@@ -1,6 +1,6 @@
 # Control Plane Services
 
-コントロールプレーンは、TenkaCloudプラットフォーム全体を管理する共有サービス群です。
+コントロールプレーンは、TenkaCloud プラットフォーム全体を管理する共有サービス群です。
 
 ## サービス一覧
 
@@ -10,7 +10,7 @@
 - 主な機能:
   - テナント自己登録フロー
   - 初期テナント設定
-  - Kubernetesネームスペース作成
+  - Kubernetes ネームスペース作成
   - 認証プール作成
   - テナント固有リソースのプロビジョニング
 
@@ -18,7 +18,7 @@
 - ディレクトリ: `tenant-management/`
 - 責務: テナントライフサイクル管理
 - 主な機能:
-  - テナント情報のCRUD操作
+  - テナント情報の CRUD 操作
   - テナント状態管理（active/suspended/deleted）
   - テナント設定管理
   - リソース使用量追跡
@@ -28,7 +28,7 @@
 - ディレクトリ: `user-management/`
 - 責務: テナント内ユーザーの管理
 - 主な機能:
-  - ユーザーのCRUD操作
+  - ユーザーの CRUD 操作
   - ロール・権限管理
   - 認証・認可
   - セッション管理
@@ -47,7 +47,7 @@
 ## アーキテクチャ
 
 ### デプロイメント
-すべてのControl Planeサービスは、Kubernetes上の専用namespace `control-plane` にデプロイされます。
+すべての Control Plane サービスは、Kubernetes 上の専用 namespace `control-plane` にデプロイされます。
 
 ```
 EKS Cluster
@@ -60,10 +60,10 @@ EKS Cluster
 
 ### データストア
 - DynamoDB: テナント情報、ユーザー情報、システム設定
-- パーティション戦略: テナントIDによる論理的分離
+- パーティション戦略: テナント ID による論理的分離
 
 ### 認証・認可
-- すべてのControl Plane APIはJWT認証を必要とする
+- すべての Control Plane API は JWT 認証を必要とする
 - システム管理者とテナント管理者で異なる権限レベル
 
 ## 技術スタック
@@ -77,4 +77,4 @@ EKS Cluster
 
 ## 開発
 
-各サービスディレクトリ配下に個別のREADME.mdがあります。
+各サービスディレクトリ配下に個別の README.md があります。

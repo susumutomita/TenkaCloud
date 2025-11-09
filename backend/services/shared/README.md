@@ -1,35 +1,35 @@
 # Shared Services
 
-Control PlaneとApplication Plane両方から利用される共有ライブラリとユーティリティ。
+Control Plane と Application Plane 両方から利用される共有ライブラリとユーティリティ。
 
 ## ディレクトリ構成
 
 ### cloud-abstraction/
-マルチクラウド対応のための抽象化レイヤー
+マルチクラウド対応のための抽象化レイヤーです。
 
 #### interfaces/
-クラウドプロバイダー共通のインターフェース定義
+クラウドプロバイダー共通のインタフェース定義です。
 
-- `IAuthProvider.ts`: 認証プロバイダーインターフェース
-- `IStorageProvider.ts`: ストレージプロバイダーインターフェース
-- `IComputeProvider.ts`: コンピュートプロバイダーインターフェース
-- `IDatabaseProvider.ts`: データベースプロバイダーインターフェース
+- `IAuthProvider.ts`: 認証プロバイダーインタフェース
+- `IStorageProvider.ts`: ストレージプロバイダーインタフェース
+- `IComputeProvider.ts`: コンピュートプロバイダーインタフェース
+- `IDatabaseProvider.ts`: データベースプロバイダーインタフェース
 
 #### providers/
-各クラウドプロバイダーの具体的な実装
+各クラウドプロバイダーの具体的な実装です。
 
-- aws/: AWS実装（Cognito, DynamoDB, EKS, etc.）
-- gcp/: GCP実装（将来実装）
-- azure/: Azure実装（将来実装）
-- localstack/: LocalStack実装（ローカル開発用）
+- aws/: AWS 実装（Cognito, DynamoDB, EKS, etc.）
+- gcp/: GCP 実装（将来実装）
+- azure/: Azure 実装（将来実装）
+- localstack/: LocalStack 実装（ローカル開発用）
 
 ## 設計原則
 
 ### 1. プロバイダー非依存
-すべてのサービスはインターフェースを通じてクラウドリソースにアクセスし、特定のクラウドプロバイダーに依存しない設計とします。
+すべてのサービスはインタフェースを通じてクラウドリソースにアクセスし、特定のクラウドプロバイダーに依存しない設計とします。
 
 ### 2. Factory Pattern
-環境変数に基づいて適切なプロバイダー実装を返すFactoryパターンを使用します。
+環境変数（例: `TENKACLOUD_CLOUD_PROVIDER` の値: aws | gcp | azure | localstack）に基づいて、該当するプロバイダー実装を返す Factory パターンを使用します。
 
 ```typescript
 // 例

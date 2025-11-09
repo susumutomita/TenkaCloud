@@ -1,0 +1,24 @@
+name: ci
+permissions:
+  contents: read
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install packages via packages.json
+        run: make install_ci
+      - name: Run textlint
+        run: |
+          make lint_text
+      - name: Format check
+        run: |
+          make format_check

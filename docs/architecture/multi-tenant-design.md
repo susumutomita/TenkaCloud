@@ -2,7 +2,7 @@
 
 ## アーキテクチャ概要
 
-TenkaCloudは、AWS SaaS Factory EKS Reference Architectureをベースとした、マルチテナントSaaS競技プラットフォームです。
+TenkaCloud は、AWS SaaS Factory EKS Reference Architecture をベースとした、マルチテナント SaaS 競技プラットフォームです。
 
 ## サービス分離戦略
 
@@ -26,14 +26,14 @@ backend/
 - **主な機能**:
   - テナント自己登録フロー
   - 初期テナント設定
-  - Kubernetesネームスペース作成
+  - Kubernetes ネームスペース作成
   - 認証プール（Cognito User Pool）の作成
   - テナント固有リソースのプロビジョニング
 
 #### 2. Tenant Management Service（テナント管理サービス）
 - **責務**: テナントライフサイクル管理
 - **主な機能**:
-  - テナント情報のCRUD操作
+  - テナント情報の CRUD 操作
   - テナント状態管理（active/suspended/deleted）
   - テナント設定管理
   - リソース使用量追跡
@@ -42,7 +42,7 @@ backend/
 #### 3. User Management Service（ユーザー管理サービス）
 - **責務**: テナント内ユーザーの管理
 - **主な機能**:
-  - ユーザーのCRUD操作
+  - ユーザーの CRUD 操作
   - ロール・権限管理
   - 認証・認可
   - セッション管理
@@ -58,8 +58,8 @@ backend/
   - メトリクス収集
 
 ### データ管理
-- **データストア**: DynamoDB（共有テーブル、テナントIDでパーティション）
-- **分離方式**: テナントIDによる論理的分離
+- **データストア**: DynamoDB（共有テーブル、テナント ID でパーティション）
+- **分離方式**: テナント ID による論理的分離
 
 ## Application Plane（アプリケーションプレーン）
 
@@ -70,7 +70,7 @@ backend/
 #### 1. Battle Service（バトル管理サービス）
 - **責務**: クラウド対戦セッションの管理
 - **主な機能**:
-  - バトルセッションのCRUD
+  - バトルセッションの CRUD
   - リアルタイムバトル進行管理
   - チーム対戦モード
   - 観戦モード（リアルタイム進捗配信）
@@ -81,9 +81,9 @@ backend/
 - **主な機能**:
   - 問題ライブラリ管理
   - 問題作成・編集
-  - Cloud Contest形式との互換性
+  - Cloud Contest 形式との互換性
   - 問題テンプレート管理
-  - AI支援による問題生成
+  - AI 支援による問題生成
 
 #### 3. Scoring Service（採点サービス）
 - **責務**: インフラ構築の自動評価
@@ -106,14 +106,14 @@ backend/
 ### データ管理
 
 #### Silo Model（サイロモデル）
-テナント毎に完全に分離されたデータストアを使用
+テナント毎に厳格に分離されたデータストアを使用します。
 - **対象**: Battle Service, Leaderboard Service
 - **理由**: 高いパフォーマンス要求、データ分離の厳格性
 
 #### Pooled Model（プールモデル）
-共有データストアでテナントIDによりパーティション
+共有データストアでテナント ID によりパーティションします。
 - **対象**: Problem Service, Scoring Service
-- **理由**: データの効率的な共有、問題テンプレートの再利用
+- **理由**: 問題テンプレートと採点ロジックを単一ストアで共有し、更新内容を全テナントへ即時反映させるため。
 
 ## テナント分離戦略
 
@@ -141,21 +141,21 @@ Kubernetes Cluster (EKS)
 ```
 
 ### ネットワーク分離
-- **NGINX Ingress Controller**: テナントルーティング
-- **Network Policy**: Namespaceレベルのネットワーク分離
+- **nginx Ingress Controller**: テナントルーティング
+- **Network Policy**: Namespace レベルのネットワーク分離
 - **Service Mesh（将来）**: より高度なトラフィック制御
 
 ## 認証・認可フロー
 
 ### テナント識別
 1. ユーザーがランディングページでテナントを選択
-2. テナント固有のCognito User Poolへリダイレクト
+2. テナント固有の Cognito User Pool へリダイレクト
 3. OAuth フローで認証
-4. JWTトークンにテナントID含む
+4. JWT トークンにテナント ID 含む
 
 ### マイクロサービス間認証
-- JWTトークン検証
-- テナントIDの抽出と検証
+- JWT トークン検証
+- テナント ID の抽出と検証
 - サービス間通信の認可
 
 ## データパーティショニング
@@ -208,11 +208,11 @@ scoring-results
 ## デプロイメントフロー
 
 ### テナントオンボーディング
-1. **Registration Service**: 新規テナント登録APIを受信
-2. **Tenant Creation**: DynamoDBにテナントレコード作成
-3. **User Pool Creation**: Cognito User Pool作成
-4. **Namespace Provisioning**: Kubernetes Namespaceを作成
-5. **Service Deployment**: Application Planeサービスをデプロイ
+1. **Registration Service**: 新規テナント登録 API を受信
+2. **Tenant Creation**: DynamoDB にテナントレコード作成
+3. **User Pool Creation**: Cognito User Pool 作成
+4. **Namespace Provisioning**: Kubernetes Namespace を作成
+5. **Service Deployment**: Application Plane サービスをデプロイ
 6. **DNS Configuration**: テナント固有のサブドメイン設定（オプション）
 7. **Notification**: テナント管理者に完了通知
 
@@ -257,23 +257,23 @@ backend/
 ## セキュリティ考慮事項
 
 ### データ分離
-- テナントIDによる厳格なデータアクセス制御
-- Namespace分離によるワークロード分離
-- Network Policyによるトラフィック制限
+- テナント ID による厳格なデータアクセス制御
+- Namespace 分離によるワークロード分離
+- Network Policy によるトラフィック制限
 
 ### 暗号化
 - 転送時: TLS 1.3
-- 保存時: DynamoDB暗号化、EBS暗号化
+- 保存時: DynamoDB 暗号化、EBS 暗号化
 
 ### 監査
-- すべてのAPI呼び出しをログ記録
+- すべての API 呼び出しをログ記録
 - テナント横断アクセスの検出・アラート
 
 ## フロントエンドアーキテクチャ（3層UI構造）
 
 ### UI分離戦略
 
-TenkaCloudは、役割に応じて3つのUIアプリケーションを提供します。
+TenkaCloud は、役割に応じて 3 つの UI アプリケーションを提供します。
 
 ```
 frontend/
@@ -284,11 +284,11 @@ frontend/
 
 ### 1. Control Plane UI（プラットフォーム管理者用）
 
-**対象ユーザー**: TenkaCloudプラットフォーム運営者
+**対象ユーザー**: TenkaCloud プラットフォーム運営者です。
 
 **主な機能**:
 - テナント管理（作成・削除・一時停止）
-- Application Planeデプロイ管理
+- Application Plane デプロイ管理
   - 新しいバージョンのデプロイ
   - テナント毎のロールアウト制御
   - デプロイステータス監視
@@ -329,7 +329,7 @@ https://platform.tenkacloud.com/
 - 問題管理
   - 問題ライブラリの閲覧
   - カスタム問題作成・編集
-  - AI支援による問題生成
+  - AI 支援による問題生成
 - チーム管理
   - チーム作成・メンバー管理
   - チーム招待
@@ -342,8 +342,8 @@ https://platform.tenkacloud.com/
   - バトル結果分析
 
 **アクセス制御**:
-- テナント固有のCognito User Pool
-- Admin権限を持つユーザーのみアクセス可能
+- テナント固有の Cognito User Pool
+- Admin 権限を持つユーザーのみアクセス可能
 - テナント境界を越えたアクセス不可
 
 **技術スタック**:
@@ -364,7 +364,7 @@ https://{tenant-id}.tenkacloud.com/admin/
 
 ### 3. Participant UI（競技者用）
 
-**対象ユーザー**: バトルに参加する競技者
+**対象ユーザー**: バトルに参加する競技者です。
 
 **主な機能**:
 - バトル参加
@@ -388,7 +388,7 @@ https://{tenant-id}.tenkacloud.com/admin/
   - チームランキング
 
 **アクセス制御**:
-- テナント固有のCognito User Pool
+- テナント固有の Cognito User Pool
 - 競技者権限を持つユーザーがアクセス可能
 - 自分のデータと公開データのみ閲覧可能
 
@@ -441,13 +441,13 @@ https://{tenant-id}.tenkacloud.com/
 
 ### デプロイメント管理機能
 
-Control Plane UIは、Application Planeサービスのデプロイを管理します。
+Control Plane UI は、Application Plane サービスのデプロイを管理します。
 
 #### デプロイメントワークフロー
 
 1. **新バージョンのビルド**
-   - GitHub ActionsでDockerイメージをビルド
-   - ECRにプッシュ
+   - GitHub Actions で Docker イメージをビルド
+   - ECR にプッシュ
    - バージョンタグ付け
 
 2. **デプロイ計画の作成**（Control Plane UI）
@@ -459,7 +459,7 @@ Control Plane UIは、Application Planeサービスのデプロイを管理し�
      - 段階的ロールアウト
 
 3. **デプロイ実行**（Control Plane Backend）
-   - Kubernetes APIを使用してテナント毎にデプロイ
+   - Kubernetes API を使用してテナント毎にデプロイ
    - ヘルスチェック
    - ロールバック機能
 
@@ -470,13 +470,13 @@ Control Plane UIは、Application Planeサービスのデプロイを管理し�
 
 #### デプロイメント管理サービス
 
-Control Planeに新しいサービスを追加：
+Control Plane に新しいサービスを追加します。
 
 **Deployment Management Service**
-- **責務**: Application Planeのデプロイ管理
+- **責務**: Application Plane のデプロイ管理
 - **主な機能**:
   - デプロイ計画の作成・管理
-  - Kubernetesマニフェストの動的生成
+  - Kubernetes マニフェストの動的生成
   - テナント毎のデプロイ実行
   - ロールアウト戦略の実装
   - デプロイステータスの追跡
@@ -520,13 +520,13 @@ backend/
 
 ## 次のステップ
 
-1. Control Planeサービスの実装
+1. Control Plane サービスの実装
    - Registration Service
    - Tenant Management Service
    - User Management Service
    - System Management Service
    - **Deployment Management Service** 🆕
-2. Application Planeサービスの実装
+2. Application Plane サービスの実装
    - Battle Service
    - Problem Service
    - Scoring Service
@@ -535,6 +535,6 @@ backend/
    - Control Plane UI
    - Admin UI
    - Participant UI
-4. Kubernetesマニフェストの作成
-5. Terraformによるインフラ定義
-6. CI/CDパイプラインの構築
+4. Kubernetes マニフェストの作成
+5. Terraform によるインフラ定義
+6. CI/CD パイプラインの構築
