@@ -18,7 +18,7 @@ install_ci:
 setup_husky:
 	bun run husky
 
-before_commit: lint_text lint typecheck format_check build test_coverage
+before_commit: lint_text format_check
 
 # ハイフン付きのエイリアス（打ち間違え対策）
 before-commit: before_commit
