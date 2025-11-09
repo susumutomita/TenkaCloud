@@ -65,6 +65,48 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
 
 ---
 
+### テナント管理サービス MVP - 2025-11-09
+
+**目的 (Objective)**:
+- Control Plane でテナント情報と状態遷移を一元管理する REST API を提供する
+- テナント状態変更の監査・イベント連携を可能にし、Application Plane への伝搬を保証する
+- `backend/services/control-plane/tenant-management` に 100% テストカバレッジの運用可能なサービススタックを確立する
+
+**制約 (Guardrails)**:
+- DynamoDB の単一テーブル設計を維持し、テナント分離キーを `TENANT#<id>` 形式で統一する
+- Fastify + TypeScript + Bun/Vitest 構成で 100% カバレッジ達成を必須とする
+- shared telemetry モジュール経由で監査ログ・メトリクスを出力し、PII は暗号化/マスキングする
+- CLAUDE.md の自律開発フローに従い、CI Green になるまでマージ不可
+
+**関連 Issue**:
+- #27 Control Plane Tenant Management Service MVP
+
+**タスク (TODOs)**:
+- [ ] テナントドメインモデルと DynamoDB パーティション/ソートキーの定義を docs/architecture に追記 (#27)
+- [ ] OpenAPI 仕様 (Create/List/Get/Update/Suspend/Resume/Delete) を `backend/services/control-plane/tenant-management/openapi.yaml` に作成 (#27)
+- [ ] Fastify サービスのブートストラップ（config, validation, logging, tracing, error handling）を整備 (#27)
+- [ ] Repository/UseCase 層で CRUD + 状態遷移ロジックと監査ログ永続化を実装 (#27)
+- [ ] EventBridge 互換イベントパブリッシャを shared 層に実装し、状態遷移イベントを publish (#27)
+- [ ] Bun/Vitest ベースのユニット & コントラクトテストで 100% カバレッジを達成 (#27)
+- [ ] Runbook / README を更新し、ローカル実行・デプロイ手順を記載 (#27)
+- [ ] Control Plane namespace 向けの Kubernetes manifest / Helm values を下書きし、デプロイ手順をまとめる (#27)
+
+**検証手順 (Validation)**:
+- `bun run lint`, `bun run typecheck`, `bun run test:coverage`, `bun run lint_text` がすべて成功すること
+- `bun run build` でテナント管理サービスがビルド可能であること
+- DynamoDB Local + EventBridge エミュレータを用いた CRUD/状態遷移/イベント publish の統合テストが通過すること
+- OpenAPI 仕様に対するモックテスト (`scripts/dev/tenant-management.sh` 等) が成功し、CI で自動検証されること
+
+**未解決の質問 (Open Questions)**:
+- Registration Service とテーブルを共有するか、Control Plane 専用テーブルを分離するか
+- イベントバスは LocalStack を採用するか、軽量な in-memory pub/sub から着手するか
+- 監査ログの保存先を DynamoDB で兼用するか、OpenSearch/CloudWatch Logs に分離するか
+
+**進捗ログ (Progress Log)**:
+- [2025-11-09 10:20] 実装プラン作成および Issue #27 を起票
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
