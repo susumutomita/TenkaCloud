@@ -1,6 +1,6 @@
 # TenkaCloud Directory Structure
 
-TenkaCloudプロジェクトの完全なディレクトリ構造と各ディレクトリの役割を説明します。
+TenkaCloud プロジェクトの完全なディレクトリ構造と各ディレクトリの役割を説明します。
 
 ## 全体構成
 
@@ -19,7 +19,7 @@ TenkaCloud/
 
 ## Backend Services
 
-AWS SaaS Factory EKS Reference Architectureに基づく2-Plane構成
+AWS SaaS Factory EKS Reference Architecture に基づく 2-Plane 構成です。
 
 ```
 backend/
@@ -129,13 +129,13 @@ infrastructure/
 
 ### Kubernetes構成
 
-- **base/**: 全環境共通の設定（Ingress、NetworkPolicyなど）
-- **control-plane/**: Control Planeサービスのマニフェスト
-- **application-plane/**: Application Planeサービスのマニフェスト（テンプレート）
+- **base/**: 全環境共通の設定（Ingress、NetworkPolicy など）
+- **control-plane/**: Control Plane サービスのマニフェスト
+- **application-plane/**: Application Plane サービスのマニフェスト（テンプレート）
 
 ### Terraform構成
 
-- **modules/**: 再利用可能なTerraformモジュール
+- **modules/**: 再利用可能な Terraform モジュール
 - **environments/**: 環境別の変数とメイン設定
 
 ## Problems
@@ -155,7 +155,7 @@ problems/
 
 ### 問題定義形式
 
-Cloud Contest形式との互換性を持つ問題定義ファイル
+Cloud Contest 形式との互換性を持つ問題定義ファイルです。
 
 ```yaml
 # problem.yaml

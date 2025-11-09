@@ -8,7 +8,7 @@
 - ディレクトリ: `battle-service/`
 - 責務: クラウド対戦セッションの管理
 - 主な機能:
-  - バトルセッションのCRUD
+  - バトルセッションの CRUD
   - リアルタイムバトル進行管理
   - チーム対戦モード
   - 観戦モード（リアルタイム進捗配信）
@@ -20,9 +20,9 @@
 - 主な機能:
   - 問題ライブラリ管理
   - 問題作成・編集
-  - Cloud Contest形式との互換性
+  - Cloud Contest 形式との互換性
   - 問題テンプレート管理
-  - AI支援による問題生成
+  - AI 支援による問題生成
 
 ### 3. Scoring Service
 - ディレクトリ: `scoring-service/`
@@ -47,7 +47,7 @@
 ## アーキテクチャ
 
 ### デプロイメント
-各テナント毎に専用のKubernetes namespaceを持ち、Application Planeサービスがデプロイされます。
+各テナント毎に専用の Kubernetes namespace を持ち、Application Plane サービスがデプロイされます。
 
 ```
 EKS Cluster
@@ -65,9 +65,9 @@ EKS Cluster
 ```
 
 ### テナント分離
-- Namespace分離: テナント毎に独立したKubernetes namespace
-- Network Policy: Namespaceレベルでのネットワーク分離
-- データ分離: テナントIDによるデータパーティション
+- Namespace 分離: テナント毎に独立した Kubernetes namespace
+- Network Policy: Namespace レベルでのネットワーク分離
+- データ分離: テナント ID によるデータパーティション
 
 ### データストア
 
@@ -75,24 +75,24 @@ EKS Cluster
 - Battle Service
 - Leaderboard Service
 
-完全に分離されたDynamoDBテーブルを各テナントに割り当て
+厳格に分離された DynamoDB テーブルを各テナントに割り当てます。
 
 #### Pooled Model（共有データベース）
 - Problem Service
 - Scoring Service
 
-テナントIDでパーティションされた共有DynamoDBテーブル
+テナント ID でパーティションされた共有 DynamoDB テーブルを利用します。
 
 ## 技術スタック
 
 - 言語: TypeScript (Node.js)
 - フレームワーク: Express / Fastify
 - データベース: DynamoDB
-- リアルタイム通信: WebSocket (Socket.io)
-- 認証: JWT（Control Planeから発行）
+- リアルタイム通信: WebSocket (Socket.IO)
+- 認証: JWT（Control Plane から発行）
 - コンテナ: Docker
 - オーケストレーション: Kubernetes (EKS)
 
 ## 開発
 
-各サービスディレクトリ配下に個別のREADME.mdがあります。
+各サービスディレクトリ配下に個別の README.md があります。
