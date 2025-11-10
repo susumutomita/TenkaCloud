@@ -3,7 +3,7 @@
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[English](./README.en.md) | 日本語
+> [English](./README.en.md) | 日本語
 
 ## 🎯 プロジェクト概要
 
@@ -87,7 +87,7 @@ TenkaCloud は、クラウド技術者のための常設・オープンソース
 - **Docker** - コンテナ化
 - **Terraform** - マルチクラウド対応
 
-### AI/ML
+### AI/機械学習
 
 - **Claude API** - AI 支援機能
 - **MCP (Model Context Protocol)** - AI 統合

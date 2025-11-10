@@ -3,7 +3,7 @@
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-English | [日本語](./README.md)
+> English | [日本語](./README.md)
 
 ## 🎯 Project Overview
 
@@ -87,7 +87,7 @@ A permanent battle arena where cloud warriors from around the world gather to ho
 - **Docker** - Containerization
 - **Terraform** - Multi-cloud support
 
-### AI/ML
+### AI/Machine Learning
 
 - **Claude API** - AI-powered features
 - **MCP (Model Context Protocol)** - AI integration
