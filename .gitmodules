@@ -1,0 +1,3 @@
+[submodule "reference/eks"]
+	path = reference/eks
+	url = https://github.com/aws-samples/aws-saas-factory-eks-reference-architecture
