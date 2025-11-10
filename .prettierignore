@@ -5,7 +5,5 @@ dist
 build
 coverage
 .git
-plans.md
-Plan.md
 reference/
 reference/**
