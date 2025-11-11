@@ -262,6 +262,194 @@ backend/
 
 ---
 
+### Control Plane 管理コンソール UI (Next.js) - 2025-11-11
+
+**目的 (Objective)**:
+- Control Plane の管理コンソール UI を Next.js で構築する
+- プラットフォーム管理者がテナント管理、ユーザー管理、システム監視を行えるダッシュボードを提供
+- Keycloak による OIDC 認証を統合し、セキュアなアクセス制御を実現
+
+**背景 (Background)**:
+- Control Plane は TenkaCloud の管理基盤（テナント管理、認証、イベント管理）
+- reference/eks には Admin App があり、テナント管理機能を提供している
+- TenkaCloud の Control Plane UI は以下を担当：
+  - **プラットフォーム管理者向け機能**
+    - 全テナントの一覧・監視
+    - テナントのライフサイクル管理（作成、停止、削除）
+    - システムメトリクス・ログの可視化
+    - Keycloak Realm 管理
+    - 課金・使用量管理（将来）
+
+**技術スタック**:
+- **フレームワーク**: Next.js 14 (App Router)
+- **言語**: TypeScript (strict mode)
+- **スタイリング**: Tailwind CSS
+- **UI コンポーネント**: shadcn/ui または Headless UI
+- **状態管理**: Zustand または React Context
+- **認証**: NextAuth.js + Keycloak OIDC
+- **API クライアント**: OpenAPI Generator（テナント管理 API）
+- **テスト**: Vitest + React Testing Library
+- **E2E テスト**: Playwright
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う
+- テスト駆動開発（TDD）- カバレッジ 100%
+- TypeScript strict mode
+- アクセシビリティ対応（WCAG 2.1 AA）
+- レスポンシブデザイン（モバイルファースト）
+
+**タスク (TODOs)**:
+- [ ] Next.js プロジェクトのセットアップ（frontend/control-plane-ui/）
+  - [ ] Next.js 14 + TypeScript + Tailwind CSS
+  - [ ] ESLint + Prettier 設定
+  - [ ] Vitest + React Testing Library セットアップ
+- [ ] Keycloak 認証統合
+  - [ ] NextAuth.js の設定
+  - [ ] Keycloak OIDC プロバイダー設定
+  - [ ] ログイン/ログアウトフロー
+  - [ ] 認証ガード（middleware）
+- [ ] レイアウト構築
+  - [ ] ダッシュボードレイアウト（サイドバー + ヘッダー）
+  - [ ] ナビゲーションメニュー
+  - [ ] ブレッドクラム
+- [ ] テナント管理機能
+  - [ ] テナント一覧ページ（テーブル、検索、フィルター）
+  - [ ] テナント詳細ページ
+  - [ ] テナント作成フォーム
+  - [ ] テナント編集フォーム
+  - [ ] テナント削除確認ダイアログ
+  - [ ] テナントステータス管理（停止/再開）
+- [ ] ダッシュボードページ
+  - [ ] システムメトリクス表示
+  - [ ] アクティブテナント数
+  - [ ] リソース使用量グラフ
+- [ ] API クライアント実装
+  - [ ] テナント管理 API クライアント
+  - [ ] エラーハンドリング
+  - [ ] リトライロジック
+- [ ] テストの作成（カバレッジ 100%）
+  - [ ] コンポーネントテスト
+  - [ ] API クライアントテスト
+  - [ ] E2E テスト（Playwright）
+
+**ディレクトリ構造**:
+```
+frontend/
+└── control-plane-ui/
+    ├── app/                        # Next.js App Router
+    │   ├── (auth)/                # 認証グループ
+    │   │   ├── login/
+    │   │   └── layout.tsx
+    │   ├── (dashboard)/           # ダッシュボードグループ
+    │   │   ├── layout.tsx         # ダッシュボードレイアウト
+    │   │   ├── page.tsx           # ダッシュボードホーム
+    │   │   ├── tenants/           # テナント管理
+    │   │   │   ├── page.tsx       # テナント一覧
+    │   │   │   ├── [id]/          # テナント詳細
+    │   │   │   └── new/           # テナント作成
+    │   │   └── settings/          # 設定
+    │   ├── api/                   # API Routes
+    │   │   └── auth/
+    │   │       └── [...nextauth]/
+    │   ├── layout.tsx             # ルートレイアウト
+    │   └── page.tsx               # ホームページ
+    ├── components/
+    │   ├── ui/                    # 再利用可能な UI コンポーネント
+    │   ├── forms/                 # フォームコンポーネント
+    │   ├── layout/                # レイアウトコンポーネント
+    │   └── tenants/               # テナント関連コンポーネント
+    ├── lib/
+    │   ├── api/                   # API クライアント
+    │   │   ├── tenant-api.ts      # テナント管理 API
+    │   │   └── client.ts          # HTTP クライアント
+    │   ├── auth/                  # 認証ヘルパー
+    │   ├── utils/                 # ユーティリティ
+    │   └── types/                 # 型定義
+    ├── test/
+    │   ├── unit/                  # ユニットテスト
+    │   ├── integration/           # 統合テスト
+    │   └── e2e/                   # E2E テスト
+    ├── public/                    # 静的ファイル
+    ├── next.config.js
+    ├── package.json
+    ├── tsconfig.json
+    ├── tailwind.config.ts
+    └── vitest.config.ts
+```
+
+**画面設計（主要ページ）**:
+
+1. **ダッシュボードページ** (`/`)
+   - システムメトリクス（CPU、メモリ、ネットワーク）
+   - アクティブテナント数
+   - 直近のイベントログ
+   - リソース使用量グラフ
+
+2. **テナント一覧ページ** (`/tenants`)
+   - テナント検索・フィルター
+   - テナントステータス表示（Active, Suspended, Deleted）
+   - ページネーション
+   - テナント作成ボタン
+
+3. **テナント詳細ページ** (`/tenants/[id]`)
+   - テナント基本情報
+   - Keycloak Realm 情報
+   - リソース使用量
+   - イベント履歴
+   - アクション（編集、停止、削除）
+
+4. **テナント作成ページ** (`/tenants/new`)
+   - テナント名入力
+   - 管理者メール入力
+   - Tier 選択（Free, Pro, Enterprise）
+   - 作成確認
+
+**検証手順 (Validation)**:
+1. Next.js ビルドが成功すること
+   ```bash
+   cd frontend/control-plane-ui
+   bun run build
+   ```
+
+2. すべてのテストが通過すること（カバレッジ 100%）
+   ```bash
+   bun run test
+   bun run test:coverage
+   ```
+
+3. Linter と Formatter が通過すること
+   ```bash
+   bun run lint
+   bun run format:check
+   ```
+
+4. E2E テストが通過すること
+   ```bash
+   bun run test:e2e
+   ```
+
+5. Keycloak 認証フローが動作すること
+   ```bash
+   # ローカル環境でテスト
+   bun run dev
+   # http://localhost:3000 でログイン確認
+   ```
+
+**未解決の質問 (Open Questions)**:
+- [ ] UI コンポーネントライブラリ: shadcn/ui vs Headless UI
+- [ ] 状態管理: Zustand vs React Context vs なし
+- [ ] テーマ: ダークモード対応するか
+- [ ] 多言語対応: i18n を最初から入れるか
+- [ ] Keycloak のローカル開発環境: Docker Compose vs kind
+
+**進捗ログ (Progress Log)**:
+- [2025-11-11 00:10] Control Plane UI の実装計画を Plan.md に追加
+
+**振り返り (Retrospective)**:
+*（実装後に記入）*
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
