@@ -31,7 +31,7 @@ docker compose up -d
 http://localhost:8080
 ```
 
-デフォルトの管理者アカウント:
+デフォルトの管理者アカウント。
 
 - **ユーザー名**: `admin`
 - **パスワード**: `.env` で設定した `KEYCLOAK_ADMIN_PASSWORD`
@@ -42,13 +42,13 @@ http://localhost:8080
 docker compose down
 ```
 
-データを保持したまま停止:
+データを保持したまま停止。
 
 ```bash
 docker compose stop
 ```
 
-データを完全に削除して停止:
+データを削除して停止。
 
 ```bash
 docker compose down -v
@@ -131,7 +131,7 @@ docker compose down -v
 
 ## 🔐 NextAuth.js 統合
 
-Control Plane UI の `.env.local` に以下を追加:
+Control Plane UI の `.env.local` に以下を追加。
 
 ```bash
 NEXTAUTH_URL=http://localhost:3000
