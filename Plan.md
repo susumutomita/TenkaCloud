@@ -450,6 +450,194 @@ frontend/
 
 ---
 
+### Keycloak 認証基盤セットアップ - 2025-11-11
+
+**目的 (Objective)**:
+- Keycloak によるマルチテナント対応の認証・認可基盤を構築する
+- ローカル開発環境で Keycloak + PostgreSQL を Docker Compose で起動可能にする
+- Control Plane UI と Keycloak を OIDC で統合し、ログイン/ログアウトを実現する
+
+**背景 (Background)**:
+- TenkaCloud はマルチクラウド対応のため、クラウドベンダーロックインを避ける必要がある
+- Keycloak は OSS の IdP（Identity Provider）で、OIDC/SAML 対応、エンタープライズグレード
+- マルチテナント対応の Realm 設計が可能（マスター Realm + テナント別 Realm）
+- Next.js との統合は NextAuth.js（Auth.js）を使用
+
+**技術スタック**:
+- **IdP**: Keycloak 23.x（最新安定版）
+- **データベース**: PostgreSQL 16
+- **コンテナ**: Docker Compose
+- **認証ライブラリ**: NextAuth.js v5（Auth.js）
+- **プロトコル**: OIDC（OpenID Connect）
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う
+- セキュリティベストプラクティスの遵守
+- パスワードポリシー: 最小 8 文字、大小英数字記号混在
+- セッション管理: HttpOnly Cookie、SameSite=Lax
+
+**タスク (TODOs)**:
+- [ ] Docker Compose ファイル作成（Keycloak + PostgreSQL）
+  - [ ] Keycloak コンテナ定義
+  - [ ] PostgreSQL コンテナ定義
+  - [ ] ネットワーク設定
+  - [ ] ボリューム設定（データ永続化）
+- [ ] Keycloak 初期設定スクリプト
+  - [ ] マスター Realm 設定
+  - [ ] TenkaCloud Realm 作成
+  - [ ] Client 作成（control-plane-ui）
+  - [ ] Role 定義（platform-admin, tenant-admin, user）
+  - [ ] テストユーザー作成
+- [ ] NextAuth.js セットアップ（Control Plane UI）
+  - [ ] next-auth パッケージインストール
+  - [ ] Keycloak Provider 設定
+  - [ ] API Routes 作成（/api/auth/[...nextauth]）
+  - [ ] Session Provider 設定
+  - [ ] 認証ガード Middleware
+- [ ] ログイン/ログアウトフロー実装
+  - [ ] ログインページ作成
+  - [ ] ログアウトボタン実装
+  - [ ] セッション状態管理
+  - [ ] 認証後のリダイレクト
+- [ ] テストの作成
+  - [ ] Keycloak 起動テスト
+  - [ ] OIDC トークン取得テスト
+  - [ ] 認証フローの E2E テスト
+
+**ディレクトリ構造**:
+```
+infrastructure/
+└── docker/
+    └── keycloak/
+        ├── docker-compose.yml       # Keycloak + PostgreSQL
+        ├── .env.example             # 環境変数テンプレート
+        ├── init/                    # 初期化スクリプト
+        │   ├── realm-config.json    # Realm 設定
+        │   └── setup.sh             # セットアップスクリプト
+        └── README.md                # セットアップ手順
+
+frontend/control-plane/
+├── app/
+│   ├── api/
+│   │   └── auth/
+│   │       └── [...nextauth]/
+│   │           └── route.ts         # NextAuth.js API Routes
+│   ├── (auth)/
+│   │   └── login/
+│   │       └── page.tsx             # ログインページ
+│   └── layout.tsx                   # Session Provider
+├── lib/
+│   └── auth/
+│       ├── auth-config.ts           # NextAuth.js 設定
+│       └── auth-options.ts          # Keycloak Provider 設定
+└── middleware.ts                    # 認証ガード
+```
+
+**Keycloak Realm 設計**:
+
+1. **マスター Realm**（keycloak 標準）
+   - Keycloak 管理用
+   - プラットフォーム管理者のみアクセス
+
+2. **TenkaCloud Realm**
+   - Control Plane UI 用
+   - Application UI 用（将来）
+   - Client:
+     - `control-plane-ui`: Control Plane 管理コンソール
+     - `application-ui`: テナント向けバトル UI（将来）
+
+3. **Role 定義**
+   - **platform-admin**: プラットフォーム管理者（全テナント管理）
+   - **tenant-admin**: テナント管理者（自テナントのみ管理）
+   - **user**: 一般ユーザー（バトル参加者）
+
+**環境変数設計**:
+```env
+# Keycloak
+KEYCLOAK_ADMIN=admin
+KEYCLOAK_ADMIN_PASSWORD=admin_password_change_me
+KC_DB=postgres
+KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
+KC_DB_USERNAME=keycloak
+KC_DB_PASSWORD=keycloak_password_change_me
+KC_HOSTNAME=localhost
+KC_HTTP_ENABLED=true
+KC_HTTP_PORT=8080
+
+# PostgreSQL
+POSTGRES_DB=keycloak
+POSTGRES_USER=keycloak
+POSTGRES_PASSWORD=keycloak_password_change_me
+
+# NextAuth.js
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-secret-key-change-me
+KEYCLOAK_CLIENT_ID=control-plane-ui
+KEYCLOAK_CLIENT_SECRET=your-client-secret
+KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
+```
+
+**検証手順 (Validation)**:
+1. Keycloak が正常に起動すること
+   ```bash
+   cd infrastructure/docker/keycloak
+   docker compose up -d
+   # http://localhost:8080 で管理コンソールにアクセス
+   ```
+
+2. Realm と Client が作成されていること
+   ```bash
+   # Keycloak 管理コンソールで確認
+   # - TenkaCloud Realm が存在
+   # - control-plane-ui Client が存在
+   # - Role が定義されている
+   ```
+
+3. NextAuth.js が Keycloak と連携できること
+   ```bash
+   cd frontend/control-plane
+   bun run dev
+   # http://localhost:3000/api/auth/signin にアクセス
+   # Keycloak のログイン画面にリダイレクトされる
+   ```
+
+4. ログイン/ログアウトが動作すること
+   ```bash
+   # テストユーザーでログイン
+   # セッション情報が取得できる
+   # ログアウトで正常にセッションが破棄される
+   ```
+
+**未解決の質問 (Open Questions)**:
+- [ ] Keycloak のバージョン: 23.x vs 24.x
+- [ ] Realm 設計: マスター Realm のみ vs テナント別 Realm
+- [ ] Client Secret の管理方法（開発環境 vs 本番環境）
+- [ ] セッションストア: メモリ vs Redis（将来）
+- [ ] MFA（多要素認証）を最初から有効化するか
+
+**進捗ログ (Progress Log)**:
+- [2025-11-11 23:30] Keycloak セットアップ実装計画を Plan.md に追加
+- [2025-11-11 23:35] Docker Compose ファイル作成完了
+  - Keycloak 23.0 + PostgreSQL 16 Alpine
+  - ヘルスチェック設定
+  - データ永続化ボリューム設定
+- [2025-11-11 23:36] 環境変数サンプルファイル作成 (.env.example)
+  - Keycloak 管理者認証情報
+  - PostgreSQL 接続情報
+  - NextAuth.js 統合用環境変数
+- [2025-11-11 23:37] Keycloak セットアップ手順ドキュメント作成 (README.md)
+  - クイックスタートガイド
+  - Realm/Client/Role 設計
+  - 初期設定手順
+  - NextAuth.js 統合手順
+  - トラブルシューティング
+- [2025-11-11 23:38] .gitignore 追加（環境変数ファイル除外）
+
+**振り返り (Retrospective)**:
+*（実装後に記入）*
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：

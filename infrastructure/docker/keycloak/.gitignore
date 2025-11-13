@@ -1,0 +1,5 @@
+# Environment variables with secrets
+.env
+
+# Docker volumes
+postgres_data/
