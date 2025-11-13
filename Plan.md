@@ -638,6 +638,103 @@ KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
 
 ---
 
+### NextAuth.js + Keycloak 認証統合 - 2025-11-13
+
+**目的 (Objective)**:
+- Control Plane UI に NextAuth.js v5 (Auth.js) を統合し、Keycloak による OIDC 認証を実現する
+- ログイン/ログアウトフローを実装し、セッション管理を確立する
+- 認証ガード Middleware を実装し、未認証ユーザーのアクセスを制御する
+
+**背景 (Background)**:
+- Keycloak は Docker Compose で起動済み（infrastructure/docker/keycloak）
+- Control Plane UI は Next.js 14 + TypeScript でセットアップ済み
+- NextAuth.js v5 は App Router に完全対応し、Keycloak Provider をサポート
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う（TDD、カバレッジ 100%）
+- TypeScript strict mode
+- セキュリティベストプラクティス（HttpOnly Cookie、SameSite=Lax）
+- 環境変数は .env.local に格納し、.gitignore で除外
+
+**タスク (TODOs)**:
+- [ ] NextAuth.js パッケージのインストール
+- [ ] 環境変数設定ファイルの作成（.env.local, .env.example）
+- [ ] auth.ts の作成（NextAuth.js v5 設定）
+- [ ] Keycloak Provider の設定
+- [ ] API Routes の作成（app/api/auth/[...nextauth]/route.ts）
+- [ ] Middleware の作成（認証ガード）
+- [ ] Session Provider の設定（app/layout.tsx）
+- [ ] ログインページの作成（app/(auth)/login/page.tsx）
+- [ ] テストの作成（認証フロー）
+- [ ] 検証（lint, typecheck, build）
+
+**検証手順 (Validation)**:
+1. パッケージがインストールされること
+   ```bash
+   cd frontend/control-plane
+   bun install
+   ```
+
+2. Lint と型チェックが通過すること
+   ```bash
+   bun run lint
+   bun run typecheck
+   ```
+
+3. ビルドが成功すること
+   ```bash
+   bun run build
+   ```
+
+4. Keycloak 連携が動作すること
+   ```bash
+   # Keycloak を起動
+   cd infrastructure/docker/keycloak
+   docker compose up -d
+
+   # Next.js を起動
+   cd frontend/control-plane
+   bun run dev
+
+   # http://localhost:3000 でログインフローを確認
+   ```
+
+**未解決の質問 (Open Questions)**:
+- [ ] NextAuth.js v5 の最新安定版はどれか
+- [ ] Keycloak Client の設定（Client ID, Secret）
+- [ ] セッションストアは JWT のみか、Database も必要か
+- [ ] テストは E2E のみか、ユニットテストも書くか
+
+**進捗ログ (Progress Log)**:
+- [2025-11-13 10:00] NextAuth.js 統合の実装計画を Plan.md に追加
+- [2025-11-13 10:05] TODO リスト作成、実装開始
+- [2025-11-13 10:10] NextAuth.js v5.0.0-beta.30 インストール完了
+- [2025-11-13 10:15] 環境変数ファイル (.env.example) 作成完了
+- [2025-11-13 10:20] auth.ts (NextAuth.js 設定) 作成完了
+- [2025-11-13 10:25] 型定義ファイル (types/next-auth.d.ts) 作成完了
+- [2025-11-13 10:30] API Routes (/api/auth/[...nextauth]/route.ts) 作成完了
+- [2025-11-13 10:35] Middleware (認証ガード) 作成完了
+- [2025-11-13 10:40] ログインページ作成完了
+- [2025-11-13 10:45] ダッシュボードページ作成完了
+- [2025-11-13 10:50] RootLayout と globals.css 作成完了
+- [2025-11-13 10:55] 型チェック成功
+- [2025-11-13 11:00] Biome lint/format 成功
+- [2025-11-13 11:05] Next.js ビルド成功（警告: middleware → proxy 非推奨）
+
+**振り返り (Retrospective)**:
+
+##### 問題 (Problem)
+Next.js 16 では `middleware.ts` が非推奨で `proxy.ts` に変更されている
+
+##### 根本原因 (Root Cause)
+Next.js 16 の仕様変更により、middleware ファイル名が変更された
+
+##### 予防策 (Prevention)
+- 将来的に `proxy.ts` にリネーム検討
+- 現時点では警告のみでビルド成功しているため、動作には問題なし
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
