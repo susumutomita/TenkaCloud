@@ -22,7 +22,7 @@ docker compose up -d
 ./scripts/setup-keycloak.sh
 ```
 
-スクリプトが自動的に以下を実行します：
+スクリプトが自動的に次の処理を実行する。
 - TenkaCloud Realm の作成
 - `control-plane-ui` Client の作成
 - Client Secret の生成と表示
@@ -39,12 +39,12 @@ docker compose up -d
 docker compose down
 ```
 
-データを保持したまま停止：
+データを保持したまま停止する場合は次を実行する。
 ```bash
 docker compose stop
 ```
 
-データを削除して停止。
+データを削除して停止する場合は次を実行する。
 
 ```bash
 docker compose down -v

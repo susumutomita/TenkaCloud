@@ -1,4 +1,4 @@
-import { signIn } from "@/auth";
+import { signIn } from '@/auth';
 
 export default function LoginPage() {
   return (
@@ -15,8 +15,8 @@ export default function LoginPage() {
 
         <form
           action={async () => {
-            "use server";
-            await signIn("keycloak", { redirectTo: "/dashboard" });
+            'use server';
+            await signIn('keycloak', { redirectTo: '/dashboard' });
           }}
         >
           <button

@@ -12,13 +12,13 @@ TenkaCloud Control Plane UI をローカル環境で起動するクイックス�
 
 ### 1. Docker Desktop を起動
 
-macOS の場合：
+macOS の場合は次を実行する。
 ```bash
 # アプリケーションフォルダから Docker.app を起動
 # メニューバーに Docker アイコンが緑色になるまで待つ
 ```
 
-Docker が起動しているか確認：
+Docker が起動しているか確認する。
 ```bash
 docker --version
 ```
@@ -30,12 +30,12 @@ cd infrastructure/docker/keycloak
 docker compose up -d
 ```
 
-起動確認：
+起動状態を確認する。
 ```bash
 docker compose ps
 ```
 
-以下のように表示されれば成功：
+以下のように表示されれば成功と判断できる。
 ```
 NAME                  STATUS          PORTS
 keycloak-keycloak-1   Up 30 seconds   0.0.0.0:8080->8080/tcp
@@ -46,7 +46,7 @@ keycloak-postgres-1   Up 30 seconds   5432/tcp
 
 #### 3.1 管理コンソールにアクセス
 
-ブラウザで http://localhost:8080 を開く
+ブラウザで http://localhost:8080 を開く。
 
 #### 3.2 ログイン
 
@@ -86,7 +86,7 @@ keycloak-postgres-1   Up 30 seconds   5432/tcp
 #### 3.5 Client Secret を取得
 
 1. 作成した `control-plane-ui` Client の **Credentials** タブを開く
-2. **Client secret** の値をコピー（後で使用します）
+2. **Client secret** の値をコピーし、後で使用する。
 
 ### 4. 環境変数ファイルを作成
 
@@ -101,11 +101,11 @@ cp .env.example .env.local
 openssl rand -base64 32
 ```
 
-出力された値をコピーします。
+出力された値をコピーする。
 
 #### 4.2 .env.local を編集
 
-`.env.local` ファイルを開いて、以下を設定：
+`.env.local` ファイルを開いて、以下を設定する。
 
 ```env
 # NextAuth.js Configuration
@@ -130,7 +130,7 @@ bun install
 bun run dev
 ```
 
-以下のように表示されれば成功：
+以下のように表示されれば成功と判断できる。
 ```
   ▲ Next.js 16.0.1
   - Local:        http://localhost:3000
@@ -142,24 +142,24 @@ bun run dev
 
 ### 7. アプリケーションにアクセス
 
-ブラウザで http://localhost:3000 を開く
+ブラウザで http://localhost:3000 を開く。
 
 ## 🎯 動作確認
 
 ### ログインフロー
 
-1. http://localhost:3000 にアクセス
-2. ログインページが表示される
-3. "Keycloak でログイン" ボタンをクリック
-4. Keycloak のログイン画面にリダイレクトされる
-5. **Username**: `admin` / **Password**: `admin` でログイン
-6. ダッシュボード (`/dashboard`) にリダイレクトされる
-7. セッション情報が表示される
+1. http://localhost:3000 にアクセスする。
+2. ログインページが表示されるのを確認する。
+3. "Keycloak でログイン" ボタンをクリックする。
+4. Keycloak のログイン画面にリダイレクトされる。
+5. **Username**: `admin` / **Password**: `admin` でログインする。
+6. ダッシュボード (`/dashboard`) にリダイレクトされる。
+7. セッション情報が表示されることを確認する。
 
 ### ログアウト
 
-1. ダッシュボード右上の "ログアウト" ボタンをクリック
-2. ログインページにリダイレクトされる
+1. ダッシュボード右上の "ログアウト" ボタンをクリックする。
+2. ログインページにリダイレクトされることを確認する。
 
 ## 🛠 トラブルシューティング
 
@@ -239,7 +239,7 @@ docker compose down -v
 
 ### Next.js を停止
 
-ターミナルで `Ctrl + C` を押す
+ターミナルで `Ctrl + C` を押す。
 
 ## 📚 次のステップ
 
@@ -275,15 +275,15 @@ docker compose logs -f keycloak
 ```
 
 **Next.js**:
-ターミナルに表示される
+ターミナルに表示される。
 
 ## 🔐 セキュリティ注意事項
 
-⚠️ **本番環境では絶対に使用しないでください**
+⚠️ 本番環境では絶対に使用しないこと。
 
-- デフォルトパスワード (`admin` / `admin`) を使用しています
-- `.env.local` は Git にコミットしないでください（`.gitignore` で除外済み）
-- 本番環境では強力なパスワードと Secret を使用してください
+- デフォルトパスワード (`admin` / `admin`) を使用している。
+- `.env.local` は Git にコミットしてはならない（`.gitignore` で除外済み）。
+- 本番環境では強力なパスワードと Secret を使用する。
 
 ---
 
