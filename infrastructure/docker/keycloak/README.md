@@ -10,45 +10,41 @@ TenkaCloud のマルチテナント認証基盤として Keycloak を使用し�
 
 ## 🚀 クイックスタート
 
-### 1. 環境変数の設定
+### 方法 1: 自動セットアップ（推奨）
 
 ```bash
 cd infrastructure/docker/keycloak
-cp .env.example .env
-```
 
-`.env` ファイルを編集して、パスワードとシークレットを変更してください。
-
-### 2. Keycloak と PostgreSQL の起動
-
-```bash
+# Keycloak を起動
 docker compose up -d
+
+# 自動セットアップスクリプトを実行
+./scripts/setup-keycloak.sh
 ```
 
-### 3. Keycloak Admin Console にアクセス
+スクリプトが自動的に次の処理を実行する。
+- TenkaCloud Realm の作成
+- `control-plane-ui` Client の作成
+- Client Secret の生成と表示
 
-```
-http://localhost:8080
-```
+出力された環境変数を `.env.local` に設定してください。
 
-デフォルトの管理者アカウント。
+### 方法 2: 手動セットアップ
 
-- **ユーザー名**: `admin`
-- **パスワード**: `.env` で設定した `KEYCLOAK_ADMIN_PASSWORD`
+詳細な手順は [Quick Start Guide](../../../docs/QUICKSTART.md) を参照してください。
 
-### 4. サービスの停止
+### サービスの停止
 
 ```bash
 docker compose down
 ```
 
-データを保持したまま停止。
-
+データを保持したまま停止する場合は次を実行する。
 ```bash
 docker compose stop
 ```
 
-データを削除して停止。
+データを削除して停止する場合は次を実行する。
 
 ```bash
 docker compose down -v

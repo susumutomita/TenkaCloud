@@ -1,6 +1,6 @@
-import type { DefaultSession } from "next-auth";
+import type { DefaultSession } from 'next-auth';
 
-declare module "next-auth" {
+declare module 'next-auth' {
   /**
    * セッション型の拡張
    * Keycloak からのトークン情報とロール情報を含める
@@ -12,7 +12,7 @@ declare module "next-auth" {
     user: {
       email: string;
       name: string;
-    } & DefaultSession["user"];
+    } & DefaultSession['user'];
   }
 
   /**

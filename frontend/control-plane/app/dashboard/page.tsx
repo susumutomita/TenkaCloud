@@ -1,11 +1,11 @@
-import { redirect } from "next/navigation";
-import { auth, signOut } from "@/auth";
+import { redirect } from 'next/navigation';
+import { auth, signOut } from '@/auth';
 
 export default async function DashboardPage() {
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/login");
+    redirect('/login');
   }
 
   return (
@@ -23,8 +23,8 @@ export default async function DashboardPage() {
 
           <form
             action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/login" });
+              'use server';
+              await signOut({ redirectTo: '/login' });
             }}
           >
             <button
