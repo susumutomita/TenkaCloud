@@ -71,11 +71,25 @@ bun run dev
 
 ## 利用できるスクリプト
 
+### 開発用
+
 - `bun run dev` - 開発サーバーを起動する
 - `bun run build` - 本番ビルドを生成する
 - `bun run start` - 本番ビルドをローカル起動する
 - `bun run lint` - Biome で静的解析する
 - `bun run format` - Biome で自動整形する
+
+### Docker ビルド
+
+- `docker build -t tenkacloud/control-plane-ui:latest .` - Docker イメージをビルド
+- `docker compose up -d` - Docker Compose で起動
+- `docker compose down` - Docker Compose を停止
+
+または、リポジトリルートで以下を実行する。
+
+- `make docker-build` - Docker イメージをビルド
+- `make docker-run` - Docker Compose で起動
+- `make docker-stop` - Docker Compose を停止
 
 ## 認証フロー
 
