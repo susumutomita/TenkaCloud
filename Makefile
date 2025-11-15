@@ -1,4 +1,4 @@
-.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build
+.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker
 
 # デフォルトターゲットはhelp
 default: help
@@ -29,22 +29,126 @@ start:
 test_coverage:
 	bun run test:coverage
 
-help:
-	@echo "Usage: make [target]"
+check-docker:
+	@echo "🔍 Docker の起動状態を確認しています..."
+	@docker --version > /dev/null 2>&1 || (echo "❌ Docker がインストールされていません" && exit 1)
+	@docker ps > /dev/null 2>&1 || (echo "❌ Docker が起動していません。Docker Desktop を起動してください。" && exit 1)
+	@echo "✅ Docker は起動しています"
+
+setup-keycloak: check-docker
+	@echo "🚀 Keycloak をセットアップしています..."
+	@cd infrastructure/docker/keycloak && docker compose up -d
+	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
+	@bash -c 'for i in {1..30}; do \
+		if curl -s -f http://localhost:8080/health/ready > /dev/null 2>&1; then \
+			echo "✅ Keycloak が起動しました"; \
+			break; \
+		fi; \
+		echo "   試行 $$i/30..."; \
+		sleep 2; \
+	done'
+	@echo "🔧 Keycloak の自動設定を実行しています..."
+	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh
+
+start-all: check-docker
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🚀 TenkaCloud ローカル環境を起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "Targets:"
-	@echo "  install         Install bun packages"
-	@echo "  clean           Clean the project"
-	@echo "  setup_husky     Setup Husky"
-	@echo "  lint            Run linter"
-	@echo "  lint_text       Run textlint"
-	@echo "  typecheck       Run TypeScript type checking"
-	@echo "  format          Format code"
-	@echo "  format_check    Check code formatting"
-	@echo "  before_commit   Run checks before commit"
-	@echo "  dev             Start development server"
-	@echo "  build           Build the project"
-	@echo "  start           Start app"
-	@echo "  test            Run tests"
-	@echo "  test_coverage   Run tests with coverage report"
-	@echo "  help            Show this help message"
+	@echo "📦 ステップ 1/3: Keycloak を起動しています..."
+	@cd infrastructure/docker/keycloak && docker compose up -d
+	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
+	@bash -c 'for i in {1..30}; do \
+		if curl -s -f http://localhost:8080/health/ready > /dev/null 2>&1; then \
+			echo "✅ Keycloak が起動しました"; \
+			break; \
+		fi; \
+		echo "   試行 $$i/30..."; \
+		sleep 2; \
+	done'
+	@echo ""
+	@echo "🔧 ステップ 2/3: Keycloak の自動設定を実行しています..."
+	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh || true
+	@echo ""
+	@echo "📝 ステップ 3/3: 環境変数ファイルを確認しています..."
+	@if [ ! -f frontend/control-plane/.env.local ]; then \
+		echo "⚠️  .env.local が見つかりません。.env.example からコピーしています..."; \
+		cd frontend/control-plane && cp .env.example .env.local; \
+		echo ""; \
+		echo "⚠️  重要: frontend/control-plane/.env.local を編集して以下を設定してください:"; \
+		echo "  - AUTH_SECRET (openssl rand -base64 32 で生成)"; \
+		echo "  - AUTH_KEYCLOAK_SECRET (上記の Keycloak セットアップで表示された値)"; \
+		echo ""; \
+		echo "設定後、以下のコマンドで Control Plane UI を起動してください:"; \
+		echo "  cd frontend/control-plane && bun run dev"; \
+	else \
+		echo "✅ .env.local が存在します"; \
+		echo ""; \
+		echo "🎯 Control Plane UI を起動するには:"; \
+		echo "  cd frontend/control-plane && bun run dev"; \
+	fi
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✨ ローカル環境の起動が完了しました！"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Keycloak:         http://localhost:8080"
+	@echo "  - Control Plane UI: http://localhost:3000 (bun run dev 実行後)"
+	@echo ""
+	@echo "📚 詳細は docs/QUICKSTART.md を参照してください"
+	@echo ""
+
+stop-all:
+	@echo "🛑 TenkaCloud ローカル環境を停止しています..."
+	@echo ""
+	@echo "📦 Keycloak を停止しています..."
+	@cd infrastructure/docker/keycloak && docker compose down
+	@echo ""
+	@echo "✅ ローカル環境を停止しました"
+	@echo ""
+	@echo "💡 データを保持したまま停止する場合:"
+	@echo "   cd infrastructure/docker/keycloak && docker compose stop"
+	@echo ""
+
+restart-all: stop-all start-all
+
+help:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📖 TenkaCloud Makefile ヘルプ"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "🚀 ローカル環境管理:"
+	@echo "  make start-all        ローカル環境を一括起動（Keycloak + 自動設定）"
+	@echo "  make stop-all         ローカル環境を一括停止"
+	@echo "  make restart-all      ローカル環境を再起動"
+	@echo "  make setup-keycloak   Keycloak のみセットアップ"
+	@echo "  make check-docker     Docker の起動状態を確認"
+	@echo ""
+	@echo "📦 パッケージ管理:"
+	@echo "  make install          bun パッケージをインストール"
+	@echo "  make clean            プロジェクトをクリーン"
+	@echo ""
+	@echo "🔍 コード品質:"
+	@echo "  make lint             Linter を実行"
+	@echo "  make lint_text        Textlint を実行"
+	@echo "  make typecheck        TypeScript 型チェック"
+	@echo "  make format           コードを自動整形"
+	@echo "  make format_check     整形チェック"
+	@echo "  make before_commit    コミット前チェック"
+	@echo ""
+	@echo "🧪 テスト:"
+	@echo "  make test             テストを実行"
+	@echo "  make test_coverage    カバレッジレポート付きテスト"
+	@echo ""
+	@echo "🏗  ビルド:"
+	@echo "  make dev              開発サーバーを起動"
+	@echo "  make build            プロジェクトをビルド"
+	@echo "  make start            本番サーバーを起動"
+	@echo ""
+	@echo "❓ ヘルプ:"
+	@echo "  make help             このヘルプを表示"
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📚 詳細: docs/QUICKSTART.md"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

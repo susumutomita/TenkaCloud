@@ -21,6 +21,55 @@ TenkaCloud は、クラウド技術者のための常設・オープンソース
 - ⚔️ **問題互換設計** — 既存 Cloud Contest 問題を再利用可能
 - 🧠 **AI 支援機能** — 問題生成・自動採点・コーチング（MCP/Claude Code 対応）
 
+## 🚀 クイックスタート
+
+### 1分で起動
+
+```bash
+# Docker Desktop を起動してから実行
+make start-all
+```
+
+これで以下が自動的に実行されます。
+
+- Keycloak の起動
+- Keycloak の Realm と Client の自動作成
+- `.env.local` の作成（存在しない場合）
+
+出力された環境変数を `frontend/control-plane/.env.local` に設定してから、Control Plane UI を起動してください。
+
+```bash
+cd frontend/control-plane
+bun run dev
+```
+
+ブラウザで <http://localhost:3000> を開いてログインしてください。
+
+### 詳細な手順
+
+詳しいセットアップ手順は [Quick Start Guide](docs/QUICKSTART.md) を参照してください。
+
+## 📦 主な Makefile コマンド
+
+```bash
+# ローカル環境管理
+make start-all        # ローカル環境を一括起動
+make stop-all         # ローカル環境を一括停止
+make restart-all      # ローカル環境を再起動
+
+# コード品質
+make lint             # Linter を実行
+make format           # コードを自動整形
+make typecheck        # TypeScript 型チェック
+make before_commit    # コミット前チェック
+
+# テスト
+make test             # テストを実行
+make test_coverage    # カバレッジレポート付きテスト
+```
+
+詳細は `make help` を実行してください。
+
 ## 🚀 主要機能
 
 ### 1. バトルアリーナ

@@ -10,7 +10,24 @@ TenkaCloud Control Plane UI をローカル環境で起動するクイックス�
 
 ## 🚀 クイックスタート（5分で起動）
 
-### 1. Docker Desktop を起動
+### 方法 1: Makefile で一括起動（推奨）
+
+```bash
+# Docker Desktop を起動してから実行
+make start-all
+```
+
+これで以下が自動的に実行されます。
+
+- Keycloak の起動
+- Keycloak の Realm と Client の自動作成
+- `.env.local` の作成（存在しない場合）
+
+出力された環境変数を `.env.local` に設定してください。
+
+### 方法 2: 手動セットアップ
+
+#### 1. Docker Desktop を起動
 
 macOS の場合は次を実行する。
 ```bash
@@ -23,7 +40,7 @@ Docker が起動しているか確認する。
 docker --version
 ```
 
-### 2. Keycloak を起動
+#### 2. Keycloak を起動
 
 ```bash
 cd infrastructure/docker/keycloak
@@ -42,25 +59,25 @@ keycloak-keycloak-1   Up 30 seconds   0.0.0.0:8080->8080/tcp
 keycloak-postgres-1   Up 30 seconds   5432/tcp
 ```
 
-### 3. Keycloak の初期設定
+#### 3. Keycloak の初期設定
 
-#### 3.1 管理コンソールにアクセス
+##### 3.1 管理コンソールにアクセス
 
 ブラウザで http://localhost:8080 を開く。
 
-#### 3.2 ログイン
+##### 3.2 ログイン
 
 - **Username**: `admin`
 - **Password**: `admin`
 
-#### 3.3 TenkaCloud Realm を作成
+##### 3.3 TenkaCloud Realm を作成
 
 1. 左上のドロップダウン（"Keycloak" と表示）をクリック
 2. "Create Realm" をクリック
 3. **Realm name**: `tenkacloud` と入力
 4. "Create" をクリック
 
-#### 3.4 Client を作成
+##### 3.4 Client を作成
 
 1. 左メニューから **Clients** をクリック
 2. "Create client" ボタンをクリック
@@ -83,19 +100,19 @@ keycloak-postgres-1   Up 30 seconds   5432/tcp
 - **Web origins**: `http://localhost:3000`
 - "Save" をクリック
 
-#### 3.5 Client Secret を取得
+##### 3.5 Client Secret を取得
 
 1. 作成した `control-plane-ui` Client の **Credentials** タブを開く
 2. **Client secret** の値をコピーし、後で使用する。
 
-### 4. 環境変数ファイルを作成
+#### 4. 環境変数ファイルを作成
 
 ```bash
 cd ../../frontend/control-plane
 cp .env.example .env.local
 ```
 
-#### 4.1 AUTH_SECRET を生成
+##### 4.1 AUTH_SECRET を生成
 
 ```bash
 openssl rand -base64 32
@@ -103,7 +120,7 @@ openssl rand -base64 32
 
 出力された値をコピーする。
 
-#### 4.2 .env.local を編集
+##### 4.2 .env.local を編集
 
 `.env.local` ファイルを開いて、以下を設定する。
 
@@ -118,13 +135,13 @@ AUTH_KEYCLOAK_SECRET=<Keycloak で取得した Client Secret>
 AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
 ```
 
-### 5. 依存関係をインストール
+#### 5. 依存関係をインストール
 
 ```bash
 bun install
 ```
 
-### 6. Control Plane UI を起動
+#### 6. Control Plane UI を起動
 
 ```bash
 bun run dev
@@ -140,7 +157,7 @@ bun run dev
  ✓ Ready in 1.2s
 ```
 
-### 7. アプリケーションにアクセス
+#### 7. アプリケーションにアクセス
 
 ブラウザで http://localhost:3000 を開く。
 
