@@ -24,3 +24,24 @@ jobs:
       - name: Format check
         run: |
           make format_check
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Control Plane UI Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend/control-plane
+          file: ./frontend/control-plane/Dockerfile
+          push: false
+          tags: tenkacloud/control-plane-ui:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
