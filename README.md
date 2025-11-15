@@ -30,13 +30,13 @@ TenkaCloud は、クラウド技術者のための常設・オープンソース
 make start-all
 ```
 
-これで以下が自動的に実行されます：
+これで以下が自動的に実行されます。
 
 - Keycloak の起動
 - Keycloak の Realm と Client の自動作成
 - `.env.local` の作成（存在しない場合）
 
-出力された環境変数を `frontend/control-plane/.env.local` に設定してから、Control Plane UI を起動：
+出力された環境変数を `frontend/control-plane/.env.local` に設定してから、Control Plane UI を起動してください。
 
 ```bash
 cd frontend/control-plane
