@@ -1,4 +1,4 @@
-.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker
+.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker docker-build docker-run docker-stop
 
 # デフォルトターゲットはhelp
 default: help
@@ -113,6 +113,31 @@ stop-all:
 
 restart-all: stop-all start-all
 
+docker-build: check-docker
+	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
+	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
+	@echo "✅ Docker イメージのビルドが完了しました"
+	@echo ""
+	@echo "📋 ビルドされたイメージ:"
+	@docker images tenkacloud/control-plane-ui:latest
+	@echo ""
+
+docker-run: docker-build
+	@echo "🚀 Docker Compose で Control Plane UI を起動しています..."
+	@cd frontend/control-plane && docker compose up -d
+	@echo "✅ Control Plane UI が起動しました"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Control Plane UI: http://localhost:3000"
+	@echo "  - Keycloak:         http://localhost:8080"
+	@echo ""
+
+docker-stop:
+	@echo "🛑 Docker Compose を停止しています..."
+	@cd frontend/control-plane && docker compose down
+	@echo "✅ 停止しました"
+	@echo ""
+
 help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📖 TenkaCloud Makefile ヘルプ"
@@ -124,6 +149,11 @@ help:
 	@echo "  make restart-all      ローカル環境を再起動"
 	@echo "  make setup-keycloak   Keycloak のみセットアップ"
 	@echo "  make check-docker     Docker の起動状態を確認"
+	@echo ""
+	@echo "🐳 Docker ビルド:"
+	@echo "  make docker-build     Control Plane UI の Docker イメージをビルド"
+	@echo "  make docker-run       Docker Compose で Control Plane UI を起動"
+	@echo "  make docker-stop      Docker Compose を停止"
 	@echo ""
 	@echo "📦 パッケージ管理:"
 	@echo "  make install          bun パッケージをインストール"

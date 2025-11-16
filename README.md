@@ -66,6 +66,11 @@ make before_commit    # コミット前チェック
 # テスト
 make test             # テストを実行
 make test_coverage    # カバレッジレポート付きテスト
+
+# Docker ビルド
+make docker-build     # Control Plane UI の Docker イメージをビルド
+make docker-run       # Docker Compose で Control Plane UI を起動
+make docker-stop      # Docker Compose を停止
 ```
 
 詳細は `make help` を実行してください。
