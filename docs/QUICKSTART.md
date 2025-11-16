@@ -23,9 +23,37 @@ make start-all
 - Keycloak の Realm と Client の自動作成
 - `.env.local` の作成（存在しない場合）
 
-出力された環境変数を `.env.local` に設定してください。
+出力された環境変数を `frontend/control-plane/.env.local` に設定してから、Control Plane UI を起動してください。
 
-### 方法 2: 手動セットアップ
+```bash
+cd frontend/control-plane
+bun run dev
+```
+
+ブラウザで <http://localhost:3000> を開いてログインしてください。
+
+### 方法 2: Docker Compose で起動（本番環境に近い）
+
+Docker イメージをビルドして、Keycloak と連携した環境で起動します。
+
+```bash
+# Docker イメージをビルドして起動
+make docker-run
+
+# アクセス先
+# - Control Plane UI: http://localhost:3000
+# - Keycloak: http://localhost:8080
+```
+
+停止する場合は次を実行します。
+
+```bash
+make docker-stop
+```
+
+この方法では `.env.local` ファイルが必要です。事前に `frontend/control-plane/.env.local` を作成してください。
+
+### 方法 3: 手動セットアップ
 
 #### 1. Docker Desktop を起動
 
@@ -241,7 +269,19 @@ PORT=3001 bun run dev
 
 ## 🧹 環境のクリーンアップ
 
-### Keycloak を停止
+### すべて停止（推奨）
+
+```bash
+make stop-all
+```
+
+### Docker Compose 環境を停止
+
+```bash
+make docker-stop
+```
+
+### Keycloak のみ停止
 
 ```bash
 cd infrastructure/docker/keycloak
@@ -251,12 +291,13 @@ docker compose down
 ### データも削除する場合
 
 ```bash
+cd infrastructure/docker/keycloak
 docker compose down -v
 ```
 
 ### Next.js を停止
 
-ターミナルで `Ctrl + C` を押す。
+開発サーバーを起動しているターミナルで `Ctrl + C` を押す。
 
 ## 📚 次のステップ
 
@@ -266,13 +307,32 @@ docker compose down -v
 
 ## 💡 開発時のヒント
 
+### 環境を再起動
+
+```bash
+# 全体を再起動
+make restart-all
+
+# Docker Compose 環境のみ再起動
+make docker-stop
+make docker-run
+```
+
 ### Keycloak のデータをリセット
 
 ```bash
 cd infrastructure/docker/keycloak
 docker compose down -v
 docker compose up -d
-# 再度 Realm と Client を作成
+# 再度 Realm と Client を作成（または make setup-keycloak を実行）
+```
+
+### Docker イメージを再ビルド
+
+コードを変更した後、Docker イメージを再ビルドする場合は次を実行します。
+
+```bash
+make docker-build
 ```
 
 ### Next.js のキャッシュをクリア
@@ -291,7 +351,13 @@ cd infrastructure/docker/keycloak
 docker compose logs -f keycloak
 ```
 
-**Next.js**:
+**Control Plane UI (Docker Compose)**:
+```bash
+cd frontend/control-plane
+docker compose logs -f control-plane-ui
+```
+
+**Next.js (開発サーバー)**:
 ターミナルに表示される。
 
 ## 🔐 セキュリティ注意事項
