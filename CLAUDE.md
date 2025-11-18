@@ -498,7 +498,7 @@ git push -u origin feat/branch-name
 **Issue 引用のルール:**
 - **コミットメッセージや PR 本文で他の Issue を `#番号` 形式で引用しない**
 - 理由: GitHub が自動的に相互リンクを作成し、関連 Issue にノイズが発生するため
-- 代替: Issue 番号を言及する必要がある場合は、フルURL（`https://github.com/org/repo/issues/番号`）を使用するか、番号のみ（`Issue 番号`）で記述する
+- 代替: Issue 番号を言及する必要がある場合は、フル URL（`https://github.com/org/repo/issues/番号`）を使用するか、番号のみ（`Issue 番号`）で記述する
 
 #### 5. プルリクエスト作成
 
