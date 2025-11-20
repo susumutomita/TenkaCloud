@@ -735,6 +735,35 @@ Next.js 16 の仕様変更により、middleware ファイル名が変更され�
 
 ---
 
+### Makefile 改善: Docker ステータス確認コマンドの追加 - 2025-11-20
+
+**目的 (Objective)**:
+- 開発者が Docker コンテナの起動状態を一目で確認できるようにする
+- `make docker-status` コマンドを追加し、Keycloak と Control Plane UI の状態を表示する
+- ドキュメント (`docs/QUICKSTART.md`) を更新し、新しいコマンドの使用方法を記載する
+
+**制約 (Guardrails)**:
+- 既存の `check-docker` ターゲットを活用する
+- 見やすいフォーマットで出力する
+- `CLAUDE.md` のコンテキストを理解し、ドキュメント更新を徹底する
+
+**タスク (TODOs)**:
+- [x] Makefile に `docker-status` ターゲットを追加
+- [x] Makefile の help に `docker-status` を追加
+- [x] `docs/QUICKSTART.md` に `make docker-status` の説明を追加
+- [x] 動作確認
+
+**検証手順 (Validation)**:
+- `make docker-status` を実行し、コンテナの状態が表示されることを確認
+- `make help` に新しいコマンドが表示されることを確認
+
+**進捗ログ (Progress Log)**:
+- [2025-11-20 08:58] Makefile に `docker-status` コマンドを追加完了
+- [2025-11-20 09:00] `docs/QUICKSTART.md` の更新に着手
+- [2025-11-20 09:05] `docs/QUICKSTART.md` に `make docker-status` の説明を追加完了
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：

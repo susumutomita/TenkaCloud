@@ -217,6 +217,16 @@ docker ps
 # エラーが出る場合は Docker Desktop を再起動
 ```
 
+### コンテナの状態を確認する
+
+起動中のコンテナの状態を一括で確認するには、以下のコマンドを使用します。
+
+```bash
+make docker-status
+```
+
+これにより、Keycloak、Control Plane UI、およびその他の実行中のコンテナの状態が表示されます。
+
 ### Keycloak に接続できない
 
 ```bash
@@ -344,6 +354,13 @@ bun run dev
 ```
 
 ### ログを確認
+
+**コンテナの状態確認**:
+```bash
+make docker-status
+```
+
+**Keycloak**:
 
 **Keycloak**:
 ```bash

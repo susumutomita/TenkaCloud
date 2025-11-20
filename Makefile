@@ -1,4 +1,4 @@
-.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker docker-build docker-run docker-stop
+.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker docker-build docker-run docker-stop docker-status
 
 # デフォルトターゲットはhelp
 default: help
@@ -138,6 +138,23 @@ docker-stop:
 	@echo "✅ 停止しました"
 	@echo ""
 
+docker-status: check-docker
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🐳 Docker コンテナの起動状態"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📦 Keycloak コンテナ:"
+	@cd infrastructure/docker/keycloak && docker compose ps || echo "  ❌ Keycloak コンテナが見つかりません"
+	@echo ""
+	@echo "📦 Control Plane UI コンテナ:"
+	@cd frontend/control-plane && docker compose ps || echo "  ❌ Control Plane UI コンテナが見つかりません"
+	@echo ""
+	@echo "🌐 すべての実行中コンテナ:"
+	@docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "  ❌ 実行中のコンテナがありません"
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+
 help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📖 TenkaCloud Makefile ヘルプ"
@@ -154,6 +171,7 @@ help:
 	@echo "  make docker-build     Control Plane UI の Docker イメージをビルド"
 	@echo "  make docker-run       Docker Compose で Control Plane UI を起動"
 	@echo "  make docker-stop      Docker Compose を停止"
+	@echo "  make docker-status    Docker コンテナの起動状態を表示"
 	@echo ""
 	@echo "📦 パッケージ管理:"
 	@echo "  make install          bun パッケージをインストール"
