@@ -27,6 +27,7 @@ export function TenantActions({ tenantId }: TenantActionsProps) {
     } catch (error) {
       console.error('Failed to delete tenant:', error);
       alert('テナント削除に失敗しました');
+    } finally {
       setIsDeleting(false);
     }
   };
