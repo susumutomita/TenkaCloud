@@ -27,10 +27,7 @@ export default async function DashboardPage() {
               const currentSession = await auth();
               await signOut({ redirect: false });
 
-              if (
-                currentSession?.idToken &&
-                process.env.AUTH_KEYCLOAK_ISSUER
-              ) {
+              if (currentSession?.idToken && process.env.AUTH_KEYCLOAK_ISSUER) {
                 const logoutUrl = `${process.env.AUTH_KEYCLOAK_ISSUER}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(
                   'http://localhost:3000'
                 )}&id_token_hint=${currentSession.idToken}`;
