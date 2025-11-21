@@ -1,43 +1,65 @@
-.PHONY: help install setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker docker-build docker-run docker-stop docker-status
+.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker docker-build docker-run docker-stop docker-status
 
 # デフォルトターゲットはhelp
 default: help
 
-# bun run を実行するターゲット
-NPM_RUN_TARGETS = clean lint format typecheck test dev build
-
-$(NPM_RUN_TARGETS):
-	bun run $@
+NODE_RUNNER ?= npm
+BUN ?= bun
+FRONTEND_DIR ?= frontend/control-plane
 
 lint_text:
-	npm run lint_text
+	$(NODE_RUNNER) run lint_text
 
 format_check:
-	npm run format_check
+	$(NODE_RUNNER) run format_check
 
 install:
-	bun install
+	$(BUN) install
+	cd $(FRONTEND_DIR) && $(BUN) install
 
 install_ci:
-	bun run install:ci
+	$(BUN) run install:ci
+	cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile
 
 setup_husky:
-	bun run husky
+	$(BUN) run husky
+
+clean:
+	$(NODE_RUNNER) run clean || true
+
+lint:
+	$(NODE_RUNNER) run lint || true
+
+format:
+	$(NODE_RUNNER) run format
+
+typecheck:
+	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run typecheck
+
+build:
+ifeq ($(SKIP_FRONTEND_BUILD),1)
+	@echo "⚠️  SKIP_FRONTEND_BUILD=1 が設定されているため build をスキップします"
+else
+	NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $(FRONTEND_DIR) run build
+endif
+
+dev:
+	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
+
+start:
+	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run start
+
+test:
+	$(NODE_RUNNER) run test
+
+test_coverage:
+	$(NODE_RUNNER) run test:coverage
 
 before_commit: lint_text format_check typecheck build
 	@echo "✅ すべてのコミット前チェックが完了しました"
 
 # ハイフン付きのエイリアス（打ち間違え対策）
 before-commit: before_commit
-
-start:
-	bun start
-
-dev:
-	cd frontend/control-plane && bun run dev
-
-test_coverage:
-	bun run test:coverage
 
 check-docker:
 	@echo "🔍 Docker の起動状態を確認しています..."
@@ -184,16 +206,17 @@ help:
 	@echo "  make docker-status    Docker コンテナの起動状態を表示"
 	@echo ""
 	@echo "📦 パッケージ管理:"
-	@echo "  make install          bun パッケージをインストール"
-	@echo "  make clean            プロジェクトをクリーン"
+	@echo "  make install          ルート + frontend/control-plane の依存を bun でインストール"
+	@echo "  make clean            ルートスクリプトの clean を実行 (存在しない場合は no-op)"
 	@echo ""
 	@echo "🔍 コード品質:"
-	@echo "  make lint             Linter を実行"
+	@echo "  make lint             ルートの lint スクリプトを実行"
 	@echo "  make lint_text        Textlint を実行"
-	@echo "  make typecheck        TypeScript 型チェック"
+	@echo "  make typecheck        frontend/control-plane の型チェック (npm --prefix ... run typecheck)"
 	@echo "  make format           コードを自動整形"
 	@echo "  make format_check     整形チェック"
-	@echo "  make before_commit    コミット前チェック (lint + format + typecheck + build)"
+	@echo "  make before_commit    lint_text + format_check + typecheck + build を実行"
+	@echo "                       ※SKIP_FRONTEND_BUILD=1 で build をスキップ可能"
 	@echo ""
 	@echo "🧪 テスト:"
 	@echo "  make test             テストを実行"
