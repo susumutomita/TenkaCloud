@@ -4,10 +4,16 @@
 default: help
 
 # bun run を実行するターゲット
-NPM_RUN_TARGETS = clean lint lint_text format format_check typecheck test dev build
+NPM_RUN_TARGETS = clean lint format typecheck test dev build
 
 $(NPM_RUN_TARGETS):
 	bun run $@
+
+lint_text:
+	npm run lint_text
+
+format_check:
+	npm run format_check
 
 install:
 	bun install

@@ -29,12 +29,12 @@
 
 ### 1.1 ビジョン
 
-TenkaCloudは、クラウド技術者のための常設・オープンソースの競技プラットフォームです。AWS GameDay文化をルーツに、完全スクラッチで再構築されたOSS版クラウド天下一武道会として、世界中のクラウド戦士たちが集い、技を磨き、腕を競い、学び合う場を提供します。
+TenkaCloud は、クラウド技術者のための常設・オープンソースの競技プラットフォームです。本プラットフォームは AWS GameDay 文化をルーツにした OSS 版クラウド天下一武道会として再構築しました。世界中のクラウド戦士たちが集い、技を磨き、腕を競い、学び合う場を提供します。
 
 ### 1.2 主要特徴
 
 - **完全OSS実装**: 社内資産を含まず、ゼロから再設計
-- **マルチクラウド対応**: AWS、GCP、Azure、OCI、LocalStack対応
+- **マルチクラウド対応**: AWS、GCP、Azure、OCI、LocalStack 対応
 - **マルチテナントSaaS**: 常設・チーム対戦・観戦モード
 - **拡張可能設計**: マイクロサービスアーキテクチャ
 - **AI支援機能**: 問題生成・自動採点・コーチング
@@ -72,10 +72,10 @@ TenkaCloudは、クラウド技術者のための常設・オープンソース�
 
 ### 2.3 制約事項
 
-- **ライセンス**: MIT License準拠
+- **ライセンス**: MIT License 準拠
 - **既存資産**: 既存プロジェクトの直接コピー禁止（独自実装必須）
-- **セキュリティ**: OWASP Top 10対応必須
-- **パフォーマンス**: 1000同時ユーザー対応
+- **セキュリティ**: OWASP Top 10 対応必須
+- **パフォーマンス**: 1000 同時ユーザー対応
 
 ---
 
@@ -212,10 +212,10 @@ sequenceDiagram
 | Runtime | Bun | 1.x | 高速実行環境 |
 | Framework | Fastify | 5.x | REST API |
 | Language | TypeScript | 5.x | 型安全性 |
-| ORM | Prisma | 6.x | データベースアクセス |
+| O/Rマッパ | Prisma | 6.x | データベースアクセス |
 | Validation | Zod | 3.x | スキーマ検証 |
 | Queue | BullMQ | 5.x | ジョブキュー |
-| WebSocket | Socket.io | 4.x | リアルタイム通信 |
+| WebSocket | Socket.IO | 4.x | リアルタイム通信 |
 | Testing | Vitest | 2.x | ユニットテスト |
 | API Doc | OpenAPI | 3.x | API仕様書 |
 
@@ -2797,32 +2797,32 @@ class IncidentManager {
 
 ## 付録A: API仕様書
 
-[別ドキュメント: API-Specification.md を参照]
+API 仕様の詳細は別ドキュメント「API-Specification.md」を参照してください。
 
 ---
 
 ## 付録B: データベース詳細設計
 
-[別ドキュメント: Database-Design.md を参照]
+データベース設計の詳細は「Database-Design.md」を参照してください。
 
 ---
 
 ## 付録C: セキュリティチェックリスト
 
-[別ドキュメント: Security-Design.md を参照]
+セキュリティチェックリストは「Security-Design.md」にまとめています。
 
 ---
 
 ## まとめ
 
-TenkaCloud Platform は、完全にスクラッチから開発されるOSSクラウド競技プラットフォームとして、以下の特徴を持ちます：
+TenkaCloud Platform は、スクラッチから開発される OSS クラウド競技プラットフォームとして、次の特徴を備えています。
 
 1. **マルチテナント・マルチクラウド対応**: 拡張性の高いアーキテクチャ
 2. **マイクロサービス設計**: 独立したサービスによる高い保守性
-3. **リアルタイム競技システム**: WebSocketによる即座のフィードバック
-4. **AI支援機能**: Claude APIによる問題生成と採点最適化
-5. **包括的なセキュリティ**: OWASP Top 10対応とゼロトラストアーキテクチャ
-6. **高パフォーマンス**: 多層キャッシュとCDN活用
+3. **リアルタイム競技システム**: WebSocket による即座のフィードバック
+4. **AI支援機能**: Claude API による問題生成と採点最適化
+5. **包括的なセキュリティ**: OWASP Top 10 対応とゼロトラストアーキテクチャ
+6. **高パフォーマンス**: 多層キャッシュと CDN 活用
 7. **完全自動化**: CI/CD パイプラインによる継続的デプロイ
 
 この設計書に基づいて実装を進めることで、エンタープライズグレードのクラウド競技プラットフォームを構築できます。
@@ -2840,7 +2840,7 @@ TenkaCloud Platform は、完全にスクラッチから開発されるOSSクラ
 
 ### 21.1 概要
 
-TenkaCloudプラットフォームから直接AWS Management Consoleにアクセスできる統合機能を提供します。これにより、競技者は問題解決中にシームレスにAWSリソースを操作できます。
+TenkaCloud プラットフォームから直接 AWS Management Console にアクセスできる統合機能を提供します。これにより、競技者は問題解決中にシームレスに AWS リソースを操作できます。
 
 ### 21.2 実装方式
 
@@ -3041,9 +3041,9 @@ BattleParticipantPolicy:
 
 #### 21.3.2 セッション管理
 
-- セッションは1時間で自動的に期限切れ
+- セッションは 1 時間で自動的に期限切れ
 - バトル終了時にセッションを即座に無効化
-- アクセスログをCloudTrailで監査
+- アクセスログを CloudTrail で監査
 
 ### 21.4 マルチクラウド対応
 
@@ -3104,7 +3104,7 @@ export class AzureConsoleAccess implements CloudConsoleAccess {
 
 ### 22.1 Apache License 2.0
 
-本プロジェクトはApache License 2.0の下で公開されます。
+本プロジェクトは Apache License 2.0 の下で公開されます。
 
 ```text
 Copyright 2025 TenkaCloud Contributors
@@ -3124,17 +3124,17 @@ limitations under the License.
 
 ### 22.2 ライセンス選択理由
 
-Apache License 2.0を選択した理由：
+Apache License 2.0 を選択した理由は次の通りです。
 
 1. **企業利用に適している**: 特許権の明示的な付与により、企業が安心して利用可能
 2. **貢献者の保護**: 貢献者に対する特許訴訟からの保護条項
 3. **商用利用可能**: 商用製品への組み込みが可能
 4. **変更の明示**: 変更箇所の明示義務により、オリジナルと派生物の区別が明確
-5. **互換性**: 多くのOSSライセンスと互換性がある
+5. **互換性**: 多くの OSS ライセンスと互換性がある
 
 ### 22.3 サードパーティライセンス
 
-主要な依存関係とそのライセンス：
+主要な依存関係とそのライセンスは次の表の通りです。
 
 | ライブラリ | ライセンス | 用途 |
 |-----------|------------|------|
@@ -3156,43 +3156,43 @@ Apache License 2.0を選択した理由：
 #### Week 1-2: プロジェクトセットアップ
 - [ ] リポジトリ構成とモノレポセットアップ
 - [ ] 開発環境構築ドキュメント作成
-- [ ] CI/CDパイプライン基本設定
+- [ ] CI/CD パイプライン基本設定
 - [ ] コーディング規約とレビュープロセス確立
 
 #### Week 3-4: 認証基盤
-- [ ] Keycloak Docker環境構築
-- [ ] NextAuth.js統合
+- [ ] Keycloak Docker 環境構築
+- [ ] NextAuth.js 統合
 - [ ] JWT token validation middleware
-- [ ] Role-based access control実装
+- [ ] Role-based access control 実装
 
 #### Week 5-6: Control Plane Core
-- [ ] Tenant Management Service実装
-- [ ] DynamoDB table作成とDAO実装
-- [ ] REST API実装（OpenAPI spec準拠）
-- [ ] ユニットテスト（カバレッジ100%）
+- [ ] Tenant Management Service 実装
+- [ ] DynamoDB table 作成と DAO 実装
+- [ ] REST API 実装（OpenAPI spec 準拠）
+- [ ] ユニットテスト（カバレッジ 100％）
 
 #### Week 7-8: Control Plane UI
 - [ ] Next.js プロジェクト構築
-- [ ] 管理ダッシュボード基本UI
+- [ ] 管理ダッシュボード基本 UI
 - [ ] テナント管理画面
-- [ ] Keycloak認証統合
+- [ ] Keycloak 認証統合
 
 ### 23.2 フェーズ2: コア機能実装 (Month 3-4)
 
 #### Week 9-10: Application Plane基盤
 - [ ] Battle Management Service
-- [ ] WebSocket real-time通信
+- [ ] WebSocket real-time 通信
 - [ ] バトルライフサイクル管理
 - [ ] 参加者管理システム
 
 #### Week 11-12: 問題管理システム
-- [ ] Challenge Service実装
+- [ ] Challenge Service 実装
 - [ ] 問題テンプレート管理
-- [ ] CloudFormation/Terraform統合
+- [ ] CloudFormation/Terraform 統合
 - [ ] 問題バリデーション機能
 
 #### Week 13-14: 採点システム
-- [ ] Scoring Service実装
+- [ ] Scoring Service 実装
 - [ ] 自動採点エンジン
 - [ ] インフラ検証ロジック
 - [ ] スコアボード更新システム
@@ -3201,7 +3201,7 @@ Apache License 2.0を選択した理由：
 - [ ] バトル参加画面
 - [ ] 問題表示・提出画面
 - [ ] リアルタイム進捗表示
-- [ ] AWS Console統合
+- [ ] AWS Console 統合
 
 ### 23.3 フェーズ3: AI機能統合 (Month 5)
 
@@ -3220,13 +3220,13 @@ Apache License 2.0を選択した理由：
 ### 23.4 フェーズ4: マルチクラウド対応 (Month 6)
 
 #### Week 21-22: クラウド抽象化層
-- [ ] Provider interface定義
-- [ ] AWS provider実装
-- [ ] GCP provider実装
-- [ ] Azure provider実装
+- [ ] Provider interface 定義
+- [ ] AWS provider 実装
+- [ ] GCP provider 実装
+- [ ] Azure provider 実装
 
 #### Week 23-24: LocalStack統合
-- [ ] LocalStack Docker環境
+- [ ] LocalStack Docker 環境
 - [ ] ローカル開発ワークフロー
 - [ ] 統合テストスイート
 - [ ] 開発者ドキュメント
@@ -3237,16 +3237,16 @@ Apache License 2.0を選択した理由：
    - 認証・認可システム
    - テナント管理
    - バトル実行エンジン
-   - 基本UI
+   - 基本 UI
 
 2. **High (P1)** - コア機能
    - 問題管理
    - 採点システム
    - リアルタイム更新
-   - AWS Console統合
+   - AWS Console 統合
 
 3. **Medium (P2)** - 付加価値機能
-   - AI問題生成
+   - AI 問題生成
    - コーチング機能
    - 詳細な分析・レポート
    - マルチクラウド対応

@@ -764,6 +764,29 @@ Next.js 16 の仕様変更により、middleware ファイル名が変更され�
 
 ---
 
+### 開発環境改善: 推奨カラーテーマの追加 - 2025-11-20
+
+**目的 (Objective)**:
+- 開発者体験向上のため、推奨カラーテーマ「Hybrid Next」をプロジェクト設定に追加する
+- VS Code の推奨拡張機能リストに `wyze.theme-hybrid-next` を追加する
+
+**制約 (Guardrails)**:
+- ユーザーの既存設定を強制上書きせず、推奨リストへの追加にとどめる
+
+**タスク (TODOs)**:
+- [x] `.vscode` ディレクトリの作成（存在しない場合）
+- [x] `.vscode/extensions.json` の作成・更新
+- [x] `wyze.theme-hybrid-next` を推奨リストに追加
+
+**検証手順 (Validation)**:
+- ファイルが正しく作成されているか確認
+
+**進捗ログ (Progress Log)**:
+- [2025-11-20 09:10] `.vscode/extensions.json` の作成に着手
+- [2025-11-20 09:12] `.vscode/extensions.json` を作成し、Hybrid Next を推奨リストに追加完了
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
