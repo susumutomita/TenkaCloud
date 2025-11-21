@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { mockTenantApi } from '@/lib/api/mock-tenant-api';
+import { TenantActions } from '@/components/tenants/tenant-actions';
 
 export default async function TenantDetailPage({
   params,
@@ -28,12 +29,13 @@ export default async function TenantDetailPage({
           >
             戻る
           </Link>
-          <button
-            type="button"
+          <TenantActions tenantId={tenant.id} />
+          <Link
+            href={`/dashboard/tenants/${tenant.id}/edit`}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-black text-white"
           >
             編集
-          </button>
+          </Link>
         </div>
       </div>
 

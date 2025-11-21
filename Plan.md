@@ -122,6 +122,25 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
 - [ ] OpenAPI 仕様 (Create/List/Get/Update/Suspend/Resume/Delete) を `backend/services/control-plane/tenant-management/openapi.yaml` に作成 (#27)
 - [ ] Fastify サービスのブートストラップ（config, validation, logging, tracing, error handling）を整備 (#27)
 - [ ] Repository/UseCase 層で CRUD + 状態遷移ロジックと監査ログ永続化を実装 (#27)
+- [ ] **テナントプロビジョニング (Onboarding) 実装** (#27)
+  - [ ] **マルチモデル対応 (Pool vs Silo)**:
+    - [ ] **Poolモデル (同居型)**: 共有リソース（DBスキーマ、Compute）を使用し、論理的に分離
+    - [ ] **Siloモデル (独立型)**: 専用リソース（DBスキーマ/DB、Compute）を払い出し
+  - [ ] **サーバーレス/K8S対応 (Compute Abstraction)**:
+    - [ ] **Kubernetes Native**: Deployment, Service, Ingress の動的生成
+    - [ ] **Serverless (Scale-to-Zero)**: Knative Service / AWS Fargate / Cloud Run への対応（アイドル時リソースゼロ）
+    - [ ] **Event-driven**: KEDA によるイベント駆動スケーリング
+  - [ ] **データストア抽象化レイヤー (Data Store Abstraction)**:
+    - [ ] **Unified Interface**: RDS, Cloud SQL, DynamoDB, Firestore, **Supabase** を透過的に扱えるリポジトリパターン
+    - [ ] **Modeling Adapter**: Pool/Silo, RDB/NoSQL のデータモデルの違いを吸収し、統一的なテナントデータアクセスを提供
+    - [ ] **Provisioning Adapter**: テナント作成時に適切なデータストア（RDB Schema, DynamoDB Table, Supabase Project等）を自動払い出し
+    - [ ] **Connection Management**: テナントIDに基づいた動的な接続切り替え (Multi-tenancy Routing)
+  - [ ] **インフラ抽象化レイヤー (Infrastructure Adapter)**:
+    - [ ] ローカル環境 (Docker Compose): DBスキーマ作成、Keycloak Realm作成、Mock Compute
+    - [ ] 本番環境 (Kubernetes/Serverless): Namespace作成、Knative Service作成、DBインスタンス作成
+  - [ ] Keycloak Realm & Client 自動作成ロジック
+- [ ] **ローカル開発環境の整備**:
+  - [ ] `make start` でテナント管理サービスと依存リソース（DB, Keycloak）が一括起動する `docker-compose.yml` の整備
 - [ ] EventBridge 互換イベントパブリッシャを shared 層に実装し、状態遷移イベントを publish (#27)
 - [ ] Bun/Vitest ベースのユニット & コントラクトテストで 100% カバレッジを達成 (#27)
 - [ ] Runbook / README を更新し、ローカル実行・デプロイ手順を記載 (#27)
@@ -129,7 +148,8 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
 
 **検証手順 (Validation)**:
 - `bun run lint`, `bun run typecheck`, `bun run test:coverage`, `bun run lint_text` がすべて成功すること
-- `bun run build` でテナント管理サービスがビルド可能であること
+- `make start` で全サービス（Control Plane UI, Tenant Management Service, Keycloak, DB）が起動し、ローカルで動作すること
+- ローカル環境でテナントを作成し、Pool/Silo 設定に応じて適切なリソース（Keycloak Realm, DBスキーマ等）が作成されること
 - DynamoDB Local + EventBridge エミュレータを用いた CRUD/状態遷移/イベント publish の統合テストが通過すること
 - OpenAPI 仕様に対するモックテスト (`scripts/dev/tenant-management.sh` 等) が成功し、CI で自動検証されること
 
@@ -137,6 +157,7 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
 - Registration Service とテーブルを共有するか、Control Plane 専用テーブルを分離するか
 - イベントバスは LocalStack を採用するか、軽量な in-memory pub/sub から着手するか
 - 監査ログの保存先を DynamoDB で兼用するか、OpenSearch/CloudWatch Logs に分離するか
+- ローカルでの Silo Compute（独立コンテナ）の再現方法（Docker-in-Docker は避けるか）
 
 **進捗ログ (Progress Log)**:
 - [2025-11-09 10:20] 実装プラン作成および Issue #27 を起票
@@ -352,8 +373,8 @@ backend/
   - [ ] テナント一覧ページ（テーブル、検索、フィルター）
   - [ ] テナント詳細ページ
   - [ ] テナント作成フォーム
-  - [ ] テナント編集フォーム
-  - [ ] テナント削除確認ダイアログ
+  - [x] テナント編集フォーム
+  - [x] テナント削除確認ダイアログ
   - [ ] テナントステータス管理（停止/再開）
 - [ ] ダッシュボードページ
   - [ ] システムメトリクス表示
