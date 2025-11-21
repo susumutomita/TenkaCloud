@@ -59,6 +59,7 @@ before_commit: lint_text format_check typecheck build
 	@echo "✅ すべてのコミット前チェックが完了しました"
 
 # ハイフン付きのエイリアス（打ち間違え対策）
+# ハイフン付きのエイリアス（打ち間違え対策）
 before-commit: before_commit
 
 check-docker:
@@ -82,9 +83,9 @@ setup-keycloak: check-docker
 	@echo "🔧 Keycloak の自動設定を実行しています..."
 	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh
 
-start-all: check-docker
+start-infrastructure: check-docker
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "🚀 TenkaCloud ローカル環境を起動します"
+	@echo "🚀 TenkaCloud インフラストラクチャを起動します"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📦 ステップ 1/3: Keycloak を起動しています..."
@@ -110,26 +111,25 @@ start-all: check-docker
 		echo "⚠️  重要: frontend/control-plane/.env.local を編集して以下を設定してください:"; \
 		echo "  - AUTH_SECRET (openssl rand -base64 32 で生成)"; \
 		echo "  - AUTH_KEYCLOAK_SECRET (上記の Keycloak セットアップで表示された値)"; \
-		echo ""; \
-		echo "設定後、以下のコマンドで Control Plane UI を起動してください:"; \
-		echo "  cd frontend/control-plane && bun run dev"; \
 	else \
 		echo "✅ .env.local が存在します"; \
-		echo ""; \
-		echo "🎯 Control Plane UI を起動するには:"; \
-		echo "  cd frontend/control-plane && bun run dev"; \
 	fi
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "✨ ローカル環境の起動が完了しました！"
+	@echo "✨ インフラストラクチャの起動が完了しました！"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
 	@echo "  - Keycloak:         http://localhost:8080"
-	@echo "  - Control Plane UI: http://localhost:3000 (bun run dev 実行後)"
 	@echo ""
-	@echo "📚 詳細は docs/QUICKSTART.md を参照してください"
-	@echo ""
+
+start-control-plane:
+	@echo "🚀 Control Plane UI を起動します..."
+	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
+
+start: start-infrastructure start-control-plane
+
+start-all: start
 
 stop-all:
 	@echo "🛑 TenkaCloud ローカル環境を停止しています..."
@@ -143,7 +143,7 @@ stop-all:
 	@echo "   cd infrastructure/docker/keycloak && docker compose stop"
 	@echo ""
 
-restart-all: stop-all start-all
+restart-all: stop-all start
 
 docker-build: check-docker
 	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
@@ -193,7 +193,10 @@ help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "🚀 ローカル環境管理:"
-	@echo "  make start-all        ローカル環境を一括起動（Keycloak + 自動設定）"
+	@echo "  make start            全サービス（インフラ + UI）を起動"
+	@echo "  make start-all        make start と同じ"
+	@echo "  make start-control-plane Control Plane UI のみを起動"
+	@echo "  make start-infrastructure インフラ（Keycloak）のみを起動"
 	@echo "  make stop-all         ローカル環境を一括停止"
 	@echo "  make restart-all      ローカル環境を再起動"
 	@echo "  make setup-keycloak   Keycloak のみセットアップ"
@@ -223,9 +226,9 @@ help:
 	@echo "  make test_coverage    カバレッジレポート付きテスト"
 	@echo ""
 	@echo "🏗  ビルド:"
-	@echo "  make dev              開発サーバーを起動"
+	@echo "  make dev              開発サーバーを起動 (UIのみ)"
 	@echo "  make build            プロジェクトをビルド"
-	@echo "  make start            本番サーバーを起動"
+	@echo "  make start-ui-prod    本番サーバーを起動 (UIのみ)"
 	@echo ""
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
