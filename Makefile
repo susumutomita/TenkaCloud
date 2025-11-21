@@ -24,7 +24,8 @@ install_ci:
 setup_husky:
 	bun run husky
 
-before_commit: lint_text format_check
+before_commit: lint_text format_check typecheck build
+	@echo "✅ すべてのコミット前チェックが完了しました"
 
 # ハイフン付きのエイリアス（打ち間違え対策）
 before-commit: before_commit
@@ -189,7 +190,7 @@ help:
 	@echo "  make typecheck        TypeScript 型チェック"
 	@echo "  make format           コードを自動整形"
 	@echo "  make format_check     整形チェック"
-	@echo "  make before_commit    コミット前チェック"
+	@echo "  make before_commit    コミット前チェック (lint + format + typecheck + build)"
 	@echo ""
 	@echo "🧪 テスト:"
 	@echo "  make test             テストを実行"
