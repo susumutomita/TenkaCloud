@@ -77,6 +77,127 @@ TenkaCloud は、クラウド技術者のための常設・オープンソース
 - **セキュリティ**: OWASP Top 10 対応必須
 - **パフォーマンス**: 1000 同時ユーザー対応
 
+### 2.4 リポジトリとディレクトリ構造
+
+TenkaCloud は単一の monorepo として管理し、プレーン別・機能別にフォルダを分離しています。ルート直下の配置は次の通りです。
+
+```
+TenkaCloud/
+├── backend/              # Control/Application plane のサービスコード
+├── frontend/             # Control/Admin/Participant UI (Next.js)
+├── infrastructure/       # Kubernetes と Terraform の IaC
+├── problems/             # 問題テンプレートとサンプル
+├── ai/                   # 問題生成・採点・コーチング AI
+├── docs/                 # すべてのアーキテクチャ/運用ドキュメント
+├── .github/              # GitHub Actions ワークフロー
+├── .devcontainer/        # VS Code Dev Container 設定
+├── Makefile              # 開発オーケストレーション
+└── CLAUDE.md             # 自律開発プレイブック
+```
+
+#### 2.4.1 backend/
+
+```
+backend/
+└── services/
+    ├── control-plane/         # registration / tenant-management / user-management / system-management / deployment-management
+    ├── application-plane/     # battle / problem / scoring / leaderboard などテナント固有ロジック
+    └── shared/
+        └── cloud-abstraction/ # プロバイダー非依存のインターフェースと実装
+```
+
+Control Plane は共有ネームスペース `tenkacloud-control` にデプロイし、Application Plane は `tenant-{id}` ネームスペース単位で分離します（詳細は [第7章](#7-マルチテナント設計)）。
+
+#### 2.4.2 frontend/
+
+```
+frontend/
+├── control-plane/         # プラットフォーム運営者向け Next.js アプリ
+└── application/          # テナント管理者・競技者 UI（route グループで Admin/Participant を分離）
+```
+
+`frontend/application` の `(admin)` グループがテナント管理 UI、`(participant)` グループが競技者 UI を担い、Control Plane UI は別リポジトリ構造として `frontend/control-plane` に配置します（UI の役割は [第10章](#10-フロントエンド設計)）。
+
+#### 2.4.3 infrastructure/
+
+```
+infrastructure/
+├── k8s/
+│   ├── base/                # namespace/ingress/network-policy など共通 CRD
+│   ├── control-plane/       # Control Plane 向けマニフェスト
+│   └── application-plane/   # テナントテンプレート（ヘルム化予定）
+└── terraform/
+    ├── modules/             # eks, dynamodb, cognito, networking 等の再利用モジュール
+    └── environments/        # dev / staging / prod の変数定義
+```
+
+#### 2.4.4 problems/
+
+```
+problems/
+├── templates/
+│   ├── beginner/
+│   ├── intermediate/
+│   └── advanced/
+└── examples/
+    ├── aws/
+    ├── gcp/
+    └── azure/
+```
+
+各問題ディレクトリには `problem.yaml` があり、最低限のメタデータと採点基準を宣言します。
+
+```yaml
+name: "問題名"
+description: "課題の説明"
+difficulty: "beginner|intermediate|advanced"
+cloud_provider: "aws|gcp|azure|multi"
+time_limit: 3600
+scoring:
+  max_score: 100
+  criteria:
+    - name: "機能性"
+      weight: 40
+    - name: "コスト最適化"
+      weight: 30
+    - name: "セキュリティ"
+      weight: 30
+```
+
+#### 2.4.5 ai/
+
+```
+ai/
+├── problem-generator/   # プロンプトと生成ロジック
+├── scoring/             # AI 補助採点
+└── coaching/            # ヒント/フィードバック生成
+```
+
+#### 2.4.6 docs/
+
+```
+docs/
+├── architecture/
+│   └── architecture.md   # 本ドキュメント（ディレクトリ案内/マルチテナント案含む）
+├── api/
+│   ├── control-plane/
+│   └── application-plane/
+├── development/
+│   ├── setup.md
+│   ├── coding-standards.md
+│   └── testing.md
+└── deployment/
+    ├── local.md
+    ├── staging.md
+    └── production.md
+```
+
+#### 2.4.7 開発環境と CI/CD
+
+- `.devcontainer/` と `docker-compose.yml` でローカル環境を即時再現できる。`.env.example` から `.env.local` を生成し、NextAuth/Keycloak/AWS 資格情報を設定する。
+- `.github/workflows/` には `control-plane-ci.yml` / `application-plane-ci.yml` / `frontend-ci.yml` / `infrastructure-ci.yml` を配置し、それぞれ lint・test・build・デプロイを自動化する。
+- ルートの `package.json`、`tsconfig.json`、`.eslintrc.json`、`.prettierrc` などでコーディング規約を統一する。
+
 ---
 
 ## 3. システムアーキテクチャ
@@ -186,6 +307,8 @@ sequenceDiagram
     GW-->>UI: JSON Response
     UI-->>U: Display Result
 ```
+
+Control Plane の共通データは DynamoDB 単一テーブル設計に集約し、テナント固有データは `battles-{tenantId}` などサイロ化テーブルで保持します。アイデンティティは各テナント専用の Amazon Cognito User Pool、ファイルアーティファクトは S3 や Artifact バケット、低レイテンシキャッシュは Redis/MemoryDB が担当します。
 
 ---
 
@@ -695,92 +818,171 @@ interface ScoringEngine {
 
 ## 7. マルチテナント設計
 
-### 7.1 テナント分離戦略
+### 7.1 Control Plane サービス
 
-#### 7.1.1 Namespace-per-Tenant Model
-```yaml
-# Control Plane (共有)
-namespace: tenkacloud-control
-  services:
-    - tenant-service
-    - identity-service
-    - platform-service
+| サービス | 主な責務 | デプロイ/データ | 補足 |
+|----------|----------|-----------------|------|
+| Registration Service | テナント自己登録と初期設定 | `control-plane` namespace、DynamoDB `tenants` パーティション | Cognito User Pool・Kubernetes Namespace 作成を自動化 |
+| Tenant Management Service | テナントライフサイクル、状態遷移、設定管理 | 同上 | テナント状態に応じて Application Plane のローリング操作をトリガー |
+| User Management Service | テナントユーザー CRUD、ロール/権限管理 | Cognito User Pool per tenant + shared DynamoDB | 各トークンに `tid` とロールを付与 |
+| System Management Service | プラットフォーム全体の設定、メトリクス、監査 | shared Observability stack | Control Plane UI から参照 |
+| Deployment Management Service | Application Plane のデプロイ計画・実行・ロールバック | `deployments` / `deployment-logs` テーブル | 章 7.7 参照 |
 
-# Application Plane (テナント別)
-namespace: tenant-{tenantId}
-  services:
-    - battle-service
-    - challenge-service
-    - scoring-service
-    - leaderboard-service
+### 7.2 Application Plane サービス
+
+| サービス | 主な責務 | データモデル | ネームスペース |
+|----------|----------|--------------|-----------------|
+| Battle Service | バトルセッション管理、ライフサイクル制御 | **Silo** (`battles-{tenantId}`) | `tenant-{id}` |
+| Problem Service | 問題ライブラリ、テンプレート、AI 生成 | **Pooled** (`problems` with tenantId) | `tenant-{id}` |
+| Scoring Service | 採点ジョブ実行、評価フィードバック | **Pooled** (`scoring-results`) | `tenant-{id}` + serverless |
+| Leaderboard Service | ランキング、履歴、カテゴリ別スコア | **Silo** (`leaderboard-{tenantId}`) | `tenant-{id}` |
+
+### 7.3 データパーティショニング
+
+#### Control Plane DynamoDB テーブル
+
+```
+tenants
+  PK: tenantId
+  Attributes: name, status, plan, createdAt, config
+
+users
+  PK: tenantId
+  SK: userId
+  Attributes: email, role, permissions, lastLogin
+
+system-config
+  PK: configKey
+  Attributes: value, updatedAt
 ```
 
-#### 7.1.2 データ分離
-```yaml
-Silo Model (完全分離):
-  - Battles: テナント専用テーブル
-  - Submissions: テナント専用テーブル
-  - LeaderboardEntries: テナント専用テーブル
+#### Application Plane テーブル
 
-Pool Model (共有 + 論理分離):
-  - Challenges: 共有テーブル + tenantId パーティション
-  - Users: 共有テーブル + tenantId パーティション
+```
+# Silo (テナント毎)
+battles-{tenantId}
+  PK: battleId
+  Attributes: teams, schedule, status, artifacts
+
+leaderboard-{tenantId}
+  PK: category
+  SK: score#userId
+  Attributes: score, rank, trend
+
+# Pooled (共有 + tenantId)
+problems
+  PK: tenantId
+  SK: problemId
+  Attributes: template, difficulty, cloud, metadata
+
+scoring-results
+  PK: tenantId#battleId
+  SK: userId#timestamp
+  Attributes: score, feedback, metrics
 ```
 
-### 7.2 テナントプロビジョニング
+### 7.4 テナント分離とネットワーク
 
-```typescript
-class TenantProvisioner {
-  async provisionNewTenant(request: TenantRequest): Promise<Tenant> {
-    // 1. テナントレコード作成
-    const tenant = await this.createTenantRecord(request);
+Kubernetes では namespace per tenant を採用し、Calico NetworkPolicy で南北/東西トラフィックを制限する。Control Plane との通信は gRPC/HTTPS のみ許可し、Service Mesh 第二段階でマイクロセグメンテーションを実現する。
 
-    // 2. Kubernetes Namespace作成
-    await this.createNamespace(tenant.tenantId);
-
-    // 3. サービスデプロイ
-    await this.deployServices(tenant.tenantId);
-
-    // 4. データベース初期化
-    await this.initializeDatabase(tenant.tenantId);
-
-    // 5. IAMロール作成
-    await this.createIAMRoles(tenant.tenantId);
-
-    // 6. DNS設定
-    await this.configureDNS(tenant);
-
-    // 7. 初期ユーザー作成
-    await this.createAdminUser(tenant);
-
-    return tenant;
-  }
-}
+```
+EKS Cluster
+├── control-plane
+│   ├── registration-service
+│   ├── tenant-management-service
+│   ├── user-management-service
+│   └── system-management-service
+│
+├── tenant-{org-1}
+│   ├── battle-service
+│   ├── problem-service
+│   ├── scoring-service
+│   └── leaderboard-service
+│
+└── tenant-{org-2}
+    ├── battle-service
+    ├── problem-service
+    ├── scoring-service
+    └── leaderboard-service
 ```
 
-### 7.3 テナントルーティング
+### 7.5 テナント識別とルーティング
+
+テナントは (1) `x-tenant-id` ヘッダー、(2) JWT `tid` クレーム、(3) `{tenant}.tenkacloud.com` サブドメインの 3 経路で特定します。実装例は以下の通りです。
 
 ```typescript
 class TenantRouter {
-  // HTTPヘッダーベース
-  extractTenantFromHeader(request: Request): string {
+  extractTenantFromHeader(request: Request): string | undefined {
     return request.headers['x-tenant-id'];
   }
 
-  // JWTベース
   extractTenantFromJWT(token: string): string {
     const payload = jwt.decode(token);
     return payload.tid;
   }
 
-  // サブドメインベース
   extractTenantFromDomain(host: string): string {
-    // tenant1.tenkacloud.io -> tenant1
-    const subdomain = host.split('.')[0];
-    return subdomain;
+    return host.split('.')[0];
   }
 }
 ```
+
+### 7.6 テナントプロビジョニング
+
+1. Registration API がテナント申請を受け付ける。
+2. `tenants` テーブルにレコードを作成し、監査ログを記録する。
+3. Cognito User Pool・初期クライアントをプロビジョニングする。
+4. `tenant-{id}` Kubernetes namespace を作成し、ResourceQuota/NetworkPolicy を適用する。
+5. Helm/Argo CD で Application Plane サービスを namespaced デプロイする。
+6. DNS（`{tenant}.tenkacloud.com`）と TLS 証明書を構成する。
+7. 初期テナント管理者ユーザーを作成し、通知を送付する。
+
+```typescript
+class TenantProvisioner {
+  async provisionNewTenant(request: TenantRequest): Promise<Tenant> {
+    const tenant = await this.createTenantRecord(request);
+    await this.createNamespace(tenant.tenantId);
+    await this.deployServices(tenant.tenantId);
+    await this.initializeDatabase(tenant.tenantId);
+    await this.createIAMRoles(tenant.tenantId);
+    await this.configureDNS(tenant);
+    await this.createAdminUser(tenant);
+    return tenant;
+  }
+}
+```
+
+### 7.7 デプロイメント管理と CI/CD
+
+- **Control Plane**: 単一パイプラインで全テナント共有サービスをローリングアップデート。
+- **Application Plane**: テナント集合をトグルしながら段階的ロールアウト（全体／カナリア／テナント単位）。
+- **Deployment Management Service**: UI からデプロイ計画を登録 → Kubernetes API へ反映 → ステータス/ロールバックを追跡。
+
+ワークフローは (1) GitHub Actions が Docker イメージをビルドし ECR へプッシュ、(2) Control Plane UI が対象サービスとテナントを選択、(3) サービスが namespace ごとにマニフェストを適用、(4) `deployment-logs` に結果を保存、の順です。
+
+```
+deployments
+- PK: deploymentId
+- Attributes: version, services[], targetTenants[], strategy, status, createdAt
+
+deployment-logs
+- PK: deploymentId
+- SK: timestamp#tenantId
+- Attributes: tenantId, status, logs, errorMessage
+```
+
+### 7.8 スケーリング戦略
+
+- **Horizontal Pod Autoscaler**: CPU/メモリとカスタムメトリクス（同時バトル数）で Application Plane を水平スケール。
+- **Cluster Autoscaler**: テナント増加時にノードプールを自動拡張し、隔離を維持。
+- **DynamoDB Auto Scaling**: Pooled テーブルはパーティションキー単位でキャパシティ調整、Silo テーブルはテナント作成時にベースラインを設定。
+
+### 7.9 セキュリティと監査
+
+- 全 API 呼び出しをテナント ID 付きで CloudWatch Logs と OpenSearch へ送信し、横断アクセスを検知。
+- TLS 1.3、DynamoDB/S3/KMS 暗号化、EBS 暗号化を標準化。
+- NetworkPolicy で Control Plane からの east-west 通信のみ許可し、Service Mesh 도입後は mTLS を強制。
+- Tenant 切り替え時には JWT とセッションを無効化し、Cognito 側も revoke。
 
 ---
 
@@ -812,6 +1014,23 @@ interface CloudProvider {
   createAlarm(config: AlarmConfig): Promise<Alarm>;
 }
 ```
+
+#### 8.1.1 ソース配置
+
+```
+backend/services/shared/cloud-abstraction/
+├── interfaces/
+│   ├── IAuthProvider.ts
+│   ├── IStorageProvider.ts
+│   └── IComputeProvider.ts
+└── providers/
+    ├── aws/
+    ├── gcp/
+    ├── azure/
+    └── localstack/
+```
+
+Interface 層で API 契約を固定し、各クラウド固有処理は `providers/{cloud}` に隔離することでテスト差し替えを容易にします。
 
 ### 8.2 Provider実装
 
@@ -1041,42 +1260,102 @@ class AuthorizationMiddleware {
 
 ## 10. フロントエンド設計
 
-### 10.1 アプリケーション構造
+### 10.1 UIポートフォリオ
+
+TenkaCloud はロールに応じて 3 つの UI 体験を提供します。
+
+| UI | 主対象 | 代表機能 | 認証/URL |
+|----|--------|----------|-----------|
+| Control Plane UI | プラットフォーム運営者 | テナント登録、Application Plane デプロイ、全体メトリクス、監査ログ | 専用 Cognito User Pool、`https://platform.tenkacloud.com` |
+| Admin UI | テナント管理者 | バトル編成、問題管理、チーム/ユーザー管理、分析レポート | テナント Cognito（Admin ロール）、`https://{tenant}.tenkacloud.com/admin` |
+| Participant UI | 競技者/観戦者 | バトル参加、問題閲覧/提出、リアルタイムスコア、リーダーボード、AI コーチング | テナント Cognito（Participant ロール）、`https://{tenant}.tenkacloud.com/` |
+
+#### 10.1.1 Control Plane UI
+- **機能**: テナント CRUD、Namespace 状態、Deployment 計画、グローバル統計、プラットフォーム設定、監査ログ表示。
+- **アクセス制御**: プラットフォーム管理者のみ。MFA と IP allowlist を推奨。
+- **スタック**: Next.js (App Router) + TanStack Query + shadcn/ui。
+- **URL 構成**:
+  ```
+  https://platform.tenkacloud.com/
+  ├── /tenants
+  ├── /tenants/:id
+  ├── /deployments
+  ├── /statistics
+  └── /settings
+  ```
+
+#### 10.1.2 Admin UI
+- **機能**: バトル作成/編集、問題ライブラリ閲覧、AI 問題生成、チーム・ユーザー管理、テナント内ランキングとレポート。
+- **アクセス制御**: テナント固有 Cognito User Pool + Admin ロール。テナント横断アクセスは禁止。
+- **スタック**: Next.js App Router（`frontend/application` の `(admin)` グループ）、Server Actions、リアルタイムモニタリング用 WebSocket。
+- **URL 構成**:
+  ```
+  https://{tenant}.tenkacloud.com/admin
+  ├── /battles
+  ├── /battles/new
+  ├── /battles/:id
+  ├── /problems
+  ├── /teams
+  ├── /users
+  └── /analytics
+  ```
+
+#### 10.1.3 Participant UI
+- **機能**: バトル一覧/参加、問題 UI、クラウドワークスペース遷移、提出・自動採点、ヒント、ランキング、履歴。
+- **アクセス制御**: テナント Cognito + Participant ロール。自分のデータ + 公開リーダーボードのみ閲覧。
+- **スタック**: Next.js App Router（`frontend/application` の `(participant)` グループ）、WebSocket (Socket.IO) でスコア/ヒントを push。
+- **URL 構成**:
+  ```
+  https://{tenant}.tenkacloud.com/
+  ├── /battles
+  ├── /battles/:id
+  ├── /battles/:id/problems/:problemId
+  ├── /leaderboard
+  ├── /history
+  └── /profile
+  ```
+
+#### 10.1.4 UI 間の関係
+
+```
+┌────────────────────────────┐
+│ Control Plane UI            │
+│ (プラットフォーム管理者)     │
+└──────────────┬────────────┘
+               │ テナント作成/設定
+               ▼
+┌────────────────────────────┐
+│ Tenant {tenant-id}          │
+│ ┌────────────┐ ┌──────────┐│
+│ │ Admin UI   │ │Participant││
+│ │ (管理者)   │ │ UI        ││
+│ │ - バトル   │ │ (競技者) ││
+│ │ - 問題     │ │ - 参加   ││
+│ │ - ユーザー │ │ - 提出   ││
+│ └────────────┘ └──────────┘│
+└────────────────────────────┘
+```
+
+### 10.2 Next.js プロジェクト構造
 
 ```
 frontend/
-├── control-plane/              # 管理画面
-│   ├── app/
-│   │   ├── (auth)/           # 認証済みレイアウト
-│   │   │   ├── dashboard/
-│   │   │   ├── tenants/
-│   │   │   ├── users/
-│   │   │   └── battles/
-│   │   ├── login/
-│   │   └── layout.tsx
-│   ├── components/
-│   │   ├── ui/              # 基本UIコンポーネント
-│   │   ├── features/        # 機能別コンポーネント
-│   │   └── layouts/         # レイアウトコンポーネント
-│   ├── hooks/               # カスタムフック
-│   ├── lib/                 # ユーティリティ
-│   ├── services/            # APIクライアント
-│   └── stores/              # 状態管理
-│
-└── application/               # 競技者画面
-    ├── app/
-    │   ├── (auth)/
-    │   │   ├── arena/        # バトルアリーナ
-    │   │   ├── challenges/   # 問題一覧
-    │   │   ├── leaderboard/  # リーダーボード
-    │   │   └── profile/      # プロフィール
-    │   └── spectate/         # 観戦モード
-    ├── components/
-    ├── hooks/
-    └── services/
+├── control-plane/
+│   ├── app/(auth)/{dashboard,tenants,users,deployments}
+│   ├── app/login
+│   ├── components/{ui,features,layouts}
+│   ├── lib, services, stores
+│   └── hooks
+└── application/
+    ├── app/(admin)/{battles,problems,teams,users,analytics}
+    ├── app/(participant)/{battles,leaderboard,history,profile}
+    ├── app/spectate
+    ├── components/{ui,feature}
+    ├── hooks
+    └── services
 ```
 
-### 10.2 コンポーネント設計
+### 10.3 コンポーネント設計
 
 #### 10.2.1 Atomic Design Pattern
 ```typescript
@@ -1129,7 +1408,7 @@ export const BattleCard: FC<BattleCardProps> = ({ battle }) => {
 };
 ```
 
-### 10.3 状態管理
+### 10.4 状態管理
 
 ```typescript
 // Zustand Store
@@ -1186,7 +1465,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 }));
 ```
 
-### 10.4 API クライアント
+### 10.5 API クライアント
 
 ```typescript
 // API Client with Interceptors
@@ -3256,6 +3535,15 @@ Apache License 2.0 を選択した理由は次の通りです。
    - エンタープライズ機能
    - カスタムブランディング
    - API marketplace
+
+### 23.6 即時アクション
+
+1. Control Plane サービス群（Registration/Tenant/User/System/Deployment）を Fastify + DynamoDB で実装し、テストカバレッジ 100％ を担保する。
+2. Application Plane（Battle/Problem/Scoring/Leaderboard）を namespace テンプレート化し、CI から任意テナントへローリングデプロイできるようにする。
+3. Frontend 3 UI（Control/Admin/Participant）の主要画面を Next.js App Router で構築し、Cognito ロールに応じてルーティングを切り替える。
+4. Kubernetes マニフェストを Control Plane / Application Plane / Shared base に分割し、Helm/Argo CD で宣言的運用を開始する。
+5. Terraform モジュール（EKS, DynamoDB, Cognito, Networking）を environments/{dev,staging,prod} で再利用可能に整備する。
+6. CI/CD（`control-plane-ci.yml` など）に lint → test → build → deploy のシーケンスを組み込み、失敗時は Deployment Management Service へ即時通知する。
 
 ## 24. 開発環境セットアップガイド
 

@@ -21,7 +21,7 @@
 - [x] マルチテナントアーキテクチャ設計書作成
 - [x] バックエンドディレクトリ構造作成
 - [x] インフラストラクチャディレクトリ構造作成
-- [x] アーキテクチャドキュメント作成（multi-tenant-design.md、directory-structure.md）
+- [x] アーキテクチャドキュメント作成（現在は architecture/architecture.md に統合済み）
 - [x] CLAUDE.md に開発プレイブック追加
 - [x] Plan.md 初期化
 - [x] GitHub Issue テンプレート作成
