@@ -33,6 +33,9 @@ before-commit: before_commit
 start:
 	bun start
 
+dev:
+	cd frontend/control-plane && bun run dev
+
 test_coverage:
 	bun run test:coverage
 

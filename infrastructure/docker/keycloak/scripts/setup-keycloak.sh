@@ -7,7 +7,7 @@ set -e
 
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin_password}"
 REALM_NAME="tenkacloud"
 CLIENT_ID="control-plane-ui"
 REDIRECT_URI="http://localhost:3000/*"
@@ -132,6 +132,36 @@ if [ -z "$CLIENT_SECRET" ]; then
 fi
 
 echo "✅ Client Secret 取得成功"
+echo ""
+
+# デフォルトユーザーを作成
+echo "👤 デフォルトユーザー 'user' を作成しています..."
+USER_ID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=user" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
+
+if [ -n "$USER_ID" ]; then
+  echo "⚠️  ユーザー 'user' は既に存在します (ID: ${USER_ID})"
+else
+  # ユーザー作成
+  curl -s -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"username\": \"user\",
+      \"enabled\": true,
+      \"firstName\": \"Demo\",
+      \"lastName\": \"User\",
+      \"email\": \"user@example.com\",
+      \"emailVerified\": true,
+      \"credentials\": [{
+        \"type\": \"password\",
+        \"value\": \"password\",
+        \"temporary\": false
+      }]
+    }" > /dev/null
+
+  echo "✅ ユーザー 'user' (パスワード: password) を作成しました"
+fi
 echo ""
 
 # 結果を表示
