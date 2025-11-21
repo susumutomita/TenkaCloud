@@ -57,7 +57,10 @@ export const mockTenantApi = {
     return newTenant;
   },
 
-  async updateTenant(id: string, input: UpdateTenantInput): Promise<Tenant | null> {
+  async updateTenant(
+    id: string,
+    input: UpdateTenantInput
+  ): Promise<Tenant | null> {
     await delay(500);
     const index = MOCK_TENANTS.findIndex((t) => t.id === id);
     if (index === -1) return null;

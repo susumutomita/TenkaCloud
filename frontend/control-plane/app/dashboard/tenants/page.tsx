@@ -57,12 +57,13 @@ export default async function TenantsPage() {
                   </td>
                   <td className="p-4 align-middle">
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${tenant.status === 'active'
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                        tenant.status === 'active'
                           ? 'bg-green-100 text-green-800'
                           : tenant.status === 'suspended'
                             ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-red-100 text-red-800'
-                        }`}
+                      }`}
                     >
                       {tenant.status}
                     </span>

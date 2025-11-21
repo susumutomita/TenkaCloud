@@ -40,20 +40,25 @@ export default async function TenantDetailPage({
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rounded-xl border bg-card text-card-foreground shadow">
           <div className="flex flex-col space-y-1.5 p-6">
-            <h3 className="font-semibold leading-none tracking-tight">基本情報</h3>
+            <h3 className="font-semibold leading-none tracking-tight">
+              基本情報
+            </h3>
           </div>
           <div className="p-6 pt-0">
             <dl className="grid gap-4">
               <div className="grid grid-cols-3 items-center gap-4">
-                <dt className="font-medium text-sm text-gray-500">ステータス</dt>
+                <dt className="font-medium text-sm text-gray-500">
+                  ステータス
+                </dt>
                 <dd className="col-span-2">
                   <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${tenant.status === 'active'
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                      tenant.status === 'active'
                         ? 'bg-green-100 text-green-800'
                         : tenant.status === 'suspended'
                           ? 'bg-yellow-100 text-yellow-800'
                           : 'bg-red-100 text-red-800'
-                      }`}
+                    }`}
                   >
                     {tenant.status}
                   </span>
@@ -64,7 +69,9 @@ export default async function TenantDetailPage({
                 <dd className="col-span-2 capitalize">{tenant.tier}</dd>
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
-                <dt className="font-medium text-sm text-gray-500">管理者 Email</dt>
+                <dt className="font-medium text-sm text-gray-500">
+                  管理者 Email
+                </dt>
                 <dd className="col-span-2">{tenant.adminEmail}</dd>
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
