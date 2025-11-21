@@ -19,6 +19,7 @@ export interface CreateTenantInput {
 
 export interface UpdateTenantInput {
   name?: string;
+  adminEmail?: string;
   status?: TenantStatus;
   tier?: TenantTier;
 }
