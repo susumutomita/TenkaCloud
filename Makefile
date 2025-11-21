@@ -131,19 +131,25 @@ start: start-infrastructure start-control-plane
 
 start-all: start
 
-stop-all:
-	@echo "🛑 TenkaCloud ローカル環境を停止しています..."
+stop-infrastructure:
+	@echo "🛑 TenkaCloud インフラストラクチャを停止しています..."
 	@echo ""
 	@echo "📦 Keycloak を停止しています..."
 	@cd infrastructure/docker/keycloak && docker compose down
 	@echo ""
-	@echo "✅ ローカル環境を停止しました"
-	@echo ""
-	@echo "💡 データを保持したまま停止する場合:"
-	@echo "   cd infrastructure/docker/keycloak && docker compose stop"
+	@echo "✅ インフラストラクチャを停止しました"
 	@echo ""
 
-restart-all: stop-all start
+stop-control-plane:
+	@echo "🛑 Control Plane UI を停止しています..."
+	@lsof -t -i:3000 | xargs kill || echo "   プロセスが見つかりませんでした（既に停止している可能性があります）"
+	@echo "✅ Control Plane UI を停止しました"
+
+stop: stop-control-plane stop-infrastructure
+
+stop-all: stop
+
+restart-all: stop start
 
 docker-build: check-docker
 	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
