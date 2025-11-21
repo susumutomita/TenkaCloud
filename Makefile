@@ -40,7 +40,7 @@ build:
 ifeq ($(SKIP_FRONTEND_BUILD),1)
 	@echo "⚠️  SKIP_FRONTEND_BUILD=1 が設定されているため build をスキップします"
 else
-	NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $(FRONTEND_DIR) run build
+	NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $(FRONTEND_DIR) run build -- --webpack
 endif
 
 dev:
@@ -50,12 +50,12 @@ start:
 	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run start
 
 test:
-	$(NODE_RUNNER) run test
+	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run test
 
 test_coverage:
-	$(NODE_RUNNER) run test:coverage
+	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run test:coverage
 
-before_commit: lint_text format_check typecheck build
+before_commit: lint_text format_check typecheck test build
 	@echo "✅ すべてのコミット前チェックが完了しました"
 
 # ハイフン付きのエイリアス（打ち間違え対策）

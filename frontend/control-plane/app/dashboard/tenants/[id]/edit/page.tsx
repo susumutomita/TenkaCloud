@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { mockTenantApi } from '@/lib/api/mock-tenant-api';
@@ -11,8 +11,8 @@ export default function EditTenantPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
   const router = useRouter();
+  const [id, setId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [formData, setFormData] = useState({
@@ -22,7 +22,28 @@ export default function EditTenantPage({
     status: 'active' as Tenant['status'],
   });
 
+  // Next.js 15 では params が Promise で渡ってくるため、クライアント側で解決する
   useEffect(() => {
+    let active = true;
+    params
+      .then(({ id }) => {
+        if (!active) return;
+        setId(id);
+      })
+      .catch((error) => {
+        console.error('Failed to resolve params:', error);
+        alert('パラメータの取得に失敗しました');
+        setIsFetching(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [params]);
+
+  useEffect(() => {
+    if (!id) return;
+
     const fetchTenant = async () => {
       try {
         const tenant = await mockTenantApi.getTenant(id);
@@ -46,10 +67,17 @@ export default function EditTenantPage({
     };
 
     fetchTenant();
-  }, [id, router]);
+    // router オブジェクトはレンダーごとに新しくなる場合があるため依存配列には含めない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!id) {
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -64,7 +92,7 @@ export default function EditTenantPage({
     }
   };
 
-  if (isFetching) {
+  if (!id || isFetching) {
     return <div className="p-6">読み込み中...</div>;
   }
 
@@ -98,7 +126,7 @@ export default function EditTenantPage({
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
                 value={formData.name}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData((prev) => ({ ...prev, name: e.target.value }))
                 }
               />
             </div>
@@ -116,7 +144,10 @@ export default function EditTenantPage({
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
                 value={formData.adminEmail}
                 onChange={(e) =>
-                  setFormData({ ...formData, adminEmail: e.target.value })
+                  setFormData((prev) => ({
+                    ...prev,
+                    adminEmail: e.target.value,
+                  }))
                 }
               />
             </div>
@@ -132,10 +163,10 @@ export default function EditTenantPage({
                 className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
                 value={formData.tier}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
+                  setFormData((prev) => ({
+                    ...prev,
                     tier: e.target.value as TenantTier,
-                  })
+                  }))
                 }
               >
                 <option value="free">Free</option>
@@ -155,10 +186,10 @@ export default function EditTenantPage({
                 className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
                 value={formData.status}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
+                  setFormData((prev) => ({
+                    ...prev,
                     status: e.target.value as Tenant['status'],
-                  })
+                  }))
                 }
               >
                 <option value="active">Active</option>
