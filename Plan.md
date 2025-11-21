@@ -873,6 +873,69 @@ Next.js 16 の仕様変更により、middleware ファイル名が変更され�
 
 ---
 
+### 3層UI構造のフロントエンドディレクトリ作成 - 2025-11-21
+
+**目的 (Objective)**:
+- Control Plane UI / Admin UI / Participant UIの3層構造でフロントエンドディレクトリを作成する
+- マルチテナントSaaSアーキテクチャに基づき、役割ごとにUIを分離する
+- 共通コンポーネントを `frontend/shared/` に配置し、コード再利用性を高める
+
+**制約 (Guardrails)**:
+- 既存の `frontend/control-plane` を `frontend/control-plane-app` にリネームして一貫性を保つ
+- pnpm workspace を使用してモノレポ構造を構築
+- TypeScript strict mode、Tailwind CSS、Next.js 14+ を使用
+- 各アプリは独立してビルド・テスト可能にする
+
+**タスク (TODOs)**:
+- [x] npm workspace の設定（pnpm 未インストールのため npm workspaces を使用）
+- [ ] `frontend/control-plane` を `frontend/control-plane-app` にリネーム（後続タスク）
+- [x] `frontend/admin-app` ディレクトリの作成（Next.js プロジェクト）
+- [x] `frontend/participant-app` ディレクトリの作成（Next.js プロジェクト）
+- [x] `frontend/shared` ディレクトリの作成（共通コンポーネントライブラリ）
+- [ ] `frontend/application` ディレクトリの削除または移行（後続タスク）
+- [x] 各アプリの README.md 作成
+- [x] ルートの package.json に workspace スクリプト追加
+- [ ] テスト（各アプリが独立してビルドできることを確認）
+- [x] ドキュメント更新（frontend/README.md 作成）
+
+**検証手順 (Validation)**:
+- 各アプリが独立してビルドできること
+  ```bash
+  cd frontend/control-plane-app && npm run build
+  cd frontend/admin-app && npm run build
+  cd frontend/participant-app && npm run build
+  ```
+- lint と型チェックが通過すること
+- pnpm workspace が正常に動作すること
+
+**未解決の質問 (Open Questions)**:
+- `frontend/application` は削除するか、別用途に転用するか
+- 共通コンポーネントライブラリのビルド方法（Rollup / tsup / Next.js standalone）
+
+**進捗ログ (Progress Log)**:
+- [2025-11-21 22:55] 実行計画を Plan.md に追加
+- [2025-11-21 22:56] 既存の frontend 構造を分析完了（control-plane と application が存在）
+- [2025-11-21 22:58] npm workspaces 設定を root package.json に追加
+- [2025-11-21 22:59] frontend/admin-app の Next.js プロジェクト作成完了
+- [2025-11-21 23:00] frontend/participant-app の Next.js プロジェクト作成完了
+- [2025-11-21 23:01] frontend/shared 共通ライブラリ作成完了（Button コンポーネントとテスト含む）
+- [2025-11-21 23:02] 各アプリの README.md、設定ファイル（tsconfig, biome, vitest）作成完了
+- [2025-11-21 23:03] frontend/README.md 作成完了（3層アーキテクチャの説明）
+
+**振り返り (Retrospective)**:
+
+##### 問題 (Problem)
+`frontend/control-plane` を `frontend/control-plane-app` にリネームする必要があるが、git mv コマンドが承認を必要とするため実行できなかった
+
+##### 根本原因 (Root Cause)
+GitHub Actions 環境では、ファイルシステム操作（mv、mkdir等）に制限がある
+
+##### 予防策 (Prevention)
+- リネーム作業は別途手動で実施するか、PRのレビュー時に対応する
+- 今回は新規ディレクトリ（admin-app, participant-app, shared）の作成に注力し、既存ディレクトリのリネームは後続タスクとする
+
+---
+
 ## 次の実行計画テンプレート
 
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
