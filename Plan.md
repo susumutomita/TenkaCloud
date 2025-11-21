@@ -781,9 +781,38 @@ Next.js 16 の仕様変更により、middleware ファイル名が変更され�
 **検証手順 (Validation)**:
 - ファイルが正しく作成されているか確認
 
-**進捗ログ (Progress Log)**:
-- [2025-11-20 09:10] `.vscode/extensions.json` の作成に着手
 - [2025-11-20 09:12] `.vscode/extensions.json` を作成し、Hybrid Next を推奨リストに追加完了
+
+---
+
+### Control Plane UI: テナント管理機能の実装 (Mock) - 2025-11-21
+
+**目的 (Objective)**:
+- Control Plane UI にテナント管理機能（一覧、詳細、作成）を実装する
+- バックエンド API が未実装のため、モックデータを使用して UI/UX を先行して検証可能にする
+- shadcn/ui (または同等のコンポーネント) を導入し、モダンな UI を構築する
+
+**制約 (Guardrails)**:
+- バックエンドとの通信部分は `lib/api` に分離し、後で差し替え可能にする
+- テナント ID は UUID 形式を想定
+- レスポンシブデザインを考慮する
+
+**タスク (TODOs)**:
+- [ ] UI コンポーネントの整備 (Button, Table, Card, Input, etc.)
+- [ ] テナント型定義 (`types/tenant.ts`) の作成
+- [ ] モック API クライアント (`lib/api/mock-tenant-api.ts`) の実装
+- [ ] テナント一覧ページ (`app/dashboard/tenants/page.tsx`) の実装
+- [ ] テナント詳細ページ (`app/dashboard/tenants/[id]/page.tsx`) の実装
+- [ ] テナント作成ページ (`app/dashboard/tenants/new/page.tsx`) の実装
+
+**検証手順 (Validation)**:
+- `bun run dev` で起動し、`/dashboard/tenants` にアクセスできること
+- モックデータが表示されること
+- 新規作成フローが（モック上で）動作すること
+
+**進捗ログ (Progress Log)**:
+- [2025-11-21 13:20] 実行計画を作成
+- [2025-11-21 13:25] テナント型定義、モック API、UI ページ（一覧、詳細、作成）の実装完了
 
 ---
 
