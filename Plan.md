@@ -4,6 +4,42 @@
 
 ## 実行計画 (Exec Plans)
 
+### make before-commit フロー修正 - 2025-11-21
+
+**目的 (Objective)**:
+- `make before-commit` を開発環境で確実に完走させ、コミット前チェックを自動化する
+- 型チェックとビルドを実際の対象プロジェクト（frontend/control-plane）に紐づけ、不要なディレクトリを誤って検査しないようにする
+
+**制約 (Guardrails)**:
+- CLAUDE.md のプレイブック（TDD、ログ記録、ドキュメント更新）に従う
+- CI/ローカル双方で動くシンプルなコマンド構成にする（追加の依存導入は最小限）
+
+**タスク (TODOs)**:
+- [ ] 失敗原因の特定（bun 実行時の panic、tsconfig スコープ過大、Next build 実行位置の不一致）
+- [ ] `typecheck`/`build` を frontend/control-plane に絞ったターゲットへ修正し、npm exec ベースに変更
+- [ ] `frontend/control-plane/package.json` に typecheck スクリプトを追加
+- [ ] Makefile help の説明を最新化
+- [ ] `make before-commit` 実行で完走することを確認（必要に応じて環境依存の注意書きを残す）
+
+**検証手順 (Validation)**:
+- `make before-commit` を実行し、lint_text / format_check / typecheck / build がすべて成功すること
+- 単体確認: `npm --prefix frontend/control-plane run typecheck` が通ること
+
+**未解決の質問 (Open Questions)**:
+- Turbopack が利用できない環境向けに webpack ビルドへフォールバックさせるべきか
+
+**進捗ログ (Progress Log)**:
+- [2025-11-21 15:25] `make before-commit` が bun 実行時の panic（system-configuration NULL object）で失敗することを再現
+- [2025-11-21 15:35] `npm --prefix frontend/control-plane run typecheck` では問題なく完走することを確認
+- [2025-11-21 15:50] `npm --prefix frontend/control-plane run build` は Turbopack がポートバインドできず失敗する環境があることを確認（回避策検討中）
+- [2025-11-21 16:10] Makefile の typecheck/build を frontend/control-plane + npm 実行へ変更、SKIP_FRONTEND_BUILD フラグを追加
+- [2025-11-21 16:15] frontend/control-plane に typecheck スクリプトを追加し、`SKIP_FRONTEND_BUILD=1 make before-commit` が完走することを確認（ビルドは環境依存で引き続き要確認）
+
+**振り返り (Retrospective)**:
+（実装後に記入）
+
+---
+
 ### マルチテナントSaaSアーキテクチャ基盤構築 - 2025-01-08
 
 **目的 (Objective)**:
