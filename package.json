@@ -1,8 +1,20 @@
 {
-  "name": "/workspace",
+  "name": "tenkacloud",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "frontend/*"
+  ],
   "module": "index.ts",
   "type": "module",
   "scripts": {
+    "dev:control-plane": "npm run dev --workspace=frontend/control-plane",
+    "dev:admin": "npm run dev --workspace=frontend/admin-app",
+    "dev:participant": "npm run dev --workspace=frontend/participant-app",
+    "build:frontend": "npm run build --workspaces --if-present",
+    "test:frontend": "npm run test --workspaces --if-present",
+    "typecheck:frontend": "npm run typecheck --workspaces --if-present",
+    "lint:frontend": "npm run lint --workspaces --if-present",
     "clean": "bun exec rimraf node_modules out",
     "install:ci": "bun install --no-frozen-lockfile",
     "test": "vitest run --config vitest.config.js",
