@@ -302,9 +302,58 @@ help:
 	@echo "  make build            全フロントエンドアプリをビルド"
 	@echo "  make start            本番サーバーを起動 (Control Plane のみ)"
 	@echo ""
+	@echo "☸️  Kubernetes:"
+	@echo "  make k8s-build-all    全サービスの Docker イメージをビルド"
+	@echo "  make k8s-deploy       Kubernetes にデプロイ"
+	@echo "  make k8s-delete       Kubernetes リソースを削除"
+	@echo ""
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📚 詳細: docs/QUICKSTART.md"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+k8s-build-all: check-docker
+	@echo "🐳 全サービスの Docker イメージをビルドしています..."
+	@echo "📦 Control Plane UI..."
+	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
+	@echo "📦 Admin App..."
+	@docker build -t tenkacloud/admin-app:latest -f frontend/admin-app/Dockerfile .
+	@echo "📦 Participant App..."
+	@docker build -t tenkacloud/participant-app:latest -f frontend/participant-app/Dockerfile .
+	@echo "📦 Landing Site..."
+	@docker build -t tenkacloud/landing-site:latest -f frontend/landing-site/Dockerfile .
+	@echo "✅ 全イメージのビルドが完了しました"
+
+k8s-deploy: check-docker
+	@echo "🚀 Kubernetes にデプロイしています..."
+	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
+	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml
+	@kubectl apply -f infrastructure/k8s/control-plane/control-plane-ui.yaml
+	@kubectl apply -f infrastructure/k8s/application-plane/admin-app.yaml
+	@kubectl apply -f infrastructure/k8s/application-plane/participant-app.yaml
+	@kubectl apply -f infrastructure/k8s/application-plane/landing-site.yaml
+	@echo "✅ デプロイが完了しました"
+	@echo ""
+	@echo "📋 次のステップ:"
+	@echo "  1. Keycloak のセットアップ:"
+	@echo "     kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud"
+	@echo "     (別のターミナルで) ./infrastructure/docker/keycloak/scripts/setup-keycloak.sh"
+	@echo "  2. /etc/hosts の設定:"
+	@echo "     127.0.0.1 keycloak"
+	@echo "  3. アプリケーションへのアクセス (port-forward):"
+	@echo "     kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud"
+	@echo "     kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud"
+	@echo "     kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud"
+	@echo "     kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud"
+
+k8s-delete:
+	@echo "🗑️  Kubernetes リソースを削除しています..."
+	@kubectl delete -f infrastructure/k8s/application-plane/landing-site.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/application-plane/participant-app.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/application-plane/admin-app.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/control-plane/control-plane-ui.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/base/keycloak.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/base/namespace.yaml --ignore-not-found
+	@echo "✅ 削除が完了しました"
