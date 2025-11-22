@@ -1,17 +1,17 @@
 # TenkaCloud Control Plane UI - Multi-stage Docker Build
 
 # Stage 1: Dependencies
-FROM oven/bun:1 AS deps
+FROM oven/bun:1.2.20 AS deps
 WORKDIR /app
 
 # Copy package files
 COPY package.json bun.lock ./
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Stage 2: Builder
-FROM oven/bun:1 AS builder
+FROM oven/bun:1.2.20 AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -28,7 +28,7 @@ ENV NODE_ENV=production
 RUN bun run build
 
 # Stage 3: Runner
-FROM oven/bun:1-slim AS runner
+FROM oven/bun:1.2.20-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
