@@ -70,3 +70,15 @@ Areas of interest, learning goals, or expertise:
 ---
 
 *This profile is automatically updated based on coding conversations and decisions.*
+
+<!-- Added by Repository Hooks (2025-11-23 08:20) -->
+
+## コミュニケーションスタイル
+### 指示の出し方
+- **シンプルで直接的**: "動きました。プルリクエスト作ってください。"
+- **具体的なURL/パス提示**: Issue整理時に `https://github.com/susumutomita/TenkaCloud/issues` を明示
+- **問題を体験ベースで表現**: "ローカルでテストしづらい体験になっている"
+### 品質基準
+- **プロダクションレベル重視**: モックアップではなく、最初から本番品質のコードを求める
+- **開発者体験 (DX) の優先**: ローカル環境での動作確認のしやすさを重視
+- **完全性**: Issue の受け入れ基準をすべて満たすまでクローズしない姿勢

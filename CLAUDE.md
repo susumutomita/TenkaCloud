@@ -290,7 +290,202 @@ MIT License（予定）
 - **カバレッジ 100%**: すべてのコードパスをテストでカバーする
 - **BDD スタイルのテスト**: テストは振る舞いを記述し、テストタイトルは日本語で書く
 
-#### 2. ユビキタス言語（Ubiquitous Language）
+#### 1.4 ドキュメント作成方針
+
+- 文末は「」で終える。コロンや記号で文を終わらせない。
+- 日本語と半角英数字の間には半角スペースを入れ、全角・半角の混在を避ける。
+- 見出しや箇条書きでは過度な装飾をしない。絵文字と太字の併用は避け、簡潔に書く。
+- 技術用語・記号は原語を保ちつつ、日本語文脈に合わせて表記ゆれをなくす（例: 100％ と表記する）。
+- lint/textlint は最終安全網と位置づけ、執筆時点で上記ルールを意識してエラーを作らないことを優先する。
+
+#### 2. プロダクションレディ実装原則
+
+**CRITICAL**: モックアップレベルではなく、プロダクションレベルのコードを一発で作成する。
+
+##### 2.1. No Mock, No Stub - 実装する時は本物を作る
+
+- 禁止: モックデータ、ハードコードされた配列、スタブ API
+- 必須: 実際のデータベース接続、実際の API 統合、実際のファイル I/O
+- NG 例: `const tenants = [{ id: 1, name: "Mock" }]`
+- OK 例: `const tenants = await db.query('SELECT * FROM tenants')`
+
+##### 2.2. フルスタック一気通貫実装
+
+新機能を実装する際は、次の 5 つをまとめて実装する。
+
+1. **データモデル** (Database Schema)
+   - マイグレーションファイル作成
+   - テーブル・インデックス定義
+   - リレーション設定
+
+2. **バックエンド API** (Fastify/Express)
+   - ルート定義
+   - バリデーション（Zod/Joi）
+   - ビジネスロジック
+   - エラーハンドリング
+   - ログ記録
+
+3. **フロントエンド** (Next.js)
+   - ページ・コンポーネント
+   - Server Actions / API 呼び出し
+   - フォームバリデーション
+   - エラー表示
+   - ローディング状態
+
+4. **認証・認可**
+   - Keycloak ロール設定
+   - アクセス制御ロジック
+   - セッション管理
+
+5. **テスト** (カバレッジ １００％)
+   - ユニットテスト（全関数）
+   - 統合テスト（API エンドポイント）
+   - E2E テスト（ユーザーフロー）
+
+##### 2.3. 実装必須チェックリスト
+
+**すべての新機能実装時に確認**:
+
+- [ ] **データ永続化**: データベースに実際に保存・取得している
+- [ ] **認証・認可**: Keycloak でアクセス制御を実装している
+- [ ] **入力バリデーション**: すべての入力をサーバーサイドで検証している
+- [ ] **エラーハンドリング**: try-catch、エラー境界、ユーザーへのエラー表示
+- [ ] **ログ記録**: 重要なイベント、エラーをログに記録している
+- [ ] **セキュリティ**: OWASP Top 10 対策（SQLi、XSS、CSRF、認証・認可）
+- [ ] **テストカバレッジ 100%**: すべてのコードパスをテストでカバー
+- [ ] **型安全性**: TypeScript strict mode で型エラーなし
+- [ ] **ドキュメント**: API ドキュメント、コメント、README 更新
+
+##### 2.4. NG 実装パターン（絶対に避ける）
+
+```typescript
+// ❌ NG: モックデータを返す
+export async function getTenants() {
+  return [
+    { id: 1, name: "Tenant 1" },
+    { id: 2, name: "Tenant 2" }
+  ];
+}
+
+// ❌ NG: バリデーションなし
+export async function createTenant(data: any) {
+  return await db.insert(data); // 危険！
+}
+
+// ❌ NG: エラーハンドリングなし
+export async function updateTenant(id: string, data: any) {
+  const result = await db.update(id, data);
+  return result;
+}
+
+// ❌ NG: 認証チェックなし
+export async function deleteTenant(id: string) {
+  await db.delete(id); // 誰でも削除できてしまう！
+}
+```
+
+##### 2.5. OK 実装パターン（プロダクションレディ）
+
+```typescript
+// ✅ OK: 実際のデータベース接続
+export async function getTenants(session: Session) {
+  // 認証チェック
+  if (!session?.user?.roles?.includes('platform-admin')) {
+    throw new UnauthorizedError('Platform admin access required');
+  }
+
+  try {
+    // 実際のデータベースクエリ
+    const tenants = await db.query(
+      'SELECT * FROM tenants WHERE deleted_at IS NULL ORDER BY created_at DESC'
+    );
+
+    // ログ記録
+    logger.info('Tenants retrieved', {
+      userId: session.user.id,
+      count: tenants.length
+    });
+
+    return tenants;
+  } catch (error) {
+    // エラーハンドリング
+    logger.error('Failed to retrieve tenants', { error });
+    throw new DatabaseError('Failed to retrieve tenants', { cause: error });
+  }
+}
+
+// ✅ OK: バリデーション、エラーハンドリング、認証
+export async function createTenant(
+  data: unknown,
+  session: Session
+): Promise<Tenant> {
+  // 認証チェック
+  if (!session?.user?.roles?.includes('platform-admin')) {
+    throw new UnauthorizedError('Platform admin access required');
+  }
+
+  // バリデーション
+  const validated = TenantSchema.parse(data);
+
+  try {
+    // トランザクション内で実行
+    const tenant = await db.transaction(async (tx) => {
+      // Keycloak Realm 作成
+      const realm = await keycloak.createRealm({
+        realm: validated.slug,
+        enabled: true
+      });
+
+      // テナントレコード作成
+      const tenant = await tx.insert('tenants', {
+        ...validated,
+        keycloak_realm_id: realm.id,
+        created_by: session.user.id
+      });
+
+      return tenant;
+    });
+
+    // ログ記録
+    logger.info('Tenant created', {
+      tenantId: tenant.id,
+      userId: session.user.id
+    });
+
+    return tenant;
+  } catch (error) {
+    logger.error('Failed to create tenant', { error, data: validated });
+    throw new TenantCreationError('Failed to create tenant', { cause: error });
+  }
+}
+```
+
+##### 2.6. 実装順序（TDD 維持）
+
+プロダクションレディでも TDD は維持する。
+
+1. **テストファースト**: 失敗するテストを先に書く
+2. **最小実装**: テストを通す最小限のプロダクションコードを書く
+3. **リファクタリング**: コードをクリーンアップ
+4. **次の機能**: 次のテストを書いて繰り返し
+
+注意:「最小実装」であっても、モックではなく実際の実装を書く。
+
+##### 2.7. レビュー時の確認ポイント
+
+プルリクエスト作成前に自己レビューする。
+
+- [ ] モックデータやスタブが残っていないか
+- [ ] すべての API が実際のデータベースに接続しているか
+- [ ] 認証・認可チェックがすべてのエンドポイントにあるか
+- [ ] バリデーションがサーバーサイドで実装されているか
+- [ ] エラーハンドリングが適切に実装されているか
+- [ ] ログが適切に記録されているか
+- [ ] テストカバレッジが 100％ か
+- [ ] 型エラーがないか（TypeScript strict mode）
+- [ ] セキュリティ脆弱性がないか（OWASP Top 10）
+
+#### 3. ユビキタス言語（Ubiquitous Language）
 
 プロジェクト全体で統一して使用する用語です。
 
@@ -635,3 +830,50 @@ gh pr diff <PR番号>
 
 - GitHub Issues: 機能提案・バグ報告
 - Discussions: 技術的な議論
+
+<!-- Added by Repository Hooks (2025-11-23 08:20) -->
+
+## 環境構築とバージョン管理
+### Docker と ローカル環境のバージョン統一
+- 必須事項: Dockerfile で使用する言語ランタイム（Bun、Node.js 等）のバージョンをローカル環境と可能な限り一致させる
+- **lockfile の整合性**: バージョン不一致により lockfile エラーが発生するため、明示的にバージョンを固定する
+例として次を使用する。
+```dockerfile
+# ❌ NG: バージョンを指定しない
+FROM oven/bun:latest
+# ✅ OK: ローカル環境と同じバージョンを明示
+FROM oven/bun:1.2.20
+```
+## NextAuth + Keycloak 統合パターン
+### ログアウト処理のベストプラクティス
+- **問題**: `signOut()` 実行後、セッションがクリアされるため `idToken` が `undefined` になり、Keycloak への `id_token_hint` パラメータが渡せない
+- **解決**: `signOut()` 実行**前**に必要なセッションデータを変数に保存する
+**実装例**:
+```typescript
+// ✅ OK: signOut前にidTokenを保存
+const currentSession = await auth();
+const idToken = currentSession?.idToken;
+const keycloakIssuer = process.env.AUTH_KEYCLOAK_ISSUER;
+await signOut({ redirect: false });
+if (idToken && keycloakIssuer) {
+  // 保存したidTokenを使用してKeycloakログアウト
+  const logoutUrl = `${keycloakIssuer}/protocol/openid-connect/logout?id_token_hint=${idToken}&post_logout_redirect_uri=${encodedRedirectUri}`;
+  redirect(logoutUrl);
+}
+// ❌ NG: signOut後にidTokenを取得しようとする
+await signOut({ redirect: false });
+const currentSession = await auth(); // セッションは既にクリア済み
+if (currentSession?.idToken) { // undefined になる
+  // ...
+}
+```
+## Issue 管理ポリシー
+### Issue クローズの基準
+- **受け入れ基準 (Acceptance Criteria) をすべて満たした場合のみクローズ**
+- 部分実装の場合は Issue を開いたまま保持し、進捗をコメントで記録
+- マイルストーンを活用して MVP フェーズと Full Feature フェーズを区別
+## ローカル開発体験 (DX) 標準
+### make start コマンドの要件
+- **すべてのサービスが一度に起動する**: フロントエンド（Control Plane UI、Admin App、Participant App、Landing Page）、バックエンド、認証基盤（Keycloak）
+- **ローカルでの動作確認が容易**: 開発者が個別にサービスを起動する手間を省く
+- **ポート番号の明示**: README または Makefile に各サービスのポート番号を記載
