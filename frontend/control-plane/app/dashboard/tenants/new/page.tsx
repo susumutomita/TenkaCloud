@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { mockTenantApi } from '@/lib/api/mock-tenant-api';
-import { TenantTier } from '@/types/tenant';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { tenantApi } from '@/lib/api/tenant-api';
+import type { TenantTier } from '@/types/tenant';
 
 export default function NewTenantPage() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function NewTenantPage() {
     setIsLoading(true);
 
     try {
-      await mockTenantApi.createTenant(formData);
+      await tenantApi.createTenant(formData);
       router.push('/dashboard/tenants');
       router.refresh(); // 一覧データを更新
     } catch (error) {

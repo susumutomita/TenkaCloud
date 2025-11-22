@@ -34,6 +34,10 @@
 - [2025-11-21 15:50] `npm --prefix frontend/control-plane run build` は Turbopack がポートバインドできず失敗する環境があることを確認（回避策検討中）
 - [2025-11-21 16:10] Makefile の typecheck/build を frontend/control-plane + npm 実行へ変更、SKIP_FRONTEND_BUILD フラグを追加
 - [2025-11-21 16:15] frontend/control-plane に typecheck スクリプトを追加し、`SKIP_FRONTEND_BUILD=1 make before-commit` が完走することを確認（ビルドは環境依存で引き続き要確認）
+- [2025-11-22 09:17] `make before-commit` が textlint で失敗（frontend の各 README に全角・半角スペース欠如、コロン終止）があることを確認
+- [2025-11-22 09:19] README の表記を修正し、`frontend/control-plane/next-env.d.ts` を Prettier で整形後に `make before-commit` が lint_text / format_check / typecheck / test / build まで完走することを確認
+- [2025-11-22 23:03] tenantApi で実 API 接続を環境変数切り替えに変更し、モック依存を減らす。Control Plane テナント一覧の UI を再設計し、Admin UI のトップページを実運用向けのダッシュボードに刷新。
+- [2025-11-22 23:05] Tailwind 4 の `@apply` 未対応クラス (bg-background/border-border) を CSS 変数適用に置き換え、`make before-commit` が再度完走することを確認
 
 **振り返り (Retrospective)**:
 （実装後に記入）
@@ -140,7 +144,8 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
     - [ ] 本番環境 (Kubernetes/Serverless): Namespace作成、Knative Service作成、DBインスタンス作成
   - [ ] Keycloak Realm & Client 自動作成ロジック
 - [ ] **ローカル開発環境の整備**:
-  - [ ] `make start` でテナント管理サービスと依存リソース（DB, Keycloak）が一括起動する `docker-compose.yml` の整備
+  - [x] `make start` でテナント管理サービスと依存リソース（DB, Keycloak）が一括起動する `docker-compose.yml` の整備
+  - [x] `make start-all` で Control Plane UI, Admin App, Participant App が Docker で一括起動するように修正
 - [ ] EventBridge 互換イベントパブリッシャを shared 層に実装し、状態遷移イベントを publish (#27)
 - [ ] Bun/Vitest ベースのユニット & コントラクトテストで 100% カバレッジを達成 (#27)
 - [ ] Runbook / README を更新し、ローカル実行・デプロイ手順を記載 (#27)
@@ -792,6 +797,33 @@ Next.js 16 の仕様変更により、middleware ファイル名が変更され�
 
 ---
 
+### Docker 化とアプリ連携の実装 - 2025-11-22
+
+**目的 (Objective)**:
+- `make start-all` で Control Plane UI, Admin App, Participant App を Docker コンテナとして一括起動できるようにする
+- Control Plane -> Admin App -> Participant App の連携フローを実装する
+
+**タスク (TODOs)**:
+- [x] Admin App, Participant App の Dockerfile 作成
+- [x] ルート `docker-compose.yml` の作成 (全サービス定義)
+- [x] Makefile の `start-all` を Docker Compose ベースに修正
+- [x] Keycloak セットアップスクリプトの修正 (全クライアント作成、Static Secret 対応)
+- [x] アプリ間連携の UI 実装 (リンク、デプロイボタン)
+
+**検証手順 (Validation)**:
+- `make start-all` がエラーなく完走すること
+- `http://localhost:3000` (Control Plane), `http://localhost:3001` (Admin App), `http://localhost:3002` (Participant App) がアクセス可能であること
+- Control Plane から Admin App へのリンクが機能すること
+- Admin App から Participant App へのデプロイ（シミュレーション）が機能すること
+
+**進捗ログ (Progress Log)**:
+- [2025-11-22 19:30] Dockerfile と docker-compose.yml を作成
+- [2025-11-22 19:45] Makefile を修正し、Docker Compose で起動するように変更
+- [2025-11-22 20:00] Keycloak セットアップスクリプトを修正し、全クライアントを自動作成するように対応
+- [2025-11-22 20:15] 全サービスの起動と連携を確認
+
+---
+
 ### Makefile 改善: Docker ステータス確認コマンドの追加 - 2025-11-20
 
 **目的 (Objective)**:
@@ -933,6 +965,235 @@ GitHub Actions 環境では、ファイルシステム操作（mv、mkdir等）�
 ##### 予防策 (Prevention)
 - リネーム作業は別途手動で実施するか、PRのレビュー時に対応する
 - 今回は新規ディレクトリ（admin-app, participant-app, shared）の作成に注力し、既存ディレクトリのリネームは後続タスクとする
+
+---
+
+### 管理画面UIフレームワーク導入（Shadcn/ui） - 2025-11-22
+
+**目的 (Objective)**:
+- Control Plane と Admin App に Shadcn/ui を導入し、統一感のあるモダンな管理画面を構築する
+- 手作りコンポーネントを Shadcn/ui の高品質なコンポーネントに置き換える
+- アクセシビリティとレスポンシブデザインを向上させる
+
+**背景 (Background)**:
+- 現在の管理画面は Tailwind CSS のみで手作りされており、デザインの統一感が不足している
+- Shadcn/ui は Tailwind CSS v4 と完全に統合され、Radix UI ベースで高いアクセシビリティを提供
+- コンポーネントをコピーして使用するため、依存関係が増えず、カスタマイズも容易
+
+**技術スタック**:
+- **UI フレームワーク**: Shadcn/ui
+- **コンポーネント基盤**: Radix UI
+- **スタイリング**: Tailwind CSS v4
+- **アイコン**: Lucide React
+- **ユーティリティ**: clsx, tailwind-merge
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う
+- TypeScript strict mode
+- 既存の機能を壊さない
+- カバレッジ 100% を維持
+- Tailwind CSS v4 の設定を変更しない
+
+**タスク (TODOs)**:
+- [ ] Shadcn/ui のセットアップ（Control Plane）
+  - [ ] 必要な依存関係のインストール
+  - [ ] components.json の作成
+  - [ ] CLI で基本コンポーネントの追加（Button, Table, Card, Input, Badge, Dialog）
+  - [ ] lib/utils.ts の作成（cn ユーティリティ）
+- [ ] Shadcn/ui のセットアップ（Admin App）
+  - [ ] 必要な依存関係のインストール
+  - [ ] components.json の作成
+  - [ ] CLI で基本コンポーネントの追加
+- [ ] Control Plane のリファクタリング
+  - [ ] テナント一覧ページを Shadcn/ui Table に置き換え
+  - [ ] ボタンを Shadcn/ui Button に置き換え
+  - [ ] ステータスバッジを Shadcn/ui Badge に置き換え
+  - [ ] 新規作成フォームを Shadcn/ui Input/Dialog に置き換え
+- [ ] Admin App ダッシュボードの実装
+  - [ ] ダッシュボードレイアウト（Shadcn/ui Card）
+  - [ ] ナビゲーションメニュー
+  - [ ] サンプルデータ表示
+- [ ] 検証とテスト
+  - [ ] lint/typecheck/build が通過すること
+  - [ ] 既存のテストが通過すること
+  - [ ] レスポンシブデザインの確認
+
+**検証手順 (Validation)**:
+1. Control Plane のビルドが成功すること
+   ```bash
+   cd frontend/control-plane
+   bun run typecheck
+   bun run lint
+   bun run build
+   ```
+
+2. Admin App のビルドが成功すること
+   ```bash
+   cd frontend/admin-app
+   bun run typecheck
+   bun run lint
+   bun run build
+   ```
+
+3. すべてのテストが通過すること
+   ```bash
+   cd frontend/control-plane && bun run test
+   cd frontend/admin-app && bun run test
+   ```
+
+4. Docker Compose で起動確認
+   ```bash
+   make start-all
+   # http://localhost:3000 (Control Plane)
+   # http://localhost:3001 (Admin App)
+   ```
+
+**未解決の質問 (Open Questions)**:
+- [ ] Shadcn/ui のテーマカスタマイズは必要か（ダークモード対応）
+- [ ] shared コンポーネントとして Shadcn/ui を再利用するか
+- [ ] Participant App にも Shadcn/ui を導入するか
+
+**進捗ログ (Progress Log)**:
+- [2025-11-22 23:00] 実行計画を Plan.md に追加
+- [2025-11-22 23:05] Control Plane に Shadcn/ui の依存関係をインストール
+  - class-variance-authority, clsx, tailwind-merge, lucide-react を追加
+- [2025-11-22 23:07] Control Plane の設定ファイルを作成
+  - components.json, lib/utils.ts, tailwind.config.ts を作成
+  - app/globals.css を Tailwind v4 形式に更新（CSS 変数定義）
+- [2025-11-22 23:08] Control Plane の UI コンポーネントを作成
+  - components/ui/button.tsx, card.tsx, badge.tsx, table.tsx を実装
+- [2025-11-22 23:10] Control Plane のダッシュボードページをリファクタリング
+  - セッション JSON 表示を削除し、Stats Cards、Quick Actions、Recent Activity セクションを追加
+  - Shadcn/ui コンポーネント（Card, Button, Badge）を使用
+- [2025-11-22 23:12] Control Plane のテナント一覧ページをリファクタリング
+  - 手作りの HTML テーブルを Shadcn/ui Table コンポーネントに置き換え
+  - Badge でステータス表示、Button で操作ボタンを実装
+- [2025-11-22 23:15] Control Plane の lint と build 検証を実施
+  - bun run format で整形、bunx biome check --fix で lint エラー修正
+  - typecheck、lint、build すべて成功
+- [2025-11-22 23:20] Admin App に Shadcn/ui をセットアップ
+  - Control Plane と同じ依存関係、設定ファイル、UI コンポーネントをコピー
+  - app/page.tsx をリファクタリング（グラデーション背景から Shadcn/ui デザインに変更）
+- [2025-11-22 23:25] Admin App の設定エラーを修正
+  - tsconfig.json のパスマッピングを `./src/*` から `./*` に修正
+  - biome.json のスキーマバージョンを 2.2.0 に更新
+  - globals.css の `@apply` を直接 CSS プロパティに変更
+  - lib/api/tenant-api.ts のスタブを作成（テストとビルド用）
+  - テストの型エラーを修正（Promise<boolean> → Promise<void>）
+- [2025-11-22 23:30] Admin App の検証完了
+  - typecheck、lint、build すべて成功
+
+**振り返り (Retrospective)**:
+*（実装後に記入）*
+
+---
+
+### Makefile 全フロントエンドアプリ対応 - 2025-11-22
+
+**目的 (Objective)**:
+- Makefile を修正して、Control Plane だけでなく、Admin App、Participant App の3つすべてのフロントエンドアプリをカバーする
+- `typecheck`, `lint`, `test`, `build` などのコマンドを全アプリで実行できるようにする
+
+**制約 (Guardrails)**:
+- 既存の Makefile の構造を維持する
+- すべてのコマンドは3つのアプリすべてで成功する必要がある（エラーが発生したら即座に停止）
+- before_commit ターゲットも全アプリをカバーする
+
+**タスク (TODOs)**:
+- [x] FRONTEND_APPS 変数を定義（3つのディレクトリパスを含む）
+- [x] install ターゲットを全アプリ対応に修正
+- [x] typecheck ターゲットを全アプリ対応に修正
+- [x] build ターゲットを全アプリ対応に修正
+- [x] test ターゲットを全アプリ対応に修正
+- [x] test_coverage ターゲットを全アプリ対応に修正
+- [x] lint ターゲットを全アプリ対応に修正
+- [x] help テキストを更新
+- [x] 動作確認（typecheck, build）
+
+**検証手順 (Validation)**:
+```bash
+# 3つのアプリすべてで型チェック
+make typecheck
+
+# 3つのアプリすべてでビルド
+make build
+
+# すべてのコミット前チェック
+make before_commit
+```
+
+**進捗ログ (Progress Log)**:
+- [2025-11-22 23:40] Makefile に FRONTEND_APPS 変数を追加（3つのディレクトリ）
+- [2025-11-22 23:42] install, typecheck, build, test, test_coverage, lint ターゲットを for ループで全アプリ対応に修正
+- [2025-11-22 23:45] help テキストを更新（全フロントエンドアプリに対応することを明記）
+- [2025-11-22 23:47] 動作確認完了
+  - `make typecheck`: 3つのアプリすべて成功 ✓
+  - `make build`: 3つのアプリすべてビルド成功 ✓
+
+**振り返り (Retrospective)**:
+
+##### 問題 (Problem)
+Makefile が Control Plane のみをカバーしており、Admin App と Participant App のビルド・テスト・型チェックが実行されていなかった。
+
+##### 根本原因 (Root Cause)
+- 初期実装時に Control Plane のみを想定していた
+- 3層構造（Control Plane, Admin App, Participant App）への移行時に Makefile を更新していなかった
+
+##### 予防策 (Prevention)
+- 新しいフロントエンドアプリを追加する際は、必ず Makefile の FRONTEND_APPS 変数に追加する
+- CI/CD パイプラインでも全アプリをビルド・テストするように設定する
+- Plan.md にマルチアプリ対応のチェックリストを追加
+
+---
+
+### Next.js 16 ビルド警告対応 - 2025-11-22
+
+**目的 (Objective)**:
+- Next.js 16 で発生していたビルド警告を解消する
+- `middleware` の非推奨警告を解決（`proxy` への移行）
+- npm/bun の混在による `package-lock.json` を削除
+
+**制約 (Guardrails)**:
+- 既存の認証ロジック（middleware/proxy）の動作を維持する
+- 全3つのフロントエンドアプリのビルドが成功する必要がある
+
+**タスク (TODOs)**:
+- [x] ビルド警告の内容を調査
+- [x] package-lock.json を削除（bun を使用しているため不要）
+- [x] Control Plane の middleware.ts を proxy.ts にリネーム
+- [x] 全アプリのビルドで警告が解消されたか検証
+
+**検証手順 (Validation)**:
+```bash
+# 全フロントエンドアプリのビルド
+make build
+
+# middleware 非推奨警告が出ないことを確認
+# ビルドが成功することを確認
+```
+
+**進捗ログ (Progress Log)**:
+- [2025-11-22 23:28] ビルド警告を調査
+  - 警告1: 複数のlockfile検出（package-lock.json と bun.lock）
+  - 警告2: middleware が非推奨、proxy への移行が必要
+- [2025-11-22 23:30] package-lock.json を削除
+  - ルートディレクトリの package-lock.json を削除
+  - プロジェクトは bun を使用しているため、npm の lockfile は不要
+- [2025-11-22 23:32] middleware.ts を proxy.ts にリネーム
+  - `git mv frontend/control-plane/middleware.ts frontend/control-plane/proxy.ts`
+  - 内容はそのまま（Next.js 16 では proxy.ts に移行するだけで OK）
+- [2025-11-22 23:35] 全アプリのビルド検証
+  - Control Plane: ✓ ビルド成功
+  - Admin App: ✓ ビルド成功
+  - Participant App: ✓ ビルド成功
+  - middleware 非推奨警告が解消されたことを確認 ✓
+  - 複数のlockfile警告は残っているが、機能的には問題なし（モノレポ構造のため）
+
+**成果 (Outcome)**:
+- ✅ middleware -> proxy 移行完了（Next.js 16 対応）
+- ✅ package-lock.json 削除（npm/bun 混在解消）
+- ✅ 全3アプリのビルド成功
+- ⚠️ 複数lockfile警告は残るが、機能的には問題なし
 
 ---
 

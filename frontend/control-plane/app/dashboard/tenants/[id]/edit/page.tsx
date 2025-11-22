@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { mockTenantApi } from '@/lib/api/mock-tenant-api';
-import { Tenant, TenantTier } from '@/types/tenant';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { tenantApi } from '@/lib/api/tenant-api';
+import type { Tenant, TenantTier } from '@/types/tenant';
 
 export default function EditTenantPage({
   params,
@@ -46,7 +46,7 @@ export default function EditTenantPage({
 
     const fetchTenant = async () => {
       try {
-        const tenant = await mockTenantApi.getTenant(id);
+        const tenant = await tenantApi.getTenant(id);
         if (tenant) {
           setFormData({
             name: tenant.name,
@@ -69,7 +69,7 @@ export default function EditTenantPage({
     fetchTenant();
     // router オブジェクトはレンダーごとに新しくなる場合があるため依存配列には含めない
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, router.push]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +81,7 @@ export default function EditTenantPage({
     setIsLoading(true);
 
     try {
-      await mockTenantApi.updateTenant(id, formData);
+      await tenantApi.updateTenant(id, formData);
       router.push(`/dashboard/tenants/${id}`);
       router.refresh();
     } catch (error) {

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { mockTenantApi } from '@/lib/api/mock-tenant-api';
 import { TenantActions } from '@/components/tenants/tenant-actions';
+import { tenantApi } from '@/lib/api/tenant-api';
 
 export default async function TenantDetailPage({
   params,
@@ -9,7 +9,7 @@ export default async function TenantDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const tenant = await mockTenantApi.getTenant(id);
+  const tenant = await tenantApi.getTenant(id);
 
   if (!tenant) {
     notFound();
