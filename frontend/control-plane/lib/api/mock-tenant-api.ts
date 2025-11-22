@@ -1,4 +1,8 @@
-import { Tenant, CreateTenantInput, UpdateTenantInput } from '@/types/tenant';
+import type {
+  CreateTenantInput,
+  Tenant,
+  UpdateTenantInput,
+} from '@/types/tenant';
 
 const MOCK_TENANTS: Tenant[] = [
   {

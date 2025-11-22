@@ -69,7 +69,7 @@ describe('TenantActions コンポーネント', () => {
     it('確認後に削除が成功した場合、テナント一覧ページに遷移するべき', async () => {
       const user = userEvent.setup();
       mockConfirm.mockReturnValue(true);
-      vi.mocked(tenantApi.deleteTenant).mockResolvedValue(true);
+      vi.mocked(tenantApi.deleteTenant).mockResolvedValue(undefined);
 
       render(<TenantActions tenantId="test-tenant-id" />);
       const deleteButton = screen.getByRole('button', { name: '削除' });
@@ -88,8 +88,8 @@ describe('TenantActions コンポーネント', () => {
       mockConfirm.mockReturnValue(true);
 
       // deleteTenant を遅延させて削除中の状態をテスト
-      let resolveDelete: (value: boolean) => void = () => {};
-      const deletePromise = new Promise<boolean>((resolve) => {
+      let resolveDelete: (value: undefined) => void = () => {};
+      const deletePromise = new Promise<void>((resolve) => {
         resolveDelete = resolve;
       });
       vi.mocked(tenantApi.deleteTenant).mockReturnValue(deletePromise);
@@ -108,7 +108,7 @@ describe('TenantActions コンポーネント', () => {
       });
 
       // 削除を完了
-      resolveDelete?.(true);
+      resolveDelete?.(undefined);
 
       await waitFor(() => {
         const resetButton = screen.getByRole('button', { name: '削除' });
@@ -139,7 +139,7 @@ describe('TenantActions コンポーネント', () => {
     it('削除成功後も状態がリセットされるべき', async () => {
       const user = userEvent.setup();
       mockConfirm.mockReturnValue(true);
-      vi.mocked(tenantApi.deleteTenant).mockResolvedValue(true);
+      vi.mocked(tenantApi.deleteTenant).mockResolvedValue(undefined);
 
       render(<TenantActions tenantId="test-tenant-id" />);
       const deleteButton = screen.getByRole('button', { name: '削除' });

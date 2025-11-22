@@ -14,10 +14,14 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.554.0",
     "next": "16.0.1",
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",

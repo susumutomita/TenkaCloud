@@ -1,16 +1,15 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  act,
+  fireEvent,
   render,
   screen,
   waitFor,
-  fireEvent,
-  act,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import EditTenantPage from '../page';
-import { mockTenantApi } from '@/lib/api/mock-tenant-api';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tenantApi } from '@/lib/api/tenant-api';
 import type { Tenant } from '@/types/tenant';
+import EditTenantPage from '../page';
 
 // Next.js の useRouter をモック
 const mockPush = vi.fn();
@@ -22,9 +21,9 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// mockTenantApi をモック
-vi.mock('@/lib/api/mock-tenant-api', () => ({
-  mockTenantApi: {
+// tenantApi をモック（API ベース URL が未設定でも強制的にモックを使用）
+vi.mock('@/lib/api/tenant-api', () => ({
+  tenantApi: {
     getTenant: vi.fn(),
     updateTenant: vi.fn(),
   },
@@ -62,12 +61,12 @@ describe('EditTenantPage', () => {
 
   describe('初期表示', () => {
     it('テナント情報を取得してフォームに表示するべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
       await waitFor(() => {
-        expect(mockTenantApi.getTenant).toHaveBeenCalledWith('test-tenant-id');
+        expect(tenantApi.getTenant).toHaveBeenCalledWith('test-tenant-id');
       });
 
       // データがロードされるまで待つ
@@ -82,7 +81,7 @@ describe('EditTenantPage', () => {
     });
 
     it('テナントが見つからない場合、アラートを表示して一覧ページに戻るべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(null);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(null);
 
       await renderPage(Promise.resolve({ id: 'nonexistent-id' }));
 
@@ -94,7 +93,7 @@ describe('EditTenantPage', () => {
 
     it('テナント取得に失敗した場合、エラーメッセージが表示されるべき', async () => {
       const error = new Error('Failed to fetch');
-      vi.mocked(mockTenantApi.getTenant).mockRejectedValue(error);
+      vi.mocked(tenantApi.getTenant).mockRejectedValue(error);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -108,9 +107,9 @@ describe('EditTenantPage', () => {
 
   describe('フォーム送信', () => {
     it('有効なデータで送信すると、テナントが更新され詳細ページに遷移するべき', async () => {
-      const user = userEvent.setup();
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
-      vi.mocked(mockTenantApi.updateTenant).mockResolvedValue({
+      const _user = userEvent.setup();
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.updateTenant).mockResolvedValue({
         ...mockTenant,
         name: 'Updated Tenant',
         adminEmail: 'updated@test.com',
@@ -126,7 +125,7 @@ describe('EditTenantPage', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockTenantApi.updateTenant).toHaveBeenCalledTimes(1);
+        expect(tenantApi.updateTenant).toHaveBeenCalledTimes(1);
         expect(mockPush).toHaveBeenCalledWith(
           '/dashboard/tenants/test-tenant-id'
         );
@@ -136,14 +135,14 @@ describe('EditTenantPage', () => {
 
     it('更新中は「更新中...」と表示され、ボタンが無効化されるべき', async () => {
       const user = userEvent.setup();
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       // updateTenant を遅延させて更新中の状態をテスト
-      let resolveUpdate: (value: Tenant | null) => void;
+      let resolveUpdate: (value: Tenant | null) => void = () => {};
       const updatePromise = new Promise<Tenant | null>((resolve) => {
         resolveUpdate = resolve;
       });
-      vi.mocked(mockTenantApi.updateTenant).mockReturnValue(updatePromise);
+      vi.mocked(tenantApi.updateTenant).mockReturnValue(updatePromise);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -163,7 +162,7 @@ describe('EditTenantPage', () => {
       });
 
       // 更新を完了
-      resolveUpdate!(mockTenant);
+      resolveUpdate?.(mockTenant);
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: '更新' })).not.toBeDisabled();
@@ -172,9 +171,9 @@ describe('EditTenantPage', () => {
 
     it('更新失敗時にエラーメッセージが表示されるべき', async () => {
       const user = userEvent.setup();
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
       const error = new Error('Update failed');
-      vi.mocked(mockTenantApi.updateTenant).mockRejectedValue(error);
+      vi.mocked(tenantApi.updateTenant).mockRejectedValue(error);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -199,7 +198,7 @@ describe('EditTenantPage', () => {
 
   describe('バリデーション', () => {
     it('名前が空の場合、送信できないべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -212,7 +211,7 @@ describe('EditTenantPage', () => {
     });
 
     it('無効なメールアドレスの場合、送信できないべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -228,7 +227,7 @@ describe('EditTenantPage', () => {
 
   describe('キャンセルボタン', () => {
     it('キャンセルボタンをクリックすると詳細ページに戻るべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -246,7 +245,7 @@ describe('EditTenantPage', () => {
 
   describe('フォーム項目', () => {
     it('Tier を変更できるべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
@@ -259,7 +258,7 @@ describe('EditTenantPage', () => {
     });
 
     it('ステータスを変更できるべき', async () => {
-      vi.mocked(mockTenantApi.getTenant).mockResolvedValue(mockTenant);
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
 
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 

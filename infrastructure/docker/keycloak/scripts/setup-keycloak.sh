@@ -22,7 +22,7 @@ max_attempts=30
 attempt=0
 
 while [ $attempt -lt $max_attempts ]; do
-  if curl -s -f "${KEYCLOAK_URL}/health/ready" > /dev/null 2>&1; then
+  if curl -s -f "${KEYCLOAK_URL}" > /dev/null 2>&1; then
     echo "✅ Keycloak が起動しました"
     break
   fi
@@ -84,55 +84,58 @@ fi
 
 echo ""
 
-# Client が既に存在するか確認
-echo "🔍 Client '${CLIENT_ID}' の存在を確認しています..."
-CLIENT_UUID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
+# 関数: クライアント作成
+create_client() {
+  local CLIENT_ID=$1
+  local REDIRECT_URI=$2
+  local WEB_ORIGINS=$3
+  local CLIENT_SECRET_VALUE=$4
 
-if [ -n "$CLIENT_UUID" ]; then
-  echo "⚠️  Client '${CLIENT_ID}' は既に存在します (ID: ${CLIENT_UUID})"
-else
-  # Client を作成
-  echo "📝 Client '${CLIENT_ID}' を作成しています..."
-  curl -s -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"clientId\": \"${CLIENT_ID}\",
-      \"enabled\": true,
-      \"protocol\": \"openid-connect\",
-      \"publicClient\": false,
-      \"clientAuthenticatorType\": \"client-secret\",
-      \"standardFlowEnabled\": true,
-      \"directAccessGrantsEnabled\": true,
-      \"redirectUris\": [\"${REDIRECT_URI}\"],
-      \"webOrigins\": [\"${WEB_ORIGINS}\"],
-      \"attributes\": {
-        \"post.logout.redirect.uris\": \"${REDIRECT_URI}\"
-      }
-    }" > /dev/null
-
-  # Client UUID を再取得
+  echo "🔍 Client '${CLIENT_ID}' の存在を確認しています..."
   CLIENT_UUID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
 
-  echo "✅ Client '${CLIENT_ID}' を作成しました (ID: ${CLIENT_UUID})"
-fi
+  if [ -n "$CLIENT_UUID" ]; then
+    echo "⚠️  Client '${CLIENT_ID}' は既に存在します (ID: ${CLIENT_UUID})"
+    # 既存クライアントのシークレットを更新するのは複雑なのでスキップ（必要なら手動削除）
+  else
+    # Client を作成
+    echo "📝 Client '${CLIENT_ID}' を作成しています..."
+    curl -s -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"clientId\": \"${CLIENT_ID}\",
+        \"secret\": \"${CLIENT_SECRET_VALUE}\",
+        \"enabled\": true,
+        \"protocol\": \"openid-connect\",
+        \"publicClient\": false,
+        \"clientAuthenticatorType\": \"client-secret\",
+        \"standardFlowEnabled\": true,
+        \"directAccessGrantsEnabled\": true,
+        \"redirectUris\": [\"${REDIRECT_URI}\"],
+        \"webOrigins\": [\"${WEB_ORIGINS}\"],
+        \"attributes\": {
+          \"post.logout.redirect.uris\": \"${REDIRECT_URI}\"
+        }
+      }" > /dev/null
 
-echo ""
+    # Client UUID を再取得
+    CLIENT_UUID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
 
-# Client Secret を取得
-echo "🔐 Client Secret を取得しています..."
-CLIENT_SECRET=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/client-secret" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"value":"[^"]*' | sed 's/"value":"//')
+    echo "✅ Client '${CLIENT_ID}' を作成しました (ID: ${CLIENT_UUID})"
+  fi
 
-if [ -z "$CLIENT_SECRET" ]; then
-  echo "❌ Client Secret の取得に失敗しました"
-  exit 1
-fi
+  echo "✅ Client Secret (${CLIENT_ID}): ${CLIENT_SECRET_VALUE}"
+}
 
-echo "✅ Client Secret 取得成功"
-echo ""
+# クライアント作成 (Secret は 'secret' で統一)
+create_client "control-plane-ui" "http://localhost:3000/*" "http://localhost:3000" "secret"
+create_client "admin-app" "http://localhost:3001/*" "http://localhost:3001" "secret"
+create_client "participant-app" "http://localhost:3002/*" "http://localhost:3002" "secret"
+
+
 
 # デフォルトユーザーを作成
 echo "👤 デフォルトユーザー 'user' を作成しています..."

@@ -1,0 +1,81 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_HOSTNAME=localhost
+      - KC_HTTP_ENABLED=true
+      - KC_HEALTH_ENABLED=true
+      - KC_METRICS_ENABLED=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infrastructure/docker/keycloak/init:/opt/keycloak/data/import
+    networks:
+      - tenkacloud
+
+  control-plane-ui:
+    build:
+      context: ./frontend/control-plane
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - AUTH_SECRET=secret
+      - AUTH_URL=http://localhost:3000
+      - AUTH_KEYCLOAK_ID=control-plane-ui
+      - AUTH_KEYCLOAK_SECRET=secret
+      - AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
+      - NEXTAUTH_URL=http://localhost:3000
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      - keycloak
+    networks:
+      - tenkacloud
+
+  admin-app:
+    build:
+      context: .
+      dockerfile: frontend/admin-app/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - AUTH_SECRET=secret
+      - AUTH_URL=http://localhost:3001
+      - AUTH_KEYCLOAK_ID=admin-app
+      - AUTH_KEYCLOAK_SECRET=secret
+      - AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
+      - NEXTAUTH_URL=http://localhost:3001
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      - keycloak
+    networks:
+      - tenkacloud
+
+  participant-app:
+    build:
+      context: .
+      dockerfile: frontend/participant-app/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - AUTH_SECRET=secret
+      - AUTH_URL=http://localhost:3002
+      - AUTH_KEYCLOAK_ID=participant-app
+      - AUTH_KEYCLOAK_SECRET=secret
+      - AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
+      - NEXTAUTH_URL=http://localhost:3002
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      - keycloak
+    networks:
+      - tenkacloud
+
+networks:
+  tenkacloud:
+    driver: bridge

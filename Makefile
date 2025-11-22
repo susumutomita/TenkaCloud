@@ -6,6 +6,10 @@ default: help
 NODE_RUNNER ?= npm
 BUN ?= bun
 FRONTEND_DIR ?= frontend/control-plane
+CONTROL_PLANE_DIR := frontend/control-plane
+ADMIN_APP_DIR := frontend/admin-app
+PARTICIPANT_APP_DIR := frontend/participant-app
+FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR)
 
 lint_text:
 	$(NODE_RUNNER) run lint_text
@@ -15,7 +19,11 @@ format_check:
 
 install:
 	$(BUN) install
-	cd $(FRONTEND_DIR) && $(BUN) install
+	@for app in $(FRONTEND_APPS); do \
+		echo "📦 $$app の依存関係をインストール中..."; \
+		cd $$app && $(BUN) install && cd ../..; \
+	done
+	@echo "✅ すべてのフロントエンドアプリの依存関係をインストールしました"
 
 install_ci:
 	$(BUN) run install:ci
@@ -28,19 +36,40 @@ clean:
 	$(NODE_RUNNER) run clean || true
 
 lint:
-	$(NODE_RUNNER) run lint || true
+	@echo "🔍 全フロントエンドアプリの lint を実行中..."
+	@for app in $(FRONTEND_APPS); do \
+		echo ""; \
+		echo "📋 $$app の lint..."; \
+		$(NODE_RUNNER) --prefix $$app run lint || exit 1; \
+	done
+	@echo ""
+	@echo "✅ すべてのフロントエンドアプリの lint が成功しました"
 
 format:
 	$(NODE_RUNNER) run format
 
 typecheck:
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run typecheck
+	@echo "🔍 全フロントエンドアプリの型チェックを実行中..."
+	@for app in $(FRONTEND_APPS); do \
+		echo ""; \
+		echo "📋 $$app の型チェック..."; \
+		$(NODE_RUNNER) --prefix $$app run typecheck || exit 1; \
+	done
+	@echo ""
+	@echo "✅ すべてのフロントエンドアプリの型チェックが成功しました"
 
 build:
 ifeq ($(SKIP_FRONTEND_BUILD),1)
 	@echo "⚠️  SKIP_FRONTEND_BUILD=1 が設定されているため build をスキップします"
 else
-	NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $(FRONTEND_DIR) run build -- --webpack
+	@echo "🏗  全フロントエンドアプリをビルド中..."
+	@for app in $(FRONTEND_APPS); do \
+		echo ""; \
+		echo "📦 $$app をビルド中..."; \
+		NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $$app run build -- --webpack || exit 1; \
+	done
+	@echo ""
+	@echo "✅ すべてのフロントエンドアプリのビルドが成功しました"
 endif
 
 dev:
@@ -50,10 +79,24 @@ start:
 	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run start
 
 test:
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run test
+	@echo "🧪 全フロントエンドアプリのテストを実行中..."
+	@for app in $(FRONTEND_APPS); do \
+		echo ""; \
+		echo "🔬 $$app のテスト..."; \
+		$(NODE_RUNNER) --prefix $$app run test || exit 1; \
+	done
+	@echo ""
+	@echo "✅ すべてのフロントエンドアプリのテストが成功しました"
 
 test_coverage:
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run test:coverage
+	@echo "📊 全フロントエンドアプリのカバレッジテストを実行中..."
+	@for app in $(FRONTEND_APPS); do \
+		echo ""; \
+		echo "📈 $$app のカバレッジテスト..."; \
+		$(NODE_RUNNER) --prefix $$app run test:coverage || exit 1; \
+	done
+	@echo ""
+	@echo "✅ すべてのフロントエンドアプリのカバレッジテストが成功しました"
 
 before_commit: lint_text format_check typecheck test build
 	@echo "✅ すべてのコミット前チェックが完了しました"
@@ -127,29 +170,52 @@ start-control-plane:
 	@echo "🚀 Control Plane UI を起動します..."
 	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
 
-start: start-infrastructure start-control-plane
+start: start-all
 
-start-all: start
+start-all: check-docker
+	@echo "🚀 TenkaCloud 全サービスを Docker で起動します..."
+	@docker compose up -d --build
+	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
+	@bash -c 'for i in {1..30}; do \
+		if curl -s -f http://localhost:8080 > /dev/null 2>&1; then \
+			echo "✅ Keycloak が起動しました"; \
+			break; \
+		fi; \
+		echo "   試行 $$i/30..."; \
+		sleep 2; \
+	done'
+	@echo "🔧 Keycloak の自動設定を実行しています..."
+	@cd infrastructure/docker/keycloak && KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin ./scripts/setup-keycloak.sh || true
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✨ 全サービスの起動が完了しました！"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Control Plane UI: http://localhost:3000"
+	@echo "  - Admin App:        http://localhost:3001"
+	@echo "  - Participant App:  http://localhost:3002"
+	@echo "  - Keycloak:         http://localhost:8080"
+	@echo ""
 
 stop-infrastructure:
 	@echo "🛑 TenkaCloud インフラストラクチャを停止しています..."
-	@echo ""
-	@echo "📦 Keycloak を停止しています..."
 	@cd infrastructure/docker/keycloak && docker compose down
-	@echo ""
 	@echo "✅ インフラストラクチャを停止しました"
-	@echo ""
 
 stop-control-plane:
 	@echo "🛑 Control Plane UI を停止しています..."
-	@lsof -t -i:3000 | xargs kill || echo "   プロセスが見つかりませんでした（既に停止している可能性があります）"
+	@docker compose stop control-plane-ui || true
 	@echo "✅ Control Plane UI を停止しました"
 
-stop: stop-control-plane stop-infrastructure
+stop: stop-all
 
-stop-all: stop
+stop-all:
+	@echo "🛑 全サービスを停止しています..."
+	@docker compose down
+	@echo "✅ 全サービスを停止しました"
 
-restart-all: stop start
+restart-all: stop-all start-all
 
 docker-build: check-docker
 	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
@@ -181,11 +247,8 @@ docker-status: check-docker
 	@echo "🐳 Docker コンテナの起動状態"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "📦 Keycloak コンテナ:"
-	@cd infrastructure/docker/keycloak && docker compose ps || echo "  ❌ Keycloak コンテナが見つかりません"
-	@echo ""
-	@echo "📦 Control Plane UI コンテナ:"
-	@cd frontend/control-plane && docker compose ps || echo "  ❌ Control Plane UI コンテナが見つかりません"
+	@echo "📦 TenkaCloud サービス (Root Compose):"
+	@docker compose ps || echo "  ❌ サービスが見つかりません"
 	@echo ""
 	@echo "🌐 すべての実行中コンテナ:"
 	@docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "  ❌ 実行中のコンテナがありません"
@@ -215,26 +278,27 @@ help:
 	@echo "  make docker-status    Docker コンテナの起動状態を表示"
 	@echo ""
 	@echo "📦 パッケージ管理:"
-	@echo "  make install          ルート + frontend/control-plane の依存を bun でインストール"
+	@echo "  make install          ルート + 全フロントエンドアプリの依存を bun でインストール"
 	@echo "  make clean            ルートスクリプトの clean を実行 (存在しない場合は no-op)"
 	@echo ""
 	@echo "🔍 コード品質:"
-	@echo "  make lint             ルートの lint スクリプトを実行"
+	@echo "  make lint             全フロントエンドアプリの lint を実行"
 	@echo "  make lint_text        Textlint を実行"
-	@echo "  make typecheck        frontend/control-plane の型チェック (npm --prefix ... run typecheck)"
+	@echo "  make typecheck        全フロントエンドアプリの型チェックを実行"
 	@echo "  make format           コードを自動整形"
 	@echo "  make format_check     整形チェック"
-	@echo "  make before_commit    lint_text + format_check + typecheck + build を実行"
+	@echo "  make before_commit    lint_text + format_check + typecheck + test + build を実行"
+	@echo "                       （全フロントエンドアプリに対して）"
 	@echo "                       ※SKIP_FRONTEND_BUILD=1 で build をスキップ可能"
 	@echo ""
 	@echo "🧪 テスト:"
-	@echo "  make test             テストを実行"
-	@echo "  make test_coverage    カバレッジレポート付きテスト"
+	@echo "  make test             全フロントエンドアプリのテストを実行"
+	@echo "  make test_coverage    全フロントエンドアプリのカバレッジテストを実行"
 	@echo ""
 	@echo "🏗  ビルド:"
-	@echo "  make dev              開発サーバーを起動 (UIのみ)"
-	@echo "  make build            プロジェクトをビルド"
-	@echo "  make start-ui-prod    本番サーバーを起動 (UIのみ)"
+	@echo "  make dev              開発サーバーを起動 (Control Plane のみ)"
+	@echo "  make build            全フロントエンドアプリをビルド"
+	@echo "  make start            本番サーバーを起動 (Control Plane のみ)"
 	@echo ""
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
