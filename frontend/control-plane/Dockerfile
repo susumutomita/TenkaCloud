@@ -7,8 +7,10 @@ WORKDIR /app
 # Copy package files
 COPY package.json bun.lock ./
 
-# Install dependencies
-RUN bun install --frozen-lockfile
+# Install dependencies (force fresh download to avoid cached integrity errors)
+ENV BUN_INSTALL_CACHE_DIR=/tmp/bun-cache
+RUN rm -rf /tmp/bun-cache \
+  && bun install --no-cache --force
 
 # Stage 2: Builder
 FROM oven/bun:1 AS builder
