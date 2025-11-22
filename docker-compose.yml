@@ -76,6 +76,17 @@ services:
     networks:
       - tenkacloud
 
+  landing-site:
+    build:
+      context: .
+      dockerfile: frontend/landing-site/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+    networks:
+      - tenkacloud
+
 networks:
   tenkacloud:
     driver: bridge
