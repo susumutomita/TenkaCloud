@@ -9,7 +9,8 @@ FRONTEND_DIR ?= frontend/control-plane
 CONTROL_PLANE_DIR := frontend/control-plane
 ADMIN_APP_DIR := frontend/admin-app
 PARTICIPANT_APP_DIR := frontend/participant-app
-FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR)
+LANDING_SITE_DIR := frontend/landing-site
+FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR) $(LANDING_SITE_DIR)
 
 lint_text:
 	$(NODE_RUNNER) run lint_text
@@ -192,6 +193,7 @@ start-all: check-docker
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
+	@echo "  - Landing Site:     http://localhost:3003"
 	@echo "  - Control Plane UI: http://localhost:3000"
 	@echo "  - Admin App:        http://localhost:3001"
 	@echo "  - Participant App:  http://localhost:3002"

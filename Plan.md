@@ -4,6 +4,228 @@
 
 ## 実行計画 (Exec Plans)
 
+### Product-Led Growth オンボーディングフロー自動化 - 2025-11-23
+
+**目的 (Objective)**:
+- ランディングページから完全自動デプロイまでのセルフサービスオンボーディングフローを実装する
+- Product-Led Growth (PLG) の原則に基づき、ユーザーが手動介入なしでテナント作成〜環境構築〜デプロイを完了できる
+- O'Reilly 978-4-8144-0101-7e (PLG関連書籍) の思想に従った摩擦のない体験を提供
+
+**背景 (Background)**:
+- 現在の TenkaCloud は管理者が手動でテナント作成を行う前提
+- セルフサービス型 SaaS として、ユーザー自身がサインアップからデプロイまで完了できる必要がある
+- PLG の原則: Time to Value (TTV) を最小化し、プロダクト主導で成長を促進
+
+**オンボーディングフロー設計**:
+1. **ランディングページ** (`/`)
+   - Hero セクション: バリュープロポジション
+   - デモ動画・スクリーンショット
+   - 料金プラン比較 (Free/Pro/Enterprise)
+   - "Start Free Trial" CTA
+
+2. **サインアップ** (`/signup`)
+   - メールアドレス + パスワード or ソーシャルログイン (Google/GitHub)
+   - Keycloak でユーザー作成
+   - メール認証 (オプション)
+
+3. **オンボーディングウィザード** (`/onboarding`)
+   - Step 1: プロフィール作成 (名前、組織名、用途)
+   - Step 2: プラン選択 (Free/Pro/Enterprise)
+   - Step 3: テナント設定 (Tenant Name, Slug, Region)
+   - Step 4: 環境選択 (Pool vs Silo, Serverless vs K8s)
+   - Step 5: 初期アプリケーション設定 (Participant App)
+
+4. **自動プロビジョニング** (バックグラウンド)
+   - Keycloak Realm 作成
+   - データベーススキーマ/インスタンス作成 (Pool vs Silo)
+   - Kubernetes Namespace 作成 (Silo の場合)
+   - Participant App デプロイ (Knative Service / Deployment)
+   - DNS 設定 (tenant-slug.tenkacloud.io)
+
+5. **ダッシュボード遷移** (`/dashboard`)
+   - プロビジョニング進捗表示 (リアルタイム更新)
+   - 完了後にテナント管理画面に遷移
+   - Quick Start ガイド表示
+
+**技術スタック**:
+- **ランディングページ**: Next.js 14 + Tailwind CSS + Framer Motion
+- **認証**: NextAuth.js v5 + Keycloak
+- **ウィザード UI**: React Hook Form + Zod (バリデーション)
+- **状態管理**: Zustand (ウィザード進捗)
+- **リアルタイム更新**: Server-Sent Events (SSE) or WebSocket
+- **バックエンド**: Control Plane Tenant Management Service (Fastify + TypeScript)
+- **インフラ自動化**: Terraform + Kubernetes Operator (Custom Controller)
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う (TDD、カバレッジ 100%)
+- セキュリティ: OWASP Top 10 対策、入力バリデーション徹底
+- UX: Time to Value を最小化 (5分以内にデプロイ完了)
+- スケーラビリティ: 同時100テナント作成に耐える
+- 冪等性: プロビジョニング失敗時の自動リトライ・ロールバック
+
+**タスク (TODOs)**:
+- [ ] **フロントエンド (Public Landing Site)**
+  - [ ] Landing Page 実装 (`frontend/landing-site/`)
+    - [ ] Hero セクション + CTA
+    - [ ] 料金プラン比較テーブル
+    - [ ] デモ動画埋め込み
+    - [ ] FAQ セクション
+  - [ ] サインアップページ (`/signup`)
+    - [ ] メールアドレス + パスワードフォーム
+    - [ ] ソーシャルログイン (Google/GitHub)
+    - [ ] Keycloak 統合
+  - [ ] オンボーディングウィザード (`/onboarding`)
+    - [ ] マルチステップフォーム (React Hook Form + Zod)
+    - [ ] プログレスインジケーター
+    - [ ] プラン選択 UI
+    - [ ] テナント設定フォーム (Tenant Name, Slug, Region)
+    - [ ] 環境選択 (Pool/Silo, Serverless/K8s)
+  - [ ] プロビジョニング進捗ページ (`/onboarding/provisioning`)
+    - [ ] リアルタイム進捗表示 (SSE)
+    - [ ] ステップ別ステータス (Realm作成, DB作成, App デプロイ)
+    - [ ] 完了後のダッシュボード遷移
+
+- [ ] **バックエンド (Tenant Management Service 拡張)**
+  - [ ] サインアップ API (`POST /api/v1/signup`)
+    - [ ] Keycloak ユーザー作成
+    - [ ] メール認証 (オプション)
+  - [ ] テナント作成 API 拡張 (`POST /api/v1/tenants`)
+    - [ ] プラン情報保存 (Free/Pro/Enterprise)
+    - [ ] テナント設定保存 (Slug, Region, Model)
+    - [ ] プロビジョニングジョブキュー投入
+  - [ ] プロビジョニングワーカー
+    - [ ] Keycloak Realm 自動作成
+    - [ ] データベース自動作成 (Pool: Schema / Silo: Instance)
+    - [ ] Kubernetes リソース自動作成 (Namespace, Deployment, Service, Ingress)
+    - [ ] DNS レコード自動登録
+    - [ ] プロビジョニングステータス更新 (SSE 配信)
+  - [ ] プロビジョニングステータス API (`GET /api/v1/tenants/{id}/provisioning-status`)
+    - [ ] SSE エンドポイント
+    - [ ] ステータス (pending, in_progress, completed, failed)
+  - [ ] ロールバック機能
+    - [ ] プロビジョニング失敗時の自動クリーンアップ
+    - [ ] 手動ロールバック API
+
+- [ ] **インフラ自動化**
+  - [ ] Terraform モジュール拡張
+    - [ ] テナント別 Realm 動的作成
+    - [ ] テナント別 DB インスタンス動的作成 (Silo)
+    - [ ] Kubernetes Namespace 動的作成
+  - [ ] Kubernetes Operator (将来)
+    - [ ] Tenant CRD 定義
+    - [ ] Tenant Controller (Reconciliation Loop)
+
+- [ ] **テスト**
+  - [ ] E2E テスト (Playwright)
+    - [ ] サインアップ → オンボーディング → プロビジョニング → ダッシュボード
+  - [ ] 統合テスト
+    - [ ] テナント作成 API → プロビジョニングワーカー → Keycloak/DB/K8s
+  - [ ] パフォーマンステスト
+    - [ ] 同時100テナント作成負荷テスト
+
+- [ ] **ドキュメント**
+  - [ ] オンボーディングフロー設計書
+  - [ ] API 仕様 (OpenAPI)
+  - [ ] インフラ自動化手順
+  - [ ] トラブルシューティングガイド
+
+**ディレクトリ構造**:
+```
+frontend/
+├── landing-site/                  # 公開ランディングサイト (新規)
+│   ├── app/
+│   │   ├── (marketing)/           # マーケティングページグループ
+│   │   │   ├── page.tsx           # ランディングページ
+│   │   │   ├── pricing/           # 料金ページ
+│   │   │   └── about/             # About ページ
+│   │   ├── signup/                # サインアップ
+│   │   │   └── page.tsx
+│   │   ├── onboarding/            # オンボーディングウィザード
+│   │   │   ├── page.tsx           # ウィザードメイン
+│   │   │   └── provisioning/      # プロビジョニング進捗
+│   │   │       └── page.tsx
+│   │   └── dashboard/             # ユーザーダッシュボード
+│   │       └── page.tsx
+│   ├── components/
+│   │   ├── landing/               # ランディングページコンポーネント
+│   │   ├── onboarding/            # オンボーディングコンポーネント
+│   │   └── ui/                    # 共通 UI コンポーネント
+│   ├── lib/
+│   │   ├── api/                   # API クライアント
+│   │   └── hooks/                 # カスタムフック
+│   └── public/
+│       └── videos/                # デモ動画
+
+backend/
+└── services/
+    └── control-plane/
+        └── tenant-management/
+            ├── src/
+            │   ├── api/
+            │   │   ├── signup.ts          # サインアップ API
+            │   │   └── provisioning.ts    # プロビジョニング API
+            │   ├── workers/
+            │   │   └── provisioning-worker.ts  # プロビジョニングワーカー
+            │   ├── keycloak/
+            │   │   └── realm-provisioner.ts    # Realm 自動作成
+            │   ├── database/
+            │   │   └── db-provisioner.ts       # DB 自動作成
+            │   └── kubernetes/
+            │       └── k8s-provisioner.ts      # K8s リソース自動作成
+            └── test/
+                └── e2e/
+                    └── onboarding.test.ts
+```
+
+**検証手順 (Validation)**:
+1. ランディングページが表示されること
+   ```bash
+   cd frontend/landing-site
+   bun run dev
+   # http://localhost:3001 でアクセス
+   ```
+
+2. サインアップフローが動作すること
+   ```bash
+   # サインアップページでユーザー作成
+   # Keycloak にユーザーが登録されていることを確認
+   ```
+
+3. オンボーディングウィザードが完了すること
+   ```bash
+   # ウィザードで全ステップを入力
+   # テナント作成リクエストが送信されること
+   ```
+
+4. プロビジョニングが完了すること
+   ```bash
+   # プロビジョニング進捗ページでリアルタイム更新を確認
+   # Keycloak Realm, DB, K8s リソースが作成されることを確認
+   ```
+
+5. E2E テストが通過すること
+   ```bash
+   cd backend/services/control-plane/tenant-management
+   bun run test:e2e
+   ```
+
+**未解決の質問 (Open Questions)**:
+- [ ] メール認証を必須にするか、オプションにするか
+- [ ] Free プランの制限 (テナント数、リソース上限)
+- [ ] DNS レコード自動登録の方法 (Route53 / Cloud DNS / external-dns)
+- [ ] プロビジョニングタイムアウト設定 (何分までに完了すべきか)
+- [ ] ロールバック時のデータ保持ポリシー
+- [ ] ソーシャルログイン対応範囲 (Google/GitHub のみ？)
+
+**進捗ログ (Progress Log)**:
+- [2025-11-23 08:00] PLG オンボーディングフロー実装計画を Plan.md に追加
+- [2025-11-23 08:02] O'Reilly 978-4-8144-0101-7e の思想を反映した設計完了
+
+**振り返り (Retrospective)**:
+（実装後に記入）
+
+---
+
 ### make before-commit フロー修正 - 2025-11-21
 
 **目的 (Objective)**:
@@ -38,6 +260,9 @@
 - [2025-11-22 09:19] README の表記を修正し、`frontend/control-plane/next-env.d.ts` を Prettier で整形後に `make before-commit` が lint_text / format_check / typecheck / test / build まで完走することを確認
 - [2025-11-22 23:03] tenantApi で実 API 接続を環境変数切り替えに変更し、モック依存を減らす。Control Plane テナント一覧の UI を再設計し、Admin UI のトップページを実運用向けのダッシュボードに刷新。
 - [2025-11-22 23:05] Tailwind 4 の `@apply` 未対応クラス (bg-background/border-border) を CSS 変数適用に置き換え、`make before-commit` が再度完走することを確認
+- [2025-11-23 08:07] frontend/landing-site の README 文言と Prettier 未整形ファイルを修正し、`make before-commit` が再び完走することを確認
+- [2025-11-23 08:28] CLAUDE.md にドキュメント作成方針を追記し、絵文字＋太字の lint 指摘を解消。`next/font/google` を排除して landing-site ビルドのネットワーク依存を解消し、`make before-commit` が再度完走することを確認
+- [2025-11-23 08:34] 追加で textlint 指摘（表現の断定・句点欠落）と `next-env.d.ts` の Prettier 警告を解消し、`make before-commit` を成功させたことを確認
 
 **振り返り (Retrospective)**:
 （実装後に記入）
