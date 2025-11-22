@@ -36,12 +36,17 @@ export default async function DashboardPage() {
             action={async () => {
               'use server';
               const currentSession = await auth();
+
+              // signOut実行前にidTokenを保存
+              const idToken = currentSession?.idToken;
+              const keycloakIssuer = process.env.AUTH_KEYCLOAK_ISSUER;
+
               await signOut({ redirect: false });
 
-              if (currentSession?.idToken && process.env.AUTH_KEYCLOAK_ISSUER) {
-                const logoutUrl = `${process.env.AUTH_KEYCLOAK_ISSUER}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(
+              if (idToken && keycloakIssuer) {
+                const logoutUrl = `${keycloakIssuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent(
                   'http://localhost:3000'
-                )}&id_token_hint=${currentSession.idToken}`;
+                )}&id_token_hint=${idToken}`;
                 redirect(logoutUrl);
               } else {
                 redirect('/login');
