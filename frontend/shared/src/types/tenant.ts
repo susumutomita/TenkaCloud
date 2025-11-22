@@ -1,12 +1,12 @@
 /**
  * テナントの状態
  */
-export type TenantStatus = "active" | "suspended" | "deleted";
+export type TenantStatus = 'active' | 'suspended' | 'deleted';
 
 /**
  * テナントのティア
  */
-export type TenantTier = "free" | "pro" | "enterprise";
+export type TenantTier = 'free' | 'pro' | 'enterprise';
 
 /**
  * テナント情報

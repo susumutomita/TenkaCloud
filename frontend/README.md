@@ -1,6 +1,6 @@
 # TenkaCloud Frontend
 
-TenkaCloudのフロントエンドは、3層のUIアーキテクチャで構成されています。
+TenkaCloud のフロントエンドは、3 層の UI アーキテクチャで構成されています。
 
 ## アーキテクチャ
 
@@ -106,12 +106,12 @@ frontend/
 
 ## 認証
 
-すべてのUIアプリは、Keycloak (OIDC) による認証を使用します。
-ロールベースのアクセス制御により、各UIへのアクセスを制限します：
+すべての UI アプリは Keycloak (OIDC) による認証を使用します。
+ロールベースのアクセス制御で各 UI へのアクセスを分離します。次のロールを割り当てます。
 
-- **platform-admin**: Control Plane UIへアクセス可能
-- **tenant-admin**: Admin UIへアクセス可能
-- **user**: Participant UIへアクセス可能
+- **platform-admin**: Control Plane UI へアクセス可能
+- **tenant-admin**: Admin UI へアクセス可能
+- **user**: Participant UI へアクセス可能
 
 ## 関連ドキュメント
 

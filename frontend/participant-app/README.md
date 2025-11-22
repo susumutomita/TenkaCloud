@@ -1,10 +1,10 @@
 # TenkaCloud Participant UI
 
-競技者用UI
+競技者向け UI です。
 
 ## 概要
 
-Participant UIは、クラウド天下一武道会の競技者がバトルに参加し、問題を解くためのWebアプリケーションです。
+Participant UI は、クラウド天下一武道会の競技者がバトルに参加し、問題を解くための Web アプリケーションです。
 
 ## 機能
 
@@ -55,15 +55,15 @@ participant-app/
 │   ├── layout.tsx    # ルートレイアウト
 │   ├── page.tsx      # ホームページ
 │   └── globals.css   # グローバルスタイル
-├── components/       # Reactコンポーネント（今後追加）
+├── components/       # React コンポーネント（今後追加）
 ├── lib/              # ユーティリティ（今後追加）
 └── public/           # 静的ファイル（今後追加）
 ```
 
 ## 認証
 
-Participant UIは、Keycloak (OIDC) による認証を使用します。
-競技者としてログインする必要があります。
+Participant UI は Keycloak (OIDC) による認証を使用します。
+競技者としてログインしてください。
 
 ## 関連ドキュメント
 

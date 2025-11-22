@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "TenkaCloud - Admin Portal",
-  description: "テナント管理者用ダッシュボード",
+  title: 'TenkaCloud - Admin Portal',
+  description: 'テナント管理者用ダッシュボード',
 };
 
 export default function RootLayout({
