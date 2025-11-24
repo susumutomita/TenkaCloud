@@ -82,7 +82,7 @@ else
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📦 $$app をビルド中..."; \
-		NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $$app run build -- --webpack || exit 1; \
+		NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $$app run build || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリのビルドが成功しました"

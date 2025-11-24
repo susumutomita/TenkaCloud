@@ -266,6 +266,7 @@ backend/
 - [2025-11-23 09:59] docs/KUBERNETES.md の textlint 指摘（コロン終止、全半角スペース、絵文字＋太字）を修正し、`make before-commit` が再度成功することを確認
 - [2025-11-23 10:12] CLAUDE.md 冒頭を要約化してリファクタリングし、textlint と Prettier を通過後に `make before-commit` が成功することを確認
 - [2025-11-23 10:57] control-plane の Sidebar で禁止されていた inline Server Action を削除し、`signOut` をクライアントハンドラに変更。Docker ビルドで Turbopack/Bun の worker 未対応エラーを避けるため `next build --webpack` を既定スクリプトに変更。整形漏れファイルを Prettier で修正し `make before-commit` を再度成功させた。
+- [2025-11-23 11:45] テナント API レスポンスをクライアント側で小文字に正規化し、API エラー時はモックにフォールバック。テナント系ページを `dynamic = 'force-dynamic'` 指定にしてビルド警告を抑制。admin/participant/landing-site の build スクリプトを `next build --webpack` に統一、Makefile の余分な `--webpack` 付与を削除して重複指定を解消。
 
 **振り返り (Retrospective)**:
 （実装後に記入）

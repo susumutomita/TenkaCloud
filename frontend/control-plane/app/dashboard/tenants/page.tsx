@@ -18,6 +18,9 @@ import {
 } from '@/components/ui/table';
 import { tenantApi } from '@/lib/api/tenant-api';
 
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'default-no-store';
+
 const getStatusVariant = (status: string) => {
   if (status === 'active') return 'success';
   if (status === 'suspended') return 'warning';

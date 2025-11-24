@@ -207,7 +207,14 @@ app.delete('/api/tenants/:id', async (c) => {
 });
 
 const port = 3004;
-console.log(`🚀 Tenant Management API is running on port ${port}`);
+
+// Only log when not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  console.log(`🚀 Tenant Management API is running on port ${port}`);
+}
+
+// Export app for testing
+export { app };
 
 export default {
   port,

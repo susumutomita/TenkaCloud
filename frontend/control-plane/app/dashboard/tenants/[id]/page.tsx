@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation';
 import { TenantActions } from '@/components/tenants/tenant-actions';
 import { tenantApi } from '@/lib/api/tenant-api';
 
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'default-no-store';
+
 export default async function TenantDetailPage({
   params,
 }: {
