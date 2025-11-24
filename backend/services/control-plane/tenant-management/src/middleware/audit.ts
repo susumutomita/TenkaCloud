@@ -106,9 +106,9 @@ function parsePathInfo(
   resourceId?: string;
 } {
   // Extract resource and ID from path
-  // Example: /api/tenants/123 -> resource: "tenant", resourceId: "123"
+  // Example: /api/tenants/123 -> resource: "tenants", resourceId: "123"
+  // Example: /api/tenants -> resource: "tenants", resourceId: undefined
   const pathParts = path.split('/').filter(Boolean);
-  const resource = pathParts[pathParts.length - 2] || 'unknown';
   const possibleId = pathParts[pathParts.length - 1];
 
   // Check if last part is an ID (UUID pattern or looks like an ID)
@@ -119,7 +119,11 @@ function parsePathInfo(
     ) ||
       !isNaN(Number(possibleId)));
 
+  // Determine resource and resourceId based on whether last part is an ID
   const resourceId = isId ? possibleId : undefined;
+  const resource = isId
+    ? pathParts[pathParts.length - 2] || 'unknown'
+    : possibleId || 'unknown';
 
   // Determine action from HTTP method
   let action: string;
