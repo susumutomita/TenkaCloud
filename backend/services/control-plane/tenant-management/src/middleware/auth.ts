@@ -146,10 +146,39 @@ export async function optionalAuth(c: Context, next: Next) {
     return;
   }
 
-  try {
-    await authMiddleware(c, next);
-  } catch (error) {
-    // Ignore auth errors for optional auth
+  const [bearer, token] = authHeader.split(' ');
+
+  if (bearer !== 'Bearer' || !token) {
+    // Invalid format, but optional auth should continue
     await next();
+    return;
   }
+
+  try {
+    // Verify JWT token
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
+    });
+
+    // Extract user information
+    const jwtPayload = payload as unknown as JWTPayload;
+    const roles = jwtPayload.realm_access?.roles || [];
+
+    const user: AuthenticatedUser = {
+      id: jwtPayload.sub,
+      email: jwtPayload.email,
+      username: jwtPayload.preferred_username,
+      roles,
+    };
+
+    // Attach user to context
+    c.set('user', user);
+
+    logger.info({ userId: user.id, email: user.email }, 'User authenticated (optional)');
+  } catch (error) {
+    // JWT verification failed, but optional auth should continue
+    logger.debug({ error }, 'Optional auth: JWT verification failed, continuing without user');
+  }
+
+  await next();
 }
