@@ -264,6 +264,8 @@ backend/
 - [2025-11-23 08:28] CLAUDE.md にドキュメント作成方針を追記し、絵文字＋太字の lint 指摘を解消。`next/font/google` を排除して landing-site ビルドのネットワーク依存を解消し、`make before-commit` が再度完走することを確認
 - [2025-11-23 08:34] 追加で textlint 指摘（表現の断定・句点欠落）と `next-env.d.ts` の Prettier 警告を解消し、`make before-commit` を成功させたことを確認
 - [2025-11-23 09:59] docs/KUBERNETES.md の textlint 指摘（コロン終止、全半角スペース、絵文字＋太字）を修正し、`make before-commit` が再度成功することを確認
+- [2025-11-23 10:12] CLAUDE.md 冒頭を要約化してリファクタリングし、textlint と Prettier を通過後に `make before-commit` が成功することを確認
+- [2025-11-23 10:57] control-plane の Sidebar で禁止されていた inline Server Action を削除し、`signOut` をクライアントハンドラに変更。Docker ビルドで Turbopack/Bun の worker 未対応エラーを避けるため `next build --webpack` を既定スクリプトに変更。整形漏れファイルを Prettier で修正し `make before-commit` を再度成功させた。
 
 **振り返り (Retrospective)**:
 （実装後に記入）
@@ -348,10 +350,10 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
 - #27 Control Plane Tenant Management Service MVP
 
 **タスク (TODOs)**:
-- [ ] テナントドメインモデルと DynamoDB パーティション/ソートキーの定義を docs/architecture に追記 (#27)
-- [ ] OpenAPI 仕様 (Create/List/Get/Update/Suspend/Resume/Delete) を `backend/services/control-plane/tenant-management/openapi.yaml` に作成 (#27)
-- [ ] Fastify サービスのブートストラップ（config, validation, logging, tracing, error handling）を整備 (#27)
-- [ ] Repository/UseCase 層で CRUD + 状態遷移ロジックと監査ログ永続化を実装 (#27)
+- [x] テナントドメインモデルと DynamoDB パーティション/ソートキーの定義を docs/architecture に追記 (#27)
+- [x] OpenAPI 仕様 (Create/List/Get/Update/Suspend/Resume/Delete) を `backend/services/control-plane/tenant-management/openapi.yaml` に作成 (#27)
+- [x] Fastify サービスのブートストラップ（config, validation, logging, tracing, error handling）を整備 (#27)
+- [x] Repository/UseCase 層で CRUD + 状態遷移ロジックと監査ログ永続化を実装 (#27)
 - [ ] **テナントプロビジョニング (Onboarding) 実装** (#27)
   - [ ] **マルチモデル対応 (Pool vs Silo)**:
     - [ ] **Poolモデル (同居型)**: 共有リソース（DBスキーマ、Compute）を使用し、論理的に分離
@@ -369,13 +371,30 @@ PR を作成した後、CI の状態確認を忘れて push がタイムアウ�
     - [ ] ローカル環境 (Docker Compose): DBスキーマ作成、Keycloak Realm作成、Mock Compute
     - [ ] 本番環境 (Kubernetes/Serverless): Namespace作成、Knative Service作成、DBインスタンス作成
   - [ ] Keycloak Realm & Client 自動作成ロジック
-- [ ] **ローカル開発環境の整備**:
+- [x] **ローカル開発環境の整備**:
   - [x] `make start` でテナント管理サービスと依存リソース（DB, Keycloak）が一括起動する `docker-compose.yml` の整備
   - [x] `make start-all` で Control Plane UI, Admin App, Participant App が Docker で一括起動するように修正
 - [ ] EventBridge 互換イベントパブリッシャを shared 層に実装し、状態遷移イベントを publish (#27)
 - [ ] Bun/Vitest ベースのユニット & コントラクトテストで 100% カバレッジを達成 (#27)
 - [ ] Runbook / README を更新し、ローカル実行・デプロイ手順を記載 (#27)
-- [ ] Control Plane namespace 向けの Kubernetes manifest / Helm values を下書きし、デプロイ手順をまとめる (#27)
+- [x] Control Plane namespace 向けの Kubernetes manifest / Helm values を下書きし、デプロイ手順をまとめる (#27)
+
+**検証手順 (Validation)**:
+- `bun run lint`, `bun run typecheck`, `bun run test:coverage`, `bun run lint_text` がすべて成功すること
+- `make start` で全サービス（Control Plane UI, Tenant Management Service, Keycloak, DB）が起動し、ローカルで動作すること
+- ローカル環境でテナントを作成し、Pool/Silo 設定に応じて適切なリソース（Keycloak Realm, DBスキーマ等）が作成されること
+- DynamoDB Local + EventBridge エミュレータを用いた CRUD/状態遷移/イベント publish の統合テストが通過すること
+- OpenAPI 仕様に対するモックテスト (`scripts/dev/tenant-management.sh` 等) が成功し、CI で自動検証されること
+
+**未解決の質問 (Open Questions)**:
+- Registration Service とテーブルを共有するか、Control Plane 専用テーブルを分離するか
+- イベントバスは LocalStack を採用するか、軽量な in-memory pub/sub から着手するか
+- 監査ログの保存先を DynamoDB で兼用するか、OpenSearch/CloudWatch Logs に分離するか
+- ローカルでの Silo Compute（独立コンテナ）の再現方法（Docker-in-Docker は避けるか）
+
+**進捗ログ (Progress Log)**:
+- [2025-11-09 10:20] 実装プラン作成および Issue #27 を起票
+- [2025-11-24 10:30] Tenant Management Service (Hono + Bun + Prisma) の初期実装完了。Docker Compose / K8s マニフェスト整備完了。
 
 **検証手順 (Validation)**:
 - `bun run lint`, `bun run typecheck`, `bun run test:coverage`, `bun run lint_text` がすべて成功すること

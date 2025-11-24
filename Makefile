@@ -250,6 +250,8 @@ k8s-build-all: check-docker
 	@echo "🐳 全サービスの Docker イメージをビルドしています..."
 	@echo "📦 Control Plane UI..."
 	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
+	@echo "📦 Tenant Management Service..."
+	@cd backend/services/control-plane/tenant-management && docker build -t tenkacloud/tenant-management:latest .
 	@echo "📦 Admin App..."
 	@docker build -t tenkacloud/admin-app:latest -f frontend/admin-app/Dockerfile .
 	@echo "📦 Participant App..."
@@ -284,14 +286,27 @@ start-k8s: check-k8s k8s-build-all
 k8s-deploy: check-k8s
 	@echo "🚀 Kubernetes にデプロイしています..."
 	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
+	@kubectl apply -f infrastructure/k8s/base/postgres.yaml
 	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml
+	@kubectl apply -f infrastructure/k8s/control-plane/tenant-management.yaml
 	@kubectl apply -f infrastructure/k8s/control-plane/control-plane-ui.yaml
 	@kubectl apply -f infrastructure/k8s/application-plane/admin-app.yaml
 	@kubectl apply -f infrastructure/k8s/application-plane/participant-app.yaml
 	@kubectl apply -f infrastructure/k8s/application-plane/landing-site.yaml
 	@echo "✅ デプロイが完了しました"
-
-stop-k8s: k8s-delete
+	@echo ""
+	@echo "📋 次のステップ:"
+	@echo "  1. Keycloak のセットアップ:"
+	@echo "     kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud"
+	@echo "     (別のターミナルで) ./infrastructure/docker/keycloak/scripts/setup-keycloak.sh"
+	@echo "  2. /etc/hosts の設定:"
+	@echo "     127.0.0.1 keycloak"
+	@echo "  3. アプリケーションへのアクセス (port-forward):"
+	@echo "     kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud"
+	@echo "     kubectl port-forward svc/tenant-management 3004:3004 -n tenkacloud"
+	@echo "     kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud"
+	@echo "     kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud"
+	@echo "     kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud"
 
 k8s-delete:
 	@echo "🗑️  Kubernetes リソースを削除しています..."
@@ -299,7 +314,9 @@ k8s-delete:
 	@kubectl delete -f infrastructure/k8s/application-plane/participant-app.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/application-plane/admin-app.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/control-plane/control-plane-ui.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/control-plane/tenant-management.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/base/keycloak.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/base/postgres.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/base/namespace.yaml --ignore-not-found
 	@echo "✅ 削除が完了しました"
 
