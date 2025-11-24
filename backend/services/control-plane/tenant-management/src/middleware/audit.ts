@@ -3,6 +3,10 @@ import { createLogger } from '../lib/logger';
 
 const auditLogger = createLogger('audit');
 
+// PII (Personally Identifiable Information) protection
+// Set to 'true' to log user email addresses (default: 'false' for GDPR/compliance)
+const LOG_PII = process.env.LOG_PII === 'true';
+
 export interface AuditLogEntry {
   timestamp: string;
   userId?: string;
@@ -71,7 +75,8 @@ export async function auditMiddleware(c: Context, next: Next) {
   const auditEntry: AuditLogEntry = {
     timestamp: new Date().toISOString(),
     userId: user?.id,
-    userEmail: user?.email,
+    // Only log email if PII logging is explicitly enabled (GDPR/compliance)
+    ...(LOG_PII && user?.email ? { userEmail: user.email } : {}),
     action,
     resource,
     resourceId,

@@ -48,10 +48,15 @@ const createTenantSchema = z.object({
 
 const updateTenantSchema = createTenantSchema.partial();
 
+// Pagination constants - DoS protection
+const MAX_PAGE = 10000; // Maximum page number to prevent excessive database queries
+const MAX_LIMIT = 100; // Maximum items per page
+
 // Error response helper
 function errorResponse(message: string, status: number, details?: unknown) {
   const response: { error: string; details?: unknown } = { error: message };
-  if (details) {
+  // Only include error details in non-production environments to prevent information leakage
+  if (details && process.env.NODE_ENV !== 'production') {
     response.details = details;
   }
   return response;
@@ -69,10 +74,13 @@ app.get('/api/tenants', async (c) => {
     const pageParam = parseInt(c.req.query('page') || '1', 10);
     const limitParam = parseInt(c.req.query('limit') || '50', 10);
 
-    // Ensure valid values (min 1, max 100 for limit)
-    const page = Math.max(1, isNaN(pageParam) ? 1 : pageParam);
+    // Ensure valid values with DoS protection
+    const page = Math.min(
+      MAX_PAGE,
+      Math.max(1, isNaN(pageParam) ? 1 : pageParam)
+    );
     const limit = Math.min(
-      100,
+      MAX_LIMIT,
       Math.max(1, isNaN(limitParam) ? 50 : limitParam)
     );
     const skip = (page - 1) * limit;
