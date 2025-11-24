@@ -13,22 +13,22 @@ This guide describes how to deploy TenkaCloud to a Kubernetes cluster.
 
 ### Docker Desktop (最新版)
 
-最新の Docker Desktop では、Kubernetesクラスターを作成する方式に変更されています：
+最新の Docker Desktop では、Kubernetes クラスターの作成方式が変更されています。次の手順で作成します。
 
 1. **Docker Desktop を起動**
    ```bash
    open -a Docker
    ```
 
-2. **Kubernetesクラスターを作成**
+2. **Kubernetes クラスターを作成**
    - 左メニュー > **Kubernetes** を選択
    - **"Start a Kubernetes cluster"** または **"Create"** をクリック
-   - ダイアログで：
-     - ✅ **Kubeadm** を選択（シングルノードクラスター、推奨）
+   - ダイアログで次を選択
+     - 推奨: Kubeadm（シングルノードクラスター）
      - **Create** ボタンをクリック
 
-3. **作成完了を待つ**（3〜5分）
-   - Docker Desktopのステータスで進捗確認
+3. **作成完了を待つ**（３〜５分）
+   - Docker Desktop のステータスで進捗確認
 
 4. **クラスター確認**
    ```bash
@@ -49,10 +49,10 @@ This guide describes how to deploy TenkaCloud to a Kubernetes cluster.
 
 ### Docker Desktop (従来版)
 
-従来のDocker Desktopを使用している場合：
+従来の Docker Desktop を使用している場合は次を実施してください。
 
 1. メニューバー > Docker 🐳 > **Settings**
-2. **Kubernetes** > ☑️ **Enable Kubernetes**
+2. **Kubernetes** > Enable Kubernetes をチェック
 3. **Apply & Restart**
 
 ### その他の環境
