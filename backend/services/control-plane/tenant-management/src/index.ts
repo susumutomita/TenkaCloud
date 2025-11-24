@@ -4,11 +4,7 @@ import { z } from 'zod';
 import { prisma } from './lib/prisma';
 import { Prisma } from '@prisma/client';
 import { logger, createLogger } from './lib/logger';
-import {
-  authMiddleware,
-  requireRoles,
-  UserRole,
-} from './middleware/auth';
+import { authMiddleware, requireRoles, UserRole } from './middleware/auth';
 import { auditMiddleware } from './middleware/audit';
 
 const app = new Hono();

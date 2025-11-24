@@ -6,8 +6,7 @@ const logger = createLogger('auth-middleware');
 
 // Keycloak configuration
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tenkacloud';
-const KEYCLOAK_URL =
-  process.env.KEYCLOAK_URL || 'http://localhost:8080';
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
 
 // Cache JWKS
@@ -129,10 +128,7 @@ export function requireRoles(...requiredRoles: UserRole[]) {
       );
     }
 
-    logger.info(
-      { userId: user.id, roles: user.roles },
-      'Access granted'
-    );
+    logger.info({ userId: user.id, roles: user.roles }, 'Access granted');
 
     await next();
   };

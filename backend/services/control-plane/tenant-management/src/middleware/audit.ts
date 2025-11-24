@@ -114,7 +114,9 @@ function parsePathInfo(
   // Check if last part is an ID (UUID pattern or looks like an ID)
   const isId =
     possibleId &&
-    (possibleId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) ||
+    (possibleId.match(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    ) ||
       !isNaN(Number(possibleId)));
 
   const resourceId = isId ? possibleId : undefined;
@@ -145,8 +147,16 @@ function parsePathInfo(
 /**
  * Redact sensitive data from logs
  */
-function redactSensitiveData(data: Record<string, unknown>): Record<string, unknown> {
-  const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'creditCard'];
+function redactSensitiveData(
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  const sensitiveFields = [
+    'password',
+    'token',
+    'secret',
+    'apiKey',
+    'creditCard',
+  ];
   const redacted = { ...data };
 
   for (const field of sensitiveFields) {
