@@ -140,3 +140,9 @@ vite.config.ts.timestamp-*
 
 .DS_Store
 *.pdf
+
+# Backup files
+*.old
+
+# Claude Code files
+.claude/
