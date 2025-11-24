@@ -1,4 +1,7 @@
-.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build start-all stop-all restart-all setup-keycloak check-docker docker-build docker-run docker-stop docker-status
+.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build
+.PHONY: start-compose start-k8s start stop-compose stop-k8s stop restart status
+.PHONY: start-infrastructure start-control-plane stop-infrastructure stop-control-plane restart-all
+.PHONY: check-docker check-k8s k8s-build-all k8s-deploy k8s-delete docker-build docker-run docker-stop docker-status
 
 # デフォルトターゲットはhelp
 default: help
@@ -11,6 +14,10 @@ ADMIN_APP_DIR := frontend/admin-app
 PARTICIPANT_APP_DIR := frontend/participant-app
 LANDING_SITE_DIR := frontend/landing-site
 FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR) $(LANDING_SITE_DIR)
+
+# ========================================
+# 📦 パッケージ管理
+# ========================================
 
 lint_text:
 	$(NODE_RUNNER) run lint_text
@@ -36,6 +43,10 @@ setup_husky:
 clean:
 	$(NODE_RUNNER) run clean || true
 
+# ========================================
+# 🔍 コード品質
+# ========================================
+
 lint:
 	@echo "🔍 全フロントエンドアプリの lint を実行中..."
 	@for app in $(FRONTEND_APPS); do \
@@ -59,6 +70,10 @@ typecheck:
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの型チェックが成功しました"
 
+# ========================================
+# 🏗  ビルド
+# ========================================
+
 build:
 ifeq ($(SKIP_FRONTEND_BUILD),1)
 	@echo "⚠️  SKIP_FRONTEND_BUILD=1 が設定されているため build をスキップします"
@@ -76,8 +91,9 @@ endif
 dev:
 	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
 
-start:
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run start
+# ========================================
+# 🧪 テスト
+# ========================================
 
 test:
 	@echo "🧪 全フロントエンドアプリのテストを実行中..."
@@ -102,9 +118,11 @@ test_coverage:
 before_commit: lint_text format_check typecheck test build
 	@echo "✅ すべてのコミット前チェックが完了しました"
 
-# ハイフン付きのエイリアス（打ち間違え対策）
-# ハイフン付きのエイリアス（打ち間違え対策）
 before-commit: before_commit
+
+# ========================================
+# 🐳 Docker チェック
+# ========================================
 
 check-docker:
 	@echo "🔍 Docker の起動状態を確認しています..."
@@ -112,12 +130,87 @@ check-docker:
 	@docker ps > /dev/null 2>&1 || (echo "❌ Docker が起動していません。Docker Desktop を起動してください。" && exit 1)
 	@echo "✅ Docker は起動しています"
 
-setup-keycloak: check-docker
-	@echo "🚀 Keycloak をセットアップしています..."
-	@cd infrastructure/docker/keycloak && docker compose up -d
+check-k8s:
+	@echo "🔍 Kubernetes クラスターを確認しています..."
+	@kubectl cluster-info > /dev/null 2>&1 || \
+		(echo "❌ Kubernetes クラスターに接続できません" && \
+		 echo "" && \
+		 echo "📋 対処方法:" && \
+		 echo "  1. Docker Desktop を起動: open -a Docker" && \
+		 echo "  2. Kubernetes > Create Kubernetes Cluster" && \
+		 echo "  3. Kubeadm を選択して Create をクリック" && \
+		 echo "  4. 数分待ってから再度実行" && \
+		 echo "" && \
+		 echo "詳細: docs/KUBERNETES.md" && \
+		 exit 1)
+	@echo "✅ Kubernetes クラスターに接続できました"
+
+# ========================================
+# 🚀 起動・停止（統合コマンド）
+# ========================================
+
+start:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🚀 TenkaCloud デプロイ方法を選択してください"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "  1) Docker Compose（ローカル開発・推奨）"
+	@echo "  2) Kubernetes（本番相当環境）"
+	@echo ""
+	@printf "選択 [1-2]: " && read choice; \
+	case $$choice in \
+		1) $(MAKE) start-compose ;; \
+		2) $(MAKE) start-k8s ;; \
+		*) echo "❌ 無効な選択です" && exit 1 ;; \
+	esac
+
+stop:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🛑 TenkaCloud サービス停止"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "  1) Docker Compose サービスを停止"
+	@echo "  2) Kubernetes サービスを停止"
+	@echo "  3) すべて停止"
+	@echo ""
+	@printf "選択 [1-3]: " && read choice; \
+	case $$choice in \
+		1) $(MAKE) stop-compose ;; \
+		2) $(MAKE) stop-k8s ;; \
+		3) $(MAKE) stop-compose && $(MAKE) stop-k8s ;; \
+		*) echo "❌ 無効な選択です" && exit 1 ;; \
+	esac
+
+restart:
+	@echo "♻️  TenkaCloud を再起動します..."
+	@$(MAKE) stop
+	@$(MAKE) start
+
+status:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "📊 TenkaCloud サービス状態"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "🐳 Docker Compose:"
+	@docker compose ps 2>/dev/null || echo "  ❌ 起動していません"
+	@echo ""
+	@echo "☸️  Kubernetes:"
+	@kubectl get pods -n tenkacloud 2>/dev/null || echo "  ❌ デプロイされていません"
+	@echo ""
+
+# ========================================
+# 🐳 Docker Compose（ローカル開発）
+# ========================================
+
+start-compose: check-docker
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🐳 Docker Compose で TenkaCloud を起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@docker compose up -d --build
 	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
 	@bash -c 'for i in {1..30}; do \
-		if curl -s -f http://localhost:8080/health/ready > /dev/null 2>&1; then \
+		if curl -s -f http://localhost:8080 > /dev/null 2>&1; then \
 			echo "✅ Keycloak が起動しました"; \
 			break; \
 		fi; \
@@ -125,7 +218,94 @@ setup-keycloak: check-docker
 		sleep 2; \
 	done'
 	@echo "🔧 Keycloak の自動設定を実行しています..."
-	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh
+	@cd infrastructure/docker/keycloak && KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin ./scripts/setup-keycloak.sh || true
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✨ 全サービスの起動が完了しました！"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Landing Site:     http://localhost:3003"
+	@echo "  - Control Plane UI: http://localhost:3000"
+	@echo "  - Admin App:        http://localhost:3001"
+	@echo "  - Participant App:  http://localhost:3002"
+	@echo "  - Keycloak:         http://localhost:8080"
+	@echo ""
+
+stop-compose:
+	@echo "🛑 Docker Compose サービスを停止しています..."
+	@docker compose down
+	@echo "✅ 停止しました"
+
+# 後方互換性
+start-all: start-compose
+stop-all: stop-compose
+restart-all: stop-compose start-compose
+
+# ========================================
+# ☸️  Kubernetes（本番相当環境）
+# ========================================
+
+k8s-build-all: check-docker
+	@echo "🐳 全サービスの Docker イメージをビルドしています..."
+	@echo "📦 Control Plane UI..."
+	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
+	@echo "📦 Admin App..."
+	@docker build -t tenkacloud/admin-app:latest -f frontend/admin-app/Dockerfile .
+	@echo "📦 Participant App..."
+	@docker build -t tenkacloud/participant-app:latest -f frontend/participant-app/Dockerfile .
+	@echo "📦 Landing Site..."
+	@docker build -t tenkacloud/landing-site:latest -f frontend/landing-site/Dockerfile .
+	@echo "✅ 全イメージのビルドが完了しました"
+
+start-k8s: check-k8s k8s-build-all
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "☸️  Kubernetes に TenkaCloud をデプロイします"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@$(MAKE) k8s-deploy
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✨ Kubernetes デプロイが完了しました！"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 次のステップ:"
+	@echo "  1. Port-forward でアクセス:"
+	@echo "     kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud"
+	@echo "     kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud"
+	@echo "     kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud"
+	@echo "     kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud"
+	@echo "     kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud"
+	@echo ""
+	@echo "  2. Keycloak セットアップ:"
+	@echo "     ./infrastructure/docker/keycloak/scripts/setup-keycloak.sh"
+	@echo ""
+
+k8s-deploy: check-k8s
+	@echo "🚀 Kubernetes にデプロイしています..."
+	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
+	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml
+	@kubectl apply -f infrastructure/k8s/control-plane/control-plane-ui.yaml
+	@kubectl apply -f infrastructure/k8s/application-plane/admin-app.yaml
+	@kubectl apply -f infrastructure/k8s/application-plane/participant-app.yaml
+	@kubectl apply -f infrastructure/k8s/application-plane/landing-site.yaml
+	@echo "✅ デプロイが完了しました"
+
+stop-k8s: k8s-delete
+
+k8s-delete:
+	@echo "🗑️  Kubernetes リソースを削除しています..."
+	@kubectl delete -f infrastructure/k8s/application-plane/landing-site.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/application-plane/participant-app.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/application-plane/admin-app.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/control-plane/control-plane-ui.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/base/keycloak.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/base/namespace.yaml --ignore-not-found
+	@echo "✅ 削除が完了しました"
+
+# ========================================
+# 🏢 インフラストラクチャ管理（従来版・互換性）
+# ========================================
 
 start-infrastructure: check-docker
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -167,18 +347,26 @@ start-infrastructure: check-docker
 	@echo "  - Keycloak:         http://localhost:8080"
 	@echo ""
 
+stop-infrastructure:
+	@echo "🛑 TenkaCloud インフラストラクチャを停止しています..."
+	@cd infrastructure/docker/keycloak && docker compose down
+	@echo "✅ インフラストラクチャを停止しました"
+
 start-control-plane:
 	@echo "🚀 Control Plane UI を起動します..."
 	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
 
-start: start-all
+stop-control-plane:
+	@echo "🛑 Control Plane UI を停止しています..."
+	@docker compose stop control-plane-ui || true
+	@echo "✅ Control Plane UI を停止しました"
 
-start-all: check-docker
-	@echo "🚀 TenkaCloud 全サービスを Docker で起動します..."
-	@docker compose up -d --build
+setup-keycloak: check-docker
+	@echo "🚀 Keycloak をセットアップしています..."
+	@cd infrastructure/docker/keycloak && docker compose up -d
 	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
 	@bash -c 'for i in {1..30}; do \
-		if curl -s -f http://localhost:8080 > /dev/null 2>&1; then \
+		if curl -s -f http://localhost:8080/health/ready > /dev/null 2>&1; then \
 			echo "✅ Keycloak が起動しました"; \
 			break; \
 		fi; \
@@ -186,38 +374,11 @@ start-all: check-docker
 		sleep 2; \
 	done'
 	@echo "🔧 Keycloak の自動設定を実行しています..."
-	@cd infrastructure/docker/keycloak && KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin ./scripts/setup-keycloak.sh || true
-	@echo ""
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "✨ 全サービスの起動が完了しました！"
-	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo ""
-	@echo "📋 アクセス先:"
-	@echo "  - Landing Site:     http://localhost:3003"
-	@echo "  - Control Plane UI: http://localhost:3000"
-	@echo "  - Admin App:        http://localhost:3001"
-	@echo "  - Participant App:  http://localhost:3002"
-	@echo "  - Keycloak:         http://localhost:8080"
-	@echo ""
+	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh
 
-stop-infrastructure:
-	@echo "🛑 TenkaCloud インフラストラクチャを停止しています..."
-	@cd infrastructure/docker/keycloak && docker compose down
-	@echo "✅ インフラストラクチャを停止しました"
-
-stop-control-plane:
-	@echo "🛑 Control Plane UI を停止しています..."
-	@docker compose stop control-plane-ui || true
-	@echo "✅ Control Plane UI を停止しました"
-
-stop: stop-all
-
-stop-all:
-	@echo "🛑 全サービスを停止しています..."
-	@docker compose down
-	@echo "✅ 全サービスを停止しました"
-
-restart-all: stop-all start-all
+# ========================================
+# 🛠  その他ツール
+# ========================================
 
 docker-build: check-docker
 	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
@@ -258,30 +419,42 @@ docker-status: check-docker
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 
+# ========================================
+# ❓ ヘルプ
+# ========================================
+
 help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📖 TenkaCloud Makefile ヘルプ"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "🚀 ローカル環境管理:"
-	@echo "  make start            全サービス（インフラ + UI）を起動"
-	@echo "  make start-all        make start と同じ"
-	@echo "  make start-control-plane Control Plane UI のみを起動"
-	@echo "  make start-infrastructure インフラ（Keycloak）のみを起動"
-	@echo "  make stop-all         ローカル環境を一括停止"
-	@echo "  make restart-all      ローカル環境を再起動"
-	@echo "  make setup-keycloak   Keycloak のみセットアップ"
-	@echo "  make check-docker     Docker の起動状態を確認"
+	@echo "🚀 デプロイ（統合コマンド）:"
+	@echo "  make start            デプロイ方法を選択（Docker Compose / Kubernetes）"
+	@echo "  make stop             サービスを停止（選択式）"
+	@echo "  make restart          サービスを再起動"
+	@echo "  make status           サービス状態を表示"
 	@echo ""
-	@echo "🐳 Docker ビルド:"
-	@echo "  make docker-build     Control Plane UI の Docker イメージをビルド"
-	@echo "  make docker-run       Docker Compose で Control Plane UI を起動"
-	@echo "  make docker-stop      Docker Compose を停止"
+	@echo "🐳 Docker Compose（ローカル開発・推奨）:"
+	@echo "  make start-compose    Docker Compose で全サービスを起動"
+	@echo "  make stop-compose     Docker Compose サービスを停止"
 	@echo "  make docker-status    Docker コンテナの起動状態を表示"
+	@echo ""
+	@echo "☸️  Kubernetes（本番相当環境）:"
+	@echo "  make check-k8s        Kubernetes クラスターの接続確認"
+	@echo "  make k8s-build-all    全サービスの Docker イメージをビルド"
+	@echo "  make start-k8s        Kubernetes にビルド&デプロイ"
+	@echo "  make k8s-deploy       Kubernetes にデプロイ（ビルド済み前提）"
+	@echo "  make stop-k8s         Kubernetes リソースを削除"
+	@echo ""
+	@echo "🏢 インフラストラクチャ管理:"
+	@echo "  make start-infrastructure  インフラ（Keycloak）のみを起動"
+	@echo "  make start-control-plane   Control Plane UI のみを起動"
+	@echo "  make stop-infrastructure   インフラを停止"
+	@echo "  make setup-keycloak        Keycloak のみセットアップ"
 	@echo ""
 	@echo "📦 パッケージ管理:"
 	@echo "  make install          ルート + 全フロントエンドアプリの依存を bun でインストール"
-	@echo "  make clean            ルートスクリプトの clean を実行 (存在しない場合は no-op)"
+	@echo "  make clean            ルートスクリプトの clean を実行"
 	@echo ""
 	@echo "🔍 コード品質:"
 	@echo "  make lint             全フロントエンドアプリの lint を実行"
@@ -290,8 +463,6 @@ help:
 	@echo "  make format           コードを自動整形"
 	@echo "  make format_check     整形チェック"
 	@echo "  make before_commit    lint_text + format_check + typecheck + test + build を実行"
-	@echo "                       （全フロントエンドアプリに対して）"
-	@echo "                       ※SKIP_FRONTEND_BUILD=1 で build をスキップ可能"
 	@echo ""
 	@echo "🧪 テスト:"
 	@echo "  make test             全フロントエンドアプリのテストを実行"
@@ -300,76 +471,16 @@ help:
 	@echo "🏗  ビルド:"
 	@echo "  make dev              開発サーバーを起動 (Control Plane のみ)"
 	@echo "  make build            全フロントエンドアプリをビルド"
-	@echo "  make start            本番サーバーを起動 (Control Plane のみ)"
 	@echo ""
-	@echo "☸️  Kubernetes:"
-	@echo "  make check-k8s        Kubernetes クラスターの接続確認"
-	@echo "  make k8s-build-all    全サービスの Docker イメージをビルド"
-	@echo "  make k8s-deploy       Kubernetes にデプロイ"
-	@echo "  make k8s-delete       Kubernetes リソースを削除"
+	@echo "🐳 Docker ビルド:"
+	@echo "  make docker-build     Control Plane UI の Docker イメージをビルド"
+	@echo "  make docker-run       Docker Compose で Control Plane UI を起動"
+	@echo "  make docker-stop      Docker Compose を停止"
+	@echo "  make check-docker     Docker の起動状態を確認"
 	@echo ""
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "📚 詳細: docs/QUICKSTART.md"
+	@echo "📚 詳細: docs/QUICKSTART.md, docs/KUBERNETES.md"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-check-k8s:
-	@echo "🔍 Kubernetes クラスターを確認しています..."
-	@kubectl cluster-info > /dev/null 2>&1 || \
-		(echo "❌ Kubernetes クラスターに接続できません" && \
-		 echo "" && \
-		 echo "📋 対処方法:" && \
-		 echo "  1. Docker Desktop を起動: open -a Docker" && \
-		 echo "  2. Settings > Kubernetes > Enable Kubernetes にチェック" && \
-		 echo "  3. Apply & Restart をクリック" && \
-		 echo "  4. 数分待ってから再度実行" && \
-		 echo "" && \
-		 echo "詳細: docs/KUBERNETES.md" && \
-		 exit 1)
-	@echo "✅ Kubernetes クラスターに接続できました"
-
-k8s-build-all: check-docker
-	@echo "🐳 全サービスの Docker イメージをビルドしています..."
-	@echo "📦 Control Plane UI..."
-	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
-	@echo "📦 Admin App..."
-	@docker build -t tenkacloud/admin-app:latest -f frontend/admin-app/Dockerfile .
-	@echo "📦 Participant App..."
-	@docker build -t tenkacloud/participant-app:latest -f frontend/participant-app/Dockerfile .
-	@echo "📦 Landing Site..."
-	@docker build -t tenkacloud/landing-site:latest -f frontend/landing-site/Dockerfile .
-	@echo "✅ 全イメージのビルドが完了しました"
-
-k8s-deploy: check-k8s
-	@echo "🚀 Kubernetes にデプロイしています..."
-	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
-	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml
-	@kubectl apply -f infrastructure/k8s/control-plane/control-plane-ui.yaml
-	@kubectl apply -f infrastructure/k8s/application-plane/admin-app.yaml
-	@kubectl apply -f infrastructure/k8s/application-plane/participant-app.yaml
-	@kubectl apply -f infrastructure/k8s/application-plane/landing-site.yaml
-	@echo "✅ デプロイが完了しました"
-	@echo ""
-	@echo "📋 次のステップ:"
-	@echo "  1. Keycloak のセットアップ:"
-	@echo "     kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud"
-	@echo "     (別のターミナルで) ./infrastructure/docker/keycloak/scripts/setup-keycloak.sh"
-	@echo "  2. /etc/hosts の設定:"
-	@echo "     127.0.0.1 keycloak"
-	@echo "  3. アプリケーションへのアクセス (port-forward):"
-	@echo "     kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud"
-	@echo "     kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud"
-	@echo "     kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud"
-	@echo "     kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud"
-
-k8s-delete:
-	@echo "🗑️  Kubernetes リソースを削除しています..."
-	@kubectl delete -f infrastructure/k8s/application-plane/landing-site.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/application-plane/participant-app.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/application-plane/admin-app.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/control-plane/control-plane-ui.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/base/keycloak.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/base/namespace.yaml --ignore-not-found
-	@echo "✅ 削除が完了しました"
