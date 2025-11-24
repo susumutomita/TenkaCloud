@@ -9,8 +9,15 @@ const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tenkacloud';
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
 
-// Cache JWKS
-const JWKS = createRemoteJWKSet(new URL(JWKS_URL));
+// Lazy initialization of JWKS to avoid startup failures when Keycloak is not available
+let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getJWKS() {
+  if (!jwksCache) {
+    jwksCache = createRemoteJWKSet(new URL(JWKS_URL));
+  }
+  return jwksCache;
+}
 
 // User roles enum
 export enum UserRole {
@@ -22,8 +29,8 @@ export enum UserRole {
 // JWT payload interface
 export interface JWTPayload {
   sub: string; // Subject (user ID)
-  email: string;
-  preferred_username: string;
+  email?: string; // Email is optional in JWT
+  preferred_username?: string; // Username is optional in JWT
   realm_access?: {
     roles: string[];
   };
@@ -70,12 +77,19 @@ export async function authMiddleware(c: Context, next: Next) {
 
   try {
     // Verify JWT token
-    const { payload } = await jwtVerify(token, JWKS, {
+    const { payload } = await jwtVerify(token, getJWKS(), {
       issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
     });
 
     // Extract user information
     const jwtPayload = payload as unknown as JWTPayload;
+
+    // Validate required JWT claims
+    if (!jwtPayload.email || !jwtPayload.preferred_username) {
+      logger.error({ payload: jwtPayload }, 'JWT payload missing required fields');
+      return c.json({ error: 'Unauthorized: Invalid token claims' }, 401);
+    }
+
     const roles = jwtPayload.realm_access?.roles || [];
 
     const user: AuthenticatedUser = {
@@ -156,28 +170,43 @@ export async function optionalAuth(c: Context, next: Next) {
 
   try {
     // Verify JWT token
-    const { payload } = await jwtVerify(token, JWKS, {
+    const { payload } = await jwtVerify(token, getJWKS(), {
       issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
     });
 
     // Extract user information
     const jwtPayload = payload as unknown as JWTPayload;
-    const roles = jwtPayload.realm_access?.roles || [];
 
-    const user: AuthenticatedUser = {
-      id: jwtPayload.sub,
-      email: jwtPayload.email,
-      username: jwtPayload.preferred_username,
-      roles,
-    };
+    // For optional auth, use defaults if email/username are missing
+    if (jwtPayload.email && jwtPayload.preferred_username) {
+      const roles = jwtPayload.realm_access?.roles || [];
 
-    // Attach user to context
-    c.set('user', user);
+      const user: AuthenticatedUser = {
+        id: jwtPayload.sub,
+        email: jwtPayload.email,
+        username: jwtPayload.preferred_username,
+        roles,
+      };
 
-    logger.info({ userId: user.id, email: user.email }, 'User authenticated (optional)');
+      // Attach user to context
+      c.set('user', user);
+
+      logger.info(
+        { userId: user.id, email: user.email },
+        'User authenticated (optional)'
+      );
+    } else {
+      logger.debug(
+        { payload: jwtPayload },
+        'Optional auth: JWT payload missing email or username, skipping user context'
+      );
+    }
   } catch (error) {
     // JWT verification failed, but optional auth should continue
-    logger.debug({ error }, 'Optional auth: JWT verification failed, continuing without user');
+    logger.debug(
+      { error },
+      'Optional auth: JWT verification failed, continuing without user'
+    );
   }
 
   await next();

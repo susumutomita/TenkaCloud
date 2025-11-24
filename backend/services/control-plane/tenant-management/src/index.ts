@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import { z } from 'zod';
 import { prisma } from './lib/prisma';
 import { Prisma } from '@prisma/client';
-import { logger, createLogger } from './lib/logger';
+import { createLogger } from './lib/logger';
 import { authMiddleware, requireRoles, UserRole } from './middleware/auth';
 import { auditMiddleware } from './middleware/audit';
 
@@ -65,20 +65,24 @@ app.get('/health', (c) => {
 // List all tenants with pagination
 app.get('/api/tenants', async (c) => {
   try {
-    // Parse pagination parameters
-    const page = parseInt(c.req.query('page') || '1', 10);
-    const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 100); // Max 100
+    // Parse and validate pagination parameters
+    const pageParam = parseInt(c.req.query('page') || '1', 10);
+    const limitParam = parseInt(c.req.query('limit') || '50', 10);
+
+    // Ensure valid values (min 1, max 100 for limit)
+    const page = Math.max(1, isNaN(pageParam) ? 1 : pageParam);
+    const limit = Math.min(100, Math.max(1, isNaN(limitParam) ? 50 : limitParam));
     const skip = (page - 1) * limit;
 
-    // Get total count for pagination metadata
-    const total = await prisma.tenant.count();
-
-    // Fetch tenants with pagination
-    const tenants = await prisma.tenant.findMany({
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-    });
+    // Parallel execution for better performance
+    const [total, tenants] = await Promise.all([
+      prisma.tenant.count(),
+      prisma.tenant.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / limit);
