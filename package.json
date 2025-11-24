@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "frontend/*"
+    "frontend/*",
+    "backend/services/control-plane/*"
   ],
   "module": "index.ts",
   "type": "module",

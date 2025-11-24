@@ -3,8 +3,8 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     command: start-dev
     environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - KC_HOSTNAME=localhost
       - KC_HTTP_ENABLED=true
       - KC_HEALTH_ENABLED=true
@@ -23,12 +23,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - AUTH_SECRET=secret
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-key-here}
       - AUTH_URL=http://localhost:3000
       - AUTH_KEYCLOAK_ID=control-plane-ui
-      - AUTH_KEYCLOAK_SECRET=secret
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-your-keycloak-client-secret-here}
       - AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
       - NEXTAUTH_URL=http://localhost:3000
+      - TENANT_API_BASE_URL=http://tenant-management:3004/api
     extra_hosts:
       - "localhost:host-gateway"
     depends_on:
@@ -43,10 +44,10 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - AUTH_SECRET=secret
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-key-here}
       - AUTH_URL=http://localhost:3001
       - AUTH_KEYCLOAK_ID=admin-app
-      - AUTH_KEYCLOAK_SECRET=secret
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-your-keycloak-client-secret-here}
       - AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
       - NEXTAUTH_URL=http://localhost:3001
     extra_hosts:
@@ -63,10 +64,10 @@ services:
     ports:
       - "3002:3002"
     environment:
-      - AUTH_SECRET=secret
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-key-here}
       - AUTH_URL=http://localhost:3002
       - AUTH_KEYCLOAK_ID=participant-app
-      - AUTH_KEYCLOAK_SECRET=secret
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-your-keycloak-client-secret-here}
       - AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
       - NEXTAUTH_URL=http://localhost:3002
     extra_hosts:
@@ -87,6 +88,39 @@ services:
     networks:
       - tenkacloud
 
+  tenant-management:
+    build:
+      context: backend/services/control-plane/tenant-management
+      dockerfile: Dockerfile
+    command: bun run dev
+    ports:
+      - "3004:3004"
+    volumes:
+      - ./backend/services/control-plane/tenant-management:/app
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tenkacloud?schema=public
+    depends_on:
+      - postgres
+    networks:
+      - tenkacloud
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-tenkacloud}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tenkacloud
+
 networks:
   tenkacloud:
     driver: bridge
+
+volumes:
+  postgres_data:

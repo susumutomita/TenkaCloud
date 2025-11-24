@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum TenantTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model Tenant {
+  id          String        @id @default(uuid())
+  name        String
+  status      TenantStatus  @default(ACTIVE)
+  tier        TenantTier    @default(FREE)
+  adminEmail  String        @unique
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status])
+  @@index([adminEmail])
+  @@map("tenants")
+}
