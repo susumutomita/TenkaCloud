@@ -71,7 +71,10 @@ app.get('/api/tenants', async (c) => {
 
     // Ensure valid values (min 1, max 100 for limit)
     const page = Math.max(1, isNaN(pageParam) ? 1 : pageParam);
-    const limit = Math.min(100, Math.max(1, isNaN(limitParam) ? 50 : limitParam));
+    const limit = Math.min(
+      100,
+      Math.max(1, isNaN(limitParam) ? 50 : limitParam)
+    );
     const skip = (page - 1) * limit;
 
     // Parallel execution for better performance

@@ -86,7 +86,10 @@ export async function authMiddleware(c: Context, next: Next) {
 
     // Validate required JWT claims
     if (!jwtPayload.email || !jwtPayload.preferred_username) {
-      logger.error({ payload: jwtPayload }, 'JWT payload missing required fields');
+      logger.error(
+        { payload: jwtPayload },
+        'JWT payload missing required fields'
+      );
       return c.json({ error: 'Unauthorized: Invalid token claims' }, 401);
     }
 
