@@ -1,5 +1,34 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { prisma } from './lib/prisma';
+
+// Mock jose library to prevent Keycloak connection attempts
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => ({})),
+  jwtVerify: vi.fn(),
+}));
+
+// Mock authentication middleware for testing
+vi.mock('./middleware/auth', async () => {
+  const actual = await vi.importActual('./middleware/auth');
+  return {
+    ...actual,
+    authMiddleware: async (c: any, next: any) => {
+      // Inject test user with PLATFORM_ADMIN role
+      c.set('user', {
+        id: 'test-user-id',
+        email: 'test@example.com',
+        username: 'testuser',
+        roles: ['platform-admin'],
+      });
+      await next();
+    },
+    requireRoles: () => async (_c: any, next: any) => {
+      // Always allow in tests
+      await next();
+    },
+  };
+});
+
 import { app } from './index';
 
 describe('テナント管理API', () => {
@@ -172,8 +201,11 @@ describe('テナント管理API', () => {
       const res = await app.request('/api/tenants');
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body.length).toBe(3);
+      expect(body.data).toBeDefined();
+      expect(Array.isArray(body.data)).toBe(true);
+      expect(body.data.length).toBe(3);
+      expect(body.pagination).toBeDefined();
+      expect(body.pagination.total).toBe(3);
     });
 
     it('テナントが作成日時降順でソートされているべき', async () => {
@@ -181,9 +213,9 @@ describe('テナント管理API', () => {
       const body = await res.json();
 
       // 作成日時が降順になっているか確認
-      for (let i = 0; i < body.length - 1; i++) {
-        const current = new Date(body[i].createdAt);
-        const next = new Date(body[i + 1].createdAt);
+      for (let i = 0; i < body.data.length - 1; i++) {
+        const current = new Date(body.data[i].createdAt);
+        const next = new Date(body.data[i + 1].createdAt);
         expect(current >= next).toBe(true);
       }
     });
@@ -195,7 +227,8 @@ describe('テナント管理API', () => {
       const res = await app.request('/api/tenants');
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toEqual([]);
+      expect(body.data).toEqual([]);
+      expect(body.pagination.total).toBe(0);
     });
   });
 
