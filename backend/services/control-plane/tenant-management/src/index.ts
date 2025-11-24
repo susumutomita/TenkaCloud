@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { z } from 'zod';
 import { prisma } from './lib/prisma';
 import { Prisma } from '@prisma/client';
+import { createLogger } from './lib/logger';
+import { authMiddleware, requireRoles, UserRole } from './middleware/auth';
+import { auditMiddleware } from './middleware/audit';
 
 const app = new Hono();
-
-// Logging middleware
-app.use('*', logger());
+const appLogger = createLogger('tenant-api');
 
 // CORS configuration - strict origin control
 app.use(
@@ -22,8 +22,18 @@ app.use(
       process.env.ALLOWED_ORIGIN || '',
     ].filter(Boolean),
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization'],
   })
+);
+
+// Audit logging for all API requests
+app.use('/api/*', auditMiddleware);
+
+// Authentication required for all tenant management operations
+app.use(
+  '/api/tenants*',
+  authMiddleware,
+  requireRoles(UserRole.PLATFORM_ADMIN, UserRole.TENANT_ADMIN)
 );
 
 // Validation schemas
@@ -40,10 +50,11 @@ const updateTenantSchema = createTenantSchema.partial();
 
 // Error response helper
 function errorResponse(message: string, status: number, details?: unknown) {
-  return {
-    error: message,
-    ...(details && { details }),
-  };
+  const response: { error: string; details?: unknown } = { error: message };
+  if (details) {
+    response.details = details;
+  }
+  return response;
 }
 
 // Health check
@@ -51,15 +62,54 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok', service: 'tenant-management' });
 });
 
-// List all tenants
+// List all tenants with pagination
 app.get('/api/tenants', async (c) => {
   try {
-    const tenants = await prisma.tenant.findMany({
-      orderBy: { createdAt: 'desc' },
+    // Parse and validate pagination parameters
+    const pageParam = parseInt(c.req.query('page') || '1', 10);
+    const limitParam = parseInt(c.req.query('limit') || '50', 10);
+
+    // Ensure valid values (min 1, max 100 for limit)
+    const page = Math.max(1, isNaN(pageParam) ? 1 : pageParam);
+    const limit = Math.min(
+      100,
+      Math.max(1, isNaN(limitParam) ? 50 : limitParam)
+    );
+    const skip = (page - 1) * limit;
+
+    // Parallel execution for better performance
+    const [total, tenants] = await Promise.all([
+      prisma.tenant.count(),
+      prisma.tenant.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(total / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
+    appLogger.info(
+      { page, limit, total, tenantsCount: tenants.length },
+      'Fetched tenants'
+    );
+
+    return c.json({
+      data: tenants,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage,
+        hasPreviousPage,
+      },
     });
-    return c.json(tenants);
   } catch (error) {
-    console.error('[GET /api/tenants] Error:', error);
+    appLogger.error({ error }, 'Failed to fetch tenants');
     return c.json(errorResponse('Failed to fetch tenants', 500), 500);
   }
 });
@@ -88,7 +138,7 @@ app.get('/api/tenants/:id', async (c) => {
 
     return c.json(tenant);
   } catch (error) {
-    console.error(`[GET /api/tenants/${id}] Error:`, error);
+    appLogger.error({ error, tenantId: id }, 'Failed to fetch tenant');
     return c.json(errorResponse('Failed to fetch tenant', 500), 500);
   }
 });
@@ -119,7 +169,7 @@ app.post('/api/tenants', async (c) => {
       );
     }
 
-    console.error('[POST /api/tenants] Error:', error);
+    appLogger.error({ error }, 'Failed to create tenant');
     return c.json(errorResponse('Failed to create tenant', 500), 500);
   }
 });
@@ -169,7 +219,7 @@ app.patch('/api/tenants/:id', async (c) => {
       );
     }
 
-    console.error(`[PATCH /api/tenants/${id}] Error:`, error);
+    appLogger.error({ error, tenantId: id }, 'Failed to update tenant');
     return c.json(errorResponse('Failed to update tenant', 500), 500);
   }
 });
@@ -201,7 +251,7 @@ app.delete('/api/tenants/:id', async (c) => {
       return c.json(errorResponse('Tenant not found', 404), 404);
     }
 
-    console.error(`[DELETE /api/tenants/${id}] Error:`, error);
+    appLogger.error({ error, tenantId: id }, 'Failed to delete tenant');
     return c.json(errorResponse('Failed to delete tenant', 500), 500);
   }
 });
@@ -210,7 +260,27 @@ const port = 3004;
 
 // Only log when not in test environment
 if (process.env.NODE_ENV !== 'test') {
-  console.log(`🚀 Tenant Management API is running on port ${port}`);
+  appLogger.info({ port }, 'Tenant Management API is running');
+}
+
+// Graceful shutdown handlers
+async function gracefulShutdown(signal: string) {
+  appLogger.info({ signal }, 'Received shutdown signal, closing connections');
+
+  try {
+    await prisma.$disconnect();
+    appLogger.info('Database connections closed');
+    process.exit(0);
+  } catch (error) {
+    appLogger.error({ error }, 'Error during graceful shutdown');
+    process.exit(1);
+  }
+}
+
+// Only register shutdown handlers when not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 // Export app for testing
