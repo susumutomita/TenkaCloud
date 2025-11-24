@@ -9,6 +9,58 @@ This guide describes how to deploy TenkaCloud to a Kubernetes cluster.
 - `docker` (for building images)
 - `/etc/hosts` entry for Keycloak (see below)
 
+## 0. Setup Kubernetes Cluster
+
+### Docker Desktop (最新版)
+
+最新の Docker Desktop では、Kubernetes クラスターの作成方式が変更されています。次の手順で作成します。
+
+1. **Docker Desktop を起動**
+   ```bash
+   open -a Docker
+   ```
+
+2. **Kubernetes クラスターを作成**
+   - 左メニュー > **Kubernetes** を選択
+   - **"Start a Kubernetes cluster"** または **"Create"** をクリック
+   - ダイアログで次を選択
+     - 推奨: Kubeadm（シングルノードクラスター）
+     - **Create** ボタンをクリック
+
+3. **作成完了を待つ**（３〜５分）
+   - Docker Desktop のステータスで進捗確認
+
+4. **クラスター確認**
+   ```bash
+   # コンテキスト一覧確認
+   kubectl config get-contexts
+
+   # kubeadm コンテキストに切り替え
+   kubectl config use-context kubeadm
+
+   # クラスター接続確認
+   kubectl cluster-info
+   ```
+
+5. **TenkaCloudデプロイ前の確認**
+   ```bash
+   make check-k8s
+   ```
+
+### Docker Desktop (従来版)
+
+従来の Docker Desktop を使用している場合は次を実施してください。
+
+1. メニューバー > Docker 🐳 > **Settings**
+2. **Kubernetes** > Enable Kubernetes をチェック
+3. **Apply & Restart**
+
+### その他の環境
+
+- **Minikube**: `minikube start`
+- **Kind**: `kind create cluster`
+- **Cloud (EKS/GKE/AKS)**: 各クラウドプロバイダーのドキュメント参照
+
 ## 1. Build Docker Images
 
 Since we are deploying locally, we need to build the images first.

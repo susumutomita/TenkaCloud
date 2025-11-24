@@ -303,6 +303,7 @@ help:
 	@echo "  make start            本番サーバーを起動 (Control Plane のみ)"
 	@echo ""
 	@echo "☸️  Kubernetes:"
+	@echo "  make check-k8s        Kubernetes クラスターの接続確認"
 	@echo "  make k8s-build-all    全サービスの Docker イメージをビルド"
 	@echo "  make k8s-deploy       Kubernetes にデプロイ"
 	@echo "  make k8s-delete       Kubernetes リソースを削除"
@@ -313,6 +314,21 @@ help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📚 詳細: docs/QUICKSTART.md"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+check-k8s:
+	@echo "🔍 Kubernetes クラスターを確認しています..."
+	@kubectl cluster-info > /dev/null 2>&1 || \
+		(echo "❌ Kubernetes クラスターに接続できません" && \
+		 echo "" && \
+		 echo "📋 対処方法:" && \
+		 echo "  1. Docker Desktop を起動: open -a Docker" && \
+		 echo "  2. Settings > Kubernetes > Enable Kubernetes にチェック" && \
+		 echo "  3. Apply & Restart をクリック" && \
+		 echo "  4. 数分待ってから再度実行" && \
+		 echo "" && \
+		 echo "詳細: docs/KUBERNETES.md" && \
+		 exit 1)
+	@echo "✅ Kubernetes クラスターに接続できました"
 
 k8s-build-all: check-docker
 	@echo "🐳 全サービスの Docker イメージをビルドしています..."
@@ -326,7 +342,7 @@ k8s-build-all: check-docker
 	@docker build -t tenkacloud/landing-site:latest -f frontend/landing-site/Dockerfile .
 	@echo "✅ 全イメージのビルドが完了しました"
 
-k8s-deploy: check-docker
+k8s-deploy: check-k8s
 	@echo "🚀 Kubernetes にデプロイしています..."
 	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
 	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml

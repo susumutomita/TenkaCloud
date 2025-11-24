@@ -7,7 +7,7 @@ set -e
 
 KEYCLOAK_URL="${KEYCLOAK_URL:-http://localhost:8080}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin_password}"
+ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
 REALM_NAME="tenkacloud"
 CLIENT_ID="control-plane-ui"
 REDIRECT_URI="http://localhost:3000/*"

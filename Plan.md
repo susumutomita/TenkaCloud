@@ -263,6 +263,7 @@ backend/
 - [2025-11-23 08:07] frontend/landing-site の README 文言と Prettier 未整形ファイルを修正し、`make before-commit` が再び完走することを確認
 - [2025-11-23 08:28] CLAUDE.md にドキュメント作成方針を追記し、絵文字＋太字の lint 指摘を解消。`next/font/google` を排除して landing-site ビルドのネットワーク依存を解消し、`make before-commit` が再度完走することを確認
 - [2025-11-23 08:34] 追加で textlint 指摘（表現の断定・句点欠落）と `next-env.d.ts` の Prettier 警告を解消し、`make before-commit` を成功させたことを確認
+- [2025-11-23 09:59] docs/KUBERNETES.md の textlint 指摘（コロン終止、全半角スペース、絵文字＋太字）を修正し、`make before-commit` が再度成功することを確認
 
 **振り返り (Retrospective)**:
 （実装後に記入）

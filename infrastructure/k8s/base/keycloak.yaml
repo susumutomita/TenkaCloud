@@ -20,9 +20,9 @@ spec:
           image: quay.io/keycloak/keycloak:26.0
           args: ["start-dev"]
           env:
-            - name: KEYCLOAK_ADMIN
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
               value: "admin"
-            - name: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               value: "admin"
             - name: KC_HOSTNAME
               value: "keycloak" # Assumes 'keycloak' is mapped to 127.0.0.1 on host, and resolves to service in K8s
@@ -35,10 +35,12 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+            - containerPort: 9000
+              name: management
           readinessProbe:
             httpGet:
               path: /health/ready
-              port: 8080
+              port: 9000
             initialDelaySeconds: 30
             periodSeconds: 10
 ---
