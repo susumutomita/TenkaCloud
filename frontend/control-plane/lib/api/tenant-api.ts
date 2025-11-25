@@ -1,21 +1,9 @@
+import { StatusCodes } from 'http-status-codes';
 import type {
   CreateTenantInput,
   Tenant,
   UpdateTenantInput,
 } from '@/types/tenant';
-
-/** HTTP ステータスコード定数 */
-const HTTP_STATUS = {
-  OK: 200,
-  CREATED: 201,
-  NO_CONTENT: 204,
-  BAD_REQUEST: 400,
-  UNAUTHORIZED: 401,
-  FORBIDDEN: 403,
-  NOT_FOUND: 404,
-  CONFLICT: 409,
-  INTERNAL_SERVER_ERROR: 500,
-} as const;
 
 // Use NEXT_PUBLIC_TENANT_API_BASE_URL for client components, fall back to server-side env.
 const isServer = typeof window === 'undefined';
@@ -54,7 +42,7 @@ export const tenantApi = {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
       cache: 'no-store',
     });
-    if (res.status === HTTP_STATUS.NOT_FOUND) return null;
+    if (res.status === StatusCodes.NOT_FOUND) return null;
     return handleResponse<Tenant>(res);
   },
 
@@ -76,7 +64,7 @@ export const tenantApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    if (res.status === HTTP_STATUS.NOT_FOUND) return null;
+    if (res.status === StatusCodes.NOT_FOUND) return null;
     return handleResponse<Tenant>(res);
   },
 
@@ -84,7 +72,7 @@ export const tenantApi = {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
       method: 'DELETE',
     });
-    if (res.status === HTTP_STATUS.NOT_FOUND) return false;
+    if (res.status === StatusCodes.NOT_FOUND) return false;
     await handleResponse<unknown>(res);
     return true;
   },
