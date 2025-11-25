@@ -18,8 +18,8 @@ export default function EditTenantPage({
   const [formData, setFormData] = useState({
     name: '',
     adminEmail: '',
-    tier: 'free' as TenantTier,
-    status: 'active' as Tenant['status'],
+    tier: 'FREE' as TenantTier,
+    status: 'ACTIVE' as Tenant['status'],
   });
 
   // Next.js 15 では params が Promise で渡ってくるため、クライアント側で解決する
@@ -169,9 +169,9 @@ export default function EditTenantPage({
                   }))
                 }
               >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+                <option value="FREE">Free</option>
+                <option value="PRO">Pro</option>
+                <option value="ENTERPRISE">Enterprise</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -192,9 +192,9 @@ export default function EditTenantPage({
                   }))
                 }
               >
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="deleted">Deleted</option>
+                <option value="ACTIVE">Active</option>
+                <option value="SUSPENDED">Suspended</option>
+                <option value="ARCHIVED">Archived</option>
               </select>
             </div>
           </div>

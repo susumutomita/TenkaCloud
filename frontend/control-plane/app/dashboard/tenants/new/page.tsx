@@ -12,7 +12,7 @@ export default function NewTenantPage() {
   const [formData, setFormData] = useState({
     name: '',
     adminEmail: '',
-    tier: 'free' as TenantTier,
+    tier: 'FREE' as TenantTier,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -103,9 +103,9 @@ export default function NewTenantPage() {
                   })
                 }
               >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+                <option value="FREE">Free</option>
+                <option value="PRO">Pro</option>
+                <option value="ENTERPRISE">Enterprise</option>
               </select>
             </div>
           </div>

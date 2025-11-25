@@ -58,9 +58,9 @@ export default async function TenantDetailPage({
                 <dd className="col-span-2">
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
-                      tenant.status === 'active'
+                      tenant.status === 'ACTIVE'
                         ? 'bg-green-100 text-green-800'
-                        : tenant.status === 'suspended'
+                        : tenant.status === 'SUSPENDED'
                           ? 'bg-yellow-100 text-yellow-800'
                           : 'bg-red-100 text-red-800'
                     }`}
@@ -95,53 +95,6 @@ export default async function TenantDetailPage({
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6">
-            <h3 className="font-semibold leading-none tracking-tight">
-              リソース使用状況 (Mock)
-            </h3>
-          </div>
-          <div className="p-6 pt-0">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">CPU 使用率</span>
-                  <span className="text-muted-foreground">45%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-secondary bg-gray-100">
-                  <div
-                    className="h-full rounded-full bg-primary bg-black"
-                    style={{ width: '45%' }}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">メモリ 使用率</span>
-                  <span className="text-muted-foreground">62%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-secondary bg-gray-100">
-                  <div
-                    className="h-full rounded-full bg-primary bg-black"
-                    style={{ width: '62%' }}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">ストレージ 使用率</span>
-                  <span className="text-muted-foreground">28%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-secondary bg-gray-100">
-                  <div
-                    className="h-full rounded-full bg-primary bg-black"
-                    style={{ width: '28%' }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

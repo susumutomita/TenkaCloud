@@ -1,5 +1,5 @@
-export type TenantStatus = 'active' | 'suspended' | 'deleted';
-export type TenantTier = 'free' | 'pro' | 'enterprise';
+export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+export type TenantTier = 'FREE' | 'PRO' | 'ENTERPRISE';
 
 export interface Tenant {
   id: string;
