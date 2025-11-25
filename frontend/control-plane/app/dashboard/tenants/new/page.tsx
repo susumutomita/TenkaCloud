@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
 import type { TenantTier } from '@/types/tenant';
+import { TENANT_TIER_LABELS, TENANT_TIERS } from '@/types/tenant';
 
 export default function NewTenantPage() {
   const router = useRouter();
@@ -103,9 +104,11 @@ export default function NewTenantPage() {
                   })
                 }
               >
-                <option value="FREE">Free</option>
-                <option value="PRO">Pro</option>
-                <option value="ENTERPRISE">Enterprise</option>
+                {TENANT_TIERS.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {TENANT_TIER_LABELS[tier]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
 import type { Tenant, TenantTier } from '@/types/tenant';
+import {
+  TENANT_STATUSES,
+  TENANT_STATUS_LABELS,
+  TENANT_TIER_LABELS,
+  TENANT_TIERS,
+} from '@/types/tenant';
 
 export default function EditTenantPage({
   params,
@@ -169,9 +175,11 @@ export default function EditTenantPage({
                   }))
                 }
               >
-                <option value="FREE">Free</option>
-                <option value="PRO">Pro</option>
-                <option value="ENTERPRISE">Enterprise</option>
+                {TENANT_TIERS.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {TENANT_TIER_LABELS[tier]}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
@@ -192,9 +200,11 @@ export default function EditTenantPage({
                   }))
                 }
               >
-                <option value="ACTIVE">Active</option>
-                <option value="SUSPENDED">Suspended</option>
-                <option value="ARCHIVED">Archived</option>
+                {TENANT_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {TENANT_STATUS_LABELS[status]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
