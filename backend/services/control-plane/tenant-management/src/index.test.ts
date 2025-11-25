@@ -32,6 +32,27 @@ vi.mock('./middleware/auth', async () => {
 import { app } from './index';
 
 describe('テナント管理API', () => {
+  describe('認証/認可テスト', () => {
+    it('Authorizationヘッダーなしで401エラーになるべき', async () => {
+      // Temporarily restore original auth middleware
+      const { authMiddleware: originalAuth } = await import(
+        './middleware/auth'
+      );
+      vi.doMock('./middleware/auth', () => ({
+        ...vi.importActual('./middleware/auth'),
+        authMiddleware: originalAuth,
+      }));
+
+      const res = await app.request('/api/tenants', {
+        method: 'GET',
+      });
+
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toContain('Unauthorized');
+    });
+  });
+
   describe('GET /health', () => {
     it('ヘルスチェックが成功するべき', async () => {
       const res = await app.request('/health');
@@ -229,6 +250,59 @@ describe('テナント管理API', () => {
       const body = await res.json();
       expect(body.data).toEqual([]);
       expect(body.pagination.total).toBe(0);
+    });
+
+    it('ページネーション: page=2でデータを取得できるべき', async () => {
+      const res = await app.request('/api/tenants?page=2&limit=1');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pagination.page).toBe(2);
+      expect(body.pagination.limit).toBe(1);
+      expect(body.pagination.hasPreviousPage).toBe(true);
+    });
+
+    it('ページネーション: limitパラメータが正しく動作するべき', async () => {
+      const res = await app.request('/api/tenants?limit=2');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.data.length).toBeLessThanOrEqual(2);
+      expect(body.pagination.limit).toBe(2);
+    });
+
+    it('ページネーション: 最大ページ数を超えても10000に制限されるべき（DoS対策）', async () => {
+      const res = await app.request('/api/tenants?page=999999999');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // MAX_PAGE(10000)に制限される
+      expect(body.pagination.page).toBe(10000);
+    });
+
+    it('ページネーション: limitは100に制限されるべき', async () => {
+      const res = await app.request('/api/tenants?limit=999999');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pagination.limit).toBe(100);
+    });
+
+    it('ページネーション: 不正なpage値は1にフォールバックされるべき', async () => {
+      const res = await app.request('/api/tenants?page=invalid');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pagination.page).toBe(1);
+    });
+
+    it('ページネーション: 負のpage値は1にフォールバックされるべき', async () => {
+      const res = await app.request('/api/tenants?page=-5');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pagination.page).toBe(1);
+    });
+
+    it('ページネーション: ゼロのlimit値は1にフォールバックされるべき', async () => {
+      const res = await app.request('/api/tenants?limit=0');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pagination.limit).toBe(1);
     });
   });
 
