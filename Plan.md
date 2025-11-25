@@ -1445,6 +1445,30 @@ make build
 
 ## 次の実行計画テンプレート
 
+### before-commit 型エラー修正 - 2025-11-26
+
+**目的 (Objective)**:
+- make before-commit で発生した Tenant 型エラーを解消し、全フロントエンドの型チェックを通す。
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う。
+- Tenant の tier と status は大文字表記で統一する。
+
+**タスク (TODOs)**:
+- [x] モックデータの tier と status を Tenant 型に合わせて大文字に統一する。
+- [x] テナント編集ページのユニットテスト期待値を大文字表記に合わせる。
+
+**検証手順 (Validation)**:
+- make before-commit を実行して lint_text、format_check、typecheck、test、build をすべて Green にする。
+
+**進捗ログ (Progress Log)**:
+- [2025-11-26 07:48 JST] typecheck 失敗箇所を修正し mock データとテスト期待値を大文字表記へ揃えた。
+
+**振り返り (Retrospective)**:
+- 問題: Tenant tier/status の表記ゆれで typecheck が失敗した。
+- 根本原因: テストとモックを作成する際に UI で使用している大文字表記を参照していなかった。
+- 予防策: 型定義のリテラル値を参照しながらフィクスチャを作成し、lint と typecheck を CI で必須にする。
+
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
 
 ```markdown

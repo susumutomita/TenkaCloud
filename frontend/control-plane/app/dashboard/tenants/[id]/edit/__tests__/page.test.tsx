@@ -49,8 +49,8 @@ describe('EditTenantPage', () => {
     id: 'test-tenant-id',
     name: 'Test Tenant',
     adminEmail: 'admin@test.com',
-    tier: 'pro',
-    status: 'active',
+    tier: 'PRO',
+    status: 'ACTIVE',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
   };
@@ -75,8 +75,8 @@ describe('EditTenantPage', () => {
         expect(screen.getByLabelText('管理者 Email')).toHaveValue(
           'admin@test.com'
         );
-        expect(screen.getByLabelText('Tier')).toHaveValue('pro');
-        expect(screen.getByLabelText('ステータス')).toHaveValue('active');
+        expect(screen.getByLabelText('Tier')).toHaveValue('PRO');
+        expect(screen.getByLabelText('ステータス')).toHaveValue('ACTIVE');
       });
     });
 
@@ -250,11 +250,11 @@ describe('EditTenantPage', () => {
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
       const tierSelect = await screen.findByLabelText('Tier');
-      expect(tierSelect).toHaveValue('pro');
+      expect(tierSelect).toHaveValue('PRO');
 
-      fireEvent.change(tierSelect, { target: { value: 'enterprise' } });
+      fireEvent.change(tierSelect, { target: { value: 'ENTERPRISE' } });
 
-      expect(screen.getByLabelText('Tier')).toHaveValue('enterprise');
+      expect(screen.getByLabelText('Tier')).toHaveValue('ENTERPRISE');
     });
 
     it('ステータスを変更できるべき', async () => {
@@ -263,11 +263,11 @@ describe('EditTenantPage', () => {
       await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
 
       const statusSelect = await screen.findByLabelText('ステータス');
-      expect(statusSelect).toHaveValue('active');
+      expect(statusSelect).toHaveValue('ACTIVE');
 
-      fireEvent.change(statusSelect, { target: { value: 'suspended' } });
+      fireEvent.change(statusSelect, { target: { value: 'SUSPENDED' } });
 
-      expect(screen.getByLabelText('ステータス')).toHaveValue('suspended');
+      expect(screen.getByLabelText('ステータス')).toHaveValue('SUSPENDED');
     });
   });
 });

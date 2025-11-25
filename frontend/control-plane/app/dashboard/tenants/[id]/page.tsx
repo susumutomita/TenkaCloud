@@ -94,7 +94,6 @@ export default async function TenantDetailPage({
             </dl>
           </div>
         </div>
-
       </div>
     </div>
   );
