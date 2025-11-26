@@ -1,33 +1,15 @@
+import { StatusCodes } from 'http-status-codes';
 import type {
   CreateTenantInput,
   Tenant,
   UpdateTenantInput,
 } from '@/types/tenant';
-import { mockTenantApi } from './mock-tenant-api';
 
 // Use NEXT_PUBLIC_TENANT_API_BASE_URL for client components, fall back to server-side env.
 const isServer = typeof window === 'undefined';
 const apiBaseUrl = isServer
   ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:3004/api'
   : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:3004/api';
-
-const shouldUseMock = false; // Force usage of real API
-
-type ApiTenant = {
-  id: string;
-  name: string;
-  status: string;
-  tier: string;
-  adminEmail: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-const normalizeTenant = (tenant: ApiTenant): Tenant => ({
-  ...tenant,
-  status: tenant.status.toLowerCase() as Tenant['status'],
-  tier: tenant.tier.toLowerCase() as Tenant['tier'],
-});
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -37,76 +19,60 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+type PaginatedResponse<T> = {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+};
+
 export const tenantApi = {
   async listTenants(): Promise<Tenant[]> {
-    if (shouldUseMock) return mockTenantApi.listTenants();
-    try {
-      const res = await fetch(`${apiBaseUrl}/tenants`, { cache: 'no-store' });
-      const data = await handleResponse<ApiTenant[]>(res);
-      return data.map(normalizeTenant);
-    } catch (e) {
-      console.warn('Tenant API listTenants failed, fallback to mock', e);
-      return mockTenantApi.listTenants();
-    }
+    const res = await fetch(`${apiBaseUrl}/tenants`, { cache: 'no-store' });
+    const response = await handleResponse<PaginatedResponse<Tenant>>(res);
+    return response.data;
   },
 
   async getTenant(id: string): Promise<Tenant | null> {
-    if (shouldUseMock) return mockTenantApi.getTenant(id);
-    try {
-      const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
-        cache: 'no-store',
-      });
-      if (res.status === 404) return null;
-      const data = await handleResponse<ApiTenant>(res);
-      return normalizeTenant(data);
-    } catch (e) {
-      console.warn('Tenant API getTenant failed, fallback to mock', e);
-      return mockTenantApi.getTenant(id);
-    }
+    const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
+      cache: 'no-store',
+    });
+    if (res.status === StatusCodes.NOT_FOUND) return null;
+    return handleResponse<Tenant>(res);
   },
 
   async createTenant(input: CreateTenantInput): Promise<Tenant> {
-    if (shouldUseMock) return mockTenantApi.createTenant(input);
-    try {
-      const res = await fetch(`${apiBaseUrl}/tenants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      const data = await handleResponse<ApiTenant>(res);
-      return normalizeTenant(data);
-    } catch (e) {
-      console.warn('Tenant API createTenant failed, fallback to mock', e);
-      return mockTenantApi.createTenant(input);
-    }
+    const res = await fetch(`${apiBaseUrl}/tenants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return handleResponse<Tenant>(res);
   },
 
   async updateTenant(
     id: string,
     input: UpdateTenantInput
   ): Promise<Tenant | null> {
-    if (shouldUseMock) return mockTenantApi.updateTenant(id, input);
-    try {
-      const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (res.status === 404) return null;
-      const data = await handleResponse<ApiTenant>(res);
-      return normalizeTenant(data);
-    } catch (e) {
-      console.warn('Tenant API updateTenant failed, fallback to mock', e);
-      return mockTenantApi.updateTenant(id, input);
-    }
+    const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (res.status === StatusCodes.NOT_FOUND) return null;
+    return handleResponse<Tenant>(res);
   },
 
   async deleteTenant(id: string): Promise<boolean> {
-    if (shouldUseMock) return mockTenantApi.deleteTenant(id);
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
       method: 'DELETE',
     });
-    if (res.status === 404) return false;
+    if (res.status === StatusCodes.NOT_FOUND) return false;
     await handleResponse<unknown>(res);
     return true;
   },

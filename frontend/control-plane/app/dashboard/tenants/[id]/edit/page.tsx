@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
 import type { Tenant, TenantTier } from '@/types/tenant';
+import {
+  TENANT_STATUSES,
+  TENANT_STATUS_LABELS,
+  TENANT_TIER_LABELS,
+  TENANT_TIERS,
+} from '@/types/tenant';
 
 export default function EditTenantPage({
   params,
@@ -18,8 +24,8 @@ export default function EditTenantPage({
   const [formData, setFormData] = useState({
     name: '',
     adminEmail: '',
-    tier: 'free' as TenantTier,
-    status: 'active' as Tenant['status'],
+    tier: 'FREE' as TenantTier,
+    status: 'ACTIVE' as Tenant['status'],
   });
 
   // Next.js 15 では params が Promise で渡ってくるため、クライアント側で解決する
@@ -169,9 +175,11 @@ export default function EditTenantPage({
                   }))
                 }
               >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+                {TENANT_TIERS.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {TENANT_TIER_LABELS[tier]}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
@@ -192,9 +200,11 @@ export default function EditTenantPage({
                   }))
                 }
               >
-                <option value="active">Active</option>
-                <option value="suspended">Suspended</option>
-                <option value="deleted">Deleted</option>
+                {TENANT_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {TENANT_STATUS_LABELS[status]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
 import type { TenantTier } from '@/types/tenant';
+import { TENANT_TIER_LABELS, TENANT_TIERS } from '@/types/tenant';
 
 export default function NewTenantPage() {
   const router = useRouter();
@@ -12,7 +13,7 @@ export default function NewTenantPage() {
   const [formData, setFormData] = useState({
     name: '',
     adminEmail: '',
-    tier: 'free' as TenantTier,
+    tier: 'FREE' as TenantTier,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -103,9 +104,11 @@ export default function NewTenantPage() {
                   })
                 }
               >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+                {TENANT_TIERS.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {TENANT_TIER_LABELS[tier]}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

@@ -22,8 +22,8 @@ export const dynamic = 'force-dynamic';
 export const fetchCache = 'default-no-store';
 
 const getStatusVariant = (status: string) => {
-  if (status === 'active') return 'success';
-  if (status === 'suspended') return 'warning';
+  if (status === 'ACTIVE') return 'success';
+  if (status === 'SUSPENDED') return 'warning';
   return 'error';
 };
 
@@ -31,9 +31,9 @@ export default async function TenantsPage() {
   const tenants = await tenantApi.listTenants();
 
   const total = tenants.length;
-  const activeCount = tenants.filter((t) => t.status === 'active').length;
-  const suspendedCount = tenants.filter((t) => t.status === 'suspended').length;
-  const enterpriseCount = tenants.filter((t) => t.tier === 'enterprise').length;
+  const activeCount = tenants.filter((t) => t.status === 'ACTIVE').length;
+  const suspendedCount = tenants.filter((t) => t.status === 'SUSPENDED').length;
+  const enterpriseCount = tenants.filter((t) => t.tier === 'ENTERPRISE').length;
 
   return (
     <div className="space-y-8 p-8">
@@ -46,8 +46,7 @@ export default async function TenantsPage() {
             </p>
             <h1 className="text-3xl font-bold tracking-tight">テナント管理</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              環境変数 TENANT_API_BASE_URL を設定すると実 API
-              へ接続し、未設定の場合はモックデータでプレビューします。
+              テナントの作成・管理を行います。
             </p>
           </div>
           <div className="flex gap-3">
@@ -90,11 +89,6 @@ export default async function TenantsPage() {
               <CardTitle>テナント一覧</CardTitle>
               <CardDescription>現在 {total} 件を表示中</CardDescription>
             </div>
-            <p className="text-xs text-muted-foreground">
-              接続先:{' '}
-              {process.env.NEXT_PUBLIC_TENANT_API_BASE_URL ||
-                'モック (ローカルデータ)'}
-            </p>
           </div>
         </CardHeader>
         <CardContent>

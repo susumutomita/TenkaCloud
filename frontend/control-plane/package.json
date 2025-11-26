@@ -16,6 +16,7 @@
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "http-status-codes": "^2.3.0",
     "lucide-react": "^0.554.0",
     "next": "16.0.1",
     "next-auth": "^5.0.0-beta.30",
