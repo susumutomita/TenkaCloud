@@ -32,23 +32,40 @@ export function ReviewStep() {
     setIsSubmitting(true);
 
     try {
-      // TODO: API call to create tenant
       const payload = {
-        profile: profileData,
-        plan: planData,
-        tenant: tenantData,
-        environment: environmentData,
+        name: tenantData.name,
+        slug: tenantData.slug,
+        adminEmail: profileData.email,
+        tier: planData.tier?.toUpperCase(),
+        region: tenantData.region,
+        isolationModel: environmentData.model?.toUpperCase(),
+        computeType: environmentData.compute?.toUpperCase(),
+        status: 'ACTIVE',
       };
 
       console.log('Creating tenant:', payload);
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const response = await fetch('http://localhost:3004/api/tenants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create tenant');
+      }
+
+      const result = await response.json();
+      console.log('Tenant created:', result);
 
       // Redirect to provisioning page
       router.push('/onboarding/provisioning');
     } catch (error) {
       console.error('Failed to create tenant:', error);
+      alert(error instanceof Error ? error.message : 'Failed to create tenant');
       setIsSubmitting(false);
     }
   };

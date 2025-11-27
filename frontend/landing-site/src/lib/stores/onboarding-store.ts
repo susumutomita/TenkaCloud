@@ -10,6 +10,7 @@ export type ComputeType = 'serverless' | 'kubernetes';
 
 export interface ProfileData {
   fullName: string;
+  email: string;
   organizationName: string;
   purpose: string;
 }

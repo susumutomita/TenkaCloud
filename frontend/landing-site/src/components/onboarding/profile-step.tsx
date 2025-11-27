@@ -12,6 +12,7 @@ import {
 
 const profileSchema = z.object({
   fullName: z.string().min(1, '氏名を入力してください'),
+  email: z.string().email('有効なメールアドレスを入力してください'),
   organizationName: z.string().min(1, '組織名を入力してください'),
   purpose: z.string().min(10, '用途を10文字以上で入力してください'),
 });
@@ -63,6 +64,27 @@ export function ProfileStep() {
             {errors.fullName && (
               <p className="mt-1 text-sm text-red-400">
                 {errors.fullName.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-white/80 mb-2"
+            >
+              メールアドレス *
+            </label>
+            <input
+              id="email"
+              type="email"
+              {...register('email')}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
+              placeholder="you@example.com"
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-400">
+                {errors.email.message}
               </p>
             )}
           </div>
