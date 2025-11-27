@@ -1,6 +1,16 @@
 name: ci
+
+# Supply Chain Security:
+# - All actions pinned to full SHA for immutable references
+# - Safe Chain runs before dependency installation
+# - Lifecycle scripts disabled during install
+# - Minimal permissions following principle of least privilege
+
 permissions:
   contents: read
+  packages: read
+  actions: read
+
 on:
   push:
   workflow_dispatch:
@@ -10,17 +20,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code
-        uses: actions/checkout@v4
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           submodules: true
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+
+      # Supply Chain Security: Setup safe-chain before dependency installation
+      - name: Setup safe-chain
+        run: |
+          npm i -g @aikidosec/safe-chain
+          safe-chain setup-ci
+
+      # Supply Chain Security: Disable lifecycle scripts during install
       - name: Install packages via packages.json
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
         run: make install_ci
+
       - name: Run textlint
         run: |
           make lint_text
+
       - name: Format check
         run: |
           make format_check
@@ -29,15 +54,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code
-        uses: actions/checkout@v4
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           submodules: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        # docker/setup-buildx-action v3.11.1
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
 
       - name: Build Control Plane UI Docker image
-        uses: docker/build-push-action@v6
+        # docker/build-push-action v6.18.0
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
           context: ./frontend/control-plane
           file: ./frontend/control-plane/Dockerfile
