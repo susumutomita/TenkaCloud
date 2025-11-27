@@ -46,12 +46,14 @@ app.post('/', async (c) => {
 
     logger.info({ userId: newUser.id, email }, 'User created successfully');
 
-    return c.json({
-      id: newUser.id,
-      email,
-      message: 'User created successfully',
-    }, 201);
-
+    return c.json(
+      {
+        id: newUser.id,
+        email,
+        message: 'User created successfully',
+      },
+      201
+    );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json({ error: 'Validation error', details: error.errors }, 400);

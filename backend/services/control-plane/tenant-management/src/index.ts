@@ -43,7 +43,11 @@ const uuidSchema = z.string().uuid('Invalid UUID format');
 
 const createTenantSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
-  slug: z.string().min(3).max(63).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric and hyphens'),
+  slug: z
+    .string()
+    .min(3)
+    .max(63)
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric and hyphens'),
   adminEmail: z.string().email('Invalid email format'),
   tier: z.enum(['FREE', 'PRO', 'ENTERPRISE']).default('FREE'),
   status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).default('ACTIVE'),
