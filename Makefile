@@ -291,19 +291,6 @@ k8s-deploy: check-k8s
 	@kubectl apply -f infrastructure/k8s/application-plane/participant-app.yaml
 	@kubectl apply -f infrastructure/k8s/application-plane/landing-site.yaml
 	@echo "✅ デプロイが完了しました"
-	@echo ""
-	@echo "📋 次のステップ:"
-	@echo "  1. Keycloak のセットアップ:"
-	@echo "     kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud"
-	@echo "     (別のターミナルで) ./infrastructure/docker/keycloak/scripts/setup-keycloak.sh"
-	@echo "  2. /etc/hosts の設定:"
-	@echo "     127.0.0.1 keycloak"
-	@echo "  3. アプリケーションへのアクセス (port-forward):"
-	@echo "     kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud"
-	@echo "     kubectl port-forward svc/tenant-management 3004:3004 -n tenkacloud"
-	@echo "     kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud"
-	@echo "     kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud"
-	@echo "     kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud"
 
 k8s-delete:
 	@echo "🗑️  Kubernetes リソースを削除しています..."
@@ -408,7 +395,7 @@ k8s-start-full: check-k8s k8s-build-all
 	@echo "  - Tenant Management:  http://localhost:3004"
 	@echo "  - Keycloak:           http://localhost:8080"
 	@echo ""
-	@echo "💡 停止するには: make stop-k8s && make k8s-forward-stop"
+	@echo "💡 停止するには: make stop-k8s"
 	@echo ""
 
 stop-k8s: k8s-forward-stop k8s-delete
