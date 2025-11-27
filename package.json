@@ -17,7 +17,7 @@
     "typecheck:frontend": "npm run typecheck --workspaces --if-present",
     "lint:frontend": "npm run lint --workspaces --if-present",
     "clean": "bun exec rimraf node_modules out",
-    "install:ci": "bun install --no-frozen-lockfile",
+    "install:ci": "bun install --no-frozen-lockfile --ignore-scripts",
     "test": "vitest run --config vitest.config.js",
     "test:watch": "vitest --config vitest.config.js",
     "test:ui": "vitest --ui --config vitest.config.js",

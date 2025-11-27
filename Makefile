@@ -33,9 +33,10 @@ install:
 	done
 	@echo "✅ すべてのフロントエンドアプリの依存関係をインストールしました"
 
+# Supply Chain Security: Disable lifecycle scripts during install
 install_ci:
 	$(BUN) run install:ci
-	cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile
+	cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts
 
 setup_husky:
 	$(BUN) run husky
