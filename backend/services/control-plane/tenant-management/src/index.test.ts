@@ -69,6 +69,7 @@ describe('テナント管理API', () => {
     it('有効なデータでテナントを作成できるべき', async () => {
       const tenantData = {
         name: 'Test Organization',
+        slug: 'test-organization',
         adminEmail: 'admin@test.com',
         tier: 'FREE',
         status: 'ACTIVE',
@@ -96,6 +97,7 @@ describe('テナント管理API', () => {
     it('デフォルト値でテナントを作成できるべき', async () => {
       const tenantData = {
         name: 'Default Tenant',
+        slug: 'default-tenant',
         adminEmail: 'default@test.com',
       };
 
@@ -114,6 +116,7 @@ describe('テナント管理API', () => {
     it('不正なメールアドレスでバリデーションエラーになるべき', async () => {
       const tenantData = {
         name: 'Invalid Email Tenant',
+        slug: 'invalid-email-tenant',
         adminEmail: 'not-an-email',
       };
 
@@ -132,6 +135,7 @@ describe('テナント管理API', () => {
     it('空の名前でバリデーションエラーになるべき', async () => {
       const tenantData = {
         name: '',
+        slug: 'empty-name-tenant',
         adminEmail: 'valid@test.com',
       };
 
@@ -149,6 +153,7 @@ describe('テナント管理API', () => {
     it('重複したメールアドレスで409エラーになるべき', async () => {
       const tenantData = {
         name: 'Duplicate Email Tenant',
+        slug: 'duplicate-email-tenant',
         adminEmail: 'duplicate@test.com',
       };
 
@@ -175,6 +180,7 @@ describe('テナント管理API', () => {
     it('不正なtier値でバリデーションエラーになるべき', async () => {
       const tenantData = {
         name: 'Invalid Tier',
+        slug: 'invalid-tier-tenant',
         adminEmail: 'tier@test.com',
         tier: 'INVALID_TIER',
       };
@@ -198,18 +204,21 @@ describe('テナント管理API', () => {
         data: [
           {
             name: 'Tenant 1',
+            slug: 'tenant-1',
             adminEmail: 'tenant1@test.com',
             tier: 'FREE',
             status: 'ACTIVE',
           },
           {
             name: 'Tenant 2',
+            slug: 'tenant-2',
             adminEmail: 'tenant2@test.com',
             tier: 'PRO',
             status: 'ACTIVE',
           },
           {
             name: 'Tenant 3',
+            slug: 'tenant-3',
             adminEmail: 'tenant3@test.com',
             tier: 'ENTERPRISE',
             status: 'SUSPENDED',
@@ -313,6 +322,7 @@ describe('テナント管理API', () => {
       testTenant = await prisma.tenant.create({
         data: {
           name: 'Test Tenant',
+          slug: 'test-tenant',
           adminEmail: 'test@test.com',
           tier: 'PRO',
           status: 'ACTIVE',
@@ -354,6 +364,7 @@ describe('テナント管理API', () => {
       testTenant = await prisma.tenant.create({
         data: {
           name: 'Original Name',
+          slug: 'original-tenant',
           adminEmail: 'original@test.com',
           tier: 'FREE',
           status: 'ACTIVE',
@@ -465,6 +476,7 @@ describe('テナント管理API', () => {
       const anotherTenant = await prisma.tenant.create({
         data: {
           name: 'Another Tenant',
+          slug: 'another-tenant',
           adminEmail: 'another@test.com',
           tier: 'FREE',
           status: 'ACTIVE',
@@ -494,6 +506,7 @@ describe('テナント管理API', () => {
       testTenant = await prisma.tenant.create({
         data: {
           name: 'To Be Deleted',
+          slug: 'to-be-deleted',
           adminEmail: 'delete@test.com',
           tier: 'FREE',
           status: 'ACTIVE',

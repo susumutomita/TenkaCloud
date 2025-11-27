@@ -19,16 +19,39 @@ enum TenantTier {
   ENTERPRISE
 }
 
+enum IsolationModel {
+  POOL
+  SILO
+}
+
+enum ComputeType {
+  KUBERNETES
+  SERVERLESS
+}
+
+enum ProvisioningStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
 model Tenant {
-  id          String        @id @default(uuid())
-  name        String
-  status      TenantStatus  @default(ACTIVE)
-  tier        TenantTier    @default(FREE)
-  adminEmail  String        @unique
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                String             @id @default(uuid())
+  name              String
+  slug              String             @unique
+  status            TenantStatus       @default(ACTIVE)
+  tier              TenantTier         @default(FREE)
+  adminEmail        String             @unique
+  region            String             @default("ap-northeast-1")
+  isolationModel    IsolationModel     @default(POOL)
+  computeType       ComputeType        @default(SERVERLESS)
+  provisioningStatus ProvisioningStatus @default(PENDING)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([status])
   @@index([adminEmail])
+  @@index([slug])
   @@map("tenants")
 }

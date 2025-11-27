@@ -45,16 +45,32 @@ export default function SignupPage() {
   const onSubmit = async (data: SignupFormData) => {
     setIsLoading(true);
     try {
-      // TODO: API call to signup endpoint
-      console.log('Signup data:', data);
+      const response = await fetch('http://localhost:3004/api/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+        }),
+      });
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Signup failed');
+      }
+
+      const result = await response.json();
+      console.log('Signup success:', result);
 
       // Redirect to onboarding
       router.push('/onboarding');
     } catch (error) {
       console.error('Signup failed:', error);
+      // Here you might want to set a form error using setError from react-hook-form
+      // For now, we'll just log it. Ideally, show a toast or alert.
+      alert(error instanceof Error ? error.message : 'Signup failed');
     } finally {
       setIsLoading(false);
     }
