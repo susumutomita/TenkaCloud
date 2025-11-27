@@ -283,6 +283,7 @@ start-k8s: check-k8s k8s-build-all
 k8s-deploy: check-k8s
 	@echo "🚀 Kubernetes にデプロイしています..."
 	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
+	@kubectl apply -f infrastructure/k8s/base/secrets.yaml
 	@kubectl apply -f infrastructure/k8s/base/postgres.yaml
 	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml
 	@kubectl apply -f infrastructure/k8s/control-plane/tenant-management.yaml
