@@ -2,6 +2,7 @@
 .PHONY: start-compose start-k8s start stop-compose stop-k8s stop restart status
 .PHONY: start-infrastructure start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-k8s k8s-build-all k8s-deploy k8s-delete docker-build docker-run docker-stop docker-status
+.PHONY: k8s-forward k8s-forward-stop k8s-start-full
 
 # デフォルトターゲットはhelp
 default: help
@@ -161,7 +162,7 @@ start:
 	@printf "選択 [1-2]: " && read choice; \
 	case $$choice in \
 		1) $(MAKE) start-compose ;; \
-		2) $(MAKE) start-k8s ;; \
+		2) $(MAKE) k8s-start-full ;; \
 		*) echo "❌ 無効な選択です" && exit 1 ;; \
 	esac
 
@@ -273,15 +274,10 @@ start-k8s: check-k8s k8s-build-all
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 次のステップ:"
-	@echo "  1. Port-forward でアクセス:"
-	@echo "     kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud"
-	@echo "     kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud"
-	@echo "     kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud"
-	@echo "     kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud"
-	@echo "     kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud"
+	@echo "  make k8s-forward      # port-forward を一発起動"
 	@echo ""
-	@echo "  2. Keycloak セットアップ:"
-	@echo "     ./infrastructure/docker/keycloak/scripts/setup-keycloak.sh"
+	@echo "💡 または一発で全部やりたい場合:"
+	@echo "  make k8s-start-full   # ビルド+デプロイ+port-forward+Keycloak設定"
 	@echo ""
 
 k8s-deploy: check-k8s
@@ -320,6 +316,102 @@ k8s-delete:
 	@kubectl delete -f infrastructure/k8s/base/postgres.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/base/namespace.yaml --ignore-not-found
 	@echo "✅ 削除が完了しました"
+
+K8S_PID_FILE := /tmp/tenkacloud-k8s-pids
+
+k8s-forward: check-k8s
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🔗 Kubernetes port-forward を起動しています..."
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@# 既存のプロセスを停止
+	@$(MAKE) k8s-forward-stop 2>/dev/null || true
+	@# Pod の準備を待機
+	@echo "⏳ Pod の準備を待っています..."
+	@kubectl wait --for=condition=ready pod -l app=keycloak -n tenkacloud --timeout=120s 2>/dev/null || true
+	@kubectl wait --for=condition=ready pod -l app=landing-site -n tenkacloud --timeout=60s 2>/dev/null || true
+	@kubectl wait --for=condition=ready pod -l app=control-plane-ui -n tenkacloud --timeout=60s 2>/dev/null || true
+	@kubectl wait --for=condition=ready pod -l app=admin-app -n tenkacloud --timeout=60s 2>/dev/null || true
+	@kubectl wait --for=condition=ready pod -l app=participant-app -n tenkacloud --timeout=60s 2>/dev/null || true
+	@# port-forward を起動
+	@echo "🚀 Port-forward を起動中..."
+	@kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/tenant-management 3004:3004 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@sleep 2
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Port-forward が起動しました"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Landing Site:       http://localhost:3003"
+	@echo "  - Control Plane UI:   http://localhost:3000"
+	@echo "  - Admin App:          http://localhost:3001"
+	@echo "  - Participant App:    http://localhost:3002"
+	@echo "  - Tenant Management:  http://localhost:3004"
+	@echo "  - Keycloak:           http://localhost:8080"
+	@echo ""
+	@echo "💡 停止するには: make k8s-forward-stop"
+	@echo ""
+
+k8s-forward-stop:
+	@echo "🛑 Port-forward を停止しています..."
+	@if [ -f $(K8S_PID_FILE) ]; then \
+		while read pid; do \
+			kill $$pid 2>/dev/null || true; \
+		done < $(K8S_PID_FILE); \
+		rm -f $(K8S_PID_FILE); \
+		echo "✅ Port-forward を停止しました"; \
+	else \
+		echo "⚠️  実行中の port-forward が見つかりません"; \
+	fi
+	@# 念のため残存プロセスも停止
+	@pkill -f "kubectl port-forward.*tenkacloud" 2>/dev/null || true
+
+k8s-start-full: check-k8s k8s-build-all
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "☸️  Kubernetes フルスタート（デプロイ + port-forward + Keycloak セットアップ）"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@# デプロイ
+	@$(MAKE) k8s-deploy
+	@echo ""
+	@# Port-forward 起動
+	@$(MAKE) k8s-forward
+	@echo ""
+	@# Keycloak セットアップ
+	@echo "🔧 Keycloak の自動設定を実行しています..."
+	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
+	@bash -c 'for i in {1..30}; do \
+		if curl -s -f http://localhost:8080 > /dev/null 2>&1; then \
+			echo "✅ Keycloak が起動しました"; \
+			break; \
+		fi; \
+		echo "   試行 $$i/30..."; \
+		sleep 2; \
+	done'
+	@cd infrastructure/docker/keycloak && KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin ./scripts/setup-keycloak.sh || true
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✨ Kubernetes フルスタートが完了しました！"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Landing Site:       http://localhost:3003"
+	@echo "  - Control Plane UI:   http://localhost:3000"
+	@echo "  - Admin App:          http://localhost:3001"
+	@echo "  - Participant App:    http://localhost:3002"
+	@echo "  - Tenant Management:  http://localhost:3004"
+	@echo "  - Keycloak:           http://localhost:8080"
+	@echo ""
+	@echo "💡 停止するには: make stop-k8s && make k8s-forward-stop"
+	@echo ""
+
+stop-k8s: k8s-forward-stop k8s-delete
 
 # ========================================
 # 🏢 インフラストラクチャ管理（従来版・互換性）
@@ -458,11 +550,14 @@ help:
 	@echo "  make docker-status    Docker コンテナの起動状態を表示"
 	@echo ""
 	@echo "☸️  Kubernetes（本番相当環境）:"
+	@echo "  make k8s-start-full   ★ビルド+デプロイ+port-forward+Keycloak設定を一発で実行"
 	@echo "  make check-k8s        Kubernetes クラスターの接続確認"
 	@echo "  make k8s-build-all    全サービスの Docker イメージをビルド"
 	@echo "  make start-k8s        Kubernetes にビルド&デプロイ"
 	@echo "  make k8s-deploy       Kubernetes にデプロイ（ビルド済み前提）"
-	@echo "  make stop-k8s         Kubernetes リソースを削除"
+	@echo "  make k8s-forward      全サービスの port-forward を起動"
+	@echo "  make k8s-forward-stop port-forward を停止"
+	@echo "  make stop-k8s         Kubernetes リソース+port-forward を停止"
 	@echo ""
 	@echo "🏢 インフラストラクチャ管理:"
 	@echo "  make start-infrastructure  インフラ（Keycloak）のみを起動"
