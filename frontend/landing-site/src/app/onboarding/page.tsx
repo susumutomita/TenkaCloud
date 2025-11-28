@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { Check } from 'lucide-react';
-import { useOnboardingStore, type Step } from '@/lib/stores/onboarding-store';
-import { ProfileStep } from '@/components/onboarding/profile-step';
-import { PlanStep } from '@/components/onboarding/plan-step';
-import { TenantStep } from '@/components/onboarding/tenant-step';
-import { EnvironmentStep } from '@/components/onboarding/environment-step';
-import { ReviewStep } from '@/components/onboarding/review-step';
+import { motion } from "framer-motion";
+import { Check } from "lucide-react";
+import { EnvironmentStep } from "@/components/onboarding/environment-step";
+import { PlanStep } from "@/components/onboarding/plan-step";
+import { ProfileStep } from "@/components/onboarding/profile-step";
+import { ReviewStep } from "@/components/onboarding/review-step";
+import { TenantStep } from "@/components/onboarding/tenant-step";
+import { type Step, useOnboardingStore } from "@/lib/stores/onboarding-store";
 
 const steps: { id: Step; label: string }[] = [
-  { id: 'profile', label: 'プロフィール' },
-  { id: 'plan', label: 'プラン選択' },
-  { id: 'tenant', label: 'テナント設定' },
-  { id: 'environment', label: '環境設定' },
-  { id: 'review', label: '確認' },
+  { id: "profile", label: "プロフィール" },
+  { id: "plan", label: "プラン選択" },
+  { id: "tenant", label: "テナント設定" },
+  { id: "environment", label: "環境設定" },
+  { id: "review", label: "確認" },
 ];
 
 export default function OnboardingPage() {
@@ -24,15 +24,15 @@ export default function OnboardingPage() {
 
   const renderStep = () => {
     switch (currentStep) {
-      case 'profile':
+      case "profile":
         return <ProfileStep />;
-      case 'plan':
+      case "plan":
         return <PlanStep />;
-      case 'tenant':
+      case "tenant":
         return <TenantStep />;
-      case 'environment':
+      case "environment":
         return <EnvironmentStep />;
-      case 'review':
+      case "review":
         return <ReviewStep />;
       default:
         return null;
@@ -45,11 +45,11 @@ export default function OnboardingPage() {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10 blur-3xl animate-float"
-          style={{ background: 'oklch(0.56 0.20 264)' }}
+          style={{ background: "oklch(0.56 0.20 264)" }}
         />
         <div
           className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full opacity-10 blur-3xl animate-float"
-          style={{ background: 'oklch(0.56 0.20 180)', animationDelay: '-3s' }}
+          style={{ background: "oklch(0.56 0.20 180)", animationDelay: "-3s" }}
         />
       </div>
 
@@ -69,10 +69,10 @@ export default function OnboardingPage() {
                       animate={{
                         scale: isCurrent ? 1.1 : 1,
                         backgroundColor: isCompleted
-                          ? 'oklch(0.56 0.20 264)'
+                          ? "oklch(0.56 0.20 264)"
                           : isCurrent
-                            ? 'oklch(0.56 0.20 180)'
-                            : 'oklch(0.15 0.02 264)',
+                            ? "oklch(0.56 0.20 180)"
+                            : "oklch(0.15 0.02 264)",
                       }}
                       className="w-10 h-10 rounded-full flex items-center justify-center border-2 border-white/20 transition-all"
                     >
@@ -86,7 +86,7 @@ export default function OnboardingPage() {
                     </motion.div>
                     <span
                       className={`mt-2 text-sm font-medium ${
-                        isCurrent ? 'text-white' : 'text-white/50'
+                        isCurrent ? "text-white" : "text-white/50"
                       }`}
                     >
                       {step.label}
@@ -97,7 +97,7 @@ export default function OnboardingPage() {
                     <div className="flex-1 h-0.5 mx-4 mt-[-2rem]">
                       <div
                         className={`h-full transition-all ${
-                          isCompleted ? 'bg-primary-500' : 'bg-white/10'
+                          isCompleted ? "bg-primary-500" : "bg-white/10"
                         }`}
                       />
                     </div>

@@ -1,44 +1,44 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { Zap, Shield, TrendingUp, Code2, Database, Globe2 } from 'lucide-react';
+import { motion } from "framer-motion";
+import { Code2, Database, Globe2, Shield, TrendingUp, Zap } from "lucide-react";
 
 const features = [
   {
     icon: Zap,
-    title: '5分で本番環境',
+    title: "5分で本番環境",
     description:
-      'クリックだけで Kubernetes、データベース、認証基盤を自動デプロイ。インフラの知識は不要です。',
+      "クリックだけで Kubernetes、データベース、認証基盤を自動デプロイ。インフラの知識は不要です。",
   },
   {
     icon: Shield,
-    title: 'エンタープライズグレードのセキュリティ',
+    title: "エンタープライズグレードのセキュリティ",
     description:
-      'Keycloak による OIDC 認証、テナント間の完全なデータ分離、SOC2 準拠の運用体制。',
+      "Keycloak による OIDC 認証、テナント間の完全なデータ分離、SOC2 準拠の運用体制。",
   },
   {
     icon: TrendingUp,
-    title: '無限のスケーラビリティ',
+    title: "無限のスケーラビリティ",
     description:
-      '10人から10,000人まで。Kubernetes の自動スケーリングで参加者数に合わせてリソースを最適化。',
+      "10人から10,000人まで。Kubernetes の自動スケーリングで参加者数に合わせてリソースを最適化。",
   },
   {
     icon: Code2,
-    title: 'マルチ言語対応ジャッジ',
+    title: "マルチ言語対応ジャッジ",
     description:
-      'Python、JavaScript、Go、Rust など主要言語をサポート。独自の実行環境も追加可能。',
+      "Python、JavaScript、Go、Rust など主要言語をサポート。独自の実行環境も追加可能。",
   },
   {
     icon: Database,
-    title: 'Pool & Silo アーキテクチャ',
+    title: "Pool & Silo アーキテクチャ",
     description:
-      '用途に応じて共有リソース (Pool) と専用リソース (Silo) を選択。コスト効率と分離性のバランスを最適化。',
+      "用途に応じて共有リソース (Pool) と専用リソース (Silo) を選択。コスト効率と分離性のバランスを最適化。",
   },
   {
     icon: Globe2,
-    title: 'マルチクラウド対応',
+    title: "マルチクラウド対応",
     description:
-      'AWS、GCP、Azure、OCI をサポート。ベンダーロックインなしで、最適なクラウドを選択できます。',
+      "AWS、GCP、Azure、OCI をサポート。ベンダーロックインなしで、最適なクラウドを選択できます。",
   },
 ];
 

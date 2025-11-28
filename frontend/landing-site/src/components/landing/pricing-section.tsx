@@ -1,55 +1,55 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { Check, Zap } from 'lucide-react';
-import Link from 'next/link';
+import { motion } from "framer-motion";
+import { Check, Zap } from "lucide-react";
+import Link from "next/link";
 
 const plans = [
   {
-    name: 'Free',
-    description: '個人開発者や小規模イベント向け',
-    price: '¥0',
-    period: '/月',
+    name: "Free",
+    description: "個人開発者や小規模イベント向け",
+    price: "¥0",
+    period: "/月",
     features: [
-      '最大100参加者',
-      'Pool モデル (共有リソース)',
-      '基本的な問題管理',
-      'コミュニティサポート',
-      '1テナント',
+      "最大100参加者",
+      "Pool モデル (共有リソース)",
+      "基本的な問題管理",
+      "コミュニティサポート",
+      "1テナント",
     ],
-    cta: '無料で始める',
+    cta: "無料で始める",
     highlighted: false,
   },
   {
-    name: 'Pro',
-    description: '成長企業や定期開催イベント向け',
-    price: '¥9,800',
-    period: '/月',
+    name: "Pro",
+    description: "成長企業や定期開催イベント向け",
+    price: "¥9,800",
+    period: "/月",
     features: [
-      '最大1,000参加者',
-      'Silo モデル (専用リソース)',
-      '高度な分析・ダッシュボード',
-      '優先サポート (24時間以内)',
-      'カスタムドメイン',
-      '無制限テナント',
+      "最大1,000参加者",
+      "Silo モデル (専用リソース)",
+      "高度な分析・ダッシュボード",
+      "優先サポート (24時間以内)",
+      "カスタムドメイン",
+      "無制限テナント",
     ],
-    cta: 'Pro を始める',
+    cta: "Pro を始める",
     highlighted: true,
   },
   {
-    name: 'Enterprise',
-    description: '大規模イベントやエンタープライズ向け',
-    price: 'お問い合わせ',
-    period: '',
+    name: "Enterprise",
+    description: "大規模イベントやエンタープライズ向け",
+    price: "お問い合わせ",
+    period: "",
     features: [
-      '無制限参加者',
-      '専用インフラ',
-      'SLA 保証 (99.9%)',
-      '専任サポート',
-      'オンプレミス対応',
-      'カスタム統合',
+      "無制限参加者",
+      "専用インフラ",
+      "SLA 保証 (99.9%)",
+      "専任サポート",
+      "オンプレミス対応",
+      "カスタム統合",
     ],
-    cta: 'お問い合わせ',
+    cta: "お問い合わせ",
     highlighted: false,
   },
 ];
@@ -93,8 +93,8 @@ export function PricingSection() {
               <div
                 className={`relative h-full p-8 rounded-3xl ${
                   plan.highlighted
-                    ? 'glass border-primary-500/50 glow'
-                    : 'glass'
+                    ? "glass border-primary-500/50 glow"
+                    : "glass"
                 }`}
               >
                 {plan.highlighted && (
@@ -138,8 +138,8 @@ export function PricingSection() {
                       whileTap={{ scale: 0.98 }}
                       className={`w-full py-3 px-6 rounded-xl font-semibold transition-all ${
                         plan.highlighted
-                          ? 'bg-gradient-to-r from-primary-500 to-accent-500 shadow-lg shadow-primary-500/25'
-                          : 'bg-white/10 hover:bg-white/15'
+                          ? "bg-gradient-to-r from-primary-500 to-accent-500 shadow-lg shadow-primary-500/25"
+                          : "bg-white/10 hover:bg-white/15"
                       }`}
                     >
                       {plan.cta}

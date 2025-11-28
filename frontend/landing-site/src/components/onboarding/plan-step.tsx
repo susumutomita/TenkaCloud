@@ -1,54 +1,54 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { useState } from 'react';
+import { motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { useState } from "react";
 import {
-  useOnboardingStore,
   type PlanTier,
-} from '@/lib/stores/onboarding-store';
+  useOnboardingStore,
+} from "@/lib/stores/onboarding-store";
 
 const plans = [
   {
-    tier: 'free' as PlanTier,
-    name: 'Free',
-    price: '¥0',
-    period: '/月',
-    description: '個人開発者や小規模イベント向け',
+    tier: "free" as PlanTier,
+    name: "Free",
+    price: "¥0",
+    period: "/月",
+    description: "個人開発者や小規模イベント向け",
     features: [
-      '最大100参加者',
-      'Pool モデル',
-      '基本的な問題管理',
-      'コミュニティサポート',
+      "最大100参加者",
+      "Pool モデル",
+      "基本的な問題管理",
+      "コミュニティサポート",
     ],
   },
   {
-    tier: 'pro' as PlanTier,
-    name: 'Pro',
-    price: '¥9,800',
-    period: '/月',
-    description: '成長企業や定期開催イベント向け',
+    tier: "pro" as PlanTier,
+    name: "Pro",
+    price: "¥9,800",
+    period: "/月",
+    description: "成長企業や定期開催イベント向け",
     features: [
-      '最大1,000参加者',
-      'Silo モデル',
-      '高度な分析',
-      '優先サポート',
-      'カスタムドメイン',
+      "最大1,000参加者",
+      "Silo モデル",
+      "高度な分析",
+      "優先サポート",
+      "カスタムドメイン",
     ],
     popular: true,
   },
   {
-    tier: 'enterprise' as PlanTier,
-    name: 'Enterprise',
-    price: 'お問い合わせ',
-    period: '',
-    description: '大規模イベント向け',
+    tier: "enterprise" as PlanTier,
+    name: "Enterprise",
+    price: "お問い合わせ",
+    period: "",
+    description: "大規模イベント向け",
     features: [
-      '無制限参加者',
-      '専用インフラ',
-      'SLA 保証',
-      '専任サポート',
-      'カスタム統合',
+      "無制限参加者",
+      "専用インフラ",
+      "SLA 保証",
+      "専任サポート",
+      "カスタム統合",
     ],
   },
 ];
@@ -56,18 +56,18 @@ const plans = [
 export function PlanStep() {
   const { planData, setPlanData, setCurrentStep } = useOnboardingStore();
   const [selectedTier, setSelectedTier] = useState<PlanTier | null>(
-    planData.tier || null
+    planData.tier || null,
   );
 
   const handleNext = () => {
     if (selectedTier) {
       setPlanData({ tier: selectedTier });
-      setCurrentStep('tenant');
+      setCurrentStep("tenant");
     }
   };
 
   const handleBack = () => {
-    setCurrentStep('profile');
+    setCurrentStep("profile");
   };
 
   return (
@@ -89,8 +89,8 @@ export function PlanStep() {
             whileTap={{ scale: 0.98 }}
             className={`relative p-6 rounded-2xl text-left transition-all ${
               selectedTier === plan.tier
-                ? 'glass border-primary-500 glow'
-                : 'glass'
+                ? "glass border-primary-500 glow"
+                : "glass"
             }`}
           >
             {plan.popular && (

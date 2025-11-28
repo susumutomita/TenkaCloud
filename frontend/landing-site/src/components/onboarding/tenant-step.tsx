@@ -1,29 +1,29 @@
-'use client';
+"use client";
 
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { motion } from "framer-motion";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
-  useOnboardingStore,
   type TenantData,
-} from '@/lib/stores/onboarding-store';
+  useOnboardingStore,
+} from "@/lib/stores/onboarding-store";
 
 const tenantSchema = z.object({
-  name: z.string().min(1, 'テナント名を入力してください'),
+  name: z.string().min(1, "テナント名を入力してください"),
   slug: z
     .string()
-    .min(3, 'スラッグは3文字以上必要です')
-    .regex(/^[a-z0-9-]+$/, '小文字英数字とハイフンのみ使用できます'),
-  region: z.string().min(1, 'リージョンを選択してください'),
+    .min(3, "スラッグは3文字以上必要です")
+    .regex(/^[a-z0-9-]+$/, "小文字英数字とハイフンのみ使用できます"),
+  region: z.string().min(1, "リージョンを選択してください"),
 });
 
 const regions = [
-  { value: 'ap-northeast-1', label: '東京 (ap-northeast-1)' },
-  { value: 'us-west-2', label: 'オレゴン (us-west-2)' },
-  { value: 'eu-west-1', label: 'アイルランド (eu-west-1)' },
-  { value: 'ap-southeast-1', label: 'シンガポール (ap-southeast-1)' },
+  { value: "ap-northeast-1", label: "東京 (ap-northeast-1)" },
+  { value: "us-west-2", label: "オレゴン (us-west-2)" },
+  { value: "eu-west-1", label: "アイルランド (eu-west-1)" },
+  { value: "ap-southeast-1", label: "シンガポール (ap-southeast-1)" },
 ];
 
 export function TenantStep() {
@@ -39,25 +39,25 @@ export function TenantStep() {
     defaultValues: tenantData,
   });
 
-  const name = watch('name');
+  const name = watch("name");
 
   const onSubmit = (data: TenantData) => {
     setTenantData(data);
-    setCurrentStep('environment');
+    setCurrentStep("environment");
   };
 
   const handleBack = () => {
-    setCurrentStep('plan');
+    setCurrentStep("plan");
   };
 
   // Auto-generate slug from name
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const slug = e.target.value
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
-    const slugInput = document.getElementById('slug') as HTMLInputElement;
+    const slugInput = document.getElementById("slug") as HTMLInputElement;
     if (slugInput && !slugInput.value) {
       slugInput.value = slug;
     }
@@ -84,9 +84,9 @@ export function TenantStep() {
             <input
               id="name"
               type="text"
-              {...register('name')}
+              {...register("name")}
               onChange={(e) => {
-                register('name').onChange(e);
+                register("name").onChange(e);
                 handleNameChange(e);
               }}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
@@ -109,7 +109,7 @@ export function TenantStep() {
               <input
                 id="slug"
                 type="text"
-                {...register('slug')}
+                {...register("slug")}
                 className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
                 placeholder="my-awesome-contest"
               />
@@ -132,7 +132,7 @@ export function TenantStep() {
             </label>
             <select
               id="region"
-              {...register('region')}
+              {...register("region")}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
             >
               <option value="">選択してください</option>

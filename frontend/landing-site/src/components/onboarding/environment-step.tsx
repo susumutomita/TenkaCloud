@@ -1,34 +1,34 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, Database, Zap } from 'lucide-react';
-import { useState } from 'react';
+import { motion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Check, Database, Zap } from "lucide-react";
+import { useState } from "react";
 import {
-  useOnboardingStore,
-  type TenantModel,
   type ComputeType,
-} from '@/lib/stores/onboarding-store';
+  type TenantModel,
+  useOnboardingStore,
+} from "@/lib/stores/onboarding-store";
 
 export function EnvironmentStep() {
   const { environmentData, setEnvironmentData, setCurrentStep } =
     useOnboardingStore();
 
   const [model, setModel] = useState<TenantModel | null>(
-    environmentData.model || null
+    environmentData.model || null,
   );
   const [compute, setCompute] = useState<ComputeType | null>(
-    environmentData.compute || null
+    environmentData.compute || null,
   );
 
   const handleNext = () => {
     if (model && compute) {
       setEnvironmentData({ model, compute });
-      setCurrentStep('review');
+      setCurrentStep("review");
     }
   };
 
   const handleBack = () => {
-    setCurrentStep('tenant');
+    setCurrentStep("tenant");
   };
 
   return (
@@ -47,14 +47,14 @@ export function EnvironmentStep() {
         <div className="grid md:grid-cols-2 gap-4">
           <motion.button
             type="button"
-            onClick={() => setModel('pool')}
+            onClick={() => setModel("pool")}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className={`relative p-6 rounded-2xl text-left transition-all ${
-              model === 'pool' ? 'glass border-primary-500 glow' : 'glass'
+              model === "pool" ? "glass border-primary-500 glow" : "glass"
             }`}
           >
-            {model === 'pool' && (
+            {model === "pool" && (
               <div className="absolute top-4 right-4">
                 <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
                   <Check className="w-4 h-4 text-white" />
@@ -80,14 +80,14 @@ export function EnvironmentStep() {
 
           <motion.button
             type="button"
-            onClick={() => setModel('silo')}
+            onClick={() => setModel("silo")}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className={`relative p-6 rounded-2xl text-left transition-all ${
-              model === 'silo' ? 'glass border-primary-500 glow' : 'glass'
+              model === "silo" ? "glass border-primary-500 glow" : "glass"
             }`}
           >
-            {model === 'silo' && (
+            {model === "silo" && (
               <div className="absolute top-4 right-4">
                 <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
                   <Check className="w-4 h-4 text-white" />
@@ -120,16 +120,16 @@ export function EnvironmentStep() {
         <div className="grid md:grid-cols-2 gap-4">
           <motion.button
             type="button"
-            onClick={() => setCompute('serverless')}
+            onClick={() => setCompute("serverless")}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className={`relative p-6 rounded-2xl text-left transition-all ${
-              compute === 'serverless'
-                ? 'glass border-primary-500 glow'
-                : 'glass'
+              compute === "serverless"
+                ? "glass border-primary-500 glow"
+                : "glass"
             }`}
           >
-            {compute === 'serverless' && (
+            {compute === "serverless" && (
               <div className="absolute top-4 right-4">
                 <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
                   <Check className="w-4 h-4 text-white" />
@@ -155,16 +155,16 @@ export function EnvironmentStep() {
 
           <motion.button
             type="button"
-            onClick={() => setCompute('kubernetes')}
+            onClick={() => setCompute("kubernetes")}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className={`relative p-6 rounded-2xl text-left transition-all ${
-              compute === 'kubernetes'
-                ? 'glass border-primary-500 glow'
-                : 'glass'
+              compute === "kubernetes"
+                ? "glass border-primary-500 glow"
+                : "glass"
             }`}
           >
-            {compute === 'kubernetes' && (
+            {compute === "kubernetes" && (
               <div className="absolute top-4 right-4">
                 <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
                   <Check className="w-4 h-4 text-white" />

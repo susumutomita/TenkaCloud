@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles } from 'lucide-react';
-import Link from 'next/link';
+import { motion } from "framer-motion";
+import { ArrowRight, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 export function HeroSection() {
   return (
@@ -11,11 +11,11 @@ export function HeroSection() {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-20 blur-3xl animate-float"
-          style={{ background: 'oklch(0.56 0.20 264)' }}
+          style={{ background: "oklch(0.56 0.20 264)" }}
         />
         <div
           className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full opacity-20 blur-3xl animate-float"
-          style={{ background: 'oklch(0.56 0.20 180)', animationDelay: '-3s' }}
+          style={{ background: "oklch(0.56 0.20 180)", animationDelay: "-3s" }}
         />
       </div>
 
