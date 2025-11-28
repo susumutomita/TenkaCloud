@@ -1,22 +1,22 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "TenkaCloud - プログラミングバトルプラットフォーム",
+  title: 'TenkaCloud - プログラミングバトルプラットフォーム',
   description:
-    "プログラミングコンテストやハッカソンを5分でデプロイ。マルチテナント対応、自動スケーリング、エンタープライズグレードのセキュリティ。",
+    'プログラミングコンテストやハッカソンを5分でデプロイ。マルチテナント対応、自動スケーリング、エンタープライズグレードのセキュリティ。',
   keywords: [
-    "プログラミングコンテスト",
-    "ハッカソン",
-    "競技プログラミング",
-    "オンラインジャッジ",
-    "マルチテナント",
-    "SaaS",
+    'プログラミングコンテスト',
+    'ハッカソン',
+    '競技プログラミング',
+    'オンラインジャッジ',
+    'マルチテナント',
+    'SaaS',
   ],
   openGraph: {
-    title: "TenkaCloud - プログラミングバトルプラットフォーム",
-    description: "5分でプログラミングコンテストをデプロイ",
-    type: "website",
+    title: 'TenkaCloud - プログラミングバトルプラットフォーム',
+    description: '5分でプログラミングコンテストをデプロイ',
+    type: 'website',
   },
 };
 
