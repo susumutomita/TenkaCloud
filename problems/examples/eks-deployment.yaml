@@ -1,0 +1,156 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: eks-deployment
+# タイプ: JAM
+
+id: eks-deployment
+title: Kubernetes マイクロサービスデプロイメント
+type: jam
+category: operations
+difficulty: hard
+
+metadata:
+  author: K8s Masters
+  version: 3.0.0
+  createdAt: "2025-01-02"
+  updatedAt: "2025-01-28"
+  tags:
+    - kubernetes
+    - eks
+    - deployment
+    - helm
+    - microservices
+    - ingress
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたは DevOps エンジニアとして、マイクロサービスアプリケーションを
+    Kubernetes クラスターにデプロイする任務を与えられました。
+
+    ## アプリケーション構成
+    - フロントエンド: React アプリケーション（Nginx でホスト）
+    - バックエンド API: Node.js アプリケーション
+    - データベース: PostgreSQL
+    - キャッシュ: Redis
+
+    ## 要件
+    - 高可用性を考慮したデプロイメント
+    - Ingress を使用した外部公開
+    - ConfigMap と Secret の適切な使用
+    - Horizontal Pod Autoscaler の設定
+
+  objectives:
+    - EKS クラスターの作成と設定
+    - Helm チャートを使用したアプリケーションデプロイ
+    - Ingress コントローラーの設定
+    - HPA (Horizontal Pod Autoscaler) の設定
+    - PersistentVolume の設定
+    - Secret 管理の実装
+
+  hints:
+    - "AWS Load Balancer Controller を使用すると ALB との統合が簡単です"
+    - "Helm の values.yaml でカスタマイズできます"
+    - "Resource requests/limits を適切に設定してください"
+    - "Liveness/Readiness Probe を忘れずに設定してください"
+
+  prerequisites:
+    - Kubernetes の基本的な知識
+    - Helm の使用経験
+    - Docker の基本的な知識
+    - AWS の基本的な知識
+
+  estimatedTime: 90
+
+deployment:
+  providers:
+    - aws
+    - gcp
+    - local
+
+  templates:
+    aws:
+      type: cdk
+      path: ./templates/aws/eks-cdk
+      parameters:
+        ClusterName: tenka-eks
+        NodeGroupSize: 3
+
+    gcp:
+      type: terraform
+      path: ./templates/gcp/gke-terraform
+      parameters:
+        cluster_name: tenka-gke
+        node_count: 3
+
+    local:
+      type: docker-compose
+      path: ./templates/local/kind-cluster.yaml
+      parameters:
+        NODES: 3
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-west-2
+    gcp:
+      - asia-northeast1
+      - us-central1
+
+  timeout: 60
+
+scoring:
+  type: container
+  path: ./scoring/k8s-validator
+  criteria:
+    - name: クラスター構成
+      description: EKS/GKE クラスターが正しく構成されている
+      weight: 15
+      maxPoints: 100
+
+    - name: Deployment 設定
+      description: すべてのマイクロサービスが正しくデプロイされている
+      weight: 20
+      maxPoints: 100
+
+    - name: Service 設定
+      description: Service が正しく設定され、Pod 間通信が可能
+      weight: 15
+      maxPoints: 100
+
+    - name: Ingress 設定
+      description: Ingress が正しく設定され、外部からアクセス可能
+      weight: 15
+      maxPoints: 100
+
+    - name: HPA 設定
+      description: Horizontal Pod Autoscaler が正しく動作する
+      weight: 15
+      maxPoints: 100
+
+    - name: Secret/ConfigMap
+      description: 機密情報と設定が適切に管理されている
+      weight: 10
+      maxPoints: 100
+
+    - name: 永続化
+      description: PersistentVolume が正しく設定されている
+      weight: 10
+      maxPoints: 100
+
+  timeoutMinutes: 15
+  intervalMinutes: 3
+
+resources:
+  static:
+    - path: ./helm/microservices
+      destination: s3://problem-assets/eks-deployment/helm/
+
+    - path: ./assets/architecture.png
+      destination: s3://problem-assets/eks-deployment/
+
+  documentation:
+    - path: ./docs/README.md
+    - path: ./docs/helm-guide.md
+    - path: ./docs/troubleshooting.md
+    - path: ./docs/solution-guide.md

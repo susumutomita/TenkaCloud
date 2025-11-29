@@ -13,10 +13,16 @@ export default function Home() {
         </p>
 
         <div className="space-y-4">
-          <button className="w-full bg-yellow-500 hover:bg-yellow-400 text-indigo-900 font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105 shadow-lg">
+          <button
+            type="button"
+            className="w-full bg-yellow-500 hover:bg-yellow-400 text-indigo-900 font-bold py-4 px-8 rounded-xl text-lg transition-all transform hover:scale-105 shadow-lg"
+          >
             バトルに参加する
           </button>
-          <button className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all border border-white/10">
+          <button
+            type="button"
+            className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all border border-white/10"
+          >
             観戦モード
           </button>
         </div>

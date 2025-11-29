@@ -1,0 +1,725 @@
+// Problem Management Service - Database Schema
+// TenkaCloud 問題管理サービスのデータベーススキーマ
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum ProblemType {
+  GAMEDAY
+  JAM
+}
+
+enum ProblemCategory {
+  ARCHITECTURE
+  SECURITY
+  COST
+  PERFORMANCE
+  RELIABILITY
+  OPERATIONS
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum CloudProvider {
+  AWS
+  GCP
+  AZURE
+  LOCAL
+}
+
+enum EventStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ParticipantType {
+  INDIVIDUAL
+  TEAM
+}
+
+enum ScoringType {
+  REALTIME
+  BATCH
+}
+
+enum DeploymentJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum CompetitorAccountStatus {
+  PENDING
+  READY
+  IN_USE
+  CLEANUP
+  ERROR
+}
+
+enum TemplateType {
+  CLOUDFORMATION
+  SAM
+  CDK
+  TERRAFORM
+  DEPLOYMENT_MANAGER
+  ARM
+  DOCKER_COMPOSE
+}
+
+enum ScoringFunctionType {
+  LAMBDA
+  CONTAINER
+  API
+  MANUAL
+}
+
+// =============================================================================
+// Problem Models
+// =============================================================================
+
+/// 問題定義
+model Problem {
+  id          String           @id @default(uuid())
+  externalId  String           @unique // 問題の外部ID (e.g., "s3-bucket-security")
+  title       String
+  type        ProblemType
+  category    ProblemCategory
+  difficulty  DifficultyLevel
+
+  // メタデータ
+  author      String
+  version     String
+  tags        String[]
+  license     String?
+
+  // 説明
+  overview    String           @db.Text
+  objectives  String[]
+  hints       String[]
+  prerequisites String[]
+  estimatedTimeMinutes Int?
+
+  // デプロイ設定
+  providers   CloudProvider[]
+  deploymentTimeoutMinutes Int @default(60)
+
+  // 採点設定
+  scoringType ScoringFunctionType
+  scoringPath String
+  scoringTimeoutMinutes Int
+  scoringIntervalMinutes Int?
+
+  // 関連
+  templates   DeploymentTemplate[]
+  regions     ProviderRegion[]
+  criteria    ScoringCriterion[]
+  staticFiles StaticFile[]
+  documentation Documentation[]
+
+  // マーケットプレイス
+  marketplaceListing MarketplaceListing?
+
+  // タイムスタンプ
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // イベントとの関連
+  eventProblems EventProblem[]
+
+  @@index([type])
+  @@index([category])
+  @@index([difficulty])
+  @@index([externalId])
+  @@map("problems")
+}
+
+/// デプロイテンプレート
+model DeploymentTemplate {
+  id          String        @id @default(uuid())
+  problemId   String
+  problem     Problem       @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  provider    CloudProvider
+  type        TemplateType
+  path        String
+  parameters  Json          @default("{}")
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([problemId, provider])
+  @@map("deployment_templates")
+}
+
+/// プロバイダー別リージョン
+model ProviderRegion {
+  id          String        @id @default(uuid())
+  problemId   String
+  problem     Problem       @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  provider    CloudProvider
+  regions     String[]
+
+  @@unique([problemId, provider])
+  @@map("provider_regions")
+}
+
+/// 採点基準
+model ScoringCriterion {
+  id          String   @id @default(uuid())
+  problemId   String
+  problem     Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  weight      Float    // 重み（%）
+  maxPoints   Int
+  order       Int      @default(0)
+
+  @@map("scoring_criteria")
+}
+
+/// 静的ファイル
+model StaticFile {
+  id          String   @id @default(uuid())
+  problemId   String
+  problem     Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  path        String
+  destination String
+
+  @@map("static_files")
+}
+
+/// ドキュメント
+model Documentation {
+  id          String   @id @default(uuid())
+  problemId   String
+  problem     Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  path        String
+
+  @@map("documentation")
+}
+
+// =============================================================================
+// Marketplace Models
+// =============================================================================
+
+/// マーケットプレイスリスティング
+model MarketplaceListing {
+  id              String   @id @default(uuid())
+  problemId       String   @unique
+  problem         Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  publisherId     String
+  publisherName   String
+  isVerified      Boolean  @default(false)
+  isFeatured      Boolean  @default(false)
+
+  downloadCount   Int      @default(0)
+  averageRating   Float    @default(0)
+  reviewCount     Int      @default(0)
+
+  publishedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  reviews         MarketplaceReview[]
+
+  @@index([publisherId])
+  @@index([averageRating])
+  @@index([downloadCount])
+  @@map("marketplace_listings")
+}
+
+/// マーケットプレイスレビュー
+model MarketplaceReview {
+  id          String             @id @default(uuid())
+  listingId   String
+  listing     MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  userId      String
+  userName    String
+  rating      Int                // 1-5
+  comment     String?            @db.Text
+
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([listingId, userId])
+  @@map("marketplace_reviews")
+}
+
+// =============================================================================
+// Event Models
+// =============================================================================
+
+/// イベント（GameDay/JAM）
+model Event {
+  id          String        @id @default(uuid())
+  externalId  String        @unique // イベントの外部ID
+  tenantId    String
+  name        String
+  type        ProblemType   // GAMEDAY or JAM
+  status      EventStatus   @default(DRAFT)
+
+  // 時間設定
+  startTime   DateTime
+  endTime     DateTime
+  timezone    String        @default("Asia/Tokyo")
+
+  // 参加者設定
+  participantType     ParticipantType
+  maxParticipants     Int
+  minTeamSize         Int?
+  maxTeamSize         Int?
+  registrationDeadline DateTime?
+
+  // クラウド設定
+  cloudProvider CloudProvider
+  regions       String[]
+
+  // 採点設定
+  scoringType           ScoringType
+  scoringIntervalMinutes Int
+  leaderboardVisible    Boolean @default(true)
+  freezeLeaderboardMinutes Int?
+
+  // 関連
+  problems          EventProblem[]
+  competitorAccounts CompetitorAccount[]
+  leaderboard       Leaderboard?
+  deploymentJobs    DeploymentJob[]
+
+  // タイムスタンプ
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   String?
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([startTime])
+  @@map("events")
+}
+
+/// イベント問題（中間テーブル）
+model EventProblem {
+  id              String   @id @default(uuid())
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  problemId       String
+  problem         Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  order           Int      @default(1)
+  unlockTime      DateTime?
+  pointMultiplier Float    @default(1)
+
+  @@unique([eventId, problemId])
+  @@map("event_problems")
+}
+
+/// 競技者アカウント
+model CompetitorAccount {
+  id          String                   @id @default(uuid())
+  eventId     String
+  event       Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  name        String
+  provider    CloudProvider
+  accountId   String                   // クラウドアカウントID
+  region      String
+  status      CompetitorAccountStatus  @default(PENDING)
+
+  // 割り当て
+  teamId      String?
+  participantId String?
+
+  // クレデンシャル（暗号化して保存）
+  credentialsEncrypted String?        @db.Text
+
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([eventId])
+  @@index([status])
+  @@map("competitor_accounts")
+}
+
+// =============================================================================
+// Deployment Models
+// =============================================================================
+
+/// デプロイジョブ
+model DeploymentJob {
+  id          String               @id @default(uuid())
+  eventId     String
+  event       Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  problemId   String
+  accountId   String               // 競技者アカウントID
+
+  status      DeploymentJobStatus  @default(PENDING)
+  stackName   String?
+  stackId     String?
+  outputs     Json?
+  error       String?              @db.Text
+
+  retryCount  Int                  @default(0)
+  maxRetries  Int                  @default(3)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime             @default(now())
+
+  @@index([eventId])
+  @@index([status])
+  @@map("deployment_jobs")
+}
+
+// =============================================================================
+// Leaderboard Models
+// =============================================================================
+
+/// リーダーボード
+model Leaderboard {
+  id          String             @id @default(uuid())
+  eventId     String             @unique
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  isFrozen    Boolean            @default(false)
+  frozenAt    DateTime?
+
+  entries     LeaderboardEntry[]
+
+  updatedAt   DateTime           @updatedAt
+
+  @@map("leaderboards")
+}
+
+/// リーダーボードエントリ
+model LeaderboardEntry {
+  id              String      @id @default(uuid())
+  leaderboardId   String
+  leaderboard     Leaderboard @relation(fields: [leaderboardId], references: [id], onDelete: Cascade)
+
+  rank            Int
+  teamId          String?
+  participantId   String?
+  name            String
+
+  totalScore      Int         @default(0)
+  problemScores   Json        @default("{}")  // { problemId: score }
+
+  lastScoredAt    DateTime?
+  trend           String?     // "up", "down", "same"
+
+  @@unique([leaderboardId, teamId])
+  @@unique([leaderboardId, participantId])
+  @@index([rank])
+  @@map("leaderboard_entries")
+}
+
+// =============================================================================
+// Scoring Models
+// =============================================================================
+
+/// 採点結果
+model ScoringResult {
+  id                  String   @id @default(uuid())
+  eventId             String
+  problemId           String
+  competitorAccountId String
+  teamId              String?
+
+  totalScore          Int
+  maxPossibleScore    Int
+  criteriaResults     Json     // [{ name, points, maxPoints, passed, feedback }]
+  executionTimeMs     Int
+
+  scoredAt            DateTime @default(now())
+
+  @@index([eventId, problemId])
+  @@index([scoredAt])
+  @@map("scoring_results")
+}
+
+// =============================================================================
+// Team Models (minoru1 互換)
+// =============================================================================
+
+/// チーム
+model Team {
+  id          String   @id @default(uuid())
+  eventId     String
+  teamName    String
+  accountId   String?  // 割り当てられたクラウドアカウント
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 関連
+  challengeAnswers TeamChallengeAnswer[]
+  taskProgress     TaskProgress[]
+  leaderboardEntry TeamLeaderboardEntry?
+
+  @@unique([eventId, teamName])
+  @@index([eventId])
+  @@map("teams")
+}
+
+// =============================================================================
+// Challenge-Task-Clue Models (minoru1 互換)
+// =============================================================================
+
+/// チャレンジ（問題のイベント内インスタンス）
+model Challenge {
+  id          String   @id @default(uuid())
+  eventId     String
+  problemId   String   // 元の問題への参照
+  challengeId String   // 外部ID（minoru1互換）
+
+  title       String
+  description String   @db.Text
+  category    String
+  difficulty  String
+  region      String?
+  sshKeyPairRequired Boolean @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 関連
+  tasks       Task[]
+  taskScorings TaskScoring[]
+  answers     Answer[]
+  statistics  ChallengeStatistics?
+  teamAnswers TeamChallengeAnswer[]
+
+  @@unique([eventId, challengeId])
+  @@index([eventId])
+  @@map("challenges")
+}
+
+/// タスク（チャレンジ内のステップ）
+model Task {
+  id          String   @id @default(uuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  titleId     String   // 外部ID（minoru1互換）
+
+  title       String
+  content     String   @db.Text
+  taskNumber  Int
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 関連
+  clues       Clue[]
+  answers     Answer[]
+  progress    TaskProgress[]
+
+  @@unique([challengeId, titleId])
+  @@index([challengeId])
+  @@map("tasks")
+}
+
+/// クルー（ヒント）
+model Clue {
+  id          String   @id @default(uuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String   @db.Text
+  order       Int      // 0-indexed
+  taskNumber  Int
+
+  createdAt   DateTime @default(now())
+
+  @@unique([taskId, order])
+  @@index([taskId])
+  @@map("clues")
+}
+
+/// タスク採点設定
+model TaskScoring {
+  id          String    @id @default(uuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  titleId     String    // タスクID（minoru1互換）
+  taskNumber  Int
+
+  pointsPossible     Int
+  clue1PenaltyPoints Int @default(0)
+  clue2PenaltyPoints Int @default(0)
+  clue3PenaltyPoints Int @default(0)
+
+  @@unique([challengeId, titleId])
+  @@index([challengeId])
+  @@map("task_scorings")
+}
+
+/// 回答（タスクの正解）
+model Answer {
+  id          String    @id @default(uuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  titleId     String    // タスクID（minoru1互換）
+
+  answerKey   String    // 正解キー
+
+  @@unique([challengeId, titleId])
+  @@map("answers")
+}
+
+// =============================================================================
+// Progress & Scoring Models (minoru1 互換)
+// =============================================================================
+
+/// チームのチャレンジ回答状態
+model TeamChallengeAnswer {
+  id          String    @id @default(uuid())
+  teamId      String
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  started     Boolean   @default(false)
+  completed   Boolean   @default(false)
+  score       Int       @default(0)
+
+  // Pessimistic Locking（minoru1互換）
+  pessimisticLocking Boolean @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([teamId, challengeId])
+  @@index([teamId])
+  @@index([challengeId])
+  @@map("team_challenge_answers")
+}
+
+/// タスク進捗
+model TaskProgress {
+  id          String   @id @default(uuid())
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  locked      Boolean  @default(true)
+  completed   Boolean  @default(false)
+
+  pointsPossible Int   @default(0)
+  pointsEarned   Int   @default(0)
+
+  // 使用したクルー
+  usedClues   Json     @default("[]")  // [{ order, description }]
+  // クルーペナルティ
+  cluePenalties Json   @default("[]")  // [{ order, penalty }]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([teamId, taskId])
+  @@index([teamId])
+  @@map("task_progress")
+}
+
+/// チャレンジ統計
+model ChallengeStatistics {
+  id                    String    @id @default(uuid())
+  challengeId           String    @unique
+  challenge             Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  title                 String
+  totalStartedChallenge Int       @default(0)
+  totalCompletedChallenge Int     @default(0)
+  totalRequestedClue    Int       @default(0)
+  averageScore          Float     @default(0)
+
+  teamsStartedChallenge String[]  @default([])
+  teamsCompletedChallenge String[] @default([])
+  teamsRequestedClues   String[]  @default([])
+
+  updatedAt             DateTime  @updatedAt
+
+  @@map("challenge_statistics")
+}
+
+// =============================================================================
+// Event Leaderboard Models (minoru1 互換)
+// =============================================================================
+
+/// チームリーダーボードエントリ
+model TeamLeaderboardEntry {
+  id                       String   @id @default(uuid())
+  eventId                  String   // イベント名（minoru1では eventName）
+  teamId                   String   @unique
+  team                     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  teamName                 String
+  score                    Int      @default(0)  // 現在のスコア
+  rank                     Int      @default(0)  // 現在の順位
+  teamTotalEffectiveScore  Int      @default(0)
+  maxPossibleEventScore    Int      @default(0)
+  timestamp                BigInt   // ミリ秒タイムスタンプ（minoru1互換）
+  lastUpdateTime           BigInt?  // 最終更新時刻
+
+  updatedAt                DateTime @updatedAt
+
+  @@unique([teamId, eventId])
+  @@index([eventId])
+  @@index([teamTotalEffectiveScore(sort: Desc)])
+  @@map("team_leaderboard_entries")
+}
+
+/// リーダーボード履歴
+model LeaderboardEntryHistory {
+  id                       String   @id @default(uuid())
+  eventId                  String
+  teamId                   String
+  teamName                 String
+  score                    Int      @default(0)
+  rank                     Int      @default(0)
+  teamTotalEffectiveScore  Int
+  timestamp                BigInt   // ミリ秒タイムスタンプ
+  recordedAt               BigInt   // 記録時刻
+
+  @@index([eventId])
+  @@index([timestamp])
+  @@map("leaderboard_entry_history")
+}
+
+/// イベントログ
+model EventLog {
+  id          String   @id @default(uuid())
+  eventId     String   // イベント名（minoru1では eventName）
+  teamName    String
+  message     String
+  dateTimeUTC BigInt   // ミリ秒タイムスタンプ
+
+  createdAt   DateTime @default(now())
+
+  @@index([eventId])
+  @@index([dateTimeUTC(sort: Desc)])
+  @@map("event_logs")
+}

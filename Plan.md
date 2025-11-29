@@ -1475,6 +1475,279 @@ make build
 以下のテンプレートを使用して、新しい機能開発の実行計画を作成してください：
 
 ```markdown
+### 問題管理システム統合（GameDay/JAM 統合 + マルチクラウド対応） - 2025-11-29
+
+**目的 (Objective)**:
+- reference/minoru（GameDay）と reference/minoru1（JAM）を統合し、管理画面から両形式を選択可能にする
+- クラウドプロバイダー抽象化レイヤーを設計し、AWS/GCP/Azure/OCI に対応する
+- 手作業デプロイから、問題マーケットプレイスによるセルフデプロイフローに移行する
+- 体験を統合し、ユーザーが GameDay/JAM の違いを意識せずに利用できるようにする
+
+**背景 (Background)**:
+- minoru（GameDay）: Next.js フロントエンド + Bash CLI ベースのオーケストレーション
+- minoru1（JAM）: Flask フロントエンド + Python/Docker/Makefile ベースのオーケストレーション
+- 両者とも AWS 固有の実装（CloudFormation/SAM、Cognito、DynamoDB）に依存している
+- 問題は手動でデプロイが必要で、DevOps 知識が必要
+- GameDay と JAM でリポジトリが分かれており、体験が分断されている
+
+**設計方針**:
+
+1. **クラウド抽象化レイヤー（Cloud Provider Abstraction）**
+   ```
+   backend/services/problem-management/
+   ├── src/
+   │   ├── providers/                    # クラウドプロバイダー抽象化
+   │   │   ├── interface.ts              # 共通インターフェース
+   │   │   ├── aws/                       # AWS 実装
+   │   │   │   ├── stack-deployer.ts     # CloudFormation/SAM デプロイ
+   │   │   │   ├── account-manager.ts    # IAM ロール管理
+   │   │   │   └── resource-cleaner.ts   # リソースクリーンアップ
+   │   │   ├── gcp/                       # GCP 実装（将来）
+   │   │   ├── azure/                     # Azure 実装（将来）
+   │   │   └── local/                     # ローカル開発用（Docker Compose）
+   │   ├── problems/                      # 問題管理
+   │   │   ├── repository.ts             # 問題リポジトリ
+   │   │   ├── marketplace.ts            # マーケットプレイス
+   │   │   └── deployer.ts               # 問題デプロイオーケストレーター
+   │   ├── scoring/                       # 採点システム
+   │   │   ├── engine.ts                 # 採点エンジン
+   │   │   └── validators/               # クラウド別検証ロジック
+   │   └── events/                        # イベント管理
+   │       ├── session.ts                # バトルセッション
+   │       └── leaderboard.ts            # リーダーボード
+   ```
+
+2. **問題形式の統一（Problem Format Unification）**
+   ```yaml
+   # 統一問題フォーマット
+   problem:
+     id: "problem-001"
+     title: "Well-Architecting Challenge"
+     type: "gameday" | "jam"            # GameDay or JAM 形式
+     category: "architecture" | "security" | "cost" | "performance"
+     difficulty: "easy" | "medium" | "hard"
+
+     metadata:
+       author: "TenkaCloud"
+       version: "1.0.0"
+       created_at: "2025-11-29"
+
+     description:
+       overview: "問題の概要（Markdown）"
+       objectives: ["目標1", "目標2"]
+       hints: ["ヒント1", "ヒント2"]
+
+     deployment:
+       providers:                         # 対応クラウドプロバイダー
+         - aws
+         - gcp
+       templates:
+         aws:
+           type: "cloudformation" | "sam" | "cdk"
+           path: "templates/aws/template.yml"
+         gcp:
+           type: "terraform" | "deployment-manager"
+           path: "templates/gcp/main.tf"
+       regions:
+         aws: ["us-east-1", "ap-northeast-1"]
+         gcp: ["us-central1", "asia-northeast1"]
+
+     scoring:
+       type: "lambda" | "container" | "api"
+       path: "scoring/"
+       criteria:
+         - name: "functionality"
+           weight: 40
+           max_points: 100
+         - name: "security"
+           weight: 30
+           max_points: 100
+         - name: "cost_optimization"
+           weight: 20
+           max_points: 100
+         - name: "performance"
+           weight: 10
+           max_points: 100
+       timeout_minutes: 120
+
+     resources:
+       static:
+         - path: "static/"
+           destination: "s3://bucket/problems/{problem_id}/"
+       documentation:
+         - path: "docs/"
+   ```
+
+3. **問題マーケットプレイス（Problem Marketplace）**
+   ```
+   frontend/admin-app/
+   ├── app/
+   │   ├── problems/                      # 問題管理
+   │   │   ├── page.tsx                   # 問題一覧
+   │   │   ├── [id]/                       # 問題詳細
+   │   │   │   ├── page.tsx
+   │   │   │   └── deploy/                # デプロイ画面
+   │   │   │       └── page.tsx
+   │   │   └── marketplace/               # マーケットプレイス
+   │   │       ├── page.tsx               # 問題カタログ
+   │   │       └── [id]/                   # 問題プレビュー
+   │   │           └── page.tsx
+   │   └── events/                        # イベント管理
+   │       ├── page.tsx                   # イベント一覧
+   │       ├── new/                        # イベント作成
+   │       │   └── page.tsx
+   │       └── [id]/                       # イベント詳細
+   │           ├── page.tsx
+   │           ├── problems/              # 問題選択・デプロイ
+   │           │   └── page.tsx
+   │           └── teams/                 # チーム管理
+   │               └── page.tsx
+   ```
+
+4. **セルフデプロイフロー（Self-Deploy Flow）**
+   ```
+   ユーザー体験:
+   1. [管理画面] イベント作成（GameDay or JAM 形式を選択）
+   2. [マーケットプレイス] 問題カタログから問題を選択
+   3. [デプロイ設定] クラウドプロバイダー、リージョン、参加者アカウントを設定
+   4. [デプロイ実行] ワンクリックでバックグラウンドデプロイ開始
+   5. [進捗監視] リアルタイムでデプロイ状況を確認
+   6. [完了通知] デプロイ完了後、参加者に招待リンクを送信
+
+   バックエンドフロー:
+   1. デプロイリクエスト受信 → ジョブキューに投入
+   2. ワーカーがジョブを取得 → クラウドプロバイダーアダプター選択
+   3. 並列デプロイ（Docker コンテナ or Kubernetes Job）
+   4. ステータス更新（WebSocket/SSE でフロントエンドに配信）
+   5. 完了後、採点 Lambda/Container をデプロイ
+   6. DynamoDB/Firestore にメタデータ保存
+   ```
+
+5. **GameDay/JAM 統合インターフェース**
+   ```typescript
+   // 統合イベント型
+   interface UnifiedEvent {
+     id: string;
+     name: string;
+     type: 'gameday' | 'jam';
+     status: 'draft' | 'scheduled' | 'active' | 'completed';
+
+     // 共通設定
+     startTime: Date;
+     endTime: Date;
+     timezone: string;
+
+     // 参加者設定
+     participants: {
+       type: 'individual' | 'team';
+       maxCount: number;
+       registrationDeadline: Date;
+     };
+
+     // 問題設定
+     problems: {
+       problemId: string;
+       order: number;
+       unlockTime?: Date;  // JAM 形式の場合、段階的アンロック
+     }[];
+
+     // クラウド設定
+     cloudConfig: {
+       provider: 'aws' | 'gcp' | 'azure';
+       regions: string[];
+       competitorAccounts: CompetitorAccount[];
+     };
+
+     // スコアリング設定
+     scoringConfig: {
+       type: 'realtime' | 'batch';
+       intervalMinutes: number;
+       leaderboardVisible: boolean;
+     };
+   }
+   ```
+
+**制約 (Guardrails)**:
+- CLAUDE.md の開発プレイブックに従う（TDD、カバレッジ 100%）
+- 既存の minoru/minoru1 のコードは参照のみ。コピーではなく、設計を参考に再実装する
+- クラウドプロバイダー固有のコードは providers/ ディレクトリに隔離する
+- 問題フォーマットは YAML で定義し、JSON Schema でバリデーションする
+- デプロイジョブは冪等性を保証する（再実行しても安全）
+- セキュリティ: 参加者アカウントへのアクセスは最小権限で行う
+
+**タスク (TODOs)**:
+
+Phase 1: 基盤設計（Week 1-2）
+- [ ] クラウドプロバイダー抽象化インターフェース設計
+- [ ] 統一問題フォーマット YAML スキーマ定義
+- [ ] 問題管理サービス（problem-management）ブートストラップ
+- [ ] DynamoDB/PostgreSQL スキーマ設計（問題、イベント、デプロイジョブ）
+
+Phase 2: AWS 実装（Week 3-4）
+- [ ] AWS スタックデプロイヤー実装（CloudFormation/SAM）
+- [ ] AWS アカウントマネージャー実装（AssumeRole）
+- [ ] AWS リソースクリーナー実装（AWS-Nuke 統合）
+- [ ] 採点 Lambda デプロイヤー実装
+
+Phase 3: 管理画面 UI（Week 5-6）
+- [ ] 問題マーケットプレイス UI（カタログ、プレビュー、選択）
+- [ ] イベント管理 UI（作成、GameDay/JAM 選択、問題割当）
+- [ ] デプロイ管理 UI（設定、実行、進捗監視）
+- [ ] リーダーボード UI（リアルタイム更新）
+
+Phase 4: セルフデプロイフロー（Week 7-8）
+- [ ] デプロイジョブキュー実装（BullMQ or Kubernetes Job）
+- [ ] 並列デプロイワーカー実装（Docker コンテナ）
+- [ ] リアルタイム進捗配信（WebSocket/SSE）
+- [ ] 完了通知・招待リンク生成
+
+Phase 5: GCP/Azure 対応（Future）
+- [ ] GCP Deployment Manager / Terraform アダプター
+- [ ] Azure ARM Templates アダプター
+- [ ] マルチクラウドテスト
+
+**検証手順 (Validation)**:
+1. ローカル環境で問題デプロイが動作すること
+   ```bash
+   make start
+   # 管理画面から問題を選択してローカルデプロイ
+   ```
+
+2. AWS 環境で問題デプロイが動作すること
+   ```bash
+   # テスト用 AWS アカウントで検証
+   # CloudFormation スタックが作成されること
+   # 採点 Lambda が動作すること
+   ```
+
+3. 全テストが通過すること（カバレッジ 100%）
+   ```bash
+   make test
+   make test_coverage
+   ```
+
+4. lint と型チェックが通過すること
+   ```bash
+   make before_commit
+   ```
+
+**未解決の質問 (Open Questions)**:
+- [ ] 問題リポジトリは Git サブモジュールか、S3/GCS に保存するか
+- [ ] 採点結果の保存先（DynamoDB vs PostgreSQL vs 両方）
+- [ ] 並列デプロイの同時実行数制限（AWS API レート制限対策）
+- [ ] 参加者アカウントのクレデンシャル管理方法（Secrets Manager vs Vault）
+- [ ] マーケットプレイスの問題公開/非公開ポリシー
+- [ ] 問題作成ワークフロー（管理画面 vs CLI vs 両方）
+
+**進捗ログ (Progress Log)**:
+- [2025-11-29 10:00] reference/minoru と reference/minoru1 のコード分析完了
+- [2025-11-29 10:30] 問題管理システム統合計画を Plan.md に追加
+
+**振り返り (Retrospective)**:
+（実装後に記入）
+
+---
+
 ### [機能名] - [YYYY-MM-DD]
 
 **目的 (Objective)**:

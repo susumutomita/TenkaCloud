@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tenkacloud.io/schemas/event.schema.json",
+  "title": "TenkaCloud Event Definition",
+  "description": "イベント（GameDay/JAM）定義スキーマ",
+  "type": "object",
+  "required": ["id", "name", "type", "status", "tenantId", "startTime", "endTime", "timezone", "participants", "problems", "cloudConfig", "scoringConfig"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "イベントの一意識別子"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "イベント名"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["gameday", "jam"],
+      "description": "イベント形式"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "scheduled", "active", "paused", "completed", "cancelled"],
+      "description": "イベントステータス"
+    },
+    "tenantId": {
+      "type": "string",
+      "description": "テナントID"
+    },
+    "startTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "開始日時（ISO 8601）"
+    },
+    "endTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "終了日時（ISO 8601）"
+    },
+    "timezone": {
+      "type": "string",
+      "description": "タイムゾーン（IANA形式）"
+    },
+    "participants": {
+      "$ref": "#/definitions/participantConfig"
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/eventProblem"
+      },
+      "description": "問題一覧"
+    },
+    "cloudConfig": {
+      "$ref": "#/definitions/cloudConfig"
+    },
+    "scoringConfig": {
+      "$ref": "#/definitions/scoringConfig"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "作成日時"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "更新日時"
+    },
+    "createdBy": {
+      "type": "string",
+      "description": "作成者ID"
+    }
+  },
+  "definitions": {
+    "participantConfig": {
+      "type": "object",
+      "required": ["type", "maxCount"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["individual", "team"],
+          "description": "参加形式"
+        },
+        "maxCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "最大参加者/チーム数"
+        },
+        "minTeamSize": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "最小チームサイズ"
+        },
+        "maxTeamSize": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "最大チームサイズ"
+        },
+        "registrationDeadline": {
+          "type": "string",
+          "format": "date-time",
+          "description": "参加登録締切"
+        }
+      }
+    },
+    "eventProblem": {
+      "type": "object",
+      "required": ["problemId", "order"],
+      "properties": {
+        "problemId": {
+          "type": "string",
+          "description": "問題ID"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "表示順"
+        },
+        "unlockTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "アンロック日時（JAM形式の段階的アンロック）"
+        },
+        "pointMultiplier": {
+          "type": "number",
+          "minimum": 0.1,
+          "default": 1,
+          "description": "得点倍率"
+        }
+      }
+    },
+    "cloudConfig": {
+      "type": "object",
+      "required": ["provider", "regions"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["aws", "gcp", "azure", "local"],
+          "description": "クラウドプロバイダー"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "使用リージョン"
+        },
+        "competitorAccounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/competitorAccount"
+          },
+          "description": "参加者アカウント一覧"
+        }
+      }
+    },
+    "competitorAccount": {
+      "type": "object",
+      "required": ["id", "name", "provider", "accountId", "region", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "アカウント識別子"
+        },
+        "name": {
+          "type": "string",
+          "description": "アカウント名"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["aws", "gcp", "azure", "local"],
+          "description": "クラウドプロバイダー"
+        },
+        "accountId": {
+          "type": "string",
+          "description": "クラウドアカウントID"
+        },
+        "region": {
+          "type": "string",
+          "description": "リージョン"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "ready", "in_use", "cleanup", "error"],
+          "description": "アカウントステータス"
+        }
+      }
+    },
+    "scoringConfig": {
+      "type": "object",
+      "required": ["type", "intervalMinutes", "leaderboardVisible"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["realtime", "batch"],
+          "description": "採点タイプ"
+        },
+        "intervalMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "採点間隔（分）"
+        },
+        "leaderboardVisible": {
+          "type": "boolean",
+          "description": "リーダーボード表示可否"
+        },
+        "freezeLeaderboardMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "終了前のリーダーボード凍結時間（分）"
+        }
+      }
+    }
+  }
+}

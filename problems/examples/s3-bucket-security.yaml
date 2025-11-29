@@ -1,0 +1,115 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: s3-bucket-security
+# タイプ: GameDay
+
+id: s3-bucket-security
+title: S3 バケットセキュリティ設定
+type: gameday
+category: security
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2025-01-15"
+  updatedAt: "2025-01-20"
+  tags:
+    - s3
+    - security
+    - iam
+    - bucket-policy
+    - encryption
+  license: MIT
+
+description:
+  overview: |
+    あなたは新しく入社したクラウドエンジニアです。
+    前任者が作成した S3 バケットにセキュリティ上の問題があることが判明しました。
+
+    ## 背景
+    - 本番環境の S3 バケットがパブリックアクセス可能になっている
+    - 暗号化が設定されていない
+    - アクセスログが有効化されていない
+
+    ## あなたのミッション
+    これらのセキュリティ問題を修正し、ベストプラクティスに従った設定を行ってください。
+
+  objectives:
+    - S3 バケットのパブリックアクセスをブロックする
+    - サーバーサイド暗号化（SSE-S3）を有効化する
+    - バケットポリシーを適切に設定する
+    - アクセスログを有効化する
+
+  hints:
+    - "aws s3api put-public-access-block コマンドを確認してください"
+    - "SSE-S3 はデフォルト暗号化として設定できます"
+    - "CloudTrail のデータイベントログも検討してください"
+
+  prerequisites:
+    - AWS マネジメントコンソールへのアクセス
+    - S3 の基本的な知識
+    - IAM の基本的な知識
+
+  estimatedTime: 30
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/s3-security.yaml
+      parameters:
+        BucketNamePrefix: tenka-gameday
+
+    local:
+      type: docker-compose
+      path: ./templates/local/docker-compose.yaml
+      parameters:
+        LOCALSTACK_SERVICES: s3
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+      - us-west-2
+
+  timeout: 30
+
+scoring:
+  type: lambda
+  path: ./scoring/s3-security-scorer
+  criteria:
+    - name: パブリックアクセスブロック
+      description: S3 バケットのパブリックアクセスが完全にブロックされている
+      weight: 30
+      maxPoints: 100
+
+    - name: サーバーサイド暗号化
+      description: デフォルト暗号化（SSE-S3 または SSE-KMS）が有効化されている
+      weight: 25
+      maxPoints: 100
+
+    - name: バケットポリシー
+      description: 適切なバケットポリシーが設定されている
+      weight: 25
+      maxPoints: 100
+
+    - name: アクセスログ
+      description: サーバーアクセスログが有効化されている
+      weight: 20
+      maxPoints: 100
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  static:
+    - path: ./assets/architecture-diagram.png
+      destination: s3://problem-assets/s3-bucket-security/
+
+  documentation:
+    - path: ./docs/README.md
+    - path: ./docs/solution-guide.md
