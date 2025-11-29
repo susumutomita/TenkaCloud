@@ -1,35 +1,35 @@
-"use client";
+'use client';
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { motion } from "framer-motion";
-import { ArrowLeft, Github, Mail } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { zodResolver } from '@hookform/resolvers/zod';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Github, Mail } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3004";
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3004';
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'http://localhost:3001';
 
 const signupSchema = z
   .object({
-    email: z.string().email("有効なメールアドレスを入力してください"),
+    email: z.string().email('有効なメールアドレスを入力してください'),
     password: z
       .string()
-      .min(8, "パスワードは8文字以上必要です")
+      .min(8, 'パスワードは8文字以上必要です')
       .regex(
         /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-        "パスワードは大文字、小文字、数字を含む必要があります",
+        'パスワードは大文字、小文字、数字を含む必要があります'
       ),
     confirmPassword: z.string(),
     acceptTerms: z.boolean().refine((val) => val === true, {
-      message: "利用規約に同意する必要があります",
+      message: '利用規約に同意する必要があります',
     }),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "パスワードが一致しません",
-    path: ["confirmPassword"],
+    message: 'パスワードが一致しません',
+    path: ['confirmPassword'],
   });
 
 type SignupFormData = z.infer<typeof signupSchema>;
@@ -51,9 +51,9 @@ export default function SignupPage() {
     setError(null);
     try {
       const response = await fetch(`${API_URL}/api/signup`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           email: data.email,
@@ -63,15 +63,15 @@ export default function SignupPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "サインアップに失敗しました");
+        throw new Error(errorData.error || 'サインアップに失敗しました');
       }
 
       // Redirect to onboarding
-      router.push("/onboarding");
+      router.push('/onboarding');
     } catch (err) {
-      console.error("Signup failed:", err);
+      console.error('Signup failed:', err);
       setError(
-        err instanceof Error ? err.message : "サインアップに失敗しました",
+        err instanceof Error ? err.message : 'サインアップに失敗しました'
       );
     } finally {
       setIsLoading(false);
@@ -84,11 +84,11 @@ export default function SignupPage() {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10 blur-3xl animate-float"
-          style={{ background: "oklch(0.56 0.20 264)" }}
+          style={{ background: 'oklch(0.56 0.20 264)' }}
         />
         <div
           className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full opacity-10 blur-3xl animate-float"
-          style={{ background: "oklch(0.56 0.20 180)", animationDelay: "-3s" }}
+          style={{ background: 'oklch(0.56 0.20 180)', animationDelay: '-3s' }}
         />
       </div>
 
@@ -169,7 +169,7 @@ export default function SignupPage() {
                 <input
                   id="email"
                   type="email"
-                  {...register("email")}
+                  {...register('email')}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
                   placeholder="you@example.com"
                 />
@@ -190,7 +190,7 @@ export default function SignupPage() {
                 <input
                   id="password"
                   type="password"
-                  {...register("password")}
+                  {...register('password')}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
                   placeholder="••••••••"
                 />
@@ -211,7 +211,7 @@ export default function SignupPage() {
                 <input
                   id="confirmPassword"
                   type="password"
-                  {...register("confirmPassword")}
+                  {...register('confirmPassword')}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
                   placeholder="••••••••"
                 />
@@ -226,7 +226,7 @@ export default function SignupPage() {
                 <input
                   id="acceptTerms"
                   type="checkbox"
-                  {...register("acceptTerms")}
+                  {...register('acceptTerms')}
                   className="mt-1 w-4 h-4 rounded border-white/20 bg-white/5 focus:ring-primary-500"
                 />
                 <label htmlFor="acceptTerms" className="text-sm text-white/70">
@@ -235,14 +235,14 @@ export default function SignupPage() {
                     className="text-primary-400 hover:text-primary-300"
                   >
                     利用規約
-                  </Link>{" "}
-                  と{" "}
+                  </Link>{' '}
+                  と{' '}
                   <Link
                     href="/privacy"
                     className="text-primary-400 hover:text-primary-300"
                   >
                     プライバシーポリシー
-                  </Link>{" "}
+                  </Link>{' '}
                   に同意します
                 </label>
               </div>
@@ -257,13 +257,13 @@ export default function SignupPage() {
                 disabled={isLoading}
                 className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl font-semibold shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? "作成中..." : "アカウントを作成"}
+                {isLoading ? '作成中...' : 'アカウントを作成'}
               </button>
             </form>
 
             {/* Login link - External link to Admin App */}
             <p className="text-center text-sm text-white/60">
-              すでにアカウントをお持ちですか？{" "}
+              すでにアカウントをお持ちですか？{' '}
               <a
                 href={ADMIN_URL}
                 rel="noopener noreferrer"

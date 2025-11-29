@@ -1,25 +1,25 @@
-"use client";
+'use client';
 
-import { motion } from "framer-motion";
-import { ArrowLeft, Rocket } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useOnboardingStore } from "@/lib/stores/onboarding-store";
+import { motion } from 'framer-motion';
+import { ArrowLeft, Rocket } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useOnboardingStore } from '@/lib/stores/onboarding-store';
 
 const planLabels = {
-  free: "Free",
-  pro: "Pro",
-  enterprise: "Enterprise",
+  free: 'Free',
+  pro: 'Pro',
+  enterprise: 'Enterprise',
 };
 
 const modelLabels = {
-  pool: "Pool (共有リソース)",
-  silo: "Silo (専用リソース)",
+  pool: 'Pool (共有リソース)',
+  silo: 'Silo (専用リソース)',
 };
 
 const computeLabels = {
-  serverless: "Serverless",
-  kubernetes: "Kubernetes",
+  serverless: 'Serverless',
+  kubernetes: 'Kubernetes',
 };
 
 export function ReviewStep() {
@@ -40,38 +40,38 @@ export function ReviewStep() {
         region: tenantData.region,
         isolationModel: environmentData.model?.toUpperCase(),
         computeType: environmentData.compute?.toUpperCase(),
-        status: "ACTIVE",
+        status: 'ACTIVE',
       };
 
-      console.log("Creating tenant:", payload);
+      console.log('Creating tenant:', payload);
 
-      const response = await fetch("http://localhost:3004/api/tenants", {
-        method: "POST",
+      const response = await fetch('http://localhost:3004/api/tenants', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create tenant");
+        throw new Error(errorData.error || 'Failed to create tenant');
       }
 
       const result = await response.json();
-      console.log("Tenant created:", result);
+      console.log('Tenant created:', result);
 
       // Redirect to provisioning page
-      router.push("/onboarding/provisioning");
+      router.push('/onboarding/provisioning');
     } catch (error) {
-      console.error("Failed to create tenant:", error);
-      alert(error instanceof Error ? error.message : "Failed to create tenant");
+      console.error('Failed to create tenant:', error);
+      alert(error instanceof Error ? error.message : 'Failed to create tenant');
       setIsSubmitting(false);
     }
   };
 
   const handleBack = () => {
-    setCurrentStep("environment");
+    setCurrentStep('environment');
   };
 
   return (
@@ -188,7 +188,7 @@ export function ReviewStep() {
             className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-primary-500 to-accent-500 rounded-xl font-semibold shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
-              "作成中..."
+              '作成中...'
             ) : (
               <>
                 <Rocket className="w-5 h-5" />
