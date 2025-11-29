@@ -1,7 +1,8 @@
 /**
- * AWS GameDay Provider Tests
+ * AWS GameDay 採点プロバイダー
  *
- * AWS GameDay 採点プロバイダーの単体テスト
+ * GameDay 形式の問題における参加者のインフラ構築結果を評価する
+ * 採点プロバイダーの振る舞いをテストする
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -54,236 +55,342 @@ const mockCredentials: CloudCredentials = {
   region: 'ap-northeast-1',
 };
 
-describe('AWSGameDayScoringProvider', () => {
+describe('AWS GameDay 採点プロバイダー', () => {
   let provider: AWSGameDayScoringProvider;
 
   beforeEach(() => {
     provider = new AWSGameDayScoringProvider();
   });
 
-  describe('createAWSGameDayScoringProvider', () => {
-    it('ファクトリ関数でプロバイダーを作成できるべき', () => {
+  describe('プロバイダーを初期化する場合', () => {
+    it('ファクトリ関数で作成するとaws-gamedayタイプのプロバイダーが返されるべき', () => {
+      // Given: ファクトリ関数を使用する
+      // When: プロバイダーを作成する
       const provider = createAWSGameDayScoringProvider();
+
+      // Then: 正しい型のプロバイダーが返される
       expect(provider).toBeInstanceOf(AWSGameDayScoringProvider);
       expect(provider.type).toBe('aws-gameday');
     });
   });
 
-  describe('execute', () => {
-    it('EC2 インスタンス検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'EC2インスタンス構築',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'ec2-instance',
-          validationConfig: {
-            minCount: 1,
-            state: 'running',
+  describe('参加者のインフラ構築を採点する場合', () => {
+    describe('EC2 インスタンスの採点基準がある場合', () => {
+      it('要件を満たす EC2 インスタンスが存在すれば採点結果にスコアが含まれるべき', async () => {
+        // Given: EC2 インスタンス構築を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'EC2インスタンス構築',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'ec2-instance',
+            validationConfig: {
+              minCount: 1,
+              state: 'running',
+            },
           },
-        },
-      ]);
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].name).toBe('EC2インスタンス構築');
-      expect(result.criteriaResults[0].maxPoints).toBe(100);
-      expect(result.totalScore).toBeGreaterThanOrEqual(0);
-      expect(result.totalScore).toBeLessThanOrEqual(result.maxPossibleScore);
+        // Then: 採点結果が返される
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].name).toBe('EC2インスタンス構築');
+        expect(result.criteriaResults[0].maxPoints).toBe(100);
+        expect(result.totalScore).toBeGreaterThanOrEqual(0);
+        expect(result.totalScore).toBeLessThanOrEqual(result.maxPossibleScore);
+      });
     });
 
-    it('S3 バケット検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'S3バケット設定',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 's3-bucket',
-          validationConfig: {
-            versioning: true,
-            encryption: true,
+    describe('S3 バケットの採点基準がある場合', () => {
+      it('バージョニングと暗号化が要求される問題で採点結果が返されるべき', async () => {
+        // Given: S3 バケット設定を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'S3バケット設定',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 's3-bucket',
+            validationConfig: {
+              versioning: true,
+              encryption: true,
+            },
           },
-        },
-      ]);
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].name).toBe('S3バケット設定');
+        // Then: S3バケット設定の採点結果が返される
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].name).toBe('S3バケット設定');
+      });
     });
 
-    it('Lambda 関数検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'Lambda関数デプロイ',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'lambda-function',
-          validationConfig: {
-            runtime: 'nodejs20.x',
+    describe('Lambda 関数の採点基準がある場合', () => {
+      it('指定されたランタイムの Lambda 関数がデプロイされていれば合格となるべき', async () => {
+        // Given: Lambda 関数デプロイを要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'Lambda関数デプロイ',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'lambda-function',
+            validationConfig: {
+              runtime: 'nodejs20.x',
+            },
           },
-        },
-      ]);
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].passed).toBe(true);
+        // Then: 採点に合格する
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].passed).toBe(true);
+      });
     });
 
-    it('CloudFormation スタック検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'CloudFormationスタック',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'cloudformation-stack',
-        },
-      ]);
-
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
-
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].passed).toBe(true);
-    });
-
-    it('VPC 設定検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'VPC構成',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'vpc-config',
-          validationConfig: {
-            minSubnets: 2,
+    describe('CloudFormation スタックの採点基準がある場合', () => {
+      it('スタックが正常にデプロイされていれば合格となるべき', async () => {
+        // Given: CloudFormation スタックを要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'CloudFormationスタック',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'cloudformation-stack',
           },
-        },
-      ]);
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.totalScore).toBeGreaterThan(0);
+        // Then: 採点に合格する
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].passed).toBe(true);
+      });
     });
 
-    it('セキュリティグループ検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'セキュリティグループ',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'security-group',
-          validationConfig: {
-            prohibitedPorts: [22, 3389],
+    describe('VPC 構成の採点基準がある場合', () => {
+      it('要求されたサブネット数を満たしていればスコアが得られるべき', async () => {
+        // Given: VPC 構成を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'VPC構成',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'vpc-config',
+            validationConfig: {
+              minSubnets: 2,
+            },
           },
-        },
-      ]);
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].name).toBe('セキュリティグループ');
+        // Then: スコアが得られる
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.totalScore).toBeGreaterThan(0);
+      });
     });
 
-    it('IAM ポリシー検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'IAMロール設定',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'iam-policy',
-        },
-      ]);
-
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
-
-      expect(result.criteriaResults).toHaveLength(1);
-    });
-
-    it('CloudWatch アラーム検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'CloudWatchアラーム',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'cloudwatch-alarm',
-          validationConfig: {
-            minAlarms: 1,
-            metrics: ['CPUUtilization'],
+    describe('セキュリティグループの採点基準がある場合', () => {
+      it('禁止ポートが閉じられていれば採点結果が返されるべき', async () => {
+        // Given: セキュリティグループ設定を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'セキュリティグループ',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'security-group',
+            validationConfig: {
+              prohibitedPorts: [22, 3389],
+            },
           },
-        },
-      ]);
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
+        // Then: セキュリティグループの採点結果が返される
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].name).toBe('セキュリティグループ');
+      });
     });
 
-    it('API Gateway 検証を実行できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'APIGateway設定',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'api-gateway',
-        },
-      ]);
+    describe('IAM ポリシーの採点基準がある場合', () => {
+      it('適切な権限設定がされていれば採点結果が返されるべき', async () => {
+        // Given: IAM ロール設定を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'IAMロール設定',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'iam-policy',
+          },
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].passed).toBe(true);
+        // Then: 採点結果が返される
+        expect(result.criteriaResults).toHaveLength(1);
+      });
     });
 
-    it('複数の採点基準を一度に処理できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'EC2インスタンス',
-          weight: 1,
-          maxPoints: 30,
-          validationType: 'ec2-instance',
-        },
-        {
-          name: 'S3バケット',
-          weight: 1,
-          maxPoints: 30,
-          validationType: 's3-bucket',
-        },
-        {
-          name: 'Lambda関数',
-          weight: 1,
-          maxPoints: 40,
-          validationType: 'lambda-function',
-        },
-      ]);
+    describe('CloudWatch アラームの採点基準がある場合', () => {
+      it('要求されたメトリクスのアラームが設定されていれば採点結果が返されるべき', async () => {
+        // Given: CloudWatch アラーム設定を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'CloudWatchアラーム',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'cloudwatch-alarm',
+            validationConfig: {
+              minAlarms: 1,
+              metrics: ['CPUUtilization'],
+            },
+          },
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(3);
-      expect(result.maxPossibleScore).toBe(100);
-      expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
+        // Then: 採点結果が返される
+        expect(result.criteriaResults).toHaveLength(1);
+      });
     });
 
-    it('汎用検証（未知のタイプ）を処理できるべき', async () => {
-      const problem = createMockProblem([
-        {
-          name: 'カスタム検証',
-          weight: 1,
-          maxPoints: 100,
-          validationType: 'unknown-type',
-        },
-      ]);
+    describe('API Gateway の採点基準がある場合', () => {
+      it('API Gateway が正しく設定されていれば合格となるべき', async () => {
+        // Given: API Gateway 設定を要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'APIGateway設定',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'api-gateway',
+          },
+        ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
 
-      expect(result.criteriaResults).toHaveLength(1);
-      expect(result.criteriaResults[0].feedback).toContain('Unknown validation type');
+        // Then: 採点に合格する
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].passed).toBe(true);
+      });
+    });
+
+    describe('複数の採点基準がある場合', () => {
+      it('すべての基準が個別に採点され、合計スコアが計算されるべき', async () => {
+        // Given: 複数のリソースを要求する問題
+        const problem = createMockProblem([
+          {
+            name: 'EC2インスタンス',
+            weight: 1,
+            maxPoints: 30,
+            validationType: 'ec2-instance',
+          },
+          {
+            name: 'S3バケット',
+            weight: 1,
+            maxPoints: 30,
+            validationType: 's3-bucket',
+          },
+          {
+            name: 'Lambda関数',
+            weight: 1,
+            maxPoints: 40,
+            validationType: 'lambda-function',
+          },
+        ]);
+
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
+
+        // Then: すべての基準が採点され、合計が100点になる
+        expect(result.criteriaResults).toHaveLength(3);
+        expect(result.maxPossibleScore).toBe(100);
+        expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
+      });
+    });
+
+    describe('未知の採点基準タイプがある場合', () => {
+      it('フィードバックにタイプが不明であることが示されるべき', async () => {
+        // Given: 未知の検証タイプを持つ問題
+        const problem = createMockProblem([
+          {
+            name: 'カスタム検証',
+            weight: 1,
+            maxPoints: 100,
+            validationType: 'unknown-type',
+          },
+        ]);
+
+        // When: 参加者のアカウントを採点する
+        const result = await provider.execute(
+          problem,
+          mockCredentials,
+          'account-1'
+        );
+
+        // Then: 不明なタイプであることがフィードバックに含まれる
+        expect(result.criteriaResults).toHaveLength(1);
+        expect(result.criteriaResults[0].feedback).toContain(
+          'Unknown validation type'
+        );
+      });
     });
   });
 
-  describe('検証タイプ推測', () => {
-    it('名前から EC2 を推測できるべき', async () => {
+  describe('採点基準名から検証タイプを推測する場合', () => {
+    it('名前に EC2 が含まれていれば EC2 インスタンス検証が適用されるべき', async () => {
+      // Given: 検証タイプ未指定だが名前に EC2 を含む基準
       const problem = createMockProblem([
         {
           name: 'EC2インスタンスの起動',
@@ -292,12 +399,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
-      // EC2 バリデーターが使用されることを確認（フィードバックに「インスタンス」が含まれる）
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: EC2 に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/インスタンス/);
     });
 
-    it('説明から S3 を推測できるべき', async () => {
+    it('説明に S3 が含まれていれば S3 バケット検証が適用されるべき', async () => {
+      // Given: 説明に S3 を含む基準
       const problem = createMockProblem([
         {
           name: 'ストレージ設定',
@@ -307,13 +421,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: S3 に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/バケット/);
     });
   });
 
-  describe('registerValidator', () => {
-    it('カスタム検証関数を登録できるべき', async () => {
+  describe('カスタム検証関数を登録する場合', () => {
+    it('登録した検証関数が採点時に使用されるべき', async () => {
+      // Given: カスタム検証関数を登録
       provider.registerValidator('custom-check', async (criterion) => ({
         passed: true,
         score: criterion.maxPoints,
@@ -330,14 +452,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
 
+      // Then: カスタム検証関数の結果が返される
       expect(result.criteriaResults[0].passed).toBe(true);
       expect(result.criteriaResults[0].feedback).toBe('カスタム検証成功');
       expect(result.totalScore).toBe(100);
     });
 
-    it('検証関数がエラーをスローした場合はエラー結果を返すべき', async () => {
+    it('検証関数がエラーをスローした場合は0点とエラーメッセージが返されるべき', async () => {
+      // Given: エラーをスローする検証関数を登録
       provider.registerValidator('error-check', async () => {
         throw new Error('Validation failed');
       });
@@ -351,16 +480,23 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
 
+      // Then: 不合格となり0点が返される
       expect(result.criteriaResults[0].passed).toBe(false);
       expect(result.criteriaResults[0].points).toBe(0);
       expect(result.criteriaResults[0].feedback).toContain('Validation error');
     });
   });
 
-  describe('検証タイプ推測（追加）', () => {
-    it('名前から Lambda を推測できるべき', async () => {
+  describe('さまざまな AWS サービス名から検証タイプを推測する場合', () => {
+    it('名前に Lambda が含まれていれば Lambda 関数検証が適用されるべき', async () => {
+      // Given: 名前に Lambda を含む基準
       const problem = createMockProblem([
         {
           name: 'Lambda 関数のデプロイ',
@@ -369,11 +505,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: Lambda に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/関数/);
     });
 
-    it('名前から RDS を推測できるべき（rds-instance は未登録）', async () => {
+    it('名前に RDS が含まれていても未対応サービスの場合は不明タイプとなるべき', async () => {
+      // Given: 名前に RDS を含む基準（未対応サービス）
       const problem = createMockProblem([
         {
           name: 'RDS データベースの起動',
@@ -382,12 +526,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
-      // RDS は未登録なので Unknown validation type を返す
-      expect(result.criteriaResults[0].feedback).toContain('Unknown validation type');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 未対応のため Unknown validation type が返される
+      expect(result.criteriaResults[0].feedback).toContain(
+        'Unknown validation type'
+      );
     });
 
-    it('名前から VPC を推測できるべき', async () => {
+    it('名前に VPC が含まれていれば VPC 構成検証が適用されるべき', async () => {
+      // Given: 名前に VPC を含む基準
       const problem = createMockProblem([
         {
           name: 'VPC ネットワーク構成',
@@ -396,11 +549,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: VPC に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/VPC|サブネット/);
     });
 
-    it('名前から IAM を推測できるべき', async () => {
+    it('名前に IAM が含まれていれば IAM ポリシー検証が適用されるべき', async () => {
+      // Given: 名前に IAM を含む基準
       const problem = createMockProblem([
         {
           name: 'IAM ポリシーの設定',
@@ -409,11 +570,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: IAM に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/IAM|権限/);
     });
 
-    it('名前から CloudWatch を推測できるべき', async () => {
+    it('名前に CloudWatch が含まれていれば CloudWatch アラーム検証が適用されるべき', async () => {
+      // Given: 名前に CloudWatch を含む基準
       const problem = createMockProblem([
         {
           name: 'CloudWatch モニタリング設定',
@@ -422,11 +591,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: CloudWatch に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/アラーム/);
     });
 
-    it('名前からセキュリティグループを推測できるべき', async () => {
+    it('名前にセキュリティグループが含まれていればセキュリティグループ検証が適用されるべき', async () => {
+      // Given: 名前にセキュリティグループを含む基準
       const problem = createMockProblem([
         {
           name: 'セキュリティグループの設定',
@@ -435,11 +612,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
-      expect(result.criteriaResults[0].feedback).toMatch(/セキュリティグループ/);
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: セキュリティグループに関連するフィードバックが返される
+      expect(result.criteriaResults[0].feedback).toMatch(
+        /セキュリティグループ/
+      );
     });
 
-    it('名前から API Gateway を推測できるべき', async () => {
+    it('名前に API Gateway が含まれていれば API Gateway 検証が適用されるべき', async () => {
+      // Given: 名前に API Gateway を含む基準
       const problem = createMockProblem([
         {
           name: 'API Gateway の作成',
@@ -448,11 +635,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: API Gateway に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/API Gateway/);
     });
 
-    it('名前から CloudFormation を推測できるべき', async () => {
+    it('名前に CloudFormation が含まれていれば CloudFormation 検証が適用されるべき', async () => {
+      // Given: 名前に CloudFormation を含む基準
       const problem = createMockProblem([
         {
           name: 'CloudFormation スタックのデプロイ',
@@ -461,13 +656,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: CloudFormation に関連するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toMatch(/スタック/);
     });
   });
 
-  describe('S3 バケット検証（詳細）', () => {
-    it('バケット名が見つからない場合はエラーを返すべき', async () => {
+  describe('S3 バケットの詳細な採点ケース', () => {
+    it('指定されたバケットが存在しない場合は不合格となりエラーメッセージが返されるべき', async () => {
+      // Given: 存在しないバケット名を指定した問題
       const problem = createMockProblem([
         {
           name: 'S3バケット',
@@ -480,12 +683,20 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 不合格となりバケットが見つからないことが通知される
       expect(result.criteriaResults[0].passed).toBe(false);
       expect(result.criteriaResults[0].feedback).toContain('見つかりません');
     });
 
-    it('バージョニングのみ設定の場合も検証できるべき', async () => {
+    it('バージョニングのみが要件の場合はバージョニング設定が評価されるべき', async () => {
+      // Given: バージョニングのみを要求する問題
       const problem = createMockProblem([
         {
           name: 'S3バケット',
@@ -498,11 +709,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: バージョニングに関するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toContain('バージョニング');
     });
 
-    it('暗号化のみ設定の場合も検証できるべき', async () => {
+    it('暗号化のみが要件の場合は暗号化設定が評価されるべき', async () => {
+      // Given: 暗号化のみを要求する問題
       const problem = createMockProblem([
         {
           name: 'S3バケット',
@@ -515,13 +734,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 暗号化に関するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toContain('暗号化');
     });
   });
 
-  describe('Lambda 検証（詳細）', () => {
-    it('関数名が見つからない場合はエラーを返すべき', async () => {
+  describe('Lambda 関数の詳細な採点ケース', () => {
+    it('指定された関数が存在しない場合は不合格となりエラーメッセージが返されるべき', async () => {
+      // Given: 存在しない関数名を指定した問題
       const problem = createMockProblem([
         {
           name: 'Lambda関数',
@@ -534,12 +761,20 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 不合格となり関数が見つからないことが通知される
       expect(result.criteriaResults[0].passed).toBe(false);
       expect(result.criteriaResults[0].feedback).toContain('見つかりません');
     });
 
-    it('ランタイムが異なる場合は減点するべき', async () => {
+    it('ランタイムが期待と異なる場合は減点されフィードバックが返されるべき', async () => {
+      // Given: 特定のランタイムを要求する問題
       const problem = createMockProblem([
         {
           name: 'Lambda関数',
@@ -552,14 +787,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
-      // 関数は存在するがランタイムが異なる
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 期待ランタイムに関するフィードバックが返される
       expect(result.criteriaResults[0].feedback).toContain('期待ランタイム');
     });
   });
 
-  describe('API Gateway 検証（詳細）', () => {
-    it('API名が見つからない場合はエラーを返すべき', async () => {
+  describe('API Gateway の詳細な採点ケース', () => {
+    it('指定された API が存在しない場合は不合格となりエラーメッセージが返されるべき', async () => {
+      // Given: 存在しない API 名を指定した問題
       const problem = createMockProblem([
         {
           name: 'APIGateway',
@@ -572,14 +814,22 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 不合格となり API が見つからないことが通知される
       expect(result.criteriaResults[0].passed).toBe(false);
       expect(result.criteriaResults[0].feedback).toContain('見つかりません');
     });
   });
 
-  describe('CloudWatch アラーム検証（詳細）', () => {
-    it('アラーム数が不足している場合は減点するべき', async () => {
+  describe('CloudWatch アラームの詳細な採点ケース', () => {
+    it('アラーム数が要件を満たさない場合は減点されフィードバックが返されるべき', async () => {
+      // Given: 最低10個のアラームを要求する問題
       const problem = createMockProblem([
         {
           name: 'CloudWatch',
@@ -592,11 +842,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: アラーム不足のフィードバックが返される
       expect(result.criteriaResults[0].feedback).toContain('アラーム不足');
     });
 
-    it('必要なメトリクスがない場合は減点するべき', async () => {
+    it('必要なメトリクスのアラームが設定されていない場合は減点されるべき', async () => {
+      // Given: 複数のメトリクスを要求する問題
       const problem = createMockProblem([
         {
           name: 'CloudWatch',
@@ -610,13 +868,21 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 未設定メトリクスのフィードバックが返される
       expect(result.criteriaResults[0].feedback).toContain('未設定メトリクス');
     });
   });
 
-  describe('IAM ポリシー検証（詳細）', () => {
-    it('ロール名が見つからない場合はエラーを返すべき', async () => {
+  describe('IAM ポリシーの詳細な採点ケース', () => {
+    it('指定されたロールが存在しない場合は不合格となりエラーメッセージが返されるべき', async () => {
+      // Given: 存在しないロール名を指定した問題
       const problem = createMockProblem([
         {
           name: 'IAM',
@@ -629,14 +895,22 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 不合格となりロールが見つからないことが通知される
       expect(result.criteriaResults[0].passed).toBe(false);
       expect(result.criteriaResults[0].feedback).toContain('見つかりません');
     });
   });
 
-  describe('EC2 検証（詳細）', () => {
-    it('特定のインスタンスタイプが要求される場合の検証', async () => {
+  describe('EC2 インスタンスの詳細な採点ケース', () => {
+    it('インスタンスタイプと状態の要件を満たしていれば合格となるべき', async () => {
+      // Given: 特定のインスタンスタイプと状態を要求する問題
       const problem = createMockProblem([
         {
           name: 'EC2',
@@ -651,11 +925,19 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 合格となる
       expect(result.criteriaResults[0].passed).toBe(true);
     });
 
-    it('インスタンス数が不足している場合は部分点を返すべき', async () => {
+    it('インスタンス数が要件を満たさない場合は部分点が与えられるべき', async () => {
+      // Given: 5台以上のインスタンスを要求する問題
       const problem = createMockProblem([
         {
           name: 'EC2',
@@ -669,15 +951,23 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 不合格となり満点未満のスコアが与えられる
       expect(result.criteriaResults[0].passed).toBe(false);
       expect(result.criteriaResults[0].points).toBeLessThan(100);
       expect(result.criteriaResults[0].feedback).toContain('以上の');
     });
   });
 
-  describe('generic 検証', () => {
-    it('generic タイプは常に部分点を返すべき', async () => {
+  describe('汎用検証タイプの採点ケース', () => {
+    it('自動検証が未対応の場合は50%の部分点と説明が返されるべき', async () => {
+      // Given: generic タイプの問題
       const problem = createMockProblem([
         {
           name: 'カスタム検証',
@@ -687,9 +977,16 @@ describe('AWSGameDayScoringProvider', () => {
         },
       ]);
 
-      const result = await provider.execute(problem, mockCredentials, 'account-1');
+      // When: 採点する
+      const result = await provider.execute(
+        problem,
+        mockCredentials,
+        'account-1'
+      );
+
+      // Then: 50%の部分点と自動検証未対応の説明が返される
       expect(result.criteriaResults[0].passed).toBe(true);
-      expect(result.criteriaResults[0].points).toBe(50); // 50% の部分点
+      expect(result.criteriaResults[0].points).toBe(50);
       expect(result.criteriaResults[0].feedback).toContain('自動検証未対応');
     });
   });

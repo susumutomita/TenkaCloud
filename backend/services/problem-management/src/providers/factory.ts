@@ -39,7 +39,9 @@ export class CloudProviderFactory implements ICloudProviderFactory {
   getProvider(provider: CloudProvider): ICloudProvider {
     const instance = this.providers.get(provider);
     if (!instance) {
-      throw new Error(`Cloud provider '${provider}' is not registered. Available providers: ${this.getRegisteredProviders().join(', ')}`);
+      throw new Error(
+        `Cloud provider '${provider}' is not registered. Available providers: ${this.getRegisteredProviders().join(', ')}`
+      );
     }
     return instance;
   }
@@ -57,7 +59,9 @@ export class CloudProviderFactory implements ICloudProviderFactory {
    */
   registerProvider(provider: ICloudProvider): void {
     if (this.providers.has(provider.provider)) {
-      console.warn(`Cloud provider '${provider.provider}' is already registered. Overwriting.`);
+      console.warn(
+        `Cloud provider '${provider.provider}' is already registered. Overwriting.`
+      );
     }
     this.providers.set(provider.provider, provider);
   }

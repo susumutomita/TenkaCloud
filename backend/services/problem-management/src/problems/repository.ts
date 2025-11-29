@@ -123,12 +123,15 @@ export interface IMarketplaceRepository {
    * @param marketplaceId マーケットプレイスID
    * @param review レビューデータ
    */
-  addReview(marketplaceId: string, review: {
-    userId: string;
-    userName: string;
-    rating: number;
-    comment: string;
-  }): Promise<void>;
+  addReview(
+    marketplaceId: string,
+    review: {
+      userId: string;
+      userName: string;
+      rating: number;
+      comment: string;
+    }
+  ): Promise<void>;
 }
 
 /**
@@ -171,20 +174,20 @@ export class InMemoryProblemRepository implements IProblemRepository {
 
     // フィルタリング
     if (options?.type) {
-      results = results.filter(p => p.type === options.type);
+      results = results.filter((p) => p.type === options.type);
     }
     if (options?.category) {
-      results = results.filter(p => p.category === options.category);
+      results = results.filter((p) => p.category === options.category);
     }
     if (options?.difficulty) {
-      results = results.filter(p => p.difficulty === options.difficulty);
+      results = results.filter((p) => p.difficulty === options.difficulty);
     }
     if (options?.author) {
-      results = results.filter(p => p.metadata.author === options.author);
+      results = results.filter((p) => p.metadata.author === options.author);
     }
     if (options?.tags && options.tags.length > 0) {
-      results = results.filter(p =>
-        options.tags!.some(tag => p.metadata.tags?.includes(tag))
+      results = results.filter((p) =>
+        options.tags!.some((tag) => p.metadata.tags?.includes(tag))
       );
     }
 
@@ -197,7 +200,11 @@ export class InMemoryProblemRepository implements IProblemRepository {
   }
 
   async count(options?: ProblemFilterOptions): Promise<number> {
-    const results = await this.findAll({ ...options, limit: undefined, offset: undefined });
+    const results = await this.findAll({
+      ...options,
+      limit: undefined,
+      offset: undefined,
+    });
     return results.length;
   }
 
@@ -245,42 +252,50 @@ export class InMemoryMarketplaceRepository implements IMarketplaceRepository {
   async unpublish(marketplaceId: string): Promise<void> {
     const problem = this.marketplaceProblems.get(marketplaceId);
     if (!problem) {
-      throw new Error(`Marketplace problem with id '${marketplaceId}' not found`);
+      throw new Error(
+        `Marketplace problem with id '${marketplaceId}' not found`
+      );
     }
     problem.status = 'archived';
     this.marketplaceProblems.set(marketplaceId, problem);
   }
 
-  async search(query: MarketplaceSearchQuery): Promise<MarketplaceSearchResult> {
-    let results = Array.from(this.marketplaceProblems.values())
-      .filter(p => p.status === 'published');
+  async search(
+    query: MarketplaceSearchQuery
+  ): Promise<MarketplaceSearchResult> {
+    let results = Array.from(this.marketplaceProblems.values()).filter(
+      (p) => p.status === 'published'
+    );
 
     // テキスト検索
     if (query.query) {
       const q = query.query.toLowerCase();
-      results = results.filter(p =>
-        p.title.toLowerCase().includes(q) ||
-        p.description.overview.toLowerCase().includes(q) ||
-        p.metadata.tags?.some(tag => tag.toLowerCase().includes(q))
+      results = results.filter(
+        (p) =>
+          p.title.toLowerCase().includes(q) ||
+          p.description.overview.toLowerCase().includes(q) ||
+          p.metadata.tags?.some((tag) => tag.toLowerCase().includes(q))
       );
     }
 
     // フィルタリング
     if (query.type) {
-      results = results.filter(p => p.type === query.type);
+      results = results.filter((p) => p.type === query.type);
     }
     if (query.category) {
-      results = results.filter(p => p.category === query.category);
+      results = results.filter((p) => p.category === query.category);
     }
     if (query.difficulty) {
-      results = results.filter(p => p.difficulty === query.difficulty);
+      results = results.filter((p) => p.difficulty === query.difficulty);
     }
     if (query.provider) {
-      results = results.filter(p => p.deployment.providers.includes(query.provider!));
+      results = results.filter((p) =>
+        p.deployment.providers.includes(query.provider!)
+      );
     }
     if (query.tags && query.tags.length > 0) {
-      results = results.filter(p =>
-        query.tags!.some(tag => p.metadata.tags?.includes(tag))
+      results = results.filter((p) =>
+        query.tags!.some((tag) => p.metadata.tags?.includes(tag))
       );
     }
 
@@ -293,8 +308,9 @@ export class InMemoryMarketplaceRepository implements IMarketplaceRepository {
         results.sort((a, b) => b.downloadCount - a.downloadCount);
         break;
       case 'newest':
-        results.sort((a, b) =>
-          (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0)
+        results.sort(
+          (a, b) =>
+            (b.publishedAt?.getTime() || 0) - (a.publishedAt?.getTime() || 0)
         );
         break;
       case 'relevance':
@@ -332,15 +348,20 @@ export class InMemoryMarketplaceRepository implements IMarketplaceRepository {
     }
   }
 
-  async addReview(marketplaceId: string, review: {
-    userId: string;
-    userName: string;
-    rating: number;
-    comment: string;
-  }): Promise<void> {
+  async addReview(
+    marketplaceId: string,
+    review: {
+      userId: string;
+      userName: string;
+      rating: number;
+      comment: string;
+    }
+  ): Promise<void> {
     const problem = this.marketplaceProblems.get(marketplaceId);
     if (!problem) {
-      throw new Error(`Marketplace problem with id '${marketplaceId}' not found`);
+      throw new Error(
+        `Marketplace problem with id '${marketplaceId}' not found`
+      );
     }
 
     const newReview = {

@@ -39,7 +39,9 @@ export async function calculatePointsEarned(
   });
 
   if (!taskProgress) {
-    throw new Error(`TaskProgress not found: teamId=${teamId}, taskId=${taskId}`);
+    throw new Error(
+      `TaskProgress not found: teamId=${teamId}, taskId=${taskId}`
+    );
   }
 
   const cluePenalties = taskProgress.cluePenalties as unknown as CluePenalty[];
@@ -124,7 +126,8 @@ export async function openClue(
     }
 
     // 7. ペナルティポイントを計算
-    const penaltyKey = `clue${clueOrder + 1}PenaltyPoints` as keyof typeof taskScoring;
+    const penaltyKey =
+      `clue${clueOrder + 1}PenaltyPoints` as keyof typeof taskScoring;
     const penaltyPoints = (taskScoring[penaltyKey] as number) || 0;
 
     // 8. 使用済みクルーを更新
@@ -135,7 +138,8 @@ export async function openClue(
     usedClues.push(newUsedClue);
 
     // 9. クルーペナルティを更新
-    const cluePenalties = (taskProgress.cluePenalties || []) as unknown as CluePenalty[];
+    const cluePenalties = (taskProgress.cluePenalties ||
+      []) as unknown as CluePenalty[];
     const newPenalty: CluePenalty = {
       order: clueOrder,
       penalty: penaltyPoints,
@@ -241,7 +245,10 @@ export async function validateAnswer(
         taskProgress.completed ||
         taskProgress.locked
       ) {
-        return { correct: false, message: 'Task is not available for submission' };
+        return {
+          correct: false,
+          message: 'Task is not available for submission',
+        };
       }
 
       // 4. チャレンジを取得
@@ -317,7 +324,9 @@ export async function validateAnswer(
         orderBy: { taskNumber: 'asc' },
       });
 
-      const currentTaskIndex = taskScorings.findIndex((ts) => ts.titleId === taskId);
+      const currentTaskIndex = taskScorings.findIndex(
+        (ts) => ts.titleId === taskId
+      );
       const isLastTask = currentTaskIndex === taskScorings.length - 1;
 
       if (isLastTask) {
@@ -371,7 +380,11 @@ export async function validateAnswer(
   });
 
   if (!result.success) {
-    return { success: false, correct: false, message: result.error || 'Lock failed' };
+    return {
+      success: false,
+      correct: false,
+      message: result.error || 'Lock failed',
+    };
   }
 
   return { success: true, ...result.result! };

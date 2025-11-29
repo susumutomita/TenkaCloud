@@ -232,7 +232,10 @@ describe('RealtimeScoringEngine', () => {
     it('参加者のスコア履歴を取得できるべき', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      const history = realtimeEngine.getParticipantHistory(mockEvent.id, 'participant-1');
+      const history = realtimeEngine.getParticipantHistory(
+        mockEvent.id,
+        'participant-1'
+      );
 
       expect(Array.isArray(history)).toBe(true);
     });
@@ -240,7 +243,10 @@ describe('RealtimeScoringEngine', () => {
     it('存在しない参加者の場合は空配列を返すべき', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      const history = realtimeEngine.getParticipantHistory(mockEvent.id, 'non-existent');
+      const history = realtimeEngine.getParticipantHistory(
+        mockEvent.id,
+        'non-existent'
+      );
 
       expect(history).toEqual([]);
     });
@@ -268,7 +274,10 @@ describe('RealtimeScoringEngine', () => {
 
     it('存在しないセッションの場合はエラーになるべき', () => {
       expect(() => {
-        realtimeEngine.triggerParticipantScoring('non-existent', 'participant-1');
+        realtimeEngine.triggerParticipantScoring(
+          'non-existent',
+          'participant-1'
+        );
       }).toThrow('Session not found');
     });
 
@@ -372,7 +381,7 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
       // スコア更新を待機
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       const leaderboard = realtimeEngine.getLeaderboard(mockEvent.id);
       expect(leaderboard).toBeDefined();
@@ -383,14 +392,20 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
       // 採点完了を待機
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
-      const history = realtimeEngine.getParticipantHistory(mockEvent.id, 'participant-1');
+      const history = realtimeEngine.getParticipantHistory(
+        mockEvent.id,
+        'participant-1'
+      );
       expect(history.length).toBeGreaterThanOrEqual(0);
     });
 
     it('存在しないイベントの履歴は空配列を返すべき', () => {
-      const history = realtimeEngine.getParticipantHistory('non-existent', 'participant-1');
+      const history = realtimeEngine.getParticipantHistory(
+        'non-existent',
+        'participant-1'
+      );
       expect(history).toEqual([]);
     });
   });
@@ -403,7 +418,7 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
       // 採点完了を待機
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       expect(scoreListener).toHaveBeenCalled();
       if (scoreListener.mock.calls.length > 0) {
@@ -420,7 +435,7 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
       // 採点完了を待機
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       expect(leaderboardListener).toHaveBeenCalled();
       if (leaderboardListener.mock.calls.length > 0) {
@@ -438,20 +453,21 @@ describe('RealtimeScoringEngine Advanced', () => {
 
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       expect(scoreListener).not.toHaveBeenCalled();
     });
 
     it('リーダーボード更新リスナーを解除できるべき', async () => {
       const leaderboardListener = vi.fn();
-      const unsubscribe = realtimeEngine.onLeaderboardUpdate(leaderboardListener);
+      const unsubscribe =
+        realtimeEngine.onLeaderboardUpdate(leaderboardListener);
 
       unsubscribe();
 
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       expect(leaderboardListener).not.toHaveBeenCalled();
     });
@@ -465,11 +481,13 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.onScoreUpdate(errorListener);
       realtimeEngine.onScoreUpdate(normalListener);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       // 両方のリスナーが呼ばれる（エラーが発生しても続行）
       if (errorListener.mock.calls.length > 0) {
@@ -492,16 +510,20 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.onLeaderboardUpdate(errorListener);
       realtimeEngine.onLeaderboardUpdate(normalListener);
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       if (errorListener.mock.calls.length > 0) {
         expect(normalListener).toHaveBeenCalled();
         expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('[RealtimeScoring] Leaderboard listener error'),
+          expect.stringContaining(
+            '[RealtimeScoring] Leaderboard listener error'
+          ),
           expect.any(Error)
         );
       }
@@ -542,7 +564,7 @@ describe('RealtimeScoringEngine Advanced', () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
       // 採点完了を待機
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       const leaderboard = realtimeEngine.getLeaderboard(mockEvent.id);
       if (leaderboard && leaderboard.entries.length >= 2) {
@@ -555,7 +577,7 @@ describe('RealtimeScoringEngine Advanced', () => {
     it('リーダーボードエントリにトレンドが含まれるべき', async () => {
       realtimeEngine.startSession(mockEvent, [mockProblem], mockParticipants);
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       const leaderboard = realtimeEngine.getLeaderboard(mockEvent.id);
       if (leaderboard && leaderboard.entries.length > 0) {
@@ -576,10 +598,14 @@ describe('RealtimeScoringEngine Advanced', () => {
         freezeLeaderboardMinutes: 5,
       };
 
-      realtimeEngine.startSession(soonEndingEvent, [mockProblem], mockParticipants);
+      realtimeEngine.startSession(
+        soonEndingEvent,
+        [mockProblem],
+        mockParticipants
+      );
 
       // 採点完了を待機
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       const leaderboard = realtimeEngine.getLeaderboard(soonEndingEvent.id);
       expect(leaderboard?.isFrozen).toBe(true);
@@ -594,9 +620,13 @@ describe('RealtimeScoringEngine Advanced', () => {
         freezeLeaderboardMinutes: 5,
       };
 
-      realtimeEngine.startSession(farEndingEvent, [mockProblem], mockParticipants);
+      realtimeEngine.startSession(
+        farEndingEvent,
+        [mockProblem],
+        mockParticipants
+      );
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       const leaderboard = realtimeEngine.getLeaderboard(farEndingEvent.id);
       expect(leaderboard?.isFrozen).toBe(false);

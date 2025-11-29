@@ -26,8 +26,14 @@ export * from './scoring';
 // Service initialization
 import { registerDefaultProviders } from './providers';
 import { createScoringEngine } from './scoring';
-import { InMemoryProblemRepository, InMemoryMarketplaceRepository } from './problems';
-import { InMemoryEventRepository, InMemoryLeaderboardRepository } from './events';
+import {
+  InMemoryProblemRepository,
+  InMemoryMarketplaceRepository,
+} from './problems';
+import {
+  InMemoryEventRepository,
+  InMemoryLeaderboardRepository,
+} from './events';
 import { ProblemDeployer } from './problems';
 import { CloudProviderFactory } from './providers';
 
@@ -70,7 +76,9 @@ export function initializeService(config: ServiceConfig = {}): ServiceContext {
 
   // リポジトリの作成
   const problemRepository = new InMemoryProblemRepository();
-  const marketplaceRepository = new InMemoryMarketplaceRepository(problemRepository);
+  const marketplaceRepository = new InMemoryMarketplaceRepository(
+    problemRepository
+  );
   const eventRepository = new InMemoryEventRepository();
   const leaderboardRepository = new InMemoryLeaderboardRepository();
 
@@ -87,14 +95,19 @@ export function initializeService(config: ServiceConfig = {}): ServiceContext {
   scoringEngine.subscribe(async (result) => {
     try {
       await leaderboardRepository.updateScore(result.eventId, result);
-      console.log(`[ProblemManagement] Leaderboard updated for event ${result.eventId}`);
+      console.log(
+        `[ProblemManagement] Leaderboard updated for event ${result.eventId}`
+      );
     } catch (error) {
       console.error('[ProblemManagement] Failed to update leaderboard:', error);
     }
   });
 
   console.log('[ProblemManagement] Service initialized successfully');
-  console.log('[ProblemManagement] Registered providers:', providerFactory.getRegisteredProviders());
+  console.log(
+    '[ProblemManagement] Registered providers:',
+    providerFactory.getRegisteredProviders()
+  );
 
   return {
     problemRepository,

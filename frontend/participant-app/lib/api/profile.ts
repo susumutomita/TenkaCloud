@@ -4,12 +4,12 @@
  * 参加者プロフィール API クライアント
  */
 
-import { get, put } from "./client";
+import { get, put } from './client';
 import type {
   Badge,
   ParticipantEventSummary,
   ParticipantProfile,
-} from "./types";
+} from './types';
 
 // =============================================================================
 // API Functions
@@ -20,9 +20,9 @@ import type {
  */
 export async function getMyProfile(): Promise<ParticipantProfile | null> {
   try {
-    return await get<ParticipantProfile>("/participant/profile");
+    return await get<ParticipantProfile>('/participant/profile');
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) {
+    if (error instanceof Error && error.message.includes('404')) {
       return null;
     }
     throw error;
@@ -36,14 +36,14 @@ export async function updateProfile(data: {
   name?: string;
   avatarUrl?: string;
 }): Promise<ParticipantProfile> {
-  return put<ParticipantProfile>("/participant/profile", data);
+  return put<ParticipantProfile>('/participant/profile', data);
 }
 
 /**
  * 自分のバッジ一覧を取得
  */
 export async function getMyBadges(): Promise<{ badges: Badge[] }> {
-  return get<{ badges: Badge[] }>("/participant/profile/badges");
+  return get<{ badges: Badge[] }>('/participant/profile/badges');
 }
 
 /**
@@ -63,8 +63,8 @@ export async function getEventHistory(options?: {
   }
 
   return get<{ events: ParticipantEventSummary[]; total: number }>(
-    "/participant/profile/history",
-    params,
+    '/participant/profile/history',
+    params
   );
 }
 
@@ -94,5 +94,5 @@ export async function getGlobalRanking(options?: {
     params.offset = options.offset;
   }
 
-  return get("/participant/rankings", params);
+  return get('/participant/rankings', params);
 }

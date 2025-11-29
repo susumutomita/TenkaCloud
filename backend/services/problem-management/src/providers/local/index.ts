@@ -63,7 +63,9 @@ export class LocalCloudProvider implements ICloudProvider {
         // AWS テンプレートをフォールバックとして使用
         const awsTemplate = problem.deployment.templates.aws;
         if (awsTemplate) {
-          console.log(`[Local] Using AWS template as fallback for problem ${problem.id}`);
+          console.log(
+            `[Local] Using AWS template as fallback for problem ${problem.id}`
+          );
         }
       }
 
@@ -120,7 +122,10 @@ export class LocalCloudProvider implements ICloudProvider {
   /**
    * スタックのステータス取得
    */
-  async getStackStatus(stackName: string, _credentials: CloudCredentials): Promise<StackStatus | null> {
+  async getStackStatus(
+    stackName: string,
+    _credentials: CloudCredentials
+  ): Promise<StackStatus | null> {
     const stack = this.deployedStacks.get(stackName);
     if (!stack) {
       return null;
@@ -138,7 +143,10 @@ export class LocalCloudProvider implements ICloudProvider {
   /**
    * スタックの削除
    */
-  async deleteStack(stackName: string, _credentials: CloudCredentials): Promise<DeploymentResult> {
+  async deleteStack(
+    stackName: string,
+    _credentials: CloudCredentials
+  ): Promise<DeploymentResult> {
     const startedAt = new Date();
 
     try {
@@ -179,7 +187,10 @@ export class LocalCloudProvider implements ICloudProvider {
   /**
    * スタック出力の取得
    */
-  async getStackOutputs(stackName: string, _credentials: CloudCredentials): Promise<Record<string, string>> {
+  async getStackOutputs(
+    stackName: string,
+    _credentials: CloudCredentials
+  ): Promise<Record<string, string>> {
     const stack = this.deployedStacks.get(stackName);
     return stack?.outputs || {};
   }
@@ -305,7 +316,7 @@ export class LocalCloudProvider implements ICloudProvider {
     console.log(`[Local] Compose content:`, composeContent);
 
     // シミュレーション: 少し待機
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   private getAvailablePort(): number {

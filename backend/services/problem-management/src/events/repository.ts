@@ -50,7 +50,10 @@ export interface IEventRepository {
    * @param options フィルターオプション
    * @returns イベント一覧
    */
-  findByTenant(tenantId: string, options?: EventFilterOptions): Promise<Event[]>;
+  findByTenant(
+    tenantId: string,
+    options?: EventFilterOptions
+  ): Promise<Event[]>;
 
   /**
    * イベントのステータス更新
@@ -64,6 +67,7 @@ export interface IEventRepository {
  * イベントフィルターオプション
  */
 export interface EventFilterOptions {
+  tenantId?: string;
   type?: EventType;
   status?: EventStatus | EventStatus[];
   startAfter?: Date;
@@ -116,7 +120,9 @@ export class InMemoryEventRepository implements IEventRepository {
   private events: Map<string, Event> = new Map();
   private idCounter = 0;
 
-  async create(eventData: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>): Promise<Event> {
+  async create(
+    eventData: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<Event> {
     const id = `event-${++this.idCounter}`;
     const now = new Date();
     const event: Event = {
@@ -155,23 +161,29 @@ export class InMemoryEventRepository implements IEventRepository {
     return this.events.get(id) || null;
   }
 
-  async findByTenant(tenantId: string, options?: EventFilterOptions): Promise<Event[]> {
-    let results = Array.from(this.events.values())
-      .filter(e => e.tenantId === tenantId);
+  async findByTenant(
+    tenantId: string,
+    options?: EventFilterOptions
+  ): Promise<Event[]> {
+    let results = Array.from(this.events.values()).filter(
+      (e) => e.tenantId === tenantId
+    );
 
     // フィルタリング
     if (options?.type) {
-      results = results.filter(e => e.type === options.type);
+      results = results.filter((e) => e.type === options.type);
     }
     if (options?.status) {
-      const statuses = Array.isArray(options.status) ? options.status : [options.status];
-      results = results.filter(e => statuses.includes(e.status));
+      const statuses = Array.isArray(options.status)
+        ? options.status
+        : [options.status];
+      results = results.filter((e) => statuses.includes(e.status));
     }
     if (options?.startAfter) {
-      results = results.filter(e => e.startTime > options.startAfter!);
+      results = results.filter((e) => e.startTime > options.startAfter!);
     }
     if (options?.startBefore) {
-      results = results.filter(e => e.startTime < options.startBefore!);
+      results = results.filter((e) => e.startTime < options.startBefore!);
     }
 
     // ソート（開始日時の降順）
@@ -194,6 +206,34 @@ export class InMemoryEventRepository implements IEventRepository {
     this.events.clear();
     this.idCounter = 0;
   }
+
+  /**
+   * イベント件数を取得（フィルタ対応）
+   */
+  async count(options?: EventFilterOptions): Promise<number> {
+    let results = Array.from(this.events.values());
+
+    if (options?.tenantId) {
+      results = results.filter((e) => e.tenantId === options.tenantId);
+    }
+    if (options?.type) {
+      results = results.filter((e) => e.type === options.type);
+    }
+    if (options?.status) {
+      const statuses = Array.isArray(options.status)
+        ? options.status
+        : [options.status];
+      results = results.filter((e) => statuses.includes(e.status));
+    }
+    if (options?.startAfter) {
+      results = results.filter((e) => e.startTime > options.startAfter!);
+    }
+    if (options?.startBefore) {
+      results = results.filter((e) => e.startTime < options.startBefore!);
+    }
+
+    return results.length;
+  }
 }
 
 /**
@@ -206,7 +246,10 @@ export class InMemoryLeaderboardRepository implements ILeaderboardRepository {
     return this.leaderboards.get(eventId) || null;
   }
 
-  async updateScore(eventId: string, scoringResult: ScoringResult): Promise<void> {
+  async updateScore(
+    eventId: string,
+    scoringResult: ScoringResult
+  ): Promise<void> {
     let leaderboard = this.leaderboards.get(eventId);
 
     if (!leaderboard) {
@@ -220,20 +263,24 @@ export class InMemoryLeaderboardRepository implements ILeaderboardRepository {
 
     if (leaderboard.isFrozen) {
       // 凍結中は内部的にはスコアを更新するが、表示順位は変更しない
-      console.log(`Leaderboard for event ${eventId} is frozen. Score updated but rank unchanged.`);
+      console.log(
+        `Leaderboard for event ${eventId} is frozen. Score updated but rank unchanged.`
+      );
     }
 
     // エントリを検索または作成
     const entryId = scoringResult.teamId || scoringResult.competitorAccountId;
     let entry = leaderboard.entries.find(
-      e => (e.teamId || e.participantId) === entryId
+      (e) => (e.teamId || e.participantId) === entryId
     );
 
     if (!entry) {
       entry = {
         rank: leaderboard.entries.length + 1,
         teamId: scoringResult.teamId,
-        participantId: scoringResult.teamId ? undefined : scoringResult.competitorAccountId,
+        participantId: scoringResult.teamId
+          ? undefined
+          : scoringResult.competitorAccountId,
         name: entryId, // 実際の実装では名前を別途取得
         totalScore: 0,
         problemScores: {},
@@ -245,7 +292,10 @@ export class InMemoryLeaderboardRepository implements ILeaderboardRepository {
     // スコアを更新
     const previousTotal = entry.totalScore;
     entry.problemScores[scoringResult.problemId] = scoringResult.totalScore;
-    entry.totalScore = Object.values(entry.problemScores).reduce((sum, score) => sum + score, 0);
+    entry.totalScore = Object.values(entry.problemScores).reduce(
+      (sum, score) => sum + score,
+      0
+    );
     entry.lastScoredAt = scoringResult.scoredAt;
 
     // トレンドを設定

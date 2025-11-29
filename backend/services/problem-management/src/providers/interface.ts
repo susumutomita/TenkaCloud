@@ -51,7 +51,10 @@ export interface ICloudProvider {
    * @param credentials 認証情報
    * @returns スタックステータス
    */
-  getStackStatus(stackName: string, credentials: CloudCredentials): Promise<StackStatus | null>;
+  getStackStatus(
+    stackName: string,
+    credentials: CloudCredentials
+  ): Promise<StackStatus | null>;
 
   /**
    * スタックの削除
@@ -59,7 +62,10 @@ export interface ICloudProvider {
    * @param credentials 認証情報
    * @returns 削除結果
    */
-  deleteStack(stackName: string, credentials: CloudCredentials): Promise<DeploymentResult>;
+  deleteStack(
+    stackName: string,
+    credentials: CloudCredentials
+  ): Promise<DeploymentResult>;
 
   /**
    * スタック出力の取得
@@ -67,7 +73,10 @@ export interface ICloudProvider {
    * @param credentials 認証情報
    * @returns 出力値のマップ
    */
-  getStackOutputs(stackName: string, credentials: CloudCredentials): Promise<Record<string, string>>;
+  getStackOutputs(
+    stackName: string,
+    credentials: CloudCredentials
+  ): Promise<Record<string, string>>;
 
   /**
    * 静的ファイルのアップロード
@@ -76,7 +85,11 @@ export interface ICloudProvider {
    * @param credentials 認証情報
    * @returns アップロード先URL
    */
-  uploadStaticFiles(localPath: string, remotePath: string, credentials: CloudCredentials): Promise<string>;
+  uploadStaticFiles(
+    localPath: string,
+    remotePath: string,
+    credentials: CloudCredentials
+  ): Promise<string>;
 
   /**
    * リソースのクリーンアップ
@@ -298,14 +311,19 @@ export interface IDeploymentOrchestrator {
    * @param jobs デプロイジョブ一覧
    * @returns 作成されたジョブID一覧
    */
-  createJobs(jobs: Omit<DeploymentJob, 'id' | 'createdAt'>[]): Promise<string[]>;
+  createJobs(
+    jobs: Omit<DeploymentJob, 'id' | 'createdAt'>[]
+  ): Promise<string[]>;
 
   /**
    * デプロイの開始
    * @param jobIds ジョブID一覧
    * @param options オプション
    */
-  startDeployment(jobIds: string[], options?: OrchestratorOptions): Promise<void>;
+  startDeployment(
+    jobIds: string[],
+    options?: OrchestratorOptions
+  ): Promise<void>;
 
   /**
    * デプロイステータスの取得
@@ -326,7 +344,10 @@ export interface IDeploymentOrchestrator {
    * @param callback コールバック
    * @returns unsubscribe関数
    */
-  subscribe(jobIds: string[], callback: (job: DeploymentJob) => void): () => void;
+  subscribe(
+    jobIds: string[],
+    callback: (job: DeploymentJob) => void
+  ): () => void;
 }
 
 export interface OrchestratorOptions {

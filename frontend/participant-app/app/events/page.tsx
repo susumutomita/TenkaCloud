@@ -4,11 +4,11 @@
  * イベント一覧ページ
  */
 
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useEffect, useId, useState } from "react";
-import { Header } from "../../components/layout";
+import Link from 'next/link';
+import { useEffect, useId, useState } from 'react';
+import { Header } from '../../components/layout';
 import {
   Badge,
   Button,
@@ -16,13 +16,13 @@ import {
   CardContent,
   EventStatusBadge,
   ProblemTypeBadge,
-} from "../../components/ui";
-import { getAvailableEvents } from "../../lib/api/events";
+} from '../../components/ui';
+import { getAvailableEvents } from '../../lib/api/events';
 import type {
   EventStatus,
   ParticipantEvent,
   ProblemType,
-} from "../../lib/api/types";
+} from '../../lib/api/types';
 
 export default function EventsPage() {
   const [events, setEvents] = useState<ParticipantEvent[]>([]);
@@ -41,7 +41,7 @@ export default function EventsPage() {
         setLoading(true);
         const statusFilter = filter.status
           ? [filter.status]
-          : ["scheduled", "active"];
+          : ['scheduled', 'active'];
         const res = await getAvailableEvents({
           status: statusFilter as EventStatus[],
           type: filter.type,
@@ -49,7 +49,7 @@ export default function EventsPage() {
         });
         setEvents(res.events);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
+        setError(err instanceof Error ? err.message : '読み込みに失敗しました');
       } finally {
         setLoading(false);
       }
@@ -60,12 +60,12 @@ export default function EventsPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("ja-JP", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    return date.toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
@@ -110,7 +110,7 @@ export default function EventsPage() {
             <select
               id={statusFilterId}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-              value={filter.status || ""}
+              value={filter.status || ''}
               onChange={(e) =>
                 setFilter((f) => ({
                   ...f,
@@ -133,7 +133,7 @@ export default function EventsPage() {
             <select
               id={typeFilterId}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-              value={filter.type || ""}
+              value={filter.type || ''}
               onChange={(e) =>
                 setFilter((f) => ({
                   ...f,
@@ -171,7 +171,7 @@ export default function EventsPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {events.map((event) => {
               const timeUntil =
-                event.status === "scheduled"
+                event.status === 'scheduled'
                   ? getTimeUntilStart(event.startTime)
                   : null;
 
@@ -204,11 +204,11 @@ export default function EventsPage() {
 
                       <div className="text-sm text-gray-600 space-y-1">
                         <p>
-                          <span className="font-medium">開始:</span>{" "}
+                          <span className="font-medium">開始:</span>{' '}
                           {formatDate(event.startTime)}
                         </p>
                         <p>
-                          <span className="font-medium">終了:</span>{" "}
+                          <span className="font-medium">終了:</span>{' '}
                           {formatDate(event.endTime)}
                         </p>
                       </div>
@@ -223,25 +223,25 @@ export default function EventsPage() {
                           {event.cloudProvider.toUpperCase()}
                         </span>
                         <span className="text-gray-500">
-                          {event.participantType === "team"
-                            ? "チーム参加"
-                            : "個人参加"}
+                          {event.participantType === 'team'
+                            ? 'チーム参加'
+                            : '個人参加'}
                         </span>
                       </div>
 
                       <Button
                         variant={
-                          event.status === "active" ? "primary" : "outline"
+                          event.status === 'active' ? 'primary' : 'outline'
                         }
                         fullWidth
                       >
-                        {event.status === "active"
+                        {event.status === 'active'
                           ? event.isRegistered
-                            ? "バトルに参加"
-                            : "今すぐ参加"
+                            ? 'バトルに参加'
+                            : '今すぐ参加'
                           : event.isRegistered
-                            ? "詳細を見る"
-                            : "登録する"}
+                            ? '詳細を見る'
+                            : '登録する'}
                       </Button>
                     </CardContent>
                   </Card>

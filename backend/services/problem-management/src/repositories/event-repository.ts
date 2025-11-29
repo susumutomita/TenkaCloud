@@ -33,12 +33,18 @@ function toEvent(prismaEvent: PrismaEvent): Event {
     startTime: prismaEvent.startTime,
     endTime: prismaEvent.endTime,
     timezone: prismaEvent.timezone,
-    participantType: prismaEvent.participantType.toLowerCase() as 'individual' | 'team',
+    participantType: prismaEvent.participantType.toLowerCase() as
+      | 'individual'
+      | 'team',
     maxParticipants: prismaEvent.maxParticipants,
     minTeamSize: prismaEvent.minTeamSize ?? undefined,
     maxTeamSize: prismaEvent.maxTeamSize ?? undefined,
     registrationDeadline: prismaEvent.registrationDeadline ?? undefined,
-    cloudProvider: prismaEvent.cloudProvider.toLowerCase() as 'aws' | 'gcp' | 'azure' | 'local',
+    cloudProvider: prismaEvent.cloudProvider.toLowerCase() as
+      | 'aws'
+      | 'gcp'
+      | 'azure'
+      | 'local',
     regions: prismaEvent.regions,
     scoringType: prismaEvent.scoringType.toLowerCase() as 'realtime' | 'batch',
     scoringIntervalMinutes: prismaEvent.scoringIntervalMinutes,
@@ -73,7 +79,9 @@ function toPrismaType(type: EventType): PrismaProblemType {
   return map[type];
 }
 
-function toPrismaParticipantType(type: 'individual' | 'team'): PrismaParticipantType {
+function toPrismaParticipantType(
+  type: 'individual' | 'team'
+): PrismaParticipantType {
   const map: Record<'individual' | 'team', PrismaParticipantType> = {
     individual: 'INDIVIDUAL',
     team: 'TEAM',
@@ -89,7 +97,9 @@ function toPrismaScoringType(type: 'realtime' | 'batch'): PrismaScoringType {
   return map[type];
 }
 
-function toPrismaCloudProvider(provider: 'aws' | 'gcp' | 'azure' | 'local'): PrismaCloudProvider {
+function toPrismaCloudProvider(
+  provider: 'aws' | 'gcp' | 'azure' | 'local'
+): PrismaCloudProvider {
   const map: Record<'aws' | 'gcp' | 'azure' | 'local', PrismaCloudProvider> = {
     aws: 'AWS',
     gcp: 'GCP',
@@ -138,7 +148,8 @@ export class PrismaEventRepository implements IEventRepository {
     const data: Record<string, unknown> = {};
 
     if (updates.name !== undefined) data.name = updates.name;
-    if (updates.status !== undefined) data.status = toPrismaStatus(updates.status);
+    if (updates.status !== undefined)
+      data.status = toPrismaStatus(updates.status);
     if (updates.startTime !== undefined) data.startTime = updates.startTime;
     if (updates.endTime !== undefined) data.endTime = updates.endTime;
     if (updates.timezone !== undefined) data.timezone = updates.timezone;
@@ -146,8 +157,10 @@ export class PrismaEventRepository implements IEventRepository {
       data.participantType = toPrismaParticipantType(updates.participantType);
     if (updates.maxParticipants !== undefined)
       data.maxParticipants = updates.maxParticipants;
-    if (updates.minTeamSize !== undefined) data.minTeamSize = updates.minTeamSize;
-    if (updates.maxTeamSize !== undefined) data.maxTeamSize = updates.maxTeamSize;
+    if (updates.minTeamSize !== undefined)
+      data.minTeamSize = updates.minTeamSize;
+    if (updates.maxTeamSize !== undefined)
+      data.maxTeamSize = updates.maxTeamSize;
     if (updates.registrationDeadline !== undefined)
       data.registrationDeadline = updates.registrationDeadline;
     if (updates.cloudProvider !== undefined)
@@ -208,10 +221,16 @@ export class PrismaEventRepository implements IEventRepository {
       where.status = { in: statuses.map(toPrismaStatus) };
     }
     if (options?.startAfter) {
-      where.startTime = { ...(where.startTime as object || {}), gte: options.startAfter };
+      where.startTime = {
+        ...((where.startTime as object) || {}),
+        gte: options.startAfter,
+      };
     }
     if (options?.startBefore) {
-      where.startTime = { ...(where.startTime as object || {}), lte: options.startBefore };
+      where.startTime = {
+        ...((where.startTime as object) || {}),
+        lte: options.startBefore,
+      };
     }
 
     const events = await prisma.event.findMany({
@@ -227,6 +246,9 @@ export class PrismaEventRepository implements IEventRepository {
   async findAll(options?: EventFilterOptions): Promise<Event[]> {
     const where: Record<string, unknown> = {};
 
+    if (options?.tenantId) {
+      where.tenantId = options.tenantId;
+    }
     if (options?.type) {
       where.type = toPrismaType(options.type);
     }
@@ -235,6 +257,18 @@ export class PrismaEventRepository implements IEventRepository {
         ? options.status
         : [options.status];
       where.status = { in: statuses.map(toPrismaStatus) };
+    }
+    if (options?.startAfter) {
+      where.startTime = {
+        ...((where.startTime as object) || {}),
+        gte: options.startAfter,
+      };
+    }
+    if (options?.startBefore) {
+      where.startTime = {
+        ...((where.startTime as object) || {}),
+        lte: options.startBefore,
+      };
     }
 
     const events = await prisma.event.findMany({
@@ -250,6 +284,9 @@ export class PrismaEventRepository implements IEventRepository {
   async count(options?: EventFilterOptions): Promise<number> {
     const where: Record<string, unknown> = {};
 
+    if (options?.tenantId) {
+      where.tenantId = options.tenantId;
+    }
     if (options?.type) {
       where.type = toPrismaType(options.type);
     }
@@ -258,6 +295,18 @@ export class PrismaEventRepository implements IEventRepository {
         ? options.status
         : [options.status];
       where.status = { in: statuses.map(toPrismaStatus) };
+    }
+    if (options?.startAfter) {
+      where.startTime = {
+        ...((where.startTime as object) || {}),
+        gte: options.startAfter,
+      };
+    }
+    if (options?.startBefore) {
+      where.startTime = {
+        ...((where.startTime as object) || {}),
+        lte: options.startBefore,
+      };
     }
 
     return prisma.event.count({ where });

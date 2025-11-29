@@ -1,21 +1,23 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MarketplaceHeader } from '@/components/problems/marketplace-header';
 import { ProblemCard } from '@/components/problems/problem-card';
 import { ProblemFilters } from '@/components/problems/problem-filters';
 import { Button } from '@/components/ui/button';
 import {
-  searchMarketplaceProblems,
   getFeaturedProblems,
   installProblem,
   type MarketplaceProblem,
   type MarketplaceSearchParams,
+  searchMarketplaceProblems,
 } from '@/lib/api/problems';
 
 export default function MarketplacePage() {
   const [problems, setProblems] = useState<MarketplaceProblem[]>([]);
-  const [featuredProblems, setFeaturedProblems] = useState<MarketplaceProblem[]>([]);
+  const [featuredProblems, setFeaturedProblems] = useState<
+    MarketplaceProblem[]
+  >([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);

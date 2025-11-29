@@ -102,14 +102,17 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
       // 同時実行数に達していない場合、新しいジョブを開始
       while (running.length < concurrency && queue.length > 0) {
         const jobId = queue.shift()!;
-        const promise = this.executeJob(jobId, maxRetries, retryDelaySeconds)
-          .finally(() => {
-            // 完了したら running から削除
-            const index = running.indexOf(promise);
-            if (index > -1) {
-              running.splice(index, 1);
-            }
-          });
+        const promise = this.executeJob(
+          jobId,
+          maxRetries,
+          retryDelaySeconds
+        ).finally(() => {
+          // 完了したら running から削除
+          const index = running.indexOf(promise);
+          if (index > -1) {
+            running.splice(index, 1);
+          }
+        });
         running.push(promise);
       }
 
@@ -142,13 +145,21 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
     // 問題と認証情報を取得
     const problem = this.problemCache.get(job.problemId);
     if (!problem) {
-      this.updateJobStatus(jobId, 'failed', `Problem ${job.problemId} not found`);
+      this.updateJobStatus(
+        jobId,
+        'failed',
+        `Problem ${job.problemId} not found`
+      );
       return;
     }
 
     const credentials = this.credentialsCache.get(job.competitorAccountId);
     if (!credentials) {
-      this.updateJobStatus(jobId, 'failed', `Credentials for account ${job.competitorAccountId} not found`);
+      this.updateJobStatus(
+        jobId,
+        'failed',
+        `Credentials for account ${job.competitorAccountId} not found`
+      );
       return;
     }
 
@@ -157,7 +168,11 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
     try {
       provider = this.factory.getProvider(job.provider);
     } catch {
-      this.updateJobStatus(jobId, 'failed', `Provider ${job.provider} not available`);
+      this.updateJobStatus(
+        jobId,
+        'failed',
+        `Provider ${job.provider} not available`
+      );
       return;
     }
 
@@ -181,7 +196,11 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
           rollbackOnFailure: true,
         };
 
-        const result = await provider.deployStack(problem, credentials, options);
+        const result = await provider.deployStack(
+          problem,
+          credentials,
+          options
+        );
 
         if (result.success) {
           this.updateJobStatus(jobId, 'completed', undefined, result);
@@ -195,7 +214,9 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
 
       // リトライ前に待機
       if (attempt < maxRetries) {
-        console.log(`Job ${jobId} failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${retryDelaySeconds}s...`);
+        console.log(
+          `Job ${jobId} failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${retryDelaySeconds}s...`
+        );
         await this.sleep(retryDelaySeconds * 1000);
         state.job.retryCount = attempt + 1;
       }
@@ -225,7 +246,11 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
       state.job.startedAt = new Date();
     }
 
-    if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+    if (
+      status === 'completed' ||
+      status === 'failed' ||
+      status === 'cancelled'
+    ) {
       state.job.completedAt = new Date();
     }
 
@@ -245,7 +270,7 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
    */
   async getStatus(jobIds: string[]): Promise<DeploymentJob[]> {
     return jobIds
-      .map(id => this.jobs.get(id)?.job)
+      .map((id) => this.jobs.get(id)?.job)
       .filter((job): job is DeploymentJob => job !== undefined);
   }
 
@@ -312,16 +337,28 @@ export class ProblemDeployer implements IDeploymentOrchestrator {
 
   /**
    * スタック名の生成
+   *
+   * CloudFormation スタック名の制約:
+   * - 英数字とハイフンのみ
+   * - 128文字以内
+   * - 先頭は英字
    */
   private generateStackName(job: DeploymentJob): string {
-    return `tenkacloud-${job.eventId}-${job.problemId}-${job.competitorAccountId.substring(0, 8)}`;
+    const sanitize = (input: string): string =>
+      input.replace(/[^a-zA-Z0-9-]/g, '').substring(0, 20);
+
+    const eventId = sanitize(job.eventId);
+    const problemId = sanitize(job.problemId);
+    const accountId = sanitize(job.competitorAccountId).substring(0, 8);
+
+    return `tenkacloud-${eventId}-${problemId}-${accountId}`;
   }
 
   /**
    * スリープ
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // ==========================================================================

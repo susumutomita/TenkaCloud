@@ -14,11 +14,11 @@ const prisma = new PrismaClient();
  * コンテストの状態
  */
 export enum ContestStatus {
-  DRAFT = 'draft',           // 下書き
-  SCHEDULED = 'scheduled',   // 開始待ち
-  RUNNING = 'running',       // 実行中
-  PAUSED = 'paused',         // 一時停止
-  ENDED = 'ended',           // 終了
+  DRAFT = 'draft', // 下書き
+  SCHEDULED = 'scheduled', // 開始待ち
+  RUNNING = 'running', // 実行中
+  PAUSED = 'paused', // 一時停止
+  ENDED = 'ended', // 終了
 }
 
 /**

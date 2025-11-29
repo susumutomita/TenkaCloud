@@ -44,7 +44,11 @@ export interface DeployedResource {
   logicalId: string;
   physicalId: string;
   type: string;
-  status: 'CREATE_COMPLETE' | 'CREATE_FAILED' | 'DELETE_COMPLETE' | 'DELETE_FAILED';
+  status:
+    | 'CREATE_COMPLETE'
+    | 'CREATE_FAILED'
+    | 'DELETE_COMPLETE'
+    | 'DELETE_FAILED';
 }
 
 export interface StackStatus {
@@ -73,7 +77,13 @@ export interface StackStatus {
 
 export type ProblemType = 'gameday' | 'jam';
 
-export type ProblemCategory = 'architecture' | 'security' | 'cost' | 'performance' | 'reliability' | 'operations';
+export type ProblemCategory =
+  | 'architecture'
+  | 'security'
+  | 'cost'
+  | 'performance'
+  | 'reliability'
+  | 'operations';
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard' | 'expert';
 
@@ -155,7 +165,13 @@ export interface Problem {
 
 export type EventType = 'gameday' | 'jam';
 
-export type EventStatus = 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled';
+export type EventStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
 
 export type ParticipantType = 'individual' | 'team';
 
@@ -327,7 +343,11 @@ export interface Leaderboard {
 // Marketplace Types
 // =============================================================================
 
-export type MarketplaceProblemStatus = 'draft' | 'published' | 'deprecated' | 'archived';
+export type MarketplaceProblemStatus =
+  | 'draft'
+  | 'published'
+  | 'deprecated'
+  | 'archived';
 
 export interface MarketplaceProblem extends Problem {
   marketplaceId: string;

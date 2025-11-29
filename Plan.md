@@ -270,6 +270,8 @@ backend/
 - [2025-11-23 10:12] CLAUDE.md 冒頭を要約化してリファクタリングし、textlint と Prettier を通過後に `make before-commit` が成功することを確認
 - [2025-11-23 10:57] control-plane の Sidebar で禁止されていた inline Server Action を削除し、`signOut` をクライアントハンドラに変更。Docker ビルドで Turbopack/Bun の worker 未対応エラーを避けるため `next build --webpack` を既定スクリプトに変更。整形漏れファイルを Prettier で修正し `make before-commit` を再度成功させた。
 - [2025-11-23 11:45] テナント API レスポンスをクライアント側で小文字に正規化し、API エラー時はモックにフォールバック。テナント系ページを `dynamic = 'force-dynamic'` 指定にしてビルド警告を抑制。admin/participant/landing-site の build スクリプトを `next build --webpack` に統一、Makefile の余分な `--webpack` 付与を削除して重複指定を解消。
+- [2025-11-29 23:03] `make before-commit` が format_check で失敗（frontend/admin-app 配下 29 ファイルの Prettier 未整形）することを再現
+- [2025-11-29 23:05] `npm run format` を実行し admin-app 配下を整形、再度 `make before-commit` を実行して lint_text / format_check / typecheck / test / build がすべて成功することを確認
 
 **振り返り (Retrospective)**:
 （実装後に記入）

@@ -105,7 +105,10 @@ export class RealtimeScoringEngine {
   private leaderboardListeners: LeaderboardUpdateListener[] = [];
   private scoreListeners: ScoreUpdateListener[] = [];
 
-  constructor(scoringEngine: ScoringEngine, config?: Partial<RealtimeScoringConfig>) {
+  constructor(
+    scoringEngine: ScoringEngine,
+    config?: Partial<RealtimeScoringConfig>
+  ) {
     this.scoringEngine = scoringEngine;
     this.config = {
       scoringIntervalMs: config?.scoringIntervalMs ?? 60000, // 1分
@@ -131,12 +134,16 @@ export class RealtimeScoringEngine {
     participants: Participant[]
   ): void {
     if (this.sessions.has(event.id)) {
-      console.warn(`[RealtimeScoring] Session already exists for event ${event.id}`);
+      console.warn(
+        `[RealtimeScoring] Session already exists for event ${event.id}`
+      );
       return;
     }
 
     if (this.sessions.size >= this.config.maxConcurrentSessions) {
-      throw new Error(`Maximum concurrent sessions (${this.config.maxConcurrentSessions}) reached`);
+      throw new Error(
+        `Maximum concurrent sessions (${this.config.maxConcurrentSessions}) reached`
+      );
     }
 
     const session: ScoringSession = {
@@ -160,7 +167,9 @@ export class RealtimeScoringEngine {
     this.sessions.set(event.id, session);
 
     console.log(`[RealtimeScoring] Session started for event ${event.id}`);
-    console.log(`[RealtimeScoring] Participants: ${participants.length}, Problems: ${problems.length}`);
+    console.log(
+      `[RealtimeScoring] Participants: ${participants.length}, Problems: ${problems.length}`
+    );
     console.log(`[RealtimeScoring] Scoring interval: ${intervalMs}ms`);
 
     // 最初の採点を即座に実行
@@ -243,7 +252,9 @@ export class RealtimeScoringEngine {
     session.scoringRound++;
     session.lastScoringAt = new Date();
 
-    console.log(`[RealtimeScoring] Starting scoring round ${session.scoringRound} for event ${eventId}`);
+    console.log(
+      `[RealtimeScoring] Starting scoring round ${session.scoringRound} for event ${eventId}`
+    );
 
     // 全参加者 × 全問題の採点リクエストを作成
     const requests: ScoringRequest[] = [];
@@ -282,12 +293,14 @@ export class RealtimeScoringEngine {
       throw new Error(`Session not found: ${eventId}`);
     }
 
-    const participant = session.participants.find(p => p.id === participantId);
+    const participant = session.participants.find(
+      (p) => p.id === participantId
+    );
     if (!participant) {
       throw new Error(`Participant not found: ${participantId}`);
     }
 
-    const requests: ScoringRequest[] = session.problems.map(problem => ({
+    const requests: ScoringRequest[] = session.problems.map((problem) => ({
       eventId,
       problemId: problem.id,
       competitorAccountId: participant.id,
@@ -297,7 +310,9 @@ export class RealtimeScoringEngine {
     }));
 
     this.scoringEngine.enqueueBatch(requests);
-    console.log(`[RealtimeScoring] Triggered scoring for participant ${participantId}`);
+    console.log(
+      `[RealtimeScoring] Triggered scoring for participant ${participantId}`
+    );
   }
 
   // ===========================================================================
@@ -317,7 +332,11 @@ export class RealtimeScoringEngine {
     this.updateLeaderboard(eventId);
 
     // スコア更新イベントを通知
-    const previousScore = this.getPreviousScore(eventId, competitorAccountId, problemId);
+    const previousScore = this.getPreviousScore(
+      eventId,
+      competitorAccountId,
+      problemId
+    );
     const update: ScoreUpdate = {
       eventId,
       participantId: competitorAccountId,
@@ -383,7 +402,10 @@ export class RealtimeScoringEngine {
   /**
    * リーダーボードを初期化
    */
-  private initializeLeaderboard(eventId: string, participants: Participant[]): void {
+  private initializeLeaderboard(
+    eventId: string,
+    participants: Participant[]
+  ): void {
     const entries: LeaderboardEntry[] = participants.map((p, index) => ({
       rank: index + 1,
       participantId: p.id,
@@ -416,12 +438,16 @@ export class RealtimeScoringEngine {
     // フリーズチェック
     const now = new Date();
     const endTime = new Date(session.event.endTime);
-    const freezeTime = new Date(endTime.getTime() - this.config.freezeBeforeEndMs);
+    const freezeTime = new Date(
+      endTime.getTime() - this.config.freezeBeforeEndMs
+    );
 
     if (now >= freezeTime && session.event.freezeLeaderboardMinutes) {
       if (!leaderboard.isFrozen) {
         leaderboard.isFrozen = true;
-        console.log(`[RealtimeScoring] Leaderboard frozen for event ${eventId}`);
+        console.log(
+          `[RealtimeScoring] Leaderboard frozen for event ${eventId}`
+        );
       }
       // フリーズ中は更新しない（内部では更新するがクライアントには古い状態を送る）
     }
@@ -430,37 +456,41 @@ export class RealtimeScoringEngine {
     if (!eventHistory) return;
 
     // 各参加者のスコアを集計
-    const previousRanks = new Map(leaderboard.entries.map(e => [e.participantId || e.teamId, e.rank]));
+    const previousRanks = new Map(
+      leaderboard.entries.map((e) => [e.participantId || e.teamId, e.rank])
+    );
 
-    const updatedEntries: LeaderboardEntry[] = session.participants.map(participant => {
-      const participantHistory = eventHistory.get(participant.id) || [];
+    const updatedEntries: LeaderboardEntry[] = session.participants.map(
+      (participant) => {
+        const participantHistory = eventHistory.get(participant.id) || [];
 
-      // 問題ごとの最新スコアを取得
-      const problemScores: Record<string, number> = {};
-      let totalScore = 0;
-      let lastScoredAt = new Date(0);
+        // 問題ごとの最新スコアを取得
+        const problemScores: Record<string, number> = {};
+        let totalScore = 0;
+        let lastScoredAt = new Date(0);
 
-      for (const result of participantHistory) {
-        // 各問題の最新スコアを使用
-        problemScores[result.problemId] = result.totalScore;
-        totalScore += result.totalScore;
+        for (const result of participantHistory) {
+          // 各問題の最新スコアを使用
+          problemScores[result.problemId] = result.totalScore;
+          totalScore += result.totalScore;
 
-        if (result.scoredAt > lastScoredAt) {
-          lastScoredAt = result.scoredAt;
+          if (result.scoredAt > lastScoredAt) {
+            lastScoredAt = result.scoredAt;
+          }
         }
-      }
 
-      return {
-        rank: 0, // 後で設定
-        participantId: participant.id,
-        teamId: participant.teamId,
-        name: participant.teamName || participant.name,
-        totalScore,
-        problemScores,
-        lastScoredAt,
-        trend: 'same' as const,
-      };
-    });
+        return {
+          rank: 0, // 後で設定
+          participantId: participant.id,
+          teamId: participant.teamId,
+          name: participant.teamName || participant.name,
+          totalScore,
+          problemScores,
+          lastScoredAt,
+          trend: 'same' as const,
+        };
+      }
+    );
 
     // スコアでソートしてランク付け
     updatedEntries.sort((a, b) => {
@@ -476,7 +506,9 @@ export class RealtimeScoringEngine {
     updatedEntries.forEach((entry, index) => {
       entry.rank = index + 1;
 
-      const previousRank = previousRanks.get(entry.participantId || entry.teamId);
+      const previousRank = previousRanks.get(
+        entry.participantId || entry.teamId
+      );
       if (previousRank !== undefined) {
         if (entry.rank < previousRank) {
           entry.trend = 'up';

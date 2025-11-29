@@ -1,18 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCallback, useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { createEvent, type CreateEventInput } from '@/lib/api/events';
+import { type CreateEventInput, createEvent } from '@/lib/api/events';
 import {
-  searchMarketplaceProblems,
+  type CloudProvider,
   type MarketplaceProblem,
   type ProblemType,
-  type CloudProvider,
+  searchMarketplaceProblems,
 } from '@/lib/api/problems';
 
 type Step = 'basic' | 'problems' | 'settings' | 'review';
@@ -38,23 +38,31 @@ export default function NewEventPage() {
   const [endTime, setEndTime] = useState('17:00');
 
   // 参加者設定
-  const [participantType, setParticipantType] = useState<'individual' | 'team'>('team');
+  const [participantType, setParticipantType] = useState<'individual' | 'team'>(
+    'team'
+  );
   const [maxParticipants, setMaxParticipants] = useState(20);
   const [minTeamSize, setMinTeamSize] = useState(2);
   const [maxTeamSize, setMaxTeamSize] = useState(5);
 
   // クラウド設定
   const [cloudProvider, setCloudProvider] = useState<CloudProvider>('aws');
-  const [selectedRegions, setSelectedRegions] = useState<string[]>(['ap-northeast-1']);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([
+    'ap-northeast-1',
+  ]);
 
   // 採点設定
-  const [scoringType, setScoringType] = useState<'realtime' | 'batch'>('realtime');
+  const [scoringType, setScoringType] = useState<'realtime' | 'batch'>(
+    'realtime'
+  );
   const [scoringInterval, setScoringInterval] = useState(5);
   const [leaderboardVisible, setLeaderboardVisible] = useState(true);
   const [freezeMinutes, setFreezeMinutes] = useState(30);
 
   // 問題選択
-  const [availableProblems, setAvailableProblems] = useState<MarketplaceProblem[]>([]);
+  const [availableProblems, setAvailableProblems] = useState<
+    MarketplaceProblem[]
+  >([]);
   const [selectedProblemIds, setSelectedProblemIds] = useState<string[]>([]);
   const [loadingProblems, setLoadingProblems] = useState(false);
 
@@ -170,11 +178,13 @@ export default function NewEventPage() {
                 currentStep === step.id
                   ? 'bg-primary text-primary-foreground'
                   : steps.findIndex((s) => s.id === currentStep) > index
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-200 text-gray-600'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-200 text-gray-600'
               }`}
             >
-              {steps.findIndex((s) => s.id === currentStep) > index ? '✓' : index + 1}
+              {steps.findIndex((s) => s.id === currentStep) > index
+                ? '✓'
+                : index + 1}
             </div>
             <span className="ml-2 text-sm hidden sm:inline">{step.label}</span>
             {index < steps.length - 1 && (
@@ -191,7 +201,9 @@ export default function NewEventPage() {
           {currentStep === 'basic' && (
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-2">イベント名 *</label>
+                <label className="block text-sm font-medium mb-2">
+                  イベント名 *
+                </label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -200,19 +212,25 @@ export default function NewEventPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">イベントタイプ *</label>
+                <label className="block text-sm font-medium mb-2">
+                  イベントタイプ *
+                </label>
                 <Select
                   value={type}
                   onChange={(e) => setType(e.target.value as ProblemType)}
                 >
-                  <option value="gameday">GameDay (トラブルシューティング)</option>
+                  <option value="gameday">
+                    GameDay (トラブルシューティング)
+                  </option>
                   <option value="jam">JAM (チャレンジ解決)</option>
                 </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">開始日時 *</label>
+                  <label className="block text-sm font-medium mb-2">
+                    開始日時 *
+                  </label>
                   <div className="flex gap-2">
                     <Input
                       type="date"
@@ -228,7 +246,9 @@ export default function NewEventPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">終了日時 *</label>
+                  <label className="block text-sm font-medium mb-2">
+                    終了日時 *
+                  </label>
                   <div className="flex gap-2">
                     <Input
                       type="date"
@@ -247,10 +267,16 @@ export default function NewEventPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">参加形式</label>
+                  <label className="block text-sm font-medium mb-2">
+                    参加形式
+                  </label>
                   <Select
                     value={participantType}
-                    onChange={(e) => setParticipantType(e.target.value as 'individual' | 'team')}
+                    onChange={(e) =>
+                      setParticipantType(
+                        e.target.value as 'individual' | 'team'
+                      )
+                    }
                   >
                     <option value="team">チーム参加</option>
                     <option value="individual">個人参加</option>
@@ -272,7 +298,9 @@ export default function NewEventPage() {
               {participantType === 'team' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">最小チームサイズ</label>
+                    <label className="block text-sm font-medium mb-2">
+                      最小チームサイズ
+                    </label>
                     <Input
                       type="number"
                       min={1}
@@ -281,7 +309,9 @@ export default function NewEventPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">最大チームサイズ</label>
+                    <label className="block text-sm font-medium mb-2">
+                      最大チームサイズ
+                    </label>
                     <Input
                       type="number"
                       min={1}
@@ -294,10 +324,14 @@ export default function NewEventPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">クラウドプロバイダー</label>
+                  <label className="block text-sm font-medium mb-2">
+                    クラウドプロバイダー
+                  </label>
                   <Select
                     value={cloudProvider}
-                    onChange={(e) => setCloudProvider(e.target.value as CloudProvider)}
+                    onChange={(e) =>
+                      setCloudProvider(e.target.value as CloudProvider)
+                    }
                   >
                     <option value="aws">AWS</option>
                     <option value="gcp">Google Cloud</option>
@@ -306,12 +340,16 @@ export default function NewEventPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">リージョン</label>
+                  <label className="block text-sm font-medium mb-2">
+                    リージョン
+                  </label>
                   <Select
                     value={selectedRegions[0]}
                     onChange={(e) => setSelectedRegions([e.target.value])}
                   >
-                    <option value="ap-northeast-1">東京 (ap-northeast-1)</option>
+                    <option value="ap-northeast-1">
+                      東京 (ap-northeast-1)
+                    </option>
                     <option value="us-east-1">バージニア (us-east-1)</option>
                     <option value="us-west-2">オレゴン (us-west-2)</option>
                     <option value="eu-west-1">アイルランド (eu-west-1)</option>
@@ -325,7 +363,9 @@ export default function NewEventPage() {
           {currentStep === 'problems' && (
             <div>
               <div className="mb-4">
-                <h3 className="font-medium mb-2">問題を選択 ({selectedProblemIds.length} 件選択中)</h3>
+                <h3 className="font-medium mb-2">
+                  問題を選択 ({selectedProblemIds.length} 件選択中)
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   イベントで出題する問題を選択してください
                 </p>
@@ -334,7 +374,10 @@ export default function NewEventPage() {
               {loadingProblems ? (
                 <div className="space-y-2">
                   {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-20 bg-gray-100 animate-pulse rounded-lg" />
+                    <div
+                      key={i}
+                      className="h-20 bg-gray-100 animate-pulse rounded-lg"
+                    />
                   ))}
                 </div>
               ) : (
@@ -354,8 +397,16 @@ export default function NewEventPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium">{problem.title}</span>
                             {problem.isVerified && (
-                              <svg className="h-4 w-4 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              <svg
+                                className="h-4 w-4 text-blue-500"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                  clipRule="evenodd"
+                                />
                               </svg>
                             )}
                           </div>
@@ -376,11 +427,13 @@ export default function NewEventPage() {
                             )}
                           </div>
                         </div>
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${
-                          selectedProblemIds.includes(problem.id)
-                            ? 'bg-primary border-primary text-primary-foreground'
-                            : 'border-gray-300'
-                        }`}>
+                        <div
+                          className={`w-5 h-5 rounded border flex items-center justify-center ${
+                            selectedProblemIds.includes(problem.id)
+                              ? 'bg-primary border-primary text-primary-foreground'
+                              : 'border-gray-300'
+                          }`}
+                        >
                           {selectedProblemIds.includes(problem.id) && '✓'}
                         </div>
                       </div>
@@ -395,21 +448,28 @@ export default function NewEventPage() {
           {currentStep === 'settings' && (
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-2">採点方式</label>
+                <label className="block text-sm font-medium mb-2">
+                  採点方式
+                </label>
                 <Select
                   value={scoringType}
-                  onChange={(e) => setScoringType(e.target.value as 'realtime' | 'batch')}
+                  onChange={(e) =>
+                    setScoringType(e.target.value as 'realtime' | 'batch')
+                  }
                 >
                   <option value="realtime">リアルタイム採点</option>
                   <option value="batch">バッチ採点</option>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">
-                  リアルタイム: 定期的に自動採点 / バッチ: 手動または定期的なバッチ処理
+                  リアルタイム: 定期的に自動採点 / バッチ:
+                  手動または定期的なバッチ処理
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">採点間隔 (分)</label>
+                <label className="block text-sm font-medium mb-2">
+                  採点間隔 (分)
+                </label>
                 <Input
                   type="number"
                   min={1}
@@ -427,7 +487,10 @@ export default function NewEventPage() {
                   onChange={(e) => setLeaderboardVisible(e.target.checked)}
                   className="w-4 h-4"
                 />
-                <label htmlFor="leaderboardVisible" className="text-sm font-medium">
+                <label
+                  htmlFor="leaderboardVisible"
+                  className="text-sm font-medium"
+                >
                   リーダーボードを表示
                 </label>
               </div>
@@ -463,9 +526,13 @@ export default function NewEventPage() {
                   <dt className="text-muted-foreground">タイプ</dt>
                   <dd>{type === 'gameday' ? 'GameDay' : 'JAM'}</dd>
                   <dt className="text-muted-foreground">開始</dt>
-                  <dd>{startDate} {startTime}</dd>
+                  <dd>
+                    {startDate} {startTime}
+                  </dd>
                   <dt className="text-muted-foreground">終了</dt>
-                  <dd>{endDate} {endTime}</dd>
+                  <dd>
+                    {endDate} {endTime}
+                  </dd>
                   <dt className="text-muted-foreground">参加形式</dt>
                   <dd>
                     {participantType === 'team'
@@ -475,16 +542,22 @@ export default function NewEventPage() {
                   <dt className="text-muted-foreground">最大参加数</dt>
                   <dd>{maxParticipants}</dd>
                   <dt className="text-muted-foreground">クラウド</dt>
-                  <dd className="uppercase">{cloudProvider} ({selectedRegions.join(', ')})</dd>
+                  <dd className="uppercase">
+                    {cloudProvider} ({selectedRegions.join(', ')})
+                  </dd>
                 </dl>
               </div>
 
               <div>
-                <h3 className="font-medium mb-3">選択した問題 ({selectedProblems.length} 件)</h3>
+                <h3 className="font-medium mb-3">
+                  選択した問題 ({selectedProblems.length} 件)
+                </h3>
                 <ul className="space-y-1 text-sm">
                   {selectedProblems.map((problem, index) => (
                     <li key={problem.id} className="flex items-center gap-2">
-                      <span className="text-muted-foreground">{index + 1}.</span>
+                      <span className="text-muted-foreground">
+                        {index + 1}.
+                      </span>
                       <span>{problem.title}</span>
                       <Badge variant="outline" className="text-xs">
                         {problem.difficulty}
@@ -498,7 +571,9 @@ export default function NewEventPage() {
                 <h3 className="font-medium mb-3">採点設定</h3>
                 <dl className="grid grid-cols-2 gap-2 text-sm">
                   <dt className="text-muted-foreground">採点方式</dt>
-                  <dd>{scoringType === 'realtime' ? 'リアルタイム' : 'バッチ'}</dd>
+                  <dd>
+                    {scoringType === 'realtime' ? 'リアルタイム' : 'バッチ'}
+                  </dd>
                   <dt className="text-muted-foreground">採点間隔</dt>
                   <dd>{scoringInterval}分</dd>
                   <dt className="text-muted-foreground">リーダーボード</dt>
@@ -526,24 +601,15 @@ export default function NewEventPage() {
           戻る
         </Button>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => router.push('/events')}
-          >
+          <Button variant="outline" onClick={() => router.push('/events')}>
             キャンセル
           </Button>
           {currentStep === 'review' ? (
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
               {isSubmitting ? '作成中...' : 'イベントを作成'}
             </Button>
           ) : (
-            <Button
-              onClick={goToNext}
-              disabled={!canProceed()}
-            >
+            <Button onClick={goToNext} disabled={!canProceed()}>
               次へ
             </Button>
           )}

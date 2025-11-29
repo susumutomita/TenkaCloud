@@ -5,5 +5,13 @@
  */
 
 export { prisma } from './prisma-client';
-export { PrismaEventRepository, getEventWithProblems, addProblemToEvent, removeProblemFromEvent } from './event-repository';
-export { PrismaProblemRepository, PrismaMarketplaceRepository } from './problem-repository';
+export {
+  PrismaEventRepository,
+  getEventWithProblems,
+  addProblemToEvent,
+  removeProblemFromEvent,
+} from './event-repository';
+export {
+  PrismaProblemRepository,
+  PrismaMarketplaceRepository,
+} from './problem-repository';

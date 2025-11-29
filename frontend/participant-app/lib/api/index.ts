@@ -2,13 +2,13 @@
  * API Client - Public Exports
  */
 
-export * from "./challenges";
+export * from './challenges';
 // Client
-export { apiRequest, del, get, patch, post, put } from "./client";
+export { apiRequest, del, get, patch, post, put } from './client';
 
 // API Functions
-export * from "./events";
-export * from "./profile";
-export * from "./teams";
+export * from './events';
+export * from './profile';
+export * from './teams';
 // Types
-export * from "./types";
+export * from './types';

@@ -12,7 +12,9 @@ import {
 import type { Event, ScoringResult } from '../types';
 
 // テスト用のモックデータ
-const createMockEventData = (overrides: Partial<Omit<Event, 'id' | 'createdAt' | 'updatedAt'>> = {}): Omit<Event, 'id' | 'createdAt' | 'updatedAt'> => ({
+const createMockEventData = (
+  overrides: Partial<Omit<Event, 'id' | 'createdAt' | 'updatedAt'>> = {}
+): Omit<Event, 'id' | 'createdAt' | 'updatedAt'> => ({
   name: 'テストイベント',
   type: 'gameday',
   status: 'draft',
@@ -72,7 +74,9 @@ describe('InMemoryEventRepository', () => {
       expect(updated.name).toBe('更新後イベント名');
       expect(updated.status).toBe('scheduled');
       expect(updated.id).toBe(created.id);
-      expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+      expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(
+        created.updatedAt.getTime()
+      );
     });
 
     it('存在しないイベントを更新しようとするとエラーになるべき', async () => {
@@ -128,46 +132,58 @@ describe('InMemoryEventRepository', () => {
 
   describe('findByTenant', () => {
     beforeEach(async () => {
-      await repository.create(createMockEventData({
-        tenantId: 'tenant-1',
-        type: 'gameday',
-        status: 'draft',
-        startTime: new Date('2024-06-01T09:00:00Z'),
-      }));
-      await repository.create(createMockEventData({
-        tenantId: 'tenant-1',
-        type: 'jam',
-        status: 'active',
-        startTime: new Date('2024-07-01T09:00:00Z'),
-      }));
-      await repository.create(createMockEventData({
-        tenantId: 'tenant-2',
-        type: 'gameday',
-        status: 'completed',
-        startTime: new Date('2024-05-01T09:00:00Z'),
-      }));
+      await repository.create(
+        createMockEventData({
+          tenantId: 'tenant-1',
+          type: 'gameday',
+          status: 'draft',
+          startTime: new Date('2024-06-01T09:00:00Z'),
+        })
+      );
+      await repository.create(
+        createMockEventData({
+          tenantId: 'tenant-1',
+          type: 'jam',
+          status: 'active',
+          startTime: new Date('2024-07-01T09:00:00Z'),
+        })
+      );
+      await repository.create(
+        createMockEventData({
+          tenantId: 'tenant-2',
+          type: 'gameday',
+          status: 'completed',
+          startTime: new Date('2024-05-01T09:00:00Z'),
+        })
+      );
     });
 
     it('テナントIDでイベントを取得できるべき', async () => {
       const events = await repository.findByTenant('tenant-1');
       expect(events).toHaveLength(2);
-      expect(events.every(e => e.tenantId === 'tenant-1')).toBe(true);
+      expect(events.every((e) => e.tenantId === 'tenant-1')).toBe(true);
     });
 
     it('タイプでフィルタリングできるべき', async () => {
-      const events = await repository.findByTenant('tenant-1', { type: 'gameday' });
+      const events = await repository.findByTenant('tenant-1', {
+        type: 'gameday',
+      });
       expect(events).toHaveLength(1);
       expect(events[0].type).toBe('gameday');
     });
 
     it('ステータスでフィルタリングできるべき（単一）', async () => {
-      const events = await repository.findByTenant('tenant-1', { status: 'draft' });
+      const events = await repository.findByTenant('tenant-1', {
+        status: 'draft',
+      });
       expect(events).toHaveLength(1);
       expect(events[0].status).toBe('draft');
     });
 
     it('ステータスでフィルタリングできるべき（複数）', async () => {
-      const events = await repository.findByTenant('tenant-1', { status: ['draft', 'active'] });
+      const events = await repository.findByTenant('tenant-1', {
+        status: ['draft', 'active'],
+      });
       expect(events).toHaveLength(2);
     });
 
@@ -176,7 +192,9 @@ describe('InMemoryEventRepository', () => {
         startAfter: new Date('2024-06-15T00:00:00Z'),
       });
       expect(events).toHaveLength(1);
-      expect(events[0].startTime.getTime()).toBeGreaterThan(new Date('2024-06-15T00:00:00Z').getTime());
+      expect(events[0].startTime.getTime()).toBeGreaterThan(
+        new Date('2024-06-15T00:00:00Z').getTime()
+      );
     });
 
     it('開始日時でフィルタリングできるべき（before）', async () => {
@@ -184,17 +202,27 @@ describe('InMemoryEventRepository', () => {
         startBefore: new Date('2024-06-15T00:00:00Z'),
       });
       expect(events).toHaveLength(1);
-      expect(events[0].startTime.getTime()).toBeLessThan(new Date('2024-06-15T00:00:00Z').getTime());
+      expect(events[0].startTime.getTime()).toBeLessThan(
+        new Date('2024-06-15T00:00:00Z').getTime()
+      );
     });
 
     it('開始日時の降順でソートされるべき', async () => {
       const events = await repository.findByTenant('tenant-1');
-      expect(events[0].startTime.getTime()).toBeGreaterThan(events[1].startTime.getTime());
+      expect(events[0].startTime.getTime()).toBeGreaterThan(
+        events[1].startTime.getTime()
+      );
     });
 
     it('ページネーションが動作するべき', async () => {
-      const page1 = await repository.findByTenant('tenant-1', { limit: 1, offset: 0 });
-      const page2 = await repository.findByTenant('tenant-1', { limit: 1, offset: 1 });
+      const page1 = await repository.findByTenant('tenant-1', {
+        limit: 1,
+        offset: 0,
+      });
+      const page2 = await repository.findByTenant('tenant-1', {
+        limit: 1,
+        offset: 1,
+      });
 
       expect(page1).toHaveLength(1);
       expect(page2).toHaveLength(1);
@@ -202,9 +230,38 @@ describe('InMemoryEventRepository', () => {
     });
   });
 
+  describe('count', () => {
+    beforeEach(async () => {
+      await repository.create(
+        createMockEventData({ tenantId: 'tenant-1', type: 'gameday' })
+      );
+      await repository.create(
+        createMockEventData({ tenantId: 'tenant-1', type: 'jam' })
+      );
+      await repository.create(
+        createMockEventData({ tenantId: 'tenant-2', type: 'gameday' })
+      );
+    });
+
+    it('テナント単位で件数を返すべき', async () => {
+      const total = await repository.count({ tenantId: 'tenant-1' });
+      expect(total).toBe(2);
+    });
+
+    it('フィルターとテナントを組み合わせて件数を返すべき', async () => {
+      const total = await repository.count({
+        tenantId: 'tenant-1',
+        type: 'gameday',
+      });
+      expect(total).toBe(1);
+    });
+  });
+
   describe('updateStatus', () => {
     it('イベントのステータスを更新できるべき', async () => {
-      const created = await repository.create(createMockEventData({ status: 'draft' }));
+      const created = await repository.create(
+        createMockEventData({ status: 'draft' })
+      );
 
       await repository.updateStatus(created.id, 'active');
 
@@ -241,7 +298,9 @@ describe('InMemoryLeaderboardRepository', () => {
     repository = new InMemoryLeaderboardRepository();
   });
 
-  const createScoringResult = (overrides: Partial<ScoringResult> = {}): ScoringResult => ({
+  const createScoringResult = (
+    overrides: Partial<ScoringResult> = {}
+  ): ScoringResult => ({
     eventId: 'event-1',
     problemId: 'problem-1',
     competitorAccountId: 'account-1',
@@ -275,10 +334,13 @@ describe('InMemoryLeaderboardRepository', () => {
 
   describe('updateScore', () => {
     it('新しいエントリを作成できるべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          totalScore: 100,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries).toHaveLength(1);
@@ -287,17 +349,23 @@ describe('InMemoryLeaderboardRepository', () => {
     });
 
     it('既存のエントリを更新できるべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        problemId: 'problem-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          problemId: 'problem-1',
+          totalScore: 100,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        problemId: 'problem-2',
-        totalScore: 50,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          problemId: 'problem-2',
+          totalScore: 50,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries).toHaveLength(1);
@@ -307,22 +375,31 @@ describe('InMemoryLeaderboardRepository', () => {
     });
 
     it('複数チームの順位を正しく計算するべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          totalScore: 100,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-2',
-        competitorAccountId: 'account-2',
-        totalScore: 150,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-2',
+          competitorAccountId: 'account-2',
+          totalScore: 150,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-3',
-        competitorAccountId: 'account-3',
-        totalScore: 80,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-3',
+          competitorAccountId: 'account-3',
+          totalScore: 80,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries[0].teamId).toBe('team-2');
@@ -334,45 +411,60 @@ describe('InMemoryLeaderboardRepository', () => {
     });
 
     it('スコアが上昇するとトレンドがupになるべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        problemId: 'problem-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          problemId: 'problem-1',
+          totalScore: 100,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        problemId: 'problem-2',
-        totalScore: 50,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          problemId: 'problem-2',
+          totalScore: 50,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries[0].trend).toBe('up');
     });
 
     it('スコアが変わらないとトレンドがsameになるべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        problemId: 'problem-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          problemId: 'problem-1',
+          totalScore: 100,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        problemId: 'problem-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          problemId: 'problem-1',
+          totalScore: 100,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries[0].trend).toBe('same');
     });
 
     it('チームIDがない場合はparticipantIdを使用するべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: undefined,
-        competitorAccountId: 'individual-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: undefined,
+          competitorAccountId: 'individual-1',
+          totalScore: 100,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries[0].participantId).toBe('individual-1');
@@ -390,26 +482,35 @@ describe('InMemoryLeaderboardRepository', () => {
     });
 
     it('凍結中はスコアを更新しても順位が変わらないべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          totalScore: 100,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-2',
-        competitorAccountId: 'account-2',
-        totalScore: 50,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-2',
+          competitorAccountId: 'account-2',
+          totalScore: 50,
+        })
+      );
 
       await repository.freezeLeaderboard('event-1');
 
       // team-2のスコアが大幅アップしても順位は変わらない
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-2',
-        competitorAccountId: 'account-2',
-        problemId: 'problem-2',
-        totalScore: 200,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-2',
+          competitorAccountId: 'account-2',
+          problemId: 'problem-2',
+          totalScore: 200,
+        })
+      );
 
       const leaderboard = await repository.getLeaderboard('event-1');
       expect(leaderboard?.entries[0].teamId).toBe('team-1');
@@ -428,26 +529,35 @@ describe('InMemoryLeaderboardRepository', () => {
     });
 
     it('凍結解除後は順位が再計算されるべき', async () => {
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-1',
-        totalScore: 100,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-1',
+          totalScore: 100,
+        })
+      );
 
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-2',
-        competitorAccountId: 'account-2',
-        totalScore: 50,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-2',
+          competitorAccountId: 'account-2',
+          totalScore: 50,
+        })
+      );
 
       await repository.freezeLeaderboard('event-1');
 
       // 凍結中に大幅スコアアップ
-      await repository.updateScore('event-1', createScoringResult({
-        teamId: 'team-2',
-        competitorAccountId: 'account-2',
-        problemId: 'problem-2',
-        totalScore: 200,
-      }));
+      await repository.updateScore(
+        'event-1',
+        createScoringResult({
+          teamId: 'team-2',
+          competitorAccountId: 'account-2',
+          problemId: 'problem-2',
+          totalScore: 200,
+        })
+      );
 
       // 凍結解除
       await repository.unfreezeLeaderboard('event-1');
@@ -472,7 +582,10 @@ describe('InMemoryLeaderboardRepository', () => {
   describe('clear', () => {
     it('全てのリーダーボードをクリアできるべき', async () => {
       await repository.updateScore('event-1', createScoringResult());
-      await repository.updateScore('event-2', createScoringResult({ eventId: 'event-2' }));
+      await repository.updateScore(
+        'event-2',
+        createScoringResult({ eventId: 'event-2' })
+      );
 
       repository.clear();
 

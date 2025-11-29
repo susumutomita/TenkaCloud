@@ -103,9 +103,14 @@ export class ScoringEngine {
   /**
    * 採点関数の登録
    */
-  registerScoringFunction(provider: CloudProvider, scoringFunction: IScoringExecutor): void {
+  registerScoringFunction(
+    provider: CloudProvider,
+    scoringFunction: IScoringExecutor
+  ): void {
     this.scoringFunctions.set(provider, scoringFunction);
-    console.log(`[ScoringEngine] Registered scoring function for provider: ${provider}`);
+    console.log(
+      `[ScoringEngine] Registered scoring function for provider: ${provider}`
+    );
   }
 
   /**
@@ -134,7 +139,9 @@ export class ScoringEngine {
     };
 
     this.jobQueue.push(job);
-    console.log(`[ScoringEngine] Job enqueued: ${jobId} for problem ${request.problemId}`);
+    console.log(
+      `[ScoringEngine] Job enqueued: ${jobId} for problem ${request.problemId}`
+    );
 
     // 処理を開始
     this.processQueue();
@@ -146,15 +153,17 @@ export class ScoringEngine {
    * 一括採点のエンキュー
    */
   enqueueBatch(requests: ScoringRequest[]): string[] {
-    return requests.map(request => this.enqueue(request));
+    return requests.map((request) => this.enqueue(request));
   }
 
   /**
    * ジョブステータスの取得
    */
   getJobStatus(jobId: string): ScoringJob | undefined {
-    return this.activeJobs.get(jobId) ||
-      this.jobQueue.find(job => job.id === jobId);
+    return (
+      this.activeJobs.get(jobId) ||
+      this.jobQueue.find((job) => job.id === jobId)
+    );
   }
 
   /**
@@ -168,14 +177,17 @@ export class ScoringEngine {
     this.isProcessing = true;
 
     try {
-      while (this.jobQueue.length > 0 && this.activeJobs.size < this.config.maxConcurrency) {
+      while (
+        this.jobQueue.length > 0 &&
+        this.activeJobs.size < this.config.maxConcurrency
+      ) {
         const job = this.jobQueue.shift();
         if (!job) {
           break;
         }
 
         this.activeJobs.set(job.id, job);
-        this.executeJob(job).catch(error => {
+        this.executeJob(job).catch((error) => {
           console.error(`[ScoringEngine] Job ${job.id} failed:`, error);
         });
       }
@@ -197,7 +209,9 @@ export class ScoringEngine {
     try {
       const scoringFunction = this.scoringFunctions.get(provider);
       if (!scoringFunction) {
-        throw new Error(`No scoring function registered for provider: ${provider}`);
+        throw new Error(
+          `No scoring function registered for provider: ${provider}`
+        );
       }
 
       // タイムアウト付きで採点実行
@@ -215,16 +229,17 @@ export class ScoringEngine {
       job.completedAt = new Date();
 
       // criteriaResults を scores に変換
-      const scores = result.criteriaResults.map(cr => ({
+      const scores = result.criteriaResults.map((cr) => ({
         criterion: cr.name,
         score: cr.points,
         maxScore: cr.maxPoints,
         details: cr.feedback,
       }));
 
-      const percentage = result.maxPossibleScore > 0
-        ? Math.round((result.totalScore / result.maxPossibleScore) * 100)
-        : 0;
+      const percentage =
+        result.maxPossibleScore > 0
+          ? Math.round((result.totalScore / result.maxPossibleScore) * 100)
+          : 0;
 
       job.result = {
         eventId: request.eventId,
@@ -241,16 +256,20 @@ export class ScoringEngine {
       // サブスクライバーに通知
       this.notifySubscribers(job.result);
 
-      console.log(`[ScoringEngine] Job ${job.id} completed with score: ${job.result.totalScore}`);
-
+      console.log(
+        `[ScoringEngine] Job ${job.id} completed with score: ${job.result.totalScore}`
+      );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       // リトライ判定
       if (job.retryCount < this.config.retryAttempts) {
         job.retryCount++;
         job.status = 'pending';
-        console.log(`[ScoringEngine] Job ${job.id} failed, retrying (${job.retryCount}/${this.config.retryAttempts})`);
+        console.log(
+          `[ScoringEngine] Job ${job.id} failed, retrying (${job.retryCount}/${this.config.retryAttempts})`
+        );
 
         // 遅延してリトライ
         await this.delay(this.config.retryDelayMs);
@@ -259,7 +278,10 @@ export class ScoringEngine {
         job.status = 'failed';
         job.completedAt = new Date();
         job.error = errorMessage;
-        console.error(`[ScoringEngine] Job ${job.id} failed permanently:`, errorMessage);
+        console.error(
+          `[ScoringEngine] Job ${job.id} failed permanently:`,
+          errorMessage
+        );
       }
     } finally {
       this.activeJobs.delete(job.id);
@@ -286,7 +308,7 @@ export class ScoringEngine {
    * 遅延
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -352,7 +374,7 @@ export class LambdaScoringFunction implements IScoringExecutor {
     // }));
 
     // シミュレーション: 採点基準に基づいてスコアを計算
-    const criteriaResults = problem.scoring.criteria.map(criterion => ({
+    const criteriaResults = problem.scoring.criteria.map((criterion) => ({
       name: criterion.name,
       points: Math.floor(Math.random() * criterion.maxPoints),
       maxPoints: criterion.maxPoints,
@@ -361,7 +383,10 @@ export class LambdaScoringFunction implements IScoringExecutor {
     }));
 
     const totalScore = criteriaResults.reduce((sum, r) => sum + r.points, 0);
-    const maxPossibleScore = criteriaResults.reduce((sum, r) => sum + r.maxPoints, 0);
+    const maxPossibleScore = criteriaResults.reduce(
+      (sum, r) => sum + r.maxPoints,
+      0
+    );
 
     return {
       totalScore,
@@ -388,15 +413,19 @@ export class ContainerScoringFunction implements IScoringExecutor {
     credentials: CloudCredentials,
     competitorAccountId: string
   ): Promise<ScoringExecutionResult> {
-    console.log(`[ContainerScoring] Executing scoring for problem ${problem.id}`);
+    console.log(
+      `[ContainerScoring] Executing scoring for problem ${problem.id}`
+    );
     console.log(`[ContainerScoring] Image URI: ${this.imageUri}`);
-    console.log(`[ContainerScoring] Competitor Account: ${competitorAccountId}`);
+    console.log(
+      `[ContainerScoring] Competitor Account: ${competitorAccountId}`
+    );
 
     // 実際の実装では ECS/Fargate でコンテナを起動して採点
     // または Kubernetes Job を作成
 
     // シミュレーション
-    const criteriaResults = problem.scoring.criteria.map(criterion => ({
+    const criteriaResults = problem.scoring.criteria.map((criterion) => ({
       name: criterion.name,
       points: Math.floor(Math.random() * criterion.maxPoints),
       maxPoints: criterion.maxPoints,
@@ -405,7 +434,10 @@ export class ContainerScoringFunction implements IScoringExecutor {
     }));
 
     const totalScore = criteriaResults.reduce((sum, r) => sum + r.points, 0);
-    const maxPossibleScore = criteriaResults.reduce((sum, r) => sum + r.maxPoints, 0);
+    const maxPossibleScore = criteriaResults.reduce(
+      (sum, r) => sum + r.maxPoints,
+      0
+    );
 
     return {
       totalScore,
@@ -431,9 +463,9 @@ export class LocalScoringFunction implements IScoringExecutor {
     console.log(`[LocalScoring] Competitor Account: ${competitorAccountId}`);
 
     // ローカルでの採点シミュレーション
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    const criteriaResults = problem.scoring.criteria.map(criterion => ({
+    const criteriaResults = problem.scoring.criteria.map((criterion) => ({
       name: criterion.name,
       points: criterion.maxPoints, // ローカルでは満点
       maxPoints: criterion.maxPoints,
@@ -442,7 +474,10 @@ export class LocalScoringFunction implements IScoringExecutor {
     }));
 
     const totalScore = criteriaResults.reduce((sum, r) => sum + r.points, 0);
-    const maxPossibleScore = criteriaResults.reduce((sum, r) => sum + r.maxPoints, 0);
+    const maxPossibleScore = criteriaResults.reduce(
+      (sum, r) => sum + r.maxPoints,
+      0
+    );
 
     return {
       totalScore,
@@ -456,7 +491,9 @@ export class LocalScoringFunction implements IScoringExecutor {
 /**
  * デフォルトの採点エンジンインスタンスを取得
  */
-export function createScoringEngine(config?: Partial<ScoringEngineConfig>): ScoringEngine {
+export function createScoringEngine(
+  config?: Partial<ScoringEngineConfig>
+): ScoringEngine {
   const engine = new ScoringEngine(config);
 
   // ローカル採点関数をデフォルトで登録

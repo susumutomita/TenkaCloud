@@ -4,12 +4,12 @@
  * チャレンジ（問題）詳細ページ - GameDay / JAM 共通
  */
 
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Header } from "../../../../../components/layout";
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Header } from '../../../../../components/layout';
 import {
   Badge,
   Button,
@@ -19,7 +19,7 @@ import {
   DifficultyBadge,
   ProblemTypeBadge,
   ScoreProgress,
-} from "../../../../../components/ui";
+} from '../../../../../components/ui';
 import {
   getAWSCredentials,
   getChallengeDetails,
@@ -29,7 +29,7 @@ import {
   revealClue,
   revealHint,
   submitJamAnswer,
-} from "../../../../../lib/api/challenges";
+} from '../../../../../lib/api/challenges';
 import type {
   AWSCredentials,
   ChallengeDetails,
@@ -38,7 +38,7 @@ import type {
   JamClue,
   JamSubmission,
   Submission,
-} from "../../../../../lib/api/types";
+} from '../../../../../lib/api/types';
 
 export default function ChallengeDetailPage() {
   const params = useParams();
@@ -58,10 +58,10 @@ export default function ChallengeDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   // JAM specific state
-  const [answer, setAnswer] = useState("");
+  const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const isJam = challenge?.type === "jam";
+  const isJam = challenge?.type === 'jam';
 
   useEffect(() => {
     async function fetchData() {
@@ -83,7 +83,7 @@ export default function ChallengeDetailPage() {
         setChallenge(challengeData);
 
         // Fetch credentials for GameDay
-        if (challengeData.type === "gameday") {
+        if (challengeData.type === 'gameday') {
           const creds = await getAWSCredentials(eventId, challengeId);
           setCredentials(creds);
         }
@@ -92,7 +92,7 @@ export default function ChallengeDetailPage() {
         const submission = await getLatestSubmission(eventId, challengeId);
         setLatestSubmission(submission);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
+        setError(err instanceof Error ? err.message : '読み込みに失敗しました');
       } finally {
         setLoading(false);
       }
@@ -112,7 +112,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "ヒントの公開に失敗しました",
+        err instanceof Error ? err.message : 'ヒントの公開に失敗しました'
       );
     }
   };
@@ -126,12 +126,12 @@ export default function ChallengeDetailPage() {
       setChallenge({
         ...jamChallenge,
         clues: jamChallenge.clues.map((c) =>
-          c.id === clueId ? revealedClue : c,
+          c.id === clueId ? revealedClue : c
         ),
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "クルーの公開に失敗しました",
+        err instanceof Error ? err.message : 'クルーの公開に失敗しました'
       );
     }
   };
@@ -146,11 +146,11 @@ export default function ChallengeDetailPage() {
         problemId: challengeId,
         eventId,
         submittedAt: new Date().toISOString(),
-        status: "pending",
+        status: 'pending',
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "採点リクエストに失敗しました",
+        err instanceof Error ? err.message : '採点リクエストに失敗しました'
       );
     } finally {
       setScoring(false);
@@ -167,10 +167,10 @@ export default function ChallengeDetailPage() {
       });
       setLatestSubmission(submission);
       if (submission.isCorrect) {
-        setAnswer("");
+        setAnswer('');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "回答の提出に失敗しました");
+      setError(err instanceof Error ? err.message : '回答の提出に失敗しました');
     } finally {
       setSubmitting(false);
     }
@@ -194,7 +194,7 @@ export default function ChallengeDetailPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card className="p-8 text-center">
             <p className="text-red-600 mb-4">
-              {error || "チャレンジが見つかりません"}
+              {error || 'チャレンジが見つかりません'}
             </p>
             <Link href={`/events/${eventId}`}>
               <Button>イベントに戻る</Button>
@@ -323,7 +323,7 @@ export default function ChallengeDetailPage() {
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="font-medium">{criterion.name}</h4>
                         <span className="font-semibold text-blue-600">
-                          {criterion.currentPoints ?? 0} / {criterion.maxPoints}{" "}
+                          {criterion.currentPoints ?? 0} / {criterion.maxPoints}{' '}
                           pts
                         </span>
                       </div>
@@ -365,9 +365,9 @@ export default function ChallengeDetailPage() {
                           rel="noopener noreferrer"
                           className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-2"
                         >
-                          {resource.type === "video" && "🎬"}
-                          {resource.type === "document" && "📄"}
-                          {resource.type === "link" && "🔗"}
+                          {resource.type === 'video' && '🎬'}
+                          {resource.type === 'document' && '📄'}
+                          {resource.type === 'link' && '🔗'}
                           {resource.name}
                         </a>
                       </li>
@@ -404,11 +404,11 @@ export default function ChallengeDetailPage() {
                     loading={scoring}
                     fullWidth
                     size="lg"
-                    disabled={scoring || latestSubmission?.status === "scoring"}
+                    disabled={scoring || latestSubmission?.status === 'scoring'}
                   >
-                    {latestSubmission?.status === "scoring"
-                      ? "採点中..."
-                      : "採点をリクエスト"}
+                    {latestSubmission?.status === 'scoring'
+                      ? '採点中...'
+                      : '採点をリクエスト'}
                   </Button>
                 )}
 
@@ -441,17 +441,17 @@ export default function ChallengeDetailPage() {
                     <div className="flex items-center justify-between">
                       <Badge
                         variant={
-                          latestSubmission.status === "completed"
-                            ? "success"
-                            : latestSubmission.status === "failed"
-                              ? "danger"
-                              : "default"
+                          latestSubmission.status === 'completed'
+                            ? 'success'
+                            : latestSubmission.status === 'failed'
+                              ? 'danger'
+                              : 'default'
                         }
                       >
-                        {latestSubmission.status === "completed" && "完了"}
-                        {latestSubmission.status === "scoring" && "採点中"}
-                        {latestSubmission.status === "pending" && "待機中"}
-                        {latestSubmission.status === "failed" && "失敗"}
+                        {latestSubmission.status === 'completed' && '完了'}
+                        {latestSubmission.status === 'scoring' && '採点中'}
+                        {latestSubmission.status === 'pending' && '待機中'}
+                        {latestSubmission.status === 'failed' && '失敗'}
                       </Badge>
                       {latestSubmission.score !== undefined && (
                         <span className="font-semibold">
@@ -461,7 +461,7 @@ export default function ChallengeDetailPage() {
                     </div>
                     {/* JAM specific: show if correct */}
                     {isJam &&
-                      "isCorrect" in latestSubmission &&
+                      'isCorrect' in latestSubmission &&
                       latestSubmission.isCorrect !== undefined && (
                         <div className="mt-2">
                           {latestSubmission.isCorrect ? (
@@ -498,7 +498,7 @@ export default function ChallengeDetailPage() {
                   <div>
                     <div className="text-xs text-gray-500">有効期限</div>
                     <code className="text-sm">
-                      {new Date(credentials.expiresAt).toLocaleString("ja-JP")}
+                      {new Date(credentials.expiresAt).toLocaleString('ja-JP')}
                     </code>
                   </div>
                   <a

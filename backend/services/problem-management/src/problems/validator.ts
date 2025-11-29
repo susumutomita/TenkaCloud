@@ -105,7 +105,10 @@ function validateProblemBusinessRules(problem: Problem): ValidationError[] {
   const errors: ValidationError[] = [];
 
   // 採点基準の重みが100%になるか確認
-  const totalWeight = problem.scoring.criteria.reduce((sum, c) => sum + c.weight, 0);
+  const totalWeight = problem.scoring.criteria.reduce(
+    (sum, c) => sum + c.weight,
+    0
+  );
   if (totalWeight !== 100) {
     errors.push({
       path: '/scoring/criteria',
@@ -130,7 +133,11 @@ function validateProblemBusinessRules(problem: Problem): ValidationError[] {
   // リージョンが指定されている場合、対応プロバイダーがあるか確認
   if (problem.deployment.regions) {
     for (const provider of Object.keys(problem.deployment.regions)) {
-      if (!problem.deployment.providers.includes(provider as typeof problem.deployment.providers[number])) {
+      if (
+        !problem.deployment.providers.includes(
+          provider as (typeof problem.deployment.providers)[number]
+        )
+      ) {
         errors.push({
           path: `/deployment/regions/${provider}`,
           message: `リージョンが指定されたプロバイダー '${provider}' は providers に含まれていません`,
@@ -164,7 +171,8 @@ function validateEventBusinessRules(event: Event): ValidationError[] {
     if (!event.minTeamSize || !event.maxTeamSize) {
       errors.push({
         path: '/participantType',
-        message: 'チーム参加の場合、minTeamSize と maxTeamSize の設定が必要です',
+        message:
+          'チーム参加の場合、minTeamSize と maxTeamSize の設定が必要です',
         keyword: 'team-size-required',
       });
     } else if (event.minTeamSize > event.maxTeamSize) {
@@ -186,7 +194,7 @@ function validateEventBusinessRules(event: Event): ValidationError[] {
  * Ajv エラーを ValidationError 形式に変換
  */
 function formatAjvErrors(errors: ErrorObject[]): ValidationError[] {
-  return errors.map(error => ({
+  return errors.map((error) => ({
     path: error.instancePath || '/',
     message: error.message || 'Unknown error',
     keyword: error.keyword,
@@ -217,11 +225,13 @@ export async function parseAndValidateProblemYaml(yaml: string): Promise<{
     return {
       result: {
         valid: false,
-        errors: [{
-          path: '/',
-          message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
-          keyword: 'parse-error',
-        }],
+        errors: [
+          {
+            path: '/',
+            message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
+            keyword: 'parse-error',
+          },
+        ],
       },
     };
   }
@@ -249,11 +259,13 @@ export async function parseAndValidateEventYaml(yaml: string): Promise<{
     return {
       result: {
         valid: false,
-        errors: [{
-          path: '/',
-          message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
-          keyword: 'parse-error',
-        }],
+        errors: [
+          {
+            path: '/',
+            message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
+            keyword: 'parse-error',
+          },
+        ],
       },
     };
   }

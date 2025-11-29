@@ -61,7 +61,9 @@ export interface AuthenticatedUser {
 /**
  * JWT トークンを検証してユーザー情報を取得
  */
-export async function verifyToken(token: string): Promise<AuthenticatedUser | null> {
+export async function verifyToken(
+  token: string
+): Promise<AuthenticatedUser | null> {
   try {
     const { payload } = await jwtVerify(token, getJWKS(), {
       issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
@@ -90,14 +92,20 @@ export function hasRole(user: AuthenticatedUser, role: UserRole): boolean {
   return user.roles.includes(role);
 }
 
-export function hasAnyRole(user: AuthenticatedUser, roles: UserRole[]): boolean {
+export function hasAnyRole(
+  user: AuthenticatedUser,
+  roles: UserRole[]
+): boolean {
   return roles.some((role) => user.roles.includes(role));
 }
 
 /**
  * チームへのアクセス権チェック
  */
-export function canAccessTeam(user: AuthenticatedUser, teamId: string): boolean {
+export function canAccessTeam(
+  user: AuthenticatedUser,
+  teamId: string
+): boolean {
   if (hasRole(user, UserRole.PLATFORM_ADMIN)) return true;
   if (hasRole(user, UserRole.TENANT_ADMIN)) return true;
   if (hasRole(user, UserRole.ORGANIZER)) return true;

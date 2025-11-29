@@ -148,9 +148,30 @@ describe('InMemoryProblemRepository', () => {
 
   describe('findAll', () => {
     beforeEach(async () => {
-      await repository.create(createMockProblem({ id: 'problem-1', type: 'gameday', category: 'architecture', difficulty: 'easy' }));
-      await repository.create(createMockProblem({ id: 'problem-2', type: 'jam', category: 'security', difficulty: 'medium' }));
-      await repository.create(createMockProblem({ id: 'problem-3', type: 'gameday', category: 'architecture', difficulty: 'hard' }));
+      await repository.create(
+        createMockProblem({
+          id: 'problem-1',
+          type: 'gameday',
+          category: 'architecture',
+          difficulty: 'easy',
+        })
+      );
+      await repository.create(
+        createMockProblem({
+          id: 'problem-2',
+          type: 'jam',
+          category: 'security',
+          difficulty: 'medium',
+        })
+      );
+      await repository.create(
+        createMockProblem({
+          id: 'problem-3',
+          type: 'gameday',
+          category: 'architecture',
+          difficulty: 'hard',
+        })
+      );
     });
 
     it('全ての問題を取得できるべき', async () => {
@@ -161,13 +182,13 @@ describe('InMemoryProblemRepository', () => {
     it('タイプでフィルタリングできるべき', async () => {
       const problems = await repository.findAll({ type: 'gameday' });
       expect(problems).toHaveLength(2);
-      expect(problems.every(p => p.type === 'gameday')).toBe(true);
+      expect(problems.every((p) => p.type === 'gameday')).toBe(true);
     });
 
     it('カテゴリでフィルタリングできるべき', async () => {
       const problems = await repository.findAll({ category: 'architecture' });
       expect(problems).toHaveLength(2);
-      expect(problems.every(p => p.category === 'architecture')).toBe(true);
+      expect(problems.every((p) => p.category === 'architecture')).toBe(true);
     });
 
     it('難易度でフィルタリングできるべき', async () => {
@@ -210,8 +231,12 @@ describe('InMemoryProblemRepository', () => {
     });
 
     it('フィルター付きで問題数を取得できるべき', async () => {
-      await repository.create(createMockProblem({ id: 'problem-1', type: 'gameday' }));
-      await repository.create(createMockProblem({ id: 'problem-2', type: 'jam' }));
+      await repository.create(
+        createMockProblem({ id: 'problem-1', type: 'gameday' })
+      );
+      await repository.create(
+        createMockProblem({ id: 'problem-2', type: 'jam' })
+      );
 
       const count = await repository.count({ type: 'gameday' });
       expect(count).toBe(1);
@@ -250,7 +275,9 @@ describe('InMemoryMarketplaceRepository', () => {
 
   beforeEach(() => {
     problemRepository = new InMemoryProblemRepository();
-    marketplaceRepository = new InMemoryMarketplaceRepository(problemRepository);
+    marketplaceRepository = new InMemoryMarketplaceRepository(
+      problemRepository
+    );
   });
 
   describe('publish', () => {
@@ -267,9 +294,9 @@ describe('InMemoryMarketplaceRepository', () => {
     });
 
     it('存在しない問題を公開しようとするとエラーになるべき', async () => {
-      await expect(marketplaceRepository.publish('non-existent')).rejects.toThrow(
-        "Problem with id 'non-existent' not found"
-      );
+      await expect(
+        marketplaceRepository.publish('non-existent')
+      ).rejects.toThrow("Problem with id 'non-existent' not found");
     });
   });
 
@@ -286,38 +313,59 @@ describe('InMemoryMarketplaceRepository', () => {
     });
 
     it('存在しないマーケットプレイス問題を非公開にしようとするとエラーになるべき', async () => {
-      await expect(marketplaceRepository.unpublish('non-existent')).rejects.toThrow(
-        "Marketplace problem with id 'non-existent' not found"
-      );
+      await expect(
+        marketplaceRepository.unpublish('non-existent')
+      ).rejects.toThrow("Marketplace problem with id 'non-existent' not found");
     });
   });
 
   describe('search', () => {
     beforeEach(async () => {
-      await problemRepository.create(createMockProblem({
-        id: 'problem-1',
-        title: 'EC2 入門',
-        type: 'gameday',
-        category: 'architecture',
-        difficulty: 'easy',
-        metadata: { author: 'test', version: '1.0.0', createdAt: '2024-01-01', tags: ['aws', 'ec2'] },
-      }));
-      await problemRepository.create(createMockProblem({
-        id: 'problem-2',
-        title: 'S3 セキュリティ',
-        type: 'jam',
-        category: 'security',
-        difficulty: 'medium',
-        metadata: { author: 'test', version: '1.0.0', createdAt: '2024-01-01', tags: ['aws', 's3'] },
-      }));
-      await problemRepository.create(createMockProblem({
-        id: 'problem-3',
-        title: 'Lambda パフォーマンス',
-        type: 'gameday',
-        category: 'performance',
-        difficulty: 'hard',
-        metadata: { author: 'test', version: '1.0.0', createdAt: '2024-01-01', tags: ['aws', 'lambda'] },
-      }));
+      await problemRepository.create(
+        createMockProblem({
+          id: 'problem-1',
+          title: 'EC2 入門',
+          type: 'gameday',
+          category: 'architecture',
+          difficulty: 'easy',
+          metadata: {
+            author: 'test',
+            version: '1.0.0',
+            createdAt: '2024-01-01',
+            tags: ['aws', 'ec2'],
+          },
+        })
+      );
+      await problemRepository.create(
+        createMockProblem({
+          id: 'problem-2',
+          title: 'S3 セキュリティ',
+          type: 'jam',
+          category: 'security',
+          difficulty: 'medium',
+          metadata: {
+            author: 'test',
+            version: '1.0.0',
+            createdAt: '2024-01-01',
+            tags: ['aws', 's3'],
+          },
+        })
+      );
+      await problemRepository.create(
+        createMockProblem({
+          id: 'problem-3',
+          title: 'Lambda パフォーマンス',
+          type: 'gameday',
+          category: 'performance',
+          difficulty: 'hard',
+          metadata: {
+            author: 'test',
+            version: '1.0.0',
+            createdAt: '2024-01-01',
+            tags: ['aws', 'lambda'],
+          },
+        })
+      );
 
       await marketplaceRepository.publish('problem-1');
       await marketplaceRepository.publish('problem-2');
@@ -342,7 +390,9 @@ describe('InMemoryMarketplaceRepository', () => {
     });
 
     it('カテゴリでフィルタリングできるべき', async () => {
-      const result = await marketplaceRepository.search({ category: 'security' });
+      const result = await marketplaceRepository.search({
+        category: 'security',
+      });
       expect(result.problems).toHaveLength(1);
     });
 
@@ -377,7 +427,9 @@ describe('InMemoryMarketplaceRepository', () => {
       await marketplaceRepository.incrementDownloads('mp-problem-2');
       await marketplaceRepository.incrementDownloads('mp-problem-1');
 
-      const result = await marketplaceRepository.search({ sortBy: 'downloads' });
+      const result = await marketplaceRepository.search({
+        sortBy: 'downloads',
+      });
       expect(result.problems[0].marketplaceId).toBe('mp-problem-2');
     });
 
@@ -386,7 +438,9 @@ describe('InMemoryMarketplaceRepository', () => {
 
       const result = await marketplaceRepository.search({});
       expect(result.problems).toHaveLength(2);
-      expect(result.problems.every(p => p.marketplaceId !== 'mp-problem-1')).toBe(true);
+      expect(
+        result.problems.every((p) => p.marketplaceId !== 'mp-problem-1')
+      ).toBe(true);
     });
   });
 

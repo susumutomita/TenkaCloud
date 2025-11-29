@@ -24,5 +24,8 @@ export function registerDefaultProviders(): void {
   // ローカルプロバイダーの登録
   factory.registerProvider(new LocalCloudProvider());
 
-  console.log('[Providers] Registered default providers:', factory.getRegisteredProviders());
+  console.log(
+    '[Providers] Registered default providers:',
+    factory.getRegisteredProviders()
+  );
 }

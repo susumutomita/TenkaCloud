@@ -12,11 +12,7 @@ export {
 } from './challenge';
 
 // 採点・クルーペナルティ
-export {
-  calculatePointsEarned,
-  openClue,
-  validateAnswer,
-} from './scoring';
+export { calculatePointsEarned, openClue, validateAnswer } from './scoring';
 
 // Pessimistic Locking
 export {

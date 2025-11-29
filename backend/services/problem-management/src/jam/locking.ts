@@ -88,7 +88,10 @@ export async function withLock<T>(
   // ロック取得
   const lockResult = await acquireLock(teamId, challengeId);
   if (!lockResult.success) {
-    return { success: false, error: lockResult.error || 'Failed to acquire lock' };
+    return {
+      success: false,
+      error: lockResult.error || 'Failed to acquire lock',
+    };
   }
 
   try {
@@ -109,12 +112,15 @@ export async function withLock<T>(
 export async function withSerializableTransaction<T>(
   operation: (tx: PrismaClient) => Promise<T>
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    return operation(tx as PrismaClient);
-  }, {
-    isolationLevel: 'Serializable',
-    timeout: 10000, // 10秒
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      return operation(tx as PrismaClient);
+    },
+    {
+      isolationLevel: 'Serializable',
+      timeout: 10000, // 10秒
+    }
+  );
 }
 
 /**

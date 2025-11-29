@@ -239,7 +239,8 @@ export async function getChallengeDetail(
       const scoring = scoringMap.get(task.titleId);
 
       // 使用済みクルーの説明を抽出
-      const usedClues = (progress?.usedClues as Array<{ description: string }>) || [];
+      const usedClues =
+        (progress?.usedClues as Array<{ description: string }>) || [];
 
       return {
         taskId: task.titleId,

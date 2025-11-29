@@ -100,7 +100,9 @@ const createEventSchema = z.object({
 });
 
 const updateEventSchema = createEventSchema.partial().extend({
-  status: z.enum(['draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled']).optional(),
+  status: z
+    .enum(['draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled'])
+    .optional(),
 });
 
 // イベント一覧取得
@@ -115,15 +117,30 @@ adminRouter.get('/events', async (c) => {
 
   try {
     const events = await eventRepository.findByTenant(tenantId, {
-      status: status as 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled' | undefined,
+      status: status as
+        | 'draft'
+        | 'scheduled'
+        | 'active'
+        | 'paused'
+        | 'completed'
+        | 'cancelled'
+        | undefined,
       type: type as 'gameday' | 'jam' | undefined,
       limit,
       offset,
     });
 
     const total = await eventRepository.count({
+      tenantId,
       type: type as 'gameday' | 'jam' | undefined,
-      status: status as 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled' | undefined,
+      status: status as
+        | 'draft'
+        | 'scheduled'
+        | 'active'
+        | 'paused'
+        | 'completed'
+        | 'cancelled'
+        | undefined,
     });
 
     return c.json({ events, total });
@@ -184,78 +201,98 @@ adminRouter.get('/events/:eventId', async (c) => {
 });
 
 // イベント作成
-adminRouter.post('/events', zValidator('json', createEventSchema), async (c) => {
-  const user = c.get('user') as AuthenticatedUser;
-  const tenantId = user.tenantId || 'default';
-  const data = c.req.valid('json');
+adminRouter.post(
+  '/events',
+  zValidator('json', createEventSchema),
+  async (c) => {
+    const user = c.get('user') as AuthenticatedUser;
+    const tenantId = user.tenantId || 'default';
+    const data = c.req.valid('json');
 
-  try {
-    const event = await eventRepository.create({
-      tenantId,
-      name: data.name,
-      type: data.type,
-      status: 'draft',
-      startTime: new Date(data.startTime),
-      endTime: new Date(data.endTime),
-      timezone: data.timezone,
-      participantType: data.participantType,
-      maxParticipants: data.maxParticipants,
-      minTeamSize: data.minTeamSize,
-      maxTeamSize: data.maxTeamSize,
-      cloudProvider: data.cloudProvider,
-      regions: data.regions,
-      scoringType: data.scoringType,
-      scoringIntervalMinutes: data.scoringIntervalMinutes,
-      leaderboardVisible: data.leaderboardVisible,
-      freezeLeaderboardMinutes: data.freezeLeaderboardMinutes,
-      createdBy: user.id,
-    });
+    try {
+      const event = await eventRepository.create({
+        tenantId,
+        name: data.name,
+        type: data.type,
+        status: 'draft',
+        startTime: new Date(data.startTime),
+        endTime: new Date(data.endTime),
+        timezone: data.timezone,
+        participantType: data.participantType,
+        maxParticipants: data.maxParticipants,
+        minTeamSize: data.minTeamSize,
+        maxTeamSize: data.maxTeamSize,
+        cloudProvider: data.cloudProvider,
+        regions: data.regions,
+        scoringType: data.scoringType,
+        scoringIntervalMinutes: data.scoringIntervalMinutes,
+        leaderboardVisible: data.leaderboardVisible,
+        freezeLeaderboardMinutes: data.freezeLeaderboardMinutes,
+        createdBy: user.id,
+      });
 
-    // 問題を関連付け
-    if (data.problemIds && data.problemIds.length > 0) {
-      for (let i = 0; i < data.problemIds.length; i++) {
-        await addProblemToEvent(event.id, data.problemIds[i], { order: i + 1 });
+      // 問題を関連付け
+      if (data.problemIds && data.problemIds.length > 0) {
+        for (let i = 0; i < data.problemIds.length; i++) {
+          await addProblemToEvent(event.id, data.problemIds[i], {
+            order: i + 1,
+          });
+        }
       }
-    }
 
-    return c.json(event, 201);
-  } catch (error) {
-    console.error('Failed to create event:', error);
-    return c.json({ error: 'Failed to create event' }, 500);
+      return c.json(event, 201);
+    } catch (error) {
+      console.error('Failed to create event:', error);
+      return c.json({ error: 'Failed to create event' }, 500);
+    }
   }
-});
+);
 
 // イベント更新
-adminRouter.put('/events/:eventId', zValidator('json', updateEventSchema), async (c) => {
-  const eventId = c.req.param('eventId');
-  const data = c.req.valid('json');
+adminRouter.put(
+  '/events/:eventId',
+  zValidator('json', updateEventSchema),
+  async (c) => {
+    const eventId = c.req.param('eventId');
+    const data = c.req.valid('json');
 
-  try {
-    const updates: Record<string, unknown> = {};
+    try {
+      const updates: Record<string, unknown> = {};
 
-    if (data.name !== undefined) updates.name = data.name;
-    if (data.status !== undefined) updates.status = data.status;
-    if (data.startTime !== undefined) updates.startTime = new Date(data.startTime);
-    if (data.endTime !== undefined) updates.endTime = new Date(data.endTime);
-    if (data.timezone !== undefined) updates.timezone = data.timezone;
-    if (data.participantType !== undefined) updates.participantType = data.participantType;
-    if (data.maxParticipants !== undefined) updates.maxParticipants = data.maxParticipants;
-    if (data.minTeamSize !== undefined) updates.minTeamSize = data.minTeamSize;
-    if (data.maxTeamSize !== undefined) updates.maxTeamSize = data.maxTeamSize;
-    if (data.cloudProvider !== undefined) updates.cloudProvider = data.cloudProvider;
-    if (data.regions !== undefined) updates.regions = data.regions;
-    if (data.scoringType !== undefined) updates.scoringType = data.scoringType;
-    if (data.scoringIntervalMinutes !== undefined) updates.scoringIntervalMinutes = data.scoringIntervalMinutes;
-    if (data.leaderboardVisible !== undefined) updates.leaderboardVisible = data.leaderboardVisible;
-    if (data.freezeLeaderboardMinutes !== undefined) updates.freezeLeaderboardMinutes = data.freezeLeaderboardMinutes;
+      if (data.name !== undefined) updates.name = data.name;
+      if (data.status !== undefined) updates.status = data.status;
+      if (data.startTime !== undefined)
+        updates.startTime = new Date(data.startTime);
+      if (data.endTime !== undefined) updates.endTime = new Date(data.endTime);
+      if (data.timezone !== undefined) updates.timezone = data.timezone;
+      if (data.participantType !== undefined)
+        updates.participantType = data.participantType;
+      if (data.maxParticipants !== undefined)
+        updates.maxParticipants = data.maxParticipants;
+      if (data.minTeamSize !== undefined)
+        updates.minTeamSize = data.minTeamSize;
+      if (data.maxTeamSize !== undefined)
+        updates.maxTeamSize = data.maxTeamSize;
+      if (data.cloudProvider !== undefined)
+        updates.cloudProvider = data.cloudProvider;
+      if (data.regions !== undefined) updates.regions = data.regions;
+      if (data.scoringType !== undefined)
+        updates.scoringType = data.scoringType;
+      if (data.scoringIntervalMinutes !== undefined)
+        updates.scoringIntervalMinutes = data.scoringIntervalMinutes;
+      if (data.leaderboardVisible !== undefined)
+        updates.leaderboardVisible = data.leaderboardVisible;
+      if (data.freezeLeaderboardMinutes !== undefined)
+        updates.freezeLeaderboardMinutes = data.freezeLeaderboardMinutes;
 
-    const event = await eventRepository.update(eventId, updates);
-    return c.json(event);
-  } catch (error) {
-    console.error('Failed to update event:', error);
-    return c.json({ error: 'Failed to update event' }, 500);
+      const event = await eventRepository.update(eventId, updates);
+      return c.json(event);
+    } catch (error) {
+      console.error('Failed to update event:', error);
+      return c.json({ error: 'Failed to update event' }, 500);
+    }
   }
-});
+);
 
 // イベント削除
 adminRouter.delete('/events/:eventId', async (c) => {
@@ -271,43 +308,64 @@ adminRouter.delete('/events/:eventId', async (c) => {
 });
 
 // イベントステータス更新
-adminRouter.patch('/events/:eventId/status', zValidator('json', z.object({
-  status: z.enum(['draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled']),
-})), async (c) => {
-  const eventId = c.req.param('eventId');
-  const { status } = c.req.valid('json');
+adminRouter.patch(
+  '/events/:eventId/status',
+  zValidator(
+    'json',
+    z.object({
+      status: z.enum([
+        'draft',
+        'scheduled',
+        'active',
+        'paused',
+        'completed',
+        'cancelled',
+      ]),
+    })
+  ),
+  async (c) => {
+    const eventId = c.req.param('eventId');
+    const { status } = c.req.valid('json');
 
-  try {
-    await eventRepository.updateStatus(eventId, status);
-    return c.json({ success: true, status });
-  } catch (error) {
-    console.error('Failed to update event status:', error);
-    return c.json({ error: 'Failed to update event status' }, 500);
+    try {
+      await eventRepository.updateStatus(eventId, status);
+      return c.json({ success: true, status });
+    } catch (error) {
+      console.error('Failed to update event status:', error);
+      return c.json({ error: 'Failed to update event status' }, 500);
+    }
   }
-});
+);
 
 // イベントに問題を追加
-adminRouter.post('/events/:eventId/problems', zValidator('json', z.object({
-  problemId: z.string(),
-  order: z.number().optional(),
-  unlockTime: z.string().datetime().optional(),
-  pointMultiplier: z.number().optional(),
-})), async (c) => {
-  const eventId = c.req.param('eventId');
-  const data = c.req.valid('json');
+adminRouter.post(
+  '/events/:eventId/problems',
+  zValidator(
+    'json',
+    z.object({
+      problemId: z.string(),
+      order: z.number().optional(),
+      unlockTime: z.string().datetime().optional(),
+      pointMultiplier: z.number().optional(),
+    })
+  ),
+  async (c) => {
+    const eventId = c.req.param('eventId');
+    const data = c.req.valid('json');
 
-  try {
-    const eventProblem = await addProblemToEvent(eventId, data.problemId, {
-      order: data.order,
-      unlockTime: data.unlockTime ? new Date(data.unlockTime) : undefined,
-      pointMultiplier: data.pointMultiplier,
-    });
-    return c.json(eventProblem, 201);
-  } catch (error) {
-    console.error('Failed to add problem to event:', error);
-    return c.json({ error: 'Failed to add problem to event' }, 500);
+    try {
+      const eventProblem = await addProblemToEvent(eventId, data.problemId, {
+        order: data.order,
+        unlockTime: data.unlockTime ? new Date(data.unlockTime) : undefined,
+        pointMultiplier: data.pointMultiplier,
+      });
+      return c.json(eventProblem, 201);
+    } catch (error) {
+      console.error('Failed to add problem to event:', error);
+      return c.json({ error: 'Failed to add problem to event' }, 500);
+    }
   }
-});
+);
 
 // イベントから問題を削除
 adminRouter.delete('/events/:eventId/problems/:problemId', async (c) => {
@@ -338,16 +396,40 @@ adminRouter.get('/problems', async (c) => {
   try {
     const problems = await problemRepository.findAll({
       type: type as 'gameday' | 'jam' | undefined,
-      category: category as 'architecture' | 'security' | 'cost' | 'performance' | 'reliability' | 'operations' | undefined,
-      difficulty: difficulty as 'easy' | 'medium' | 'hard' | 'expert' | undefined,
+      category: category as
+        | 'architecture'
+        | 'security'
+        | 'cost'
+        | 'performance'
+        | 'reliability'
+        | 'operations'
+        | undefined,
+      difficulty: difficulty as
+        | 'easy'
+        | 'medium'
+        | 'hard'
+        | 'expert'
+        | undefined,
       limit,
       offset,
     });
 
     const total = await problemRepository.count({
       type: type as 'gameday' | 'jam' | undefined,
-      category: category as 'architecture' | 'security' | 'cost' | 'performance' | 'reliability' | 'operations' | undefined,
-      difficulty: difficulty as 'easy' | 'medium' | 'hard' | 'expert' | undefined,
+      category: category as
+        | 'architecture'
+        | 'security'
+        | 'cost'
+        | 'performance'
+        | 'reliability'
+        | 'operations'
+        | undefined,
+      difficulty: difficulty as
+        | 'easy'
+        | 'medium'
+        | 'hard'
+        | 'expert'
+        | undefined,
     });
 
     return c.json({ problems, total });
@@ -388,8 +470,20 @@ adminRouter.get('/marketplace', async (c) => {
     const result = await marketplaceRepository.search({
       query,
       type: type as 'gameday' | 'jam' | undefined,
-      category: category as 'architecture' | 'security' | 'cost' | 'performance' | 'reliability' | 'operations' | undefined,
-      difficulty: difficulty as 'easy' | 'medium' | 'hard' | 'expert' | undefined,
+      category: category as
+        | 'architecture'
+        | 'security'
+        | 'cost'
+        | 'performance'
+        | 'reliability'
+        | 'operations'
+        | undefined,
+      difficulty: difficulty as
+        | 'easy'
+        | 'medium'
+        | 'hard'
+        | 'expert'
+        | undefined,
       provider: provider as 'aws' | 'gcp' | 'azure' | 'local' | undefined,
       sortBy: sortBy as 'relevance' | 'rating' | 'downloads' | 'newest',
       page,

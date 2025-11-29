@@ -18,9 +18,13 @@ const createMockProvider = (provider: CloudProviderType): ICloudProvider => ({
   provider,
   displayName: `Mock ${provider.toUpperCase()} Provider`,
   validateCredentials: vi.fn().mockResolvedValue(true),
-  deployStack: vi.fn().mockResolvedValue({ success: true, startedAt: new Date() }),
+  deployStack: vi
+    .fn()
+    .mockResolvedValue({ success: true, startedAt: new Date() }),
   getStackStatus: vi.fn().mockResolvedValue(null),
-  deleteStack: vi.fn().mockResolvedValue({ success: true, startedAt: new Date() }),
+  deleteStack: vi
+    .fn()
+    .mockResolvedValue({ success: true, startedAt: new Date() }),
   getStackOutputs: vi.fn().mockResolvedValue({}),
   uploadStaticFiles: vi.fn().mockResolvedValue('https://example.com/files'),
   cleanupResources: vi.fn().mockResolvedValue({
@@ -100,7 +104,9 @@ describe('CloudProviderFactory', () => {
       factory.registerProvider(createMockProvider('gcp'));
       factory.registerProvider(createMockProvider('local'));
 
-      expect(() => factory.getProvider('aws')).toThrow(/Available providers:.*gcp.*local/);
+      expect(() => factory.getProvider('aws')).toThrow(
+        /Available providers:.*gcp.*local/
+      );
     });
   });
 

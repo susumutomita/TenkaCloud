@@ -4,14 +4,29 @@
  * イベント管理 API クライアント
  */
 
-import { get, post, put, patch, del } from './client';
-import type { ProblemType, CloudProvider } from './problems';
+import { del, get, patch, post, put } from './client';
+import type { CloudProvider, ProblemType } from './problems';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type EventStatus = 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled';
+export type EventStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
+export const EVENT_STATUSES: readonly EventStatus[] = [
+  'draft',
+  'scheduled',
+  'active',
+  'paused',
+  'completed',
+  'cancelled',
+] as const;
+
 export type ParticipantType = 'individual' | 'team';
 export type ScoringType = 'realtime' | 'batch';
 
@@ -119,7 +134,9 @@ export async function getEvents(options?: {
   const params: Record<string, string | number | boolean | undefined> = {};
 
   if (options?.status) {
-    params.status = Array.isArray(options.status) ? options.status.join(',') : options.status;
+    params.status = Array.isArray(options.status)
+      ? options.status.join(',')
+      : options.status;
   }
   if (options?.type) {
     params.type = options.type;
@@ -137,7 +154,9 @@ export async function getEvents(options?: {
 /**
  * イベント詳細を取得
  */
-export async function getEventDetails(eventId: string): Promise<EventDetails | null> {
+export async function getEventDetails(
+  eventId: string
+): Promise<EventDetails | null> {
   try {
     return await get<EventDetails>(`/admin/events/${eventId}`);
   } catch (error) {
@@ -158,7 +177,10 @@ export async function createEvent(input: CreateEventInput): Promise<Event> {
 /**
  * イベントを更新
  */
-export async function updateEvent(eventId: string, input: UpdateEventInput): Promise<Event> {
+export async function updateEvent(
+  eventId: string,
+  input: UpdateEventInput
+): Promise<Event> {
   return put<Event>(`/admin/events/${eventId}`, input);
 }
 
@@ -172,7 +194,10 @@ export async function deleteEvent(eventId: string): Promise<void> {
 /**
  * イベントステータスを更新
  */
-export async function updateEventStatus(eventId: string, status: EventStatus): Promise<void> {
+export async function updateEventStatus(
+  eventId: string,
+  status: EventStatus
+): Promise<void> {
   await patch<void>(`/admin/events/${eventId}/status`, { status });
 }
 
@@ -193,14 +218,19 @@ export async function addProblemToEvent(
 /**
  * イベントから問題を削除
  */
-export async function removeProblemFromEvent(eventId: string, problemId: string): Promise<void> {
+export async function removeProblemFromEvent(
+  eventId: string,
+  problemId: string
+): Promise<void> {
   await del<void>(`/admin/events/${eventId}/problems/${problemId}`);
 }
 
 /**
  * リーダーボードを取得
  */
-export async function getLeaderboard(eventId: string): Promise<Leaderboard | null> {
+export async function getLeaderboard(
+  eventId: string
+): Promise<Leaderboard | null> {
   try {
     return await get<Leaderboard>(`/admin/events/${eventId}/leaderboard`);
   } catch (error) {

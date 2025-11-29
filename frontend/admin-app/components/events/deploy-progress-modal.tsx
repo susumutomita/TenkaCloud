@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDeploymentProgress } from '@/lib/api/events';
 
 interface DeployProgressModalProps {
@@ -26,7 +26,9 @@ export function DeployProgressModal({
   onClose,
   onComplete,
 }: DeployProgressModalProps) {
-  const [status, setStatus] = useState<'pending' | 'running' | 'completed' | 'failed'>('pending');
+  const [status, setStatus] = useState<
+    'pending' | 'running' | 'completed' | 'failed'
+  >('pending');
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('デプロイを開始しています...');
   const [tasks, setTasks] = useState<DeploymentTask[]>([
@@ -53,7 +55,10 @@ export function DeployProgressModal({
           if (index < result.completedTasks) {
             return { ...task, status: 'completed' };
           } else if (index === result.completedTasks) {
-            return { ...task, status: result.status === 'running' ? 'running' : 'pending' };
+            return {
+              ...task,
+              status: result.status === 'running' ? 'running' : 'pending',
+            };
           }
           return task;
         })
@@ -97,25 +102,58 @@ export function DeployProgressModal({
     switch (taskStatus) {
       case 'completed':
         return (
-          <svg className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          <svg
+            className="h-5 w-5 text-green-500"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+              clipRule="evenodd"
+            />
           </svg>
         );
       case 'running':
         return (
-          <svg className="h-5 w-5 text-blue-500 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          <svg
+            className="h-5 w-5 text-blue-500 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
           </svg>
         );
       case 'failed':
         return (
-          <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          <svg
+            className="h-5 w-5 text-red-500"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+              clipRule="evenodd"
+            />
           </svg>
         );
       default:
-        return <div className="h-5 w-5 rounded-full border-2 border-gray-300" />;
+        return (
+          <div className="h-5 w-5 rounded-full border-2 border-gray-300" />
+        );
     }
   };
 
@@ -167,8 +205,8 @@ export function DeployProgressModal({
                     task.status === 'completed'
                       ? 'text-gray-500'
                       : task.status === 'running'
-                      ? 'text-blue-700 font-medium'
-                      : 'text-gray-700'
+                        ? 'text-blue-700 font-medium'
+                        : 'text-gray-700'
                   }`}
                 >
                   {task.name}
@@ -184,9 +222,7 @@ export function DeployProgressModal({
                 バックグラウンドで実行
               </Button>
             ) : (
-              <Button onClick={onClose}>
-                閉じる
-              </Button>
+              <Button onClick={onClose}>閉じる</Button>
             )}
           </div>
         </CardContent>

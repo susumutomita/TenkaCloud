@@ -1,40 +1,73 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
 import { EventCard } from '@/components/events/event-card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/select';
 import {
-  getEvents,
   deployEvent,
-  updateEventStatus,
+  EVENT_STATUSES,
   type Event,
   type EventStatus,
+  getEvents,
+  updateEventStatus,
 } from '@/lib/api/events';
-import type { ProblemType } from '@/lib/api/problems';
+import { PROBLEM_TYPES, type ProblemType } from '@/lib/api/problems';
+
+/** 通知メッセージの型 */
+interface Notification {
+  type: 'success' | 'error' | 'info';
+  message: string;
+}
 
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [deploying, setDeploying] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<Notification | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<EventStatus | ''>('');
   const [typeFilter, setTypeFilter] = useState<ProblemType | ''>('');
 
+  /** 通知を表示して自動的に消す */
+  const showNotification = useCallback(
+    (type: Notification['type'], message: string) => {
+      setNotification({ type, message });
+      setTimeout(() => setNotification(null), 5000);
+    },
+    []
+  );
+
+  /** ステータスフィルターの変更ハンドラー（型安全） */
+  const handleStatusFilterChange = useCallback((value: string) => {
+    if (value === '' || EVENT_STATUSES.includes(value as EventStatus)) {
+      setStatusFilter(value as EventStatus | '');
+    }
+  }, []);
+
+  /** タイプフィルターの変更ハンドラー（型安全） */
+  const handleTypeFilterChange = useCallback((value: string) => {
+    if (value === '' || PROBLEM_TYPES.includes(value as ProblemType)) {
+      setTypeFilter(value as ProblemType | '');
+    }
+  }, []);
+
   const loadEvents = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const result = await getEvents({
         status: statusFilter || undefined,
         type: typeFilter || undefined,
       });
       setEvents(result.events);
-      setTotal(result.total);
-    } catch (error) {
-      console.error('Failed to load events:', error);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'イベントの取得に失敗しました';
+      setError(message);
+      console.error('Failed to load events:', err);
     } finally {
       setLoading(false);
     }
@@ -45,36 +78,44 @@ export default function EventsPage() {
   }, [loadEvents]);
 
   const handleDeploy = async (eventId: string) => {
-    setDeploying(eventId);
+    setActionInProgress(eventId);
     try {
       const result = await deployEvent(eventId);
-      alert(`デプロイを開始しました (Job ID: ${result.jobId})`);
-      // TODO: 進捗監視モーダルを表示
-    } catch (error) {
-      console.error('Failed to deploy event:', error);
-      alert('デプロイに失敗しました');
+      showNotification(
+        'success',
+        `デプロイを開始しました (Job ID: ${result.jobId})`
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'デプロイに失敗しました';
+      showNotification('error', message);
+      console.error('Failed to deploy event:', err);
     } finally {
-      setDeploying(null);
+      setActionInProgress(null);
     }
   };
 
   const handleStart = async (eventId: string) => {
-    if (!confirm('イベントを開始しますか？')) {
+    if (!window.confirm('イベントを開始しますか？')) {
       return;
     }
+    setActionInProgress(eventId);
     try {
       await updateEventStatus(eventId, 'active');
-      alert('イベントを開始しました');
+      showNotification('success', 'イベントを開始しました');
       loadEvents();
-    } catch (error) {
-      console.error('Failed to start event:', error);
-      alert('イベントの開始に失敗しました');
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'イベントの開始に失敗しました';
+      showNotification('error', message);
+      console.error('Failed to start event:', err);
+    } finally {
+      setActionInProgress(null);
     }
   };
 
   const handleViewDetails = (eventId: string) => {
-    // TODO: イベント詳細ページに遷移
-    console.log('View details:', eventId);
+    window.location.href = `/events/${eventId}`;
   };
 
   // 統計情報を計算
@@ -88,6 +129,54 @@ export default function EventsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* 通知トースト */}
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transition-all ${
+            notification.type === 'success'
+              ? 'bg-green-100 border border-green-400 text-green-700'
+              : notification.type === 'error'
+                ? 'bg-red-100 border border-red-400 text-red-700'
+                : 'bg-blue-100 border border-blue-400 text-blue-700'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {notification.type === 'success' && (
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+            {notification.type === 'error' && (
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+            <span>{notification.message}</span>
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="ml-2 text-current opacity-70 hover:opacity-100"
+            >
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ヘッダー */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -98,8 +187,16 @@ export default function EventsPage() {
         </div>
         <Link href="/events/new">
           <Button>
-            <svg className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            <svg
+              className="h-4 w-4 mr-2"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                clipRule="evenodd"
+              />
             </svg>
             新規イベント
           </Button>
@@ -117,15 +214,21 @@ export default function EventsPage() {
           <div className="text-sm text-muted-foreground">下書き</div>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <div className="text-2xl font-bold text-blue-600">{stats.scheduled}</div>
+          <div className="text-2xl font-bold text-blue-600">
+            {stats.scheduled}
+          </div>
           <div className="text-sm text-muted-foreground">予定</div>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+          <div className="text-2xl font-bold text-green-600">
+            {stats.active}
+          </div>
           <div className="text-sm text-muted-foreground">開催中</div>
         </div>
         <div className="bg-card border rounded-lg p-4">
-          <div className="text-2xl font-bold text-purple-600">{stats.completed}</div>
+          <div className="text-2xl font-bold text-purple-600">
+            {stats.completed}
+          </div>
           <div className="text-sm text-muted-foreground">終了</div>
         </div>
       </div>
@@ -133,10 +236,13 @@ export default function EventsPage() {
       {/* フィルター */}
       <div className="flex items-center gap-4 mb-6">
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">ステータス:</label>
+          <label htmlFor="status-filter" className="text-sm font-medium">
+            ステータス:
+          </label>
           <Select
+            id="status-filter"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as EventStatus)}
+            onChange={(e) => handleStatusFilterChange(e.target.value)}
             className="w-32"
           >
             <option value="">すべて</option>
@@ -149,10 +255,13 @@ export default function EventsPage() {
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">タイプ:</label>
+          <label htmlFor="type-filter" className="text-sm font-medium">
+            タイプ:
+          </label>
           <Select
+            id="type-filter"
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as ProblemType)}
+            onChange={(e) => handleTypeFilterChange(e.target.value)}
             className="w-32"
           >
             <option value="">すべて</option>
@@ -163,11 +272,34 @@ export default function EventsPage() {
       </div>
 
       {/* イベント一覧 */}
-      {loading ? (
+      {error ? (
+        <div className="text-center py-12 border rounded-lg bg-red-50">
+          <svg
+            className="mx-auto h-12 w-12 text-red-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-red-800">
+            エラーが発生しました
+          </h3>
+          <p className="mt-1 text-sm text-red-600">{error}</p>
+          <Button variant="outline" className="mt-4" onClick={loadEvents}>
+            再読み込み
+          </Button>
+        </div>
+      ) : loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
             <div
-              key={i}
+              key={`skeleton-${i}`}
               className="h-72 bg-gray-100 animate-pulse rounded-lg"
             />
           ))}
@@ -195,8 +327,16 @@ export default function EventsPage() {
           </p>
           <Link href="/events/new">
             <Button className="mt-4">
-              <svg className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              <svg
+                className="h-4 w-4 mr-2"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                  clipRule="evenodd"
+                />
               </svg>
               新規イベント
             </Button>

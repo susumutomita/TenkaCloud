@@ -74,7 +74,9 @@ interface EventSchemaData {
 }
 
 // 有効な問題データを作成するヘルパー（JSON Schema 形式）
-const createValidProblem = (overrides: Partial<ProblemSchemaData> = {}): ProblemSchemaData => ({
+const createValidProblem = (
+  overrides: Partial<ProblemSchemaData> = {}
+): ProblemSchemaData => ({
   id: 'test-problem-1',
   title: 'テスト問題',
   type: 'gameday',
@@ -115,7 +117,9 @@ const createValidProblem = (overrides: Partial<ProblemSchemaData> = {}): Problem
 });
 
 // 有効なイベントデータを作成するヘルパー（JSON Schema 形式 - Legacy）
-const createValidEvent = (overrides: Partial<EventSchemaData> = {}): EventSchemaData => ({
+const createValidEvent = (
+  overrides: Partial<EventSchemaData> = {}
+): EventSchemaData => ({
   id: 'test-event-1',
   name: 'テストイベント',
   type: 'gameday',
@@ -128,9 +132,7 @@ const createValidEvent = (overrides: Partial<EventSchemaData> = {}): EventSchema
     type: 'individual',
     maxCount: 100,
   },
-  problems: [
-    { problemId: 'problem-1', order: 1 },
-  ],
+  problems: [{ problemId: 'problem-1', order: 1 }],
   cloudConfig: {
     provider: 'aws',
     regions: ['ap-northeast-1'],

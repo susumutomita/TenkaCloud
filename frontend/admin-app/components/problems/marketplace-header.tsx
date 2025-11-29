@@ -7,7 +7,10 @@ interface MarketplaceHeaderProps {
   featuredCount: number;
 }
 
-export function MarketplaceHeader({ totalProblems, featuredCount }: MarketplaceHeaderProps) {
+export function MarketplaceHeader({
+  totalProblems,
+  featuredCount,
+}: MarketplaceHeaderProps) {
   return (
     <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-6 mb-6">
       <div className="flex items-center justify-between">

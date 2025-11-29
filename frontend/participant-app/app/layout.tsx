@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "TenkaCloud - Battle Arena",
-  description: "クラウド天下一武道会 - 競技者用UI",
+  title: 'TenkaCloud - Battle Arena',
+  description: 'クラウド天下一武道会 - 競技者用UI',
 };
 
 export default function RootLayout({

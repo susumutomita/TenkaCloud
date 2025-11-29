@@ -11,7 +11,18 @@ import { get, post } from './client';
 // =============================================================================
 
 export type ProblemType = 'gameday' | 'jam';
-export type ProblemCategory = 'architecture' | 'security' | 'cost' | 'performance' | 'reliability' | 'operations';
+export const PROBLEM_TYPES: readonly ProblemType[] = [
+  'gameday',
+  'jam',
+] as const;
+
+export type ProblemCategory =
+  | 'architecture'
+  | 'security'
+  | 'cost'
+  | 'performance'
+  | 'reliability'
+  | 'operations';
 export type DifficultyLevel = 'easy' | 'medium' | 'hard' | 'expert';
 export type CloudProvider = 'aws' | 'gcp' | 'azure' | 'local';
 
@@ -164,15 +175,21 @@ export async function searchMarketplaceProblems(
 /**
  * 問題のレビューを取得
  */
-export async function getProblemReviews(problemId: string): Promise<ProblemReview[]> {
+export async function getProblemReviews(
+  problemId: string
+): Promise<ProblemReview[]> {
   return get<ProblemReview[]>(`/admin/marketplace/${problemId}/reviews`);
 }
 
 /**
  * 問題をインストール（マーケットプレイスからテナントにコピー）
  */
-export async function installProblem(marketplaceId: string): Promise<{ success: boolean; installedId: string }> {
-  return post<{ success: boolean; installedId: string }>(`/admin/marketplace/${marketplaceId}/install`);
+export async function installProblem(
+  marketplaceId: string
+): Promise<{ success: boolean; installedId: string }> {
+  return post<{ success: boolean; installedId: string }>(
+    `/admin/marketplace/${marketplaceId}/install`
+  );
 }
 
 /**
@@ -189,6 +206,10 @@ export async function getFeaturedProblems(): Promise<MarketplaceProblem[]> {
 /**
  * カテゴリ別の問題数を取得
  */
-export async function getCategoryCounts(): Promise<Record<ProblemCategory, number>> {
-  return get<Record<ProblemCategory, number>>('/admin/problems/categories/counts');
+export async function getCategoryCounts(): Promise<
+  Record<ProblemCategory, number>
+> {
+  return get<Record<ProblemCategory, number>>(
+    '/admin/problems/categories/counts'
+  );
 }

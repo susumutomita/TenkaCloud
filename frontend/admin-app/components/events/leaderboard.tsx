@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { getLeaderboard, type Leaderboard as LeaderboardType, type LeaderboardEntry } from '@/lib/api/events';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  getLeaderboard,
+  type LeaderboardEntry,
+  type Leaderboard as LeaderboardType,
+} from '@/lib/api/events';
 
 interface LeaderboardProps {
   eventId: string;
@@ -13,18 +17,42 @@ interface LeaderboardProps {
 
 const trendIcons = {
   up: (
-    <svg className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+    <svg
+      className="h-4 w-4 text-green-500"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z"
+        clipRule="evenodd"
+      />
     </svg>
   ),
   down: (
-    <svg className="h-4 w-4 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clipRule="evenodd" />
+    <svg
+      className="h-4 w-4 text-red-500"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+    >
+      <path
+        fillRule="evenodd"
+        d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z"
+        clipRule="evenodd"
+      />
     </svg>
   ),
   same: (
-    <svg className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+    <svg
+      className="h-4 w-4 text-gray-400"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+    >
+      <path
+        fillRule="evenodd"
+        d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+        clipRule="evenodd"
+      />
     </svg>
   ),
 };
@@ -54,7 +82,11 @@ function formatTime(dateString: string): string {
   });
 }
 
-export function Leaderboard({ eventId, autoRefresh = true, refreshInterval = 30000 }: LeaderboardProps) {
+export function Leaderboard({
+  eventId,
+  autoRefresh = true,
+  refreshInterval = 30000,
+}: LeaderboardProps) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardType | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -119,9 +151,7 @@ export function Leaderboard({ eventId, autoRefresh = true, refreshInterval = 300
           <div className="flex items-center gap-2">
             <CardTitle>リーダーボード</CardTitle>
             {leaderboard.isFrozen && (
-              <Badge className="bg-blue-100 text-blue-800">
-                凍結中
-              </Badge>
+              <Badge className="bg-blue-100 text-blue-800">凍結中</Badge>
             )}
           </div>
           {lastUpdated && (
@@ -138,7 +168,9 @@ export function Leaderboard({ eventId, autoRefresh = true, refreshInterval = 300
             <div
               key={entry.teamId || entry.participantId}
               className={`flex items-center gap-4 p-3 rounded-lg ${
-                index < 3 ? 'bg-gradient-to-r from-yellow-50 to-transparent' : 'bg-gray-50'
+                index < 3
+                  ? 'bg-gradient-to-r from-yellow-50 to-transparent'
+                  : 'bg-gray-50'
               }`}
             >
               {/* 順位 */}
@@ -161,11 +193,17 @@ export function Leaderboard({ eventId, autoRefresh = true, refreshInterval = 300
 
               {/* 問題別スコア（省略表示） */}
               <div className="hidden md:flex items-center gap-1">
-                {Object.entries(entry.problemScores).slice(0, 3).map(([problemId, score]) => (
-                  <Badge key={problemId} variant="outline" className="text-xs">
-                    {score}
-                  </Badge>
-                ))}
+                {Object.entries(entry.problemScores)
+                  .slice(0, 3)
+                  .map(([problemId, score]) => (
+                    <Badge
+                      key={problemId}
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      {score}
+                    </Badge>
+                  ))}
                 {Object.keys(entry.problemScores).length > 3 && (
                   <span className="text-xs text-muted-foreground">
                     +{Object.keys(entry.problemScores).length - 3}

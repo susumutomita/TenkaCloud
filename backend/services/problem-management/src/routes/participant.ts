@@ -18,10 +18,7 @@ import {
   UserRole,
   type AuthenticatedUser,
 } from '../auth';
-import {
-  PrismaEventRepository,
-  getEventWithProblems,
-} from '../repositories';
+import { PrismaEventRepository, getEventWithProblems } from '../repositories';
 import { getLeaderboard } from '../jam/dashboard';
 import type { EventStatus, EventType } from '../types';
 
@@ -90,10 +87,13 @@ participantRouter.get('/events', async (c) => {
     const events = user.tenantId
       ? await eventRepository.findByTenant(user.tenantId, options)
       : await eventRepository.findAll(options);
-    const total = await eventRepository.count(options);
+    const total = await eventRepository.count({
+      ...options,
+      tenantId: user.tenantId,
+    });
 
     // 参加状況を追加
-    const eventsWithRegistration = events.map(event => ({
+    const eventsWithRegistration = events.map((event) => ({
       ...event,
       isRegistered: false, // TODO: 実際の登録状況を確認
       myRank: undefined,
@@ -151,7 +151,8 @@ participantRouter.get('/events/:eventId', async (c) => {
     // 問題情報を参加者向けに変換（解答は含めない）
     const problems = event.problems.map((ep) => {
       // ScoringCriterion の maxPoints を合計して maxScore を計算
-      const maxScore = ep.problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
+      const maxScore =
+        ep.problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
 
       return {
         id: ep.problem.id,
@@ -225,7 +226,10 @@ participantRouter.post('/events/:eventId/register', async (c) => {
 
     // TODO: 実際の登録処理（Participantテーブルに追加）
 
-    return c.json({ success: true, message: 'Successfully registered for the event' });
+    return c.json({
+      success: true,
+      message: 'Successfully registered for the event',
+    });
   } catch (error) {
     console.error('Failed to register for event:', error);
     return c.json({ error: 'Failed to register' }, 500);
@@ -253,7 +257,10 @@ participantRouter.post('/events/:eventId/unregister', async (c) => {
 
     // TODO: 実際の登録解除処理
 
-    return c.json({ success: true, message: 'Successfully unregistered from the event' });
+    return c.json({
+      success: true,
+      message: 'Successfully unregistered from the event',
+    });
   } catch (error) {
     console.error('Failed to unregister from event:', error);
     return c.json({ error: 'Failed to unregister' }, 500);
@@ -282,12 +289,12 @@ participantRouter.get('/events/:eventId/leaderboard', async (c) => {
     const entries = await getLeaderboard(eventId);
 
     // 自分のポジションをマーク
-    const entriesWithMe = entries.map(entry => ({
+    const entriesWithMe = entries.map((entry) => ({
       ...entry,
       isMe: entry.teamId === user.teamId,
     }));
 
-    const myPosition = entriesWithMe.findIndex(e => e.isMe) + 1;
+    const myPosition = entriesWithMe.findIndex((e) => e.isMe) + 1;
 
     return c.json({
       eventId,
@@ -311,7 +318,7 @@ participantRouter.get('/events/:eventId/my-ranking', async (c) => {
 
   try {
     const entries = await getLeaderboard(eventId);
-    const myEntry = entries.find(e => e.teamId === user.teamId);
+    const myEntry = entries.find((e) => e.teamId === user.teamId);
 
     if (!myEntry) {
       return c.json({ error: 'Not found in leaderboard' }, 404);
@@ -346,7 +353,9 @@ participantRouter.get('/events/:eventId/challenges/:challengeId', async (c) => {
       return c.json({ error: 'Event not found' }, 404);
     }
 
-    const eventProblem = event.problems.find(ep => ep.problemId === challengeId);
+    const eventProblem = event.problems.find(
+      (ep) => ep.problemId === challengeId
+    );
     if (!eventProblem) {
       return c.json({ error: 'Challenge not found' }, 404);
     }
@@ -364,7 +373,8 @@ participantRouter.get('/events/:eventId/challenges/:challengeId', async (c) => {
     }
 
     // maxScore を criteria から計算
-    const maxScore = problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
+    const maxScore =
+      problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
 
     return c.json({
       id: problem.id,
@@ -390,7 +400,7 @@ participantRouter.get('/events/:eventId/challenges/:challengeId', async (c) => {
         isRevealed: false, // TODO: 実際の公開状態
       })),
       resources: [], // TODO: 静的ファイルから取得
-      scoringCriteria: (problem.criteria || []).map(sc => ({
+      scoringCriteria: (problem.criteria || []).map((sc) => ({
         name: sc.name,
         description: sc.description || '',
         maxPoints: sc.maxPoints,
@@ -409,155 +419,182 @@ participantRouter.get('/events/:eventId/challenges/:challengeId', async (c) => {
 /**
  * JAMチャレンジ詳細を取得（クルー付き）
  */
-participantRouter.get('/events/:eventId/challenges/:challengeId/jam', async (c) => {
-  const user = c.get('user') as AuthenticatedUser;
-  const { eventId, challengeId } = c.req.param();
+participantRouter.get(
+  '/events/:eventId/challenges/:challengeId/jam',
+  async (c) => {
+    const user = c.get('user') as AuthenticatedUser;
+    const { eventId, challengeId } = c.req.param();
 
-  try {
-    const event = await getEventWithProblems(eventId);
+    try {
+      const event = await getEventWithProblems(eventId);
 
-    if (!event || event.tenantId !== user.tenantId) {
-      return c.json({ error: 'Event not found' }, 404);
+      if (!event || event.tenantId !== user.tenantId) {
+        return c.json({ error: 'Event not found' }, 404);
+      }
+
+      // Prisma の enum は大文字
+      if (event.type !== 'JAM') {
+        return c.json({ error: 'Not a JAM event' }, 400);
+      }
+
+      const eventProblem = event.problems.find(
+        (ep) => ep.problemId === challengeId
+      );
+      if (!eventProblem) {
+        return c.json({ error: 'Challenge not found' }, 404);
+      }
+
+      const problem = eventProblem.problem;
+      const maxScore =
+        problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
+
+      return c.json({
+        id: problem.id,
+        title: problem.title,
+        type: problem.type.toLowerCase(),
+        category: problem.category.toLowerCase(),
+        difficulty: problem.difficulty.toLowerCase(),
+        overview: problem.overview,
+        objectives: problem.objectives,
+        order: eventProblem.order,
+        pointMultiplier: eventProblem.pointMultiplier,
+        maxScore,
+        isUnlocked:
+          !eventProblem.unlockTime || new Date() >= eventProblem.unlockTime,
+        isCompleted: false, // TODO: 実際の完了状態
+        myScore: undefined, // TODO: 実際のスコア
+        description: problem.overview,
+        instructions: problem.objectives || [],
+        clues: [], // TODO: Challenge モデルから取得
+        resources: [],
+        scoringCriteria: problem.criteria || [],
+        answerFormat: 'text',
+        answerValidation: undefined,
+      });
+    } catch (error) {
+      console.error('Failed to fetch JAM challenge:', error);
+      return c.json({ error: 'Failed to fetch challenge' }, 500);
     }
-
-    // Prisma の enum は大文字
-    if (event.type !== 'JAM') {
-      return c.json({ error: 'Not a JAM event' }, 400);
-    }
-
-    const eventProblem = event.problems.find(ep => ep.problemId === challengeId);
-    if (!eventProblem) {
-      return c.json({ error: 'Challenge not found' }, 404);
-    }
-
-    const problem = eventProblem.problem;
-    const maxScore = problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
-
-    return c.json({
-      id: problem.id,
-      title: problem.title,
-      type: problem.type.toLowerCase(),
-      category: problem.category.toLowerCase(),
-      difficulty: problem.difficulty.toLowerCase(),
-      overview: problem.overview,
-      objectives: problem.objectives,
-      order: eventProblem.order,
-      pointMultiplier: eventProblem.pointMultiplier,
-      maxScore,
-      isUnlocked: !eventProblem.unlockTime || new Date() >= eventProblem.unlockTime,
-      isCompleted: false, // TODO: 実際の完了状態
-      myScore: undefined, // TODO: 実際のスコア
-      description: problem.overview,
-      instructions: problem.objectives || [],
-      clues: [], // TODO: Challenge モデルから取得
-      resources: [],
-      scoringCriteria: problem.criteria || [],
-      answerFormat: 'text',
-      answerValidation: undefined,
-    });
-  } catch (error) {
-    console.error('Failed to fetch JAM challenge:', error);
-    return c.json({ error: 'Failed to fetch challenge' }, 500);
   }
-});
+);
 
 /**
  * AWS クレデンシャルを取得
  */
-participantRouter.get('/events/:eventId/challenges/:challengeId/credentials', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
+participantRouter.get(
+  '/events/:eventId/challenges/:challengeId/credentials',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
-  try {
-    // TODO: 実際のクレデンシャル発行処理
-    // - 参加者に割り当てられたAWSアカウントからSTSでセッショントークンを取得
-    // - セキュリティ制約を適用
+    try {
+      // TODO: 実際のクレデンシャル発行処理
+      // - 参加者に割り当てられたAWSアカウントからSTSでセッショントークンを取得
+      // - セキュリティ制約を適用
 
-    return c.json({
-      accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
-      secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-      sessionToken: 'FwoGZXIvYXdzEBYaDkExample...',
-      expiresAt: new Date(Date.now() + 3600000).toISOString(), // 1時間後
-      region: 'ap-northeast-1',
-    });
-  } catch (error) {
-    console.error('Failed to get credentials:', error);
-    return c.json({ error: 'Failed to get credentials' }, 500);
+      return c.json({
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'FwoGZXIvYXdzEBYaDkExample...',
+        expiresAt: new Date(Date.now() + 3600000).toISOString(), // 1時間後
+        region: 'ap-northeast-1',
+      });
+    } catch (error) {
+      console.error('Failed to get credentials:', error);
+      return c.json({ error: 'Failed to get credentials' }, 500);
+    }
   }
-});
+);
 
 /**
  * ヒントを公開
  */
-participantRouter.post('/events/:eventId/challenges/:challengeId/hints/:hintId/reveal', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, challengeId: _challengeId, hintId } = c.req.param();
+participantRouter.post(
+  '/events/:eventId/challenges/:challengeId/hints/:hintId/reveal',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const {
+      eventId: _eventId,
+      challengeId: _challengeId,
+      hintId,
+    } = c.req.param();
 
-  try {
-    // TODO: 実際のヒント公開処理
-    // - ポイント減点を記録
-    // - ヒント公開状態を保存
+    try {
+      // TODO: 実際のヒント公開処理
+      // - ポイント減点を記録
+      // - ヒント公開状態を保存
 
-    return c.json({
-      id: hintId,
-      content: 'ヒントの内容がここに表示されます',
-      costPoints: 10,
-      isRevealed: true,
-    });
-  } catch (error) {
-    console.error('Failed to reveal hint:', error);
-    return c.json({ error: 'Failed to reveal hint' }, 500);
+      return c.json({
+        id: hintId,
+        content: 'ヒントの内容がここに表示されます',
+        costPoints: 10,
+        isRevealed: true,
+      });
+    } catch (error) {
+      console.error('Failed to reveal hint:', error);
+      return c.json({ error: 'Failed to reveal hint' }, 500);
+    }
   }
-});
+);
 
 /**
  * クルーを公開（JAM）
  */
-participantRouter.post('/events/:eventId/challenges/:challengeId/clues/:clueId/reveal', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, challengeId: _challengeId, clueId } = c.req.param();
+participantRouter.post(
+  '/events/:eventId/challenges/:challengeId/clues/:clueId/reveal',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const {
+      eventId: _eventId,
+      challengeId: _challengeId,
+      clueId,
+    } = c.req.param();
 
-  try {
-    // TODO: 実際のクルー公開処理
+    try {
+      // TODO: 実際のクルー公開処理
 
-    return c.json({
-      id: clueId,
-      order: 1,
-      title: 'クルータイトル',
-      content: 'クルーの内容がここに表示されます',
-      costPoints: 50,
-      isRevealed: true,
-      revealedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Failed to reveal clue:', error);
-    return c.json({ error: 'Failed to reveal clue' }, 500);
+      return c.json({
+        id: clueId,
+        order: 1,
+        title: 'クルータイトル',
+        content: 'クルーの内容がここに表示されます',
+        costPoints: 50,
+        isRevealed: true,
+        revealedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Failed to reveal clue:', error);
+      return c.json({ error: 'Failed to reveal clue' }, 500);
+    }
   }
-});
+);
 
 /**
  * 採点をリクエスト（GameDay）
  */
-participantRouter.post('/events/:eventId/challenges/:challengeId/score', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
+participantRouter.post(
+  '/events/:eventId/challenges/:challengeId/score',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
-  try {
-    // TODO: 実際の採点リクエスト処理
-    // - 採点キューに追加
-    // - 提出IDを返す
+    try {
+      // TODO: 実際の採点リクエスト処理
+      // - 採点キューに追加
+      // - 提出IDを返す
 
-    const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    return c.json({
-      submissionId,
-      message: '採点リクエストを受け付けました。結果は数分後に反映されます。',
-    });
-  } catch (error) {
-    console.error('Failed to request scoring:', error);
-    return c.json({ error: 'Failed to request scoring' }, 500);
+      return c.json({
+        submissionId,
+        message: '採点リクエストを受け付けました。結果は数分後に反映されます。',
+      });
+    } catch (error) {
+      console.error('Failed to request scoring:', error);
+      return c.json({ error: 'Failed to request scoring' }, 500);
+    }
   }
-});
+);
 
 /**
  * 回答を提出（JAM）
@@ -606,36 +643,42 @@ participantRouter.post(
 /**
  * 提出履歴を取得
  */
-participantRouter.get('/events/:eventId/challenges/:challengeId/submissions', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
+participantRouter.get(
+  '/events/:eventId/challenges/:challengeId/submissions',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
-  try {
-    // TODO: 実際の提出履歴を取得
+    try {
+      // TODO: 実際の提出履歴を取得
 
-    return c.json({ submissions: [] });
-  } catch (error) {
-    console.error('Failed to fetch submissions:', error);
-    return c.json({ error: 'Failed to fetch submissions' }, 500);
+      return c.json({ submissions: [] });
+    } catch (error) {
+      console.error('Failed to fetch submissions:', error);
+      return c.json({ error: 'Failed to fetch submissions' }, 500);
+    }
   }
-});
+);
 
 /**
  * 最新の提出結果を取得
  */
-participantRouter.get('/events/:eventId/challenges/:challengeId/submissions/latest', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
+participantRouter.get(
+  '/events/:eventId/challenges/:challengeId/submissions/latest',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
-  try {
-    // TODO: 実際の最新提出を取得
+    try {
+      // TODO: 実際の最新提出を取得
 
-    return c.json({ error: 'No submissions found' }, 404);
-  } catch (error) {
-    console.error('Failed to fetch latest submission:', error);
-    return c.json({ error: 'Failed to fetch submission' }, 500);
+      return c.json({ error: 'No submissions found' }, 404);
+    } catch (error) {
+      console.error('Failed to fetch latest submission:', error);
+      return c.json({ error: 'Failed to fetch submission' }, 500);
+    }
   }
-});
+);
 
 // ====================
 // チーム管理
@@ -818,19 +861,22 @@ participantRouter.get('/events/:eventId/team/members', async (c) => {
 /**
  * チームメンバーを削除
  */
-participantRouter.delete('/events/:eventId/team/members/:memberId', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-  const { eventId: _eventId, memberId: _memberId } = c.req.param();
+participantRouter.delete(
+  '/events/:eventId/team/members/:memberId',
+  async (c) => {
+    const _user = c.get('user') as AuthenticatedUser;
+    const { eventId: _eventId, memberId: _memberId } = c.req.param();
 
-  try {
-    // TODO: キャプテン権限チェック + 実際の削除処理
+    try {
+      // TODO: キャプテン権限チェック + 実際の削除処理
 
-    return c.json({ success: true, message: 'Member removed from team' });
-  } catch (error) {
-    console.error('Failed to remove member:', error);
-    return c.json({ error: 'Failed to remove member' }, 500);
+      return c.json({ success: true, message: 'Member removed from team' });
+    } catch (error) {
+      console.error('Failed to remove member:', error);
+      return c.json({ error: 'Failed to remove member' }, 500);
+    }
   }
-});
+);
 
 /**
  * チームを解散

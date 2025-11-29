@@ -4,11 +4,11 @@
  * 参加者ダッシュボード
  */
 
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Header } from "../../components/layout";
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { Header } from '../../components/layout';
 import {
   Button,
   Card,
@@ -16,9 +16,9 @@ import {
   CardHeader,
   EventStatusBadge,
   ProblemTypeBadge,
-} from "../../components/ui";
-import { getAvailableEvents, getMyEvents } from "../../lib/api/events";
-import type { ParticipantEvent } from "../../lib/api/types";
+} from '../../components/ui';
+import { getAvailableEvents, getMyEvents } from '../../lib/api/events';
+import type { ParticipantEvent } from '../../lib/api/types';
 
 export default function DashboardPage() {
   const [myEvents, setMyEvents] = useState<ParticipantEvent[]>([]);
@@ -32,16 +32,16 @@ export default function DashboardPage() {
         setLoading(true);
         const [myEventsRes, upcomingRes] = await Promise.all([
           getMyEvents(),
-          getAvailableEvents({ status: ["scheduled", "active"], limit: 5 }),
+          getAvailableEvents({ status: ['scheduled', 'active'], limit: 5 }),
         ]);
         setMyEvents(myEventsRes.events);
         setUpcomingEvents(
           upcomingRes.events.filter(
-            (e) => !myEventsRes.events.some((me) => me.id === e.id),
-          ),
+            (e) => !myEventsRes.events.some((me) => me.id === e.id)
+          )
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
+        setError(err instanceof Error ? err.message : '読み込みに失敗しました');
       } finally {
         setLoading(false);
       }
@@ -52,16 +52,16 @@ export default function DashboardPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("ja-JP", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    return date.toLocaleDateString('ja-JP', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
-  const activeEvents = myEvents.filter((e) => e.status === "active");
-  const scheduledEvents = myEvents.filter((e) => e.status === "scheduled");
+  const activeEvents = myEvents.filter((e) => e.status === 'active');
+  const scheduledEvents = myEvents.filter((e) => e.status === 'scheduled');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -121,7 +121,7 @@ export default function DashboardPage() {
                           <div className="text-sm text-gray-600 space-y-1">
                             <p>終了: {formatDate(event.endTime)}</p>
                             <p>
-                              問題数: {event.problemCount} | 参加者:{" "}
+                              問題数: {event.problemCount} | 参加者:{' '}
                               {event.participantCount}
                             </p>
                           </div>

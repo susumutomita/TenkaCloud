@@ -7,32 +7,32 @@
 interface ProgressProps {
   value: number;
   max?: number;
-  size?: "sm" | "md" | "lg";
-  variant?: "default" | "success" | "warning" | "danger";
+  size?: 'sm' | 'md' | 'lg';
+  variant?: 'default' | 'success' | 'warning' | 'danger';
   showLabel?: boolean;
   className?: string;
 }
 
 const sizeClasses = {
-  sm: "h-1",
-  md: "h-2",
-  lg: "h-4",
+  sm: 'h-1',
+  md: 'h-2',
+  lg: 'h-4',
 };
 
 const variantClasses = {
-  default: "bg-blue-600",
-  success: "bg-green-600",
-  warning: "bg-yellow-600",
-  danger: "bg-red-600",
+  default: 'bg-blue-600',
+  success: 'bg-green-600',
+  warning: 'bg-yellow-600',
+  danger: 'bg-red-600',
 };
 
 export function Progress({
   value,
   max = 100,
-  size = "md",
-  variant = "default",
+  size = 'md',
+  variant = 'default',
   showLabel = false,
-  className = "",
+  className = '',
 }: ProgressProps) {
   const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
 
@@ -66,25 +66,25 @@ export function Progress({
 export function ScoreProgress({
   score,
   maxScore,
-  size = "md",
+  size = 'md',
   showLabel = true,
-  className = "",
+  className = '',
 }: {
   score: number;
   maxScore: number;
-  size?: "sm" | "md" | "lg";
+  size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
   className?: string;
 }) {
   const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
 
-  let variant: "default" | "success" | "warning" | "danger" = "default";
+  let variant: 'default' | 'success' | 'warning' | 'danger' = 'default';
   if (percentage >= 80) {
-    variant = "success";
+    variant = 'success';
   } else if (percentage >= 50) {
-    variant = "warning";
+    variant = 'warning';
   } else if (percentage > 0) {
-    variant = "danger";
+    variant = 'danger';
   }
 
   return (

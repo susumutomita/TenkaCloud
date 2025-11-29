@@ -61,7 +61,10 @@ export class AWSCloudProvider implements ICloudProvider {
     }
 
     // AssumeRole または直接認証情報のいずれかが必要
-    if (!credentials.roleArn && (!credentials.accessKeyId || !credentials.secretAccessKey)) {
+    if (
+      !credentials.roleArn &&
+      (!credentials.accessKeyId || !credentials.secretAccessKey)
+    ) {
       return false;
     }
 
@@ -108,14 +111,22 @@ export class AWSCloudProvider implements ICloudProvider {
         TemplateBody: await this.loadTemplate(template.path),
         Parameters: parameters,
         Tags: tags,
-        Capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
+        Capabilities: [
+          'CAPABILITY_IAM',
+          'CAPABILITY_NAMED_IAM',
+          'CAPABILITY_AUTO_EXPAND',
+        ],
         TimeoutInMinutes: Math.ceil((options.timeoutSeconds || 3600) / 60),
-        OnFailure: options.rollbackOnFailure !== false ? 'ROLLBACK' : 'DO_NOTHING',
+        OnFailure:
+          options.rollbackOnFailure !== false ? 'ROLLBACK' : 'DO_NOTHING',
       };
 
       if (options.dryRun) {
         // ドライランの場合はテンプレート検証のみ
-        await this.validateTemplate(createStackParams.TemplateBody, credentials);
+        await this.validateTemplate(
+          createStackParams.TemplateBody,
+          credentials
+        );
         return {
           success: true,
           stackName: options.stackName,
@@ -154,7 +165,9 @@ export class AWSCloudProvider implements ICloudProvider {
         success: false,
         stackId: createResult.StackId as string | undefined,
         stackName: options.stackName,
-        error: finalStatus.statusReason || `Stack creation failed with status: ${finalStatus.status}`,
+        error:
+          finalStatus.statusReason ||
+          `Stack creation failed with status: ${finalStatus.status}`,
         startedAt,
         completedAt: new Date(),
       };
@@ -172,7 +185,10 @@ export class AWSCloudProvider implements ICloudProvider {
   /**
    * スタックのステータス取得
    */
-  async getStackStatus(stackName: string, credentials: CloudCredentials): Promise<StackStatus | null> {
+  async getStackStatus(
+    stackName: string,
+    credentials: CloudCredentials
+  ): Promise<StackStatus | null> {
     try {
       const result = await this.callCloudFormation(
         credentials,
@@ -181,7 +197,9 @@ export class AWSCloudProvider implements ICloudProvider {
         { StackName: stackName }
       );
 
-      const stacks = result.Stacks as Array<Record<string, unknown>> | undefined;
+      const stacks = result.Stacks as
+        | Array<Record<string, unknown>>
+        | undefined;
       if (!stacks || stacks.length === 0) {
         return null;
       }
@@ -192,8 +210,15 @@ export class AWSCloudProvider implements ICloudProvider {
         stackId: stack.StackId as string,
         status: stack.StackStatus as StackStatus['status'],
         statusReason: stack.StackStatusReason as string | undefined,
-        outputs: this.parseOutputs((stack.Outputs || []) as Array<{ OutputKey: string; OutputValue: string }>),
-        lastUpdatedTime: stack.LastUpdatedTime ? new Date(stack.LastUpdatedTime as string) : undefined,
+        outputs: this.parseOutputs(
+          (stack.Outputs || []) as Array<{
+            OutputKey: string;
+            OutputValue: string;
+          }>
+        ),
+        lastUpdatedTime: stack.LastUpdatedTime
+          ? new Date(stack.LastUpdatedTime as string)
+          : undefined,
       };
     } catch {
       return null;
@@ -203,7 +228,10 @@ export class AWSCloudProvider implements ICloudProvider {
   /**
    * スタックの削除
    */
-  async deleteStack(stackName: string, credentials: CloudCredentials): Promise<DeploymentResult> {
+  async deleteStack(
+    stackName: string,
+    credentials: CloudCredentials
+  ): Promise<DeploymentResult> {
     const startedAt = new Date();
 
     try {
@@ -242,7 +270,10 @@ export class AWSCloudProvider implements ICloudProvider {
   /**
    * スタック出力の取得
    */
-  async getStackOutputs(stackName: string, credentials: CloudCredentials): Promise<Record<string, string>> {
+  async getStackOutputs(
+    stackName: string,
+    credentials: CloudCredentials
+  ): Promise<Record<string, string>> {
     const status = await this.getStackStatus(stackName, credentials);
     return status?.outputs || {};
   }
@@ -259,16 +290,11 @@ export class AWSCloudProvider implements ICloudProvider {
     const bucketName = this.extractBucketName(remotePath);
     const key = this.extractS3Key(remotePath);
 
-    await this.callS3(
-      credentials,
-      credentials.region,
-      'PutObject',
-      {
-        Bucket: bucketName,
-        Key: key,
-        Body: await this.readFile(localPath),
-      }
-    );
+    await this.callS3(credentials, credentials.region, 'PutObject', {
+      Bucket: bucketName,
+      Key: key,
+      Body: await this.readFile(localPath),
+    });
 
     return `s3://${bucketName}/${key}`;
   }
@@ -332,11 +358,13 @@ export class AWSCloudProvider implements ICloudProvider {
       return {
         success: false,
         deletedResources,
-        failedResources: [{
-          type: 'Cleanup',
-          id: accountId,
-          error: error instanceof Error ? error.message : String(error),
-        }],
+        failedResources: [
+          {
+            type: 'Cleanup',
+            id: accountId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        ],
         totalDeleted: deletedResources.length,
         totalFailed: 1,
         dryRun: options?.dryRun ?? false,
@@ -378,11 +406,18 @@ export class AWSCloudProvider implements ICloudProvider {
   // Private Helper Methods
   // ==========================================================================
 
-  private async callSTS(credentials: CloudCredentials, action: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async callSTS(
+    credentials: CloudCredentials,
+    action: string,
+    params?: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     // 実際の実装では AWS SDK を使用
     // ここではモック実装
     console.log(`[AWS STS] ${action}`, params);
-    return { Account: credentials.accountId, Arn: `arn:aws:iam::${credentials.accountId}:root` };
+    return {
+      Account: credentials.accountId,
+      Arn: `arn:aws:iam::${credentials.accountId}:root`,
+    };
   }
 
   private async callCloudFormation(
@@ -393,7 +428,9 @@ export class AWSCloudProvider implements ICloudProvider {
   ): Promise<Record<string, unknown>> {
     // 実際の実装では AWS SDK を使用
     console.log(`[AWS CloudFormation] ${action} in ${region}`, params);
-    return { StackId: `arn:aws:cloudformation:${region}:${credentials.accountId}:stack/${params.StackName}/xxx` };
+    return {
+      StackId: `arn:aws:cloudformation:${region}:${credentials.accountId}:stack/${params.StackName}/xxx`,
+    };
   }
 
   private async callS3(
@@ -406,19 +443,26 @@ export class AWSCloudProvider implements ICloudProvider {
     return {};
   }
 
-  private async callIAM(credentials: CloudCredentials, action: string): Promise<Record<string, unknown>> {
+  private async callIAM(
+    credentials: CloudCredentials,
+    action: string
+  ): Promise<Record<string, unknown>> {
     console.log(`[AWS IAM] ${action}`);
     return { AccountAliases: [] };
   }
 
-  private buildParameters(params: Record<string, string>): { ParameterKey: string; ParameterValue: string }[] {
+  private buildParameters(
+    params: Record<string, string>
+  ): { ParameterKey: string; ParameterValue: string }[] {
     return Object.entries(params).map(([key, value]) => ({
       ParameterKey: key,
       ParameterValue: value,
     }));
   }
 
-  private buildTags(tags: Record<string, string>): { Key: string; Value: string }[] {
+  private buildTags(
+    tags: Record<string, string>
+  ): { Key: string; Value: string }[] {
     return Object.entries(tags).map(([key, value]) => ({
       Key: key,
       Value: value,
@@ -431,10 +475,18 @@ export class AWSCloudProvider implements ICloudProvider {
     return '{}';
   }
 
-  private async validateTemplate(templateBody: string, credentials: CloudCredentials): Promise<void> {
-    await this.callCloudFormation(credentials, credentials.region, 'ValidateTemplate', {
-      TemplateBody: templateBody,
-    });
+  private async validateTemplate(
+    templateBody: string,
+    credentials: CloudCredentials
+  ): Promise<void> {
+    await this.callCloudFormation(
+      credentials,
+      credentials.region,
+      'ValidateTemplate',
+      {
+        TemplateBody: templateBody,
+      }
+    );
   }
 
   private async waitForStackComplete(
@@ -447,12 +499,18 @@ export class AWSCloudProvider implements ICloudProvider {
     const pollInterval = 10000; // 10秒
 
     while (Date.now() - startTime < timeoutSeconds * 1000) {
-      const status = await this.getStackStatus(stackName, { ...credentials, region });
+      const status = await this.getStackStatus(stackName, {
+        ...credentials,
+        region,
+      });
       if (!status) {
         throw new Error(`Stack ${stackName} not found`);
       }
 
-      if (status.status.endsWith('_COMPLETE') || status.status.endsWith('_FAILED')) {
+      if (
+        status.status.endsWith('_COMPLETE') ||
+        status.status.endsWith('_FAILED')
+      ) {
         return status;
       }
 
@@ -472,7 +530,10 @@ export class AWSCloudProvider implements ICloudProvider {
     const pollInterval = 10000;
 
     while (Date.now() - startTime < timeoutSeconds * 1000) {
-      const status = await this.getStackStatus(stackName, { ...credentials, region });
+      const status = await this.getStackStatus(stackName, {
+        ...credentials,
+        region,
+      });
       if (!status) {
         return 'DELETE_COMPLETE';
       }
@@ -487,7 +548,9 @@ export class AWSCloudProvider implements ICloudProvider {
     throw new Error(`Timeout waiting for stack deletion: ${stackName}`);
   }
 
-  private parseOutputs(outputs: { OutputKey: string; OutputValue: string }[]): Record<string, string> {
+  private parseOutputs(
+    outputs: { OutputKey: string; OutputValue: string }[]
+  ): Record<string, string> {
     const result: Record<string, string> = {};
     for (const output of outputs) {
       result[output.OutputKey] = output.OutputValue;
@@ -520,7 +583,10 @@ export class AWSCloudProvider implements ICloudProvider {
     return [];
   }
 
-  private shouldDeleteResource(resourceName: string, options?: CleanupOptions): boolean {
+  private shouldDeleteResource(
+    resourceName: string,
+    options?: CleanupOptions
+  ): boolean {
     if (!options) return true;
 
     // 除外パターンのチェック
@@ -536,7 +602,7 @@ export class AWSCloudProvider implements ICloudProvider {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

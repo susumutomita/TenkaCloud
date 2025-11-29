@@ -36,9 +36,19 @@ import type {
  */
 function toProblem(
   prismaProblem: PrismaProblem & {
-    templates?: { provider: string; type: string; path: string; parameters: unknown }[];
+    templates?: {
+      provider: string;
+      type: string;
+      path: string;
+      parameters: unknown;
+    }[];
     regions?: { provider: string; regions: string[] }[];
-    criteria?: { name: string; description: string | null; weight: number; maxPoints: number }[];
+    criteria?: {
+      name: string;
+      description: string | null;
+      weight: number;
+      maxPoints: number;
+    }[];
   }
 ): Problem {
   // テンプレートをプロバイダーごとにグループ化
@@ -89,16 +99,21 @@ function toProblem(
       regions: regionsMap,
     },
     scoring: {
-      type: prismaProblem.scoringType.toLowerCase() as 'lambda' | 'container' | 'api' | 'manual',
+      type: prismaProblem.scoringType.toLowerCase() as
+        | 'lambda'
+        | 'container'
+        | 'api'
+        | 'manual',
       path: prismaProblem.scoringPath,
       timeoutMinutes: prismaProblem.scoringTimeoutMinutes,
       intervalMinutes: prismaProblem.scoringIntervalMinutes ?? undefined,
-      criteria: prismaProblem.criteria?.map((c) => ({
-        name: c.name,
-        description: c.description ?? '',
-        weight: c.weight,
-        maxPoints: c.maxPoints,
-      })) || [],
+      criteria:
+        prismaProblem.criteria?.map((c) => ({
+          name: c.name,
+          description: c.description ?? '',
+          weight: c.weight,
+          maxPoints: c.maxPoints,
+        })) || [],
     },
   };
 }
@@ -126,7 +141,9 @@ function toPrismaCategory(category: ProblemCategory): PrismaProblemCategory {
   return map[category];
 }
 
-function toPrismaDifficulty(difficulty: DifficultyLevel): PrismaDifficultyLevel {
+function toPrismaDifficulty(
+  difficulty: DifficultyLevel
+): PrismaDifficultyLevel {
   const map: Record<DifficultyLevel, PrismaDifficultyLevel> = {
     easy: 'EASY',
     medium: 'MEDIUM',
@@ -169,7 +186,11 @@ export class PrismaProblemRepository implements IProblemRepository {
         estimatedTimeMinutes: problem.description.estimatedTime,
         providers: problem.deployment.providers.map(toPrismaCloudProvider),
         deploymentTimeoutMinutes: problem.deployment.timeout || 60,
-        scoringType: problem.scoring.type.toUpperCase() as 'LAMBDA' | 'CONTAINER' | 'API' | 'MANUAL',
+        scoringType: problem.scoring.type.toUpperCase() as
+          | 'LAMBDA'
+          | 'CONTAINER'
+          | 'API'
+          | 'MANUAL',
         scoringPath: problem.scoring.path,
         scoringTimeoutMinutes: problem.scoring.timeoutMinutes || 5,
         scoringIntervalMinutes: problem.scoring.intervalMinutes,
@@ -190,9 +211,12 @@ export class PrismaProblemRepository implements IProblemRepository {
     if (updates.title) data.title = updates.title;
     if (updates.type) data.type = toPrismaType(updates.type);
     if (updates.category) data.category = toPrismaCategory(updates.category);
-    if (updates.difficulty) data.difficulty = toPrismaDifficulty(updates.difficulty);
-    if (updates.description?.overview) data.overview = updates.description.overview;
-    if (updates.description?.objectives) data.objectives = updates.description.objectives;
+    if (updates.difficulty)
+      data.difficulty = toPrismaDifficulty(updates.difficulty);
+    if (updates.description?.overview)
+      data.overview = updates.description.overview;
+    if (updates.description?.objectives)
+      data.objectives = updates.description.objectives;
     if (updates.description?.hints) data.hints = updates.description.hints;
     if (updates.description?.prerequisites)
       data.prerequisites = updates.description.prerequisites;
@@ -359,7 +383,9 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
     });
   }
 
-  async search(query: MarketplaceSearchQuery): Promise<MarketplaceSearchResult> {
+  async search(
+    query: MarketplaceSearchQuery
+  ): Promise<MarketplaceSearchResult> {
     const where: Record<string, unknown> = {};
 
     if (query.query) {
@@ -373,25 +399,25 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
     }
     if (query.type) {
       where.problem = {
-        ...where.problem as object,
+        ...(where.problem as object),
         type: toPrismaType(query.type),
       };
     }
     if (query.category) {
       where.problem = {
-        ...where.problem as object,
+        ...(where.problem as object),
         category: toPrismaCategory(query.category),
       };
     }
     if (query.difficulty) {
       where.problem = {
-        ...where.problem as object,
+        ...(where.problem as object),
         difficulty: toPrismaDifficulty(query.difficulty),
       };
     }
     if (query.provider) {
       where.problem = {
-        ...where.problem as object,
+        ...(where.problem as object),
         providers: { has: toPrismaCloudProvider(query.provider) },
       };
     }
@@ -509,9 +535,19 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
   private toMarketplaceProblem(
     listing: MarketplaceListing & {
       problem: PrismaProblem & {
-        templates?: { provider: string; type: string; path: string; parameters: unknown }[];
+        templates?: {
+          provider: string;
+          type: string;
+          path: string;
+          parameters: unknown;
+        }[];
         regions?: { provider: string; regions: string[] }[];
-        criteria?: { name: string; description: string | null; weight: number; maxPoints: number }[];
+        criteria?: {
+          name: string;
+          description: string | null;
+          weight: number;
+          maxPoints: number;
+        }[];
       };
       reviews?: { rating: number }[];
     }
@@ -524,14 +560,15 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
       publishedAt: listing.publishedAt,
       downloadCount: listing.downloadCount,
       rating: listing.averageRating,
-      reviews: listing.reviews?.map((r) => ({
-        id: 'review',
-        userId: '',
-        userName: '',
-        rating: r.rating,
-        comment: '',
-        createdAt: new Date(),
-      })) || [],
+      reviews:
+        listing.reviews?.map((r) => ({
+          id: 'review',
+          userId: '',
+          userName: '',
+          rating: r.rating,
+          comment: '',
+          createdAt: new Date(),
+        })) || [],
     };
   }
 }
