@@ -19,6 +19,12 @@ export default defineConfig({
         '**/*.config.*',
         '**/vitest.setup.ts',
       ],
+      thresholds: {
+        lines: 99,
+        functions: 99,
+        branches: 99,
+        statements: 99,
+      },
     },
   },
   resolve: {

@@ -1,0 +1,134 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: lambda-api-gateway
+# タイプ: JAM
+
+id: lambda-api-gateway
+title: サーバーレス REST API 構築チャレンジ
+type: jam
+category: architecture
+difficulty: medium
+
+metadata:
+  author: Cloud Experts Inc.
+  version: 2.1.0
+  createdAt: "2025-01-10"
+  updatedAt: "2025-01-18"
+  tags:
+    - lambda
+    - api-gateway
+    - serverless
+    - rest-api
+    - dynamodb
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたのチームは新しいマイクロサービスを構築することになりました。
+    要件に従って、サーバーレスアーキテクチャを使用した REST API を構築してください。
+
+    ## 要件
+    - Lambda 関数を使用してビジネスロジックを実装
+    - API Gateway で RESTful なエンドポイントを公開
+    - DynamoDB をデータストアとして使用
+    - 適切なエラーハンドリングを実装
+
+    ## 制約
+    - Lambda のタイムアウトは 30 秒以内
+    - API Gateway は REST API タイプを使用
+    - DynamoDB は On-Demand キャパシティモード
+
+  objectives:
+    - Lambda 関数のデプロイ（CRUD 操作）
+    - API Gateway REST API の設定
+    - DynamoDB テーブルの作成
+    - IAM ロールの適切な設定
+    - エラーハンドリングの実装
+    - API キーによるアクセス制御
+
+  hints:
+    - "SAM (Serverless Application Model) の使用を検討してください"
+    - "Lambda Proxy 統合を使用すると開発が簡単になります"
+    - "DynamoDB の GSI を使用すると柔軟なクエリが可能です"
+    - "CloudWatch Logs でデバッグ情報を確認できます"
+
+  prerequisites:
+    - Lambda の基本的な知識
+    - API Gateway の基本的な知識
+    - Python または Node.js の経験
+    - IAM の基本的な知識
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: sam
+      path: ./templates/aws/sam-template.yaml
+      parameters:
+        Stage: prod
+        TableName: items
+
+    local:
+      type: docker-compose
+      path: ./templates/local/docker-compose.yaml
+      parameters:
+        LOCALSTACK_SERVICES: lambda,apigateway,dynamodb
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 45
+
+scoring:
+  type: container
+  path: ./scoring/api-gateway-tester
+  criteria:
+    - name: Lambda 関数のデプロイ
+      description: 4 つの CRUD 操作用 Lambda 関数が正常にデプロイされている
+      weight: 20
+      maxPoints: 100
+
+    - name: API Gateway 設定
+      description: REST API が正しく設定され、エンドポイントが公開されている
+      weight: 20
+      maxPoints: 100
+
+    - name: DynamoDB 統合
+      description: Lambda から DynamoDB への CRUD 操作が正常に動作する
+      weight: 20
+      maxPoints: 100
+
+    - name: IAM 権限
+      description: 最小権限の原則に従った IAM ロールが設定されている
+      weight: 15
+      maxPoints: 100
+
+    - name: エラーハンドリング
+      description: 適切なエラーレスポンスが返される
+      weight: 15
+      maxPoints: 100
+
+    - name: API キー認証
+      description: API キーによるアクセス制御が実装されている
+      weight: 10
+      maxPoints: 100
+
+  timeoutMinutes: 10
+  intervalMinutes: 2
+
+resources:
+  static:
+    - path: ./assets/api-spec.yaml
+      destination: s3://problem-assets/lambda-api-gateway/
+
+  documentation:
+    - path: ./docs/README.md
+    - path: ./docs/api-specification.md
+    - path: ./docs/solution-guide.md

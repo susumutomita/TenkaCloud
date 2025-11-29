@@ -10,6 +10,12 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: ['node_modules/', 'coverage/', '**/*.config.*'],
+      thresholds: {
+        lines: 99,
+        functions: 99,
+        branches: 99,
+        statements: 99,
+      },
     },
   },
 });

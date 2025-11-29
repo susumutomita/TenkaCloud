@@ -1,0 +1,285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tenkacloud.io/schemas/problem.schema.json",
+  "title": "TenkaCloud Problem Definition",
+  "description": "統一問題フォーマット - GameDay/JAM 両形式をサポート",
+  "type": "object",
+  "required": ["id", "title", "type", "category", "difficulty", "metadata", "description", "deployment", "scoring"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "minLength": 3,
+      "maxLength": 64,
+      "description": "問題の一意識別子（小文字英数字とハイフンのみ）"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "問題タイトル"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["gameday", "jam"],
+      "description": "問題形式（GameDay or JAM）"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["architecture", "security", "cost", "performance", "reliability", "operations"],
+      "description": "問題カテゴリ"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard", "expert"],
+      "description": "難易度"
+    },
+    "metadata": {
+      "$ref": "#/definitions/metadata"
+    },
+    "description": {
+      "$ref": "#/definitions/description"
+    },
+    "deployment": {
+      "$ref": "#/definitions/deployment"
+    },
+    "scoring": {
+      "$ref": "#/definitions/scoring"
+    },
+    "resources": {
+      "$ref": "#/definitions/resources"
+    }
+  },
+  "definitions": {
+    "metadata": {
+      "type": "object",
+      "required": ["author", "version", "createdAt"],
+      "properties": {
+        "author": {
+          "type": "string",
+          "description": "作成者"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "バージョン（セマンティックバージョニング）"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date",
+          "description": "作成日（YYYY-MM-DD）"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date",
+          "description": "更新日（YYYY-MM-DD）"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "タグ一覧"
+        },
+        "license": {
+          "type": "string",
+          "description": "ライセンス"
+        }
+      }
+    },
+    "description": {
+      "type": "object",
+      "required": ["overview", "objectives"],
+      "properties": {
+        "overview": {
+          "type": "string",
+          "description": "問題の概要（Markdown）"
+        },
+        "objectives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "達成目標一覧"
+        },
+        "hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "ヒント一覧"
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "前提条件"
+        },
+        "estimatedTime": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "想定所要時間（分）"
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "required": ["providers", "templates"],
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["aws", "gcp", "azure", "local"]
+          },
+          "minItems": 1,
+          "description": "対応クラウドプロバイダー"
+        },
+        "templates": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/deploymentTemplate"
+          },
+          "description": "プロバイダー別デプロイテンプレート"
+        },
+        "regions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "プロバイダー別対応リージョン"
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 480,
+          "default": 60,
+          "description": "デプロイタイムアウト（分）"
+        }
+      }
+    },
+    "deploymentTemplate": {
+      "type": "object",
+      "required": ["type", "path"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["cloudformation", "sam", "cdk", "terraform", "deployment-manager", "arm", "docker-compose"],
+          "description": "テンプレートタイプ"
+        },
+        "path": {
+          "type": "string",
+          "description": "テンプレートファイルパス"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "デフォルトパラメータ"
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "required": ["type", "path", "criteria", "timeoutMinutes"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["lambda", "container", "api", "manual"],
+          "description": "採点タイプ"
+        },
+        "path": {
+          "type": "string",
+          "description": "採点コードのパス"
+        },
+        "criteria": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/scoringCriterion"
+          },
+          "minItems": 1,
+          "description": "採点基準一覧"
+        },
+        "timeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 480,
+          "description": "採点タイムアウト（分）"
+        },
+        "intervalMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "採点間隔（分）- リアルタイム採点の場合"
+        }
+      }
+    },
+    "scoringCriterion": {
+      "type": "object",
+      "required": ["name", "weight", "maxPoints"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "基準名"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "重み（％）"
+        },
+        "maxPoints": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "最大得点"
+        },
+        "description": {
+          "type": "string",
+          "description": "基準の説明"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "static": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "destination"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "ローカルパス"
+              },
+              "destination": {
+                "type": "string",
+                "description": "アップロード先"
+              }
+            }
+          },
+          "description": "静的ファイル"
+        },
+        "documentation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "ドキュメントパス"
+              }
+            }
+          },
+          "description": "ドキュメント"
+        }
+      }
+    }
+  }
+}

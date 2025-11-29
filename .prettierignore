@@ -7,3 +7,4 @@ coverage
 .git
 reference/
 reference/**
+**/next-env.d.ts
