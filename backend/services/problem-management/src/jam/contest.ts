@@ -5,10 +5,8 @@
  * ※ 従来CLIで行っていた操作をAPI化
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../repositories';
 import { logContestStart, logContestEnd } from './eventlog';
-
-const prisma = new PrismaClient();
 
 /**
  * コンテストの状態
@@ -30,13 +28,13 @@ export interface Contest {
   name: string;
   description: string;
   status: ContestStatus;
-  startTime?: bigint;
-  endTime?: bigint;
+  startTime?: Date;
+  endTime?: Date;
   duration: number; // 分
   maxTeams?: number;
   challenges: string[];
-  createdAt: bigint;
-  updatedAt: bigint;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 /**
@@ -53,7 +51,7 @@ export async function createContest(data: {
   try {
     // 注意: Contest モデルはPrismaスキーマに追加が必要
     // 暫定的にEventLogを使ってコンテスト状態を管理
-    const now = BigInt(Date.now());
+    const now = new Date();
 
     // コンテスト情報を返す（実際のDB保存は別途Contestモデル追加後）
     return {
@@ -83,10 +81,10 @@ export async function startContest(
 ): Promise<{
   success: boolean;
   message: string;
-  startTime?: bigint;
+  startTime?: Date;
 }> {
   try {
-    const now = BigInt(Date.now());
+    const now = new Date();
 
     // すべてのチャレンジを有効化（必要に応じて）
     // 実際にはChallenge.enabledフラグなどを更新
@@ -117,7 +115,7 @@ export async function stopContest(
 ): Promise<{
   success: boolean;
   message: string;
-  endTime?: bigint;
+  endTime?: Date;
   finalLeaderboard?: Array<{
     rank: number;
     teamName: string;
@@ -125,7 +123,7 @@ export async function stopContest(
   }>;
 }> {
   try {
-    const now = BigInt(Date.now());
+    const now = new Date();
 
     // すべてのアクティブなロックを解除
     await prisma.teamChallengeAnswer.updateMany({
@@ -501,5 +499,3 @@ export async function getContestTeams(eventId: string): Promise<
     throw error;
   }
 }
-
-export { prisma };

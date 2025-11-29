@@ -715,11 +715,14 @@ model EventLog {
   eventId     String   // イベント名（minoru1では eventName）
   teamName    String
   message     String
+  logType     String?  // ログタイプ (challenge_start, task_complete, etc.)
+  metadata    Json?    // 追加のメタデータ
   dateTimeUTC BigInt   // ミリ秒タイムスタンプ
 
   createdAt   DateTime @default(now())
 
   @@index([eventId])
   @@index([dateTimeUTC(sort: Desc)])
+  @@index([logType])
   @@map("event_logs")
 }

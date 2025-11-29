@@ -18,7 +18,11 @@ import {
   UserRole,
   type AuthenticatedUser,
 } from '../auth';
-import { PrismaEventRepository, getEventWithProblems } from '../repositories';
+import {
+  PrismaEventRepository,
+  getEventWithProblems,
+  prisma,
+} from '../repositories';
 import { getLeaderboard } from '../jam/dashboard';
 import type { EventStatus, EventType } from '../types';
 
@@ -240,13 +244,18 @@ participantRouter.post('/events/:eventId/register', async (c) => {
  * イベント登録をキャンセル
  */
 participantRouter.post('/events/:eventId/unregister', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
+  const user = c.get('user') as AuthenticatedUser;
   const { eventId } = c.req.param();
 
   try {
     const event = await eventRepository.findById(eventId);
 
     if (!event) {
+      return c.json({ error: 'Event not found' }, 404);
+    }
+
+    // テナント分離チェック
+    if (event.tenantId !== user.tenantId) {
       return c.json({ error: 'Event not found' }, 404);
     }
 
@@ -484,21 +493,37 @@ participantRouter.get(
 participantRouter.get(
   '/events/:eventId/challenges/:challengeId/credentials',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
-    const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
+    const user = c.get('user') as AuthenticatedUser;
+    const { eventId, challengeId } = c.req.param();
 
     try {
+      // イベントとチャレンジの存在確認
+      const event = await getEventWithProblems(eventId);
+      if (!event || event.tenantId !== user.tenantId) {
+        return c.json({ error: 'Event not found' }, 404);
+      }
+
+      const eventProblem = event.problems.find(
+        (ep) => ep.problemId === challengeId
+      );
+      if (!eventProblem) {
+        return c.json({ error: 'Challenge not found' }, 404);
+      }
+
       // TODO: 実際のクレデンシャル発行処理
       // - 参加者に割り当てられたAWSアカウントからSTSでセッショントークンを取得
+      // - CompetitorAccount テーブルから暗号化されたクレデンシャルを取得
       // - セキュリティ制約を適用
 
-      return c.json({
-        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
-        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-        sessionToken: 'FwoGZXIvYXdzEBYaDkExample...',
-        expiresAt: new Date(Date.now() + 3600000).toISOString(), // 1時間後
-        region: 'ap-northeast-1',
-      });
+      // 現在は未実装のため 501 を返す
+      return c.json(
+        {
+          error: 'Credential provisioning not yet implemented',
+          message:
+            'AWS credentials will be provided when the competition infrastructure is deployed',
+        },
+        501
+      );
     } catch (error) {
       console.error('Failed to get credentials:', error);
       return c.json({ error: 'Failed to get credentials' }, 500);
@@ -601,29 +626,68 @@ participantRouter.post(
  */
 const submitAnswerSchema = z.object({
   answer: z.string().min(1),
+  titleId: z.string().min(1), // タスク識別子（どのタスクへの回答か）
 });
 
 participantRouter.post(
   '/events/:eventId/challenges/:challengeId/submit',
   zValidator('json', submitAnswerSchema),
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
+    const user = c.get('user') as AuthenticatedUser;
     const { eventId, challengeId } = c.req.param();
-    const { answer } = c.req.valid('json');
+    const { answer, titleId } = c.req.valid('json');
 
     try {
-      // TODO: 実際の回答検証処理
-      // - 正解と比較
-      // - 使用したクルー数から減点計算
-      // - スコアを記録
+      // イベントとチャレンジの存在確認
+      const challenge = await prisma.challenge.findFirst({
+        where: {
+          id: challengeId,
+          event: { id: eventId },
+        },
+        include: {
+          event: true,
+        },
+      });
 
-      const isCorrect = answer.toLowerCase().trim() === 'correct'; // 仮の判定
+      if (!challenge) {
+        return c.json({ error: 'Challenge not found' }, 404);
+      }
+
+      // テナント分離チェック
+      if (challenge.event.tenantId !== user.tenantId) {
+        return c.json({ error: 'Challenge not found' }, 404);
+      }
+
+      // 正解データを取得
+      const correctAnswer = await prisma.answer.findUnique({
+        where: {
+          challengeId_titleId: { challengeId, titleId },
+        },
+      });
+
+      if (!correctAnswer) {
+        return c.json(
+          { error: 'Answer configuration not found for this task' },
+          404
+        );
+      }
+
+      // 回答の検証（大文字小文字を無視、前後の空白を除去）
+      const isCorrect =
+        answer.toLowerCase().trim() ===
+        correctAnswer.answerKey.toLowerCase().trim();
+
+      // 提出IDを生成
       const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // TODO: TeamChallengeAnswer に提出を記録
+      // TODO: 使用したクルー数から減点計算
 
       return c.json({
         id: submissionId,
         problemId: challengeId,
         eventId,
+        titleId,
         submittedAt: new Date().toISOString(),
         status: 'completed',
         score: isCorrect ? 100 : 0,

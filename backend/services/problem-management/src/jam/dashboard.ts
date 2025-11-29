@@ -4,9 +4,7 @@
  * minoru1/RestApp/LambdaFunction/Dashboard/dashboard.py を TypeScript で再実装
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../repositories';
 
 /**
  * リーダーボードエントリの型

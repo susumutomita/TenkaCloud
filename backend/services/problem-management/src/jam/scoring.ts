@@ -4,10 +4,8 @@
  * minoru1/RestApp/LambdaFunction/Clue の採点ロジックを TypeScript で再実装
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../repositories';
 import { withLock, withSerializableTransaction } from './locking';
-
-const prisma = new PrismaClient();
 
 /**
  * クルーペナルティの型

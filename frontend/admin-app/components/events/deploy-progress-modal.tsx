@@ -55,6 +55,14 @@ export function DeployProgressModal({
           if (index < result.completedTasks) {
             return { ...task, status: 'completed' };
           } else if (index === result.completedTasks) {
+            // 失敗時は現在のタスクを 'failed' としてマーク
+            if (result.status === 'failed') {
+              return {
+                ...task,
+                status: 'failed',
+                message: result.message,
+              };
+            }
             return {
               ...task,
               status: result.status === 'running' ? 'running' : 'pending',
@@ -66,6 +74,11 @@ export function DeployProgressModal({
 
       if (result.status === 'completed') {
         onComplete();
+      }
+
+      if (result.status === 'failed') {
+        // 失敗時もコールバックで通知（任意で onError を追加可能）
+        console.error('Deployment failed:', result.message);
       }
 
       return result.status;

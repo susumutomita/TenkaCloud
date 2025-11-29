@@ -466,18 +466,22 @@ export class RealtimeScoringEngine {
 
         // 問題ごとの最新スコアを取得
         const problemScores: Record<string, number> = {};
-        let totalScore = 0;
         let lastScoredAt = new Date(0);
 
+        // 履歴を走査して各問題の最新スコアを取得（後のエントリで上書き）
         for (const result of participantHistory) {
-          // 各問題の最新スコアを使用
           problemScores[result.problemId] = result.totalScore;
-          totalScore += result.totalScore;
 
           if (result.scoredAt > lastScoredAt) {
             lastScoredAt = result.scoredAt;
           }
         }
+
+        // 各問題の最新スコアのみを合計（履歴全体ではなく）
+        const totalScore = Object.values(problemScores).reduce(
+          (sum, score) => sum + score,
+          0
+        );
 
         return {
           rank: 0, // 後で設定

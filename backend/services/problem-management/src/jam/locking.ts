@@ -5,9 +5,8 @@
  * PostgreSQL トランザクションで再実装
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import type { PrismaClient } from '@prisma/client';
+import { prisma } from '../repositories';
 
 /**
  * ロック取得結果

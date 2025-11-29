@@ -347,6 +347,8 @@ export interface ScoringEngineStats {
 
 /**
  * Lambda 採点関数実装
+ *
+ * 実際の実装では AWS SDK を使用して Lambda 関数を呼び出す
  */
 export class LambdaScoringFunction implements IScoringExecutor {
   readonly type = 'lambda';
@@ -358,47 +360,34 @@ export class LambdaScoringFunction implements IScoringExecutor {
 
   async execute(
     problem: Problem,
-    credentials: CloudCredentials,
+    _credentials: CloudCredentials,
     competitorAccountId: string
   ): Promise<ScoringExecutionResult> {
-    // Lambda 関数を呼び出して採点
     console.log(`[LambdaScoring] Executing scoring for problem ${problem.id}`);
     console.log(`[LambdaScoring] Function ARN: ${this.functionArn}`);
     console.log(`[LambdaScoring] Competitor Account: ${competitorAccountId}`);
 
-    // 実際の実装では AWS SDK を使用して Lambda を呼び出す
+    // TODO: AWS SDK を使用して Lambda 関数を呼び出す
     // const lambda = new LambdaClient({ region: credentials.region });
     // const response = await lambda.send(new InvokeCommand({
     //   FunctionName: this.functionArn,
     //   Payload: JSON.stringify({ problem, competitorAccountId }),
     // }));
+    // const result = JSON.parse(response.Payload.toString());
+    // return result;
 
-    // シミュレーション: 採点基準に基づいてスコアを計算
-    const criteriaResults = problem.scoring.criteria.map((criterion) => ({
-      name: criterion.name,
-      points: Math.floor(Math.random() * criterion.maxPoints),
-      maxPoints: criterion.maxPoints,
-      passed: Math.random() > 0.3,
-      feedback: `${criterion.name}の評価結果`,
-    }));
-
-    const totalScore = criteriaResults.reduce((sum, r) => sum + r.points, 0);
-    const maxPossibleScore = criteriaResults.reduce(
-      (sum, r) => sum + r.maxPoints,
-      0
+    throw new Error(
+      `Lambda scoring function not yet implemented. ` +
+        `Function ARN: ${this.functionArn}, Problem: ${problem.id}`
     );
-
-    return {
-      totalScore,
-      maxPossibleScore,
-      criteriaResults,
-      executionTimeMs: Math.floor(Math.random() * 5000) + 1000,
-    };
   }
 }
 
 /**
  * コンテナ採点関数実装
+ *
+ * 実際の実装では ECS/Fargate でコンテナを起動、
+ * または Kubernetes Job を作成して採点
  */
 export class ContainerScoringFunction implements IScoringExecutor {
   readonly type = 'container';
@@ -410,7 +399,7 @@ export class ContainerScoringFunction implements IScoringExecutor {
 
   async execute(
     problem: Problem,
-    credentials: CloudCredentials,
+    _credentials: CloudCredentials,
     competitorAccountId: string
   ): Promise<ScoringExecutionResult> {
     console.log(
@@ -421,30 +410,26 @@ export class ContainerScoringFunction implements IScoringExecutor {
       `[ContainerScoring] Competitor Account: ${competitorAccountId}`
     );
 
-    // 実際の実装では ECS/Fargate でコンテナを起動して採点
-    // または Kubernetes Job を作成
+    // TODO: ECS/Fargate または Kubernetes Job でコンテナを起動
+    // const ecs = new ECSClient({ region: credentials.region });
+    // const response = await ecs.send(new RunTaskCommand({
+    //   cluster: 'scoring-cluster',
+    //   taskDefinition: 'scoring-task',
+    //   overrides: {
+    //     containerOverrides: [{
+    //       name: 'scoring',
+    //       environment: [
+    //         { name: 'PROBLEM_ID', value: problem.id },
+    //         { name: 'COMPETITOR_ACCOUNT_ID', value: competitorAccountId },
+    //       ],
+    //     }],
+    //   },
+    // }));
 
-    // シミュレーション
-    const criteriaResults = problem.scoring.criteria.map((criterion) => ({
-      name: criterion.name,
-      points: Math.floor(Math.random() * criterion.maxPoints),
-      maxPoints: criterion.maxPoints,
-      passed: Math.random() > 0.3,
-      feedback: `${criterion.name}の評価結果`,
-    }));
-
-    const totalScore = criteriaResults.reduce((sum, r) => sum + r.points, 0);
-    const maxPossibleScore = criteriaResults.reduce(
-      (sum, r) => sum + r.maxPoints,
-      0
+    throw new Error(
+      `Container scoring function not yet implemented. ` +
+        `Image URI: ${this.imageUri}, Problem: ${problem.id}`
     );
-
-    return {
-      totalScore,
-      maxPossibleScore,
-      criteriaResults,
-      executionTimeMs: Math.floor(Math.random() * 10000) + 2000,
-    };
   }
 }
 

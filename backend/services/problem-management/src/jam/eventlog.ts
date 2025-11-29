@@ -4,9 +4,7 @@
  * minoru1/RestApp/LambdaFunction/Dashboard/dashboard.py のログ機能を TypeScript で再実装
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../repositories';
 
 /**
  * イベントログのタイプ
@@ -54,6 +52,8 @@ export async function addEventLog(
         eventId,
         teamName,
         message,
+        logType: logType ?? null,
+        metadata: metadata ?? null,
         dateTimeUTC: BigInt(Date.now()),
       },
     });
@@ -63,8 +63,8 @@ export async function addEventLog(
       eventId: log.eventId,
       teamName: log.teamName,
       message: log.message,
-      logType,
-      metadata,
+      logType: log.logType as EventLogType | undefined,
+      metadata: log.metadata as Record<string, unknown> | undefined,
       timestamp: log.dateTimeUTC,
     };
   } catch (error) {
@@ -283,6 +283,8 @@ export async function getEventLogs(
         eventId: log.eventId,
         teamName: log.teamName,
         message: log.message,
+        logType: log.logType as EventLogType | undefined,
+        metadata: log.metadata as Record<string, unknown> | undefined,
         timestamp: log.dateTimeUTC,
       })),
       total,
@@ -315,6 +317,8 @@ export async function getRecentLogs(
       eventId: log.eventId,
       teamName: log.teamName,
       message: log.message,
+      logType: log.logType as EventLogType | undefined,
+      metadata: log.metadata as Record<string, unknown> | undefined,
       timestamp: log.dateTimeUTC,
     }));
   } catch (error) {
@@ -322,5 +326,3 @@ export async function getRecentLogs(
     throw error;
   }
 }
-
-export { prisma };
