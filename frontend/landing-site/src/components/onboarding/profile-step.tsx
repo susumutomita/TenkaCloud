@@ -1,13 +1,13 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 import {
-  useOnboardingStore,
   type ProfileData,
+  useOnboardingStore,
 } from '@/lib/stores/onboarding-store';
 
 const profileSchema = z.object({

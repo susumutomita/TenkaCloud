@@ -3,16 +3,15 @@
 import { motion } from 'framer-motion';
 import {
   Activity,
-  Users,
-  Zap,
   ArrowRight,
   Code,
   Trophy,
   UserPlus,
+  Users,
+  Zap,
 } from 'lucide-react';
-import Link from 'next/link';
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:3001';
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'http://localhost:3001';
 
 export default function DashboardPage() {
   const container = {

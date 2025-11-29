@@ -11,35 +11,37 @@ type ProvisioningStep = {
   status: 'pending' | 'in_progress' | 'completed' | 'failed';
 };
 
+const INITIAL_STEPS: ProvisioningStep[] = [
+  { id: 'realm', label: 'Keycloak Realm 作成中', status: 'pending' },
+  { id: 'database', label: 'データベース作成中', status: 'pending' },
+  {
+    id: 'namespace',
+    label: 'Kubernetes Namespace 作成中',
+    status: 'pending',
+  },
+  {
+    id: 'deployment',
+    label: 'アプリケーションデプロイ中',
+    status: 'pending',
+  },
+  { id: 'dns', label: 'DNS 設定中', status: 'pending' },
+];
+
 export default function ProvisioningPage() {
   const router = useRouter();
-  const [steps, setSteps] = useState<ProvisioningStep[]>([
-    { id: 'realm', label: 'Keycloak Realm 作成中', status: 'pending' },
-    { id: 'database', label: 'データベース作成中', status: 'pending' },
-    {
-      id: 'namespace',
-      label: 'Kubernetes Namespace 作成中',
-      status: 'pending',
-    },
-    {
-      id: 'deployment',
-      label: 'アプリケーションデプロイ中',
-      status: 'pending',
-    },
-    { id: 'dns', label: 'DNS 設定中', status: 'pending' },
-  ]);
-
+  const [steps, setSteps] = useState<ProvisioningStep[]>(INITIAL_STEPS);
   const [isComplete, setIsComplete] = useState(false);
 
   useEffect(() => {
     // Simulate provisioning progress
     const stepDurations = [2000, 2500, 2000, 3000, 1500];
     let currentStep = 0;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     const processNextStep = () => {
-      if (currentStep >= steps.length) {
+      if (currentStep >= INITIAL_STEPS.length) {
         setIsComplete(true);
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           router.push('/dashboard');
         }, 2000);
         return;
@@ -52,8 +54,11 @@ export default function ProvisioningPage() {
         )
       );
 
+      // Get duration before incrementing currentStep
+      const duration = stepDurations[currentStep];
+
       // Complete current step after duration
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setSteps((prev) =>
           prev.map((step, index) =>
             index === currentStep ? { ...step, status: 'completed' } : step
@@ -62,10 +67,17 @@ export default function ProvisioningPage() {
 
         currentStep++;
         processNextStep();
-      }, stepDurations[currentStep]);
+      }, duration);
     };
 
     processNextStep();
+
+    // Cleanup timeouts on unmount
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [router]);
 
   return (

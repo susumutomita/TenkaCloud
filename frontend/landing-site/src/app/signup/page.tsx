@@ -1,13 +1,16 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Github, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useRouter } from 'next/navigation';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3004';
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'http://localhost:3001';
 
 const signupSchema = z
   .object({
@@ -34,6 +37,7 @@ type SignupFormData = z.infer<typeof signupSchema>;
 export default function SignupPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -44,8 +48,9 @@ export default function SignupPage() {
 
   const onSubmit = async (data: SignupFormData) => {
     setIsLoading(true);
+    setError(null);
     try {
-      const response = await fetch('http://localhost:3004/api/signup', {
+      const response = await fetch(`${API_URL}/api/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,19 +63,16 @@ export default function SignupPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Signup failed');
+        throw new Error(errorData.error || 'サインアップに失敗しました');
       }
-
-      const result = await response.json();
-      console.log('Signup success:', result);
 
       // Redirect to onboarding
       router.push('/onboarding');
-    } catch (error) {
-      console.error('Signup failed:', error);
-      // Here you might want to set a form error using setError from react-hook-form
-      // For now, we'll just log it. Ideally, show a toast or alert.
-      alert(error instanceof Error ? error.message : 'Signup failed');
+    } catch (err) {
+      console.error('Signup failed:', err);
+      setError(
+        err instanceof Error ? err.message : 'サインアップに失敗しました'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -116,6 +118,13 @@ export default function SignupPage() {
                 無料で始める - クレジットカード不要
               </p>
             </div>
+
+            {/* Error message */}
+            {error && (
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                <p className="text-sm text-red-400">{error}</p>
+              </div>
+            )}
 
             {/* Social login buttons */}
             <div className="space-y-3">
@@ -252,15 +261,16 @@ export default function SignupPage() {
               </button>
             </form>
 
-            {/* Login link */}
+            {/* Login link - External link to Admin App */}
             <p className="text-center text-sm text-white/60">
               すでにアカウントをお持ちですか？{' '}
-              <Link
-                href="/login"
+              <a
+                href={ADMIN_URL}
+                rel="noopener noreferrer"
                 className="text-primary-400 hover:text-primary-300"
               >
                 ログイン
-              </Link>
+              </a>
             </p>
           </div>
         </div>

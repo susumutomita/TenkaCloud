@@ -2,12 +2,12 @@
 
 import { motion } from 'framer-motion';
 import { Check } from 'lucide-react';
-import { useOnboardingStore, type Step } from '@/lib/stores/onboarding-store';
-import { ProfileStep } from '@/components/onboarding/profile-step';
-import { PlanStep } from '@/components/onboarding/plan-step';
-import { TenantStep } from '@/components/onboarding/tenant-step';
 import { EnvironmentStep } from '@/components/onboarding/environment-step';
+import { PlanStep } from '@/components/onboarding/plan-step';
+import { ProfileStep } from '@/components/onboarding/profile-step';
 import { ReviewStep } from '@/components/onboarding/review-step';
+import { TenantStep } from '@/components/onboarding/tenant-step';
+import { type Step, useOnboardingStore } from '@/lib/stores/onboarding-store';
 
 const steps: { id: Step; label: string }[] = [
   { id: 'profile', label: 'プロフィール' },

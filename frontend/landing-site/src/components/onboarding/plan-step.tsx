@@ -4,8 +4,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useState } from 'react';
 import {
-  useOnboardingStore,
   type PlanTier,
+  useOnboardingStore,
 } from '@/lib/stores/onboarding-store';
 
 const plans = [

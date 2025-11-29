@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Zap, Shield, TrendingUp, Code2, Database, Globe2 } from 'lucide-react';
+import { Code2, Database, Globe2, Shield, TrendingUp, Zap } from 'lucide-react';
 
 const features = [
   {

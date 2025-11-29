@@ -4,9 +4,9 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, Database, Zap } from 'lucide-react';
 import { useState } from 'react';
 import {
-  useOnboardingStore,
-  type TenantModel,
   type ComputeType,
+  type TenantModel,
+  useOnboardingStore,
 } from '@/lib/stores/onboarding-store';
 
 export function EnvironmentStep() {

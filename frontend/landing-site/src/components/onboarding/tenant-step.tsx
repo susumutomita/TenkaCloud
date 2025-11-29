@@ -1,13 +1,13 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 import {
-  useOnboardingStore,
   type TenantData,
+  useOnboardingStore,
 } from '@/lib/stores/onboarding-store';
 
 const tenantSchema = z.object({
@@ -33,13 +33,10 @@ export function TenantStep() {
     register,
     handleSubmit,
     formState: { errors },
-    watch,
   } = useForm<TenantData>({
     resolver: zodResolver(tenantSchema),
     defaultValues: tenantData,
   });
-
-  const name = watch('name');
 
   const onSubmit = (data: TenantData) => {
     setTenantData(data);
