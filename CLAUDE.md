@@ -636,26 +636,23 @@ Claude Code や AI エージェントが自律的に開発を進める際のワ�
 
 #### 3. 検証 (Validation)
 
-コミット前に必ず以下をすべて実行します。
+**CRITICAL: タスク完了の必須条件**
+
+すべてのタスク完了時に必ず `make before-commit` を実行し、成功することを確認する。これはタスク完了の必須条件であり、このコマンドが成功しない限りタスクは完了とみなさない。
 
 ```bash
-# Linter
-npm run lint          # または bun run lint
-
-# 型チェック
-npm run typecheck     # または bun run typecheck
-
-# テスト
-npm run test          # または bun run test
-
-# カバレッジ確認
-npm run test:coverage # カバレッジ 100% を確認
-
-# ビルド
-npm run build         # または bun run build
+# 必須: タスク完了前に必ず実行
+make before-commit
 ```
 
-**すべて Green にならない限り次に進まない。失敗したら Plan.md に問題を記録。**
+このコマンドは以下をすべて実行する。
+- `lint_text`: テキストの lint チェック
+- `format_check`: コードフォーマットチェック
+- `typecheck`: 全フロントエンドアプリの型チェック
+- `test`: 全フロントエンドアプリのテスト（カバレッジ 99％以上必須）
+- `build`: 全フロントエンドアプリのビルド
+
+**すべて Green にならない限りタスクは完了とみなさない。失敗したら Plan.md に問題を記録。**
 
 #### 4. Git ワークフロー
 
