@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
 import {
   Activity,
   ArrowRight,
@@ -9,10 +9,9 @@ import {
   UserPlus,
   Users,
   Zap,
-} from 'lucide-react';
-import Link from 'next/link';
+} from "lucide-react";
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:3001';
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? "http://localhost:3001";
 
 export default function DashboardPage() {
   const container = {
@@ -133,7 +132,7 @@ function StatsCard({
   label,
   value,
   gradient,
-  valueColor = 'text-white',
+  valueColor = "text-white",
 }: {
   icon: React.ReactNode;
   label: string;

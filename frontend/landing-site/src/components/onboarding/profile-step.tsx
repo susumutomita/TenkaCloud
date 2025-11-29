@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { motion } from "framer-motion";
+import { ArrowRight } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   type ProfileData,
   useOnboardingStore,
-} from '@/lib/stores/onboarding-store';
+} from "@/lib/stores/onboarding-store";
 
 const profileSchema = z.object({
-  fullName: z.string().min(1, '氏名を入力してください'),
-  email: z.string().email('有効なメールアドレスを入力してください'),
-  organizationName: z.string().min(1, '組織名を入力してください'),
-  purpose: z.string().min(10, '用途を10文字以上で入力してください'),
+  fullName: z.string().min(1, "氏名を入力してください"),
+  email: z.string().email("有効なメールアドレスを入力してください"),
+  organizationName: z.string().min(1, "組織名を入力してください"),
+  purpose: z.string().min(10, "用途を10文字以上で入力してください"),
 });
 
 export function ProfileStep() {
@@ -31,7 +31,7 @@ export function ProfileStep() {
 
   const onSubmit = (data: ProfileData) => {
     setProfileData(data);
-    setCurrentStep('plan');
+    setCurrentStep("plan");
   };
 
   return (
@@ -57,7 +57,7 @@ export function ProfileStep() {
             <input
               id="fullName"
               type="text"
-              {...register('fullName')}
+              {...register("fullName")}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
               placeholder="山田 太郎"
             />
@@ -78,7 +78,7 @@ export function ProfileStep() {
             <input
               id="email"
               type="email"
-              {...register('email')}
+              {...register("email")}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
               placeholder="you@example.com"
             />
@@ -99,7 +99,7 @@ export function ProfileStep() {
             <input
               id="organizationName"
               type="text"
-              {...register('organizationName')}
+              {...register("organizationName")}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors"
               placeholder="株式会社サンプル"
             />
@@ -119,7 +119,7 @@ export function ProfileStep() {
             </label>
             <textarea
               id="purpose"
-              {...register('purpose')}
+              {...register("purpose")}
               rows={4}
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-primary-500 transition-colors resize-none"
               placeholder="例: 社内ハッカソンでプログラミングコンテストを開催したい"

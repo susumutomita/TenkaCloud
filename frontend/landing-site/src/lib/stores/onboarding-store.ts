@@ -1,12 +1,12 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-export type Step = 'profile' | 'plan' | 'tenant' | 'environment' | 'review';
+export type Step = "profile" | "plan" | "tenant" | "environment" | "review";
 
-export type PlanTier = 'free' | 'pro' | 'enterprise';
+export type PlanTier = "free" | "pro" | "enterprise";
 
-export type TenantModel = 'pool' | 'silo';
+export type TenantModel = "pool" | "silo";
 
-export type ComputeType = 'serverless' | 'kubernetes';
+export type ComputeType = "serverless" | "kubernetes";
 
 export interface ProfileData {
   fullName: string;
@@ -46,7 +46,7 @@ export interface OnboardingState {
 }
 
 const initialState = {
-  currentStep: 'profile' as Step,
+  currentStep: "profile" as Step,
   profileData: {},
   planData: {},
   tenantData: {},
