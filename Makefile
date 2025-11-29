@@ -15,6 +15,8 @@ ADMIN_APP_DIR := frontend/admin-app
 PARTICIPANT_APP_DIR := frontend/participant-app
 LANDING_SITE_DIR := frontend/landing-site
 FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR) $(LANDING_SITE_DIR)
+BACKEND_SERVICES_DIR := backend/services
+PROBLEM_MANAGEMENT_DIR := $(BACKEND_SERVICES_DIR)/problem-management
 
 # ========================================
 # 📦 パッケージ管理
@@ -98,24 +100,38 @@ dev:
 # ========================================
 
 test:
-	@echo "🧪 全フロントエンドアプリのテストを実行中..."
+	@echo "🧪 全アプリのテストを実行中..."
+	@echo ""
+	@echo "📦 フロントエンドアプリ:"
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "🔬 $$app のテスト..."; \
 		$(NODE_RUNNER) --prefix $$app run test || exit 1; \
 	done
 	@echo ""
-	@echo "✅ すべてのフロントエンドアプリのテストが成功しました"
+	@echo "📦 バックエンドサービス:"
+	@echo ""
+	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
+	@cd $(PROBLEM_MANAGEMENT_DIR) && npx vitest run || exit 1
+	@echo ""
+	@echo "✅ すべてのテストが成功しました"
 
 test_coverage:
-	@echo "📊 全フロントエンドアプリのカバレッジテストを実行中..."
+	@echo "📊 全アプリのカバレッジテストを実行中..."
+	@echo ""
+	@echo "📦 フロントエンドアプリ:"
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📈 $$app のカバレッジテスト..."; \
 		$(NODE_RUNNER) --prefix $$app run test:coverage || exit 1; \
 	done
 	@echo ""
-	@echo "✅ すべてのフロントエンドアプリのカバレッジテストが成功しました"
+	@echo "📦 バックエンドサービス:"
+	@echo ""
+	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
+	@cd $(PROBLEM_MANAGEMENT_DIR) && npx vitest run --coverage || exit 1
+	@echo ""
+	@echo "✅ すべてのカバレッジテストが成功しました"
 
 before_commit: lint_text format_check typecheck test build
 	@echo "✅ すべてのコミット前チェックが完了しました"
@@ -566,8 +582,8 @@ help:
 	@echo "  make before_commit    lint_text + format_check + typecheck + test + build を実行"
 	@echo ""
 	@echo "🧪 テスト:"
-	@echo "  make test             全フロントエンドアプリのテストを実行"
-	@echo "  make test_coverage    全フロントエンドアプリのカバレッジテストを実行"
+	@echo "  make test             全アプリ（フロントエンド + バックエンド）のテストを実行"
+	@echo "  make test_coverage    全アプリのカバレッジテストを実行"
 	@echo ""
 	@echo "🏗  ビルド:"
 	@echo "  make dev              開発サーバーを起動 (Control Plane のみ)"

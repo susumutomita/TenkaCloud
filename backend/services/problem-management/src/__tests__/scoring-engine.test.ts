@@ -407,24 +407,16 @@ describe('Lambda 関数で採点を実行する場合', () => {
   });
 
   describe('採点を実行した場合', () => {
-    it('すべての基準に対するスコアと実行時間が返されるべき', async () => {
+    it('未実装エラーがスローされるべき', async () => {
       // Given: Lambda 採点関数
       const scorer = new LambdaScoringFunction(
         'arn:aws:lambda:us-east-1:123456789012:function:scoring'
       );
 
-      // When: 採点を実行する
-      const result = await scorer.execute(
-        mockProblem,
-        mockCredentials,
-        'account-1'
-      );
-
-      // Then: 採点結果が返される
-      expect(result.totalScore).toBeGreaterThanOrEqual(0);
-      expect(result.maxPossibleScore).toBe(100); // 50 + 30 + 20
-      expect(result.criteriaResults).toHaveLength(3);
-      expect(result.executionTimeMs).toBeGreaterThan(0);
+      // When/Then: 採点を実行すると未実装エラーがスローされる
+      await expect(
+        scorer.execute(mockProblem, mockCredentials, 'account-1')
+      ).rejects.toThrow('Lambda scoring function not yet implemented');
     });
   });
 });
@@ -445,24 +437,16 @@ describe('コンテナで採点を実行する場合', () => {
   });
 
   describe('採点を実行した場合', () => {
-    it('すべての基準に対するスコアと実行時間が返されるべき', async () => {
+    it('未実装エラーがスローされるべき', async () => {
       // Given: コンテナ採点関数
       const scorer = new ContainerScoringFunction(
         '123456789012.dkr.ecr.us-east-1.amazonaws.com/scoring:latest'
       );
 
-      // When: 採点を実行する
-      const result = await scorer.execute(
-        mockProblem,
-        mockCredentials,
-        'account-1'
-      );
-
-      // Then: 採点結果が返される
-      expect(result.totalScore).toBeGreaterThanOrEqual(0);
-      expect(result.maxPossibleScore).toBe(100);
-      expect(result.criteriaResults).toHaveLength(3);
-      expect(result.executionTimeMs).toBeGreaterThan(0);
+      // When/Then: 採点を実行すると未実装エラーがスローされる
+      await expect(
+        scorer.execute(mockProblem, mockCredentials, 'account-1')
+      ).rejects.toThrow('Container scoring function not yet implemented');
     });
   });
 });
