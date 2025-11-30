@@ -47,7 +47,13 @@ install:
 # Note: install_ci は ni インストール前に実行されるため、直接 bun を使用
 install_ci:
 	$(BUN) run install:ci
-	(cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts)
+	@for app in $(FRONTEND_APPS); do \
+		echo "📦 $$app の依存関係をインストール中（CI）..."; \
+		(cd $$app && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1; \
+	done
+	@echo "📦 $(PROBLEM_MANAGEMENT_DIR) の依存関係をインストール中（CI）..."
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1
+	@echo "✅ すべての依存関係をインストールしました（CI）"
 
 setup_husky:
 	$(BUN) run husky

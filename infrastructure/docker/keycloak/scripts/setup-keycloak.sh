@@ -113,6 +113,7 @@ create_client() {
         \"clientAuthenticatorType\": \"client-secret\",
         \"standardFlowEnabled\": true,
         \"directAccessGrantsEnabled\": true,
+        \"serviceAccountsEnabled\": true,
         \"redirectUris\": [\"${REDIRECT_URI}\"],
         \"webOrigins\": [\"${WEB_ORIGINS}\"],
         \"attributes\": {
@@ -134,6 +135,43 @@ create_client() {
 create_client "control-plane-ui" "http://localhost:3000/*" "http://localhost:3000" "secret"
 create_client "admin-app" "http://localhost:3001/*" "http://localhost:3001" "secret"
 create_client "participant-app" "http://localhost:3002/*" "http://localhost:3002" "secret"
+create_client "tenant-management-service" "http://localhost:3004/*" "http://localhost:3004" "secret"
+
+
+# tenant-management-service に管理者権限を付与
+echo "👑 tenant-management-service に管理者権限を付与しています..."
+
+# Get Client UUID
+CLIENT_UUID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=tenant-management-service" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
+
+if [ -n "$CLIENT_UUID" ]; then
+  # Get Service Account User ID
+  SERVICE_ACCOUNT_USER_ID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/service-account-user" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
+
+  if [ -n "$SERVICE_ACCOUNT_USER_ID" ]; then
+    # Get realm-management Client UUID
+    REALM_MANAGEMENT_ID=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=realm-management" \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"id":"[^"]*' | head -1 | sed 's/"id":"//')
+
+    # Get realm-admin Role info
+    ROLE_INFO=$(curl -s "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${REALM_MANAGEMENT_ID}/roles/realm-admin" \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}")
+
+    # Assign role
+    curl -s -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${SERVICE_ACCOUNT_USER_ID}/role-mappings/clients/${REALM_MANAGEMENT_ID}" \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      -d "[${ROLE_INFO}]" > /dev/null
+
+    echo "✅ 権限を付与しました"
+  else
+    echo "⚠️  Service Account User ID が見つかりません"
+  fi
+else
+  echo "⚠️  Client UUID が見つかりません"
+fi
 
 
 
