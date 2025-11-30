@@ -7,7 +7,11 @@
 # デフォルトターゲットはhelp
 default: help
 
-NODE_RUNNER ?= npm
+# ni: パッケージマネージャー自動選択ツール（bun.lockb を検出して bun を使用）
+# bunx nr = bun run と同等
+NI ?= bunx ni
+NR ?= bunx nr
+NLX ?= bunx nlx
 BUN ?= bun
 FRONTEND_DIR ?= frontend/control-plane
 CONTROL_PLANE_DIR := frontend/control-plane
@@ -23,10 +27,10 @@ PROBLEM_MANAGEMENT_DIR := $(BACKEND_SERVICES_DIR)/problem-management
 # ========================================
 
 lint_text:
-	$(NODE_RUNNER) run lint_text
+	$(NR) lint_text
 
 format_check:
-	$(NODE_RUNNER) run format_check
+	$(NR) format_check
 
 install:
 	$(BUN) install
@@ -45,7 +49,7 @@ setup_husky:
 	$(BUN) run husky
 
 clean:
-	$(NODE_RUNNER) run clean || true
+	$(NR) clean || true
 
 # ========================================
 # 🔍 コード品質
@@ -56,20 +60,20 @@ lint:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📋 $$app の lint..."; \
-		$(NODE_RUNNER) --prefix $$app run lint || exit 1; \
+		cd $$app && $(NR) lint && cd ../..; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの lint が成功しました"
 
 format:
-	$(NODE_RUNNER) run format
+	$(NR) format
 
 typecheck:
 	@echo "🔍 全フロントエンドアプリの型チェックを実行中..."
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📋 $$app の型チェック..."; \
-		$(NODE_RUNNER) --prefix $$app run typecheck || exit 1; \
+		cd $$app && $(NR) typecheck && cd ../..; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの型チェックが成功しました"
@@ -86,14 +90,14 @@ else
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📦 $$app をビルド中..."; \
-		NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $$app run build || exit 1; \
+		cd $$app && NEXT_TELEMETRY_DISABLED=1 $(NR) build && cd ../..; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリのビルドが成功しました"
 endif
 
 dev:
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
+	cd $(FRONTEND_DIR) && $(NR) dev
 
 # ========================================
 # 🧪 テスト
@@ -110,13 +114,13 @@ test_quick:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "🔬 $$app のテスト..."; \
-		$(NODE_RUNNER) --prefix $$app run test || exit 1; \
+		cd $$app && $(NR) test && cd ../..; \
 	done
 	@echo ""
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@$(NODE_RUNNER) --prefix $(PROBLEM_MANAGEMENT_DIR) run test || exit 1
+	@cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
@@ -127,13 +131,13 @@ test_coverage:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📈 $$app のカバレッジテスト..."; \
-		$(NODE_RUNNER) --prefix $$app run test:coverage || exit 1; \
+		cd $$app && $(NR) test:coverage && cd ../..; \
 	done
 	@echo ""
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@$(NODE_RUNNER) --prefix $(PROBLEM_MANAGEMENT_DIR) run test:coverage || exit 1
+	@cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run --coverage || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
@@ -472,7 +476,7 @@ stop-infrastructure:
 
 start-control-plane:
 	@echo "🚀 Control Plane UI を起動します..."
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
+	cd $(FRONTEND_DIR) && $(NR) dev
 
 stop-control-plane:
 	@echo "🛑 Control Plane UI を停止しています..."
