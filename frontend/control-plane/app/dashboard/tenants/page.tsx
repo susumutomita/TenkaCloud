@@ -17,15 +17,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { getStatusVariant } from '@/lib/tenant-utils';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'default-no-store';
-
-const getStatusVariant = (status: string) => {
-  if (status === 'ACTIVE') return 'success';
-  if (status === 'SUSPENDED') return 'warning';
-  return 'error';
-};
 
 export default async function TenantsPage() {
   const tenants = await tenantApi.listTenants();

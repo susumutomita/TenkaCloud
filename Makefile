@@ -116,7 +116,7 @@ test_quick:
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN)x vitest run || exit 1
+	@$(NODE_RUNNER) --prefix $(PROBLEM_MANAGEMENT_DIR) run test || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
@@ -133,7 +133,7 @@ test_coverage:
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN)x vitest run --coverage || exit 1
+	@$(NODE_RUNNER) --prefix $(PROBLEM_MANAGEMENT_DIR) run test:coverage || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 

@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { submitTenantUpdate } from '@/lib/tenant-utils';
 import type { Tenant, TenantTier } from '@/types/tenant';
 import {
-  TENANT_STATUSES,
   TENANT_STATUS_LABELS,
+  TENANT_STATUSES,
   TENANT_TIER_LABELS,
   TENANT_TIERS,
 } from '@/types/tenant';
@@ -79,23 +80,25 @@ export default function EditTenantPage({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!id) {
-      return;
-    }
-
     setIsLoading(true);
 
-    try {
-      await tenantApi.updateTenant(id, formData);
-      router.push(`/dashboard/tenants/${id}`);
-      router.refresh();
-    } catch (error) {
-      console.error('Failed to update tenant:', error);
-      alert('テナント更新に失敗しました');
-    } finally {
-      setIsLoading(false);
+    const success = await submitTenantUpdate(
+      id,
+      formData,
+      () => {
+        router.push(`/dashboard/tenants/${id}`);
+        router.refresh();
+      },
+      () => {
+        alert('テナント更新に失敗しました');
+      }
+    );
+
+    if (!success && id) {
+      // エラーケース（id が有効だが更新に失敗した場合）は onError で処理済み
     }
+
+    setIsLoading(false);
   };
 
   if (!id || isFetching) {

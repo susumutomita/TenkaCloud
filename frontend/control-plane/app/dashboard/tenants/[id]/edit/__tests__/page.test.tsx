@@ -8,6 +8,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { submitTenantUpdate, type TenantFormData } from '@/lib/tenant-utils';
 import type { Tenant } from '@/types/tenant';
 import EditTenantPage from '../page';
 
@@ -269,5 +270,190 @@ describe('EditTenantPage', () => {
 
       expect(screen.getByLabelText('ステータス')).toHaveValue('SUSPENDED');
     });
+
+    it('テナント名を変更できるべき', async () => {
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
+
+      await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
+
+      const nameInput = await screen.findByLabelText('テナント名');
+      expect(nameInput).toHaveValue('Test Tenant');
+
+      fireEvent.change(nameInput, { target: { value: 'Updated Name' } });
+
+      expect(screen.getByLabelText('テナント名')).toHaveValue('Updated Name');
+    });
+
+    it('管理者 Email を変更できるべき', async () => {
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
+
+      await renderPage(Promise.resolve({ id: 'test-tenant-id' }));
+
+      const emailInput = await screen.findByLabelText('管理者 Email');
+      expect(emailInput).toHaveValue('admin@test.com');
+
+      fireEvent.change(emailInput, { target: { value: 'new@test.com' } });
+
+      expect(screen.getByLabelText('管理者 Email')).toHaveValue('new@test.com');
+    });
+  });
+
+  describe('params 解決エラー', () => {
+    it('params の解決に失敗した場合、エラーメッセージが表示されるべき', async () => {
+      // params Promise が拒否されるケースをテスト
+      const rejectedParams = Promise.reject(new Error('Params error'));
+
+      // renderPage 内で catch されるので、テスト側でも catch する
+      await renderPage(rejectedParams);
+
+      await waitFor(() => {
+        expect(mockAlert).toHaveBeenCalledWith(
+          'パラメータの取得に失敗しました'
+        );
+      });
+    });
+  });
+
+  describe('クリーンアップ処理', () => {
+    it('コンポーネントがアンマウントされた後に params が解決された場合、state を更新しないべき', async () => {
+      vi.mocked(tenantApi.getTenant).mockResolvedValue(mockTenant);
+
+      // 遅延して解決する params Promise を作成
+      let resolveParams: (value: { id: string }) => void = () => {};
+      const delayedParams = new Promise<{ id: string }>((resolve) => {
+        resolveParams = resolve;
+      });
+
+      // コンポーネントをレンダリング
+      const { unmount } = render(<EditTenantPage params={delayedParams} />);
+
+      // ローディング中であることを確認
+      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+
+      // コンポーネントをアンマウント（クリーンアップ関数が呼ばれ、active = false になる）
+      unmount();
+
+      // params を解決（この時点で active = false なので、setId は呼ばれないはず）
+      resolveParams({ id: 'test-tenant-id' });
+
+      // Promise が解決するのを待つ
+      await act(async () => {
+        await delayedParams;
+      });
+
+      // getTenant は呼ばれていないはず（id がセットされていないため）
+      expect(tenantApi.getTenant).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleSubmit のガード条件', () => {
+    it('id が null の場合、submit で何もしないべき', async () => {
+      // このテストは id が null の状態で submit を呼ぶことをテストする
+      // id が null のまま form を render するには、params が解決する前に submit をトリガーする
+      // しかし、実際には params が解決するまでローディング表示なので、
+      // id が null で handleSubmit が呼ばれることは通常ない
+      // 代わりに、updateTenant が呼ばれないことを確認する
+
+      // params が解決されないままの状態をシミュレート
+      let resolveParams: (value: { id: string }) => void = () => {};
+      const pendingParams = new Promise<{ id: string }>((resolve) => {
+        resolveParams = resolve;
+      });
+
+      render(<EditTenantPage params={pendingParams} />);
+
+      // ローディング中は「読み込み中...」が表示される
+      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+
+      // updateTenant は呼ばれていないはず
+      expect(tenantApi.updateTenant).not.toHaveBeenCalled();
+
+      // クリーンアップ: params を解決
+      resolveParams({ id: 'test-id' });
+    });
+  });
+});
+
+describe('submitTenantUpdate', () => {
+  const mockFormData: TenantFormData = {
+    name: 'Test Tenant',
+    adminEmail: 'test@example.com',
+    tier: 'PRO',
+    status: 'ACTIVE',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('id が null の場合、false を返して早期リターンすべき', async () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+
+    const result = await submitTenantUpdate(
+      null,
+      mockFormData,
+      onSuccess,
+      onError
+    );
+
+    expect(result).toBe(false);
+    expect(tenantApi.updateTenant).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('id が有効な場合、テナントを更新して true を返すべき', async () => {
+    vi.mocked(tenantApi.updateTenant).mockResolvedValue({
+      id: 'test-id',
+      name: 'Test Tenant',
+      adminEmail: 'test@example.com',
+      tier: 'PRO',
+      status: 'ACTIVE',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    });
+
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+
+    const result = await submitTenantUpdate(
+      'test-id',
+      mockFormData,
+      onSuccess,
+      onError
+    );
+
+    expect(result).toBe(true);
+    expect(tenantApi.updateTenant).toHaveBeenCalledWith(
+      'test-id',
+      mockFormData
+    );
+    expect(onSuccess).toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('更新失敗時は onError を呼んで false を返すべき', async () => {
+    vi.mocked(tenantApi.updateTenant).mockRejectedValue(
+      new Error('Update failed')
+    );
+
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+
+    const result = await submitTenantUpdate(
+      'test-id',
+      mockFormData,
+      onSuccess,
+      onError
+    );
+
+    expect(result).toBe(false);
+    expect(tenantApi.updateTenant).toHaveBeenCalledWith(
+      'test-id',
+      mockFormData
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalled();
   });
 });
