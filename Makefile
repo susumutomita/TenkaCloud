@@ -8,10 +8,13 @@
 default: help
 
 # ni: パッケージマネージャー自動選択ツール（bun.lockb を検出して bun を使用）
-# bunx nr = bun run と同等
+# NI  = bunx ni   (依存関係インストール = bun install 相当)
+# NR  = bunx nr   (スクリプト実行 = bun run 相当)
+# NLX = bunx nlx  (パッケージ一時実行 = bunx 相当)
 NI ?= bunx ni
 NR ?= bunx nr
 NLX ?= bunx nlx
+NCI ?= bunx nci
 BUN ?= bun
 FRONTEND_DIR ?= frontend/control-plane
 CONTROL_PLANE_DIR := frontend/control-plane
@@ -33,17 +36,17 @@ format_check:
 	$(NR) format_check
 
 install:
-	$(BUN) install
+	$(NI)
 	@for app in $(FRONTEND_APPS); do \
 		echo "📦 $$app の依存関係をインストール中..."; \
-		cd $$app && $(BUN) install && cd ../..; \
+		(cd $$app && $(NI)) || exit 1; \
 	done
 	@echo "✅ すべてのフロントエンドアプリの依存関係をインストールしました"
 
 # Supply Chain Security: Disable lifecycle scripts during install
 install_ci:
-	$(BUN) run install:ci
-	cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts
+	$(NR) install:ci
+	(cd $(FRONTEND_DIR) && $(NCI) --ignore-scripts)
 
 setup_husky:
 	$(BUN) run husky
@@ -60,7 +63,7 @@ lint:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📋 $$app の lint..."; \
-		cd $$app && $(NR) lint && cd ../..; \
+		(cd $$app && $(NR) lint) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの lint が成功しました"
@@ -73,7 +76,7 @@ typecheck:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📋 $$app の型チェック..."; \
-		cd $$app && $(NR) typecheck && cd ../..; \
+		(cd $$app && $(NR) typecheck) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの型チェックが成功しました"
@@ -90,7 +93,7 @@ else
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📦 $$app をビルド中..."; \
-		cd $$app && NEXT_TELEMETRY_DISABLED=1 $(NR) build && cd ../..; \
+		(cd $$app && NEXT_TELEMETRY_DISABLED=1 $(NR) build) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリのビルドが成功しました"
@@ -114,13 +117,13 @@ test_quick:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "🔬 $$app のテスト..."; \
-		cd $$app && $(NR) test && cd ../..; \
+		(cd $$app && $(NR) test) || exit 1; \
 	done
 	@echo ""
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run || exit 1
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run) || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
@@ -131,13 +134,13 @@ test_coverage:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📈 $$app のカバレッジテスト..."; \
-		cd $$app && $(NR) test:coverage && cd ../..; \
+		(cd $$app && $(NR) test:coverage) || exit 1; \
 	done
 	@echo ""
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run --coverage || exit 1
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run --coverage) || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
