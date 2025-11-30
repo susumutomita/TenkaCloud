@@ -50,6 +50,18 @@ jobs:
         run: |
           make format_check
 
+      - name: Type check
+        run: |
+          make typecheck
+
+      - name: Run tests
+        run: |
+          make test
+
+      - name: Build
+        run: |
+          make build
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

@@ -100,6 +100,9 @@ services:
       - /app/node_modules
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tenkacloud?schema=public
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_CLIENT_ID=tenant-management-service
+      - KEYCLOAK_CLIENT_SECRET=secret
     depends_on:
       - postgres
     networks:
