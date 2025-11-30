@@ -36,7 +36,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@antfu/ni": "^27.0.1",
+    "@types/bun": "latest",
+    "@vitest/coverage-v8": "^4.0.14"
   },
   "peerDependencies": {
     "typescript": "^5.0.0",
