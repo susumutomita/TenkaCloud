@@ -1,11 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { tenantApi } from "@/lib/api/tenant-api";
-import NewTenantPage from "../page";
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tenantApi } from '@/lib/api/tenant-api';
+import NewTenantPage from '../page';
 
 // tenant-api のモック
-vi.mock("@/lib/api/tenant-api", () => ({
+vi.mock('@/lib/api/tenant-api', () => ({
   tenantApi: {
     createTenant: vi.fn(),
   },
@@ -14,198 +14,198 @@ vi.mock("@/lib/api/tenant-api", () => ({
 // next/navigation のモック
 const mockPush = vi.fn();
 const mockRefresh = vi.fn();
-vi.mock("next/navigation", () => ({
+vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({
     push: mockPush,
     refresh: mockRefresh,
   })),
 }));
 
-describe("NewTenantPage コンポーネント", () => {
+describe('NewTenantPage コンポーネント', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe("レンダリング", () => {
-    it("タイトルを表示すべき", () => {
+  describe('レンダリング', () => {
+    it('タイトルを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByText("新規テナント作成")).toBeInTheDocument();
+      expect(screen.getByText('新規テナント作成')).toBeInTheDocument();
     });
 
-    it("テナント情報セクションを表示すべき", () => {
+    it('テナント情報セクションを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByText("テナント情報")).toBeInTheDocument();
+      expect(screen.getByText('テナント情報')).toBeInTheDocument();
       expect(
-        screen.getByText("新しいテナントを作成します。"),
+        screen.getByText('新しいテナントを作成します。')
       ).toBeInTheDocument();
     });
 
-    it("テナント名入力フィールドを表示すべき", () => {
+    it('テナント名入力フィールドを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByLabelText("テナント名")).toBeInTheDocument();
+      expect(screen.getByLabelText('テナント名')).toBeInTheDocument();
     });
 
-    it("管理者 Email 入力フィールドを表示すべき", () => {
+    it('管理者 Email 入力フィールドを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByLabelText("管理者 Email")).toBeInTheDocument();
+      expect(screen.getByLabelText('管理者 Email')).toBeInTheDocument();
     });
 
-    it("Tier 選択フィールドを表示すべき", () => {
+    it('Tier 選択フィールドを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByLabelText("Tier")).toBeInTheDocument();
+      expect(screen.getByLabelText('Tier')).toBeInTheDocument();
     });
 
-    it("作成ボタンを表示すべき", () => {
+    it('作成ボタンを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByRole("button", { name: "作成" })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '作成' })).toBeInTheDocument();
     });
 
-    it("キャンセルリンクを表示すべき", () => {
+    it('キャンセルリンクを表示すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByRole("link", { name: "キャンセル" })).toHaveAttribute(
-        "href",
-        "/dashboard/tenants",
+      expect(screen.getByRole('link', { name: 'キャンセル' })).toHaveAttribute(
+        'href',
+        '/dashboard/tenants'
       );
     });
   });
 
-  describe("フォーム入力", () => {
-    it("テナント名を入力できるべき", async () => {
+  describe('フォーム入力', () => {
+    it('テナント名を入力できるべき', async () => {
       const user = userEvent.setup();
       render(<NewTenantPage />);
 
-      const input = screen.getByLabelText("テナント名");
-      await user.type(input, "株式会社テスト");
-      expect(input).toHaveValue("株式会社テスト");
+      const input = screen.getByLabelText('テナント名');
+      await user.type(input, '株式会社テスト');
+      expect(input).toHaveValue('株式会社テスト');
     });
 
-    it("管理者 Email を入力できるべき", async () => {
+    it('管理者 Email を入力できるべき', async () => {
       const user = userEvent.setup();
       render(<NewTenantPage />);
 
-      const input = screen.getByLabelText("管理者 Email");
-      await user.type(input, "admin@test.com");
-      expect(input).toHaveValue("admin@test.com");
+      const input = screen.getByLabelText('管理者 Email');
+      await user.type(input, 'admin@test.com');
+      expect(input).toHaveValue('admin@test.com');
     });
 
-    it("Tier を選択できるべき", async () => {
+    it('Tier を選択できるべき', async () => {
       const user = userEvent.setup();
       render(<NewTenantPage />);
 
-      const select = screen.getByLabelText("Tier");
-      await user.selectOptions(select, "PRO");
-      expect(select).toHaveValue("PRO");
+      const select = screen.getByLabelText('Tier');
+      await user.selectOptions(select, 'PRO');
+      expect(select).toHaveValue('PRO');
     });
 
-    it("すべての Tier オプションが存在すべき", () => {
+    it('すべての Tier オプションが存在すべき', () => {
       render(<NewTenantPage />);
-      expect(screen.getByRole("option", { name: "Free" })).toBeInTheDocument();
-      expect(screen.getByRole("option", { name: "Pro" })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Free' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Pro' })).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: "Enterprise" }),
+        screen.getByRole('option', { name: 'Enterprise' })
       ).toBeInTheDocument();
     });
   });
 
-  describe("フォーム送信", () => {
-    it("フォーム送信時に createTenant が呼ばれるべき", async () => {
+  describe('フォーム送信', () => {
+    it('フォーム送信時に createTenant が呼ばれるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockResolvedValue({
-        id: "1",
-        name: "株式会社テスト",
-        status: "ACTIVE",
-        tier: "FREE",
-        adminEmail: "admin@test.com",
-        createdAt: "2024-01-01T00:00:00Z",
-        updatedAt: "2024-01-01T00:00:00Z",
+        id: '1',
+        name: '株式会社テスト',
+        status: 'ACTIVE',
+        tier: 'FREE',
+        adminEmail: 'admin@test.com',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
       });
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText("テナント名"), "株式会社テスト");
-      await user.type(screen.getByLabelText("管理者 Email"), "admin@test.com");
-      await user.click(screen.getByRole("button", { name: "作成" }));
+      await user.type(screen.getByLabelText('テナント名'), '株式会社テスト');
+      await user.type(screen.getByLabelText('管理者 Email'), 'admin@test.com');
+      await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
         expect(tenantApi.createTenant).toHaveBeenCalledWith({
-          name: "株式会社テスト",
-          adminEmail: "admin@test.com",
-          tier: "FREE",
+          name: '株式会社テスト',
+          adminEmail: 'admin@test.com',
+          tier: 'FREE',
         });
       });
     });
 
-    it("作成成功後にテナント一覧へリダイレクトすべき", async () => {
+    it('作成成功後にテナント一覧へリダイレクトすべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockResolvedValue({
-        id: "1",
-        name: "株式会社テスト",
-        status: "ACTIVE",
-        tier: "FREE",
-        adminEmail: "admin@test.com",
-        createdAt: "2024-01-01T00:00:00Z",
-        updatedAt: "2024-01-01T00:00:00Z",
+        id: '1',
+        name: '株式会社テスト',
+        status: 'ACTIVE',
+        tier: 'FREE',
+        adminEmail: 'admin@test.com',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
       });
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText("テナント名"), "株式会社テスト");
-      await user.type(screen.getByLabelText("管理者 Email"), "admin@test.com");
-      await user.click(screen.getByRole("button", { name: "作成" }));
+      await user.type(screen.getByLabelText('テナント名'), '株式会社テスト');
+      await user.type(screen.getByLabelText('管理者 Email'), 'admin@test.com');
+      await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith("/dashboard/tenants");
+        expect(mockPush).toHaveBeenCalledWith('/dashboard/tenants');
         expect(mockRefresh).toHaveBeenCalled();
       });
     });
 
-    it("作成中はボタンテキストが変わるべき", async () => {
+    it('作成中はボタンテキストが変わるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100)),
+        () => new Promise((resolve) => setTimeout(resolve, 100))
       );
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText("テナント名"), "テスト");
-      await user.type(screen.getByLabelText("管理者 Email"), "test@test.com");
-      await user.click(screen.getByRole("button", { name: "作成" }));
+      await user.type(screen.getByLabelText('テナント名'), 'テスト');
+      await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
+      await user.click(screen.getByRole('button', { name: '作成' }));
 
       expect(
-        screen.getByRole("button", { name: "作成中..." }),
+        screen.getByRole('button', { name: '作成中...' })
       ).toBeInTheDocument();
     });
 
-    it("作成中はボタンが無効になるべき", async () => {
+    it('作成中はボタンが無効になるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100)),
+        () => new Promise((resolve) => setTimeout(resolve, 100))
       );
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText("テナント名"), "テスト");
-      await user.type(screen.getByLabelText("管理者 Email"), "test@test.com");
-      await user.click(screen.getByRole("button", { name: "作成" }));
+      await user.type(screen.getByLabelText('テナント名'), 'テスト');
+      await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
+      await user.click(screen.getByRole('button', { name: '作成' }));
 
-      expect(screen.getByRole("button", { name: "作成中..." })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '作成中...' })).toBeDisabled();
     });
 
-    it("作成失敗時にアラートを表示すべき", async () => {
+    it('作成失敗時にアラートを表示すべき', async () => {
       const user = userEvent.setup();
-      const alertMock = vi.spyOn(window, "alert").mockImplementation(() => {});
+      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
       vi.mocked(tenantApi.createTenant).mockRejectedValue(
-        new Error("API Error"),
+        new Error('API Error')
       );
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText("テナント名"), "テスト");
-      await user.type(screen.getByLabelText("管理者 Email"), "test@test.com");
-      await user.click(screen.getByRole("button", { name: "作成" }));
+      await user.type(screen.getByLabelText('テナント名'), 'テスト');
+      await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
+      await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
-        expect(alertMock).toHaveBeenCalledWith("テナント作成に失敗しました");
+        expect(alertMock).toHaveBeenCalledWith('テナント作成に失敗しました');
       });
 
       alertMock.mockRestore();

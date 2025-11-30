@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { tenantApi } from "@/lib/api/tenant-api";
-import { submitTenantUpdate } from "@/lib/tenant-utils";
-import type { Tenant, TenantTier } from "@/types/tenant";
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { tenantApi } from '@/lib/api/tenant-api';
+import { submitTenantUpdate } from '@/lib/tenant-utils';
+import type { Tenant, TenantTier } from '@/types/tenant';
 import {
   TENANT_STATUS_LABELS,
   TENANT_STATUSES,
   TENANT_TIER_LABELS,
   TENANT_TIERS,
-} from "@/types/tenant";
+} from '@/types/tenant';
 
 export default function EditTenantPage({
   params,
@@ -23,10 +23,10 @@ export default function EditTenantPage({
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [formData, setFormData] = useState({
-    name: "",
-    adminEmail: "",
-    tier: "FREE" as TenantTier,
-    status: "ACTIVE" as Tenant["status"],
+    name: '',
+    adminEmail: '',
+    tier: 'FREE' as TenantTier,
+    status: 'ACTIVE' as Tenant['status'],
   });
 
   // Next.js 15 では params が Promise で渡ってくるため、クライアント側で解決する
@@ -38,8 +38,8 @@ export default function EditTenantPage({
         setId(id);
       })
       .catch((error) => {
-        console.error("Failed to resolve params:", error);
-        alert("パラメータの取得に失敗しました");
+        console.error('Failed to resolve params:', error);
+        alert('パラメータの取得に失敗しました');
         setIsFetching(false);
       });
 
@@ -62,12 +62,12 @@ export default function EditTenantPage({
             status: tenant.status,
           });
         } else {
-          alert("テナントが見つかりません");
-          router.push("/dashboard/tenants");
+          alert('テナントが見つかりません');
+          router.push('/dashboard/tenants');
         }
       } catch (error) {
-        console.error("Failed to fetch tenant:", error);
-        alert("テナント情報の取得に失敗しました");
+        console.error('Failed to fetch tenant:', error);
+        alert('テナント情報の取得に失敗しました');
       } finally {
         setIsFetching(false);
       }
@@ -90,8 +90,8 @@ export default function EditTenantPage({
         router.refresh();
       },
       () => {
-        alert("テナント更新に失敗しました");
-      },
+        alert('テナント更新に失敗しました');
+      }
     );
 
     if (!success && id) {
@@ -199,7 +199,7 @@ export default function EditTenantPage({
                 onChange={(e) =>
                   setFormData((prev) => ({
                     ...prev,
-                    status: e.target.value as Tenant["status"],
+                    status: e.target.value as Tenant['status'],
                   }))
                 }
               >
@@ -217,7 +217,7 @@ export default function EditTenantPage({
               disabled={isLoading}
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-black text-white"
             >
-              {isLoading ? "更新中..." : "更新"}
+              {isLoading ? '更新中...' : '更新'}
             </button>
             <Link
               href={`/dashboard/tenants/${id}`}

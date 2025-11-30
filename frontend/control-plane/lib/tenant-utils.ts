@@ -1,11 +1,11 @@
-import { tenantApi } from "@/lib/api/tenant-api";
-import type { Tenant, TenantTier } from "@/types/tenant";
+import { tenantApi } from '@/lib/api/tenant-api';
+import type { Tenant, TenantTier } from '@/types/tenant';
 
 /** ステータスに応じた Badge variant を返す */
 export const getStatusVariant = (status: string) => {
-  if (status === "ACTIVE") return "success";
-  if (status === "SUSPENDED") return "warning";
-  return "error";
+  if (status === 'ACTIVE') return 'success';
+  if (status === 'SUSPENDED') return 'warning';
+  return 'error';
 };
 
 /** テナント更新フォームデータの型 */
@@ -13,7 +13,7 @@ export type TenantFormData = {
   name: string;
   adminEmail: string;
   tier: TenantTier;
-  status: Tenant["status"];
+  status: Tenant['status'];
 };
 
 /** テナント更新処理 */
@@ -21,7 +21,7 @@ export async function submitTenantUpdate(
   id: string | null,
   formData: TenantFormData,
   onSuccess: () => void,
-  onError: () => void,
+  onError: () => void
 ): Promise<boolean> {
   if (!id) {
     return false;
@@ -32,7 +32,7 @@ export async function submitTenantUpdate(
     onSuccess();
     return true;
   } catch (error) {
-    console.error("Failed to update tenant:", error);
+    console.error('Failed to update tenant:', error);
     onError();
     return false;
   }

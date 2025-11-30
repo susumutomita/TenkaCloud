@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { tenantApi } from "@/lib/api/tenant-api";
-import type { TenantTier } from "@/types/tenant";
-import { TENANT_TIER_LABELS, TENANT_TIERS } from "@/types/tenant";
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { tenantApi } from '@/lib/api/tenant-api';
+import type { TenantTier } from '@/types/tenant';
+import { TENANT_TIER_LABELS, TENANT_TIERS } from '@/types/tenant';
 
 export default function NewTenantPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
-    adminEmail: "",
-    tier: "FREE" as TenantTier,
+    name: '',
+    adminEmail: '',
+    tier: 'FREE' as TenantTier,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,11 +22,11 @@ export default function NewTenantPage() {
 
     try {
       await tenantApi.createTenant(formData);
-      router.push("/dashboard/tenants");
+      router.push('/dashboard/tenants');
       router.refresh(); // 一覧データを更新
     } catch (error) {
-      console.error("Failed to create tenant:", error);
-      alert("テナント作成に失敗しました");
+      console.error('Failed to create tenant:', error);
+      alert('テナント作成に失敗しました');
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +118,7 @@ export default function NewTenantPage() {
               disabled={isLoading}
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-black text-white"
             >
-              {isLoading ? "作成中..." : "作成"}
+              {isLoading ? '作成中...' : '作成'}
             </button>
             <Link
               href="/dashboard/tenants"

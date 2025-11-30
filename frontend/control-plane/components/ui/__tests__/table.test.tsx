@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { createRef } from "react";
-import { describe, expect, it } from "vitest";
+import { render, screen } from '@testing-library/react';
+import { createRef } from 'react';
+import { describe, expect, it } from 'vitest';
 import {
   Table,
   TableBody,
@@ -10,11 +10,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../table";
+} from '../table';
 
-describe("Table コンポーネント", () => {
-  describe("Table", () => {
-    it("children を正しくレンダリングすべき", () => {
+describe('Table コンポーネント', () => {
+  describe('Table', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableBody>
@@ -22,12 +22,12 @@ describe("Table コンポーネント", () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("テスト")).toBeInTheDocument();
+      expect(screen.getByText('テスト')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table className="custom-table">
           <TableBody>
@@ -35,12 +35,12 @@ describe("Table コンポーネント", () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByRole("table")).toHaveClass("custom-table");
+      expect(screen.getByRole('table')).toHaveClass('custom-table');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableElement>();
       render(
         <Table ref={ref}>
@@ -49,12 +49,12 @@ describe("Table コンポーネント", () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableElement);
     });
 
-    it("デフォルトスタイルを持つべき", () => {
+    it('デフォルトスタイルを持つべき', () => {
       render(
         <Table>
           <TableBody>
@@ -62,14 +62,14 @@ describe("Table コンポーネント", () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByRole("table")).toHaveClass("w-full");
+      expect(screen.getByRole('table')).toHaveClass('w-full');
     });
   });
 
-  describe("TableHeader", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableHeader', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableHeader>
@@ -77,12 +77,12 @@ describe("Table コンポーネント", () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("ヘッダー")).toBeInTheDocument();
+      expect(screen.getByText('ヘッダー')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableHeader className="custom-header" data-testid="header">
@@ -90,12 +90,12 @@ describe("Table コンポーネント", () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByTestId("header")).toHaveClass("custom-header");
+      expect(screen.getByTestId('header')).toHaveClass('custom-header');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableSectionElement>();
       render(
         <Table>
@@ -104,14 +104,14 @@ describe("Table コンポーネント", () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableSectionElement);
     });
   });
 
-  describe("TableBody", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableBody', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableBody>
@@ -119,12 +119,12 @@ describe("Table コンポーネント", () => {
               <TableCell>ボディ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("ボディ")).toBeInTheDocument();
+      expect(screen.getByText('ボディ')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableBody className="custom-body" data-testid="body">
@@ -132,12 +132,12 @@ describe("Table コンポーネント", () => {
               <TableCell>ボディ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByTestId("body")).toHaveClass("custom-body");
+      expect(screen.getByTestId('body')).toHaveClass('custom-body');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableSectionElement>();
       render(
         <Table>
@@ -146,14 +146,14 @@ describe("Table コンポーネント", () => {
               <TableCell>ボディ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableSectionElement);
     });
   });
 
-  describe("TableFooter", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableFooter', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableFooter>
@@ -161,12 +161,12 @@ describe("Table コンポーネント", () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("フッター")).toBeInTheDocument();
+      expect(screen.getByText('フッター')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableFooter className="custom-footer" data-testid="footer">
@@ -174,12 +174,12 @@ describe("Table コンポーネント", () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByTestId("footer")).toHaveClass("custom-footer");
+      expect(screen.getByTestId('footer')).toHaveClass('custom-footer');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableSectionElement>();
       render(
         <Table>
@@ -188,12 +188,12 @@ describe("Table コンポーネント", () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableSectionElement);
     });
 
-    it("デフォルトスタイルを持つべき", () => {
+    it('デフォルトスタイルを持つべき', () => {
       render(
         <Table>
           <TableFooter data-testid="footer">
@@ -201,14 +201,14 @@ describe("Table コンポーネント", () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByTestId("footer")).toHaveClass("border-t");
+      expect(screen.getByTestId('footer')).toHaveClass('border-t');
     });
   });
 
-  describe("TableRow", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableRow', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableBody>
@@ -216,12 +216,12 @@ describe("Table コンポーネント", () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("行データ")).toBeInTheDocument();
+      expect(screen.getByText('行データ')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableBody>
@@ -229,12 +229,12 @@ describe("Table コンポーネント", () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByTestId("row")).toHaveClass("custom-row");
+      expect(screen.getByTestId('row')).toHaveClass('custom-row');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableRowElement>();
       render(
         <Table>
@@ -243,12 +243,12 @@ describe("Table コンポーネント", () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableRowElement);
     });
 
-    it("デフォルトスタイルを持つべき", () => {
+    it('デフォルトスタイルを持つべき', () => {
       render(
         <Table>
           <TableBody>
@@ -256,14 +256,14 @@ describe("Table コンポーネント", () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByTestId("row")).toHaveClass("border-b");
+      expect(screen.getByTestId('row')).toHaveClass('border-b');
     });
   });
 
-  describe("TableHead", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableHead', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableHeader>
@@ -271,12 +271,12 @@ describe("Table コンポーネント", () => {
               <TableHead>見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("見出し")).toBeInTheDocument();
+      expect(screen.getByText('見出し')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableHeader>
@@ -284,12 +284,12 @@ describe("Table コンポーネント", () => {
               <TableHead className="custom-head">見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByRole("columnheader")).toHaveClass("custom-head");
+      expect(screen.getByRole('columnheader')).toHaveClass('custom-head');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableCellElement>();
       render(
         <Table>
@@ -298,12 +298,12 @@ describe("Table コンポーネント", () => {
               <TableHead ref={ref}>見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableCellElement);
     });
 
-    it("デフォルトスタイルを持つべき", () => {
+    it('デフォルトスタイルを持つべき', () => {
       render(
         <Table>
           <TableHeader>
@@ -311,15 +311,15 @@ describe("Table コンポーネント", () => {
               <TableHead>見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByRole("columnheader")).toHaveClass("h-12");
-      expect(screen.getByRole("columnheader")).toHaveClass("font-medium");
+      expect(screen.getByRole('columnheader')).toHaveClass('h-12');
+      expect(screen.getByRole('columnheader')).toHaveClass('font-medium');
     });
   });
 
-  describe("TableCell", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableCell', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableBody>
@@ -327,12 +327,12 @@ describe("Table コンポーネント", () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("セル")).toBeInTheDocument();
+      expect(screen.getByText('セル')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableBody>
@@ -340,12 +340,12 @@ describe("Table コンポーネント", () => {
               <TableCell className="custom-cell">セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByRole("cell")).toHaveClass("custom-cell");
+      expect(screen.getByRole('cell')).toHaveClass('custom-cell');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableCellElement>();
       render(
         <Table>
@@ -354,12 +354,12 @@ describe("Table コンポーネント", () => {
               <TableCell ref={ref}>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableCellElement);
     });
 
-    it("デフォルトスタイルを持つべき", () => {
+    it('デフォルトスタイルを持つべき', () => {
       render(
         <Table>
           <TableBody>
@@ -367,14 +367,14 @@ describe("Table コンポーネント", () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByRole("cell")).toHaveClass("p-4");
+      expect(screen.getByRole('cell')).toHaveClass('p-4');
     });
   });
 
-  describe("TableCaption", () => {
-    it("children を正しくレンダリングすべき", () => {
+  describe('TableCaption', () => {
+    it('children を正しくレンダリングすべき', () => {
       render(
         <Table>
           <TableCaption>キャプション</TableCaption>
@@ -383,12 +383,12 @@ describe("Table コンポーネント", () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("キャプション")).toBeInTheDocument();
+      expect(screen.getByText('キャプション')).toBeInTheDocument();
     });
 
-    it("追加の className を適用すべき", () => {
+    it('追加の className を適用すべき', () => {
       render(
         <Table>
           <TableCaption className="custom-caption">キャプション</TableCaption>
@@ -397,12 +397,12 @@ describe("Table コンポーネント", () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("キャプション")).toHaveClass("custom-caption");
+      expect(screen.getByText('キャプション')).toHaveClass('custom-caption');
     });
 
-    it("ref を正しく転送すべき", () => {
+    it('ref を正しく転送すべき', () => {
       const ref = createRef<HTMLTableCaptionElement>();
       render(
         <Table>
@@ -412,12 +412,12 @@ describe("Table コンポーネント", () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableCaptionElement);
     });
 
-    it("デフォルトスタイルを持つべき", () => {
+    it('デフォルトスタイルを持つべき', () => {
       render(
         <Table>
           <TableCaption>キャプション</TableCaption>
@@ -426,15 +426,15 @@ describe("Table コンポーネント", () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
-      expect(screen.getByText("キャプション")).toHaveClass("mt-4");
-      expect(screen.getByText("キャプション")).toHaveClass("text-sm");
+      expect(screen.getByText('キャプション')).toHaveClass('mt-4');
+      expect(screen.getByText('キャプション')).toHaveClass('text-sm');
     });
   });
 
-  describe("Table 組み合わせ", () => {
-    it("すべてのサブコンポーネントを正しく組み合わせるべき", () => {
+  describe('Table 組み合わせ', () => {
+    it('すべてのサブコンポーネントを正しく組み合わせるべき', () => {
       render(
         <Table>
           <TableCaption>テーブルキャプション</TableCaption>
@@ -460,15 +460,15 @@ describe("Table コンポーネント", () => {
               <TableCell>2名</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
 
-      expect(screen.getByText("テーブルキャプション")).toBeInTheDocument();
-      expect(screen.getByText("名前")).toBeInTheDocument();
-      expect(screen.getByText("年齢")).toBeInTheDocument();
-      expect(screen.getByText("田中")).toBeInTheDocument();
-      expect(screen.getByText("鈴木")).toBeInTheDocument();
-      expect(screen.getByText("合計")).toBeInTheDocument();
+      expect(screen.getByText('テーブルキャプション')).toBeInTheDocument();
+      expect(screen.getByText('名前')).toBeInTheDocument();
+      expect(screen.getByText('年齢')).toBeInTheDocument();
+      expect(screen.getByText('田中')).toBeInTheDocument();
+      expect(screen.getByText('鈴木')).toBeInTheDocument();
+      expect(screen.getByText('合計')).toBeInTheDocument();
     });
   });
 });

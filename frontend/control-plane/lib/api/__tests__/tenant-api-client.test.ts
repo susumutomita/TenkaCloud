@@ -4,22 +4,22 @@
  * このテストファイルは tenant-api.ts のクライアントサイドブランチをテストします。
  * jsdom 環境では window が定義されているため、クライアントサイドのコードパスがカバーされます。
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 
 // jsdom 環境では window が定義されているため、typeof window === 'undefined' は false になる
 // これにより、クライアントサイドの環境変数 NEXT_PUBLIC_TENANT_API_BASE_URL が使用される
 
-describe("tenant-api クライアントサイドテスト", () => {
-  it("jsdom 環境では window が定義されているべき", () => {
-    expect(typeof window).not.toBe("undefined");
+describe('tenant-api クライアントサイドテスト', () => {
+  it('jsdom 環境では window が定義されているべき', () => {
+    expect(typeof window).not.toBe('undefined');
   });
 
-  it("クライアントサイドで tenantApi がエクスポートされるべき", async () => {
+  it('クライアントサイドで tenantApi がエクスポートされるべき', async () => {
     // モジュールキャッシュをリセット
     vi.resetModules();
 
     // 動的インポートでモジュールを読み込む
-    const { tenantApi } = await import("../tenant-api");
+    const { tenantApi } = await import('../tenant-api');
 
     expect(tenantApi).toBeDefined();
     expect(tenantApi.listTenants).toBeDefined();
@@ -29,13 +29,13 @@ describe("tenant-api クライアントサイドテスト", () => {
     expect(tenantApi.deleteTenant).toBeDefined();
   });
 
-  it("NEXT_PUBLIC_TENANT_API_BASE_URL が設定されている場合それを使用すべき", async () => {
+  it('NEXT_PUBLIC_TENANT_API_BASE_URL が設定されている場合それを使用すべき', async () => {
     vi.resetModules();
 
     // 環境変数を設定
     const originalEnv = process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
     process.env.NEXT_PUBLIC_TENANT_API_BASE_URL =
-      "http://custom-client-api:3004/api";
+      'http://custom-client-api:3004/api';
 
     // fetch をモック
     const mockFetch = vi.fn().mockResolvedValue({
@@ -45,12 +45,12 @@ describe("tenant-api クライアントサイドテスト", () => {
     global.fetch = mockFetch;
 
     try {
-      const { tenantApi } = await import("../tenant-api");
+      const { tenantApi } = await import('../tenant-api');
       await tenantApi.listTenants();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://custom-client-api:3004/api/tenants",
-        { cache: "no-store" },
+        'http://custom-client-api:3004/api/tenants',
+        { cache: 'no-store' }
       );
     } finally {
       if (originalEnv === undefined) {
@@ -61,7 +61,7 @@ describe("tenant-api クライアントサイドテスト", () => {
     }
   });
 
-  it("NEXT_PUBLIC_TENANT_API_BASE_URL 未設定時はデフォルト URL を使用すべき", async () => {
+  it('NEXT_PUBLIC_TENANT_API_BASE_URL 未設定時はデフォルト URL を使用すべき', async () => {
     vi.resetModules();
 
     // 環境変数を削除
@@ -76,12 +76,12 @@ describe("tenant-api クライアントサイドテスト", () => {
     global.fetch = mockFetch;
 
     try {
-      const { tenantApi } = await import("../tenant-api");
+      const { tenantApi } = await import('../tenant-api');
       await tenantApi.listTenants();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3004/api/tenants",
-        { cache: "no-store" },
+        'http://localhost:3004/api/tenants',
+        { cache: 'no-store' }
       );
     } finally {
       if (originalEnv !== undefined) {

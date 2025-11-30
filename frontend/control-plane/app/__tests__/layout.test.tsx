@@ -1,34 +1,34 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import RootLayout from "../layout";
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import RootLayout from '../layout';
 
-describe("RootLayout コンポーネント", () => {
-  it("children を正しくレンダリングすべき", () => {
+describe('RootLayout コンポーネント', () => {
+  it('children を正しくレンダリングすべき', () => {
     render(
       <RootLayout>
         <div>テストコンテンツ</div>
-      </RootLayout>,
+      </RootLayout>
     );
-    expect(screen.getByText("テストコンテンツ")).toBeInTheDocument();
+    expect(screen.getByText('テストコンテンツ')).toBeInTheDocument();
   });
 
   it('html 要素に lang="ja" を設定すべき', () => {
     const { container } = render(
       <RootLayout>
         <div>テスト</div>
-      </RootLayout>,
+      </RootLayout>
     );
-    const html = container.closest("html");
-    expect(html).toHaveAttribute("lang", "ja");
+    const html = container.closest('html');
+    expect(html).toHaveAttribute('lang', 'ja');
   });
 
-  it("body 要素内に children を配置すべき", () => {
+  it('body 要素内に children を配置すべき', () => {
     render(
       <RootLayout>
         <div data-testid="child">子要素</div>
-      </RootLayout>,
+      </RootLayout>
     );
-    const child = screen.getByTestId("child");
-    expect(child.closest("body")).toBeInTheDocument();
+    const child = screen.getByTestId('child');
+    expect(child.closest('body')).toBeInTheDocument();
   });
 });

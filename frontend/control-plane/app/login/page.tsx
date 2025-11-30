@@ -1,4 +1,4 @@
-import { loginWithKeycloak } from "./actions";
+import { loginWithKeycloak } from './actions';
 
 export default function LoginPage() {
   return (

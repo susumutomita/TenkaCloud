@@ -1,28 +1,28 @@
-export type TenantStatus = "ACTIVE" | "SUSPENDED" | "ARCHIVED";
-export type TenantTier = "FREE" | "PRO" | "ENTERPRISE";
+export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+export type TenantTier = 'FREE' | 'PRO' | 'ENTERPRISE';
 
 export const TENANT_STATUSES: readonly TenantStatus[] = [
-  "ACTIVE",
-  "SUSPENDED",
-  "ARCHIVED",
+  'ACTIVE',
+  'SUSPENDED',
+  'ARCHIVED',
 ] as const;
 
 export const TENANT_TIERS: readonly TenantTier[] = [
-  "FREE",
-  "PRO",
-  "ENTERPRISE",
+  'FREE',
+  'PRO',
+  'ENTERPRISE',
 ] as const;
 
 export const TENANT_STATUS_LABELS: Record<TenantStatus, string> = {
-  ACTIVE: "Active",
-  SUSPENDED: "Suspended",
-  ARCHIVED: "Archived",
+  ACTIVE: 'Active',
+  SUSPENDED: 'Suspended',
+  ARCHIVED: 'Archived',
 };
 
 export const TENANT_TIER_LABELS: Record<TenantTier, string> = {
-  FREE: "Free",
-  PRO: "Pro",
-  ENTERPRISE: "Enterprise",
+  FREE: 'Free',
+  PRO: 'Pro',
+  ENTERPRISE: 'Enterprise',
 };
 
 export interface Tenant {
