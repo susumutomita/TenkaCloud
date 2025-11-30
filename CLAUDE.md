@@ -756,11 +756,11 @@ git push
 #### カバレッジ計測
 
 ```bash
-# Jest の場合
-npm run test:coverage -- --coverage
+# ni を使用（推奨）
+nr test:coverage
 
-# Vitest の場合
-npm run test:coverage
+# または直接実行
+bun run test:coverage
 ```
 
 #### カバレッジレポートの確認
@@ -874,3 +874,47 @@ if (currentSession?.idToken) { // undefined になる
 - **すべてのサービスが一度に起動する**: フロントエンド（Control Plane UI、Admin App、Participant App、Landing Page）、バックエンド、認証基盤（Keycloak）
 - **ローカルでの動作確認が容易**: 開発者が個別にサービスを起動する手間を省く
 - **ポート番号の明示**: README または Makefile に各サービスのポート番号を記載
+
+## ni (パッケージマネージャー自動選択ツール)
+
+本プロジェクトでは [@antfu/ni](https://github.com/antfu-collective/ni) を使用し、パッケージマネージャーに依存しないコマンド体系を採用している。
+
+### ni コマンド対応表
+
+| ni コマンド | 本プロジェクトでの変換結果（bun） | 用途 |
+|------------|----------------------------------|------|
+| `ni` | `bun install` | 依存関係をインストール |
+| `ni <pkg>` | `bun add <pkg>` | パッケージを追加 |
+| `ni -D <pkg>` | `bun add -D <pkg>` | devDependencies に追加 |
+| `nr <script>` | `bun run <script>` | スクリプトを実行 |
+| `nlx <pkg>` | `bunx <pkg>` | パッケージを一時実行 |
+| `nci` | `bun install --frozen-lockfile` | CI 用クリーンインストール |
+| `nun <pkg>` | `bun remove <pkg>` | パッケージを削除 |
+| `nup` | `bun update` | パッケージを更新 |
+
+### 推奨コマンド例
+
+```bash
+# 依存関係のインストール
+ni
+
+# 開発サーバー起動
+nr dev
+
+# テスト実行
+nr test
+
+# テストカバレッジ
+nr test:coverage
+
+# ビルド
+nr build
+
+# 型チェック
+nr typecheck
+```
+
+### 利点
+- lock ファイル（bun.lockb）を検出して自動的に bun を使用する
+- 新規参加者が「npm i in a bun project」のような間違いを防げる
+- CI/CD やドキュメントでパッケージマネージャーを統一できる
