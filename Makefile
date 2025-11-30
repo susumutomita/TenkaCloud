@@ -7,7 +7,13 @@
 # デフォルトターゲットはhelp
 default: help
 
-NODE_RUNNER ?= npm
+# ni: パッケージマネージャー自動選択ツール（bun.lockb を検出して bun を使用）
+# NI  = bunx ni   (依存関係インストール = bun install 相当)
+# NR  = bunx nr   (スクリプト実行 = bun run 相当)
+# NLX = bunx nlx  (パッケージ一時実行 = bunx 相当)
+NI ?= bunx ni
+NR ?= bunx nr
+NLX ?= bunx nlx
 BUN ?= bun
 FRONTEND_DIR ?= frontend/control-plane
 CONTROL_PLANE_DIR := frontend/control-plane
@@ -22,30 +28,32 @@ PROBLEM_MANAGEMENT_DIR := $(BACKEND_SERVICES_DIR)/problem-management
 # 📦 パッケージ管理
 # ========================================
 
+# Note: lint_text/format_check は CI で ni インストール前に実行されるため、直接 bun を使用
 lint_text:
-	$(NODE_RUNNER) run lint_text
+	$(BUN) run lint_text
 
 format_check:
-	$(NODE_RUNNER) run format_check
+	$(BUN) run format_check
 
 install:
-	$(BUN) install
+	$(NI)
 	@for app in $(FRONTEND_APPS); do \
 		echo "📦 $$app の依存関係をインストール中..."; \
-		cd $$app && $(BUN) install && cd ../..; \
+		(cd $$app && $(NI)) || exit 1; \
 	done
 	@echo "✅ すべてのフロントエンドアプリの依存関係をインストールしました"
 
 # Supply Chain Security: Disable lifecycle scripts during install
+# Note: install_ci は ni インストール前に実行されるため、直接 bun を使用
 install_ci:
 	$(BUN) run install:ci
-	cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts
+	(cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts)
 
 setup_husky:
 	$(BUN) run husky
 
 clean:
-	$(NODE_RUNNER) run clean || true
+	$(NR) clean || true
 
 # ========================================
 # 🔍 コード品質
@@ -56,20 +64,20 @@ lint:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📋 $$app の lint..."; \
-		$(NODE_RUNNER) --prefix $$app run lint || exit 1; \
+		(cd $$app && $(NR) lint) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの lint が成功しました"
 
 format:
-	$(NODE_RUNNER) run format
+	$(NR) format
 
 typecheck:
 	@echo "🔍 全フロントエンドアプリの型チェックを実行中..."
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📋 $$app の型チェック..."; \
-		$(NODE_RUNNER) --prefix $$app run typecheck || exit 1; \
+		(cd $$app && $(NR) typecheck) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリの型チェックが成功しました"
@@ -86,14 +94,14 @@ else
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📦 $$app をビルド中..."; \
-		NEXT_TELEMETRY_DISABLED=1 $(NODE_RUNNER) --prefix $$app run build || exit 1; \
+		(cd $$app && NEXT_TELEMETRY_DISABLED=1 $(NR) build) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリのビルドが成功しました"
 endif
 
 dev:
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
+	cd $(FRONTEND_DIR) && $(NR) dev
 
 # ========================================
 # 🧪 テスト
@@ -110,13 +118,13 @@ test_quick:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "🔬 $$app のテスト..."; \
-		$(NODE_RUNNER) --prefix $$app run test || exit 1; \
+		(cd $$app && $(NR) test) || exit 1; \
 	done
 	@echo ""
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@$(NODE_RUNNER) --prefix $(PROBLEM_MANAGEMENT_DIR) run test || exit 1
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test) || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
@@ -127,13 +135,13 @@ test_coverage:
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📈 $$app のカバレッジテスト..."; \
-		$(NODE_RUNNER) --prefix $$app run test:coverage || exit 1; \
+		(cd $$app && $(NR) test:coverage) || exit 1; \
 	done
 	@echo ""
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@$(NODE_RUNNER) --prefix $(PROBLEM_MANAGEMENT_DIR) run test:coverage || exit 1
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test:coverage) || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
@@ -472,7 +480,7 @@ stop-infrastructure:
 
 start-control-plane:
 	@echo "🚀 Control Plane UI を起動します..."
-	$(NODE_RUNNER) --prefix $(FRONTEND_DIR) run dev
+	cd $(FRONTEND_DIR) && $(NR) dev
 
 stop-control-plane:
 	@echo "🛑 Control Plane UI を停止しています..."
