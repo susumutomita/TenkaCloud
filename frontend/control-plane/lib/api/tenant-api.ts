@@ -1,15 +1,15 @@
-import { StatusCodes } from 'http-status-codes';
+import { StatusCodes } from "http-status-codes";
 import type {
   CreateTenantInput,
   Tenant,
   UpdateTenantInput,
-} from '@/types/tenant';
+} from "@/types/tenant";
 
 // Use NEXT_PUBLIC_TENANT_API_BASE_URL for client components, fall back to server-side env.
-const isServer = typeof window === 'undefined';
+const isServer = typeof window === "undefined";
 const apiBaseUrl = isServer
-  ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:3004/api'
-  : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:3004/api';
+  ? process.env.TENANT_API_BASE_URL || "http://tenant-management:3004/api"
+  : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || "http://localhost:3004/api";
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -33,14 +33,14 @@ type PaginatedResponse<T> = {
 
 export const tenantApi = {
   async listTenants(): Promise<Tenant[]> {
-    const res = await fetch(`${apiBaseUrl}/tenants`, { cache: 'no-store' });
+    const res = await fetch(`${apiBaseUrl}/tenants`, { cache: "no-store" });
     const response = await handleResponse<PaginatedResponse<Tenant>>(res);
     return response.data;
   },
 
   async getTenant(id: string): Promise<Tenant | null> {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
-      cache: 'no-store',
+      cache: "no-store",
     });
     if (res.status === StatusCodes.NOT_FOUND) return null;
     return handleResponse<Tenant>(res);
@@ -48,8 +48,8 @@ export const tenantApi = {
 
   async createTenant(input: CreateTenantInput): Promise<Tenant> {
     const res = await fetch(`${apiBaseUrl}/tenants`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
     return handleResponse<Tenant>(res);
@@ -57,11 +57,11 @@ export const tenantApi = {
 
   async updateTenant(
     id: string,
-    input: UpdateTenantInput
+    input: UpdateTenantInput,
   ): Promise<Tenant | null> {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
     if (res.status === StatusCodes.NOT_FOUND) return null;
@@ -70,7 +70,7 @@ export const tenantApi = {
 
   async deleteTenant(id: string): Promise<boolean> {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
     if (res.status === StatusCodes.NOT_FOUND) return false;
     await handleResponse<unknown>(res);

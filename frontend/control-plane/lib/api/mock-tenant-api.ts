@@ -2,35 +2,35 @@ import type {
   CreateTenantInput,
   Tenant,
   UpdateTenantInput,
-} from '@/types/tenant';
+} from "@/types/tenant";
 
 const MOCK_TENANTS: Tenant[] = [
   {
-    id: '1',
-    name: 'Acme Corp',
-    status: 'ACTIVE',
-    tier: 'ENTERPRISE',
-    adminEmail: 'admin@acme.com',
-    createdAt: '2025-01-01T00:00:00Z',
-    updatedAt: '2025-01-01T00:00:00Z',
+    id: "1",
+    name: "Acme Corp",
+    status: "ACTIVE",
+    tier: "ENTERPRISE",
+    adminEmail: "admin@acme.com",
+    createdAt: "2025-01-01T00:00:00Z",
+    updatedAt: "2025-01-01T00:00:00Z",
   },
   {
-    id: '2',
-    name: 'Beta Inc',
-    status: 'SUSPENDED',
-    tier: 'PRO',
-    adminEmail: 'admin@beta.com',
-    createdAt: '2025-02-01T00:00:00Z',
-    updatedAt: '2025-02-10T00:00:00Z',
+    id: "2",
+    name: "Beta Inc",
+    status: "SUSPENDED",
+    tier: "PRO",
+    adminEmail: "admin@beta.com",
+    createdAt: "2025-02-01T00:00:00Z",
+    updatedAt: "2025-02-10T00:00:00Z",
   },
   {
-    id: '3',
-    name: 'Charlie LLC',
-    status: 'ACTIVE',
-    tier: 'FREE',
-    adminEmail: 'admin@charlie.com',
-    createdAt: '2025-03-01T00:00:00Z',
-    updatedAt: '2025-03-01T00:00:00Z',
+    id: "3",
+    name: "Charlie LLC",
+    status: "ACTIVE",
+    tier: "FREE",
+    adminEmail: "admin@charlie.com",
+    createdAt: "2025-03-01T00:00:00Z",
+    updatedAt: "2025-03-01T00:00:00Z",
   },
 ];
 
@@ -53,7 +53,7 @@ export const mockTenantApi = {
     const newTenant: Tenant = {
       id: Math.random().toString(36).substring(7),
       ...input,
-      status: 'ACTIVE',
+      status: "ACTIVE",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -63,7 +63,7 @@ export const mockTenantApi = {
 
   async updateTenant(
     id: string,
-    input: UpdateTenantInput
+    input: UpdateTenantInput,
   ): Promise<Tenant | null> {
     await delay(500);
     const index = MOCK_TENANTS.findIndex((t) => t.id === id);

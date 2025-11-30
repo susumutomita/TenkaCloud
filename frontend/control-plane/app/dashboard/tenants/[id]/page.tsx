@@ -1,10 +1,10 @@
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { TenantActions } from '@/components/tenants/tenant-actions';
-import { tenantApi } from '@/lib/api/tenant-api';
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { TenantActions } from "@/components/tenants/tenant-actions";
+import { tenantApi } from "@/lib/api/tenant-api";
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'default-no-store';
+export const dynamic = "force-dynamic";
+export const fetchCache = "default-no-store";
 
 export default async function TenantDetailPage({
   params,
@@ -58,11 +58,11 @@ export default async function TenantDetailPage({
                 <dd className="col-span-2">
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
-                      tenant.status === 'ACTIVE'
-                        ? 'bg-green-100 text-green-800'
-                        : tenant.status === 'SUSPENDED'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
+                      tenant.status === "ACTIVE"
+                        ? "bg-green-100 text-green-800"
+                        : tenant.status === "SUSPENDED"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
                     }`}
                   >
                     {tenant.status}
@@ -82,13 +82,13 @@ export default async function TenantDetailPage({
               <div className="grid grid-cols-3 items-center gap-4">
                 <dt className="font-medium text-sm text-gray-500">作成日時</dt>
                 <dd className="col-span-2">
-                  {new Date(tenant.createdAt).toLocaleString('ja-JP')}
+                  {new Date(tenant.createdAt).toLocaleString("ja-JP")}
                 </dd>
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
                 <dt className="font-medium text-sm text-gray-500">更新日時</dt>
                 <dd className="col-span-2">
-                  {new Date(tenant.updatedAt).toLocaleString('ja-JP')}
+                  {new Date(tenant.updatedAt).toLocaleString("ja-JP")}
                 </dd>
               </div>
             </dl>
