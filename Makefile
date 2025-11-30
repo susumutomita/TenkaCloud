@@ -1,4 +1,4 @@
-.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_coverage dev build
+.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage dev build
 .PHONY: start-compose start-k8s start stop-compose stop-k8s stop restart status
 .PHONY: start-infrastructure start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-k8s k8s-build-all k8s-deploy k8s-delete docker-build docker-run docker-stop docker-status
@@ -99,8 +99,12 @@ dev:
 # 🧪 テスト
 # ========================================
 
-test:
-	@echo "🧪 全アプリのテストを実行中..."
+# デフォルトのテストはカバレッジ付き
+test: test_coverage
+
+# カバレッジなしの高速テスト
+test_quick:
+	@echo "🧪 全アプリのテストを実行中（カバレッジなし）..."
 	@echo ""
 	@echo "📦 フロントエンドアプリ:"
 	@for app in $(FRONTEND_APPS); do \
@@ -112,7 +116,7 @@ test:
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@cd $(PROBLEM_MANAGEMENT_DIR) && npx vitest run || exit 1
+	@cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN)x vitest run || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
@@ -129,11 +133,11 @@ test_coverage:
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@cd $(PROBLEM_MANAGEMENT_DIR) && npx vitest run --coverage || exit 1
+	@cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN)x vitest run --coverage || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
-before_commit: lint_text format_check typecheck test build
+before_commit: lint_text format_check typecheck test_coverage build
 	@echo "✅ すべてのコミット前チェックが完了しました"
 
 before-commit: before_commit
@@ -582,8 +586,9 @@ help:
 	@echo "  make before_commit    lint_text + format_check + typecheck + test + build を実行"
 	@echo ""
 	@echo "🧪 テスト:"
-	@echo "  make test             全アプリ（フロントエンド + バックエンド）のテストを実行"
-	@echo "  make test_coverage    全アプリのカバレッジテストを実行"
+	@echo "  make test             全アプリのカバレッジテストを実行（デフォルト）"
+	@echo "  make test_quick       全アプリのテストを実行（カバレッジなし・高速）"
+	@echo "  make test_coverage    全アプリのカバレッジテストを実行（test と同じ）"
 	@echo ""
 	@echo "🏗  ビルド:"
 	@echo "  make dev              開発サーバーを起動 (Control Plane のみ)"
