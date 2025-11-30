@@ -14,7 +14,6 @@ default: help
 NI ?= bunx ni
 NR ?= bunx nr
 NLX ?= bunx nlx
-NCI ?= bunx nci
 BUN ?= bun
 FRONTEND_DIR ?= frontend/control-plane
 CONTROL_PLANE_DIR := frontend/control-plane
@@ -29,11 +28,12 @@ PROBLEM_MANAGEMENT_DIR := $(BACKEND_SERVICES_DIR)/problem-management
 # 📦 パッケージ管理
 # ========================================
 
+# Note: lint_text/format_check は CI で ni インストール前に実行されるため、直接 bun を使用
 lint_text:
-	$(NR) lint_text
+	$(BUN) run lint_text
 
 format_check:
-	$(NR) format_check
+	$(BUN) run format_check
 
 install:
 	$(NI)
@@ -124,7 +124,7 @@ test_quick:
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run) || exit 1
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test) || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
@@ -141,7 +141,7 @@ test_coverage:
 	@echo "📦 バックエンドサービス:"
 	@echo ""
 	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NLX) vitest run --coverage) || exit 1
+	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test:coverage) || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
