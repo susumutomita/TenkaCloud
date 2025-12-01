@@ -145,4 +145,5 @@ vite.config.ts.timestamp-*
 *.old
 
 # Claude Code files
-.claude/
+.claude/*
+!.claude/skills/
