@@ -1,20 +1,129 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 255, 255, 255;
+@theme {
+  --font-family-display: 'Inter', system-ui, sans-serif;
+
+  /* カラーパレット - モダンで洗練されたダークモード対応 */
+  --color-primary-50: oklch(0.97 0.01 264);
+  --color-primary-100: oklch(0.93 0.03 264);
+  --color-primary-200: oklch(0.86 0.06 264);
+  --color-primary-300: oklch(0.76 0.1 264);
+  --color-primary-400: oklch(0.66 0.15 264);
+  --color-primary-500: oklch(0.56 0.2 264);
+  --color-primary-600: oklch(0.46 0.2 264);
+  --color-primary-700: oklch(0.36 0.18 264);
+  --color-primary-800: oklch(0.28 0.14 264);
+  --color-primary-900: oklch(0.22 0.1 264);
+  --color-primary-950: oklch(0.14 0.06 264);
+
+  --color-accent-50: oklch(0.97 0.01 180);
+  --color-accent-100: oklch(0.93 0.04 180);
+  --color-accent-200: oklch(0.86 0.08 180);
+  --color-accent-300: oklch(0.76 0.12 180);
+  --color-accent-400: oklch(0.66 0.16 180);
+  --color-accent-500: oklch(0.56 0.2 180);
+  --color-accent-600: oklch(0.46 0.2 180);
+  --color-accent-700: oklch(0.36 0.18 180);
+
+  /* グラデーション */
+  --gradient-primary: linear-gradient(
+    135deg,
+    var(--color-primary-500),
+    var(--color-accent-500)
+  );
+  --gradient-dark: linear-gradient(
+    135deg,
+    oklch(0.12 0.02 264),
+    oklch(0.08 0.01 240)
+  );
+
+  /* Spacing */
+  --spacing-section: 8rem;
+
+  /* Border radius */
+  --radius-2xl: 1.5rem;
+
+  /* Animation */
+  --animation-duration-fast: 200ms;
+  --animation-duration-normal: 300ms;
+  --animation-duration-slow: 500ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-rgb: 0, 0, 0;
+@layer base {
+  * {
+    border-color: oklch(0.25 0.01 264);
+  }
+
+  body {
+    font-family: var(--font-family-display);
+    background: oklch(0.02 0.01 264);
+    color: oklch(0.98 0.01 264);
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
   }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+@layer utilities {
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glass {
+    background: oklch(0.15 0.02 264 / 0.5);
+    backdrop-filter: blur(12px);
+    border: 1px solid oklch(0.25 0.02 264 / 0.3);
+  }
+
+  .glow {
+    box-shadow: 0 0 60px -15px var(--color-primary-500);
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-20px);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn var(--animation-duration-slow) ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .gradient-text {
+    background: linear-gradient(
+      135deg,
+      oklch(0.75 0.2 264),
+      oklch(0.65 0.2 200),
+      oklch(0.7 0.18 180)
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .section-padding {
+    padding-block: var(--spacing-section);
+  }
 }
