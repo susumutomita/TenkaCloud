@@ -87,24 +87,24 @@ export default function DashboardPage() {
             <div className="grid gap-4">
               <QuickStartItem
                 number="1"
-                title="最初の問題を作成"
-                description="Admin Appの問題管理画面へ移動し、プログラミング問題を追加します。"
+                title="問題を選択"
+                description="問題マーケットプレイスから、コンテストで使用する問題を選択します。"
                 icon={<Code className="w-5 h-5" />}
-                href={`${ADMIN_URL}/problems/new`}
+                href={`${ADMIN_URL}/problems/marketplace`}
               />
               <QuickStartItem
                 number="2"
-                title="コンテストを作成"
-                description="作成した問題を組み合わせて、新しいコンテストを開催します。"
+                title="イベントを作成"
+                description="選択した問題を組み合わせて、新しいイベントを開催します。"
                 icon={<Trophy className="w-5 h-5" />}
-                href={`${ADMIN_URL}/contests/new`}
+                href={`${ADMIN_URL}/events/new`}
               />
               <QuickStartItem
                 number="3"
-                title="参加者を招待"
-                description="招待リンクを発行して、参加者に共有しましょう。"
+                title="イベントを管理"
+                description="作成したイベントの参加者管理や進行状況を確認します。"
                 icon={<UserPlus className="w-5 h-5" />}
-                href={`${ADMIN_URL}/users/invite`}
+                href={`${ADMIN_URL}/events`}
               />
             </div>
           </motion.div>

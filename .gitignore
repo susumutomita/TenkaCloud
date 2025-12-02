@@ -147,3 +147,5 @@ vite.config.ts.timestamp-*
 # Claude Code files
 .claude/*
 !.claude/skills/
+
+.playwright-mcp
