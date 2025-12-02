@@ -1,7 +1,7 @@
 .PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage dev build
 .PHONY: start-compose start-k8s start stop-compose stop-k8s stop restart status
 .PHONY: start-infrastructure start-control-plane stop-infrastructure stop-control-plane restart-all
-.PHONY: check-docker check-k8s k8s-build-all k8s-deploy k8s-delete docker-build docker-run docker-stop docker-status
+.PHONY: check-docker check-docker-hub check-k8s k8s-pull-base-images k8s-build-all k8s-deploy k8s-delete docker-build docker-run docker-stop docker-status
 .PHONY: k8s-forward k8s-forward-stop k8s-start-full
 
 # デフォルトターゲットはhelp
@@ -166,6 +166,25 @@ check-docker:
 	@docker ps > /dev/null 2>&1 || (echo "❌ Docker が起動していません。Docker Desktop を起動してください。" && exit 1)
 	@echo "✅ Docker は起動しています"
 
+check-docker-hub:
+	@echo "🔍 Docker Hub への接続を確認しています..."
+	@for i in 1 2 3; do \
+		if curl -s -o /dev/null -w "" --connect-timeout 5 https://auth.docker.io/token 2>/dev/null; then \
+			echo "✅ Docker Hub に接続できます"; \
+			exit 0; \
+		fi; \
+		echo "   試行 $$i/3 - Docker Hub への接続を再試行中..."; \
+		sleep 2; \
+	done; \
+	echo "❌ Docker Hub に接続できません。ネットワーク接続を確認してください。"; \
+	echo ""; \
+	echo "📋 対処方法:"; \
+	echo "  1. インターネット接続を確認"; \
+	echo "  2. VPN を使用している場合は一時的に無効化"; \
+	echo "  3. DNS 設定を確認（8.8.8.8 など）"; \
+	echo "  4. 数分待ってから再試行"; \
+	exit 1
+
 check-k8s:
 	@echo "🔍 Kubernetes クラスターを確認しています..."
 	@kubectl cluster-info > /dev/null 2>&1 || \
@@ -282,7 +301,34 @@ restart-all: stop-compose start-compose
 # ☸️  Kubernetes（本番相当環境）
 # ========================================
 
-k8s-build-all: check-docker
+k8s-pull-base-images:
+	@echo "📥 ベースイメージをプルしています..."
+	@for i in 1 2 3; do \
+		if docker pull oven/bun:1.2.20 > /dev/null 2>&1; then \
+			echo "✅ oven/bun:1.2.20 をプルしました"; \
+			break; \
+		fi; \
+		echo "   試行 $$i/3 - イメージのプルを再試行中..."; \
+		sleep 3; \
+		if [ $$i -eq 3 ]; then \
+			echo "❌ ベースイメージのプルに失敗しました"; \
+			exit 1; \
+		fi; \
+	done
+	@for i in 1 2 3; do \
+		if docker pull oven/bun:1.2.20-slim > /dev/null 2>&1; then \
+			echo "✅ oven/bun:1.2.20-slim をプルしました"; \
+			break; \
+		fi; \
+		echo "   試行 $$i/3 - イメージのプルを再試行中..."; \
+		sleep 3; \
+		if [ $$i -eq 3 ]; then \
+			echo "❌ ベースイメージのプルに失敗しました"; \
+			exit 1; \
+		fi; \
+	done
+
+k8s-build-all: check-docker check-docker-hub k8s-pull-base-images
 	@echo "🐳 全サービスの Docker イメージをビルドしています..."
 	@echo "📦 Control Plane UI..."
 	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
@@ -574,6 +620,8 @@ help:
 	@echo "☸️  Kubernetes（本番相当環境）:"
 	@echo "  make k8s-start-full   ★ビルド+デプロイ+port-forward+Keycloak設定を一発で実行"
 	@echo "  make check-k8s        Kubernetes クラスターの接続確認"
+	@echo "  make check-docker-hub Docker Hub への接続確認（リトライ付き）"
+	@echo "  make k8s-pull-base-images ベースイメージをプリプル（リトライ付き）"
 	@echo "  make k8s-build-all    全サービスの Docker イメージをビルド"
 	@echo "  make start-k8s        Kubernetes にビルド&デプロイ"
 	@echo "  make k8s-deploy       Kubernetes にデプロイ（ビルド済み前提）"
