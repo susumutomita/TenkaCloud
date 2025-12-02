@@ -46,7 +46,9 @@ export default function Home() {
           <p className="text-2xl text-white/90 mb-2 font-light">
             クラウド天下一武道会
           </p>
-          <p className="text-white/50 mb-12">最強のクラウドエンジニアを目指せ</p>
+          <p className="text-white/50 mb-12">
+            最強のクラウドエンジニアを目指せ
+          </p>
         </motion.div>
 
         <motion.div variants={item} className="space-y-4">
