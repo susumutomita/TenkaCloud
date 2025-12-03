@@ -4,7 +4,7 @@
  * 汎用カードコンポーネント
  */
 
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 interface CardProps {
   children: ReactNode;
@@ -15,14 +15,14 @@ interface CardProps {
 
 export function Card({
   children,
-  className = '',
+  className = "",
   onClick,
   hoverable = false,
 }: CardProps) {
-  const baseClasses = 'bg-white rounded-lg border border-gray-200 shadow-sm';
+  const baseClasses = "bg-white rounded-lg border border-gray-200 shadow-sm";
   const hoverClasses = hoverable
-    ? 'hover:shadow-md hover:border-gray-300 transition-all cursor-pointer'
-    : '';
+    ? "hover:shadow-md hover:border-gray-300 transition-all cursor-pointer"
+    : "";
   const combinedClasses = `${baseClasses} ${hoverClasses} ${className}`;
 
   if (onClick) {
@@ -31,7 +31,7 @@ export function Card({
         type="button"
         className={combinedClasses}
         onClick={onClick}
-        style={{ textAlign: 'inherit', display: 'block', width: '100%' }}
+        style={{ textAlign: "inherit", display: "block", width: "100%" }}
       >
         {children}
       </button>
@@ -46,7 +46,7 @@ interface CardHeaderProps {
   className?: string;
 }
 
-export function CardHeader({ children, className = '' }: CardHeaderProps) {
+export function CardHeader({ children, className = "" }: CardHeaderProps) {
   return (
     <div className={`px-6 py-4 border-b border-gray-200 ${className}`}>
       {children}
@@ -59,7 +59,7 @@ interface CardContentProps {
   className?: string;
 }
 
-export function CardContent({ children, className = '' }: CardContentProps) {
+export function CardContent({ children, className = "" }: CardContentProps) {
   return <div className={`px-6 py-4 ${className}`}>{children}</div>;
 }
 
@@ -68,7 +68,7 @@ interface CardFooterProps {
   className?: string;
 }
 
-export function CardFooter({ children, className = '' }: CardFooterProps) {
+export function CardFooter({ children, className = "" }: CardFooterProps) {
   return (
     <div
       className={`px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg ${className}`}

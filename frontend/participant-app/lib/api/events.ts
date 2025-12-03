@@ -4,14 +4,14 @@
  * 参加者向けイベント API クライアント
  */
 
-import { get, post } from './client';
+import { get, post } from "./client";
 import type {
   EventDetails,
   EventStatus,
   Leaderboard,
   ParticipantEvent,
   ProblemType,
-} from './types';
+} from "./types";
 
 // =============================================================================
 // API Functions
@@ -30,7 +30,7 @@ export async function getAvailableEvents(options?: {
 
   if (options?.status) {
     params.status = Array.isArray(options.status)
-      ? options.status.join(',')
+      ? options.status.join(",")
       : options.status;
   }
   if (options?.type) {
@@ -44,8 +44,8 @@ export async function getAvailableEvents(options?: {
   }
 
   return get<{ events: ParticipantEvent[]; total: number }>(
-    '/participant/events',
-    params
+    "/participant/events",
+    params,
   );
 }
 
@@ -53,19 +53,19 @@ export async function getAvailableEvents(options?: {
  * 参加中のイベント一覧を取得
  */
 export async function getMyEvents(): Promise<{ events: ParticipantEvent[] }> {
-  return get<{ events: ParticipantEvent[] }>('/participant/events/me');
+  return get<{ events: ParticipantEvent[] }>("/participant/events/me");
 }
 
 /**
  * イベント詳細を取得
  */
 export async function getEventDetails(
-  eventId: string
+  eventId: string,
 ): Promise<EventDetails | null> {
   try {
     return await get<EventDetails>(`/participant/events/${eventId}`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -76,10 +76,10 @@ export async function getEventDetails(
  * イベントに登録
  */
 export async function registerForEvent(
-  eventId: string
+  eventId: string,
 ): Promise<{ success: boolean; message: string }> {
   return post<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/register`
+    `/participant/events/${eventId}/register`,
   );
 }
 
@@ -87,10 +87,10 @@ export async function registerForEvent(
  * イベント登録をキャンセル
  */
 export async function unregisterFromEvent(
-  eventId: string
+  eventId: string,
 ): Promise<{ success: boolean; message: string }> {
   return post<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/unregister`
+    `/participant/events/${eventId}/unregister`,
   );
 }
 
@@ -98,12 +98,12 @@ export async function unregisterFromEvent(
  * リーダーボードを取得
  */
 export async function getLeaderboard(
-  eventId: string
+  eventId: string,
 ): Promise<Leaderboard | null> {
   try {
     return await get<Leaderboard>(`/participant/events/${eventId}/leaderboard`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -125,7 +125,7 @@ export async function getMyRanking(eventId: string): Promise<{
       problemScores: Record<string, number>;
     }>(`/participant/events/${eventId}/my-ranking`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;

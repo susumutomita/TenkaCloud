@@ -4,7 +4,7 @@
  * 参加者向けチャレンジ（問題）API クライアント
  */
 
-import { get, post } from './client';
+import { get, post } from "./client";
 import type {
   AWSCredentials,
   ChallengeDetails,
@@ -14,7 +14,7 @@ import type {
   JamSubmission,
   Submission,
   SubmitAnswerInput,
-} from './types';
+} from "./types";
 
 // =============================================================================
 // Common Challenge API Functions
@@ -25,14 +25,14 @@ import type {
  */
 export async function getChallengeDetails(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<ChallengeDetails | null> {
   try {
     return await get<ChallengeDetails>(
-      `/participant/events/${eventId}/challenges/${challengeId}`
+      `/participant/events/${eventId}/challenges/${challengeId}`,
     );
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -44,14 +44,14 @@ export async function getChallengeDetails(
  */
 export async function getAWSCredentials(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<AWSCredentials | null> {
   try {
     return await get<AWSCredentials>(
-      `/participant/events/${eventId}/challenges/${challengeId}/credentials`
+      `/participant/events/${eventId}/challenges/${challengeId}/credentials`,
     );
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -64,10 +64,10 @@ export async function getAWSCredentials(
 export async function revealHint(
   eventId: string,
   challengeId: string,
-  hintId: string
+  hintId: string,
 ): Promise<ChallengeHint> {
   return post<ChallengeHint>(
-    `/participant/events/${eventId}/challenges/${challengeId}/hints/${hintId}/reveal`
+    `/participant/events/${eventId}/challenges/${challengeId}/hints/${hintId}/reveal`,
   );
 }
 
@@ -76,10 +76,10 @@ export async function revealHint(
  */
 export async function getSubmissions(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<{ submissions: Submission[] }> {
   return get<{ submissions: Submission[] }>(
-    `/participant/events/${eventId}/challenges/${challengeId}/submissions`
+    `/participant/events/${eventId}/challenges/${challengeId}/submissions`,
   );
 }
 
@@ -88,14 +88,14 @@ export async function getSubmissions(
  */
 export async function getLatestSubmission(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<Submission | null> {
   try {
     return await get<Submission>(
-      `/participant/events/${eventId}/challenges/${challengeId}/submissions/latest`
+      `/participant/events/${eventId}/challenges/${challengeId}/submissions/latest`,
     );
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -111,10 +111,10 @@ export async function getLatestSubmission(
  */
 export async function requestGameDayScoring(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<{ submissionId: string; message: string }> {
   return post<{ submissionId: string; message: string }>(
-    `/participant/events/${eventId}/challenges/${challengeId}/score`
+    `/participant/events/${eventId}/challenges/${challengeId}/score`,
   );
 }
 
@@ -124,10 +124,10 @@ export async function requestGameDayScoring(
 export async function getGameDayScoringStatus(
   eventId: string,
   challengeId: string,
-  submissionId: string
+  submissionId: string,
 ): Promise<Submission> {
   return get<Submission>(
-    `/participant/events/${eventId}/challenges/${challengeId}/submissions/${submissionId}`
+    `/participant/events/${eventId}/challenges/${challengeId}/submissions/${submissionId}`,
   );
 }
 
@@ -140,14 +140,14 @@ export async function getGameDayScoringStatus(
  */
 export async function getJamChallengeDetails(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<JamChallenge | null> {
   try {
     return await get<JamChallenge>(
-      `/participant/events/${eventId}/challenges/${challengeId}/jam`
+      `/participant/events/${eventId}/challenges/${challengeId}/jam`,
     );
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -160,10 +160,10 @@ export async function getJamChallengeDetails(
 export async function revealClue(
   eventId: string,
   challengeId: string,
-  clueId: string
+  clueId: string,
 ): Promise<JamClue> {
   return post<JamClue>(
-    `/participant/events/${eventId}/challenges/${challengeId}/clues/${clueId}/reveal`
+    `/participant/events/${eventId}/challenges/${challengeId}/clues/${clueId}/reveal`,
   );
 }
 
@@ -173,11 +173,11 @@ export async function revealClue(
 export async function submitJamAnswer(
   eventId: string,
   challengeId: string,
-  input: SubmitAnswerInput
+  input: SubmitAnswerInput,
 ): Promise<JamSubmission> {
   return post<JamSubmission>(
     `/participant/events/${eventId}/challenges/${challengeId}/submit`,
-    input
+    input,
   );
 }
 
@@ -186,9 +186,9 @@ export async function submitJamAnswer(
  */
 export async function getJamSubmissions(
   eventId: string,
-  challengeId: string
+  challengeId: string,
 ): Promise<{ submissions: JamSubmission[] }> {
   return get<{ submissions: JamSubmission[] }>(
-    `/participant/events/${eventId}/challenges/${challengeId}/jam/submissions`
+    `/participant/events/${eventId}/challenges/${challengeId}/jam/submissions`,
   );
 }

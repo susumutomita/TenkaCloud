@@ -9,24 +9,24 @@
 // =============================================================================
 
 export type EventStatus =
-  | 'draft'
-  | 'scheduled'
-  | 'active'
-  | 'paused'
-  | 'completed'
-  | 'cancelled';
-export type ParticipantType = 'individual' | 'team';
-export type ScoringType = 'realtime' | 'batch';
-export type ProblemType = 'gameday' | 'jam';
-export type CloudProvider = 'aws' | 'gcp' | 'azure' | 'local';
-export type DifficultyLevel = 'easy' | 'medium' | 'hard' | 'expert';
+  | "draft"
+  | "scheduled"
+  | "active"
+  | "paused"
+  | "completed"
+  | "cancelled";
+export type ParticipantType = "individual" | "team";
+export type ScoringType = "realtime" | "batch";
+export type ProblemType = "gameday" | "jam";
+export type CloudProvider = "aws" | "gcp" | "azure" | "local";
+export type DifficultyLevel = "easy" | "medium" | "hard" | "expert";
 export type ProblemCategory =
-  | 'architecture'
-  | 'security'
-  | 'cost'
-  | 'performance'
-  | 'reliability'
-  | 'operations';
+  | "architecture"
+  | "security"
+  | "cost"
+  | "performance"
+  | "reliability"
+  | "operations";
 
 export interface ParticipantEvent {
   id: string;
@@ -95,7 +95,7 @@ export interface ChallengeHint {
 
 export interface ChallengeResource {
   name: string;
-  type: 'link' | 'document' | 'video';
+  type: "link" | "document" | "video";
   url: string;
 }
 
@@ -131,7 +131,7 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'captain' | 'member';
+  role: "captain" | "member";
   joinedAt: string;
 }
 
@@ -155,7 +155,7 @@ export interface LeaderboardEntry {
   totalScore: number;
   problemScores: Record<string, number>;
   lastScoredAt?: string;
-  trend?: 'up' | 'down' | 'same';
+  trend?: "up" | "down" | "same";
   isMe?: boolean;
 }
 
@@ -176,7 +176,7 @@ export interface Submission {
   problemId: string;
   eventId: string;
   submittedAt: string;
-  status: 'pending' | 'scoring' | 'completed' | 'failed';
+  status: "pending" | "scoring" | "completed" | "failed";
   score?: number;
   maxScore?: number;
   feedback?: SubmissionFeedback[];

@@ -4,25 +4,25 @@
  * イベントリーダーボードページ
  */
 
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Header } from '../../../../components/layout';
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Header } from "../../../../components/layout";
 import {
   Badge,
   Button,
   Card,
   CardContent,
   CardHeader,
-} from '../../../../components/ui';
-import { getEventDetails, getLeaderboard } from '../../../../lib/api/events';
+} from "../../../../components/ui";
+import { getEventDetails, getLeaderboard } from "../../../../lib/api/events";
 import type {
   EventDetails,
   Leaderboard,
   LeaderboardEntry,
-} from '../../../../lib/api/types';
+} from "../../../../lib/api/types";
 
 export default function LeaderboardPage() {
   const params = useParams();
@@ -44,7 +44,7 @@ export default function LeaderboardPage() {
         setEvent(eventData);
         setLeaderboard(leaderboardData);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '読み込みに失敗しました');
+        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
       } finally {
         setLoading(false);
       }
@@ -58,34 +58,34 @@ export default function LeaderboardPage() {
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
+    return date.toLocaleString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
   };
 
   const getRankStyle = (rank: number) => {
     switch (rank) {
       case 1:
-        return 'bg-yellow-100 border-yellow-400 text-yellow-800';
+        return "bg-yellow-100 border-yellow-400 text-yellow-800";
       case 2:
-        return 'bg-gray-100 border-gray-400 text-gray-800';
+        return "bg-gray-100 border-gray-400 text-gray-800";
       case 3:
-        return 'bg-amber-100 border-amber-400 text-amber-800';
+        return "bg-amber-100 border-amber-400 text-amber-800";
       default:
-        return 'bg-white border-gray-200';
+        return "bg-white border-gray-200";
     }
   };
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
       case 1:
-        return '🥇';
+        return "🥇";
       case 2:
-        return '🥈';
+        return "🥈";
       case 3:
-        return '🥉';
+        return "🥉";
       default:
         return `#${rank}`;
     }
@@ -109,7 +109,7 @@ export default function LeaderboardPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card className="p-8 text-center">
             <p className="text-red-600 mb-4">
-              {error || 'リーダーボードが見つかりません'}
+              {error || "リーダーボードが見つかりません"}
             </p>
             <Link href={`/events/${eventId}`}>
               <Button>イベントに戻る</Button>
@@ -213,11 +213,11 @@ export default function LeaderboardPage() {
                 {leaderboard.entries.map((entry: LeaderboardEntry) => (
                   <tr
                     key={entry.teamId || entry.participantId}
-                    className={`${getRankStyle(entry.rank)} ${entry.isMe ? 'ring-2 ring-blue-500' : ''}`}
+                    className={`${getRankStyle(entry.rank)} ${entry.isMe ? "ring-2 ring-blue-500" : ""}`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`font-bold ${entry.rank <= 3 ? 'text-xl' : ''}`}
+                        className={`font-bold ${entry.rank <= 3 ? "text-xl" : ""}`}
                       >
                         {getRankIcon(entry.rank)}
                       </span>
@@ -225,7 +225,7 @@ export default function LeaderboardPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <span
-                          className={entry.isMe ? 'font-bold' : 'font-medium'}
+                          className={entry.isMe ? "font-bold" : "font-medium"}
                         >
                           {entry.name}
                         </span>
@@ -247,8 +247,8 @@ export default function LeaderboardPage() {
                             <span
                               className={
                                 score > 0
-                                  ? 'text-green-600 font-medium'
-                                  : 'text-gray-400'
+                                  ? "text-green-600 font-medium"
+                                  : "text-gray-400"
                               }
                             >
                               {score}
@@ -265,13 +265,13 @@ export default function LeaderboardPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
-                      {entry.trend === 'up' && (
+                      {entry.trend === "up" && (
                         <span className="text-green-600">↑</span>
                       )}
-                      {entry.trend === 'down' && (
+                      {entry.trend === "down" && (
                         <span className="text-red-600">↓</span>
                       )}
-                      {entry.trend === 'same' && (
+                      {entry.trend === "same" && (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>

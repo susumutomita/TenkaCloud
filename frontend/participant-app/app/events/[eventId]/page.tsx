@@ -4,12 +4,12 @@
  * イベント詳細ページ
  */
 
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Header } from '../../../components/layout';
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Header } from "../../../components/layout";
 import {
   Badge,
   Button,
@@ -21,17 +21,17 @@ import {
   EventStatusBadge,
   ProblemTypeBadge,
   ScoreProgress,
-} from '../../../components/ui';
+} from "../../../components/ui";
 import {
   getEventDetails,
   getLeaderboard,
   registerForEvent,
-} from '../../../lib/api/events';
+} from "../../../lib/api/events";
 import type {
   ChallengeProblem,
   EventDetails,
   Leaderboard,
-} from '../../../lib/api/types';
+} from "../../../lib/api/types";
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -54,14 +54,14 @@ export default function EventDetailPage() {
         ]);
 
         if (!eventData) {
-          router.push('/events');
+          router.push("/events");
           return;
         }
 
         setEvent(eventData);
         setLeaderboard(leaderboardData);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '読み込みに失敗しました');
+        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
       } finally {
         setLoading(false);
       }
@@ -82,7 +82,7 @@ export default function EventDetailPage() {
         setEvent(updatedEvent);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登録に失敗しました');
+      setError(err instanceof Error ? err.message : "登録に失敗しました");
     } finally {
       setRegistering(false);
     }
@@ -90,12 +90,12 @@ export default function EventDetailPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return date.toLocaleDateString("ja-JP", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -104,7 +104,7 @@ export default function EventDetailPage() {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     return hours > 0
-      ? `${hours}時間${minutes > 0 ? ` ${minutes}分` : ''}`
+      ? `${hours}時間${minutes > 0 ? ` ${minutes}分` : ""}`
       : `${minutes}分`;
   };
 
@@ -126,7 +126,7 @@ export default function EventDetailPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card className="p-8 text-center">
             <p className="text-red-600 mb-4">
-              {error || 'イベントが見つかりません'}
+              {error || "イベントが見つかりません"}
             </p>
             <Link href="/events">
               <Button>イベント一覧に戻る</Button>
@@ -137,7 +137,7 @@ export default function EventDetailPage() {
     );
   }
 
-  const isActive = event.status === 'active';
+  const isActive = event.status === "active";
   const canParticipate = event.isRegistered && isActive;
 
   return (
@@ -164,15 +164,15 @@ export default function EventDetailPage() {
           </h1>
           <div className="flex flex-wrap gap-6 text-gray-600">
             <div>
-              <span className="font-medium">開始:</span>{' '}
+              <span className="font-medium">開始:</span>{" "}
               {formatDate(event.startTime)}
             </div>
             <div>
-              <span className="font-medium">終了:</span>{' '}
+              <span className="font-medium">終了:</span>{" "}
               {formatDate(event.endTime)}
             </div>
             <div>
-              <span className="font-medium">期間:</span>{' '}
+              <span className="font-medium">期間:</span>{" "}
               {getEventDuration(event.startTime, event.endTime)}
             </div>
           </div>
@@ -192,8 +192,8 @@ export default function EventDetailPage() {
                 {event.problems.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">
                     {isActive
-                      ? '問題の読み込み中...'
-                      : '問題はイベント開始時に公開されます'}
+                      ? "問題の読み込み中..."
+                      : "問題はイベント開始時に公開されます"}
                   </p>
                 ) : (
                   event.problems.map((problem: ChallengeProblem) => (
@@ -209,7 +209,7 @@ export default function EventDetailPage() {
             </Card>
 
             {/* Team Info (if team event) */}
-            {event.participantType === 'team' && event.teamInfo && (
+            {event.participantType === "team" && event.teamInfo && (
               <Card>
                 <CardHeader>
                   <h2 className="text-xl font-semibold">チーム情報</h2>
@@ -231,7 +231,7 @@ export default function EventDetailPage() {
                           className="px-3 py-1 bg-gray-100 rounded-full text-sm"
                         >
                           {member.name}
-                          {member.role === 'captain' && ' 👑'}
+                          {member.role === "captain" && " 👑"}
                         </span>
                       ))}
                     </div>
@@ -264,16 +264,16 @@ export default function EventDetailPage() {
                     </div>
                   )}
 
-                  {!event.isRegistered && event.status !== 'completed' && (
+                  {!event.isRegistered && event.status !== "completed" && (
                     <Button
                       onClick={handleRegister}
                       loading={registering}
                       fullWidth
                       size="lg"
                     >
-                      {event.participantType === 'team'
-                        ? 'チームで登録'
-                        : '参加登録'}
+                      {event.participantType === "team"
+                        ? "チームで登録"
+                        : "参加登録"}
                     </Button>
                   )}
 
@@ -302,7 +302,7 @@ export default function EventDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-500">参加形式</span>
                     <span className="font-medium">
-                      {event.participantType === 'team' ? 'チーム' : '個人'}
+                      {event.participantType === "team" ? "チーム" : "個人"}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -314,9 +314,9 @@ export default function EventDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-500">採点方式</span>
                     <span className="font-medium">
-                      {event.scoringType === 'realtime'
-                        ? 'リアルタイム'
-                        : 'バッチ'}
+                      {event.scoringType === "realtime"
+                        ? "リアルタイム"
+                        : "バッチ"}
                     </span>
                   </div>
                 </div>
@@ -342,26 +342,26 @@ export default function EventDetailPage() {
                       <div
                         key={entry.teamId || entry.participantId}
                         className={`flex items-center justify-between p-2 rounded ${
-                          entry.isMe ? 'bg-blue-50' : ''
+                          entry.isMe ? "bg-blue-50" : ""
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <span
                             className={`font-bold ${
                               entry.rank === 1
-                                ? 'text-yellow-500'
+                                ? "text-yellow-500"
                                 : entry.rank === 2
-                                  ? 'text-gray-400'
+                                  ? "text-gray-400"
                                   : entry.rank === 3
-                                    ? 'text-amber-600'
-                                    : 'text-gray-500'
+                                    ? "text-amber-600"
+                                    : "text-gray-500"
                             }`}
                           >
                             #{entry.rank}
                           </span>
-                          <span className={entry.isMe ? 'font-medium' : ''}>
+                          <span className={entry.isMe ? "font-medium" : ""}>
                             {entry.name}
-                            {entry.isMe && ' (自分)'}
+                            {entry.isMe && " (自分)"}
                           </span>
                         </div>
                         <span className="font-medium">{entry.totalScore}</span>
@@ -399,12 +399,12 @@ function ProblemCard({
   return (
     <div
       className={`p-4 border rounded-lg ${
-        canAccess ? 'hover:border-blue-300 cursor-pointer' : 'opacity-75'
-      } ${problem.isCompleted ? 'bg-green-50 border-green-200' : 'bg-white'}`}
+        canAccess ? "hover:border-blue-300 cursor-pointer" : "opacity-75"
+      } ${problem.isCompleted ? "bg-green-50 border-green-200" : "bg-white"}`}
     >
       <Link
-        href={canAccess ? `/events/${eventId}/challenges/${problem.id}` : '#'}
-        className={canAccess ? '' : 'pointer-events-none'}
+        href={canAccess ? `/events/${eventId}/challenges/${problem.id}` : "#"}
+        className={canAccess ? "" : "pointer-events-none"}
       >
         <div className="flex items-start justify-between">
           <div className="flex-1">
