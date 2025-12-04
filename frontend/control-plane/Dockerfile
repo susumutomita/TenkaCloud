@@ -1,17 +1,17 @@
 # TenkaCloud Control Plane UI - Multi-stage Docker Build
 
 # Stage 1: Dependencies
-FROM oven/bun:1.2.20 AS deps
+FROM node:22-slim AS deps
 WORKDIR /app
 
 # Copy package files
-COPY package.json bun.lock ./
+COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN bun install
+RUN npm ci
 
 # Stage 2: Builder
-FROM oven/bun:1.2.20 AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -25,10 +25,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 # Build Next.js application
-RUN bun run build
+RUN npm run build
 
 # Stage 3: Runner
-FROM oven/bun:1.2.20-slim AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -53,5 +53,4 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # Start the application
-# Start the application
-CMD ["bun", "server.js"]
+CMD ["node", "server.js"]

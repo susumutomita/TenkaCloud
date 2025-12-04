@@ -1,18 +1,18 @@
-FROM oven/bun:1 as base
+FROM node:22-slim as base
 WORKDIR /app
 
 # Install dependencies
-COPY package.json bun.lockb* ./
-RUN bun install
+COPY package.json package-lock.json* ./
+RUN npm ci
 
 # Copy source code and Prisma schema
 COPY . .
 
 # Generate Prisma Client
-RUN bunx prisma generate
+RUN npx prisma generate
 
 # Build the application
-RUN bun run build
+RUN npm run build
 
 # Start the application
-CMD ["bun", "run", "start"]
+CMD ["npm", "run", "start"]
