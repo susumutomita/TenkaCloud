@@ -13,7 +13,7 @@
 
 **CRITICAL**: タスク完了前に必ず `make before-commit` を実行する。lint、format、typecheck、test（カバレッジ 99％以上）、build がすべて通るまでタスクは完了とみなさない。
 
-**NEVER** 以下を行わない:
+以下は禁止事項です。
 - `rm` コマンドの使用（環境破壊リスク）
 - コミット/PR での `#番号` 形式の Issue 引用（GitHub 自動リンクでノイズになる）
 - モックデータ、ハードコード配列、スタブ API（実際の DB 接続と API 統合を実装する）
@@ -22,7 +22,7 @@
 
 ## Ubiquitous Language
 
-プロジェクト全体で統一する用語:
+プロジェクト全体で統一する用語を以下に示します。
 - **Tenant**: TenkaCloud を利用する組織・企業単位
 - **Control Plane**: テナント管理・認証を担う共有プラットフォーム
 - **Application Plane**: テナント固有のビジネスロジックを実行するサービス群
