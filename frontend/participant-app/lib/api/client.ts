@@ -13,11 +13,17 @@ interface FetchOptions extends RequestInit {
 
 /**
  * 認証トークンを取得
+ *
+ * TODO: Keycloak 統合後に NextAuth セッションからトークンを取得
+ * @see frontend/control-plane/lib/api/client.ts の実装を参考
  */
 async function getAuthToken(): Promise<string | null> {
-  // TODO: Keycloak から実際のトークンを取得
-  // 開発中は仮のトークンを返す
-  return 'participant-dev-token';
+  // Keycloak 統合後は以下のように実装:
+  // const session = await getSession();
+  // return session?.accessToken ?? null;
+
+  // 現在は未認証状態を返す（API 側で適切に処理される想定）
+  return null;
 }
 
 /**

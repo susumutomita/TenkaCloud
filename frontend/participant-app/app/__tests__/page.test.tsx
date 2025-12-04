@@ -33,22 +33,11 @@ describe('Participant App ホームページ', () => {
     expect(spectateButton).toBeInTheDocument();
   });
 
-  it('ステータス情報「Active」が表示されるべき', () => {
+  it('統計情報のプレースホルダーが3つ表示されるべき（API 接続前）', () => {
     render(<Home />);
-    const activeStatus = screen.getByText('Active');
-    expect(activeStatus).toBeInTheDocument();
-  });
-
-  it('参加者数「128」が表示されるべき', () => {
-    render(<Home />);
-    const participants = screen.getByText('128');
-    expect(participants).toBeInTheDocument();
-  });
-
-  it('問題数「12」が表示されるべき', () => {
-    render(<Home />);
-    const problems = screen.getByText('12');
-    expect(problems).toBeInTheDocument();
+    // API 接続前はプレースホルダー値「---」が表示される
+    const placeholders = screen.getAllByText('---');
+    expect(placeholders).toHaveLength(3);
   });
 
   it('ステータスラベル「Status」が表示されるべき', () => {

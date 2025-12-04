@@ -3,10 +3,11 @@
 import { motion } from 'framer-motion';
 import { Eye, Swords, Trophy, Users, Zap } from 'lucide-react';
 
+// 統計情報は API 接続後に動的に取得予定
 const stats = [
-  { label: 'Status', value: 'Active', icon: Zap },
-  { label: 'Participants', value: '128', icon: Users },
-  { label: 'Problems', value: '12', icon: Trophy },
+  { label: 'Status', value: '---', icon: Zap },
+  { label: 'Participants', value: '---', icon: Users },
+  { label: 'Problems', value: '---', icon: Trophy },
 ];
 
 export default function Home() {
