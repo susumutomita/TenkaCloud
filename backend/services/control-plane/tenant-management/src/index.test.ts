@@ -35,9 +35,8 @@ describe('テナント管理API', () => {
   describe('認証/認可テスト', () => {
     it('Authorizationヘッダーなしで401エラーになるべき', async () => {
       // Temporarily restore original auth middleware
-      const { authMiddleware: originalAuth } = await import(
-        './middleware/auth'
-      );
+      const { authMiddleware: originalAuth } =
+        await import('./middleware/auth');
       vi.doMock('./middleware/auth', () => ({
         ...vi.importActual('./middleware/auth'),
         authMiddleware: originalAuth,

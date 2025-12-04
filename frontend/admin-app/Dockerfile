@@ -2,7 +2,7 @@ FROM oven/bun:1.2.20
 WORKDIR /app
 
 # Copy root package files
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 
 # Copy workspace package files
 COPY frontend/admin-app/package.json ./frontend/admin-app/
