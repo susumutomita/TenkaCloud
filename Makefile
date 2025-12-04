@@ -8,13 +8,25 @@
 default: help
 
 # ni: パッケージマネージャー自動選択ツール（bun.lockb を検出して bun を使用）
+# proto の shim が Sandbox 環境でクラッシュすることがあるため、直接 bin パスを優先
+PROTO_BIN := $(HOME)/.proto/bin
+ifeq ($(wildcard $(PROTO_BIN)/bun),$(PROTO_BIN)/bun)
+	BUN ?= $(PROTO_BIN)/bun
+	BUNX ?= $(PROTO_BIN)/bunx
+else
+	BUN ?= bun
+	BUNX ?= bunx
+endif
+
+# shims が優先される PATH を上書きし、直接 bin を使う
+export PATH := $(PROTO_BIN):$(PATH)
+
 # NI  = bunx ni   (依存関係インストール = bun install 相当)
 # NR  = bunx nr   (スクリプト実行 = bun run 相当)
 # NLX = bunx nlx  (パッケージ一時実行 = bunx 相当)
-NI ?= bunx ni
-NR ?= bunx nr
-NLX ?= bunx nlx
-BUN ?= bun
+NI ?= $(BUNX) ni
+NR ?= $(BUNX) nr
+NLX ?= $(BUNX) nlx
 FRONTEND_DIR ?= frontend/control-plane
 CONTROL_PLANE_DIR := frontend/control-plane
 ADMIN_APP_DIR := frontend/admin-app
