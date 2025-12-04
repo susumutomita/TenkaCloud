@@ -1,21 +1,21 @@
-FROM node:22-slim
+FROM oven/bun:1.2.20
 WORKDIR /app
 
 # Copy root package files
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 
 # Copy workspace package files
 COPY frontend/landing-site/package.json ./frontend/landing-site/
 
 # Install dependencies
-RUN npm ci
+RUN bun install
 
 # Copy source code
 COPY frontend/landing-site ./frontend/landing-site
 
 # Build
 WORKDIR /app/frontend/landing-site
-RUN NEXT_TELEMETRY_DISABLED=1 npm run build -- --webpack
+RUN NEXT_TELEMETRY_DISABLED=1 bun run build -- --webpack
 
 # Start
-CMD ["npm", "start", "--", "--port", "3003"]
+CMD ["bun", "start", "--port", "3003"]

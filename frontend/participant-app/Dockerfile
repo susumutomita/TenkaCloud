@@ -1,21 +1,21 @@
-FROM node:22-slim
+FROM oven/bun:1.2.20
 WORKDIR /app
 
 # Copy root package files
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 
 # Copy workspace package files
 COPY frontend/participant-app/package.json ./frontend/participant-app/
 
 # Install dependencies
-RUN npm ci
+RUN bun install
 
 # Copy source code
 COPY frontend/participant-app ./frontend/participant-app
 
 # Build
 WORKDIR /app/frontend/participant-app
-RUN npm run build
+RUN bun run build
 
 # Start
-CMD ["npm", "start", "--", "--port", "3002"]
+CMD ["bun", "start", "--port", "3002"]
