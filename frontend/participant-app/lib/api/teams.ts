@@ -4,13 +4,13 @@
  * 参加者向けチーム管理 API クライアント
  */
 
-import { del, get, post } from "./client";
+import { del, get, post } from './client';
 import type {
   CreateTeamInput,
   JoinTeamInput,
   TeamInfo,
   TeamMember,
-} from "./types";
+} from './types';
 
 // =============================================================================
 // API Functions
@@ -23,7 +23,7 @@ export async function getMyTeam(eventId: string): Promise<TeamInfo | null> {
   try {
     return await get<TeamInfo>(`/participant/events/${eventId}/team`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) {
+    if (error instanceof Error && error.message.includes('404')) {
       return null;
     }
     throw error;
@@ -35,7 +35,7 @@ export async function getMyTeam(eventId: string): Promise<TeamInfo | null> {
  */
 export async function createTeam(
   eventId: string,
-  input: CreateTeamInput,
+  input: CreateTeamInput
 ): Promise<TeamInfo> {
   return post<TeamInfo>(`/participant/events/${eventId}/team`, input);
 }
@@ -45,7 +45,7 @@ export async function createTeam(
  */
 export async function joinTeam(
   eventId: string,
-  input: JoinTeamInput,
+  input: JoinTeamInput
 ): Promise<TeamInfo> {
   return post<TeamInfo>(`/participant/events/${eventId}/team/join`, input);
 }
@@ -54,10 +54,10 @@ export async function joinTeam(
  * チームから離脱
  */
 export async function leaveTeam(
-  eventId: string,
+  eventId: string
 ): Promise<{ success: boolean; message: string }> {
   return post<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/team/leave`,
+    `/participant/events/${eventId}/team/leave`
   );
 }
 
@@ -65,10 +65,10 @@ export async function leaveTeam(
  * 招待コードを再生成（キャプテンのみ）
  */
 export async function regenerateInviteCode(
-  eventId: string,
+  eventId: string
 ): Promise<{ inviteCode: string }> {
   return post<{ inviteCode: string }>(
-    `/participant/events/${eventId}/team/invite-code`,
+    `/participant/events/${eventId}/team/invite-code`
   );
 }
 
@@ -77,10 +77,10 @@ export async function regenerateInviteCode(
  */
 export async function removeMember(
   eventId: string,
-  memberId: string,
+  memberId: string
 ): Promise<{ success: boolean; message: string }> {
   return del<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/team/members/${memberId}`,
+    `/participant/events/${eventId}/team/members/${memberId}`
   );
 }
 
@@ -89,13 +89,13 @@ export async function removeMember(
  */
 export async function transferCaptain(
   eventId: string,
-  newCaptainId: string,
+  newCaptainId: string
 ): Promise<TeamInfo> {
   return post<TeamInfo>(
     `/participant/events/${eventId}/team/transfer-captain`,
     {
       newCaptainId,
-    },
+    }
   );
 }
 
@@ -103,10 +103,10 @@ export async function transferCaptain(
  * チームメンバー一覧を取得
  */
 export async function getTeamMembers(
-  eventId: string,
+  eventId: string
 ): Promise<{ members: TeamMember[] }> {
   return get<{ members: TeamMember[] }>(
-    `/participant/events/${eventId}/team/members`,
+    `/participant/events/${eventId}/team/members`
   );
 }
 
@@ -114,9 +114,9 @@ export async function getTeamMembers(
  * チームを解散（キャプテンのみ）
  */
 export async function disbandTeam(
-  eventId: string,
+  eventId: string
 ): Promise<{ success: boolean; message: string }> {
   return del<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/team`,
+    `/participant/events/${eventId}/team`
   );
 }

@@ -5,7 +5,7 @@
  */
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
@@ -31,7 +31,7 @@ async function getAuthToken(): Promise<string | null> {
  */
 export async function apiRequest<T>(
   endpoint: string,
-  options: FetchOptions = {},
+  options: FetchOptions = {}
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
 
@@ -56,7 +56,7 @@ export async function apiRequest<T>(
   const response = await fetch(url, {
     ...fetchOptions,
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
@@ -65,7 +65,7 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const error = await response
       .json()
-      .catch(() => ({ error: "Unknown error" }));
+      .catch(() => ({ error: 'Unknown error' }));
     throw new Error(error.error || `HTTP error! status: ${response.status}`);
   }
 
@@ -77,9 +77,9 @@ export async function apiRequest<T>(
  */
 export async function get<T>(
   endpoint: string,
-  params?: Record<string, string | number | boolean | undefined>,
+  params?: Record<string, string | number | boolean | undefined>
 ): Promise<T> {
-  return apiRequest<T>(endpoint, { method: "GET", params });
+  return apiRequest<T>(endpoint, { method: 'GET', params });
 }
 
 /**
@@ -87,7 +87,7 @@ export async function get<T>(
  */
 export async function post<T>(endpoint: string, data?: unknown): Promise<T> {
   return apiRequest<T>(endpoint, {
-    method: "POST",
+    method: 'POST',
     body: data ? JSON.stringify(data) : undefined,
   });
 }
@@ -97,7 +97,7 @@ export async function post<T>(endpoint: string, data?: unknown): Promise<T> {
  */
 export async function put<T>(endpoint: string, data?: unknown): Promise<T> {
   return apiRequest<T>(endpoint, {
-    method: "PUT",
+    method: 'PUT',
     body: data ? JSON.stringify(data) : undefined,
   });
 }
@@ -107,7 +107,7 @@ export async function put<T>(endpoint: string, data?: unknown): Promise<T> {
  */
 export async function patch<T>(endpoint: string, data?: unknown): Promise<T> {
   return apiRequest<T>(endpoint, {
-    method: "PATCH",
+    method: 'PATCH',
     body: data ? JSON.stringify(data) : undefined,
   });
 }
@@ -116,5 +116,5 @@ export async function patch<T>(endpoint: string, data?: unknown): Promise<T> {
  * DELETE リクエスト
  */
 export async function del<T>(endpoint: string): Promise<T> {
-  return apiRequest<T>(endpoint, { method: "DELETE" });
+  return apiRequest<T>(endpoint, { method: 'DELETE' });
 }
