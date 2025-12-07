@@ -15,7 +15,11 @@
     "declaration": true,
     "declarationMap": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
+    "paths": {
+      "vite": ["../../node_modules/vite"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "**/*.test.ts", "**/*.test.tsx"]

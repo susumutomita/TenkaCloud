@@ -2,7 +2,6 @@ import {
   KubeConfig,
   CoreV1Api,
   AppsV1Api,
-  NetworkingV1Api,
   V1Namespace,
   V1Deployment,
   V1Service,
@@ -14,14 +13,12 @@ const logger = createLogger('k8s-provisioner');
 export class KubernetesProvisioner {
   private k8sApi: CoreV1Api;
   private k8sAppsApi: AppsV1Api;
-  private k8sNetworkingApi: NetworkingV1Api;
 
   constructor() {
     const kc = new KubeConfig();
     kc.loadFromDefault();
     this.k8sApi = kc.makeApiClient(CoreV1Api);
     this.k8sAppsApi = kc.makeApiClient(AppsV1Api);
-    this.k8sNetworkingApi = kc.makeApiClient(NetworkingV1Api);
   }
 
   async createNamespace(tenantSlug: string): Promise<string> {

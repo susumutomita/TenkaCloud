@@ -20,18 +20,18 @@ const defaultConfig: RateLimitConfig = {
   maxRequests: 10, // 10 requests per minute
 };
 
+// Cleanup old entries periodically (module-level, runs once)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of requestCounts.entries()) {
+    if (record.resetTime < now) {
+      requestCounts.delete(key);
+    }
+  }
+}, defaultConfig.windowMs);
+
 export function rateLimitMiddleware(config: Partial<RateLimitConfig> = {}) {
   const { windowMs, maxRequests } = { ...defaultConfig, ...config };
-
-  // Cleanup old entries periodically
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, record] of requestCounts.entries()) {
-      if (record.resetTime < now) {
-        requestCounts.delete(key);
-      }
-    }
-  }, windowMs);
 
   return async (c: Context, next: Next) => {
     const ip =

@@ -10,6 +10,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
@@ -19,7 +20,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "vite": ["../../node_modules/vite"]
     }
   },
   "include": [

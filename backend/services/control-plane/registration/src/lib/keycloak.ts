@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import { createLogger } from './logger';
 
@@ -10,24 +11,36 @@ interface KeycloakConfig {
   clientSecret: string;
 }
 
-const config: KeycloakConfig = {
-  baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8080',
-  realmName: process.env.KEYCLOAK_REALM || 'tenkacloud',
-  clientId: process.env.KEYCLOAK_CLIENT_ID || 'registration-service',
-  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || 'secret',
-};
+// Validate required environment variables in non-development environments
+function validateConfig(): KeycloakConfig {
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
 
-let keycloakClient: KcAdminClient | null = null;
-
-export async function getKeycloakClient(): Promise<KcAdminClient> {
-  if (keycloakClient) {
-    return keycloakClient;
+  if (!clientSecret && nodeEnv === 'production') {
+    throw new Error('KEYCLOAK_CLIENT_SECRET is required in production');
   }
 
+  return {
+    baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8080',
+    realmName: process.env.KEYCLOAK_REALM || 'tenkacloud',
+    clientId: process.env.KEYCLOAK_CLIENT_ID || 'registration-service',
+    clientSecret: clientSecret || 'secret',
+  };
+}
+
+const config = validateConfig();
+
+/**
+ * Creates a new Keycloak admin client for a specific realm.
+ * Each call returns a fresh client to avoid concurrent realm switching issues.
+ */
+export async function createKeycloakClient(
+  realmName?: string
+): Promise<KcAdminClient> {
   try {
     const kcAdminClient = new KcAdminClient({
       baseUrl: config.baseUrl,
-      realmName: config.realmName,
+      realmName: realmName || config.realmName,
     });
 
     await kcAdminClient.auth({
@@ -36,28 +49,29 @@ export async function getKeycloakClient(): Promise<KcAdminClient> {
       clientSecret: config.clientSecret,
     });
 
-    keycloakClient = kcAdminClient;
     logger.info('Keycloak認証に成功しました');
 
-    return keycloakClient;
+    return kcAdminClient;
   } catch (error) {
     logger.error({ error }, 'Keycloak認証に失敗しました');
     throw error;
   }
 }
 
+// Legacy alias for backward compatibility
+export const getKeycloakClient = createKeycloakClient;
+
 export async function createAdminUser(
   realmName: string,
   email: string,
   name: string
 ): Promise<{ userId: string; temporaryPassword: string }> {
-  const client = await getKeycloakClient();
+  // Create a fresh client for this realm operation
+  const client = await createKeycloakClient(realmName);
   const temporaryPassword = generateTemporaryPassword();
 
   try {
-    // Switch to the tenant's realm
-    client.setConfig({ realmName });
-
+    // Create user first
     const user = await client.users.create({
       realm: realmName,
       username: email,
@@ -73,35 +87,62 @@ export async function createAdminUser(
           temporary: true,
         },
       ],
-      realmRoles: ['tenant-admin'],
     });
 
-    logger.info({ email, realmName }, '管理者ユーザーを作成しました');
+    // Assign realm role via separate call (Keycloak API limitation)
+    try {
+      const role = await client.roles.findOneByName({
+        realm: realmName,
+        name: 'tenant-admin',
+      });
+      if (role) {
+        await client.users.addRealmRoleMappings({
+          id: user.id,
+          realm: realmName,
+          roles: [{ id: role.id!, name: role.name! }],
+        });
+      }
+    } catch (roleError) {
+      logger.warn(
+        { error: roleError, realmName },
+        'tenant-adminロールの割り当てをスキップしました'
+      );
+    }
+
+    logger.info({ realmName }, '管理者ユーザーを作成しました');
 
     return {
       userId: user.id,
       temporaryPassword,
     };
   } catch (error) {
-    logger.error(
-      { error, email, realmName },
-      '管理者ユーザーの作成に失敗しました'
-    );
+    logger.error({ error, realmName }, '管理者ユーザーの作成に失敗しました');
     throw error;
-  } finally {
-    // Reset to master realm
-    client.setConfig({ realmName: config.realmName });
   }
 }
 
+/**
+ * Generate a cryptographically secure temporary password.
+ * Uses crypto.randomBytes with rejection sampling to avoid bias.
+ */
 function generateTemporaryPassword(): string {
   const chars =
     'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
-  let password = '';
-  for (let i = 0; i < 16; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  const length = 16;
+  const charCount = chars.length;
+  const maxValidByte = Math.floor(256 / charCount) * charCount;
+
+  const password: string[] = [];
+  while (password.length < length) {
+    const bytes = randomBytes(64);
+    for (let i = 0; i < bytes.length && password.length < length; i++) {
+      const byte = bytes[i];
+      if (byte < maxValidByte) {
+        password.push(chars.charAt(byte % charCount));
+      }
+    }
   }
-  return password;
+  return password.join('');
 }
 
 export const keycloakConfig = config;

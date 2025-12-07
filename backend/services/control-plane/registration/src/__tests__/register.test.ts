@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { app } from '../index';
 
 // Mock Prisma
@@ -185,9 +186,11 @@ describe('登録API', () => {
     });
 
     it('重複するメールアドレスの場合は409エラーを返すべき', async () => {
-      vi.mocked(prisma.tenant.create).mockRejectedValue(
-        new Error('Unique constraint failed on the fields: (`adminEmail`)')
+      const prismaError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`adminEmail`)',
+        { code: 'P2002', clientVersion: '5.0.0' }
       );
+      vi.mocked(prisma.tenant.create).mockRejectedValue(prismaError);
 
       const res = await app.request('/api/register', {
         method: 'POST',

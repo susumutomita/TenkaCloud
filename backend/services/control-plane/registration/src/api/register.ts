@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { RegistrationService } from '../services/registration';
 import { createLogger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
@@ -43,7 +44,7 @@ registerApp.post('/', async (c) => {
     const result = await registrationService.register(validated);
 
     logger.info(
-      { tenantId: result.tenantId, email: validated.adminEmail },
+      { tenantId: result.tenantId },
       '登録リクエストを受け付けました'
     );
 
@@ -58,8 +59,8 @@ registerApp.post('/', async (c) => {
 
     // Check for duplicate email/slug constraint violation
     if (
-      error instanceof Error &&
-      error.message.includes('Unique constraint failed')
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
     ) {
       return c.json(
         errorResponse('このメールアドレスは既に登録されています', 409),
