@@ -40,6 +40,8 @@
 
 **フロントエンドデザイン**: `/skill frontend-design` を参照。ジェネリックな AI 風デザイン（Inter、Roboto、白背景に紫グラデーション等）は禁止。意図的で独自性のあるデザインを選択する。
 
+**スペック・仕様書**: `/skill spec` を使用。Open Web Docs 形式（MDN スタイル）で記述する。
+
 ## Quick Start
 
 ```bash
