@@ -108,6 +108,30 @@ services:
     networks:
       - tenkacloud
 
+  registration:
+    build:
+      context: backend/services/control-plane/registration
+      dockerfile: Dockerfile
+    command: bun run dev
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./backend/services/control-plane/registration:/app
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tenkacloud?schema=public
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_CLIENT_ID=registration-service
+      - KEYCLOAK_CLIENT_SECRET=secret
+      - SMTP_HOST=mailhog
+      - SMTP_PORT=1025
+      - APP_URL=http://localhost:3000
+    depends_on:
+      - postgres
+      - keycloak
+    networks:
+      - tenkacloud
+
   postgres:
     image: postgres:16-alpine
     environment:
