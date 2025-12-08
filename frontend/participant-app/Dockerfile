@@ -6,12 +6,14 @@ COPY package.json bun.lock ./
 
 # Copy workspace package files
 COPY frontend/participant-app/package.json ./frontend/participant-app/
+COPY frontend/shared/package.json ./frontend/shared/
 
 # Install dependencies
 RUN bun install
 
 # Copy source code
 COPY frontend/participant-app ./frontend/participant-app
+COPY frontend/shared ./frontend/shared
 
 # Build
 WORKDIR /app/frontend/participant-app
