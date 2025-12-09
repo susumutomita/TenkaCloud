@@ -4,43 +4,43 @@
 
 ## Core Values
 
-- **完全 OSS**: 社内資産を含まず、ゼロから設計
-- **マルチクラウド**: AWS / GCP / Azure / LocalStack / OCI 対応
-- **マルチテナント SaaS**: [EKS Reference Architecture](./reference/eks) をベースに設計
-- **AI 支援**: MCP/Claude Code 統合による問題生成・自動採点・コーチング
+- 完全 OSS: 社内資産を含まず、ゼロから設計
+- マルチクラウド: AWS / GCP / Azure / LocalStack / OCI 対応
+- マルチテナント SaaS: [EKS Reference Architecture](./reference/eks) をベースに設計
+- AI 支援: MCP/Claude Code 統合による問題生成・自動採点・コーチング
 
 ## Development Rules
 
-**CRITICAL**: タスク完了前に必ず `make before-commit` を実行する。lint、format、typecheck、test（カバレッジ 99％以上）、build がすべて通るまでタスクは完了とみなさない。
+CRITICAL: タスク完了前に必ず `make before-commit` を実行する。lint、format、typecheck、test（カバレッジ 99％以上）、build がすべて通るまでタスクは完了とみなさない。
 
 以下は禁止事項です。
 - `rm` コマンドの使用（環境破壊リスク）
 - コミット/PR での `#番号` 形式の Issue 引用（GitHub 自動リンクでノイズになる）
 - モックデータ、ハードコード配列、スタブ API（実際の DB 接続と API 統合を実装する）
 
-**実装原則**: TDD でテストを先に書く。テストタイトルは日本語で「〜すべき」形式。小さく動くものを素早く作り、段階的に改善する。
+実装原則: TDD でテストを先に書く。テストタイトルは日本語で「〜すべき」形式。小さく動くものを素早く作り、段階的に改善する。
 
 ## Ubiquitous Language
 
 プロジェクト全体で統一する用語を以下に示します。
-- **Tenant**: TenkaCloud を利用する組織・企業単位
-- **Control Plane**: テナント管理・認証を担う共有プラットフォーム
-- **Application Plane**: テナント固有のビジネスロジックを実行するサービス群
-- **Battle**: クラウド構築の競技セッション
-- **Participant**: バトルに参加する競技者
-- **Problem**: クラウドインフラ構築の課題
+- Tenant: TenkaCloud を利用する組織・企業単位
+- Control Plane: テナント管理・認証を担う共有プラットフォーム
+- Application Plane: テナント固有のビジネスロジックを実行するサービス群
+- Battle: クラウド構築の競技セッション
+- Participant: バトルに参加する競技者
+- Problem: クラウドインフラ構築の課題
 
 ## Technical Notes
 
-**Dockerfile**: ランタイムバージョンはローカル環境と一致させる（`oven/bun:1.2.20` など）。`latest` タグは lockfile エラーの原因になる。
+Dockerfile: ランタイムバージョンはローカル環境と一致させる（`oven/bun:1.2.20` など）。`latest` タグは lockfile エラーの原因になる。
 
-**NextAuth + Keycloak**: `signOut()` 実行後は `idToken` が `undefined` になる。Keycloak ログアウト URL 構築には事前に保存が必要。
+NextAuth + Keycloak: `signOut()` 実行後は `idToken` が `undefined` になる。Keycloak ログアウト URL 構築には事前に保存が必要。
 
-**パッケージ管理**: [@antfu/ni](https://github.com/antfu-collective/ni) を使用。`ni`、`nr`、`nlx` コマンドが lock ファイルから自動で bun を選択する。
+パッケージ管理: [@antfu/ni](https://github.com/antfu-collective/ni) を使用。`ni`、`nr`、`nlx` コマンドが lock ファイルから自動で bun を選択する。
 
-**フロントエンドデザイン**: `/skill frontend-design` を参照。ジェネリックな AI 風デザイン（Inter、Roboto、白背景に紫グラデーション等）は禁止。意図的で独自性のあるデザインを選択する。
+フロントエンドデザイン: `/skill frontend-design` を参照。ジェネリックな AI 風デザイン（Inter、Roboto、白背景に紫グラデーション等）は禁止。意図的で独自性のあるデザインを選択する。
 
-**スペック・仕様書**: `/skill spec` を使用。Open Web Docs 形式（MDN スタイル）で記述する。
+スペック・仕様書: `/skill spec` を使用。Open Web Docs 形式（MDN スタイル）で記述する。
 
 ## Quick Start
 
