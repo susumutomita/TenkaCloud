@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import { createLogger } from './logger';
 
@@ -5,20 +6,33 @@ const logger = createLogger('keycloak-client');
 
 let adminClient: KcAdminClient | null = null;
 
+function getRequiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`必須環境変数 ${name} が設定されていません`);
+  }
+  return value;
+}
+
 export async function getKeycloakClient(): Promise<KcAdminClient> {
   if (adminClient) {
     return adminClient;
   }
 
+  const keycloakUrl = getRequiredEnv('KEYCLOAK_URL');
+  const keycloakRealm = getRequiredEnv('KEYCLOAK_REALM');
+  const clientId = getRequiredEnv('KEYCLOAK_CLIENT_ID');
+  const clientSecret = getRequiredEnv('KEYCLOAK_CLIENT_SECRET');
+
   adminClient = new KcAdminClient({
-    baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8080',
-    realmName: process.env.KEYCLOAK_REALM || 'master',
+    baseUrl: keycloakUrl,
+    realmName: keycloakRealm,
   });
 
   await adminClient.auth({
     grantType: 'client_credentials',
-    clientId: process.env.KEYCLOAK_CLIENT_ID || 'admin-cli',
-    clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
+    clientId,
+    clientSecret,
   });
 
   logger.info('Keycloak client authenticated');
@@ -103,9 +117,10 @@ export async function disableKeycloakUser(
 function generateTemporaryPassword(): string {
   const chars =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+  const bytes = randomBytes(16);
   let password = '';
   for (let i = 0; i < 16; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    password += chars.charAt(bytes[i] % chars.length);
   }
   return password;
 }

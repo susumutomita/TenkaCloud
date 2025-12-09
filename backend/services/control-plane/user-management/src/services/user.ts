@@ -102,15 +102,19 @@ export class UserService {
   ): Promise<User> {
     logger.info({ userId, role }, 'ユーザーロールを更新します');
 
+    // Verify tenant ownership BEFORE update
+    const existingUser = await prisma.user.findFirst({
+      where: { id: userId, tenantId },
+    });
+
+    if (!existingUser) {
+      throw new Error('ユーザーが見つかりません');
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: { role },
     });
-
-    // Verify tenant ownership
-    if (user.tenantId !== tenantId) {
-      throw new Error('ユーザーが見つかりません');
-    }
 
     logger.info({ userId, role }, 'ユーザーロールを更新しました');
 

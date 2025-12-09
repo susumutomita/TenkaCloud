@@ -494,19 +494,8 @@ describe('ユーザー管理API', () => {
     });
 
     it('別テナントのユーザーの場合は404を返すべき', async () => {
-      const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
-        tenantId: 'different-tenant-id',
-        email: 'user@example.com',
-        name: 'テストユーザー',
-        role: 'TENANT_ADMIN' as const,
-        status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      vi.mocked(prisma.user.update).mockResolvedValue(mockUser);
+      // findFirst は tenantId でフィルタするため、別テナントのユーザーは見つからない
+      vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
 
       const res = await app.request(
         createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
@@ -535,6 +524,7 @@ describe('ユーザー管理API', () => {
         updatedAt: new Date(),
       };
 
+      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
       vi.mocked(prisma.user.update).mockResolvedValue(mockUser);
 
       const res = await app.request(
@@ -568,6 +558,19 @@ describe('ユーザー管理API', () => {
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
+      const mockUser = {
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        tenantId: mockTenantId,
+        email: 'user@example.com',
+        name: 'テストユーザー',
+        role: 'PARTICIPANT' as const,
+        status: 'ACTIVE' as const,
+        keycloakId: 'keycloak-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
       vi.mocked(prisma.user.update).mockRejectedValue(
         new Error('DB connection failed')
       );
