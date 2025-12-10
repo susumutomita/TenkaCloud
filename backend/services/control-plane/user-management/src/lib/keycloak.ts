@@ -5,6 +5,9 @@ import { createLogger } from './logger';
 const logger = createLogger('keycloak-client');
 
 let adminClient: KcAdminClient | null = null;
+let tokenExpiresAt = 0;
+// トークン有効期限の 80% で更新（5分前に期限切れするように）
+const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -14,28 +17,44 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
-export async function getKeycloakClient(): Promise<KcAdminClient> {
-  if (adminClient) {
-    return adminClient;
-  }
-
-  const keycloakUrl = getRequiredEnv('KEYCLOAK_URL');
-  const keycloakRealm = getRequiredEnv('KEYCLOAK_REALM');
+async function authenticateClient(client: KcAdminClient): Promise<void> {
   const clientId = getRequiredEnv('KEYCLOAK_CLIENT_ID');
   const clientSecret = getRequiredEnv('KEYCLOAK_CLIENT_SECRET');
 
-  adminClient = new KcAdminClient({
-    baseUrl: keycloakUrl,
-    realmName: keycloakRealm,
-  });
-
-  await adminClient.auth({
+  await client.auth({
     grantType: 'client_credentials',
     clientId,
     clientSecret,
   });
 
+  // デフォルトのトークン有効期限は 300 秒（5分）
+  // 環境変数で上書き可能
+  const tokenLifetimeMs =
+    (Number(process.env.KEYCLOAK_TOKEN_LIFETIME_SECONDS) || 300) * 1000;
+  tokenExpiresAt = Date.now() + tokenLifetimeMs - TOKEN_REFRESH_BUFFER_MS;
+
   logger.info('Keycloak client authenticated');
+}
+
+export async function getKeycloakClient(): Promise<KcAdminClient> {
+  const keycloakUrl = getRequiredEnv('KEYCLOAK_URL');
+  const keycloakRealm = getRequiredEnv('KEYCLOAK_REALM');
+
+  if (!adminClient) {
+    adminClient = new KcAdminClient({
+      baseUrl: keycloakUrl,
+      realmName: keycloakRealm,
+    });
+    await authenticateClient(adminClient);
+    return adminClient;
+  }
+
+  // トークンの有効期限が近い場合は再認証
+  if (Date.now() >= tokenExpiresAt) {
+    logger.info('Keycloak token expired, re-authenticating');
+    await authenticateClient(adminClient);
+  }
+
   return adminClient;
 }
 
@@ -114,13 +133,35 @@ export async function disableKeycloakUser(
   logger.info({ realm, keycloakId }, 'Keycloak user disabled');
 }
 
+export async function deleteKeycloakUser(
+  realm: string,
+  keycloakId: string
+): Promise<void> {
+  const client = await getKeycloakClient();
+  client.setConfig({ realmName: realm });
+
+  await client.users.del({ id: keycloakId, realm });
+
+  logger.info({ realm, keycloakId }, 'Keycloak user deleted');
+}
+
 function generateTemporaryPassword(): string {
   const chars =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-  const bytes = randomBytes(16);
+  const length = 16;
+  // Rejection sampling: 256 % 67 = 55 なので、0-54 のインデックスが偏る
+  // maxValid 未満の値のみ使用することでバイアスを排除
+  const maxValid = Math.floor(256 / chars.length) * chars.length;
   let password = '';
-  for (let i = 0; i < 16; i++) {
-    password += chars.charAt(bytes[i] % chars.length);
+
+  while (password.length < length) {
+    const bytes = randomBytes(length - password.length);
+    for (const byte of bytes) {
+      if (byte < maxValid && password.length < length) {
+        password += chars.charAt(byte % chars.length);
+      }
+    }
   }
+
   return password;
 }

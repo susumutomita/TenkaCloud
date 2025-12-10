@@ -5,6 +5,7 @@ import {
   createKeycloakUser,
   resetKeycloakPassword,
   disableKeycloakUser,
+  deleteKeycloakUser,
 } from '../lib/keycloak';
 
 const logger = createLogger('user-service');
@@ -49,17 +50,35 @@ export class UserService {
       input.name
     );
 
-    // Create user in database
-    const user = await prisma.user.create({
-      data: {
-        tenantId: input.tenantId,
-        email: input.email,
-        name: input.name,
-        role: input.role ?? 'PARTICIPANT',
-        status: 'PENDING',
-        keycloakId: keycloakResult.keycloakId,
-      },
-    });
+    // Create user in database with rollback on failure
+    let user: User;
+    try {
+      user = await prisma.user.create({
+        data: {
+          tenantId: input.tenantId,
+          email: input.email,
+          name: input.name,
+          role: input.role ?? 'PARTICIPANT',
+          status: 'PENDING',
+          keycloakId: keycloakResult.keycloakId,
+        },
+      });
+    } catch (error) {
+      // DB 作成失敗時は Keycloak ユーザーを削除してロールバック
+      logger.error(
+        { keycloakId: keycloakResult.keycloakId, error },
+        'DB ユーザー作成失敗、Keycloak ユーザーをロールバックします'
+      );
+      try {
+        await deleteKeycloakUser(input.tenantSlug, keycloakResult.keycloakId);
+      } catch (rollbackError) {
+        logger.error(
+          { keycloakId: keycloakResult.keycloakId, rollbackError },
+          'Keycloak ロールバック失敗'
+        );
+      }
+      throw error;
+    }
 
     logger.info({ userId: user.id }, 'ユーザーを作成しました');
 
@@ -102,18 +121,19 @@ export class UserService {
   ): Promise<User> {
     logger.info({ userId, role }, 'ユーザーロールを更新します');
 
-    // Verify tenant ownership BEFORE update
-    const existingUser = await prisma.user.findFirst({
+    // 原子的な更新: WHERE 句でテナント所有権を検証しながら更新
+    // TOCTOU レース条件を回避
+    const result = await prisma.user.updateMany({
       where: { id: userId, tenantId },
+      data: { role },
     });
 
-    if (!existingUser) {
+    if (result.count === 0) {
       throw new Error('ユーザーが見つかりません');
     }
 
-    const user = await prisma.user.update({
+    const user = await prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      data: { role },
     });
 
     logger.info({ userId, role }, 'ユーザーロールを更新しました');
