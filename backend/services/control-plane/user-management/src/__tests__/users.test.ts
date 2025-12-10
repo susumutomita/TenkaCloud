@@ -9,8 +9,13 @@ vi.mock('../lib/prisma', () => ({
       create: vi.fn(),
       findMany: vi.fn(),
       findFirst: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
       count: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    tenant: {
+      findUnique: vi.fn(),
     },
     $disconnect: vi.fn(),
   },
@@ -48,6 +53,11 @@ function createRequest(path: string, options: RequestInit = {}): Request {
 describe('ユーザー管理API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // デフォルトでテナント検証が成功するようモック
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      id: mockTenantId,
+      slug: mockTenantSlug,
+    });
   });
 
   afterEach(() => {
@@ -242,6 +252,44 @@ describe('ユーザー管理API', () => {
 
       const body = await res.json();
       expect(body.error).toContain('失敗しました');
+    });
+
+    it('テナントが見つからない場合は500を返すべき', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue(null);
+
+      const res = await app.request(
+        createRequest('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'user@example.com',
+            name: 'テストユーザー',
+          }),
+        })
+      );
+
+      expect(res.status).toBe(500);
+    });
+
+    it('テナント slug が不一致の場合は500を返すべき（クロステナント攻撃防止）', async () => {
+      // 攻撃者が X-Tenant-Slug を改ざんした場合
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        id: mockTenantId,
+        slug: 'actual-tenant-slug', // 実際の slug は異なる
+      });
+
+      const res = await app.request(
+        createRequest('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'user@example.com',
+            name: 'テストユーザー',
+          }),
+        })
+      );
+
+      expect(res.status).toBe(500);
     });
   });
 
@@ -494,8 +542,8 @@ describe('ユーザー管理API', () => {
     });
 
     it('別テナントのユーザーの場合は404を返すべき', async () => {
-      // findFirst は tenantId でフィルタするため、別テナントのユーザーは見つからない
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+      // updateMany は tenantId でフィルタするため、別テナントのユーザーは更新されない
+      vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 });
 
       const res = await app.request(
         createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
@@ -524,8 +572,8 @@ describe('ユーザー管理API', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
-      vi.mocked(prisma.user.update).mockResolvedValue(mockUser);
+      vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 });
+      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(mockUser);
 
       const res = await app.request(
         createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
@@ -558,20 +606,7 @@ describe('ユーザー管理API', () => {
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
-        tenantId: mockTenantId,
-        email: 'user@example.com',
-        name: 'テストユーザー',
-        role: 'PARTICIPANT' as const,
-        status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
-      vi.mocked(prisma.user.update).mockRejectedValue(
+      vi.mocked(prisma.user.updateMany).mockRejectedValue(
         new Error('DB connection failed')
       );
 
@@ -716,6 +751,24 @@ describe('ユーザー管理API', () => {
       const body = await res.json();
       expect(body.error).toContain('失敗しました');
     });
+
+    it('テナント slug が不一致の場合は500を返すべき（クロステナント攻撃防止）', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        id: mockTenantId,
+        slug: 'different-slug',
+      });
+
+      const res = await app.request(
+        createRequest(
+          '/api/users/123e4567-e89b-12d3-a456-426614174001/password-reset',
+          {
+            method: 'POST',
+          }
+        )
+      );
+
+      expect(res.status).toBe(500);
+    });
   });
 
   describe('DELETE /api/users/:id', () => {
@@ -837,6 +890,21 @@ describe('ユーザー管理API', () => {
 
       const body = await res.json();
       expect(body.error).toContain('失敗しました');
+    });
+
+    it('テナント slug が不一致の場合は500を返すべき（クロステナント攻撃防止）', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        id: mockTenantId,
+        slug: 'different-slug',
+      });
+
+      const res = await app.request(
+        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001', {
+          method: 'DELETE',
+        })
+      );
+
+      expect(res.status).toBe(500);
     });
   });
 

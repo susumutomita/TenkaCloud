@@ -10,6 +10,35 @@ import {
 
 const logger = createLogger('user-service');
 
+/**
+ * テナントの slug を検証し、tenantId に対応する正しい slug を返す
+ * これにより、悪意のある tenantSlug ヘッダー改ざんを防ぐ
+ */
+async function validateAndGetTenantSlug(
+  tenantId: string,
+  providedSlug: string
+): Promise<string> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { slug: true },
+  });
+
+  if (!tenant) {
+    throw new Error('テナントが見つかりません');
+  }
+
+  // 提供された slug が実際の slug と一致することを検証
+  if (tenant.slug !== providedSlug) {
+    logger.warn(
+      { tenantId, providedSlug, actualSlug: tenant.slug },
+      'テナント slug の不一致を検出しました'
+    );
+    throw new Error('テナント情報が一致しません');
+  }
+
+  return tenant.slug;
+}
+
 export interface CreateUserInput {
   tenantId: string;
   tenantSlug: string;
@@ -43,9 +72,15 @@ export class UserService {
       'ユーザー作成を開始します'
     );
 
+    // tenantSlug の検証（クロステナント攻撃の防止）
+    const validatedSlug = await validateAndGetTenantSlug(
+      input.tenantId,
+      input.tenantSlug
+    );
+
     // Create user in Keycloak
     const keycloakResult = await createKeycloakUser(
-      input.tenantSlug,
+      validatedSlug,
       input.email,
       input.name
     );
@@ -70,7 +105,7 @@ export class UserService {
         'DB ユーザー作成失敗、Keycloak ユーザーをロールバックします'
       );
       try {
-        await deleteKeycloakUser(input.tenantSlug, keycloakResult.keycloakId);
+        await deleteKeycloakUser(validatedSlug, keycloakResult.keycloakId);
       } catch (rollbackError) {
         logger.error(
           { keycloakId: keycloakResult.keycloakId, rollbackError },
@@ -148,6 +183,9 @@ export class UserService {
   ): Promise<string> {
     logger.info({ userId }, 'パスワードリセットを開始します');
 
+    // tenantSlug の検証（クロステナント攻撃の防止）
+    const validatedSlug = await validateAndGetTenantSlug(tenantId, tenantSlug);
+
     const user = await prisma.user.findFirst({
       where: { id: userId, tenantId },
     });
@@ -161,7 +199,7 @@ export class UserService {
     }
 
     const temporaryPassword = await resetKeycloakPassword(
-      tenantSlug,
+      validatedSlug,
       user.keycloakId
     );
 
@@ -177,6 +215,9 @@ export class UserService {
   ): Promise<User> {
     logger.info({ userId }, 'ユーザー無効化を開始します');
 
+    // tenantSlug の検証（クロステナント攻撃の防止）
+    const validatedSlug = await validateAndGetTenantSlug(tenantId, tenantSlug);
+
     const user = await prisma.user.findFirst({
       where: { id: userId, tenantId },
     });
@@ -187,7 +228,7 @@ export class UserService {
 
     // Disable in Keycloak if linked
     if (user.keycloakId) {
-      await disableKeycloakUser(tenantSlug, user.keycloakId);
+      await disableKeycloakUser(validatedSlug, user.keycloakId);
     }
 
     // Update status in database
