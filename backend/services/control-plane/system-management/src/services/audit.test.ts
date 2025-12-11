@@ -120,13 +120,7 @@ describe('AuditService', () => {
     });
 
     it('フィルタ条件で監査ログを絞り込むべき', async () => {
-      const mockLogs: typeof prisma.auditLog.findMany extends (
-        ...args: unknown[]
-      ) => Promise<infer T>
-        ? T
-        : never = [];
-
-      vi.mocked(prisma.auditLog.findMany).mockResolvedValue(mockLogs);
+      vi.mocked(prisma.auditLog.findMany).mockResolvedValue([]);
       vi.mocked(prisma.auditLog.count).mockResolvedValue(0);
 
       const result = await service.listLogs({
@@ -140,7 +134,7 @@ describe('AuditService', () => {
         offset: 5,
       });
 
-      expect(result.logs).toEqual([]);
+      expect(result.logs).toHaveLength(0);
       expect(result.total).toBe(0);
       expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
         where: expect.objectContaining({

@@ -25,8 +25,23 @@ app.route('/', metricsRoutes);
 app.route('/', auditRoutes);
 app.route('/', settingsRoutes);
 
-// サーバー起動
-const port = parseInt(process.env.PORT ?? '3007', 10);
+// PORT バリデーション
+const parsePort = (value: string | undefined): number => {
+  const defaultPort = 3007;
+  if (!value) return defaultPort;
+
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > 65535) {
+    logger.warn(
+      { providedValue: value },
+      `無効な PORT 値です。デフォルト (${defaultPort}) を使用します`
+    );
+    return defaultPort;
+  }
+  return parsed;
+};
+
+const port = parsePort(process.env.PORT);
 
 const server = serve(
   {

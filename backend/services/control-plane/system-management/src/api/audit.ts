@@ -1,11 +1,22 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { AuditService } from '../services/audit';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('audit-api');
 const auditRoutes = new Hono();
 const auditService = new AuditService();
+
+/**
+ * JSON 値として有効かを検証する型ガード
+ */
+const isJsonValue = (val: unknown): val is Prisma.InputJsonValue =>
+  val === null ||
+  typeof val === 'string' ||
+  typeof val === 'number' ||
+  typeof val === 'boolean' ||
+  (typeof val === 'object' && val !== null);
 
 const createAuditLogSchema = z.object({
   tenantId: z.string().uuid().optional(),
@@ -20,7 +31,14 @@ const createAuditLogSchema = z.object({
     'SYSTEM',
   ]),
   resourceId: z.string().optional(),
-  details: z.record(z.unknown()).optional(),
+  details: z
+    .unknown()
+    .optional()
+    .refine(
+      (val): val is Prisma.InputJsonValue | undefined =>
+        val === undefined || isJsonValue(val),
+      { message: '有効な JSON 値である必要があります' }
+    ),
 });
 
 const listAuditLogsSchema = z.object({

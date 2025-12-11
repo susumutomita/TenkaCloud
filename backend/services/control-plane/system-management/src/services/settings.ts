@@ -1,19 +1,26 @@
-import type { SystemSetting } from '@prisma/client';
+import type { Prisma, SystemSetting } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { createLogger } from '../lib/logger';
+import { AuditService } from './audit';
 
 const logger = createLogger('settings-service');
 
 export interface CreateSettingInput {
   key: string;
-  value: unknown;
+  value: Prisma.InputJsonValue;
   category: string;
-  updatedBy?: string;
+  updatedBy: string;
 }
 
 export interface UpdateSettingInput {
-  value: unknown;
-  updatedBy?: string;
+  value: Prisma.InputJsonValue;
+  updatedBy: string;
+}
+
+export interface DeleteSettingInput {
+  userId: string;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export interface ListSettingsInput {
@@ -28,6 +35,12 @@ export interface ListSettingsResult {
 }
 
 export class SettingsService {
+  private readonly auditService: AuditService;
+
+  constructor(auditService?: AuditService) {
+    this.auditService = auditService ?? new AuditService();
+  }
+
   async createSetting(input: CreateSettingInput): Promise<SystemSetting> {
     logger.info(
       { key: input.key, category: input.category },
@@ -37,7 +50,7 @@ export class SettingsService {
     const setting = await prisma.systemSetting.create({
       data: {
         key: input.key,
-        value: input.value as object,
+        value: input.value,
         category: input.category,
         updatedBy: input.updatedBy,
       },
@@ -63,7 +76,7 @@ export class SettingsService {
     const setting = await prisma.systemSetting.update({
       where: { key },
       data: {
-        value: input.value as object,
+        value: input.value,
         updatedBy: input.updatedBy,
       },
     });
@@ -73,11 +86,26 @@ export class SettingsService {
     return setting;
   }
 
-  async deleteSetting(key: string): Promise<void> {
-    logger.info({ key }, '設定を削除します');
+  async deleteSetting(key: string, input: DeleteSettingInput): Promise<void> {
+    logger.info({ key, userId: input.userId }, '設定を削除します');
+
+    const existingSetting = await prisma.systemSetting.findUnique({
+      where: { key },
+    });
 
     await prisma.systemSetting.delete({
       where: { key },
+    });
+
+    // 監査ログを記録
+    await this.auditService.createLog({
+      userId: input.userId,
+      action: 'DELETE',
+      resourceType: 'SETTING',
+      resourceId: existingSetting?.id,
+      details: { key, category: existingSetting?.category },
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
     });
 
     logger.info({ key }, '設定を削除しました');

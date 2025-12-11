@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
+import { Prisma } from '@prisma/client';
 import * as settingsServiceModule from '../services/settings';
 
 vi.mock('../services/settings');
@@ -72,10 +73,46 @@ describe('Settings API', () => {
       expect(body.key).toBe('app.theme');
     });
 
-    it('無効なキーの場合、400を返すべき', async () => {
+    it('x-user-id ヘッダーがない場合、401を返すべき', async () => {
       const res = await app.request('/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'app.theme',
+          value: { dark: true },
+          category: 'appearance',
+        }),
+      });
+
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe('認証が必要です (x-user-id ヘッダー)');
+    });
+
+    it('空の x-user-id ヘッダーの場合、401を返すべき', async () => {
+      const res = await app.request('/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': '   ',
+        },
+        body: JSON.stringify({
+          key: 'app.theme',
+          value: { dark: true },
+          category: 'appearance',
+        }),
+      });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('無効なキーの場合、400を返すべき', async () => {
+      const res = await app.request('/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify({
           key: '',
           value: { dark: true },
@@ -91,7 +128,10 @@ describe('Settings API', () => {
 
       const res = await app.request('/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify({
           key: 'app.theme',
           value: { dark: true },
@@ -102,14 +142,19 @@ describe('Settings API', () => {
       expect(res.status).toBe(500);
     });
 
-    it('重複キーの場合、409を返すべき', async () => {
-      mockCreateSetting.mockRejectedValue(
-        new Error('Unique constraint failed')
+    it('重複キーの場合 (P2002)、409を返すべき', async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0' }
       );
+      mockCreateSetting.mockRejectedValue(prismaError);
 
       const res = await app.request('/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify({
           key: 'app.theme',
           value: { dark: true },
@@ -185,10 +230,25 @@ describe('Settings API', () => {
   });
 
   describe('PUT /settings/:key', () => {
-    it('無効なボディ形式の場合、400を返すべき', async () => {
+    it('x-user-id ヘッダーがない場合、401を返すべき', async () => {
       const res = await app.request('/settings/app.theme', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: { dark: false } }),
+      });
+
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe('認証が必要です (x-user-id ヘッダー)');
+    });
+
+    it('無効なボディ形式の場合、400を返すべき', async () => {
+      const res = await app.request('/settings/app.theme', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify('not an object'),
       });
 
@@ -209,7 +269,10 @@ describe('Settings API', () => {
 
       const res = await app.request('/settings/app.theme', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify({ value: { dark: false } }),
       });
 
@@ -218,14 +281,19 @@ describe('Settings API', () => {
       expect(body.value).toEqual({ dark: false });
     });
 
-    it('存在しないキーの場合、404を返すべき', async () => {
-      mockUpdateSetting.mockRejectedValue(
-        new Error('Record to update not found')
+    it('存在しないキーの場合 (P2025)、404を返すべき', async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError(
+        'Record to update not found',
+        { code: 'P2025', clientVersion: '5.0.0' }
       );
+      mockUpdateSetting.mockRejectedValue(prismaError);
 
       const res = await app.request('/settings/non-existent', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify({ value: { dark: false } }),
       });
 
@@ -237,7 +305,10 @@ describe('Settings API', () => {
 
       const res = await app.request('/settings/app.theme', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
         body: JSON.stringify({ value: { dark: false } }),
       });
 
@@ -246,23 +317,56 @@ describe('Settings API', () => {
   });
 
   describe('DELETE /settings/:key', () => {
+    it('x-user-id ヘッダーがない場合、401を返すべき', async () => {
+      const res = await app.request('/settings/app.theme', {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe('認証が必要です (x-user-id ヘッダー)');
+    });
+
     it('設定を削除すべき', async () => {
       mockDeleteSetting.mockResolvedValue(undefined);
 
       const res = await app.request('/settings/app.theme', {
         method: 'DELETE',
+        headers: { 'x-user-id': 'user-1' },
       });
 
       expect(res.status).toBe(204);
     });
 
-    it('存在しないキーの場合、404を返すべき', async () => {
-      mockDeleteSetting.mockRejectedValue(
-        new Error('Record to delete does not exist')
+    it('IP アドレスと User-Agent を渡すべき', async () => {
+      mockDeleteSetting.mockResolvedValue(undefined);
+
+      await app.request('/settings/app.theme', {
+        method: 'DELETE',
+        headers: {
+          'x-user-id': 'user-1',
+          'x-forwarded-for': '192.168.1.1',
+          'user-agent': 'Test Agent',
+        },
+      });
+
+      expect(mockDeleteSetting).toHaveBeenCalledWith('app.theme', {
+        userId: 'user-1',
+        ipAddress: '192.168.1.1',
+        userAgent: 'Test Agent',
+      });
+    });
+
+    it('存在しないキーの場合 (P2025)、404を返すべき', async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError(
+        'Record to delete does not exist',
+        { code: 'P2025', clientVersion: '5.0.0' }
       );
+      mockDeleteSetting.mockRejectedValue(prismaError);
 
       const res = await app.request('/settings/non-existent', {
         method: 'DELETE',
+        headers: { 'x-user-id': 'user-1' },
       });
 
       expect(res.status).toBe(404);
@@ -273,6 +377,7 @@ describe('Settings API', () => {
 
       const res = await app.request('/settings/app.theme', {
         method: 'DELETE',
+        headers: { 'x-user-id': 'user-1' },
       });
 
       expect(res.status).toBe(500);

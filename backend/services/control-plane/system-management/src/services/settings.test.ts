@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from './settings';
 import { prisma } from '../lib/prisma';
+import type { AuditService } from './audit';
 
 vi.mock('../lib/prisma', () => ({
   prisma: {
@@ -17,9 +18,15 @@ vi.mock('../lib/prisma', () => ({
 
 describe('SettingsService', () => {
   let service: SettingsService;
+  let mockAuditService: {
+    createLog: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
-    service = new SettingsService();
+    mockAuditService = {
+      createLog: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    };
+    service = new SettingsService(mockAuditService as unknown as AuditService);
     vi.clearAllMocks();
   });
 
@@ -119,7 +126,44 @@ describe('SettingsService', () => {
   });
 
   describe('deleteSetting', () => {
-    it('設定を削除すべき', async () => {
+    it('設定を削除し監査ログを記録すべき', async () => {
+      const mockSetting = {
+        id: 'setting-1',
+        key: 'app.theme',
+        value: { dark: true },
+        category: 'appearance',
+        updatedAt: new Date(),
+        updatedBy: null,
+      };
+
+      vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(mockSetting);
+      vi.mocked(prisma.systemSetting.delete).mockResolvedValue(mockSetting);
+
+      await service.deleteSetting('app.theme', {
+        userId: 'user-1',
+        ipAddress: '192.168.1.1',
+        userAgent: 'Test Agent',
+      });
+
+      expect(prisma.systemSetting.findUnique).toHaveBeenCalledWith({
+        where: { key: 'app.theme' },
+      });
+      expect(prisma.systemSetting.delete).toHaveBeenCalledWith({
+        where: { key: 'app.theme' },
+      });
+      expect(mockAuditService.createLog).toHaveBeenCalledWith({
+        userId: 'user-1',
+        action: 'DELETE',
+        resourceType: 'SETTING',
+        resourceId: 'setting-1',
+        details: { key: 'app.theme', category: 'appearance' },
+        ipAddress: '192.168.1.1',
+        userAgent: 'Test Agent',
+      });
+    });
+
+    it('存在しない設定でも監査ログを記録すべき', async () => {
+      vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(null);
       vi.mocked(prisma.systemSetting.delete).mockResolvedValue({
         id: 'setting-1',
         key: 'app.theme',
@@ -129,10 +173,18 @@ describe('SettingsService', () => {
         updatedBy: null,
       });
 
-      await service.deleteSetting('app.theme');
+      await service.deleteSetting('app.theme', {
+        userId: 'user-1',
+      });
 
-      expect(prisma.systemSetting.delete).toHaveBeenCalledWith({
-        where: { key: 'app.theme' },
+      expect(mockAuditService.createLog).toHaveBeenCalledWith({
+        userId: 'user-1',
+        action: 'DELETE',
+        resourceType: 'SETTING',
+        resourceId: undefined,
+        details: { key: 'app.theme', category: undefined },
+        ipAddress: undefined,
+        userAgent: undefined,
       });
     });
   });

@@ -1,4 +1,4 @@
-import type { AuditAction, AuditResourceType } from '@prisma/client';
+import type { AuditAction, AuditResourceType, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { createLogger } from '../lib/logger';
 
@@ -10,7 +10,7 @@ export interface CreateAuditLogInput {
   action: AuditAction;
   resourceType: AuditResourceType;
   resourceId?: string;
-  details?: Record<string, unknown>;
+  details?: Prisma.InputJsonValue;
   ipAddress?: string;
   userAgent?: string;
 }
