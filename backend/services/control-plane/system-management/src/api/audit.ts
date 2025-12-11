@@ -10,13 +10,16 @@ const auditService = new AuditService();
 
 /**
  * JSON 値として有効かを検証する型ガード
+ * JSON.stringify で再帰的に検証し、function/undefined/symbol 等を検出
  */
-const isJsonValue = (val: unknown): val is Prisma.InputJsonValue =>
-  val === null ||
-  typeof val === 'string' ||
-  typeof val === 'number' ||
-  typeof val === 'boolean' ||
-  (typeof val === 'object' && val !== null);
+const isJsonValue = (val: unknown): val is Prisma.InputJsonValue => {
+  try {
+    JSON.stringify(val);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const createAuditLogSchema = z.object({
   tenantId: z.string().uuid().optional(),

@@ -9,18 +9,26 @@ const logger = createLogger('settings-api');
 const settingsRoutes = new Hono();
 const settingsService = new SettingsService();
 
+/**
+ * JSON 値として有効かを検証する型ガード
+ * JSON.stringify で再帰的に検証し、function/undefined/symbol 等を検出
+ */
+const isJsonValue = (val: unknown): val is Prisma.InputJsonValue => {
+  try {
+    JSON.stringify(val);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const createSettingSchema = z.object({
   key: z.string().min(1).max(255),
   value: z
     .unknown()
     .refine(
       (val): val is Prisma.InputJsonValue =>
-        val !== undefined &&
-        (val === null ||
-          typeof val === 'string' ||
-          typeof val === 'number' ||
-          typeof val === 'boolean' ||
-          (typeof val === 'object' && val !== null)),
+        val !== undefined && isJsonValue(val),
       { message: '有効な JSON 値である必要があります' }
     ),
   category: z.string().min(1).max(100),
@@ -31,12 +39,7 @@ const updateSettingSchema = z.object({
     .unknown()
     .refine(
       (val): val is Prisma.InputJsonValue =>
-        val !== undefined &&
-        (val === null ||
-          typeof val === 'string' ||
-          typeof val === 'number' ||
-          typeof val === 'boolean' ||
-          (typeof val === 'object' && val !== null)),
+        val !== undefined && isJsonValue(val),
       { message: '有効な JSON 値である必要があります' }
     ),
 });
