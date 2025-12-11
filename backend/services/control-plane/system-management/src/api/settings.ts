@@ -65,7 +65,12 @@ const getUserIdFromHeader = (c: Context): string | null => {
 };
 
 settingsRoutes.post('/settings', async (c) => {
-  const body = await c.req.json();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: '無効な JSON 形式です' }, 400);
+  }
   const parsed = createSettingSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -123,7 +128,12 @@ settingsRoutes.get('/settings/:key', async (c) => {
 
 settingsRoutes.put('/settings/:key', async (c) => {
   const key = c.req.param('key');
-  const body = await c.req.json();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: '無効な JSON 形式です' }, 400);
+  }
   const parsed = updateSettingSchema.safeParse(body);
 
   if (!parsed.success) {

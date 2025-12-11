@@ -57,7 +57,12 @@ const listAuditLogsSchema = z.object({
 });
 
 auditRoutes.post('/audit/logs', async (c) => {
-  const body = await c.req.json();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: '無効な JSON 形式です' }, 400);
+  }
   const parsed = createAuditLogSchema.safeParse(body);
 
   if (!parsed.success) {

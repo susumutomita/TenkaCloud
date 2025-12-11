@@ -166,6 +166,21 @@ describe('Settings API', () => {
       const body = await res.json();
       expect(body.error).toBe('設定キーが既に存在します');
     });
+
+    it('無効な JSON の場合、400を返すべき', async () => {
+      const res = await app.request('/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
+        body: 'invalid json {',
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('無効な JSON 形式です');
+    });
   });
 
   describe('GET /settings', () => {
@@ -313,6 +328,21 @@ describe('Settings API', () => {
       });
 
       expect(res.status).toBe(500);
+    });
+
+    it('無効な JSON の場合、400を返すべき', async () => {
+      const res = await app.request('/settings/app.theme', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'user-1',
+        },
+        body: 'invalid json {',
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('無効な JSON 形式です');
     });
   });
 
