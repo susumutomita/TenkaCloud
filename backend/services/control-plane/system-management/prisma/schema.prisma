@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  ACCESS
+}
+
+enum AuditResourceType {
+  USER
+  TENANT
+  BATTLE
+  PROBLEM
+  SETTING
+  SYSTEM
+}
+
+model AuditLog {
+  id           String            @id @default(uuid())
+  tenantId     String?
+  userId       String?
+  action       AuditAction
+  resourceType AuditResourceType
+  resourceId   String?
+  details      Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime          @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  category  String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@index([category])
+  @@map("system_settings")
+}
+
+model ServiceHealth {
+  id          String   @id @default(uuid())
+  serviceName String   @unique
+  status      String
+  lastCheck   DateTime @default(now())
+  details     Json?
+
+  @@map("service_health")
+}
