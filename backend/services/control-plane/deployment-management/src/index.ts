@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { createLogger } from './lib/logger';
 import { healthRoutes } from './api/health';
 import { deploymentsRoutes } from './api/deployments';
+import { authMiddleware } from './middleware/auth';
 
 const logger = createLogger('deployment-management');
 const app = new Hono();
@@ -16,6 +17,9 @@ app.use(
     credentials: true,
   })
 );
+
+// デプロイメントルートに認証を適用
+app.use('/deployments/*', authMiddleware);
 
 // ルート登録
 app.route('/', healthRoutes);

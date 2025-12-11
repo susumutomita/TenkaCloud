@@ -67,8 +67,8 @@ describe('DeploymentService', () => {
         image: 'app:v1',
         version: 'v1',
         replicas: 2,
-        status: 'PENDING',
-        type: 'CREATE',
+        status: 'PENDING' as const,
+        type: 'CREATE' as const,
         previousImage: null,
         errorMessage: null,
         createdAt: new Date(),
@@ -80,11 +80,11 @@ describe('DeploymentService', () => {
       vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
       vi.mocked(prisma.deployment.update).mockResolvedValue({
         ...mockDeployment,
-        status: 'SUCCEEDED',
+        status: 'SUCCEEDED' as const,
       });
       vi.mocked(prisma.deployment.findUnique).mockResolvedValue({
         ...mockDeployment,
-        status: 'SUCCEEDED',
+        status: 'SUCCEEDED' as const,
       });
       vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
         id: 'history-1',
@@ -131,8 +131,8 @@ describe('DeploymentService', () => {
         image: 'app:v1',
         version: 'v1',
         replicas: 1,
-        status: 'PENDING',
-        type: 'CREATE',
+        status: 'PENDING' as const,
+        type: 'CREATE' as const,
         previousImage: null,
         errorMessage: null,
         createdAt: new Date(),
@@ -175,8 +175,8 @@ describe('DeploymentService', () => {
         image: 'app:v1',
         version: 'v1',
         replicas: 1,
-        status: 'PENDING',
-        type: 'CREATE',
+        status: 'PENDING' as const,
+        type: 'CREATE' as const,
         previousImage: null,
         errorMessage: null,
         createdAt: new Date(),
@@ -188,7 +188,7 @@ describe('DeploymentService', () => {
       vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
       vi.mocked(prisma.deployment.update).mockResolvedValue({
         ...mockDeployment,
-        status: 'FAILED',
+        status: 'FAILED' as const,
       });
       vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
         id: 'history-1',
@@ -220,8 +220,8 @@ describe('DeploymentService', () => {
         image: 'app:v1',
         version: 'v1',
         replicas: 1,
-        status: 'PENDING',
-        type: 'CREATE',
+        status: 'PENDING' as const,
+        type: 'CREATE' as const,
         previousImage: null,
         errorMessage: null,
         createdAt: new Date(),
@@ -233,7 +233,7 @@ describe('DeploymentService', () => {
       vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
       vi.mocked(prisma.deployment.update).mockResolvedValue({
         ...mockDeployment,
-        status: 'FAILED',
+        status: 'FAILED' as const,
         errorMessage: '不明なエラー',
       });
       vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
