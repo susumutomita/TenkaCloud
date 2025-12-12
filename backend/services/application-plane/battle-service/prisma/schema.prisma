@@ -1,0 +1,99 @@
+// バトル管理サービス用 Prisma スキーマ
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// バトルのステータス
+enum BattleStatus {
+  WAITING    // 参加者待ち
+  IN_PROGRESS // 進行中
+  FINISHED   // 終了
+  CANCELLED  // キャンセル
+}
+
+// バトルモード
+enum BattleMode {
+  INDIVIDUAL // 個人戦
+  TEAM       // チーム戦
+}
+
+// バトルセッション
+model Battle {
+  id          String       @id @default(uuid())
+  tenantId    String       @map("tenant_id")
+  title       String
+  description String?
+  mode        BattleMode   @default(INDIVIDUAL)
+  status      BattleStatus @default(WAITING)
+  maxParticipants Int      @default(10) @map("max_participants")
+  timeLimit   Int          @default(3600) @map("time_limit") // 秒単位
+  startedAt   DateTime?    @map("started_at")
+  endedAt     DateTime?    @map("ended_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  participants BattleParticipant[]
+  teams        Team[]
+  history      BattleHistory[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("battles")
+}
+
+// バトル参加者
+model BattleParticipant {
+  id        String   @id @default(uuid())
+  battleId  String   @map("battle_id")
+  userId    String   @map("user_id")
+  teamId    String?  @map("team_id")
+  score     Int      @default(0)
+  rank      Int?
+  joinedAt  DateTime @default(now()) @map("joined_at")
+  leftAt    DateTime? @map("left_at")
+
+  battle Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  team   Team?  @relation(fields: [teamId], references: [id])
+
+  @@unique([battleId, userId])
+  @@index([battleId])
+  @@index([userId])
+  @@map("battle_participants")
+}
+
+// チーム
+model Team {
+  id        String   @id @default(uuid())
+  battleId  String   @map("battle_id")
+  name      String
+  score     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  battle       Battle              @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  participants BattleParticipant[]
+
+  @@unique([battleId, name])
+  @@index([battleId])
+  @@map("teams")
+}
+
+// バトル履歴（リプレイ用）
+model BattleHistory {
+  id        String   @id @default(uuid())
+  battleId  String   @map("battle_id")
+  eventType String   @map("event_type")
+  payload   Json
+  timestamp DateTime @default(now())
+
+  battle Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+
+  @@index([battleId])
+  @@index([timestamp])
+  @@map("battle_history")
+}
