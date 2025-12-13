@@ -337,9 +337,10 @@ describe('validateEvent', () => {
     });
   });
 
-  // 注意: validateEventBusinessRules は Event 型（フラット構造）を期待するが、
-  // JSON Schema は EventLegacy 型（ネスト構造）を期待する。
-  // この不整合により、ビジネスルールのテストは現状の実装ではスキップ。
+  // 注意: validateEventBusinessRules は Event 型（フラット構造・Date オブジェクト）を期待するが、
+  // JSON Schema は EventLegacy 型（ネスト構造・文字列日付）を期待する。
+  // この設計上の不整合により、ビジネスルールのテストは現状の実装ではカバーできない。
+  // TODO: バリデーターのリファクタリングが必要
 });
 
 describe('parseAndValidateProblemYaml', () => {

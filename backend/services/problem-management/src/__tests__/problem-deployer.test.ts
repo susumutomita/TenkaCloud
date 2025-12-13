@@ -394,6 +394,120 @@ describe('デプロイ状況のサマリーを取得する場合', () => {
       expect(summary.pending).toBe(0);
     });
   });
+
+  describe('完了したジョブを含む場合', () => {
+    it('completed ステータスが集計されるべき', async () => {
+      // Given: デプロイが成功するセットアップ
+      factory.registerProvider(createMockProvider(true));
+      const problem = createMockProblem();
+      const credentials = createMockCredentials();
+      deployer.registerProblem(problem);
+      deployer.registerCredentials('account-1', credentials);
+
+      const jobIds = await deployer.createJobs([createJobData()]);
+      await deployer.startDeployment(jobIds, { maxRetries: 0 });
+
+      // When: サマリーを取得する
+      const summary = deployer.getStatusSummary(jobIds);
+
+      // Then: completed が 1 になる
+      expect(summary.completed).toBe(1);
+    });
+  });
+
+  describe('失敗したジョブを含む場合', () => {
+    it('failed ステータスが集計されるべき', async () => {
+      // Given: デプロイが失敗するセットアップ（プロバイダーなし）
+      const problem = createMockProblem();
+      const credentials = createMockCredentials();
+      deployer.registerProblem(problem);
+      deployer.registerCredentials('account-1', credentials);
+
+      const jobIds = await deployer.createJobs([
+        createJobData({ maxRetries: 0 }),
+      ]);
+      await deployer.startDeployment(jobIds, { maxRetries: 0 });
+
+      // When: サマリーを取得する
+      const summary = deployer.getStatusSummary(jobIds);
+
+      // Then: failed が 1 になる
+      expect(summary.failed).toBe(1);
+    });
+  });
+
+  describe('キャンセルされたジョブを含む場合', () => {
+    it('cancelled ステータスが集計されるべき', async () => {
+      // Given: 遅延するプロバイダーでデプロイを開始
+      const slowProvider: ICloudProvider = {
+        provider: 'aws',
+        displayName: 'Slow AWS Provider',
+        validateCredentials: vi.fn().mockResolvedValue(true),
+        deployStack: vi.fn().mockImplementation(
+          () =>
+            new Promise((resolve) =>
+              setTimeout(
+                () =>
+                  resolve({
+                    success: true,
+                    stackName: 'test-stack',
+                    stackId: 'stack-123',
+                    startedAt: new Date(),
+                    completedAt: new Date(),
+                  }),
+                1000
+              )
+            )
+        ),
+        getStackStatus: vi.fn().mockResolvedValue(null),
+        deleteStack: vi
+          .fn()
+          .mockResolvedValue({ success: true, startedAt: new Date() }),
+        getStackOutputs: vi.fn().mockResolvedValue({}),
+        uploadStaticFiles: vi
+          .fn()
+          .mockResolvedValue('https://example.com/files'),
+        cleanupResources: vi.fn().mockResolvedValue({
+          success: true,
+          deletedResources: [],
+          failedResources: [],
+          totalDeleted: 0,
+          totalFailed: 0,
+          dryRun: false,
+        }),
+        getAvailableRegions: vi.fn().mockResolvedValue([]),
+        getAccountInfo: vi.fn().mockResolvedValue({
+          accountId: '123456789012',
+          provider: 'aws',
+        }),
+      };
+      factory.registerProvider(slowProvider);
+      const problem = createMockProblem();
+      const credentials = createMockCredentials();
+      deployer.registerProblem(problem);
+      deployer.registerCredentials('account-1', credentials);
+
+      const jobIds = await deployer.createJobs([createJobData()]);
+
+      // デプロイ開始（awaiting しない）
+      const deployPromise = deployer.startDeployment(jobIds, { maxRetries: 0 });
+
+      // デプロイが in_progress になるまで少し待つ
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // キャンセル
+      await deployer.cancelDeployment(jobIds);
+
+      // When: サマリーを取得する
+      const summary = deployer.getStatusSummary(jobIds);
+
+      // Then: cancelled が 1 になる
+      expect(summary.cancelled).toBe(1);
+
+      // クリーンアップ
+      await deployPromise;
+    });
+  });
 });
 
 // =============================================================================
