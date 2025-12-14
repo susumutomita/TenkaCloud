@@ -494,5 +494,168 @@ describe('クルーペナルティ採点', () => {
         })
       );
     });
+
+    it('タスクが既に完了している場合はエラーを返すべき', async () => {
+      const mockTx = {
+        teamChallengeAnswer: {
+          findUnique: vi.fn().mockResolvedValue({
+            started: true,
+            completed: false,
+          }),
+        },
+        taskProgress: {
+          findUnique: vi.fn().mockResolvedValue({
+            locked: false,
+            completed: true, // 既に完了
+          }),
+        },
+      };
+
+      vi.mocked(withLock).mockImplementation(
+        async (teamId, challengeId, operation) => {
+          return { success: true, result: await operation() };
+        }
+      );
+      vi.mocked(withSerializableTransaction).mockImplementation((fn) =>
+        fn(mockTx as any)
+      );
+
+      const result = await validateAnswer(
+        'event-1',
+        'team-1',
+        'challenge-1',
+        'task-1',
+        'answer'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.correct).toBe(false);
+      expect(result.message).toBe('Task is not available for submission');
+    });
+
+    it('タスクがロックされている場合はエラーを返すべき', async () => {
+      const mockTx = {
+        teamChallengeAnswer: {
+          findUnique: vi.fn().mockResolvedValue({
+            started: true,
+            completed: false,
+          }),
+        },
+        taskProgress: {
+          findUnique: vi.fn().mockResolvedValue({
+            locked: true, // ロックされている
+            completed: false,
+          }),
+        },
+      };
+
+      vi.mocked(withLock).mockImplementation(
+        async (teamId, challengeId, operation) => {
+          return { success: true, result: await operation() };
+        }
+      );
+      vi.mocked(withSerializableTransaction).mockImplementation((fn) =>
+        fn(mockTx as any)
+      );
+
+      const result = await validateAnswer(
+        'event-1',
+        'team-1',
+        'challenge-1',
+        'task-1',
+        'answer'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.correct).toBe(false);
+      expect(result.message).toBe('Task is not available for submission');
+    });
+
+    it('チャレンジが見つからない場合はエラーを返すべき', async () => {
+      const mockTx = {
+        teamChallengeAnswer: {
+          findUnique: vi.fn().mockResolvedValue({
+            started: true,
+            completed: false,
+          }),
+        },
+        taskProgress: {
+          findUnique: vi.fn().mockResolvedValue({
+            locked: false,
+            completed: false,
+          }),
+        },
+        challenge: {
+          findFirst: vi.fn().mockResolvedValue(null), // チャレンジが見つからない
+        },
+      };
+
+      vi.mocked(withLock).mockImplementation(
+        async (teamId, challengeId, operation) => {
+          return { success: true, result: await operation() };
+        }
+      );
+      vi.mocked(withSerializableTransaction).mockImplementation((fn) =>
+        fn(mockTx as any)
+      );
+
+      const result = await validateAnswer(
+        'event-1',
+        'team-1',
+        'challenge-1',
+        'task-1',
+        'answer'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.correct).toBe(false);
+      expect(result.message).toBe('Challenge not found');
+    });
+
+    it('回答キーが見つからない場合はエラーを返すべき', async () => {
+      const mockTx = {
+        teamChallengeAnswer: {
+          findUnique: vi.fn().mockResolvedValue({
+            started: true,
+            completed: false,
+          }),
+        },
+        taskProgress: {
+          findUnique: vi.fn().mockResolvedValue({
+            locked: false,
+            completed: false,
+          }),
+        },
+        challenge: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'challenge-db-1',
+          }),
+        },
+        answer: {
+          findFirst: vi.fn().mockResolvedValue(null), // 回答が見つからない
+        },
+      };
+
+      vi.mocked(withLock).mockImplementation(
+        async (teamId, challengeId, operation) => {
+          return { success: true, result: await operation() };
+        }
+      );
+      vi.mocked(withSerializableTransaction).mockImplementation((fn) =>
+        fn(mockTx as any)
+      );
+
+      const result = await validateAnswer(
+        'event-1',
+        'team-1',
+        'challenge-1',
+        'task-1',
+        'answer'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.correct).toBe(false);
+      expect(result.message).toBe('Answer not found');
+    });
   });
 });

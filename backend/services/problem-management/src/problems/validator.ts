@@ -152,10 +152,27 @@ function validateProblemBusinessRules(problem: Problem): ValidationError[] {
 }
 
 /**
+ * ネスト構造のイベントデータ型（JSON Schema 互換）
+ */
+interface EventNested {
+  startTime: Date | string;
+  endTime: Date | string;
+  participants?: {
+    type?: string;
+    minTeamSize?: number;
+    maxTeamSize?: number;
+  };
+}
+
+/**
  * イベント定義のビジネスルールバリデーション
+ * フラット構造（Admin API）とネスト構造（JSON Schema/YAML）の両方をサポート
  */
 function validateEventBusinessRules(event: Event): ValidationError[] {
   const errors: ValidationError[] = [];
+
+  // ネスト構造の場合に対応
+  const nested = event as unknown as EventNested;
 
   // 終了時刻が開始時刻より後であることを確認
   if (event.endTime <= event.startTime) {
@@ -166,16 +183,21 @@ function validateEventBusinessRules(event: Event): ValidationError[] {
     });
   }
 
+  // 参加者タイプを取得（フラット/ネスト両対応）
+  const participantType = event.participantType ?? nested.participants?.type;
+  const minTeamSize = event.minTeamSize ?? nested.participants?.minTeamSize;
+  const maxTeamSize = event.maxTeamSize ?? nested.participants?.maxTeamSize;
+
   // チーム参加の場合、チームサイズの設定を確認
-  if (event.participantType === 'team') {
-    if (!event.minTeamSize || !event.maxTeamSize) {
+  if (participantType === 'team') {
+    if (!minTeamSize || !maxTeamSize) {
       errors.push({
         path: '/participantType',
         message:
           'チーム参加の場合、minTeamSize と maxTeamSize の設定が必要です',
         keyword: 'team-size-required',
       });
-    } else if (event.minTeamSize > event.maxTeamSize) {
+    } else if (minTeamSize > maxTeamSize) {
       errors.push({
         path: '/minTeamSize',
         message: 'minTeamSize は maxTeamSize 以下である必要があります',
