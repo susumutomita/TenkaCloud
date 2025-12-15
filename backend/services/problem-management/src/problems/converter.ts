@@ -15,7 +15,10 @@ import type {
 /**
  * サポートする外部フォーマット
  */
-export type ExternalFormat = 'tenkacloud-yaml' | 'tenkacloud-json';
+export type ExternalFormat =
+  | 'tenkacloud-yaml'
+  | 'tenkacloud-json'
+  | 'cloud-contest';
 
 /**
  * 変換結果
@@ -97,6 +100,73 @@ interface TenkaCloudYamlProblem {
 }
 
 /**
+ * Cloud Contest 形式のスキーマデータ型
+ */
+interface CloudContestProblem {
+  version: string;
+  challenge: {
+    id: string;
+    name: string;
+    description: string;
+    difficulty: string;
+    category: string;
+    timeLimit?: number;
+    points?: number;
+  };
+  scenario: {
+    background: string;
+    objectives: string[];
+    hints?: string[];
+  };
+  infrastructure: {
+    provider: string;
+    region?: string;
+    template: {
+      type: string;
+      path: string;
+      parameters?: Record<string, string>;
+    };
+  };
+  scoring: {
+    endpoint?: string;
+    method: string;
+    criteria: Array<{
+      id?: string;
+      name: string;
+      points: number;
+      description?: string;
+    }>;
+    timeout?: number;
+  };
+  metadata: {
+    author: string;
+    version: string;
+    createdAt: string;
+    tags?: string[];
+  };
+}
+
+/**
+ * Cloud Contest difficulty を TenkaCloud difficulty にマッピング
+ */
+const CLOUD_CONTEST_DIFFICULTY_MAP: Record<string, DifficultyLevel> = {
+  beginner: 'easy',
+  intermediate: 'medium',
+  advanced: 'hard',
+  expert: 'expert',
+};
+
+/**
+ * TenkaCloud difficulty を Cloud Contest difficulty にマッピング
+ */
+const TENKACLOUD_DIFFICULTY_MAP: Record<DifficultyLevel, string> = {
+  easy: 'beginner',
+  medium: 'intermediate',
+  hard: 'advanced',
+  expert: 'expert',
+};
+
+/**
  * 問題をエクスポート形式に変換
  */
 export function exportProblem(
@@ -107,18 +177,24 @@ export function exportProblem(
   const warnings: string[] = [];
 
   try {
-    const yamlData = convertToYamlSchema(problem);
-
     let output: string;
+
     if (options.format === 'tenkacloud-yaml') {
+      const yamlData = convertToYamlSchema(problem);
       output = stringify(yamlData, {
         indent: 2,
         lineWidth: 120,
       });
     } else if (options.format === 'tenkacloud-json') {
+      const yamlData = convertToYamlSchema(problem);
       output = options.prettyPrint
         ? JSON.stringify(yamlData, null, 2)
         : JSON.stringify(yamlData);
+    } else if (options.format === 'cloud-contest') {
+      const cloudContestData = convertToCloudContestSchema(problem);
+      output = options.prettyPrint
+        ? JSON.stringify(cloudContestData, null, 2)
+        : JSON.stringify(cloudContestData);
     } else {
       errors.push(`Unsupported export format: ${options.format}`);
       return { success: false, errors, warnings };
@@ -144,10 +220,10 @@ export function exportProblems(
   const warnings: string[] = [];
 
   try {
-    const yamlData = problems.map((p) => convertToYamlSchema(p));
-
     let output: string;
+
     if (options.format === 'tenkacloud-yaml') {
+      const yamlData = problems.map((p) => convertToYamlSchema(p));
       output = stringify(
         { version: '1.0', problems: yamlData },
         {
@@ -156,7 +232,16 @@ export function exportProblems(
         }
       );
     } else if (options.format === 'tenkacloud-json') {
+      const yamlData = problems.map((p) => convertToYamlSchema(p));
       const data = { version: '1.0', problems: yamlData };
+      output = options.prettyPrint
+        ? JSON.stringify(data, null, 2)
+        : JSON.stringify(data);
+    } else if (options.format === 'cloud-contest') {
+      const cloudContestData = problems.map((p) =>
+        convertToCloudContestSchema(p)
+      );
+      const data = { version: '2.0', challenges: cloudContestData };
       output = options.prettyPrint
         ? JSON.stringify(data, null, 2)
         : JSON.stringify(data);
@@ -220,6 +305,65 @@ function convertToYamlSchema(problem: Problem): TenkaCloudYamlProblem {
 }
 
 /**
+ * エクスポート用の Cloud Contest スキーマ形式に変換
+ */
+function convertToCloudContestSchema(problem: Problem): CloudContestProblem {
+  const provider = problem.deployment.providers[0] ?? 'aws';
+  const template = problem.deployment.templates[provider];
+  const totalPoints = problem.scoring.criteria.reduce(
+    (sum, c) => sum + c.maxPoints,
+    0
+  );
+
+  return {
+    version: '2.0',
+    challenge: {
+      id: problem.id,
+      name: problem.title,
+      description: problem.description.overview,
+      difficulty:
+        TENKACLOUD_DIFFICULTY_MAP[problem.difficulty as DifficultyLevel] ??
+        problem.difficulty,
+      category: problem.category,
+      timeLimit: (problem.scoring.timeoutMinutes ?? 10) * 60,
+      points: totalPoints,
+    },
+    scenario: {
+      background: problem.description.overview,
+      objectives: problem.description.objectives,
+      hints: problem.description.hints,
+    },
+    infrastructure: {
+      provider,
+      region: problem.deployment.regions?.[provider]?.[0],
+      template: {
+        type: template?.type ?? 'cloudformation',
+        path: template?.path ?? '',
+        parameters: template?.parameters,
+      },
+    },
+    scoring: {
+      endpoint:
+        problem.scoring.type === 'api' ? problem.scoring.path : undefined,
+      method: problem.scoring.type,
+      criteria: problem.scoring.criteria.map((c, index) => ({
+        id: `criterion-${index}`,
+        name: c.name,
+        points: c.maxPoints,
+        description: c.description,
+      })),
+      timeout: (problem.scoring.timeoutMinutes ?? 10) * 60,
+    },
+    metadata: {
+      author: problem.metadata.author,
+      version: problem.metadata.version,
+      createdAt: problem.metadata.createdAt,
+      tags: problem.metadata.tags,
+    },
+  };
+}
+
+/**
  * 文字列またはオブジェクトから問題をインポート
  */
 export function importProblem(
@@ -230,6 +374,25 @@ export function importProblem(
   const warnings: string[] = [];
 
   try {
+    if (options.format === 'cloud-contest') {
+      const parsed = JSON.parse(input) as CloudContestProblem;
+
+      // 基本バリデーション
+      if (!parsed.challenge?.id) {
+        errors.push('Missing required field: challenge.id');
+      }
+      if (!parsed.challenge?.name) {
+        errors.push('Missing required field: challenge.name');
+      }
+
+      if (errors.length > 0) {
+        return { success: false, errors, warnings };
+      }
+
+      const problem = convertFromCloudContestSchema(parsed);
+      return { success: true, data: problem, errors, warnings };
+    }
+
     let parsed: TenkaCloudYamlProblem;
 
     if (options.format === 'tenkacloud-yaml') {
@@ -278,6 +441,33 @@ export function importProblems(
   const warnings: string[] = [];
 
   try {
+    if (options.format === 'cloud-contest') {
+      const parsed = JSON.parse(input) as {
+        version?: string;
+        challenges: CloudContestProblem[];
+      };
+
+      if (!parsed.challenges || !Array.isArray(parsed.challenges)) {
+        errors.push('Invalid format: expected "challenges" array');
+        return { success: false, errors, warnings };
+      }
+
+      const problems = parsed.challenges
+        .map((p, index) => {
+          try {
+            return convertFromCloudContestSchema(p);
+          } catch (e) {
+            warnings.push(
+              `Challenge at index ${index} conversion failed: ${e}`
+            );
+            return null;
+          }
+        })
+        .filter((p): p is Partial<Problem> => p !== null);
+
+      return { success: true, data: problems, errors, warnings };
+    }
+
     let parsed: { version?: string; problems: TenkaCloudYamlProblem[] };
 
     if (options.format === 'tenkacloud-yaml') {
@@ -363,10 +553,81 @@ function convertFromYamlSchema(yaml: TenkaCloudYamlProblem): Partial<Problem> {
 }
 
 /**
+ * Cloud Contest スキーマ形式から Problem 型に変換
+ */
+function convertFromCloudContestSchema(
+  cloudContest: CloudContestProblem
+): Partial<Problem> {
+  const provider = (cloudContest.infrastructure?.provider ??
+    'aws') as CloudProvider;
+  const difficulty =
+    CLOUD_CONTEST_DIFFICULTY_MAP[cloudContest.challenge.difficulty] ??
+    (cloudContest.challenge.difficulty as DifficultyLevel);
+
+  return {
+    id: cloudContest.challenge.id,
+    title: cloudContest.challenge.name,
+    type: 'gameday',
+    category: cloudContest.challenge.category as ProblemCategory,
+    difficulty,
+    metadata: {
+      author: cloudContest.metadata?.author ?? 'Unknown',
+      version: cloudContest.metadata?.version ?? '1.0.0',
+      createdAt: cloudContest.metadata?.createdAt ?? new Date().toISOString(),
+      tags: cloudContest.metadata?.tags ?? [],
+    },
+    description: {
+      overview:
+        cloudContest.scenario?.background ?? cloudContest.challenge.description,
+      objectives: cloudContest.scenario?.objectives ?? [],
+      hints: cloudContest.scenario?.hints ?? [],
+    },
+    deployment: {
+      providers: [provider],
+      templates: {
+        [provider]: {
+          type: cloudContest.infrastructure?.template?.type ?? 'cloudformation',
+          path: cloudContest.infrastructure?.template?.path ?? '',
+          parameters: cloudContest.infrastructure?.template?.parameters,
+        },
+      },
+      regions: cloudContest.infrastructure?.region
+        ? { [provider]: [cloudContest.infrastructure.region] }
+        : {},
+    },
+    scoring: {
+      type: (cloudContest.scoring?.method ?? 'api') as
+        | 'lambda'
+        | 'container'
+        | 'api'
+        | 'manual',
+      path: cloudContest.scoring?.endpoint ?? '',
+      criteria: (cloudContest.scoring?.criteria ?? []).map((c) => ({
+        name: c.name,
+        weight: c.points,
+        maxPoints: c.points,
+        description: c.description,
+      })),
+      timeoutMinutes: Math.ceil((cloudContest.scoring?.timeout ?? 600) / 60),
+    },
+  };
+}
+
+/**
  * ファイル拡張子からフォーマットを推測
  */
 export function detectFormat(filename: string): ExternalFormat | null {
-  const ext = filename.toLowerCase().split('.').pop();
+  const lowerFilename = filename.toLowerCase();
+
+  // Cloud Contest 形式の検出 (.cloudcontest.json または .cc.json)
+  if (
+    lowerFilename.endsWith('.cloudcontest.json') ||
+    lowerFilename.endsWith('.cc.json')
+  ) {
+    return 'cloud-contest';
+  }
+
+  const ext = lowerFilename.split('.').pop();
   switch (ext) {
     case 'yaml':
     case 'yml':

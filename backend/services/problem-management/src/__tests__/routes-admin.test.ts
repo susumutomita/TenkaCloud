@@ -12,6 +12,7 @@ const {
   mockEventRepository,
   mockProblemRepository,
   mockMarketplaceRepository,
+  mockTemplateRepository,
 } = vi.hoisted(() => ({
   mockEventRepository: {
     findByTenant: vi.fn().mockResolvedValue([]),
@@ -26,11 +27,35 @@ const {
     findAll: vi.fn().mockResolvedValue([]),
     findById: vi.fn().mockResolvedValue(null),
     count: vi.fn().mockResolvedValue(0),
+    create: vi
+      .fn()
+      .mockResolvedValue({ id: 'problem-1', name: 'Test Problem' }),
   },
   mockMarketplaceRepository: {
     search: vi.fn().mockResolvedValue({ problems: [], total: 0 }),
     incrementDownloads: vi.fn().mockResolvedValue(undefined),
     findById: vi.fn().mockResolvedValue(null),
+  },
+  mockTemplateRepository: {
+    findAll: vi.fn().mockResolvedValue([]),
+    findById: vi.fn().mockResolvedValue(null),
+    search: vi.fn().mockResolvedValue({
+      templates: [],
+      total: 0,
+      page: 1,
+      limit: 20,
+      hasMore: false,
+    }),
+    create: vi
+      .fn()
+      .mockResolvedValue({ id: 'template-1', name: 'Test Template' }),
+    update: vi
+      .fn()
+      .mockResolvedValue({ id: 'template-1', name: 'Updated Template' }),
+    delete: vi.fn().mockResolvedValue(undefined),
+    count: vi.fn().mockResolvedValue(0),
+    exists: vi.fn().mockResolvedValue(false),
+    incrementUsageCount: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -60,11 +85,23 @@ vi.mock('../repositories', () => ({
     findAll = mockProblemRepository.findAll;
     findById = mockProblemRepository.findById;
     count = mockProblemRepository.count;
+    create = mockProblemRepository.create;
   },
   PrismaMarketplaceRepository: class {
     search = mockMarketplaceRepository.search;
     incrementDownloads = mockMarketplaceRepository.incrementDownloads;
     findById = mockMarketplaceRepository.findById;
+  },
+  PrismaProblemTemplateRepository: class {
+    findAll = mockTemplateRepository.findAll;
+    findById = mockTemplateRepository.findById;
+    search = mockTemplateRepository.search;
+    create = mockTemplateRepository.create;
+    update = mockTemplateRepository.update;
+    delete = mockTemplateRepository.delete;
+    count = mockTemplateRepository.count;
+    exists = mockTemplateRepository.exists;
+    incrementUsageCount = mockTemplateRepository.incrementUsageCount;
   },
   getEventWithProblems: vi.fn().mockResolvedValue(null),
   addProblemToEvent: vi
@@ -957,6 +994,387 @@ describe('Admin Routes', () => {
         body: JSON.stringify({ teamName: 'Test Team' }),
       });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('テンプレート管理API', () => {
+    beforeEach(() => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
+      });
+      vi.mocked(hasRole).mockReturnValue(true);
+    });
+
+    describe('GET /templates', () => {
+      it('テンプレート一覧を取得できるべき', async () => {
+        mockTemplateRepository.findAll.mockResolvedValueOnce([
+          { id: 'template-1', name: 'Test Template' },
+        ]);
+        const res = await app.request('/api/admin/templates');
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.templates).toHaveLength(1);
+      });
+
+      it('フィルター付きでテンプレート一覧を取得できるべき', async () => {
+        mockTemplateRepository.findAll.mockResolvedValueOnce([]);
+        const res = await app.request(
+          '/api/admin/templates?type=gameday&status=published&difficulty=medium'
+        );
+        expect(res.status).toBe(200);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.findAll.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/templates');
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('GET /templates/search', () => {
+      it('テンプレートを検索できるべき', async () => {
+        mockTemplateRepository.search.mockResolvedValueOnce({
+          templates: [{ id: 'template-1', name: 'Test Template' }],
+          total: 1,
+          page: 1,
+          limit: 20,
+          hasMore: false,
+        });
+        const res = await app.request('/api/admin/templates/search?query=test');
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.templates).toHaveLength(1);
+        expect(body.total).toBe(1);
+      });
+
+      it('フィルター付きで検索できるべき', async () => {
+        mockTemplateRepository.search.mockResolvedValueOnce({
+          templates: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          hasMore: false,
+        });
+        const res = await app.request(
+          '/api/admin/templates/search?type=gameday&category=security&difficulty=hard&status=published&provider=aws&sortBy=usageCount&page=2&limit=10'
+        );
+        expect(res.status).toBe(200);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.search.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/templates/search');
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('GET /templates/:templateId', () => {
+      it('テンプレート詳細を取得できるべき', async () => {
+        mockTemplateRepository.findById.mockResolvedValueOnce({
+          id: 'template-1',
+          name: 'Test Template',
+          description: 'Test description',
+        });
+        const res = await app.request('/api/admin/templates/template-1');
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.id).toBe('template-1');
+      });
+
+      it('テンプレートが見つからない場合は 404 を返すべき', async () => {
+        mockTemplateRepository.findById.mockResolvedValueOnce(null);
+        const res = await app.request('/api/admin/templates/template-1');
+        expect(res.status).toBe(404);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.findById.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/templates/template-1');
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('POST /templates', () => {
+      const validTemplate = {
+        name: 'New Template',
+        description: 'Template description',
+        type: 'gameday',
+        category: 'security',
+        difficulty: 'medium',
+        status: 'draft',
+        variables: [
+          {
+            name: 'accountId',
+            type: 'string',
+            description: 'AWS Account ID',
+            required: true,
+          },
+        ],
+        descriptionTemplate: {
+          overviewTemplate: 'Overview with {{accountId}}',
+          objectivesTemplate: ['Objective 1'],
+          hintsTemplate: ['Hint 1'],
+          prerequisites: ['AWS account'],
+          estimatedTime: 60,
+        },
+        deployment: {
+          providers: ['aws'],
+          templateType: 'cloudformation',
+          templateContent: '{"Resources": {}}',
+          regions: { aws: ['us-east-1'] },
+          timeout: 30,
+        },
+        scoring: {
+          type: 'lambda',
+          criteriaTemplate: [
+            {
+              description: 'Task 1',
+              maxPoints: 100,
+              weight: 1,
+            },
+          ],
+          timeoutMinutes: 5,
+        },
+        tags: ['aws', 'security'],
+        author: 'test-user',
+        version: '1.0.0',
+      };
+
+      it('テンプレートを作成できるべき', async () => {
+        mockTemplateRepository.create.mockResolvedValueOnce({
+          id: 'template-1',
+          ...validTemplate,
+        });
+        const res = await app.request('/api/admin/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validTemplate),
+        });
+        expect(res.status).toBe(201);
+        const body = await res.json();
+        expect(body.id).toBe('template-1');
+      });
+
+      it('バリデーションエラー時に 400 を返すべき', async () => {
+        const res = await app.request('/api/admin/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: '' }),
+        });
+        expect(res.status).toBe(400);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.create.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validTemplate),
+        });
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('PUT /templates/:templateId', () => {
+      it('テンプレートを更新できるべき', async () => {
+        mockTemplateRepository.exists.mockResolvedValueOnce(true);
+        mockTemplateRepository.update.mockResolvedValueOnce({
+          id: 'template-1',
+          name: 'Updated Template',
+        });
+        const res = await app.request('/api/admin/templates/template-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Updated Template' }),
+        });
+        expect(res.status).toBe(200);
+      });
+
+      it('テンプレートが見つからない場合は 404 を返すべき', async () => {
+        mockTemplateRepository.exists.mockResolvedValueOnce(false);
+        const res = await app.request('/api/admin/templates/template-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Updated Template' }),
+        });
+        expect(res.status).toBe(404);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.exists.mockResolvedValueOnce(true);
+        mockTemplateRepository.update.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/templates/template-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Updated Template' }),
+        });
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('DELETE /templates/:templateId', () => {
+      it('テンプレートを削除できるべき', async () => {
+        mockTemplateRepository.exists.mockResolvedValueOnce(true);
+        const res = await app.request('/api/admin/templates/template-1', {
+          method: 'DELETE',
+        });
+        expect(res.status).toBe(200);
+      });
+
+      it('テンプレートが見つからない場合は 404 を返すべき', async () => {
+        mockTemplateRepository.exists.mockResolvedValueOnce(false);
+        const res = await app.request('/api/admin/templates/template-1', {
+          method: 'DELETE',
+        });
+        expect(res.status).toBe(404);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.exists.mockResolvedValueOnce(true);
+        mockTemplateRepository.delete.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/templates/template-1', {
+          method: 'DELETE',
+        });
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('POST /templates/:templateId/create-problem', () => {
+      it('テンプレートから問題を作成できるべき', async () => {
+        mockTemplateRepository.findById.mockResolvedValueOnce({
+          id: 'template-1',
+          name: 'Test Template {{accountId}}',
+          description: 'Description with {{accountId}}',
+          type: 'gameday',
+          category: 'security',
+          difficulty: 'medium',
+          variables: [
+            {
+              name: 'accountId',
+              type: 'string',
+              description: 'AWS Account ID',
+              required: true,
+            },
+          ],
+          descriptionTemplate: {
+            overviewTemplate: 'Overview with {{accountId}}',
+            objectivesTemplate: ['Objective with {{accountId}}'],
+            hintsTemplate: ['Hint with {{accountId}}'],
+            prerequisites: ['AWS account'],
+            estimatedTime: 60,
+          },
+          deployment: {
+            providers: ['aws'],
+            templateType: 'cloudformation',
+            templateContent: '{"AccountId": "{{accountId}}"}',
+            regions: { aws: ['us-east-1'] },
+            timeout: 30,
+          },
+          scoring: {
+            type: 'lambda',
+            criteriaTemplate: [
+              {
+                description: 'Task 1',
+                maxPoints: 100,
+                weight: 1,
+              },
+            ],
+            timeoutMinutes: 5,
+          },
+          tags: ['aws', 'security'],
+        });
+        mockProblemRepository.create.mockResolvedValueOnce({
+          id: 'problem-1',
+          name: 'Test Template 123456789012',
+        });
+
+        const res = await app.request(
+          '/api/admin/templates/template-1/create-problem',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: 'New Problem',
+              variables: { accountId: '123456789012' },
+            }),
+          }
+        );
+        expect(res.status).toBe(201);
+      });
+
+      it('テンプレートが見つからない場合は 404 を返すべき', async () => {
+        mockTemplateRepository.findById.mockResolvedValueOnce(null);
+        const res = await app.request(
+          '/api/admin/templates/template-1/create-problem',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: 'New Problem',
+              variables: { accountId: '123456789012' },
+            }),
+          }
+        );
+        expect(res.status).toBe(404);
+      });
+
+      it('必須変数が不足している場合は 400 を返すべき', async () => {
+        mockTemplateRepository.findById.mockResolvedValueOnce({
+          id: 'template-1',
+          name: 'Test Template',
+          variables: [
+            {
+              name: 'accountId',
+              type: 'string',
+              description: 'AWS Account ID',
+              required: true,
+            },
+          ],
+        });
+        const res = await app.request(
+          '/api/admin/templates/template-1/create-problem',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: 'New Problem',
+              variables: {},
+            }),
+          }
+        );
+        expect(res.status).toBe(400);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockTemplateRepository.findById.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request(
+          '/api/admin/templates/template-1/create-problem',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: 'New Problem',
+              variables: { accountId: '123456789012' },
+            }),
+          }
+        );
+        expect(res.status).toBe(500);
+      });
     });
   });
 });
