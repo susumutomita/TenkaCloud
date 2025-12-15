@@ -337,10 +337,137 @@ describe('validateEvent', () => {
     });
   });
 
-  // 注意: validateEventBusinessRules は Event 型（フラット構造・Date オブジェクト）を期待するが、
-  // JSON Schema は EventLegacy 型（ネスト構造・文字列日付）を期待する。
-  // この設計上の不整合により、ビジネスルールのテストは現状の実装ではカバーできない。
-  // TODO: バリデーターのリファクタリングが必要
+  describe('ビジネスルールバリデーション', () => {
+    it('終了時刻が開始時刻より前の場合はエラーを返すべき', async () => {
+      // parseAndValidateEventYaml を使ってビジネスルールをテスト
+      // （直接 validateEventBusinessRules は呼べないため）
+      const yaml = `
+id: test-event-1
+name: テストイベント
+type: gameday
+status: draft
+tenantId: tenant-1
+startTime: "2024-12-01T18:00:00Z"
+endTime: "2024-12-01T09:00:00Z"
+timezone: Asia/Tokyo
+participants:
+  type: individual
+  maxCount: 100
+problems:
+  - problemId: problem-1
+    order: 1
+cloudConfig:
+  provider: aws
+  regions:
+    - ap-northeast-1
+scoringConfig:
+  type: realtime
+  intervalMinutes: 5
+  leaderboardVisible: true
+`;
+
+      const { result } = await parseAndValidateEventYaml(yaml);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({
+          keyword: 'date-range',
+        })
+      );
+    });
+
+    it('チーム参加でチームサイズ設定がない場合はエラーを返すべき', async () => {
+      const yaml = `
+id: test-event-1
+name: テストイベント
+type: gameday
+status: draft
+tenantId: tenant-1
+startTime: "2024-12-01T09:00:00Z"
+endTime: "2024-12-01T18:00:00Z"
+timezone: Asia/Tokyo
+participants:
+  type: team
+  maxCount: 50
+problems:
+  - problemId: problem-1
+    order: 1
+cloudConfig:
+  provider: aws
+  regions:
+    - ap-northeast-1
+scoringConfig:
+  type: realtime
+  intervalMinutes: 5
+  leaderboardVisible: true
+`;
+
+      const { result } = await parseAndValidateEventYaml(yaml);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({
+          keyword: 'team-size-required',
+        })
+      );
+    });
+
+    it('minTeamSize が maxTeamSize より大きい場合はエラーを返すべき', async () => {
+      const yaml = `
+id: test-event-1
+name: テストイベント
+type: gameday
+status: draft
+tenantId: tenant-1
+startTime: "2024-12-01T09:00:00Z"
+endTime: "2024-12-01T18:00:00Z"
+timezone: Asia/Tokyo
+participants:
+  type: team
+  maxCount: 50
+  minTeamSize: 10
+  maxTeamSize: 5
+problems:
+  - problemId: problem-1
+    order: 1
+cloudConfig:
+  provider: aws
+  regions:
+    - ap-northeast-1
+scoringConfig:
+  type: realtime
+  intervalMinutes: 5
+  leaderboardVisible: true
+`;
+
+      const { result } = await parseAndValidateEventYaml(yaml);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({
+          keyword: 'team-size-range',
+        })
+      );
+    });
+
+    it('リージョンが未設定でもバリデーションを通過するべき（オプショナル）', () => {
+      const problem = createValidProblem({
+        deployment: {
+          providers: ['aws'],
+          templates: {
+            aws: {
+              type: 'cloudformation',
+              path: '/templates/test.yaml',
+            },
+          },
+          // regions は未定義
+        },
+      });
+      const result = validateProblem(problem);
+
+      expect(result.valid).toBe(true);
+    });
+  });
 });
 
 describe('parseAndValidateProblemYaml', () => {
