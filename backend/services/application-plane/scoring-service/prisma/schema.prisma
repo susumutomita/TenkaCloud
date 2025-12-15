@@ -1,0 +1,152 @@
+// 採点サービス用 Prisma スキーマ
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 評価カテゴリ
+enum EvaluationCategory {
+  INFRASTRUCTURE // インフラ構成
+  COST           // コスト最適化
+  SECURITY       // セキュリティ
+  PERFORMANCE    // パフォーマンス
+  RELIABILITY    // 信頼性
+}
+
+// 重要度
+enum Severity {
+  CRITICAL // 致命的
+  HIGH     // 高
+  MEDIUM   // 中
+  LOW      // 低
+  INFO     // 情報
+}
+
+// 評価ステータス
+enum EvaluationStatus {
+  PENDING     // 評価待ち
+  IN_PROGRESS // 評価中
+  COMPLETED   // 完了
+  FAILED      // 失敗
+}
+
+// 評価基準
+model EvaluationCriteria {
+  id          String             @id @default(uuid())
+  tenantId    String             @map("tenant_id")
+  name        String
+  description String?
+  category    EvaluationCategory
+  weight      Int                @default(1) // 重み付け（1-10）
+  maxScore    Int                @default(100) @map("max_score")
+  isActive    Boolean            @default(true) @map("is_active")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  criteriaDetails CriteriaDetail[]
+  evaluationItems EvaluationItem[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([category])
+  @@map("evaluation_criteria")
+}
+
+// 評価基準の詳細ルール
+model CriteriaDetail {
+  id           String   @id @default(uuid())
+  criteriaId   String   @map("criteria_id")
+  ruleKey      String   @map("rule_key")   // 例: "vpc_exists", "s3_encryption"
+  ruleValue    String   @map("rule_value") // 期待値
+  points       Int      // この項目の得点
+  severity     Severity @default(MEDIUM)
+  description  String?
+
+  criteria EvaluationCriteria @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
+
+  @@unique([criteriaId, ruleKey])
+  @@index([criteriaId])
+  @@map("criteria_details")
+}
+
+// 採点セッション
+model ScoringSession {
+  id          String           @id @default(uuid())
+  tenantId    String           @map("tenant_id")
+  battleId    String?          @map("battle_id")
+  participantId String         @map("participant_id")
+  status      EvaluationStatus @default(PENDING)
+  totalScore  Int              @default(0) @map("total_score")
+  maxPossibleScore Int         @default(0) @map("max_possible_score")
+  submittedAt DateTime?        @map("submitted_at")
+  evaluatedAt DateTime?        @map("evaluated_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  evaluationItems EvaluationItem[]
+  feedbacks       Feedback[]
+
+  @@index([tenantId])
+  @@index([battleId])
+  @@index([participantId])
+  @@index([status])
+  @@map("scoring_sessions")
+}
+
+// 評価項目ごとの結果
+model EvaluationItem {
+  id            String   @id @default(uuid())
+  sessionId     String   @map("session_id")
+  criteriaId    String   @map("criteria_id")
+  score         Int      @default(0)
+  maxScore      Int      @map("max_score")
+  passed        Boolean  @default(false)
+  actualValue   String?  @map("actual_value")
+  expectedValue String?  @map("expected_value")
+  details       Json?    // 詳細な評価結果
+
+  session  ScoringSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  criteria EvaluationCriteria @relation(fields: [criteriaId], references: [id])
+
+  @@unique([sessionId, criteriaId])
+  @@index([sessionId])
+  @@map("evaluation_items")
+}
+
+// フィードバック
+model Feedback {
+  id          String             @id @default(uuid())
+  sessionId   String             @map("session_id")
+  category    EvaluationCategory
+  severity    Severity
+  title       String
+  message     String
+  suggestion  String?            // 改善提案
+  resourceRef String?            @map("resource_ref") // 該当リソースの参照
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  session ScoringSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([category])
+  @@index([severity])
+  @@map("feedbacks")
+}
+
+// Terraform State スナップショット
+model TerraformSnapshot {
+  id            String   @id @default(uuid())
+  sessionId     String   @unique @map("session_id")
+  stateVersion  Int      @map("state_version")
+  resourceCount Int      @map("resource_count")
+  stateData     Json     @map("state_data")
+  parsedAt      DateTime @default(now()) @map("parsed_at")
+
+  @@index([sessionId])
+  @@map("terraform_snapshots")
+}
