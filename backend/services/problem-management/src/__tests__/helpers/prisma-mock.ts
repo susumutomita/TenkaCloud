@@ -140,6 +140,15 @@ export function createMockPrisma() {
       create: vi.fn(),
       findMany: vi.fn(),
     },
+    problemTemplate: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
     $transaction: vi.fn((fn) => fn(createMockPrisma())),
     $executeRaw: vi.fn(),
   };

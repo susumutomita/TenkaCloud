@@ -386,3 +386,90 @@ export interface MarketplaceSearchResult {
   limit: number;
   hasMore: boolean;
 }
+
+// =============================================================================
+// Problem Template Types
+// =============================================================================
+
+export type ProblemTemplateStatus = 'draft' | 'published' | 'archived';
+
+export interface ProblemTemplateVariable {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'select';
+  description: string;
+  defaultValue?: string | number | boolean;
+  options?: string[]; // for select type
+  required: boolean;
+}
+
+export interface ProblemTemplateDeployment {
+  providers: CloudProvider[];
+  templateType: DeploymentTemplateType;
+  templateContent: string; // テンプレートのコンテンツ（変数プレースホルダー含む）
+  regions?: Partial<Record<CloudProvider, string[]>>;
+  timeout?: number;
+}
+
+export interface ProblemTemplateScoring {
+  type: 'lambda' | 'container' | 'api' | 'manual';
+  criteriaTemplate: Omit<ScoringCriterion, 'name'>[];
+  timeoutMinutes: number;
+}
+
+export interface ProblemTemplate {
+  id: string;
+  name: string;
+  description: string;
+  type: ProblemType;
+  category: ProblemCategory;
+  difficulty: DifficultyLevel;
+  status: ProblemTemplateStatus;
+  variables: ProblemTemplateVariable[];
+  descriptionTemplate: {
+    overviewTemplate: string;
+    objectivesTemplate: string[];
+    hintsTemplate: string[];
+    prerequisites?: string[];
+    estimatedTime?: number;
+  };
+  deployment: ProblemTemplateDeployment;
+  scoring: ProblemTemplateScoring;
+  tags: string[];
+  author: string;
+  version: string;
+  usageCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateProblemFromTemplateInput {
+  templateId: string;
+  variables: Record<string, string | number | boolean>;
+  title: string;
+  overrides?: {
+    category?: ProblemCategory;
+    difficulty?: DifficultyLevel;
+    tags?: string[];
+  };
+}
+
+export interface ProblemTemplateSearchQuery {
+  query?: string;
+  type?: ProblemType;
+  category?: ProblemCategory;
+  difficulty?: DifficultyLevel;
+  provider?: CloudProvider;
+  status?: ProblemTemplateStatus;
+  tags?: string[];
+  sortBy?: 'name' | 'usageCount' | 'newest' | 'updated';
+  page?: number;
+  limit?: number;
+}
+
+export interface ProblemTemplateSearchResult {
+  templates: ProblemTemplate[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}

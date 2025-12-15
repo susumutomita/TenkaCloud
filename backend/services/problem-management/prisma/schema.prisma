@@ -94,6 +94,65 @@ enum ScoringFunctionType {
   MANUAL
 }
 
+enum ProblemTemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// =============================================================================
+// Problem Template Models
+// =============================================================================
+
+/// 問題テンプレート（再利用可能な問題のひな形）
+model ProblemTemplate {
+  id            String                @id @default(uuid())
+  name          String
+  description   String                @db.Text
+  type          ProblemType
+  category      ProblemCategory
+  difficulty    DifficultyLevel
+  status        ProblemTemplateStatus @default(DRAFT)
+
+  // テンプレート変数
+  variables     Json                  @default("[]") // ProblemTemplateVariable[]
+
+  // 説明テンプレート
+  overviewTemplate    String          @db.Text
+  objectivesTemplate  String[]
+  hintsTemplate       String[]
+  prerequisites       String[]
+  estimatedTimeMinutes Int?
+
+  // デプロイ設定テンプレート
+  providers           CloudProvider[]
+  templateType        TemplateType
+  templateContent     String          @db.Text
+  regions             Json            @default("{}") // Partial<Record<CloudProvider, string[]>>
+  deploymentTimeout   Int             @default(60)
+
+  // 採点設定テンプレート
+  scoringType         ScoringFunctionType
+  criteriaTemplate    Json            @default("[]") // ScoringCriterion[]（nameを除く）
+  scoringTimeout      Int             @default(30)
+
+  // メタデータ
+  tags          String[]
+  author        String
+  version       String                @default("1.0.0")
+  usageCount    Int                   @default(0)
+
+  // タイムスタンプ
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([category])
+  @@index([difficulty])
+  @@map("problem_templates")
+}
+
 // =============================================================================
 // Problem Models
 // =============================================================================

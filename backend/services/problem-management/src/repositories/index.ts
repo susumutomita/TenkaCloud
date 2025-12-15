@@ -15,3 +15,8 @@ export {
   PrismaProblemRepository,
   PrismaMarketplaceRepository,
 } from './problem-repository';
+export {
+  PrismaProblemTemplateRepository,
+  type IProblemTemplateRepository,
+  type ProblemTemplateFilterOptions,
+} from './template-repository';
