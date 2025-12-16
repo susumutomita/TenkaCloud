@@ -27,14 +27,14 @@ export PATH := $(PROTO_BIN):$(PATH)
 NI ?= $(BUNX) ni
 NR ?= $(BUNX) nr
 NLX ?= $(BUNX) nlx
-FRONTEND_DIR ?= frontend/control-plane
-CONTROL_PLANE_DIR := frontend/control-plane
-ADMIN_APP_DIR := frontend/admin-app
-PARTICIPANT_APP_DIR := frontend/participant-app
-LANDING_SITE_DIR := frontend/landing-site
-FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR) $(LANDING_SITE_DIR)
-BACKEND_SERVICES_DIR := backend/services
-PROBLEM_MANAGEMENT_DIR := $(BACKEND_SERVICES_DIR)/problem-management
+APPS_DIR := apps
+CONTROL_PLANE_DIR := $(APPS_DIR)/control-plane
+APPLICATION_PLANE_DIR := $(APPS_DIR)/application-plane
+LANDING_SITE_DIR := $(APPS_DIR)/landing-site
+FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR) $(LANDING_SITE_DIR)
+PACKAGES_DIR := packages
+CORE_PACKAGE_DIR := $(PACKAGES_DIR)/core
+SHARED_PACKAGE_DIR := $(PACKAGES_DIR)/shared
 
 # ========================================
 # 📦 パッケージ管理
@@ -63,8 +63,6 @@ install_ci:
 		echo "📦 $$app の依存関係をインストール中（CI）..."; \
 		(cd $$app && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1; \
 	done
-	@echo "📦 $(PROBLEM_MANAGEMENT_DIR) の依存関係をインストール中（CI）..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1
 	@echo "✅ すべての依存関係をインストールしました（CI）"
 
 setup_husky:
@@ -119,7 +117,13 @@ else
 endif
 
 dev:
-	cd $(FRONTEND_DIR) && $(NR) dev
+	cd $(CONTROL_PLANE_DIR) && $(NR) dev
+
+dev-app:
+	cd $(APPLICATION_PLANE_DIR) && $(NR) dev
+
+dev-landing:
+	cd $(LANDING_SITE_DIR) && $(NR) dev
 
 # ========================================
 # 🧪 テスト
@@ -139,27 +143,18 @@ test_quick:
 		(cd $$app && $(NR) test) || exit 1; \
 	done
 	@echo ""
-	@echo "📦 バックエンドサービス:"
-	@echo ""
-	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test) || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
 test_coverage:
 	@echo "📊 全アプリのカバレッジテストを実行中..."
 	@echo ""
-	@echo "📦 フロントエンドアプリ:"
+	@echo "📦 アプリ:"
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📈 $$app のカバレッジテスト..."; \
 		(cd $$app && $(NR) test:coverage) || exit 1; \
 	done
-	@echo ""
-	@echo "📦 バックエンドサービス:"
-	@echo ""
-	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test:coverage) || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
@@ -342,16 +337,12 @@ k8s-pull-base-images:
 
 k8s-build-all: check-docker check-docker-hub k8s-pull-base-images
 	@echo "🐳 全サービスの Docker イメージをビルドしています..."
-	@echo "📦 Control Plane UI..."
-	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
-	@echo "📦 Tenant Management Service..."
-	@cd backend/services/control-plane/tenant-management && docker build -t tenkacloud/tenant-management:latest .
-	@echo "📦 Admin App..."
-	@docker build -t tenkacloud/admin-app:latest -f frontend/admin-app/Dockerfile .
-	@echo "📦 Participant App..."
-	@docker build -t tenkacloud/participant-app:latest -f frontend/participant-app/Dockerfile .
+	@echo "📦 Control Plane..."
+	@cd $(CONTROL_PLANE_DIR) && docker build -t tenkacloud/control-plane:latest .
+	@echo "📦 Application Plane..."
+	@cd $(APPLICATION_PLANE_DIR) && docker build -t tenkacloud/application-plane:latest .
 	@echo "📦 Landing Site..."
-	@docker build -t tenkacloud/landing-site:latest -f frontend/landing-site/Dockerfile .
+	@cd $(LANDING_SITE_DIR) && docker build -t tenkacloud/landing-site:latest .
 	@echo "✅ 全イメージのビルドが完了しました"
 
 start-k8s: check-k8s k8s-build-all
@@ -518,13 +509,13 @@ start-infrastructure: check-docker
 	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh || true
 	@echo ""
 	@echo "📝 ステップ 3/3: 環境変数ファイルを確認しています..."
-	@if [ ! -f frontend/control-plane/.env.local ]; then \
+	@if [ ! -f $(CONTROL_PLANE_DIR)/.env.local ]; then \
 		echo "⚠️  .env.local が見つかりません。.env.example からコピーしています..."; \
-		cd frontend/control-plane && cp .env.example .env.local; \
+		cd $(CONTROL_PLANE_DIR) && cp .env.example .env.local; \
 		echo ""; \
-		echo "⚠️  重要: frontend/control-plane/.env.local を編集して以下を設定してください:"; \
+		echo "⚠️  重要: $(CONTROL_PLANE_DIR)/.env.local を編集して以下を設定してください:"; \
 		echo "  - AUTH_SECRET (openssl rand -base64 32 で生成)"; \
-		echo "  - AUTH_KEYCLOAK_SECRET (上記の Keycloak セットアップで表示された値)"; \
+		echo "  - AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET / AUTH0_ISSUER"; \
 	else \
 		echo "✅ .env.local が存在します"; \
 	fi
@@ -543,8 +534,8 @@ stop-infrastructure:
 	@echo "✅ インフラストラクチャを停止しました"
 
 start-control-plane:
-	@echo "🚀 Control Plane UI を起動します..."
-	cd $(FRONTEND_DIR) && $(NR) dev
+	@echo "🚀 Control Plane を起動します..."
+	cd $(CONTROL_PLANE_DIR) && $(NR) dev
 
 stop-control-plane:
 	@echo "🛑 Control Plane UI を停止しています..."
@@ -571,27 +562,28 @@ setup-keycloak: check-docker
 # ========================================
 
 docker-build: check-docker
-	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
-	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
+	@echo "🐳 Control Plane の Docker イメージをビルドしています..."
+	@cd $(CONTROL_PLANE_DIR) && docker build -t tenkacloud/control-plane:latest .
 	@echo "✅ Docker イメージのビルドが完了しました"
 	@echo ""
 	@echo "📋 ビルドされたイメージ:"
-	@docker images tenkacloud/control-plane-ui:latest
+	@docker images tenkacloud/control-plane:latest
 	@echo ""
 
 docker-run: docker-build
-	@echo "🚀 Docker Compose で Control Plane UI を起動しています..."
-	@cd frontend/control-plane && docker compose up -d
-	@echo "✅ Control Plane UI が起動しました"
+	@echo "🚀 Docker Compose で全サービスを起動しています..."
+	@docker compose up -d
+	@echo "✅ サービスが起動しました"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Control Plane UI: http://localhost:3000"
-	@echo "  - Keycloak:         http://localhost:8080"
+	@echo "  - Control Plane:      http://localhost:3000"
+	@echo "  - Application Plane:  http://localhost:3001"
+	@echo "  - Landing Site:       http://localhost:3002"
 	@echo ""
 
 docker-stop:
 	@echo "🛑 Docker Compose を停止しています..."
-	@cd frontend/control-plane && docker compose down
+	@docker compose down
 	@echo "✅ 停止しました"
 	@echo ""
 

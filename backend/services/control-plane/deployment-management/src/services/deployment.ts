@@ -1,6 +1,7 @@
 import type { DeploymentStatus, DeploymentType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { KubernetesClient } from '../lib/kubernetes';
+import { createK8sClient, type K8sClient } from '../lib/kubernetes-factory';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('deployment-service');
@@ -29,10 +30,10 @@ interface ListDeploymentsInput {
 }
 
 export class DeploymentService {
-  private k8sClient: KubernetesClient;
+  private k8sClient: K8sClient;
 
-  constructor(k8sClient?: KubernetesClient) {
-    this.k8sClient = k8sClient ?? new KubernetesClient();
+  constructor(k8sClient?: K8sClient) {
+    this.k8sClient = k8sClient ?? createK8sClient();
   }
 
   async createDeployment(input: CreateDeploymentInput) {

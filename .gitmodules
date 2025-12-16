@@ -1,3 +1,6 @@
 [submodule "reference/eks"]
 	path = reference/eks
 	url = https://github.com/aws-samples/aws-saas-factory-eks-reference-architecture
+[submodule "reference/serverless"]
+	path = reference/serverless
+	url = https://github.com/aws-samples/aws-saas-factory-ref-solution-serverless-saas.git
