@@ -141,6 +141,31 @@ describe('Auth0 認証設定', () => {
       expect(result.tenantId).toBeNull();
       expect(result.teamId).toBeNull();
     });
+
+    it('ロールが存在しない場合、空配列にフォールバックすべき', async () => {
+      const NextAuth = (await import('next-auth')).default;
+
+      await import('../auth');
+      const mockCall = vi.mocked(NextAuth).mock.calls[0][0] as NextAuthConfig;
+      const jwtCallback = mockCall.callbacks?.jwt;
+
+      if (!jwtCallback) throw new Error('JWT callback not defined');
+
+      const token = {};
+      const profile = {
+        email: 'test@example.com',
+        name: 'Test User',
+      };
+
+      const result = (await jwtCallback({
+        token,
+        profile,
+        user: { id: '1', name: 'Test', email: 'test@example.com' },
+        trigger: 'signIn',
+      } as Parameters<typeof jwtCallback>[0])) as AnyRecord;
+
+      expect(result.roles).toEqual([]);
+    });
   });
 
   describe('Session コールバック', () => {
@@ -198,6 +223,51 @@ describe('Auth0 認証設定', () => {
       expect(result.user?.email).toBe('test@example.com');
       expect(result.user?.name).toBe('Test User');
       expect(result.user?.image).toBe('https://example.com/avatar.png');
+    });
+
+    it('session.user が存在しない場合でも正しく動作すべき', async () => {
+      const NextAuth = (await import('next-auth')).default;
+
+      await import('../auth');
+      const mockCall = vi.mocked(NextAuth).mock.calls[0][0] as NextAuthConfig;
+      const sessionCallback = mockCall.callbacks?.session;
+
+      if (!sessionCallback) throw new Error('Session callback not defined');
+
+      const token = {
+        accessToken: 'test-access-token',
+        idToken: 'test-id-token',
+        roles: ['participant'],
+        tenantId: 'tenant-123',
+        teamId: 'team-456',
+        email: 'test@example.com',
+        name: 'Test User',
+        picture: 'https://example.com/avatar.png',
+      };
+
+      const session = {
+        expires: new Date().toISOString(),
+        sessionToken: 'test-session-token',
+        userId: '1',
+      };
+
+      const result = (await sessionCallback({
+        session,
+        token,
+        user: {
+          id: '1',
+          name: 'Test',
+          email: 'test@example.com',
+          emailVerified: null,
+        },
+        trigger: 'update',
+        newSession: null,
+      } as unknown as Parameters<typeof sessionCallback>[0])) as AnyRecord;
+
+      expect(result.accessToken).toBe('test-access-token');
+      expect(result.idToken).toBe('test-id-token');
+      expect(result.roles).toEqual(['participant']);
+      expect(result.user).toBeUndefined();
     });
   });
 
