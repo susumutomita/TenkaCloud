@@ -4,7 +4,7 @@ import LoginPage from '../page';
 
 // actions のモック
 vi.mock('../actions', () => ({
-  loginWithKeycloak: vi.fn(),
+  loginWithAuth0: vi.fn(),
 }));
 
 describe('LoginPage コンポーネント', () => {
@@ -23,15 +23,13 @@ describe('LoginPage コンポーネント', () => {
   it('ログインボタンを表示すべき', () => {
     render(<LoginPage />);
     expect(
-      screen.getByRole('button', { name: 'Keycloak でログイン' })
+      screen.getByRole('button', { name: 'Auth0 でログイン' })
     ).toBeInTheDocument();
   });
 
   it('認証説明テキストを表示すべき', () => {
     render(<LoginPage />);
-    expect(
-      screen.getByText('認証には Keycloak を使用します')
-    ).toBeInTheDocument();
+    expect(screen.getByText('認証には Auth0 を使用します')).toBeInTheDocument();
   });
 
   it('form 要素が存在すべき', () => {
@@ -41,7 +39,7 @@ describe('LoginPage コンポーネント', () => {
 
   it('ログインボタンのタイプが submit であるべき', () => {
     render(<LoginPage />);
-    const button = screen.getByRole('button', { name: 'Keycloak でログイン' });
+    const button = screen.getByRole('button', { name: 'Auth0 でログイン' });
     expect(button).toHaveAttribute('type', 'submit');
   });
 });

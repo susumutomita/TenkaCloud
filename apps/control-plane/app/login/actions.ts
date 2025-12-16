@@ -2,6 +2,6 @@
 
 import { signIn } from '@/auth';
 
-export async function loginWithKeycloak() {
-  await signIn('keycloak', { redirectTo: '/dashboard' });
+export async function loginWithAuth0() {
+  await signIn('auth0', { redirectTo: '/dashboard' });
 }

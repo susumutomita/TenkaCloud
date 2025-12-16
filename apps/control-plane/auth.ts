@@ -1,12 +1,12 @@
 import NextAuth from 'next-auth';
-import Keycloak from 'next-auth/providers/keycloak';
+import Auth0 from 'next-auth/providers/auth0';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
-    Keycloak({
-      clientId: process.env.AUTH_KEYCLOAK_ID,
-      clientSecret: process.env.AUTH_KEYCLOAK_SECRET,
-      issuer: process.env.AUTH_KEYCLOAK_ISSUER,
+    Auth0({
+      clientId: process.env.AUTH0_CLIENT_ID,
+      clientSecret: process.env.AUTH0_CLIENT_SECRET,
+      issuer: process.env.AUTH0_ISSUER,
     }),
   ],
   callbacks: {
@@ -18,11 +18,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.idToken = account.id_token;
       }
 
-      // Keycloak のユーザー情報を JWT に保存
+      // Auth0 のユーザー情報を JWT に保存
       if (profile) {
-        token.roles = profile.roles || [];
-        token.email = profile.email;
-        token.name = profile.name;
+        // Auth0 のカスタムクレームからロールを取得
+        const namespace = 'https://tenkacloud.com';
+        token.roles =
+          (profile[`${namespace}/roles`] as string[]) ||
+          (profile.roles as string[]) ||
+          [];
+        token.email = profile.email as string;
+        token.name = profile.name as string;
+        token.picture = profile.picture as string;
       }
 
       return token;
@@ -36,6 +42,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.email = token.email as string;
         session.user.name = token.name as string;
+        session.user.image = token.picture as string;
       }
 
       return session;

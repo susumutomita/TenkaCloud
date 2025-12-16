@@ -1,27 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { signIn } from '@/auth';
-import { loginWithKeycloak } from '../actions';
+import { loginWithAuth0 } from '../actions';
 
 // auth モジュールのモック
 vi.mock('@/auth', () => ({
   signIn: vi.fn(),
 }));
 
-describe('loginWithKeycloak', () => {
+describe('loginWithAuth0', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('keycloak プロバイダーで signIn を呼び出すべき', async () => {
-    await loginWithKeycloak();
+  it('auth0 プロバイダーで signIn を呼び出すべき', async () => {
+    await loginWithAuth0();
 
-    expect(signIn).toHaveBeenCalledWith('keycloak', {
+    expect(signIn).toHaveBeenCalledWith('auth0', {
       redirectTo: '/dashboard',
     });
   });
 
   it('signIn に正しいリダイレクト先を渡すべき', async () => {
-    await loginWithKeycloak();
+    await loginWithAuth0();
 
     expect(signIn).toHaveBeenCalledTimes(1);
     const callArgs = vi.mocked(signIn).mock.calls[0];

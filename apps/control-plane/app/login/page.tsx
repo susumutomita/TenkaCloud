@@ -1,4 +1,4 @@
-import { loginWithKeycloak } from './actions';
+import { loginWithAuth0 } from './actions';
 
 export default function LoginPage() {
   return (
@@ -13,17 +13,17 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form action={loginWithKeycloak}>
+        <form action={loginWithAuth0}>
           <button
             type="submit"
             className="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
-            Keycloak でログイン
+            Auth0 でログイン
           </button>
         </form>
 
         <p className="text-center text-xs text-gray-500">
-          認証には Keycloak を使用します
+          認証には Auth0 を使用します
         </p>
       </div>
     </div>
