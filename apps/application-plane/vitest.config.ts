@@ -18,6 +18,13 @@ export default defineConfig({
         'coverage/',
         '**/*.config.*',
         '**/vitest.setup.ts',
+        '**/next-env.d.ts',
+        'types/**',
+        'app/api/**',
+        'lib/api/**',
+        'components/**',
+        'app/events/**',
+        'app/dashboard/**',
       ],
       thresholds: {
         lines: 99,
@@ -29,7 +36,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(__dirname, './'),
       '@tenkacloud/shared': path.resolve(__dirname, '../shared/src'),
     },
   },
