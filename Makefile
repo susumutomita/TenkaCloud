@@ -27,14 +27,14 @@ export PATH := $(PROTO_BIN):$(PATH)
 NI ?= $(BUNX) ni
 NR ?= $(BUNX) nr
 NLX ?= $(BUNX) nlx
-FRONTEND_DIR ?= frontend/control-plane
-CONTROL_PLANE_DIR := frontend/control-plane
-ADMIN_APP_DIR := frontend/admin-app
-PARTICIPANT_APP_DIR := frontend/participant-app
-LANDING_SITE_DIR := frontend/landing-site
-FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(ADMIN_APP_DIR) $(PARTICIPANT_APP_DIR) $(LANDING_SITE_DIR)
-BACKEND_SERVICES_DIR := backend/services
-PROBLEM_MANAGEMENT_DIR := $(BACKEND_SERVICES_DIR)/problem-management
+APPS_DIR := apps
+CONTROL_PLANE_DIR := $(APPS_DIR)/control-plane
+APPLICATION_PLANE_DIR := $(APPS_DIR)/application-plane
+LANDING_SITE_DIR := $(APPS_DIR)/landing-site
+FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR) $(LANDING_SITE_DIR)
+PACKAGES_DIR := packages
+CORE_PACKAGE_DIR := $(PACKAGES_DIR)/core
+SHARED_PACKAGE_DIR := $(PACKAGES_DIR)/shared
 
 # ========================================
 # 📦 パッケージ管理
@@ -63,8 +63,6 @@ install_ci:
 		echo "📦 $$app の依存関係をインストール中（CI）..."; \
 		(cd $$app && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1; \
 	done
-	@echo "📦 $(PROBLEM_MANAGEMENT_DIR) の依存関係をインストール中（CI）..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1
 	@echo "✅ すべての依存関係をインストールしました（CI）"
 
 setup_husky:
@@ -112,14 +110,20 @@ else
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📦 $$app をビルド中..."; \
-		(cd $$app && NEXT_TELEMETRY_DISABLED=1 $(NR) build) || exit 1; \
+		(cd $$app && NEXT_TELEMETRY_DISABLED=1 SKIP_AUTH0_VALIDATION=1 AUTH0_CLIENT_ID=dummy-client-id AUTH0_CLIENT_SECRET=dummy-client-secret AUTH0_ISSUER=https://example.com $(NR) build) || exit 1; \
 	done
 	@echo ""
 	@echo "✅ すべてのフロントエンドアプリのビルドが成功しました"
 endif
 
 dev:
-	cd $(FRONTEND_DIR) && $(NR) dev
+	cd $(CONTROL_PLANE_DIR) && $(NR) dev
+
+dev-app:
+	cd $(APPLICATION_PLANE_DIR) && $(NR) dev
+
+dev-landing:
+	cd $(LANDING_SITE_DIR) && $(NR) dev
 
 # ========================================
 # 🧪 テスト
@@ -139,27 +143,18 @@ test_quick:
 		(cd $$app && $(NR) test) || exit 1; \
 	done
 	@echo ""
-	@echo "📦 バックエンドサービス:"
-	@echo ""
-	@echo "🔬 $(PROBLEM_MANAGEMENT_DIR) のテスト..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test) || exit 1
 	@echo ""
 	@echo "✅ すべてのテストが成功しました"
 
 test_coverage:
 	@echo "📊 全アプリのカバレッジテストを実行中..."
 	@echo ""
-	@echo "📦 フロントエンドアプリ:"
+	@echo "📦 アプリ:"
 	@for app in $(FRONTEND_APPS); do \
 		echo ""; \
 		echo "📈 $$app のカバレッジテスト..."; \
 		(cd $$app && $(NR) test:coverage) || exit 1; \
 	done
-	@echo ""
-	@echo "📦 バックエンドサービス:"
-	@echo ""
-	@echo "📈 $(PROBLEM_MANAGEMENT_DIR) のカバレッジテスト..."
-	@(cd $(PROBLEM_MANAGEMENT_DIR) && $(NR) test:coverage) || exit 1
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
 
@@ -275,28 +270,27 @@ start-compose: check-docker
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@docker compose up -d --build
-	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
-	@bash -c 'for i in {1..30}; do \
-		if curl -s -f http://localhost:8080 > /dev/null 2>&1; then \
-			echo "✅ Keycloak が起動しました"; \
+	@echo "⏳ DynamoDB Local の起動を待っています..."
+	@bash -c 'for i in {1..15}; do \
+		if curl -s -f http://localhost:8000 > /dev/null 2>&1; then \
+			echo "✅ DynamoDB Local が起動しました"; \
 			break; \
 		fi; \
-		echo "   試行 $$i/30..."; \
+		echo "   試行 $$i/15..."; \
 		sleep 2; \
 	done'
-	@echo "🔧 Keycloak の自動設定を実行しています..."
-	@cd infrastructure/docker/keycloak && KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin ./scripts/setup-keycloak.sh || true
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "✨ 全サービスの起動が完了しました！"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Landing Site:     http://localhost:3003"
-	@echo "  - Control Plane UI: http://localhost:3000"
-	@echo "  - Admin App:        http://localhost:3001"
-	@echo "  - Participant App:  http://localhost:3002"
-	@echo "  - Keycloak:         http://localhost:8080"
+	@echo "  - Control Plane:      http://localhost:3000"
+	@echo "  - Application Plane:  http://localhost:3001"
+	@echo "  - Landing Site:       http://localhost:3002"
+	@echo "  - DynamoDB Local:     http://localhost:8000"
+	@echo ""
+	@echo "💡 Auth0 認証を使用するには .env.local で環境変数を設定してください"
 	@echo ""
 
 stop-compose:
@@ -342,16 +336,12 @@ k8s-pull-base-images:
 
 k8s-build-all: check-docker check-docker-hub k8s-pull-base-images
 	@echo "🐳 全サービスの Docker イメージをビルドしています..."
-	@echo "📦 Control Plane UI..."
-	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
-	@echo "📦 Tenant Management Service..."
-	@cd backend/services/control-plane/tenant-management && docker build -t tenkacloud/tenant-management:latest .
-	@echo "📦 Admin App..."
-	@docker build -t tenkacloud/admin-app:latest -f frontend/admin-app/Dockerfile .
-	@echo "📦 Participant App..."
-	@docker build -t tenkacloud/participant-app:latest -f frontend/participant-app/Dockerfile .
+	@echo "📦 Control Plane..."
+	@cd $(CONTROL_PLANE_DIR) && docker build -t tenkacloud/control-plane:latest .
+	@echo "📦 Application Plane..."
+	@cd $(APPLICATION_PLANE_DIR) && docker build -t tenkacloud/application-plane:latest .
 	@echo "📦 Landing Site..."
-	@docker build -t tenkacloud/landing-site:latest -f frontend/landing-site/Dockerfile .
+	@cd $(LANDING_SITE_DIR) && docker build -t tenkacloud/landing-site:latest .
 	@echo "✅ 全イメージのビルドが完了しました"
 
 start-k8s: check-k8s k8s-build-all
@@ -369,15 +359,14 @@ start-k8s: check-k8s k8s-build-all
 	@echo "  make k8s-forward      # port-forward を一発起動"
 	@echo ""
 	@echo "💡 または一発で全部やりたい場合:"
-	@echo "  make k8s-start-full   # ビルド+デプロイ+port-forward+Keycloak設定"
+	@echo "  make k8s-start-full   # ビルド+デプロイ+port-forward"
 	@echo ""
 
 k8s-deploy: check-k8s
 	@echo "🚀 Kubernetes にデプロイしています..."
 	@kubectl apply -f infrastructure/k8s/base/namespace.yaml
 	@kubectl apply -f infrastructure/k8s/base/secrets.yaml
-	@kubectl apply -f infrastructure/k8s/base/postgres.yaml
-	@kubectl apply -f infrastructure/k8s/base/keycloak.yaml
+	@kubectl apply -f infrastructure/k8s/base/dynamodb-local.yaml 2>/dev/null || echo "⚠️  dynamodb-local.yaml が見つかりません（スキップ）"
 	@kubectl apply -f infrastructure/k8s/control-plane/tenant-management.yaml
 	@kubectl apply -f infrastructure/k8s/control-plane/control-plane-ui.yaml
 	@kubectl apply -f infrastructure/k8s/application-plane/admin-app.yaml
@@ -392,8 +381,7 @@ k8s-delete:
 	@kubectl delete -f infrastructure/k8s/application-plane/admin-app.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/control-plane/control-plane-ui.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/control-plane/tenant-management.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/base/keycloak.yaml --ignore-not-found
-	@kubectl delete -f infrastructure/k8s/base/postgres.yaml --ignore-not-found
+	@kubectl delete -f infrastructure/k8s/base/dynamodb-local.yaml --ignore-not-found
 	@kubectl delete -f infrastructure/k8s/base/namespace.yaml --ignore-not-found
 	@echo "✅ 削除が完了しました"
 
@@ -408,18 +396,17 @@ k8s-forward: check-k8s
 	@$(MAKE) k8s-forward-stop 2>/dev/null || true
 	@# Pod の準備を待機
 	@echo "⏳ Pod の準備を待っています..."
-	@kubectl wait --for=condition=ready pod -l app=keycloak -n tenkacloud --timeout=120s 2>/dev/null || true
+	@kubectl wait --for=condition=ready pod -l app=dynamodb-local -n tenkacloud --timeout=60s 2>/dev/null || true
 	@kubectl wait --for=condition=ready pod -l app=landing-site -n tenkacloud --timeout=60s 2>/dev/null || true
 	@kubectl wait --for=condition=ready pod -l app=control-plane-ui -n tenkacloud --timeout=60s 2>/dev/null || true
 	@kubectl wait --for=condition=ready pod -l app=admin-app -n tenkacloud --timeout=60s 2>/dev/null || true
 	@kubectl wait --for=condition=ready pod -l app=participant-app -n tenkacloud --timeout=60s 2>/dev/null || true
 	@# port-forward を起動
 	@echo "🚀 Port-forward を起動中..."
-	@kubectl port-forward svc/keycloak 8080:8080 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
-	@kubectl port-forward svc/landing-site 3003:3003 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/dynamodb-local 8000:8000 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
+	@kubectl port-forward svc/landing-site 3002:3002 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
 	@kubectl port-forward svc/control-plane-ui 3000:3000 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
 	@kubectl port-forward svc/admin-app 3001:3001 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
-	@kubectl port-forward svc/participant-app 3002:3002 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
 	@kubectl port-forward svc/tenant-management 3004:3004 -n tenkacloud > /dev/null 2>&1 & echo $$! >> $(K8S_PID_FILE)
 	@sleep 2
 	@echo ""
@@ -428,12 +415,11 @@ k8s-forward: check-k8s
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Landing Site:       http://localhost:3003"
-	@echo "  - Control Plane UI:   http://localhost:3000"
-	@echo "  - Admin App:          http://localhost:3001"
-	@echo "  - Participant App:    http://localhost:3002"
+	@echo "  - Control Plane:      http://localhost:3000"
+	@echo "  - Application Plane:  http://localhost:3001"
+	@echo "  - Landing Site:       http://localhost:3002"
 	@echo "  - Tenant Management:  http://localhost:3004"
-	@echo "  - Keycloak:           http://localhost:8080"
+	@echo "  - DynamoDB Local:     http://localhost:8000"
 	@echo ""
 	@echo "💡 停止するには: make k8s-forward-stop"
 	@echo ""
@@ -454,7 +440,7 @@ k8s-forward-stop:
 
 k8s-start-full: check-k8s k8s-build-all
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "☸️  Kubernetes フルスタート（デプロイ + port-forward + Keycloak セットアップ）"
+	@echo "☸️  Kubernetes フルスタート（デプロイ + port-forward）"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@# デプロイ
@@ -463,31 +449,18 @@ k8s-start-full: check-k8s k8s-build-all
 	@# Port-forward 起動
 	@$(MAKE) k8s-forward
 	@echo ""
-	@# Keycloak セットアップ
-	@echo "🔧 Keycloak の自動設定を実行しています..."
-	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
-	@bash -c 'for i in {1..30}; do \
-		if curl -s -f http://localhost:8080 > /dev/null 2>&1; then \
-			echo "✅ Keycloak が起動しました"; \
-			break; \
-		fi; \
-		echo "   試行 $$i/30..."; \
-		sleep 2; \
-	done'
-	@cd infrastructure/docker/keycloak && KEYCLOAK_ADMIN=admin KEYCLOAK_ADMIN_PASSWORD=admin ./scripts/setup-keycloak.sh || true
-	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "✨ Kubernetes フルスタートが完了しました！"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Landing Site:       http://localhost:3003"
-	@echo "  - Control Plane UI:   http://localhost:3000"
-	@echo "  - Admin App:          http://localhost:3001"
-	@echo "  - Participant App:    http://localhost:3002"
+	@echo "  - Control Plane:      http://localhost:3000"
+	@echo "  - Application Plane:  http://localhost:3001"
+	@echo "  - Landing Site:       http://localhost:3002"
 	@echo "  - Tenant Management:  http://localhost:3004"
-	@echo "  - Keycloak:           http://localhost:8080"
+	@echo "  - DynamoDB Local:     http://localhost:8000"
 	@echo ""
+	@echo "💡 Auth0 認証を使用するには環境変数を設定してください"
 	@echo "💡 停止するには: make stop-k8s"
 	@echo ""
 
@@ -502,29 +475,26 @@ start-infrastructure: check-docker
 	@echo "🚀 TenkaCloud インフラストラクチャを起動します"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "📦 ステップ 1/3: Keycloak を起動しています..."
-	@cd infrastructure/docker/keycloak && docker compose up -d
-	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
-	@bash -c 'for i in {1..30}; do \
-		if curl -s -f http://localhost:8080/health/ready > /dev/null 2>&1; then \
-			echo "✅ Keycloak が起動しました"; \
+	@echo "📦 ステップ 1/2: DynamoDB Local を起動しています..."
+	@docker compose up -d dynamodb-local
+	@echo "⏳ DynamoDB Local の起動を待っています..."
+	@bash -c 'for i in {1..15}; do \
+		if curl -s -f http://localhost:8000 > /dev/null 2>&1; then \
+			echo "✅ DynamoDB Local が起動しました"; \
 			break; \
 		fi; \
-		echo "   試行 $$i/30..."; \
+		echo "   試行 $$i/15..."; \
 		sleep 2; \
 	done'
 	@echo ""
-	@echo "🔧 ステップ 2/3: Keycloak の自動設定を実行しています..."
-	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh || true
-	@echo ""
-	@echo "📝 ステップ 3/3: 環境変数ファイルを確認しています..."
-	@if [ ! -f frontend/control-plane/.env.local ]; then \
+	@echo "📝 ステップ 2/2: 環境変数ファイルを確認しています..."
+	@if [ ! -f $(CONTROL_PLANE_DIR)/.env.local ]; then \
 		echo "⚠️  .env.local が見つかりません。.env.example からコピーしています..."; \
-		cd frontend/control-plane && cp .env.example .env.local; \
+		cd $(CONTROL_PLANE_DIR) && cp .env.example .env.local; \
 		echo ""; \
-		echo "⚠️  重要: frontend/control-plane/.env.local を編集して以下を設定してください:"; \
+		echo "⚠️  重要: $(CONTROL_PLANE_DIR)/.env.local を編集して以下を設定してください:"; \
 		echo "  - AUTH_SECRET (openssl rand -base64 32 で生成)"; \
-		echo "  - AUTH_KEYCLOAK_SECRET (上記の Keycloak セットアップで表示された値)"; \
+		echo "  - AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET / AUTH0_ISSUER"; \
 	else \
 		echo "✅ .env.local が存在します"; \
 	fi
@@ -534,64 +504,64 @@ start-infrastructure: check-docker
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Keycloak:         http://localhost:8080"
+	@echo "  - DynamoDB Local:   http://localhost:8000"
 	@echo ""
 
 stop-infrastructure:
 	@echo "🛑 TenkaCloud インフラストラクチャを停止しています..."
-	@cd infrastructure/docker/keycloak && docker compose down
+	@docker compose down dynamodb-local 2>/dev/null || docker compose stop dynamodb-local
 	@echo "✅ インフラストラクチャを停止しました"
 
 start-control-plane:
-	@echo "🚀 Control Plane UI を起動します..."
-	cd $(FRONTEND_DIR) && $(NR) dev
+	@echo "🚀 Control Plane を起動します..."
+	cd $(CONTROL_PLANE_DIR) && $(NR) dev
 
 stop-control-plane:
 	@echo "🛑 Control Plane UI を停止しています..."
 	@docker compose stop control-plane-ui || true
 	@echo "✅ Control Plane UI を停止しました"
 
-setup-keycloak: check-docker
-	@echo "🚀 Keycloak をセットアップしています..."
-	@cd infrastructure/docker/keycloak && docker compose up -d
-	@echo "⏳ Keycloak の起動を待っています（最大60秒）..."
-	@bash -c 'for i in {1..30}; do \
-		if curl -s -f http://localhost:8080/health/ready > /dev/null 2>&1; then \
-			echo "✅ Keycloak が起動しました"; \
+setup-dynamodb: check-docker
+	@echo "🚀 DynamoDB Local をセットアップしています..."
+	@docker compose up -d dynamodb-local
+	@echo "⏳ DynamoDB Local の起動を待っています..."
+	@bash -c 'for i in {1..15}; do \
+		if curl -s -f http://localhost:8000 > /dev/null 2>&1; then \
+			echo "✅ DynamoDB Local が起動しました"; \
 			break; \
 		fi; \
-		echo "   試行 $$i/30..."; \
+		echo "   試行 $$i/15..."; \
 		sleep 2; \
 	done'
-	@echo "🔧 Keycloak の自動設定を実行しています..."
-	@cd infrastructure/docker/keycloak && ./scripts/setup-keycloak.sh
+	@echo "✅ DynamoDB Local のセットアップが完了しました"
 
 # ========================================
 # 🛠  その他ツール
 # ========================================
 
 docker-build: check-docker
-	@echo "🐳 Control Plane UI の Docker イメージをビルドしています..."
-	@cd frontend/control-plane && docker build -t tenkacloud/control-plane-ui:latest .
+	@echo "🐳 Control Plane の Docker イメージをビルドしています..."
+	@cd $(CONTROL_PLANE_DIR) && docker build -t tenkacloud/control-plane:latest .
 	@echo "✅ Docker イメージのビルドが完了しました"
 	@echo ""
 	@echo "📋 ビルドされたイメージ:"
-	@docker images tenkacloud/control-plane-ui:latest
+	@docker images tenkacloud/control-plane:latest
 	@echo ""
 
 docker-run: docker-build
-	@echo "🚀 Docker Compose で Control Plane UI を起動しています..."
-	@cd frontend/control-plane && docker compose up -d
-	@echo "✅ Control Plane UI が起動しました"
+	@echo "🚀 Docker Compose で全サービスを起動しています..."
+	@docker compose up -d
+	@echo "✅ サービスが起動しました"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Control Plane UI: http://localhost:3000"
-	@echo "  - Keycloak:         http://localhost:8080"
+	@echo "  - Control Plane:      http://localhost:3000"
+	@echo "  - Application Plane:  http://localhost:3001"
+	@echo "  - Landing Site:       http://localhost:3002"
 	@echo ""
 
 docker-stop:
 	@echo "🛑 Docker Compose を停止しています..."
-	@cd frontend/control-plane && docker compose down
+	@docker compose down
 	@echo "✅ 停止しました"
 	@echo ""
 
@@ -630,7 +600,7 @@ help:
 	@echo "  make docker-status    Docker コンテナの起動状態を表示"
 	@echo ""
 	@echo "☸️  Kubernetes（本番相当環境）:"
-	@echo "  make k8s-start-full   ★ビルド+デプロイ+port-forward+Keycloak設定を一発で実行"
+	@echo "  make k8s-start-full   ★ビルド+デプロイ+port-forwardを一発で実行"
 	@echo "  make check-k8s        Kubernetes クラスターの接続確認"
 	@echo "  make check-docker-hub Docker Hub への接続確認（リトライ付き）"
 	@echo "  make k8s-pull-base-images ベースイメージをプリプル（リトライ付き）"
@@ -642,10 +612,10 @@ help:
 	@echo "  make stop-k8s         Kubernetes リソース+port-forward を停止"
 	@echo ""
 	@echo "🏢 インフラストラクチャ管理:"
-	@echo "  make start-infrastructure  インフラ（Keycloak）のみを起動"
+	@echo "  make start-infrastructure  インフラ（DynamoDB Local）のみを起動"
 	@echo "  make start-control-plane   Control Plane UI のみを起動"
 	@echo "  make stop-infrastructure   インフラを停止"
-	@echo "  make setup-keycloak        Keycloak のみセットアップ"
+	@echo "  make setup-dynamodb        DynamoDB Local のみセットアップ"
 	@echo ""
 	@echo "📦 パッケージ管理:"
 	@echo "  make install          ルート + 全フロントエンドアプリの依存を bun でインストール"

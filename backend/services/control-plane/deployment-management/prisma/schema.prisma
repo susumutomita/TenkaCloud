@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["deployment"]
 }
 
 enum DeploymentStatus {
@@ -13,12 +14,16 @@ enum DeploymentStatus {
   SUCCEEDED
   FAILED
   ROLLED_BACK
+
+  @@schema("deployment")
 }
 
 enum DeploymentType {
   CREATE
   UPDATE
   ROLLBACK
+
+  @@schema("deployment")
 }
 
 model Deployment {
@@ -44,6 +49,7 @@ model Deployment {
   @@index([status])
   @@index([createdAt])
   @@map("deployments")
+  @@schema("deployment")
 }
 
 model DeploymentHistory {
@@ -56,4 +62,5 @@ model DeploymentHistory {
   @@index([deploymentId])
   @@index([createdAt])
   @@map("deployment_history")
+  @@schema("deployment")
 }

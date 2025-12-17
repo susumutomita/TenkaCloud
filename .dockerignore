@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/node_modules
+**/.next
+**/coverage
+**/out
+**/dist
+**/.turbo
+**/*.log
+**/.DS_Store
+**/*.tsbuildinfo
+frontend/**

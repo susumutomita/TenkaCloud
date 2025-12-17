@@ -69,20 +69,16 @@ jobs:
       matrix:
         include:
           - name: control-plane
-            context: ./frontend/control-plane
-            dockerfile: ./frontend/control-plane/Dockerfile
+            context: .
+            dockerfile: ./apps/control-plane/Dockerfile
             image: tenkacloud/control-plane-ui:test
-          - name: admin-app
+          - name: application-plane
             context: .
-            dockerfile: ./frontend/admin-app/Dockerfile
-            image: tenkacloud/admin-app:test
-          - name: participant-app
-            context: .
-            dockerfile: ./frontend/participant-app/Dockerfile
-            image: tenkacloud/participant-app:test
+            dockerfile: ./apps/application-plane/Dockerfile
+            image: tenkacloud/application-plane:test
           - name: landing-site
             context: .
-            dockerfile: ./frontend/landing-site/Dockerfile
+            dockerfile: ./apps/landing-site/Dockerfile
             image: tenkacloud/landing-site:test
     steps:
       - name: Check out the code
