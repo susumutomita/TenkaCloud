@@ -38,6 +38,9 @@ export class LocalCloudProvider implements ICloudProvider {
   readonly displayName = 'Local Development';
 
   private deployedStacks: Map<string, LocalStack> = new Map();
+  private usedPorts: Set<number> = new Set();
+  private readonly basePort = 8080;
+  private readonly maxPort = 9000;
 
   /**
    * 認証情報の検証（ローカルでは常に成功）
@@ -163,6 +166,13 @@ export class LocalCloudProvider implements ICloudProvider {
 
       // Docker Compose down を実行
       await this.runDockerCompose('down', stack.composeFile, stackName);
+
+      // 使用していたポートを解放
+      const serviceUrl = stack.outputs.ServiceUrl;
+      const portMatch = serviceUrl?.match(/:(\d+)$/);
+      if (portMatch) {
+        this.releasePort(Number.parseInt(portMatch[1], 10));
+      }
 
       // スタック情報を削除
       this.deployedStacks.delete(stackName);
@@ -311,17 +321,30 @@ export class LocalCloudProvider implements ICloudProvider {
     composeContent: string,
     projectName: string
   ): Promise<void> {
-    // 実際の実装では Docker Compose CLI を実行
+    // TODO: child_process.exec を使用して実際の Docker Compose CLI を実行する
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[Local] Docker Compose ${command} for project ${projectName}`);
     console.log(`[Local] Compose content:`, composeContent);
 
     // シミュレーション: 少し待機
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   private getAvailablePort(): number {
-    // 利用可能なポートを取得（実際の実装ではポートスキャンを行う）
-    return 8080 + this.deployedStacks.size;
+    // 利用可能なポートを探索（使用中のポートをスキップ）
+    for (let port = this.basePort; port < this.maxPort; port++) {
+      if (!this.usedPorts.has(port)) {
+        this.usedPorts.add(port);
+        return port;
+      }
+    }
+    throw new Error(
+      `No available ports in range ${this.basePort}-${this.maxPort}`
+    );
+  }
+
+  private releasePort(port: number): void {
+    this.usedPorts.delete(port);
   }
 }
 
@@ -339,7 +362,10 @@ interface LocalStack {
 }
 
 /**
- * ローカルプロバイダーのシングルトンインスタンスを取得
+ * ローカルプロバイダーの新しいインスタンスを作成
+ *
+ * 注意: このファンクションは呼び出しごとに新しいインスタンスを作成します。
+ * シングルトンパターンが必要な場合は CloudProviderFactory を使用してください。
  */
 export function getLocalProvider(): LocalCloudProvider {
   return new LocalCloudProvider();

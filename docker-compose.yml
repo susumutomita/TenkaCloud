@@ -1,8 +1,8 @@
 services:
   control-plane:
     build:
-      context: ./apps/control-plane
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/control-plane/Dockerfile
     ports:
       - "3000:3000"
     environment:
@@ -12,14 +12,14 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3000
-      - DATABASE_URL=${DATABASE_URL:-dynamodb://localhost:8000}
+      - AWS_ENDPOINT_URL=http://dynamodb-local:8000
     networks:
       - tenkacloud
 
   application-plane:
     build:
-      context: ./apps/application-plane
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/application-plane/Dockerfile
     ports:
       - "3001:3001"
     environment:
@@ -29,17 +29,17 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3001
-      - DATABASE_URL=${DATABASE_URL:-dynamodb://localhost:8000}
+      - AWS_ENDPOINT_URL=http://dynamodb-local:8000
       - AWS_REGION=${AWS_REGION:-ap-northeast-1}
     networks:
       - tenkacloud
 
   landing-site:
     build:
-      context: ./apps/landing-site
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/landing-site/Dockerfile
     ports:
-      - "3002:3002"
+      - "3003:3003"
     environment:
       - NEXT_TELEMETRY_DISABLED=1
     networks:

@@ -24,7 +24,7 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@tenkacloud/shared": ["../shared/src"],
+      "@tenkacloud/shared": ["../../packages/shared/src"],
       "vite": ["../../node_modules/vite"]
     }
   },

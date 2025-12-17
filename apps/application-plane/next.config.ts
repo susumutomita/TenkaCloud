@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['@tenkacloud/shared'],
   },
+  output: 'standalone',
 };
 
 export default nextConfig;

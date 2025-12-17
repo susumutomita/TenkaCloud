@@ -1,14 +1,23 @@
 import NextAuth from 'next-auth';
 import Auth0 from 'next-auth/providers/auth0';
 
+// Auth0 設定のバリデーション
+const auth0Config = {
+  clientId: process.env.AUTH0_CLIENT_ID,
+  clientSecret: process.env.AUTH0_CLIENT_SECRET,
+  issuer: process.env.AUTH0_ISSUER,
+};
+
+/* v8 ignore start -- Module-level validation tested in auth.test.ts */
+if (!auth0Config.clientId || !auth0Config.clientSecret || !auth0Config.issuer) {
+  throw new Error(
+    'Missing required Auth0 environment variables: AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_ISSUER'
+  );
+}
+/* v8 ignore stop */
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Auth0({
-      clientId: process.env.AUTH0_CLIENT_ID,
-      clientSecret: process.env.AUTH0_CLIENT_SECRET,
-      issuer: process.env.AUTH0_ISSUER,
-    }),
-  ],
+  providers: [Auth0(auth0Config)],
   callbacks: {
     async jwt({ token, account, profile }) {
       // アクセストークンとリフレッシュトークンを JWT に保存

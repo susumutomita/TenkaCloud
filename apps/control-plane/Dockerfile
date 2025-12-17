@@ -1,30 +1,37 @@
-# TenkaCloud Control Plane UI - Multi-stage Docker Build
+# TenkaCloud Control Plane UI - multi-stage Docker build using repo root context
 
 # Stage 1: Dependencies
 FROM oven/bun:1.2.20 AS deps
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock ./
+# Copy workspace manifests for deterministic installs
+COPY bun.lock package.json ./
+COPY apps/control-plane/package.json apps/control-plane/
+COPY apps/application-plane/package.json apps/application-plane/
+COPY apps/landing-site/package.json apps/landing-site/
+COPY packages/core/package.json packages/core/
+COPY packages/shared/package.json packages/shared/
 
-# Install dependencies
-RUN bun install
+RUN bun install --frozen-lockfile
 
 # Stage 2: Builder
 FROM oven/bun:1.2.20 AS builder
 WORKDIR /app
 
-# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/bun.lock ./bun.lock
+COPY --from=deps /app/package.json ./package.json
+COPY apps/control-plane ./apps/control-plane
+COPY packages ./packages
 
-# Copy source code
-COPY . .
-
-# Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV SKIP_AUTH0_VALIDATION=1
+ENV AUTH0_CLIENT_ID=dummy-client-id
+ENV AUTH0_CLIENT_SECRET=dummy-client-secret
+ENV AUTH0_ISSUER=https://example.com
 
-# Build Next.js application
+WORKDIR /app/apps/control-plane
 RUN bun run build
 
 # Stage 3: Runner
@@ -39,9 +46,9 @@ RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Copy necessary files from builder
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/apps/control-plane/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/control-plane/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/control-plane/.next/static ./.next/static
 
 # Switch to non-root user
 USER nextjs
@@ -52,6 +59,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Start the application
 # Start the application
 CMD ["bun", "server.js"]

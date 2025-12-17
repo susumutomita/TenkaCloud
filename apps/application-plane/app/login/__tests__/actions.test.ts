@@ -20,15 +20,5 @@ describe('ログインアクション', () => {
         redirectTo: '/battles',
       });
     });
-
-    it('ログイン後に /battles にリダイレクトすべき', async () => {
-      const { loginWithAuth0 } = await import('../actions');
-      await loginWithAuth0();
-
-      expect(mockSignIn).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ redirectTo: '/battles' })
-      );
-    });
   });
 });

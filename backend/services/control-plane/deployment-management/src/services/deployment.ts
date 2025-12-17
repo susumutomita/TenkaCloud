@@ -1,6 +1,5 @@
 import type { DeploymentStatus, DeploymentType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { KubernetesClient } from '../lib/kubernetes';
 import { createK8sClient, type K8sClient } from '../lib/kubernetes-factory';
 import { createLogger } from '../lib/logger';
 

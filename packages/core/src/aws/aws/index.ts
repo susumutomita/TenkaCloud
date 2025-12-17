@@ -411,8 +411,8 @@ export class AWSCloudProvider implements ICloudProvider {
     action: string,
     params?: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
-    // 実際の実装では AWS SDK を使用
-    // ここではモック実装
+    // TODO: @aws-sdk/client-sts を使用した実装に置き換える
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS STS] ${action}`, params);
     return {
       Account: credentials.accountId,
@@ -426,7 +426,8 @@ export class AWSCloudProvider implements ICloudProvider {
     action: string,
     params: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
-    // 実際の実装では AWS SDK を使用
+    // TODO: @aws-sdk/client-cloudformation を使用した実装に置き換える
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS CloudFormation] ${action} in ${region}`, params);
     return {
       StackId: `arn:aws:cloudformation:${region}:${credentials.accountId}:stack/${params.StackName}/xxx`,
@@ -439,6 +440,8 @@ export class AWSCloudProvider implements ICloudProvider {
     action: string,
     params: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
+    // TODO: @aws-sdk/client-s3 を使用した実装に置き換える
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS S3] ${action} in ${region}`, params);
     return {};
   }
@@ -447,6 +450,8 @@ export class AWSCloudProvider implements ICloudProvider {
     credentials: CloudCredentials,
     action: string
   ): Promise<Record<string, unknown>> {
+    // TODO: @aws-sdk/client-iam を使用した実装に置き換える
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS IAM] ${action}`);
     return { AccountAliases: [] };
   }
@@ -470,7 +475,8 @@ export class AWSCloudProvider implements ICloudProvider {
   }
 
   private async loadTemplate(path: string): Promise<string> {
-    // 実際の実装ではファイルシステムまたは S3 からテンプレートを読み込む
+    // TODO: ファイルシステムまたは S3 からテンプレートを読み込む実装に置き換える
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS] Loading template from ${path}`);
     return '{}';
   }
@@ -569,7 +575,8 @@ export class AWSCloudProvider implements ICloudProvider {
   }
 
   private async readFile(path: string): Promise<Buffer> {
-    // 実際の実装ではファイルを読み込む
+    // TODO: fs.readFile を使用した実装に置き換える
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS] Reading file from ${path}`);
     return Buffer.from('');
   }
@@ -578,7 +585,8 @@ export class AWSCloudProvider implements ICloudProvider {
     credentials: CloudCredentials,
     tagFilter: Record<string, string>
   ): Promise<{ StackName: string; StackId: string }[]> {
-    // 実際の実装ではタグでフィルタリングしたスタック一覧を返す
+    // TODO: CloudFormation ListStacks + DescribeStacks でタグフィルタリングを実装
+    // 現在はスタブ実装（開発・テスト用）
     console.log(`[AWS] Listing managed stacks with tags:`, tagFilter);
     return [];
   }
@@ -589,11 +597,21 @@ export class AWSCloudProvider implements ICloudProvider {
   ): boolean {
     if (!options) return true;
 
-    // 除外パターンのチェック
+    // 除外パターンのチェック（ReDoS 対策: 正規表現メタ文字をエスケープ）
     if (options.excludePatterns) {
       for (const pattern of options.excludePatterns) {
-        if (new RegExp(pattern).test(resourceName)) {
-          return false;
+        // 安全なパターンマッチング: ワイルドカード形式のみサポート
+        const safePattern = pattern
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // メタ文字をエスケープ
+          .replace(/\\\*/g, '.*') // * を .* に変換
+          .replace(/\\\?/g, '.'); // ? を . に変換
+        try {
+          if (new RegExp(`^${safePattern}$`).test(resourceName)) {
+            return false;
+          }
+        } catch {
+          // 無効なパターンは無視
+          continue;
         }
       }
     }
@@ -607,7 +625,10 @@ export class AWSCloudProvider implements ICloudProvider {
 }
 
 /**
- * AWS プロバイダーのシングルトンインスタンスを取得
+ * AWS プロバイダーの新しいインスタンスを作成
+ *
+ * 注意: このファンクションは呼び出しごとに新しいインスタンスを作成します。
+ * シングルトンパターンが必要な場合は CloudProviderFactory を使用してください。
  */
 export function getAWSProvider(): AWSCloudProvider {
   return new AWSCloudProvider();

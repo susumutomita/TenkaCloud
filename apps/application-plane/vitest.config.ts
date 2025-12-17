@@ -37,7 +37,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
-      '@tenkacloud/shared': path.resolve(__dirname, '../shared/src'),
+      '@tenkacloud/shared': path.resolve(
+        __dirname,
+        '../../packages/shared/src'
+      ),
     },
   },
 });

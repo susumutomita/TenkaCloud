@@ -13,6 +13,17 @@ export class MockKubernetesClient {
     { image: string; replicas: number; status: string }
   >();
   private services = new Map<string, boolean>();
+  private pendingTimeouts: NodeJS.Timeout[] = [];
+
+  /**
+   * すべての保留中のタイムアウトをクリア（テスト用）
+   */
+  clearPendingTimeouts(): void {
+    for (const timeout of this.pendingTimeouts) {
+      clearTimeout(timeout);
+    }
+    this.pendingTimeouts = [];
+  }
 
   async createNamespace(tenantSlug: string): Promise<string> {
     const namespaceName = `tenant-${tenantSlug}`;
@@ -47,12 +58,18 @@ export class MockKubernetesClient {
     const key = `${namespace}/${serviceName}`;
     this.deployments.set(key, { image, replicas, status: 'Updating' });
     // シミュレート: 更新完了
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       const deployment = this.deployments.get(key);
       if (deployment) {
         deployment.status = 'Running';
       }
+      // タイムアウトリストから削除
+      const index = this.pendingTimeouts.indexOf(timeout);
+      if (index > -1) {
+        this.pendingTimeouts.splice(index, 1);
+      }
     }, 1000);
+    this.pendingTimeouts.push(timeout);
     logger.info(
       { serviceName, namespace, image, replicas },
       '[MOCK] Deployment を更新しました'

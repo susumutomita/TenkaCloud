@@ -32,6 +32,16 @@ describe('Auth0 認証設定', () => {
     process.env.AUTH0_ISSUER = 'https://test.auth0.com';
   });
 
+  it('必須の環境変数が欠けている場合はエラーを投げるべき', async () => {
+    process.env.AUTH0_CLIENT_ID = '';
+    process.env.AUTH0_CLIENT_SECRET = '';
+    process.env.AUTH0_ISSUER = '';
+
+    await expect(import('../auth')).rejects.toThrow(
+      'Missing required Auth0 environment variables'
+    );
+  });
+
   it('handlers, signIn, signOut, auth がエクスポートされるべき', async () => {
     const auth = await import('../auth');
     expect(auth.handlers).toBeDefined();
