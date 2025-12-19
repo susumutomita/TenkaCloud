@@ -1,8 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createLogger } from './lib/logger';
-import { prisma } from './lib/prisma';
+import { initDynamoDB } from '@tenkacloud/dynamodb';
 import usersApp from './api/users';
+
+// Initialize DynamoDB
+initDynamoDB({
+  tableName: process.env.DYNAMODB_TABLE_NAME ?? 'TenkaCloud-dev',
+  endpoint: process.env.DYNAMODB_ENDPOINT,
+});
 
 const app = new Hono();
 const appLogger = createLogger('user-management-api');
@@ -44,17 +50,9 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Graceful shutdown handlers
-async function gracefulShutdown(signal: string) {
-  appLogger.info({ signal }, 'Received shutdown signal, closing connections');
-
-  try {
-    await prisma.$disconnect();
-    appLogger.info('Database connections closed');
-    process.exit(0);
-  } catch (error) {
-    appLogger.error({ error }, 'Error during graceful shutdown');
-    process.exit(1);
-  }
+function gracefulShutdown(signal: string) {
+  appLogger.info({ signal }, 'Received shutdown signal');
+  process.exit(0);
 }
 
 // Only register shutdown handlers when not in test environment

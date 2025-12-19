@@ -1,23 +1,25 @@
-import { prisma } from '../lib/prisma';
+import { TenantRepository, type Tenant } from '@tenkacloud/dynamodb';
 import { createLogger } from '../lib/logger';
 import { Auth0Provisioner } from './auth0';
 import { KubernetesProvisioner } from './kubernetes';
-import type { Tenant } from '@prisma/client';
 
 const logger = createLogger('provisioning-manager');
 
 export interface ProvisioningManagerDeps {
   auth0Provisioner?: Auth0Provisioner;
   k8sProvisioner?: KubernetesProvisioner;
+  tenantRepository?: TenantRepository;
 }
 
 export class ProvisioningManager {
   private auth0Provisioner: Auth0Provisioner;
   private k8sProvisioner: KubernetesProvisioner | null;
+  private tenantRepository: TenantRepository;
 
   constructor(deps?: ProvisioningManagerDeps) {
     this.auth0Provisioner = deps?.auth0Provisioner ?? new Auth0Provisioner();
     this.k8sProvisioner = deps?.k8sProvisioner ?? this.createK8sProvisioner();
+    this.tenantRepository = deps?.tenantRepository ?? new TenantRepository();
   }
 
   private createK8sProvisioner(): KubernetesProvisioner | null {
@@ -43,10 +45,10 @@ export class ProvisioningManager {
     );
 
     try {
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { provisioningStatus: 'IN_PROGRESS' },
-      });
+      await this.tenantRepository.updateProvisioningStatus(
+        tenant.id,
+        'IN_PROGRESS'
+      );
 
       logger.info('Auth0 Organization をプロビジョニング中...');
       const auth0Result = await this.auth0Provisioner.createTenantOrganization(
@@ -73,12 +75,10 @@ export class ProvisioningManager {
         );
       }
 
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: {
-          provisioningStatus: 'COMPLETED',
-          status: 'ACTIVE',
-        },
+      await this.tenantRepository.update(tenant.id, {
+        provisioningStatus: 'COMPLETED',
+        status: 'ACTIVE',
+        auth0OrgId: auth0Result.organizationId,
       });
 
       logger.info(
@@ -91,10 +91,7 @@ export class ProvisioningManager {
         'プロビジョニングに失敗しました'
       );
 
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { provisioningStatus: 'FAILED' },
-      });
+      await this.tenantRepository.updateProvisioningStatus(tenant.id, 'FAILED');
 
       throw error;
     }

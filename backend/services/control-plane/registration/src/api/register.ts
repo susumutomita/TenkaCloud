@@ -1,9 +1,20 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
+import {
+  initDynamoDB,
+  TenantRepository,
+  type ProvisioningStatus,
+} from '@tenkacloud/dynamodb';
 import { RegistrationService } from '../services/registration';
 import { createLogger } from '../lib/logger';
-import { prisma } from '../lib/prisma';
+
+// Initialize DynamoDB
+initDynamoDB({
+  tableName: process.env.DYNAMODB_TABLE_NAME ?? 'TenkaCloud-dev',
+  endpoint: process.env.DYNAMODB_ENDPOINT,
+});
+
+const tenantRepository = new TenantRepository();
 
 const logger = createLogger('register-api');
 
@@ -23,7 +34,11 @@ const registerSchema = z.object({
   tier: z.enum(['FREE', 'PRO', 'ENTERPRISE']).default('FREE'),
 });
 
-const uuidSchema = z.string().uuid('無効なID形式です');
+// ULID format: 26 characters, uppercase alphanumeric
+const idSchema = z
+  .string()
+  .length(26, '無効なID形式です')
+  .regex(/^[0-9A-Z]+$/, '無効なID形式です');
 
 // Error response helper
 function errorResponse(message: string, status: number, details?: unknown) {
@@ -58,10 +73,7 @@ registerApp.post('/', async (c) => {
     }
 
     // Check for duplicate email/slug constraint violation
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+    if (error instanceof Error && error.message.includes('既に存在します')) {
       return c.json(
         errorResponse('このメールアドレスは既に登録されています', 409),
         409
@@ -77,26 +89,17 @@ registerApp.post('/', async (c) => {
 registerApp.get('/:tenantId/status', async (c) => {
   const tenantId = c.req.param('tenantId');
 
-  // Validate UUID
-  const uuidValidation = uuidSchema.safeParse(tenantId);
-  if (!uuidValidation.success) {
+  // Validate ID format (ULID)
+  const idValidation = idSchema.safeParse(tenantId);
+  if (!idValidation.success) {
     return c.json(
-      errorResponse('無効なテナントIDです', 400, uuidValidation.error.errors),
+      errorResponse('無効なテナントIDです', 400, idValidation.error.errors),
       400
     );
   }
 
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: uuidValidation.data },
-      select: {
-        id: true,
-        name: true,
-        provisioningStatus: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const tenant = await tenantRepository.findById(idValidation.data);
 
     if (!tenant) {
       return c.json(errorResponse('テナントが見つかりません', 404), 404);
@@ -106,11 +109,9 @@ registerApp.get('/:tenantId/status', async (c) => {
       tenantId: tenant.id,
       organizationName: tenant.name,
       provisioningStatus: tenant.provisioningStatus,
-      createdAt: tenant.createdAt.toISOString(),
+      createdAt: tenant.createdAt,
       completedAt:
-        tenant.provisioningStatus === 'COMPLETED'
-          ? tenant.updatedAt.toISOString()
-          : null,
+        tenant.provisioningStatus === 'COMPLETED' ? tenant.updatedAt : null,
     });
   } catch (error) {
     logger.error({ error, tenantId }, 'ステータス取得中にエラーが発生しました');

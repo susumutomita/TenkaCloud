@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import type { Tenant } from '@prisma/client';
+import type { Tenant } from '@tenkacloud/dynamodb';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('notification-service');

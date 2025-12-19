@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bunx prisma generate && bun run --watch src/index.ts",
+    "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
     "start": "bun run dist/index.js",
     "test": "vitest run",
@@ -13,9 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.817.0",
+    "@aws-sdk/lib-dynamodb": "^3.817.0",
     "@hono/node-server": "^1.13.7",
-    "@keycloak/keycloak-admin-client": "^26.4.6",
-    "@prisma/client": "^6.0.0",
+    "@tenkacloud/dynamodb": "workspace:*",
     "hono": "^4.6.12",
     "jose": "^6.1.2",
     "pino": "^10.1.0",
@@ -26,7 +27,6 @@
     "@types/node": "^20.11.0",
     "@vitest/coverage-v8": "2.1.9",
     "eslint": "^9.0.0",
-    "prisma": "^6.0.0",
     "typescript": "^5.0.0",
     "vitest": "^2.1.0"
   }

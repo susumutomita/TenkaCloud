@@ -13,9 +13,10 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.test.ts',
         'vitest.config.ts',
-        'src/lib/prisma.ts',
-        'src/lib/keycloak.ts',
+        'src/lib/auth0.ts',
         'src/lib/logger.ts',
+        'src/lib/keycloak.ts', // TODO: Delete after migration complete
+        'src/lib/prisma.ts', // TODO: Delete after migration complete
         'src/index.ts',
       ],
       thresholds: {
