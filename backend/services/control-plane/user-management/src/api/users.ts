@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 import { UserService } from '../services/user';
 import { createLogger } from '../lib/logger';
 
@@ -8,6 +7,12 @@ const logger = createLogger('users-api');
 const userService = new UserService();
 
 const app = new Hono();
+
+// ULID format: 26 characters, uppercase alphanumeric
+const idSchema = z
+  .string()
+  .length(26, '無効なID形式です')
+  .regex(/^[0-9A-Z]+$/, '無効なID形式です');
 
 // Schemas
 const createUserSchema = z.object({
@@ -20,14 +25,12 @@ const listUsersSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING']).optional(),
   role: z.enum(['TENANT_ADMIN', 'PARTICIPANT']).optional(),
   limit: z.coerce.number().min(1).max(100).optional(),
-  offset: z.coerce.number().min(0).optional(),
+  lastKey: z.string().optional(),
 });
 
 const updateRoleSchema = z.object({
   role: z.enum(['TENANT_ADMIN', 'PARTICIPANT']),
 });
-
-const uuidSchema = z.string().uuid('無効なID形式です');
 
 // Helper to extract tenant context (from auth middleware in production)
 function getTenantContext(c: any): { tenantId: string; tenantSlug: string } {
@@ -81,13 +84,11 @@ app.post('/', async (c) => {
       201
     );
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        return c.json(
-          { error: 'このメールアドレスは既に登録されています' },
-          409
-        );
-      }
+    if (
+      error instanceof Error &&
+      (error as Error & { code?: string }).code === 'EMAIL_DUPLICATE'
+    ) {
+      return c.json({ error: 'このメールアドレスは既に登録されています' }, 409);
     }
     logger.error({ error }, 'ユーザー作成に失敗しました');
     return c.json({ error: 'ユーザー作成に失敗しました' }, 500);
@@ -115,9 +116,22 @@ app.get('/', async (c) => {
       return c.json({ error: 'テナント情報が必要です' }, 400);
     }
 
+    // Parse lastKey if provided
+    let lastKey: Record<string, unknown> | undefined;
+    if (validation.data.lastKey) {
+      try {
+        lastKey = JSON.parse(validation.data.lastKey);
+      } catch {
+        return c.json({ error: '無効なlastKey形式です' }, 400);
+      }
+    }
+
     const result = await userService.listUsers({
       tenantId,
-      ...validation.data,
+      status: validation.data.status,
+      role: validation.data.role,
+      limit: validation.data.limit,
+      lastKey,
     });
 
     return c.json({
@@ -130,8 +144,11 @@ app.get('/', async (c) => {
         createdAt: user.createdAt,
       })),
       total: result.total,
-      limit: validation.data.limit ?? 50,
-      offset: validation.data.offset ?? 0,
+      pagination: {
+        limit: validation.data.limit ?? 50,
+        hasNextPage: !!result.lastKey,
+        lastKey: result.lastKey,
+      },
     });
   } catch (error) {
     logger.error({ error }, 'ユーザー一覧取得に失敗しました');
@@ -143,7 +160,7 @@ app.get('/', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const userId = c.req.param('id');
-    const idValidation = uuidSchema.safeParse(userId);
+    const idValidation = idSchema.safeParse(userId);
 
     if (!idValidation.success) {
       return c.json({ error: '無効なユーザーID形式です' }, 400);
@@ -179,7 +196,7 @@ app.get('/:id', async (c) => {
 app.patch('/:id/role', async (c) => {
   try {
     const userId = c.req.param('id');
-    const idValidation = uuidSchema.safeParse(userId);
+    const idValidation = idSchema.safeParse(userId);
 
     if (!idValidation.success) {
       return c.json({ error: '無効なユーザーID形式です' }, 400);
@@ -230,7 +247,7 @@ app.patch('/:id/role', async (c) => {
 app.post('/:id/password-reset', async (c) => {
   try {
     const userId = c.req.param('id');
-    const idValidation = uuidSchema.safeParse(userId);
+    const idValidation = idSchema.safeParse(userId);
 
     if (!idValidation.success) {
       return c.json({ error: '無効なユーザーID形式です' }, 400);
@@ -257,7 +274,7 @@ app.post('/:id/password-reset', async (c) => {
       if (error.message === 'ユーザーが見つかりません') {
         return c.json({ error: 'ユーザーが見つかりません' }, 404);
       }
-      if (error.message === 'Keycloakユーザーが紐付けられていません') {
+      if (error.message === 'Auth0ユーザーが紐付けられていません') {
         return c.json({ error: error.message }, 400);
       }
     }
@@ -270,7 +287,7 @@ app.post('/:id/password-reset', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const userId = c.req.param('id');
-    const idValidation = uuidSchema.safeParse(userId);
+    const idValidation = idSchema.safeParse(userId);
 
     if (!idValidation.success) {
       return c.json({ error: '無効なユーザーID形式です' }, 400);

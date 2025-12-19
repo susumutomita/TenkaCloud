@@ -1,16 +1,29 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import { prisma } from './lib/prisma';
-import { Prisma } from '@prisma/client';
+import {
+  initDynamoDB,
+  TenantRepository,
+  type TenantStatus,
+  type TenantTier,
+  type IsolationModel,
+  type ComputeType,
+} from '@tenkacloud/dynamodb';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { createLogger } from './lib/logger';
 import { authMiddleware, requireRoles, UserRole } from './middleware/auth';
 import { auditMiddleware } from './middleware/audit';
 
+// Initialize DynamoDB
+initDynamoDB({
+  tableName: process.env.DYNAMODB_TABLE_NAME ?? 'TenkaCloud-dev',
+  endpoint: process.env.DYNAMODB_ENDPOINT,
+});
+
+const tenantRepository = new TenantRepository();
+
 const app = new Hono();
 const appLogger = createLogger('tenant-api');
-
-import signupApp from './api/signup';
 
 // CORS configuration - strict origin control
 app.use(
@@ -38,8 +51,11 @@ app.use(
   requireRoles(UserRole.PLATFORM_ADMIN, UserRole.TENANT_ADMIN)
 );
 
-// Validation schemas
-const uuidSchema = z.string().uuid('Invalid UUID format');
+// ULID format: 26 characters, uppercase alphanumeric
+const idSchema = z
+  .string()
+  .length(26, 'Invalid ID format')
+  .regex(/^[0-9A-Z]+$/, 'Invalid ID format');
 
 const createTenantSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
@@ -49,17 +65,28 @@ const createTenantSchema = z.object({
     .max(63)
     .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric and hyphens'),
   adminEmail: z.string().email('Invalid email format'),
-  tier: z.enum(['FREE', 'PRO', 'ENTERPRISE']).default('FREE'),
-  status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).default('ACTIVE'),
+  tier: z
+    .enum(['FREE', 'PRO', 'ENTERPRISE'] as const)
+    .default('FREE') as z.ZodType<TenantTier>,
+  status: z
+    .enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED'] as const)
+    .default('ACTIVE') as z.ZodType<TenantStatus>,
   region: z.string().default('ap-northeast-1'),
-  isolationModel: z.enum(['POOL', 'SILO']).default('POOL'),
-  computeType: z.enum(['KUBERNETES', 'SERVERLESS']).default('SERVERLESS'),
+  isolationModel: z
+    .enum(['POOL', 'SILO'] as const)
+    .default('POOL') as z.ZodType<IsolationModel>,
+  computeType: z
+    .enum(['KUBERNETES', 'SERVERLESS'] as const)
+    .default('SERVERLESS') as z.ZodType<ComputeType>,
 });
 
-const updateTenantSchema = createTenantSchema.partial();
+const updateTenantSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED'] as const).optional(),
+  tier: z.enum(['FREE', 'PRO', 'ENTERPRISE'] as const).optional(),
+});
 
 // Pagination constants - DoS protection
-const MAX_PAGE = 10000; // Maximum page number to prevent excessive database queries
 const MAX_LIMIT = 100; // Maximum items per page
 
 // Error response helper
@@ -77,56 +104,39 @@ app.get('/health', (c) => {
   return c.json({ status: 'ok', service: 'tenant-management' });
 });
 
-// Public routes
-app.route('/api/signup', signupApp);
-
 // List all tenants with pagination
 app.get('/api/tenants', async (c) => {
   try {
-    // Parse and validate pagination parameters
-    const pageParam = parseInt(c.req.query('page') || '1', 10);
     const limitParam = parseInt(c.req.query('limit') || '50', 10);
-
-    // Ensure valid values with DoS protection
-    const page = Math.min(
-      MAX_PAGE,
-      Math.max(1, isNaN(pageParam) ? 1 : pageParam)
-    );
     const limit = Math.min(
       MAX_LIMIT,
       Math.max(1, isNaN(limitParam) ? 50 : limitParam)
     );
-    const skip = (page - 1) * limit;
 
-    // Parallel execution for better performance
-    const [total, tenants] = await Promise.all([
-      prisma.tenant.count(),
-      prisma.tenant.findMany({
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-      }),
+    // Get lastKey from query if provided
+    const lastKeyParam = c.req.query('lastKey');
+    const lastKey = lastKeyParam ? JSON.parse(lastKeyParam) : undefined;
+
+    const [countResult, listResult] = await Promise.all([
+      tenantRepository.count(),
+      tenantRepository.list({ limit, lastKey }),
     ]);
 
-    // Calculate pagination metadata
-    const totalPages = Math.ceil(total / limit);
-    const hasNextPage = page < totalPages;
-    const hasPreviousPage = page > 1;
+    const total = countResult;
+    const tenants = listResult.tenants;
 
     appLogger.info(
-      { page, limit, total, tenantsCount: tenants.length },
+      { limit, total, tenantsCount: tenants.length },
       'Fetched tenants'
     );
 
     return c.json({
       data: tenants,
       pagination: {
-        page,
         limit,
         total,
-        totalPages,
-        hasNextPage,
-        hasPreviousPage,
+        hasNextPage: !!listResult.lastKey,
+        lastKey: listResult.lastKey,
       },
     });
   } catch (error) {
@@ -139,19 +149,17 @@ app.get('/api/tenants', async (c) => {
 app.get('/api/tenants/:id', async (c) => {
   const id = c.req.param('id');
 
-  // Validate UUID
-  const uuidValidation = uuidSchema.safeParse(id);
-  if (!uuidValidation.success) {
+  // Validate ULID
+  const idValidation = idSchema.safeParse(id);
+  if (!idValidation.success) {
     return c.json(
-      errorResponse('Invalid tenant ID', 400, uuidValidation.error.errors),
+      errorResponse('Invalid tenant ID', 400, idValidation.error.errors),
       400
     );
   }
 
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: uuidValidation.data },
-    });
+    const tenant = await tenantRepository.findById(idValidation.data);
 
     if (!tenant) {
       return c.json(errorResponse('Tenant not found', 404), 404);
@@ -170,24 +178,29 @@ app.post('/api/tenants', async (c) => {
     const body = await c.req.json();
     const validated = createTenantSchema.parse(body);
 
-    const tenant = await prisma.tenant.create({
-      data: validated,
+    // Check if slug already exists
+    const existingTenant = await tenantRepository.findBySlug(validated.slug);
+    if (existingTenant) {
+      return c.json(
+        errorResponse('Tenant with this slug already exists', 409),
+        409
+      );
+    }
+
+    const tenant = await tenantRepository.create({
+      name: validated.name,
+      slug: validated.slug,
+      adminEmail: validated.adminEmail,
+      tier: validated.tier,
+      region: validated.region,
+      isolationModel: validated.isolationModel,
+      computeType: validated.computeType,
     });
 
     return c.json(tenant, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return c.json(errorResponse('Validation error', 400, error.errors), 400);
-    }
-
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      return c.json(
-        errorResponse('Tenant with this email already exists', 409),
-        409
-      );
     }
 
     appLogger.error({ error }, 'Failed to create tenant');
@@ -199,11 +212,11 @@ app.post('/api/tenants', async (c) => {
 app.patch('/api/tenants/:id', async (c) => {
   const id = c.req.param('id');
 
-  // Validate UUID
-  const uuidValidation = uuidSchema.safeParse(id);
-  if (!uuidValidation.success) {
+  // Validate ULID
+  const idValidation = idSchema.safeParse(id);
+  if (!idValidation.success) {
     return c.json(
-      errorResponse('Invalid tenant ID', 400, uuidValidation.error.errors),
+      errorResponse('Invalid tenant ID', 400, idValidation.error.errors),
       400
     );
   }
@@ -212,10 +225,7 @@ app.patch('/api/tenants/:id', async (c) => {
     const body = await c.req.json();
     const validated = updateTenantSchema.parse(body);
 
-    const tenant = await prisma.tenant.update({
-      where: { id: uuidValidation.data },
-      data: validated,
-    });
+    const tenant = await tenantRepository.update(idValidation.data, validated);
 
     return c.json(tenant);
   } catch (error) {
@@ -223,21 +233,9 @@ app.patch('/api/tenants/:id', async (c) => {
       return c.json(errorResponse('Validation error', 400, error.errors), 400);
     }
 
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2025'
-    ) {
+    // ConditionalCheckFailedException means item doesn't exist
+    if (error instanceof ConditionalCheckFailedException) {
       return c.json(errorResponse('Tenant not found', 404), 404);
-    }
-
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      return c.json(
-        errorResponse('Tenant with this email already exists', 409),
-        409
-      );
     }
 
     appLogger.error({ error, tenantId: id }, 'Failed to update tenant');
@@ -249,29 +247,26 @@ app.patch('/api/tenants/:id', async (c) => {
 app.delete('/api/tenants/:id', async (c) => {
   const id = c.req.param('id');
 
-  // Validate UUID
-  const uuidValidation = uuidSchema.safeParse(id);
-  if (!uuidValidation.success) {
+  // Validate ULID
+  const idValidation = idSchema.safeParse(id);
+  if (!idValidation.success) {
     return c.json(
-      errorResponse('Invalid tenant ID', 400, uuidValidation.error.errors),
+      errorResponse('Invalid tenant ID', 400, idValidation.error.errors),
       400
     );
   }
 
   try {
-    await prisma.tenant.delete({
-      where: { id: uuidValidation.data },
-    });
-
-    return c.json({ success: true, message: 'Tenant deleted successfully' });
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2025'
-    ) {
+    // First check if tenant exists
+    const tenant = await tenantRepository.findById(idValidation.data);
+    if (!tenant) {
       return c.json(errorResponse('Tenant not found', 404), 404);
     }
 
+    await tenantRepository.delete(idValidation.data);
+
+    return c.json({ success: true, message: 'Tenant deleted successfully' });
+  } catch (error) {
     appLogger.error({ error, tenantId: id }, 'Failed to delete tenant');
     return c.json(errorResponse('Failed to delete tenant', 500), 500);
   }
@@ -285,17 +280,9 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Graceful shutdown handlers
-async function gracefulShutdown(signal: string) {
-  appLogger.info({ signal }, 'Received shutdown signal, closing connections');
-
-  try {
-    await prisma.$disconnect();
-    appLogger.info('Database connections closed');
-    process.exit(0);
-  } catch (error) {
-    appLogger.error({ error }, 'Error during graceful shutdown');
-    process.exit(1);
-  }
+function gracefulShutdown(signal: string) {
+  appLogger.info({ signal }, 'Received shutdown signal');
+  process.exit(0);
 }
 
 // Only register shutdown handlers when not in test environment

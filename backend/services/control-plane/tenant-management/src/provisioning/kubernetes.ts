@@ -3,6 +3,9 @@ import {
   CoreV1Api,
   AppsV1Api,
   NetworkingV1Api,
+  V1Namespace,
+  V1Deployment,
+  V1Service,
 } from '@kubernetes/client-node';
 import { createLogger } from '../lib/logger';
 
@@ -23,19 +26,22 @@ export class KubernetesProvisioner {
 
   async createNamespace(tenantSlug: string) {
     const namespaceName = `tenant-${tenantSlug}`;
-    try {
-      await this.k8sApi.createNamespace({
-        metadata: {
-          name: namespaceName,
-          labels: {
-            'tenkacloud.io/tenant': tenantSlug,
-            'tenkacloud.io/managed-by': 'control-plane',
-          },
+    const namespace: V1Namespace = {
+      metadata: {
+        name: namespaceName,
+        labels: {
+          'tenkacloud.io/tenant': tenantSlug,
+          'tenkacloud.io/managed-by': 'control-plane',
         },
-      });
+      },
+    };
+
+    try {
+      await this.k8sApi.createNamespace({ body: namespace });
       logger.info({ namespace: namespaceName }, 'Namespace created');
-    } catch (error: any) {
-      if (error.response && error.response.statusCode === 409) {
+    } catch (error: unknown) {
+      const err = error as { response?: { statusCode?: number } };
+      if (err.response?.statusCode === 409) {
         logger.info({ namespace: namespaceName }, 'Namespace already exists');
       } else {
         logger.error(
@@ -50,50 +56,54 @@ export class KubernetesProvisioner {
 
   async deployParticipantApp(tenantSlug: string, namespace: string) {
     const appName = `app-${tenantSlug}`;
-    const image = 'tenkacloud/participant-app:latest'; // In real world, this would be dynamic
+    const image =
+      process.env.PARTICIPANT_APP_IMAGE || 'tenkacloud/participant-app:v1.0.0';
 
-    try {
-      // Deployment
-      await this.k8sAppsApi.createNamespacedDeployment(namespace, {
-        metadata: { name: appName },
-        spec: {
-          replicas: 1,
-          selector: { matchLabels: { app: appName } },
-          template: {
-            metadata: { labels: { app: appName } },
-            spec: {
-              containers: [
-                {
-                  name: 'app',
-                  image: image,
-                  ports: [{ containerPort: 3000 }],
-                  env: [
-                    { name: 'TENANT_ID', value: tenantSlug },
-                    // Add DB connection info here
-                  ],
-                },
-              ],
-            },
+    const deployment: V1Deployment = {
+      metadata: { name: appName },
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { app: appName } },
+        template: {
+          metadata: { labels: { app: appName } },
+          spec: {
+            containers: [
+              {
+                name: 'app',
+                image: image,
+                ports: [{ containerPort: 3000 }],
+                env: [{ name: 'TENANT_ID', value: tenantSlug }],
+              },
+            ],
           },
         },
+      },
+    };
+
+    const service: V1Service = {
+      metadata: { name: appName },
+      spec: {
+        selector: { app: appName },
+        ports: [{ port: 80, targetPort: 3000 }],
+        type: 'ClusterIP',
+      },
+    };
+
+    try {
+      await this.k8sAppsApi.createNamespacedDeployment({
+        namespace,
+        body: deployment,
       });
 
-      // Service
-      await this.k8sApi.createNamespacedService(namespace, {
-        metadata: { name: appName },
-        spec: {
-          selector: { app: appName },
-          ports: [{ port: 80, targetPort: 3000 }],
-          type: 'ClusterIP',
-        },
+      await this.k8sApi.createNamespacedService({
+        namespace,
+        body: service,
       });
-
-      // Ingress (Optional for now, assuming we use port-forward or similar for local)
-      // For local development with kind/minikube, we might need NodePort or Ingress Controller
 
       logger.info({ appName, namespace }, 'Participant app deployed');
-    } catch (error: any) {
-      if (error.response && error.response.statusCode === 409) {
+    } catch (error: unknown) {
+      const err = error as { response?: { statusCode?: number } };
+      if (err.response?.statusCode === 409) {
         logger.info({ appName, namespace }, 'Deployment already exists');
       } else {
         logger.error(

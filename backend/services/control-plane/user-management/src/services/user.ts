@@ -1,14 +1,22 @@
-import type { User, UserRole, UserStatus } from '@prisma/client';
-import { prisma } from '../lib/prisma';
+import {
+  UserRepository,
+  TenantRepository,
+  type User,
+  type UserRole,
+  type UserStatus,
+} from '@tenkacloud/dynamodb';
 import { createLogger } from '../lib/logger';
 import {
-  createKeycloakUser,
-  resetKeycloakPassword,
-  disableKeycloakUser,
-  deleteKeycloakUser,
-} from '../lib/keycloak';
+  createAuth0User,
+  resetAuth0Password,
+  disableAuth0User,
+  deleteAuth0User,
+} from '../lib/auth0';
 
 const logger = createLogger('user-service');
+
+const userRepository = new UserRepository();
+const tenantRepository = new TenantRepository();
 
 /**
  * テナントの slug を検証し、tenantId に対応する正しい slug を返す
@@ -18,16 +26,12 @@ async function validateAndGetTenantSlug(
   tenantId: string,
   providedSlug: string
 ): Promise<string> {
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { slug: true },
-  });
+  const tenant = await tenantRepository.findById(tenantId);
 
   if (!tenant) {
     throw new Error('テナントが見つかりません');
   }
 
-  // 提供された slug が実際の slug と一致することを検証
   if (tenant.slug !== providedSlug) {
     logger.warn(
       { tenantId, providedSlug, actualSlug: tenant.slug },
@@ -57,12 +61,13 @@ export interface ListUsersInput {
   status?: UserStatus;
   role?: UserRole;
   limit?: number;
-  offset?: number;
+  lastKey?: Record<string, unknown>;
 }
 
 export interface ListUsersResult {
   users: User[];
   total: number;
+  lastKey?: Record<string, unknown>;
 }
 
 export class UserService {
@@ -72,44 +77,49 @@ export class UserService {
       'ユーザー作成を開始します'
     );
 
-    // tenantSlug の検証（クロステナント攻撃の防止）
     const validatedSlug = await validateAndGetTenantSlug(
       input.tenantId,
       input.tenantSlug
     );
 
-    // Create user in Keycloak
-    const keycloakResult = await createKeycloakUser(
-      validatedSlug,
-      input.email,
-      input.name
+    // Check if email already exists for this tenant
+    const existingUser = await userRepository.findByTenantAndEmail(
+      input.tenantId,
+      input.email
     );
+    if (existingUser) {
+      const error = new Error('このメールアドレスは既に登録されています');
+      (error as Error & { code: string }).code = 'EMAIL_DUPLICATE';
+      throw error;
+    }
 
-    // Create user in database with rollback on failure
+    const orgName = `tenant-${validatedSlug}`;
+    const auth0Result = await createAuth0User(orgName, input.email, input.name);
+
     let user: User;
     try {
-      user = await prisma.user.create({
-        data: {
-          tenantId: input.tenantId,
-          email: input.email,
-          name: input.name,
-          role: input.role ?? 'PARTICIPANT',
-          status: 'PENDING',
-          keycloakId: keycloakResult.keycloakId,
-        },
+      user = await userRepository.create({
+        tenantId: input.tenantId,
+        email: input.email,
+        name: input.name,
+        role: input.role ?? 'PARTICIPANT',
+      });
+
+      // Update user with Auth0 ID
+      user = await userRepository.update(user.id, {
+        auth0Id: auth0Result.auth0Id,
       });
     } catch (error) {
-      // DB 作成失敗時は Keycloak ユーザーを削除してロールバック
       logger.error(
-        { keycloakId: keycloakResult.keycloakId, error },
-        'DB ユーザー作成失敗、Keycloak ユーザーをロールバックします'
+        { auth0Id: auth0Result.auth0Id, error },
+        'DB ユーザー作成失敗、Auth0 ユーザーをロールバックします'
       );
       try {
-        await deleteKeycloakUser(validatedSlug, keycloakResult.keycloakId);
+        await deleteAuth0User(orgName, auth0Result.auth0Id);
       } catch (rollbackError) {
         logger.error(
-          { keycloakId: keycloakResult.keycloakId, rollbackError },
-          'Keycloak ロールバック失敗'
+          { auth0Id: auth0Result.auth0Id, rollbackError },
+          'Auth0 ロールバック失敗'
         );
       }
       throw error;
@@ -119,34 +129,35 @@ export class UserService {
 
     return {
       user,
-      temporaryPassword: keycloakResult.temporaryPassword,
+      temporaryPassword: auth0Result.temporaryPassword,
     };
   }
 
   async listUsers(input: ListUsersInput): Promise<ListUsersResult> {
-    const where = {
-      tenantId: input.tenantId,
-      ...(input.status && { status: input.status }),
-      ...(input.role && { role: input.role }),
-    };
-
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        take: input.limit ?? 50,
-        skip: input.offset ?? 0,
-        orderBy: { createdAt: 'desc' },
+    const [listResult, total] = await Promise.all([
+      userRepository.listByTenant(input.tenantId, {
+        status: input.status,
+        role: input.role,
+        limit: input.limit ?? 50,
+        lastKey: input.lastKey,
       }),
-      prisma.user.count({ where }),
+      userRepository.countByTenant(input.tenantId),
     ]);
 
-    return { users, total };
+    return {
+      users: listResult.users,
+      total,
+      lastKey: listResult.lastKey,
+    };
   }
 
   async getUserById(tenantId: string, userId: string): Promise<User | null> {
-    return prisma.user.findFirst({
-      where: { id: userId, tenantId },
-    });
+    const user = await userRepository.findById(userId);
+    // Ensure user belongs to the requested tenant
+    if (!user || user.tenantId !== tenantId) {
+      return null;
+    }
+    return user;
   }
 
   async updateUserRole(
@@ -156,20 +167,13 @@ export class UserService {
   ): Promise<User> {
     logger.info({ userId, role }, 'ユーザーロールを更新します');
 
-    // 原子的な更新: WHERE 句でテナント所有権を検証しながら更新
-    // TOCTOU レース条件を回避
-    const result = await prisma.user.updateMany({
-      where: { id: userId, tenantId },
-      data: { role },
-    });
-
-    if (result.count === 0) {
+    // First check if user exists and belongs to tenant
+    const existingUser = await userRepository.findById(userId);
+    if (!existingUser || existingUser.tenantId !== tenantId) {
       throw new Error('ユーザーが見つかりません');
     }
 
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-    });
+    const user = await userRepository.update(userId, { role });
 
     logger.info({ userId, role }, 'ユーザーロールを更新しました');
 
@@ -183,25 +187,20 @@ export class UserService {
   ): Promise<string> {
     logger.info({ userId }, 'パスワードリセットを開始します');
 
-    // tenantSlug の検証（クロステナント攻撃の防止）
     const validatedSlug = await validateAndGetTenantSlug(tenantId, tenantSlug);
 
-    const user = await prisma.user.findFirst({
-      where: { id: userId, tenantId },
-    });
+    const user = await userRepository.findById(userId);
 
-    if (!user) {
+    if (!user || user.tenantId !== tenantId) {
       throw new Error('ユーザーが見つかりません');
     }
 
-    if (!user.keycloakId) {
-      throw new Error('Keycloakユーザーが紐付けられていません');
+    if (!user.auth0Id) {
+      throw new Error('Auth0ユーザーが紐付けられていません');
     }
 
-    const temporaryPassword = await resetKeycloakPassword(
-      validatedSlug,
-      user.keycloakId
-    );
+    const orgName = `tenant-${validatedSlug}`;
+    const temporaryPassword = await resetAuth0Password(orgName, user.auth0Id);
 
     logger.info({ userId }, 'パスワードリセットが完了しました');
 
@@ -215,26 +214,21 @@ export class UserService {
   ): Promise<User> {
     logger.info({ userId }, 'ユーザー無効化を開始します');
 
-    // tenantSlug の検証（クロステナント攻撃の防止）
     const validatedSlug = await validateAndGetTenantSlug(tenantId, tenantSlug);
 
-    const user = await prisma.user.findFirst({
-      where: { id: userId, tenantId },
-    });
+    const user = await userRepository.findById(userId);
 
-    if (!user) {
+    if (!user || user.tenantId !== tenantId) {
       throw new Error('ユーザーが見つかりません');
     }
 
-    // Disable in Keycloak if linked
-    if (user.keycloakId) {
-      await disableKeycloakUser(validatedSlug, user.keycloakId);
+    if (user.auth0Id) {
+      const orgName = `tenant-${validatedSlug}`;
+      await disableAuth0User(orgName, user.auth0Id);
     }
 
-    // Update status in database
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: { status: 'INACTIVE' },
+    const updatedUser = await userRepository.update(userId, {
+      status: 'INACTIVE',
     });
 
     logger.info({ userId }, 'ユーザーを無効化しました');

@@ -1,7 +1,11 @@
-import type { Tenant, TenantTier } from '@prisma/client';
-import { prisma } from '../lib/prisma';
+import {
+  initDynamoDB,
+  TenantRepository,
+  type Tenant,
+  type TenantTier,
+} from '@tenkacloud/dynamodb';
 import { createLogger } from '../lib/logger';
-import { createAdminUser } from '../lib/keycloak';
+import { createAdminUser } from '../lib/auth0';
 import {
   createNotificationService,
   type NotificationService,
@@ -9,6 +13,12 @@ import {
 import { ProvisioningManager } from '../provisioning/manager';
 
 const logger = createLogger('registration-service');
+
+// Initialize DynamoDB
+initDynamoDB({
+  tableName: process.env.DYNAMODB_TABLE_NAME ?? 'TenkaCloud-dev',
+  endpoint: process.env.DYNAMODB_ENDPOINT,
+});
 
 export interface RegistrationInput {
   organizationName: string;
@@ -26,14 +36,17 @@ export interface RegistrationResult {
 export class RegistrationService {
   private notificationService: NotificationService;
   private provisioningManager: ProvisioningManager;
+  private tenantRepository: TenantRepository;
 
   constructor(
     notificationService?: NotificationService,
-    provisioningManager?: ProvisioningManager
+    provisioningManager?: ProvisioningManager,
+    tenantRepository?: TenantRepository
   ) {
     this.notificationService =
       notificationService ?? createNotificationService();
     this.provisioningManager = provisioningManager ?? new ProvisioningManager();
+    this.tenantRepository = tenantRepository ?? new TenantRepository();
   }
 
   async register(input: RegistrationInput): Promise<RegistrationResult> {
@@ -48,17 +61,13 @@ export class RegistrationService {
     // Generate unique slug from organization name
     const slug = this.generateSlug(input.organizationName);
 
-    // Create tenant record
-    const tenant = await prisma.tenant.create({
-      data: {
-        name: input.organizationName,
-        slug,
-        adminEmail: input.adminEmail,
-        adminName: input.adminName,
-        tier: input.tier ?? 'FREE',
-        status: 'ACTIVE',
-        provisioningStatus: 'PENDING',
-      },
+    // Create tenant record in DynamoDB
+    const tenant = await this.tenantRepository.create({
+      name: input.organizationName,
+      slug,
+      adminEmail: input.adminEmail,
+      adminName: input.adminName,
+      tier: input.tier ?? 'FREE',
     });
 
     logger.info(
@@ -85,18 +94,17 @@ export class RegistrationService {
       await this.provisioningManager.provisionTenant(tenant);
 
       // Get updated tenant status
-      const updatedTenant = await prisma.tenant.findUnique({
-        where: { id: tenant.id },
-      });
+      const updatedTenant = await this.tenantRepository.findById(tenant.id);
 
       if (!updatedTenant) {
         throw new Error('テナントが見つかりません');
       }
 
       if (updatedTenant.provisioningStatus === 'COMPLETED') {
-        // Create admin user in Keycloak
+        // Create admin user in Auth0 Organization
+        const orgName = `tenant-${updatedTenant.slug}`;
         const credentials = await createAdminUser(
-          updatedTenant.slug,
+          orgName,
           updatedTenant.adminEmail,
           updatedTenant.adminName || updatedTenant.adminEmail
         );
@@ -121,10 +129,7 @@ export class RegistrationService {
       );
 
       // Update tenant status to FAILED
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { provisioningStatus: 'FAILED' },
-      });
+      await this.tenantRepository.updateProvisioningStatus(tenant.id, 'FAILED');
 
       // Send failure notification
       const errorMessage =
@@ -139,9 +144,7 @@ export class RegistrationService {
   async getRegistrationStatus(
     tenantId: string
   ): Promise<{ tenant: Tenant } | null> {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
+    const tenant = await this.tenantRepository.findById(tenantId);
 
     if (!tenant) {
       return null;

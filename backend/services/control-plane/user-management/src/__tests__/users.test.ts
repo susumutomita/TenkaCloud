@@ -1,44 +1,88 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Prisma } from '@prisma/client';
+
+// Mock DynamoDB - define mocks inside factory to avoid hoisting issues
+vi.mock('@tenkacloud/dynamodb', () => {
+  const mockUserRepoFunctions = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByEmail: vi.fn(),
+    findByTenantAndEmail: vi.fn(),
+    listByTenant: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    countByTenant: vi.fn(),
+  };
+
+  const mockTenantRepoFunctions = {
+    findById: vi.fn(),
+  };
+
+  return {
+    initDynamoDB: vi.fn(),
+    UserRepository: vi.fn().mockImplementation(() => mockUserRepoFunctions),
+    TenantRepository: vi.fn().mockImplementation(() => mockTenantRepoFunctions),
+    __mockUserRepo: mockUserRepoFunctions,
+    __mockTenantRepo: mockTenantRepoFunctions,
+  };
+});
+
+// Mock Auth0 - define mocks inside factory
+vi.mock('../lib/auth0', () => {
+  const mockAuth0 = {
+    createAuth0User: vi.fn(),
+    resetAuth0Password: vi.fn(),
+    disableAuth0User: vi.fn(),
+    deleteAuth0User: vi.fn(),
+  };
+
+  return {
+    ...mockAuth0,
+    __mockAuth0: mockAuth0,
+  };
+});
+
+// Import after mocks are set up
 import { app } from '../index';
+import * as dynamodbModule from '@tenkacloud/dynamodb';
+import * as auth0Module from '../lib/auth0';
 
-// Mock Prisma
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    user: {
-      create: vi.fn(),
-      findMany: vi.fn(),
-      findFirst: vi.fn(),
-      findUniqueOrThrow: vi.fn(),
-      count: vi.fn(),
-      update: vi.fn(),
-      updateMany: vi.fn(),
-    },
-    tenant: {
-      findUnique: vi.fn(),
-    },
-    $disconnect: vi.fn(),
-  },
-}));
+// Get mock references - these are now accessible after import
+const mockUserRepoFunctions = (
+  dynamodbModule as typeof dynamodbModule & {
+    __mockUserRepo: typeof dynamodbModule.__mockUserRepo;
+  }
+).__mockUserRepo as {
+  create: ReturnType<typeof vi.fn>;
+  findById: ReturnType<typeof vi.fn>;
+  findByEmail: ReturnType<typeof vi.fn>;
+  findByTenantAndEmail: ReturnType<typeof vi.fn>;
+  listByTenant: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+  countByTenant: ReturnType<typeof vi.fn>;
+};
 
-// Mock Keycloak
-vi.mock('../lib/keycloak', () => ({
-  getKeycloakClient: vi.fn().mockResolvedValue({
-    users: { create: vi.fn().mockResolvedValue({ id: 'mock-keycloak-id' }) },
-    setConfig: vi.fn(),
-  }),
-  createKeycloakUser: vi.fn().mockResolvedValue({
-    keycloakId: 'mock-keycloak-id',
-    temporaryPassword: 'TempPass123!',
-  }),
-  resetKeycloakPassword: vi.fn().mockResolvedValue('NewTempPass456!'),
-  disableKeycloakUser: vi.fn().mockResolvedValue(undefined),
-}));
+const mockTenantRepoFunctions = (
+  dynamodbModule as typeof dynamodbModule & {
+    __mockTenantRepo: { findById: ReturnType<typeof vi.fn> };
+  }
+).__mockTenantRepo;
 
-import { prisma } from '../lib/prisma';
+const mockAuth0Functions = (
+  auth0Module as typeof auth0Module & {
+    __mockAuth0: typeof auth0Module.__mockAuth0;
+  }
+).__mockAuth0 as {
+  createAuth0User: ReturnType<typeof vi.fn>;
+  resetAuth0Password: ReturnType<typeof vi.fn>;
+  disableAuth0User: ReturnType<typeof vi.fn>;
+  deleteAuth0User: ReturnType<typeof vi.fn>;
+};
 
-const mockTenantId = '123e4567-e89b-12d3-a456-426614174000';
+// ULID format test IDs (26 uppercase alphanumeric characters)
+const mockTenantId = '01HY6CPMD9K2G8XNQR7VT3JHAB';
 const mockTenantSlug = 'test-tenant';
+const mockUserId = '01HY6CPMD9K2G8XNQR7VT3JHCD';
 
 function createRequest(path: string, options: RequestInit = {}): Request {
   const headers = new Headers(options.headers);
@@ -54,10 +98,28 @@ describe('ユーザー管理API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // デフォルトでテナント検証が成功するようモック
-    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+    mockTenantRepoFunctions.findById.mockResolvedValue({
       id: mockTenantId,
       slug: mockTenantSlug,
+      name: 'Test Tenant',
+      status: 'ACTIVE',
+      tier: 'FREE',
+      adminEmail: 'admin@example.com',
+      region: 'ap-northeast-1',
+      isolationModel: 'POOL',
+      computeType: 'SERVERLESS',
+      provisioningStatus: 'COMPLETED',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
+
+    // Default Auth0 mock
+    mockAuth0Functions.createAuth0User.mockResolvedValue({
+      auth0Id: 'auth0|mock-id',
+      temporaryPassword: 'TempPass123!',
+    });
+    mockAuth0Functions.resetAuth0Password.mockResolvedValue('NewTempPass456!');
+    mockAuth0Functions.disableAuth0User.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -67,18 +129,23 @@ describe('ユーザー管理API', () => {
   describe('POST /api/users', () => {
     it('有効なリクエストで新規ユーザーを作成すべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'PENDING' as const,
-        keycloakId: 'mock-keycloak-id',
+        auth0Id: 'auth0|mock-id',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.create).mockResolvedValue(mockUser);
+      mockUserRepoFunctions.findByTenantAndEmail.mockResolvedValue(null);
+      mockUserRepoFunctions.create.mockResolvedValue({
+        ...mockUser,
+        auth0Id: undefined,
+      });
+      mockUserRepoFunctions.update.mockResolvedValue(mockUser);
 
       const res = await app.request(
         createRequest('/api/users', {
@@ -102,18 +169,23 @@ describe('ユーザー管理API', () => {
 
     it('TENANT_ADMINロールを指定できるべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174002',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'admin@example.com',
         name: '管理者',
         role: 'TENANT_ADMIN' as const,
         status: 'PENDING' as const,
-        keycloakId: 'mock-keycloak-id',
+        auth0Id: 'auth0|mock-id',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.create).mockResolvedValue(mockUser);
+      mockUserRepoFunctions.findByTenantAndEmail.mockResolvedValue(null);
+      mockUserRepoFunctions.create.mockResolvedValue({
+        ...mockUser,
+        auth0Id: undefined,
+      });
+      mockUserRepoFunctions.update.mockResolvedValue(mockUser);
 
       const res = await app.request(
         createRequest('/api/users', {
@@ -129,11 +201,9 @@ describe('ユーザー管理API', () => {
 
       expect(res.status).toBe(201);
 
-      expect(prisma.user.create).toHaveBeenCalledWith(
+      expect(mockUserRepoFunctions.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            role: 'TENANT_ADMIN',
-          }),
+          role: 'TENANT_ADMIN',
         })
       );
     });
@@ -193,11 +263,10 @@ describe('ユーザー管理API', () => {
     });
 
     it('重複するメールアドレスの場合は409エラーを返すべき', async () => {
-      const prismaError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        { code: 'P2002', clientVersion: '5.0.0' }
-      );
-      vi.mocked(prisma.user.create).mockRejectedValue(prismaError);
+      mockUserRepoFunctions.findByTenantAndEmail.mockResolvedValue({
+        id: mockUserId,
+        email: 'existing@example.com',
+      });
 
       const res = await app.request(
         createRequest('/api/users', {
@@ -233,7 +302,8 @@ describe('ユーザー管理API', () => {
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      vi.mocked(prisma.user.create).mockRejectedValue(
+      mockUserRepoFunctions.findByTenantAndEmail.mockResolvedValue(null);
+      mockUserRepoFunctions.create.mockRejectedValue(
         new Error('DB connection failed')
       );
 
@@ -254,8 +324,36 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('失敗しました');
     });
 
+    it('DB作成失敗時にAuth0ロールバックも失敗した場合でも500を返すべき', async () => {
+      mockUserRepoFunctions.findByTenantAndEmail.mockResolvedValue(null);
+      mockUserRepoFunctions.create.mockRejectedValue(
+        new Error('DB connection failed')
+      );
+      mockAuth0Functions.deleteAuth0User.mockRejectedValue(
+        new Error('Auth0 delete failed')
+      );
+
+      const res = await app.request(
+        createRequest('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'user@example.com',
+            name: 'テストユーザー',
+          }),
+        })
+      );
+
+      expect(res.status).toBe(500);
+
+      const body = await res.json();
+      expect(body.error).toContain('失敗しました');
+      // Auth0 ロールバックが呼ばれたことを確認
+      expect(mockAuth0Functions.deleteAuth0User).toHaveBeenCalled();
+    });
+
     it('テナントが見つからない場合は500を返すべき', async () => {
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue(null);
+      mockTenantRepoFunctions.findById.mockResolvedValue(null);
 
       const res = await app.request(
         createRequest('/api/users', {
@@ -273,7 +371,7 @@ describe('ユーザー管理API', () => {
 
     it('テナント slug が不一致の場合は500を返すべき（クロステナント攻撃防止）', async () => {
       // 攻撃者が X-Tenant-Slug を改ざんした場合
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      mockTenantRepoFunctions.findById.mockResolvedValue({
         id: mockTenantId,
         slug: 'actual-tenant-slug', // 実際の slug は異なる
       });
@@ -306,31 +404,34 @@ describe('ユーザー管理API', () => {
     it('ユーザー一覧を取得すべき', async () => {
       const mockUsers = [
         {
-          id: '123e4567-e89b-12d3-a456-426614174001',
+          id: '01HY6CPMD9K2G8XNQR7VT3JH01',
           tenantId: mockTenantId,
           email: 'user1@example.com',
           name: 'ユーザー1',
           role: 'PARTICIPANT' as const,
           status: 'ACTIVE' as const,
-          keycloakId: 'keycloak-1',
+          auth0Id: 'auth0|1',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
         {
-          id: '123e4567-e89b-12d3-a456-426614174002',
+          id: '01HY6CPMD9K2G8XNQR7VT3JH02',
           tenantId: mockTenantId,
           email: 'user2@example.com',
           name: 'ユーザー2',
           role: 'TENANT_ADMIN' as const,
           status: 'ACTIVE' as const,
-          keycloakId: 'keycloak-2',
+          auth0Id: 'auth0|2',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
       ];
 
-      vi.mocked(prisma.user.findMany).mockResolvedValue(mockUsers);
-      vi.mocked(prisma.user.count).mockResolvedValue(2);
+      mockUserRepoFunctions.listByTenant.mockResolvedValue({
+        users: mockUsers,
+        lastKey: undefined,
+      });
+      mockUserRepoFunctions.countByTenant.mockResolvedValue(2);
 
       const res = await app.request(createRequest('/api/users'));
 
@@ -342,25 +443,30 @@ describe('ユーザー管理API', () => {
     });
 
     it('ステータスでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.user.count).mockResolvedValue(0);
+      mockUserRepoFunctions.listByTenant.mockResolvedValue({
+        users: [],
+        lastKey: undefined,
+      });
+      mockUserRepoFunctions.countByTenant.mockResolvedValue(0);
 
       const res = await app.request(createRequest('/api/users?status=ACTIVE'));
 
       expect(res.status).toBe(200);
 
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect(mockUserRepoFunctions.listByTenant).toHaveBeenCalledWith(
+        mockTenantId,
         expect.objectContaining({
-          where: expect.objectContaining({
-            status: 'ACTIVE',
-          }),
+          status: 'ACTIVE',
         })
       );
     });
 
     it('ロールでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.user.count).mockResolvedValue(0);
+      mockUserRepoFunctions.listByTenant.mockResolvedValue({
+        users: [],
+        lastKey: undefined,
+      });
+      mockUserRepoFunctions.countByTenant.mockResolvedValue(0);
 
       const res = await app.request(
         createRequest('/api/users?role=TENANT_ADMIN')
@@ -368,39 +474,39 @@ describe('ユーザー管理API', () => {
 
       expect(res.status).toBe(200);
 
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect(mockUserRepoFunctions.listByTenant).toHaveBeenCalledWith(
+        mockTenantId,
         expect.objectContaining({
-          where: expect.objectContaining({
-            role: 'TENANT_ADMIN',
-          }),
+          role: 'TENANT_ADMIN',
         })
       );
     });
 
     it('ページネーションをサポートすべき', async () => {
-      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.user.count).mockResolvedValue(100);
+      mockUserRepoFunctions.listByTenant.mockResolvedValue({
+        users: [],
+        lastKey: { PK: 'test', SK: 'test' },
+      });
+      mockUserRepoFunctions.countByTenant.mockResolvedValue(100);
 
-      const res = await app.request(
-        createRequest('/api/users?limit=10&offset=20')
-      );
+      const res = await app.request(createRequest('/api/users?limit=10'));
 
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.limit).toBe(10);
-      expect(body.offset).toBe(20);
+      expect(body.pagination.limit).toBe(10);
+      expect(body.pagination.hasNextPage).toBe(true);
 
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect(mockUserRepoFunctions.listByTenant).toHaveBeenCalledWith(
+        mockTenantId,
         expect.objectContaining({
-          take: 10,
-          skip: 20,
+          limit: 10,
         })
       );
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      vi.mocked(prisma.user.findMany).mockRejectedValue(
+      mockUserRepoFunctions.listByTenant.mockRejectedValue(
         new Error('DB connection failed')
       );
 
@@ -431,13 +537,22 @@ describe('ユーザー管理API', () => {
       const body = await res.json();
       expect(body.error).toBe('バリデーションエラー');
     });
+
+    it('無効なlastKey形式の場合は400エラーを返すべき', async () => {
+      const res = await app.request(
+        createRequest('/api/users?lastKey=invalid-json-format')
+      );
+
+      expect(res.status).toBe(400);
+
+      const body = await res.json();
+      expect(body.error).toBe('無効なlastKey形式です');
+    });
   });
 
   describe('GET /api/users/:id', () => {
     it('テナント情報がない場合は400エラーを返すべき', async () => {
-      const res = await app.request(
-        '/api/users/123e4567-e89b-12d3-a456-426614174001'
-      );
+      const res = await app.request(`/api/users/${mockUserId}`);
 
       expect(res.status).toBe(400);
 
@@ -447,22 +562,20 @@ describe('ユーザー管理API', () => {
 
     it('ユーザー詳細を取得すべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'auth0|1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
+      mockUserRepoFunctions.findById.mockResolvedValue(mockUser);
 
-      const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001')
-      );
+      const res = await app.request(createRequest(`/api/users/${mockUserId}`));
 
       expect(res.status).toBe(200);
 
@@ -472,10 +585,10 @@ describe('ユーザー管理API', () => {
     });
 
     it('存在しないユーザーの場合は404を返すべき', async () => {
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+      mockUserRepoFunctions.findById.mockResolvedValue(null);
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174999')
+        createRequest('/api/users/01HY6CPMD9K2G8XNQR7VT3JHXX')
       );
 
       expect(res.status).toBe(404);
@@ -484,8 +597,8 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('見つかりません');
     });
 
-    it('無効なUUID形式の場合は400を返すべき', async () => {
-      const res = await app.request(createRequest('/api/users/invalid-uuid'));
+    it('無効なULID形式の場合は400を返すべき', async () => {
+      const res = await app.request(createRequest('/api/users/invalid-ulid'));
 
       expect(res.status).toBe(400);
 
@@ -494,13 +607,11 @@ describe('ユーザー管理API', () => {
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      vi.mocked(prisma.user.findFirst).mockRejectedValue(
+      mockUserRepoFunctions.findById.mockRejectedValue(
         new Error('DB connection failed')
       );
 
-      const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001')
-      );
+      const res = await app.request(createRequest(`/api/users/${mockUserId}`));
 
       expect(res.status).toBe(500);
 
@@ -511,14 +622,11 @@ describe('ユーザー管理API', () => {
 
   describe('PATCH /api/users/:id/role', () => {
     it('テナント情報がない場合は400エラーを返すべき', async () => {
-      const res = await app.request(
-        '/api/users/123e4567-e89b-12d3-a456-426614174001/role',
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'TENANT_ADMIN' }),
-        }
-      );
+      const res = await app.request(`/api/users/${mockUserId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'TENANT_ADMIN' }),
+      });
 
       expect(res.status).toBe(400);
 
@@ -526,9 +634,9 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('テナント情報');
     });
 
-    it('無効なUUID形式の場合は400を返すべき', async () => {
+    it('無効なULID形式の場合は400を返すべき', async () => {
       const res = await app.request(
-        createRequest('/api/users/invalid-uuid/role', {
+        createRequest('/api/users/invalid-ulid/role', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'TENANT_ADMIN' }),
@@ -542,11 +650,20 @@ describe('ユーザー管理API', () => {
     });
 
     it('別テナントのユーザーの場合は404を返すべき', async () => {
-      // updateMany は tenantId でフィルタするため、別テナントのユーザーは更新されない
-      vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 });
+      // ユーザーが別のテナントに属している場合
+      mockUserRepoFunctions.findById.mockResolvedValue({
+        id: mockUserId,
+        tenantId: '01HY6CPMD9K2G8XNQR7VT3JXXX', // Different tenant
+        email: 'user@example.com',
+        name: 'Test User',
+        role: 'PARTICIPANT',
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
+        createRequest(`/api/users/${mockUserId}/role`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'TENANT_ADMIN' }),
@@ -561,22 +678,24 @@ describe('ユーザー管理API', () => {
 
     it('ユーザーロールを更新すべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
-        role: 'TENANT_ADMIN' as const,
+        role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'auth0|1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 1 });
-      vi.mocked(prisma.user.findUniqueOrThrow).mockResolvedValue(mockUser);
+      const updatedUser = { ...mockUser, role: 'TENANT_ADMIN' as const };
+
+      mockUserRepoFunctions.findById.mockResolvedValue(mockUser);
+      mockUserRepoFunctions.update.mockResolvedValue(updatedUser);
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
+        createRequest(`/api/users/${mockUserId}/role`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'TENANT_ADMIN' }),
@@ -592,7 +711,7 @@ describe('ユーザー管理API', () => {
 
     it('無効なロールの場合はバリデーションエラーを返すべき', async () => {
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
+        createRequest(`/api/users/${mockUserId}/role`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'INVALID_ROLE' }),
@@ -606,12 +725,12 @@ describe('ユーザー管理API', () => {
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      vi.mocked(prisma.user.updateMany).mockRejectedValue(
+      mockUserRepoFunctions.findById.mockRejectedValue(
         new Error('DB connection failed')
       );
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001/role', {
+        createRequest(`/api/users/${mockUserId}/role`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'TENANT_ADMIN' }),
@@ -627,12 +746,9 @@ describe('ユーザー管理API', () => {
 
   describe('POST /api/users/:id/password-reset', () => {
     it('テナント情報がない場合は400エラーを返すべき', async () => {
-      const res = await app.request(
-        '/api/users/123e4567-e89b-12d3-a456-426614174001/password-reset',
-        {
-          method: 'POST',
-        }
-      );
+      const res = await app.request(`/api/users/${mockUserId}/password-reset`, {
+        method: 'POST',
+      });
 
       expect(res.status).toBe(400);
 
@@ -640,9 +756,9 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('テナント情報');
     });
 
-    it('無効なUUID形式の場合は400を返すべき', async () => {
+    it('無効なULID形式の場合は400を返すべき', async () => {
       const res = await app.request(
-        createRequest('/api/users/invalid-uuid/password-reset', {
+        createRequest('/api/users/invalid-ulid/password-reset', {
           method: 'POST',
         })
       );
@@ -655,26 +771,23 @@ describe('ユーザー管理API', () => {
 
     it('パスワードをリセットすべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'auth0|1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
+      mockUserRepoFunctions.findById.mockResolvedValue(mockUser);
 
       const res = await app.request(
-        createRequest(
-          '/api/users/123e4567-e89b-12d3-a456-426614174001/password-reset',
-          {
-            method: 'POST',
-          }
-        )
+        createRequest(`/api/users/${mockUserId}/password-reset`, {
+          method: 'POST',
+        })
       );
 
       expect(res.status).toBe(200);
@@ -685,15 +798,12 @@ describe('ユーザー管理API', () => {
     });
 
     it('存在しないユーザーの場合は404を返すべき', async () => {
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+      mockUserRepoFunctions.findById.mockResolvedValue(null);
 
       const res = await app.request(
-        createRequest(
-          '/api/users/123e4567-e89b-12d3-a456-426614174999/password-reset',
-          {
-            method: 'POST',
-          }
-        )
+        createRequest(`/api/users/${mockUserId}/password-reset`, {
+          method: 'POST',
+        })
       );
 
       expect(res.status).toBe(404);
@@ -702,48 +812,42 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('見つかりません');
     });
 
-    it('Keycloakに紐付けられていないユーザーの場合は400を返すべき', async () => {
+    it('Auth0に紐付けられていないユーザーの場合は400を返すべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: null,
+        auth0Id: undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
+      mockUserRepoFunctions.findById.mockResolvedValue(mockUser);
 
       const res = await app.request(
-        createRequest(
-          '/api/users/123e4567-e89b-12d3-a456-426614174001/password-reset',
-          {
-            method: 'POST',
-          }
-        )
+        createRequest(`/api/users/${mockUserId}/password-reset`, {
+          method: 'POST',
+        })
       );
 
       expect(res.status).toBe(400);
 
       const body = await res.json();
-      expect(body.error).toContain('Keycloak');
+      expect(body.error).toContain('Auth0');
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      vi.mocked(prisma.user.findFirst).mockRejectedValue(
+      mockUserRepoFunctions.findById.mockRejectedValue(
         new Error('DB connection failed')
       );
 
       const res = await app.request(
-        createRequest(
-          '/api/users/123e4567-e89b-12d3-a456-426614174001/password-reset',
-          {
-            method: 'POST',
-          }
-        )
+        createRequest(`/api/users/${mockUserId}/password-reset`, {
+          method: 'POST',
+        })
       );
 
       expect(res.status).toBe(500);
@@ -753,18 +857,15 @@ describe('ユーザー管理API', () => {
     });
 
     it('テナント slug が不一致の場合は500を返すべき（クロステナント攻撃防止）', async () => {
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      mockTenantRepoFunctions.findById.mockResolvedValue({
         id: mockTenantId,
         slug: 'different-slug',
       });
 
       const res = await app.request(
-        createRequest(
-          '/api/users/123e4567-e89b-12d3-a456-426614174001/password-reset',
-          {
-            method: 'POST',
-          }
-        )
+        createRequest(`/api/users/${mockUserId}/password-reset`, {
+          method: 'POST',
+        })
       );
 
       expect(res.status).toBe(500);
@@ -773,12 +874,9 @@ describe('ユーザー管理API', () => {
 
   describe('DELETE /api/users/:id', () => {
     it('テナント情報がない場合は400エラーを返すべき', async () => {
-      const res = await app.request(
-        '/api/users/123e4567-e89b-12d3-a456-426614174001',
-        {
-          method: 'DELETE',
-        }
-      );
+      const res = await app.request(`/api/users/${mockUserId}`, {
+        method: 'DELETE',
+      });
 
       expect(res.status).toBe(400);
 
@@ -786,9 +884,9 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('テナント情報');
     });
 
-    it('無効なUUID形式の場合は400を返すべき', async () => {
+    it('無効なULID形式の場合は400を返すべき', async () => {
       const res = await app.request(
-        createRequest('/api/users/invalid-uuid', {
+        createRequest('/api/users/invalid-ulid', {
           method: 'DELETE',
         })
       );
@@ -801,24 +899,24 @@ describe('ユーザー管理API', () => {
 
     it('ユーザーを無効化すべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'auth0|1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       const updatedUser = { ...mockUser, status: 'INACTIVE' as const };
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
-      vi.mocked(prisma.user.update).mockResolvedValue(updatedUser);
+      mockUserRepoFunctions.findById.mockResolvedValue(mockUser);
+      mockUserRepoFunctions.update.mockResolvedValue(updatedUser);
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001', {
+        createRequest(`/api/users/${mockUserId}`, {
           method: 'DELETE',
         })
       );
@@ -831,10 +929,10 @@ describe('ユーザー管理API', () => {
     });
 
     it('存在しないユーザーの場合は404を返すべき', async () => {
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+      mockUserRepoFunctions.findById.mockResolvedValue(null);
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174999', {
+        createRequest(`/api/users/${mockUserId}`, {
           method: 'DELETE',
         })
       );
@@ -845,26 +943,26 @@ describe('ユーザー管理API', () => {
       expect(body.error).toContain('見つかりません');
     });
 
-    it('Keycloakに紐付けられていないユーザーも無効化できるべき', async () => {
+    it('Auth0に紐付けられていないユーザーも無効化できるべき', async () => {
       const mockUser = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: mockUserId,
         tenantId: mockTenantId,
         email: 'user@example.com',
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: null,
+        auth0Id: undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       const updatedUser = { ...mockUser, status: 'INACTIVE' as const };
 
-      vi.mocked(prisma.user.findFirst).mockResolvedValue(mockUser);
-      vi.mocked(prisma.user.update).mockResolvedValue(updatedUser);
+      mockUserRepoFunctions.findById.mockResolvedValue(mockUser);
+      mockUserRepoFunctions.update.mockResolvedValue(updatedUser);
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001', {
+        createRequest(`/api/users/${mockUserId}`, {
           method: 'DELETE',
         })
       );
@@ -876,12 +974,12 @@ describe('ユーザー管理API', () => {
     });
 
     it('サーバーエラーの場合は500を返すべき', async () => {
-      vi.mocked(prisma.user.findFirst).mockRejectedValue(
+      mockUserRepoFunctions.findById.mockRejectedValue(
         new Error('DB connection failed')
       );
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001', {
+        createRequest(`/api/users/${mockUserId}`, {
           method: 'DELETE',
         })
       );
@@ -893,13 +991,13 @@ describe('ユーザー管理API', () => {
     });
 
     it('テナント slug が不一致の場合は500を返すべき（クロステナント攻撃防止）', async () => {
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      mockTenantRepoFunctions.findById.mockResolvedValue({
         id: mockTenantId,
         slug: 'different-slug',
       });
 
       const res = await app.request(
-        createRequest('/api/users/123e4567-e89b-12d3-a456-426614174001', {
+        createRequest(`/api/users/${mockUserId}`, {
           method: 'DELETE',
         })
       );

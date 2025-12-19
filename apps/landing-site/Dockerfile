@@ -8,6 +8,15 @@ COPY apps/application-plane/package.json apps/application-plane/
 COPY apps/landing-site/package.json apps/landing-site/
 COPY packages/core/package.json packages/core/
 COPY packages/shared/package.json packages/shared/
+COPY backend/services/application-plane/problem-service/package.json backend/services/application-plane/problem-service/
+COPY backend/services/application-plane/battle-service/package.json backend/services/application-plane/battle-service/
+COPY backend/services/application-plane/scoring-service/package.json backend/services/application-plane/scoring-service/
+COPY backend/services/shared/dynamodb/package.json backend/services/shared/dynamodb/
+COPY backend/services/control-plane/registration/package.json backend/services/control-plane/registration/
+COPY backend/services/control-plane/system-management/package.json backend/services/control-plane/system-management/
+COPY backend/services/control-plane/user-management/package.json backend/services/control-plane/user-management/
+COPY backend/services/control-plane/deployment-management/package.json backend/services/control-plane/deployment-management/
+COPY backend/services/control-plane/tenant-management/package.json backend/services/control-plane/tenant-management/
 
 RUN bun install --frozen-lockfile
 

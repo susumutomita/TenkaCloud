@@ -28,15 +28,15 @@ model Tenant {
 }
 
 model User {
-  id         String     @id @default(uuid())
-  tenantId   String
-  email      String
-  name       String
-  role       UserRole   @default(PARTICIPANT)
-  status     UserStatus @default(PENDING)
-  keycloakId String?    @unique
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id        String     @id @default(uuid())
+  tenantId  String
+  email     String
+  name      String
+  role      UserRole   @default(PARTICIPANT)
+  status    UserStatus @default(PENDING)
+  auth0Id   String?    @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   @@unique([tenantId, email])
   @@index([tenantId])

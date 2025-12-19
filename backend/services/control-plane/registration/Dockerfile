@@ -5,11 +5,8 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install
 
-# Copy source code and Prisma schema
+# Copy source code
 COPY . .
-
-# Generate Prisma Client
-RUN bunx prisma generate
 
 # Build the application
 RUN bun run build

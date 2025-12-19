@@ -1,30 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Context, Next } from 'hono';
-import { auditMiddleware } from './audit';
-import { createLogger } from '../lib/logger';
 
-// Mock logger
-vi.mock('../lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  })),
+// Use vi.hoisted to create mock functions that are available before vi.mock runs
+const mockLoggerFunctions = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
 }));
+
+// Mock logger - must be before any imports that use it
+vi.mock('../lib/logger', () => ({
+  createLogger: vi.fn(() => mockLoggerFunctions),
+}));
+
+import { auditMiddleware } from './audit';
 
 describe('監査ログミドルウェア', () => {
   let mockContext: Partial<Context>;
   let mockNext: Next;
-  let mockLogger: any;
 
   beforeEach(() => {
-    mockLogger = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-    vi.mocked(createLogger).mockReturnValue(mockLogger);
+    vi.clearAllMocks();
 
     mockNext = vi.fn(async () => {});
 
@@ -69,11 +66,11 @@ describe('監査ログミドルウェア', () => {
       await auditMiddleware(mockContext as Context, mockNext);
 
       expect(mockNext).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalled();
-      expect(mockLogger.warn).not.toHaveBeenCalled();
-      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLoggerFunctions.info).toHaveBeenCalled();
+      expect(mockLoggerFunctions.warn).not.toHaveBeenCalled();
+      expect(mockLoggerFunctions.error).not.toHaveBeenCalled();
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.action).toBe('list');
       expect(logEntry.resource).toBe('tenants');
       expect(logEntry.method).toBe('GET');
@@ -87,9 +84,16 @@ describe('監査ログミドルウェア', () => {
       const originalEnv = process.env.LOG_PII;
       process.env.LOG_PII = 'true';
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      // Need to reimport because LOG_PII is read at module load time
+      vi.resetModules();
+      vi.doMock('../lib/logger', () => ({
+        createLogger: vi.fn(() => mockLoggerFunctions),
+      }));
+      const { auditMiddleware: freshAuditMiddleware } = await import('./audit');
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      await freshAuditMiddleware(mockContext as Context, mockNext);
+
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.userEmail).toBe('test@example.com');
 
       // Restore original environment
@@ -103,7 +107,7 @@ describe('監査ログミドルウェア', () => {
 
       await auditMiddleware(mockContext as Context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.userEmail).toBeUndefined();
 
       // Restore original environment
@@ -115,11 +119,11 @@ describe('監査ログミドルウェア', () => {
 
       await auditMiddleware(mockContext as Context, mockNext);
 
-      expect(mockLogger.warn).toHaveBeenCalled();
-      expect(mockLogger.info).not.toHaveBeenCalled();
-      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLoggerFunctions.warn).toHaveBeenCalled();
+      expect(mockLoggerFunctions.info).not.toHaveBeenCalled();
+      expect(mockLoggerFunctions.error).not.toHaveBeenCalled();
 
-      const logEntry = mockLogger.warn.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.warn.mock.calls[0][0];
       expect(logEntry.statusCode).toBe(404);
     });
 
@@ -128,26 +132,40 @@ describe('監査ログミドルウェア', () => {
 
       await auditMiddleware(mockContext as Context, mockNext);
 
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockLogger.info).not.toHaveBeenCalled();
-      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLoggerFunctions.error).toHaveBeenCalled();
+      expect(mockLoggerFunctions.info).not.toHaveBeenCalled();
+      expect(mockLoggerFunctions.warn).not.toHaveBeenCalled();
 
-      const logEntry = mockLogger.error.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.error.mock.calls[0][0];
       expect(logEntry.statusCode).toBe(500);
     });
   });
 
   describe('リソース解析', () => {
+    const createMockReq = (method: string, path: string) => ({
+      method,
+      path,
+      header: vi.fn((name: string) => {
+        if (name === 'user-agent') return 'Test Agent';
+        if (name === 'x-forwarded-for') return '192.168.1.1';
+        return null;
+      }),
+      raw: {
+        clone: () => ({
+          json: vi.fn().mockResolvedValue({}),
+        }),
+      } as any,
+    });
+
     it('IDなしのパス /api/tenants を正しく解析するべき', async () => {
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'GET',
-        path: '/api/tenants',
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('GET', '/api/tenants'),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.resource).toBe('tenants');
       expect(logEntry.resourceId).toBeUndefined();
       expect(logEntry.action).toBe('list');
@@ -155,58 +173,54 @@ describe('監査ログミドルウェア', () => {
 
     it('UUIDを含むパス /api/tenants/:id を正しく解析するべき', async () => {
       const testUuid = '550e8400-e29b-41d4-a716-446655440000';
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'GET',
-        path: `/api/tenants/${testUuid}`,
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('GET', `/api/tenants/${testUuid}`),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.resource).toBe('tenants');
       expect(logEntry.resourceId).toBe(testUuid);
       expect(logEntry.action).toBe('view');
     });
 
     it('POSTリクエストをcreateアクションとして記録するべき', async () => {
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'POST',
-        path: '/api/tenants',
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('POST', '/api/tenants'),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.action).toBe('create');
     });
 
     it('PATCHリクエストをupdateアクションとして記録するべき', async () => {
       const testUuid = '550e8400-e29b-41d4-a716-446655440000';
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'PATCH',
-        path: `/api/tenants/${testUuid}`,
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('PATCH', `/api/tenants/${testUuid}`),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.action).toBe('update');
     });
 
     it('DELETEリクエストをdeleteアクションとして記録するべき', async () => {
       const testUuid = '550e8400-e29b-41d4-a716-446655440000';
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'DELETE',
-        path: `/api/tenants/${testUuid}`,
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('DELETE', `/api/tenants/${testUuid}`),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.action).toBe('delete');
     });
   });
@@ -220,20 +234,27 @@ describe('監査ログミドルウェア', () => {
         apiKey: 'api-key-123',
       };
 
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'POST',
-        path: '/api/tenants',
-        raw: {
-          clone: () => ({
-            json: vi.fn().mockResolvedValue(sensitiveData),
+      const context = {
+        ...mockContext,
+        req: {
+          method: 'POST',
+          path: '/api/tenants',
+          header: vi.fn((name: string) => {
+            if (name === 'user-agent') return 'Test Agent';
+            if (name === 'x-forwarded-for') return '192.168.1.1';
+            return null;
           }),
-        } as any,
-      } as any;
+          raw: {
+            clone: () => ({
+              json: vi.fn().mockResolvedValue(sensitiveData),
+            }),
+          } as any,
+        },
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.requestBody.name).toBe('Test Tenant');
       expect(logEntry.requestBody.password).toBe('[REDACTED]');
       expect(logEntry.requestBody.token).toBe('[REDACTED]');
@@ -250,7 +271,7 @@ describe('監査ログミドルウェア', () => {
 
       await auditMiddleware(mockContext as Context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.responseTime).toBeGreaterThan(0);
     });
   });
@@ -259,14 +280,14 @@ describe('監査ログミドルウェア', () => {
     it('x-forwarded-forヘッダーからIPアドレスを記録するべき', async () => {
       await auditMiddleware(mockContext as Context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.ipAddress).toBe('192.168.1.1');
     });
 
     it('user-agentヘッダーを記録するべき', async () => {
       await auditMiddleware(mockContext as Context, mockNext);
 
-      const logEntry = mockLogger.info.mock.calls[0][0];
+      const logEntry = mockLoggerFunctions.info.mock.calls[0][0];
       expect(logEntry.userAgent).toBe('Test Agent');
     });
   });

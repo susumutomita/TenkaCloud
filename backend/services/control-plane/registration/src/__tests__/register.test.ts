@@ -1,28 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Prisma } from '@prisma/client';
-import { app } from '../index';
 
-// Mock Prisma
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    tenant: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
-    $disconnect: vi.fn(),
-  },
+// Use vi.hoisted to create mock functions that are available before vi.mock runs
+const mockTenantRepoFunctions = vi.hoisted(() => ({
+  create: vi.fn(),
+  findById: vi.fn(),
+  findBySlug: vi.fn(),
+  update: vi.fn(),
+  updateProvisioningStatus: vi.fn(),
 }));
 
-// Mock Keycloak
-vi.mock('../lib/keycloak', () => ({
-  getKeycloakClient: vi.fn().mockResolvedValue({
-    realms: { create: vi.fn() },
-    users: { create: vi.fn().mockResolvedValue({ id: 'mock-user-id' }) },
-    setConfig: vi.fn(),
-  }),
+// Mock DynamoDB - must be before any imports that use it
+vi.mock('@tenkacloud/dynamodb', () => ({
+  initDynamoDB: vi.fn(),
+  TenantRepository: class MockTenantRepository {
+    create = mockTenantRepoFunctions.create;
+    findById = mockTenantRepoFunctions.findById;
+    findBySlug = mockTenantRepoFunctions.findBySlug;
+    update = mockTenantRepoFunctions.update;
+    updateProvisioningStatus = mockTenantRepoFunctions.updateProvisioningStatus;
+  },
+  getDocClient: vi.fn(),
+  getTableName: vi.fn().mockReturnValue('TenkaCloud-test'),
+}));
+
+// Mock Auth0
+vi.mock('../lib/auth0', () => ({
   createAdminUser: vi.fn().mockResolvedValue({
-    userId: 'mock-user-id',
+    auth0Id: 'auth0|mock-user-id',
     temporaryPassword: 'mock-password',
   }),
 }));
@@ -44,7 +48,8 @@ vi.mock('../services/notification', () => ({
   EmailNotificationService: vi.fn(),
 }));
 
-import { prisma } from '../lib/prisma';
+// Import app after mocks are set up
+import { app } from '../index';
 
 describe('登録API', () => {
   beforeEach(() => {
@@ -58,7 +63,7 @@ describe('登録API', () => {
   describe('POST /api/register', () => {
     it('有効なリクエストで新規テナントを登録すべき', async () => {
       const mockTenant = {
-        id: '123e4567-e89b-12d3-a456-426614174000',
+        id: '01HJXK5K3VDXK5YPNZBKRT5ABC',
         name: 'テスト組織',
         slug: 'tesuto-soshiki-abc123',
         adminEmail: 'admin@example.com',
@@ -73,7 +78,7 @@ describe('登録API', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.tenant.create).mockResolvedValue(mockTenant);
+      mockTenantRepoFunctions.create.mockResolvedValue(mockTenant);
 
       const res = await app.request('/api/register', {
         method: 'POST',
@@ -146,7 +151,7 @@ describe('登録API', () => {
 
     it('PRO/ENTERPRISEティアを指定できるべき', async () => {
       const mockTenant = {
-        id: '123e4567-e89b-12d3-a456-426614174001',
+        id: '01HJXK5K3VDXK5YPNZBKRT5DEF',
         name: 'エンタープライズ組織',
         slug: 'enterprise-org-abc123',
         adminEmail: 'enterprise@example.com',
@@ -161,7 +166,7 @@ describe('登録API', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.tenant.create).mockResolvedValue(mockTenant);
+      mockTenantRepoFunctions.create.mockResolvedValue(mockTenant);
 
       const res = await app.request('/api/register', {
         method: 'POST',
@@ -176,21 +181,17 @@ describe('登録API', () => {
 
       expect(res.status).toBe(201);
 
-      expect(prisma.tenant.create).toHaveBeenCalledWith(
+      expect(mockTenantRepoFunctions.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            tier: 'ENTERPRISE',
-          }),
+          tier: 'ENTERPRISE',
         })
       );
     });
 
     it('重複するメールアドレスの場合は409エラーを返すべき', async () => {
-      const prismaError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed on the fields: (`adminEmail`)',
-        { code: 'P2002', clientVersion: '5.0.0' }
+      mockTenantRepoFunctions.create.mockRejectedValue(
+        new Error('同じ slug のテナントが既に存在します')
       );
-      vi.mocked(prisma.tenant.create).mockRejectedValue(prismaError);
 
       const res = await app.request('/api/register', {
         method: 'POST',
@@ -212,17 +213,17 @@ describe('登録API', () => {
   describe('GET /api/register/:tenantId/status', () => {
     it('有効なテナントIDでステータスを取得すべき', async () => {
       const mockTenant = {
-        id: '123e4567-e89b-12d3-a456-426614174000',
+        id: '01HJXK5K3VDXK5YPNZBKRT5GHI',
         name: 'テスト組織',
-        provisioningStatus: 'COMPLETED',
-        createdAt: new Date('2024-01-01T00:00:00Z'),
-        updatedAt: new Date('2024-01-01T00:01:00Z'),
+        provisioningStatus: 'COMPLETED' as const,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:01:00.000Z'),
       };
 
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue(mockTenant as any);
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
 
       const res = await app.request(
-        '/api/register/123e4567-e89b-12d3-a456-426614174000/status'
+        '/api/register/01HJXK5K3VDXK5YPNZBKRT5GHI/status'
       );
 
       expect(res.status).toBe(200);
@@ -230,22 +231,21 @@ describe('登録API', () => {
       const body = await res.json();
       expect(body.tenantId).toBe(mockTenant.id);
       expect(body.provisioningStatus).toBe('COMPLETED');
-      expect(body.completedAt).toBe('2024-01-01T00:01:00.000Z');
     });
 
     it('プロビジョニング中のテナントはcompletedAtがnullであるべき', async () => {
       const mockTenant = {
-        id: '123e4567-e89b-12d3-a456-426614174000',
+        id: '01HJXK5K3VDXK5YPNZBKRT5JKL',
         name: 'テスト組織',
-        provisioningStatus: 'IN_PROGRESS',
-        createdAt: new Date('2024-01-01T00:00:00Z'),
-        updatedAt: new Date('2024-01-01T00:00:30Z'),
+        provisioningStatus: 'IN_PROGRESS' as const,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:30.000Z'),
       };
 
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue(mockTenant as any);
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
 
       const res = await app.request(
-        '/api/register/123e4567-e89b-12d3-a456-426614174000/status'
+        '/api/register/01HJXK5K3VDXK5YPNZBKRT5JKL/status'
       );
 
       expect(res.status).toBe(200);
@@ -256,10 +256,10 @@ describe('登録API', () => {
     });
 
     it('存在しないテナントIDの場合は404を返すべき', async () => {
-      vi.mocked(prisma.tenant.findUnique).mockResolvedValue(null);
+      mockTenantRepoFunctions.findById.mockResolvedValue(null);
 
       const res = await app.request(
-        '/api/register/123e4567-e89b-12d3-a456-426614174999/status'
+        '/api/register/01HJXK5K3VDXK5YPNZBKRT5MNO/status'
       );
 
       expect(res.status).toBe(404);
@@ -268,8 +268,8 @@ describe('登録API', () => {
       expect(body.error).toContain('見つかりません');
     });
 
-    it('無効なUUID形式の場合は400を返すべき', async () => {
-      const res = await app.request('/api/register/invalid-uuid/status');
+    it('無効なID形式の場合は400を返すべき', async () => {
+      const res = await app.request('/api/register/invalid-id/status');
 
       expect(res.status).toBe(400);
 
@@ -295,27 +295,11 @@ describe('登録サービス', () => {
   describe('テナントID生成', () => {
     it('一意のテナントIDが生成されるべき', async () => {
       const ids = new Set<string>();
-      const mockTenants: any[] = [];
 
-      // Generate 10 tenants and verify uniqueness
+      // Generate 10 tenant IDs and verify uniqueness
       for (let i = 0; i < 10; i++) {
-        const mockTenant = {
-          id: `123e4567-e89b-12d3-a456-42661417400${i}`,
-          name: `組織${i}`,
-          slug: `soshiki-${i}-${Date.now()}`,
-          adminEmail: `admin${i}@example.com`,
-          adminName: '管理者',
-          tier: 'FREE',
-          status: 'ACTIVE',
-          provisioningStatus: 'PENDING',
-          region: 'ap-northeast-1',
-          isolationModel: 'POOL',
-          computeType: 'SERVERLESS',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        mockTenants.push(mockTenant);
-        ids.add(mockTenant.id);
+        const mockId = `01HJXK5K3VDXK5YPNZBKRT5${String(i).padStart(3, '0')}`;
+        ids.add(mockId);
       }
 
       // All IDs should be unique

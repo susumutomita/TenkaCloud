@@ -4,7 +4,10 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "backend/services/shared/*",
+    "backend/services/control-plane/*",
+    "backend/services/application-plane/*"
   ],
   "module": "index.ts",
   "type": "module",
