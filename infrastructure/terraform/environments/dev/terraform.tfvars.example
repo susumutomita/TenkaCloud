@@ -1,0 +1,10 @@
+# Auth0 Configuration
+# Copy this file to terraform.tfvars and fill in your values
+# DO NOT commit terraform.tfvars to version control
+
+auth0_domain        = "your-tenant.auth0.com"
+auth0_client_id     = "your-management-api-client-id"
+auth0_client_secret = "your-management-api-client-secret"
+
+# AWS Configuration (optional, defaults to ap-northeast-1)
+# aws_region = "ap-northeast-1"
