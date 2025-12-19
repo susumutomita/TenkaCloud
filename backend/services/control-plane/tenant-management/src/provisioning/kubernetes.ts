@@ -56,7 +56,8 @@ export class KubernetesProvisioner {
 
   async deployParticipantApp(tenantSlug: string, namespace: string) {
     const appName = `app-${tenantSlug}`;
-    const image = 'tenkacloud/participant-app:latest';
+    const image =
+      process.env.PARTICIPANT_APP_IMAGE || 'tenkacloud/participant-app:v1.0.0';
 
     const deployment: V1Deployment = {
       metadata: { name: appName },

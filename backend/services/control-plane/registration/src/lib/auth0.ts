@@ -344,14 +344,20 @@ export async function createAdminUser(
   orgName: string,
   email: string,
   name: string
-): Promise<{ userId: string; temporaryPassword: string }> {
+): Promise<{ userId: string; temporaryPassword: string; isNewUser: boolean }> {
   const temporaryPassword = generateTemporaryPassword();
 
   try {
     let user = await getUserByEmail(email);
+    let isNewUser = false;
 
     if (!user) {
       user = await createUser(email, name, temporaryPassword);
+      isNewUser = true;
+    } else {
+      // 既存ユーザーの場合はパスワードをリセットして新しいパスワードを適用
+      await resetUserPassword(user.user_id, temporaryPassword);
+      logger.info({ email }, '既存ユーザーのパスワードをリセットしました');
     }
 
     const org = await getOrganizationByName(orgName);
@@ -359,11 +365,12 @@ export async function createAdminUser(
       await addMemberToOrganization(org.id, user.user_id);
     }
 
-    logger.info({ orgName, email }, '管理者ユーザーを作成しました');
+    logger.info({ orgName, email, isNewUser }, '管理者ユーザーを作成しました');
 
     return {
       userId: user.user_id,
       temporaryPassword,
+      isNewUser,
     };
   } catch (error) {
     logger.error(

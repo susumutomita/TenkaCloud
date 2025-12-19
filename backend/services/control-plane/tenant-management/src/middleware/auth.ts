@@ -101,6 +101,8 @@ export async function authMiddleware(c: Context, next: Next) {
 
     const jwtPayload = payload as unknown as JWTPayload;
 
+    // Note: email may be empty for M2M (machine-to-machine) tokens using client credentials.
+    // Downstream consumers must handle empty email values appropriately.
     const email = jwtPayload.email || '';
     const name = jwtPayload.name || jwtPayload.nickname || email;
     const roles = extractRoles(jwtPayload);
@@ -228,28 +230,28 @@ export async function optionalAuth(c: Context, next: Next) {
 
     const jwtPayload = payload as unknown as JWTPayload;
 
+    // Note: email may be empty for M2M (machine-to-machine) tokens using client credentials.
+    // Consistent with authMiddleware, always set user context even with empty email.
     const email = jwtPayload.email || '';
     const name = jwtPayload.name || jwtPayload.nickname || email;
     const roles = extractRoles(jwtPayload);
     const tenantId = extractTenantId(jwtPayload);
 
-    if (email) {
-      const user: AuthenticatedUser = {
-        id: jwtPayload.sub,
-        email,
-        username: name,
-        roles,
-        tenantId,
-        organizationId: jwtPayload.org_id,
-      };
+    const user: AuthenticatedUser = {
+      id: jwtPayload.sub,
+      email,
+      username: name,
+      roles,
+      tenantId,
+      organizationId: jwtPayload.org_id,
+    };
 
-      c.set('user', user);
+    c.set('user', user);
 
-      logger.info(
-        { userId: user.id, email: user.email },
-        'User authenticated (optional)'
-      );
-    }
+    logger.info(
+      { userId: user.id, email: user.email },
+      'User authenticated (optional)'
+    );
   } catch (error) {
     logger.debug(
       { error },
