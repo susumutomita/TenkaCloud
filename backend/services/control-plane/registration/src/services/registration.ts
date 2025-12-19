@@ -1,7 +1,7 @@
 import type { Tenant, TenantTier } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { createLogger } from '../lib/logger';
-import { createAdminUser } from '../lib/keycloak';
+import { createAdminUser } from '../lib/auth0';
 import {
   createNotificationService,
   type NotificationService,
@@ -94,9 +94,10 @@ export class RegistrationService {
       }
 
       if (updatedTenant.provisioningStatus === 'COMPLETED') {
-        // Create admin user in Keycloak
+        // Create admin user in Auth0 Organization
+        const orgName = `tenant-${updatedTenant.slug}`;
         const credentials = await createAdminUser(
-          updatedTenant.slug,
+          orgName,
           updatedTenant.adminEmail,
           updatedTenant.adminName || updatedTenant.adminEmail
         );

@@ -28,7 +28,7 @@ vi.mock('../lib/keycloak', () => ({
     setConfig: vi.fn(),
   }),
   createKeycloakUser: vi.fn().mockResolvedValue({
-    keycloakId: 'mock-keycloak-id',
+    auth0Id: 'mock-keycloak-id',
     temporaryPassword: 'TempPass123!',
   }),
   resetKeycloakPassword: vi.fn().mockResolvedValue('NewTempPass456!'),
@@ -73,7 +73,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'PENDING' as const,
-        keycloakId: 'mock-keycloak-id',
+        auth0Id: 'mock-keycloak-id',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -108,7 +108,7 @@ describe('ユーザー管理API', () => {
         name: '管理者',
         role: 'TENANT_ADMIN' as const,
         status: 'PENDING' as const,
-        keycloakId: 'mock-keycloak-id',
+        auth0Id: 'mock-keycloak-id',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -312,7 +312,7 @@ describe('ユーザー管理API', () => {
           name: 'ユーザー1',
           role: 'PARTICIPANT' as const,
           status: 'ACTIVE' as const,
-          keycloakId: 'keycloak-1',
+          auth0Id: 'keycloak-1',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -323,7 +323,7 @@ describe('ユーザー管理API', () => {
           name: 'ユーザー2',
           role: 'TENANT_ADMIN' as const,
           status: 'ACTIVE' as const,
-          keycloakId: 'keycloak-2',
+          auth0Id: 'keycloak-2',
           createdAt: new Date(),
           updatedAt: new Date(),
         },
@@ -453,7 +453,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'keycloak-1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -567,7 +567,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'TENANT_ADMIN' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'keycloak-1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -661,7 +661,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'keycloak-1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -710,7 +710,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: null,
+        auth0Id: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -807,7 +807,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: 'keycloak-1',
+        auth0Id: 'keycloak-1',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -853,7 +853,7 @@ describe('ユーザー管理API', () => {
         name: 'テストユーザー',
         role: 'PARTICIPANT' as const,
         status: 'ACTIVE' as const,
-        keycloakId: null,
+        auth0Id: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };

@@ -138,14 +138,28 @@ describe('監査ログミドルウェア', () => {
   });
 
   describe('リソース解析', () => {
-    it('IDなしのパス /api/tenants を正しく解析するべき', async () => {
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'GET',
-        path: '/api/tenants',
-      } as any;
+    const createMockReq = (method: string, path: string) => ({
+      method,
+      path,
+      header: vi.fn((name: string) => {
+        if (name === 'user-agent') return 'Test Agent';
+        if (name === 'x-forwarded-for') return '192.168.1.1';
+        return null;
+      }),
+      raw: {
+        clone: () => ({
+          json: vi.fn().mockResolvedValue({}),
+        }),
+      } as any,
+    });
 
-      await auditMiddleware(mockContext as Context, mockNext);
+    it('IDなしのパス /api/tenants を正しく解析するべき', async () => {
+      const context = {
+        ...mockContext,
+        req: createMockReq('GET', '/api/tenants'),
+      } as unknown as Context;
+
+      await auditMiddleware(context, mockNext);
 
       const logEntry = mockLogger.info.mock.calls[0][0];
       expect(logEntry.resource).toBe('tenants');
@@ -155,13 +169,12 @@ describe('監査ログミドルウェア', () => {
 
     it('UUIDを含むパス /api/tenants/:id を正しく解析するべき', async () => {
       const testUuid = '550e8400-e29b-41d4-a716-446655440000';
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'GET',
-        path: `/api/tenants/${testUuid}`,
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('GET', `/api/tenants/${testUuid}`),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
       const logEntry = mockLogger.info.mock.calls[0][0];
       expect(logEntry.resource).toBe('tenants');
@@ -170,13 +183,12 @@ describe('監査ログミドルウェア', () => {
     });
 
     it('POSTリクエストをcreateアクションとして記録するべき', async () => {
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'POST',
-        path: '/api/tenants',
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('POST', '/api/tenants'),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
       const logEntry = mockLogger.info.mock.calls[0][0];
       expect(logEntry.action).toBe('create');
@@ -184,13 +196,12 @@ describe('監査ログミドルウェア', () => {
 
     it('PATCHリクエストをupdateアクションとして記録するべき', async () => {
       const testUuid = '550e8400-e29b-41d4-a716-446655440000';
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'PATCH',
-        path: `/api/tenants/${testUuid}`,
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('PATCH', `/api/tenants/${testUuid}`),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
       const logEntry = mockLogger.info.mock.calls[0][0];
       expect(logEntry.action).toBe('update');
@@ -198,13 +209,12 @@ describe('監査ログミドルウェア', () => {
 
     it('DELETEリクエストをdeleteアクションとして記録するべき', async () => {
       const testUuid = '550e8400-e29b-41d4-a716-446655440000';
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'DELETE',
-        path: `/api/tenants/${testUuid}`,
-      } as any;
+      const context = {
+        ...mockContext,
+        req: createMockReq('DELETE', `/api/tenants/${testUuid}`),
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
       const logEntry = mockLogger.info.mock.calls[0][0];
       expect(logEntry.action).toBe('delete');
@@ -220,18 +230,25 @@ describe('監査ログミドルウェア', () => {
         apiKey: 'api-key-123',
       };
 
-      mockContext.req = {
-        ...mockContext.req,
-        method: 'POST',
-        path: '/api/tenants',
-        raw: {
-          clone: () => ({
-            json: vi.fn().mockResolvedValue(sensitiveData),
+      const context = {
+        ...mockContext,
+        req: {
+          method: 'POST',
+          path: '/api/tenants',
+          header: vi.fn((name: string) => {
+            if (name === 'user-agent') return 'Test Agent';
+            if (name === 'x-forwarded-for') return '192.168.1.1';
+            return null;
           }),
-        } as any,
-      } as any;
+          raw: {
+            clone: () => ({
+              json: vi.fn().mockResolvedValue(sensitiveData),
+            }),
+          } as any,
+        },
+      } as unknown as Context;
 
-      await auditMiddleware(mockContext as Context, mockNext);
+      await auditMiddleware(context, mockNext);
 
       const logEntry = mockLogger.info.mock.calls[0][0];
       expect(logEntry.requestBody.name).toBe('Test Tenant');

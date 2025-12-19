@@ -4,12 +4,14 @@ import { createLogger } from '../lib/logger';
 
 const logger = createLogger('auth-middleware');
 
-// Keycloak configuration
-const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tenkacloud';
-const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
-const JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
+// Auth0 configuration
+const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN || 'dev-tenkacloud.auth0.com';
+const AUTH0_AUDIENCE =
+  process.env.AUTH0_AUDIENCE || 'https://api.tenkacloud.com';
+const JWKS_URL = `https://${AUTH0_DOMAIN}/.well-known/jwks.json`;
+const AUTH0_NAMESPACE = 'https://tenkacloud.com';
 
-// Lazy initialization of JWKS to avoid startup failures when Keycloak is not available
+// Lazy initialization of JWKS to avoid startup failures
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJWKS() {
@@ -26,19 +28,15 @@ export enum UserRole {
   USER = 'user',
 }
 
-// JWT payload interface
+// Auth0 JWT payload interface
 export interface JWTPayload {
-  sub: string; // Subject (user ID)
-  email?: string; // Email is optional in JWT
-  preferred_username?: string; // Username is optional in JWT
-  realm_access?: {
-    roles: string[];
-  };
-  resource_access?: {
-    [key: string]: {
-      roles: string[];
-    };
-  };
+  sub: string;
+  email?: string;
+  name?: string;
+  nickname?: string;
+  picture?: string;
+  org_id?: string;
+  [key: `${typeof AUTH0_NAMESPACE}/${string}`]: unknown;
 }
 
 // Authenticated user context
@@ -47,6 +45,8 @@ export interface AuthenticatedUser {
   email: string;
   username: string;
   roles: string[];
+  tenantId?: string;
+  organizationId?: string;
 }
 
 // Extend Hono context with user info
@@ -56,8 +56,26 @@ declare module 'hono' {
   }
 }
 
+function extractRoles(payload: JWTPayload): string[] {
+  const rolesKey = `${AUTH0_NAMESPACE}/roles` as const;
+  const roles = payload[rolesKey];
+  if (Array.isArray(roles)) {
+    return roles as string[];
+  }
+  return [];
+}
+
+function extractTenantId(payload: JWTPayload): string | undefined {
+  const tenantKey = `${AUTH0_NAMESPACE}/tenant_id` as const;
+  const tenantId = payload[tenantKey];
+  if (typeof tenantId === 'string') {
+    return tenantId;
+  }
+  return undefined;
+}
+
 /**
- * JWT authentication middleware
+ * JWT authentication middleware for Auth0
  * Validates JWT token from Authorization header and attaches user info to context
  */
 export async function authMiddleware(c: Context, next: Next) {
@@ -76,36 +94,33 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   try {
-    // Verify JWT token
     const { payload } = await jwtVerify(token, getJWKS(), {
-      issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
+      issuer: `https://${AUTH0_DOMAIN}/`,
+      audience: AUTH0_AUDIENCE,
     });
 
-    // Extract user information
     const jwtPayload = payload as unknown as JWTPayload;
 
-    // Validate required JWT claims
-    if (!jwtPayload.email || !jwtPayload.preferred_username) {
-      logger.error(
-        { payload: jwtPayload },
-        'JWT payload missing required fields'
-      );
-      return c.json({ error: 'Unauthorized: Invalid token claims' }, 401);
-    }
-
-    const roles = jwtPayload.realm_access?.roles || [];
+    const email = jwtPayload.email || '';
+    const name = jwtPayload.name || jwtPayload.nickname || email;
+    const roles = extractRoles(jwtPayload);
+    const tenantId = extractTenantId(jwtPayload);
 
     const user: AuthenticatedUser = {
       id: jwtPayload.sub,
-      email: jwtPayload.email,
-      username: jwtPayload.preferred_username,
+      email,
+      username: name,
       roles,
+      tenantId,
+      organizationId: jwtPayload.org_id,
     };
 
-    // Attach user to context
     c.set('user', user);
 
-    logger.info({ userId: user.id, email: user.email }, 'User authenticated');
+    logger.info(
+      { userId: user.id, email: user.email, orgId: user.organizationId },
+      'User authenticated'
+    );
 
     await next();
   } catch (error) {
@@ -152,6 +167,41 @@ export function requireRoles(...requiredRoles: UserRole[]) {
 }
 
 /**
+ * Tenant access control middleware
+ * Ensures user can only access resources within their tenant
+ */
+export function requireTenantAccess() {
+  return async (c: Context, next: Next) => {
+    const user = c.get('user');
+
+    if (!user) {
+      return c.json({ error: 'Unauthorized: No user context' }, 401);
+    }
+
+    // Platform admins can access all tenants
+    if (user.roles.includes(UserRole.PLATFORM_ADMIN)) {
+      await next();
+      return;
+    }
+
+    // For tenant-specific access, check tenant ID from path or header
+    const pathTenantId = c.req.param('tenantId');
+    const headerTenantId = c.req.header('X-Tenant-ID');
+    const requestedTenantId = pathTenantId || headerTenantId;
+
+    if (requestedTenantId && user.tenantId !== requestedTenantId) {
+      logger.warn(
+        { userId: user.id, userTenantId: user.tenantId, requestedTenantId },
+        'Tenant access denied'
+      );
+      return c.json({ error: 'Forbidden: Cannot access this tenant' }, 403);
+    }
+
+    await next();
+  };
+}
+
+/**
  * Optional authentication middleware
  * Attempts to authenticate but doesn't fail if no token present
  */
@@ -166,46 +216,41 @@ export async function optionalAuth(c: Context, next: Next) {
   const [bearer, token] = authHeader.split(' ');
 
   if (bearer !== 'Bearer' || !token) {
-    // Invalid format, but optional auth should continue
     await next();
     return;
   }
 
   try {
-    // Verify JWT token
     const { payload } = await jwtVerify(token, getJWKS(), {
-      issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
+      issuer: `https://${AUTH0_DOMAIN}/`,
+      audience: AUTH0_AUDIENCE,
     });
 
-    // Extract user information
     const jwtPayload = payload as unknown as JWTPayload;
 
-    // For optional auth, use defaults if email/username are missing
-    if (jwtPayload.email && jwtPayload.preferred_username) {
-      const roles = jwtPayload.realm_access?.roles || [];
+    const email = jwtPayload.email || '';
+    const name = jwtPayload.name || jwtPayload.nickname || email;
+    const roles = extractRoles(jwtPayload);
+    const tenantId = extractTenantId(jwtPayload);
 
+    if (email) {
       const user: AuthenticatedUser = {
         id: jwtPayload.sub,
-        email: jwtPayload.email,
-        username: jwtPayload.preferred_username,
+        email,
+        username: name,
         roles,
+        tenantId,
+        organizationId: jwtPayload.org_id,
       };
 
-      // Attach user to context
       c.set('user', user);
 
       logger.info(
         { userId: user.id, email: user.email },
         'User authenticated (optional)'
       );
-    } else {
-      logger.debug(
-        { payload: jwtPayload },
-        'Optional auth: JWT payload missing email or username, skipping user context'
-      );
     }
   } catch (error) {
-    // JWT verification failed, but optional auth should continue
     logger.debug(
       { error },
       'Optional auth: JWT verification failed, continuing without user'
