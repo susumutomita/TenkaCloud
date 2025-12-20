@@ -2,9 +2,17 @@ import {
   EvaluationCategory,
   EvaluationStatus,
   Severity,
-  type Prisma,
-} from '@prisma/client';
-import { prisma } from '../lib/prisma';
+  type ScoringSession,
+  type EvaluationCriteria,
+  type TerraformSnapshot,
+  type EvaluationItemResult,
+  type ScoringFeedback,
+  type CriteriaDetail,
+} from '@tenkacloud/dynamodb';
+import {
+  scoringSessionRepository,
+  evaluationCriteriaRepository,
+} from '../lib/dynamodb';
 
 // ========== 型定義 ==========
 
@@ -15,6 +23,7 @@ export interface CreateEvaluationCriteriaInput {
   category: EvaluationCategory;
   weight?: number;
   maxScore?: number;
+  criteriaDetails?: CriteriaDetail[];
 }
 
 export interface UpdateEvaluationCriteriaInput {
@@ -24,6 +33,7 @@ export interface UpdateEvaluationCriteriaInput {
   weight?: number;
   maxScore?: number;
   isActive?: boolean;
+  criteriaDetails?: CriteriaDetail[];
 }
 
 export interface ListEvaluationCriteriaOptions {
@@ -66,148 +76,118 @@ export interface TerraformResourceInstance {
 
 export async function createEvaluationCriteria(
   input: CreateEvaluationCriteriaInput
-) {
-  return prisma.evaluationCriteria.create({
-    data: input,
+): Promise<EvaluationCriteria> {
+  return evaluationCriteriaRepository.create({
+    tenantId: input.tenantId,
+    name: input.name,
+    description: input.description,
+    category: input.category,
+    weight: input.weight,
+    maxScore: input.maxScore,
+    criteriaDetails: input.criteriaDetails,
   });
 }
 
 export async function getEvaluationCriteria(
   criteriaId: string,
   tenantId: string
-) {
-  const criteria = await prisma.evaluationCriteria.findUnique({
-    where: { id: criteriaId },
-    include: { criteriaDetails: true },
-  });
-
-  if (!criteria || criteria.tenantId !== tenantId) {
-    return null;
-  }
-
-  return criteria;
+): Promise<EvaluationCriteria | null> {
+  return evaluationCriteriaRepository.findByIdAndTenant(criteriaId, tenantId);
 }
 
 export async function listEvaluationCriteria(
   tenantId: string,
   options: ListEvaluationCriteriaOptions
-) {
+): Promise<{
+  data: EvaluationCriteria[];
+  total: number;
+  page: number;
+  limit: number;
+}> {
   const { page, limit, category, isActive } = options;
-  const skip = (page - 1) * limit;
 
-  const where: Prisma.EvaluationCriteriaWhereInput = { tenantId };
-  if (category) {
-    where.category = category;
-  }
-  if (isActive !== undefined) {
-    where.isActive = isActive;
-  }
-
-  const [data, total] = await Promise.all([
-    prisma.evaluationCriteria.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: { criteriaDetails: true },
+  const [{ criteria }, total] = await Promise.all([
+    evaluationCriteriaRepository.listByTenant(tenantId, {
+      category,
+      activeOnly: isActive,
+      limit,
     }),
-    prisma.evaluationCriteria.count({ where }),
+    evaluationCriteriaRepository.countByTenant(tenantId, isActive),
   ]);
 
-  return { data, total, page, limit };
+  return { data: criteria, total, page, limit };
 }
 
 export async function updateEvaluationCriteria(
   criteriaId: string,
   tenantId: string,
   updates: UpdateEvaluationCriteriaInput
-) {
-  const criteria = await prisma.evaluationCriteria.findUnique({
-    where: { id: criteriaId },
-  });
+): Promise<EvaluationCriteria | null> {
+  const criteria = await evaluationCriteriaRepository.findByIdAndTenant(
+    criteriaId,
+    tenantId
+  );
 
-  if (!criteria || criteria.tenantId !== tenantId) {
+  if (!criteria) {
     return null;
   }
 
-  return prisma.evaluationCriteria.update({
-    where: { id: criteriaId },
-    data: updates,
-  });
+  return evaluationCriteriaRepository.update(criteriaId, updates);
 }
 
 export async function deleteEvaluationCriteria(
   criteriaId: string,
   tenantId: string
-) {
-  const criteria = await prisma.evaluationCriteria.findUnique({
-    where: { id: criteriaId },
-  });
+): Promise<void> {
+  const criteria = await evaluationCriteriaRepository.findByIdAndTenant(
+    criteriaId,
+    tenantId
+  );
 
-  if (!criteria || criteria.tenantId !== tenantId) {
+  if (!criteria) {
     return;
   }
 
-  await prisma.evaluationCriteria.delete({
-    where: { id: criteriaId },
-  });
+  await evaluationCriteriaRepository.delete(criteriaId);
 }
 
 // ========== 採点セッション管理 ==========
 
-export async function createScoringSession(input: CreateScoringSessionInput) {
-  return prisma.scoringSession.create({
-    data: input,
-  });
+export async function createScoringSession(
+  input: CreateScoringSessionInput
+): Promise<ScoringSession> {
+  return scoringSessionRepository.create(input);
 }
 
-export async function getScoringSession(sessionId: string, tenantId: string) {
-  const session = await prisma.scoringSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      evaluationItems: {
-        include: { criteria: true },
-      },
-      feedbacks: true,
-    },
-  });
-
-  if (!session || session.tenantId !== tenantId) {
-    return null;
-  }
-
-  return session;
+export async function getScoringSession(
+  sessionId: string,
+  tenantId: string
+): Promise<ScoringSession | null> {
+  return scoringSessionRepository.findByIdAndTenant(sessionId, tenantId);
 }
 
 export async function listScoringSessions(
   tenantId: string,
   options: ListScoringSessionsOptions
-) {
+): Promise<{
+  data: ScoringSession[];
+  total: number;
+  page: number;
+  limit: number;
+}> {
   const { page, limit, battleId, participantId, status } = options;
-  const skip = (page - 1) * limit;
 
-  const where: Prisma.ScoringSessionWhereInput = { tenantId };
-  if (battleId) {
-    where.battleId = battleId;
-  }
-  if (participantId) {
-    where.participantId = participantId;
-  }
-  if (status) {
-    where.status = status;
-  }
-
-  const [data, total] = await Promise.all([
-    prisma.scoringSession.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
+  const [{ sessions }, total] = await Promise.all([
+    scoringSessionRepository.listByTenant(tenantId, {
+      battleId,
+      participantId,
+      status,
+      limit,
     }),
-    prisma.scoringSession.count({ where }),
+    scoringSessionRepository.countByTenant(tenantId, status),
   ]);
 
-  return { data, total, page, limit };
+  return { data: sessions, total, page, limit };
 }
 
 // ========== 採点実行 ==========
@@ -216,12 +196,13 @@ export async function submitForEvaluation(
   sessionId: string,
   tenantId: string,
   terraformState: TerraformState
-) {
-  const session = await prisma.scoringSession.findUnique({
-    where: { id: sessionId },
-  });
+): Promise<ScoringSession | null> {
+  const session = await scoringSessionRepository.findByIdAndTenant(
+    sessionId,
+    tenantId
+  );
 
-  if (!session || session.tenantId !== tenantId) {
+  if (!session) {
     return null;
   }
 
@@ -229,35 +210,30 @@ export async function submitForEvaluation(
     throw new Error('評価待ちのセッションのみ提出できます');
   }
 
-  // Terraform State スナップショットを保存
-  await prisma.terraformSnapshot.create({
-    data: {
-      sessionId,
-      stateVersion: terraformState.version,
-      resourceCount: terraformState.resources?.length ?? 0,
-      stateData: terraformState as unknown as Prisma.JsonObject,
-    },
-  });
+  // Terraform State スナップショットを保存してステータスを更新
+  const terraformSnapshot: TerraformSnapshot = {
+    stateVersion: terraformState.version,
+    resourceCount: terraformState.resources?.length ?? 0,
+    stateData: terraformState,
+  };
 
-  // ステータスを IN_PROGRESS に更新
-  return prisma.scoringSession.update({
-    where: { id: sessionId },
-    data: {
-      status: EvaluationStatus.IN_PROGRESS,
-      submittedAt: new Date(),
-    },
+  return scoringSessionRepository.update(sessionId, {
+    status: EvaluationStatus.IN_PROGRESS,
+    submittedAt: new Date(),
+    terraformSnapshot,
   });
 }
 
-export async function evaluateSubmission(sessionId: string, tenantId: string) {
-  const session = await prisma.scoringSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      terraformSnapshot: true,
-    },
-  });
+export async function evaluateSubmission(
+  sessionId: string,
+  tenantId: string
+): Promise<ScoringSession | null> {
+  const session = await scoringSessionRepository.findByIdAndTenant(
+    sessionId,
+    tenantId
+  );
 
-  if (!session || session.tenantId !== tenantId) {
+  if (!session) {
     return null;
   }
 
@@ -266,99 +242,62 @@ export async function evaluateSubmission(sessionId: string, tenantId: string) {
   }
 
   // テナントの評価基準を取得
-  const criteria = await prisma.evaluationCriteria.findMany({
-    where: { tenantId, isActive: true },
-    include: { criteriaDetails: true },
-  });
+  const { criteria } = await evaluationCriteriaRepository.listByTenant(
+    tenantId,
+    { activeOnly: true }
+  );
 
-  const terraformState = session.terraformSnapshot
-    ?.stateData as unknown as TerraformState;
+  const terraformState = session.terraformSnapshot?.stateData as
+    | TerraformState
+    | undefined;
   const evaluationResults = evaluateTerraformState(terraformState, criteria);
 
-  // 評価結果を保存
-  if (evaluationResults.items.length > 0) {
-    await prisma.evaluationItem.createMany({
-      data: evaluationResults.items.map((item) => ({
-        sessionId,
-        criteriaId: item.criteriaId,
-        score: item.score,
-        maxScore: item.maxScore,
-        passed: item.passed,
-        actualValue: item.actualValue,
-        expectedValue: item.expectedValue,
-        details: item.details as Prisma.JsonObject,
-      })),
-    });
-  }
-
-  // フィードバックを保存
-  if (evaluationResults.feedbacks.length > 0) {
-    await prisma.feedback.createMany({
-      data: evaluationResults.feedbacks.map((fb) => ({
-        sessionId,
-        category: fb.category,
-        severity: fb.severity,
-        title: fb.title,
-        message: fb.message,
-        suggestion: fb.suggestion,
-        resourceRef: fb.resourceRef,
-      })),
-    });
-  }
-
-  // セッションを完了状態に更新
-  return prisma.scoringSession.update({
-    where: { id: sessionId },
-    data: {
-      status: EvaluationStatus.COMPLETED,
-      totalScore: evaluationResults.totalScore,
-      maxPossibleScore: evaluationResults.maxPossibleScore,
-      evaluatedAt: new Date(),
-    },
+  // セッションを完了状態に更新（評価結果とフィードバックを含む）
+  return scoringSessionRepository.update(sessionId, {
+    status: EvaluationStatus.COMPLETED,
+    totalScore: evaluationResults.totalScore,
+    maxPossibleScore: evaluationResults.maxPossibleScore,
+    evaluatedAt: new Date(),
+    evaluationItems: evaluationResults.items,
+    feedbacks: evaluationResults.feedbacks,
   });
 }
 
 // ========== フィードバック取得 ==========
 
-export async function getSessionFeedback(sessionId: string, tenantId: string) {
-  const session = await prisma.scoringSession.findUnique({
-    where: { id: sessionId },
-  });
+export async function getSessionFeedback(
+  sessionId: string,
+  tenantId: string
+): Promise<ScoringFeedback[] | null> {
+  const session = await scoringSessionRepository.findByIdAndTenant(
+    sessionId,
+    tenantId
+  );
 
-  if (!session || session.tenantId !== tenantId) {
+  if (!session) {
     return null;
   }
 
-  return prisma.feedback.findMany({
-    where: { sessionId },
-    orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
-  });
+  // フィードバックをseverityでソート
+  const feedbacks = session.feedbacks ?? [];
+  const severityOrder = {
+    [Severity.CRITICAL]: 0,
+    [Severity.HIGH]: 1,
+    [Severity.MEDIUM]: 2,
+    [Severity.LOW]: 3,
+    [Severity.INFO]: 4,
+  };
+
+  return feedbacks.sort(
+    (a, b) => severityOrder[a.severity] - severityOrder[b.severity]
+  );
 }
 
 // ========== ヘルパー関数（テスト用にエクスポート） ==========
 
-interface EvaluationItemResult {
-  criteriaId: string;
-  score: number;
-  maxScore: number;
-  passed: boolean;
-  actualValue?: string;
-  expectedValue?: string;
-  details?: Record<string, unknown>;
-}
-
-interface FeedbackResult {
-  category: EvaluationCategory;
-  severity: Severity;
-  title: string;
-  message: string;
-  suggestion?: string;
-  resourceRef?: string;
-}
-
 interface EvaluationResults {
   items: EvaluationItemResult[];
-  feedbacks: FeedbackResult[];
+  feedbacks: ScoringFeedback[];
   totalScore: number;
   maxPossibleScore: number;
 }
@@ -369,15 +308,7 @@ interface CriteriaWithDetails {
   category: EvaluationCategory;
   maxScore: number;
   weight: number;
-  criteriaDetails: CriteriaDetail[];
-}
-
-interface CriteriaDetail {
-  ruleKey: string;
-  ruleValue: string;
-  points: number;
-  severity: Severity;
-  description?: string | null;
+  criteriaDetails?: CriteriaDetail[];
 }
 
 export function evaluateTerraformState(
@@ -385,7 +316,7 @@ export function evaluateTerraformState(
   criteria: CriteriaWithDetails[]
 ): EvaluationResults {
   const items: EvaluationItemResult[] = [];
-  const feedbacks: FeedbackResult[] = [];
+  const feedbacks: ScoringFeedback[] = [];
   let totalScore = 0;
   let maxPossibleScore = 0;
 
@@ -403,12 +334,12 @@ export function evaluateTerraformState(
 export function evaluateCriterion(
   state: TerraformState | undefined,
   criterion: CriteriaWithDetails
-): { item: EvaluationItemResult; feedbacks: FeedbackResult[] } {
-  const feedbacks: FeedbackResult[] = [];
+): { item: EvaluationItemResult; feedbacks: ScoringFeedback[] } {
+  const feedbacks: ScoringFeedback[] = [];
   let score = 0;
   const details: Record<string, unknown> = {};
 
-  for (const detail of criterion.criteriaDetails) {
+  for (const detail of criterion.criteriaDetails ?? []) {
     const checkResult = checkRule(state, detail.ruleKey, detail.ruleValue);
     details[detail.ruleKey] = checkResult;
 

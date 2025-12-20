@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { BattleMode, BattleStatus } from '@prisma/client';
+import { BattleMode, BattleStatus } from '@tenkacloud/dynamodb';
 import {
   createBattle,
   getBattle,
@@ -19,7 +19,7 @@ export const battlesRoutes = new Hono();
 const createBattleSchema = z.object({
   title: z.string().min(1).max(100),
   description: z.string().max(1000).optional(),
-  mode: z.nativeEnum(BattleMode),
+  mode: z.enum([BattleMode.INDIVIDUAL, BattleMode.TEAM]),
   maxParticipants: z.number().int().min(2).max(100).default(10),
   timeLimit: z.number().int().min(60).max(86400).default(3600),
 });
@@ -34,7 +34,14 @@ const updateBattleSchema = z.object({
 const listBattlesSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  status: z.nativeEnum(BattleStatus).optional(),
+  status: z
+    .enum([
+      BattleStatus.WAITING,
+      BattleStatus.IN_PROGRESS,
+      BattleStatus.FINISHED,
+      BattleStatus.CANCELLED,
+    ])
+    .optional(),
 });
 
 const updateScoreSchema = z.object({

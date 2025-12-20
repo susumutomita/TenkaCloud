@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { battlesRoutes } from './battles';
-import { BattleMode, BattleStatus } from '@prisma/client';
+import { BattleMode, BattleStatus } from '@tenkacloud/dynamodb';
 import * as battleService from '../services/battle';
 
 vi.mock('../services/battle');

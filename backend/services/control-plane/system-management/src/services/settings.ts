@@ -1,5 +1,5 @@
-import type { Prisma, SystemSetting } from '@prisma/client';
-import { prisma } from '../lib/prisma';
+import type { SystemSetting } from '@tenkacloud/dynamodb';
+import { systemSettingRepository } from '../lib/dynamodb';
 import { createLogger } from '../lib/logger';
 import { AuditService } from './audit';
 
@@ -7,13 +7,13 @@ const logger = createLogger('settings-service');
 
 export interface CreateSettingInput {
   key: string;
-  value: Prisma.InputJsonValue;
+  value: unknown;
   category: string;
   updatedBy: string;
 }
 
 export interface UpdateSettingInput {
-  value: Prisma.InputJsonValue;
+  value: unknown;
   updatedBy: string;
 }
 
@@ -47,24 +47,20 @@ export class SettingsService {
       '設定を作成します'
     );
 
-    const setting = await prisma.systemSetting.create({
-      data: {
-        key: input.key,
-        value: input.value,
-        category: input.category,
-        updatedBy: input.updatedBy,
-      },
+    const setting = await systemSettingRepository.set({
+      key: input.key,
+      value: input.value,
+      category: input.category,
+      updatedBy: input.updatedBy,
     });
 
-    logger.info({ settingId: setting.id }, '設定を作成しました');
+    logger.info({ key: setting.key }, '設定を作成しました');
 
     return setting;
   }
 
   async getSettingByKey(key: string): Promise<SystemSetting | null> {
-    return prisma.systemSetting.findUnique({
-      where: { key },
-    });
+    return systemSettingRepository.get(key);
   }
 
   async updateSetting(
@@ -73,15 +69,20 @@ export class SettingsService {
   ): Promise<SystemSetting> {
     logger.info({ key }, '設定を更新します');
 
-    const setting = await prisma.systemSetting.update({
-      where: { key },
-      data: {
-        value: input.value,
-        updatedBy: input.updatedBy,
-      },
+    // DynamoDB では set で upsert される
+    const existing = await systemSettingRepository.get(key);
+    if (!existing) {
+      throw new Error(`設定が見つかりません: ${key}`);
+    }
+
+    const setting = await systemSettingRepository.set({
+      key,
+      value: input.value,
+      category: existing.category,
+      updatedBy: input.updatedBy,
     });
 
-    logger.info({ settingId: setting.id }, '設定を更新しました');
+    logger.info({ key: setting.key }, '設定を更新しました');
 
     return setting;
   }
@@ -89,20 +90,16 @@ export class SettingsService {
   async deleteSetting(key: string, input: DeleteSettingInput): Promise<void> {
     logger.info({ key, userId: input.userId }, '設定を削除します');
 
-    const existingSetting = await prisma.systemSetting.findUnique({
-      where: { key },
-    });
+    const existingSetting = await systemSettingRepository.get(key);
 
-    await prisma.systemSetting.delete({
-      where: { key },
-    });
+    await systemSettingRepository.delete(key);
 
     // 監査ログを記録
     await this.auditService.createLog({
       userId: input.userId,
       action: 'DELETE',
       resourceType: 'SETTING',
-      resourceId: existingSetting?.id,
+      resourceId: key,
       details: { key, category: existingSetting?.category },
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
@@ -112,27 +109,23 @@ export class SettingsService {
   }
 
   async listSettings(input: ListSettingsInput): Promise<ListSettingsResult> {
-    const where = {
-      ...(input.category && { category: input.category }),
-    };
+    let settings: SystemSetting[];
 
-    const [settings, total] = await Promise.all([
-      prisma.systemSetting.findMany({
-        where,
-        take: input.limit ?? 50,
-        skip: input.offset ?? 0,
-        orderBy: { key: 'asc' },
-      }),
-      prisma.systemSetting.count({ where }),
-    ]);
+    if (input.category) {
+      settings = await systemSettingRepository.listByCategory(input.category);
+    } else {
+      settings = await systemSettingRepository.listAll();
+    }
 
-    return { settings, total };
+    // offset/limit でのページネーション（クライアント側）
+    const offset = input.offset ?? 0;
+    const limit = input.limit ?? 50;
+    const paginatedSettings = settings.slice(offset, offset + limit);
+
+    return { settings: paginatedSettings, total: settings.length };
   }
 
   async getSettingsByCategory(category: string): Promise<SystemSetting[]> {
-    return prisma.systemSetting.findMany({
-      where: { category },
-      orderBy: { key: 'asc' },
-    });
+    return systemSettingRepository.listByCategory(category);
   }
 }

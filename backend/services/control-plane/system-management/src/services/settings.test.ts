@@ -1,20 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from './settings';
-import { prisma } from '../lib/prisma';
 import type { AuditService } from './audit';
+import type { SystemSetting } from '@tenkacloud/dynamodb';
 
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    systemSetting: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn(),
-    },
-  },
+const mockSystemSettingRepository = vi.hoisted(() => ({
+  set: vi.fn(),
+  get: vi.fn(),
+  listByCategory: vi.fn(),
+  listAll: vi.fn(),
+  delete: vi.fn(),
 }));
+
+vi.mock('../lib/dynamodb', () => ({
+  systemSettingRepository: mockSystemSettingRepository,
+}));
+
+const createMockSetting = (
+  overrides: Partial<SystemSetting> = {}
+): SystemSetting => ({
+  key: 'app.theme',
+  value: { dark: true },
+  category: 'appearance',
+  updatedBy: 'user-1',
+  updatedAt: new Date(),
+  ...overrides,
+});
 
 describe('SettingsService', () => {
   let service: SettingsService;
@@ -36,16 +46,9 @@ describe('SettingsService', () => {
 
   describe('createSetting', () => {
     it('設定を作成すべき', async () => {
-      const mockSetting = {
-        id: 'setting-1',
-        key: 'app.theme',
-        value: { dark: true },
-        category: 'appearance',
-        updatedAt: new Date(),
-        updatedBy: 'user-1',
-      };
+      const mockSetting = createMockSetting();
 
-      vi.mocked(prisma.systemSetting.create).mockResolvedValue(mockSetting);
+      mockSystemSettingRepository.set.mockResolvedValue(mockSetting);
 
       const result = await service.createSetting({
         key: 'app.theme',
@@ -55,40 +58,29 @@ describe('SettingsService', () => {
       });
 
       expect(result).toEqual(mockSetting);
-      expect(prisma.systemSetting.create).toHaveBeenCalledWith({
-        data: {
-          key: 'app.theme',
-          value: { dark: true },
-          category: 'appearance',
-          updatedBy: 'user-1',
-        },
+      expect(mockSystemSettingRepository.set).toHaveBeenCalledWith({
+        key: 'app.theme',
+        value: { dark: true },
+        category: 'appearance',
+        updatedBy: 'user-1',
       });
     });
   });
 
   describe('getSettingByKey', () => {
     it('キーで設定を取得すべき', async () => {
-      const mockSetting = {
-        id: 'setting-1',
-        key: 'app.theme',
-        value: { dark: true },
-        category: 'appearance',
-        updatedAt: new Date(),
-        updatedBy: 'user-1',
-      };
+      const mockSetting = createMockSetting();
 
-      vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(mockSetting);
+      mockSystemSettingRepository.get.mockResolvedValue(mockSetting);
 
       const result = await service.getSettingByKey('app.theme');
 
       expect(result).toEqual(mockSetting);
-      expect(prisma.systemSetting.findUnique).toHaveBeenCalledWith({
-        where: { key: 'app.theme' },
-      });
+      expect(mockSystemSettingRepository.get).toHaveBeenCalledWith('app.theme');
     });
 
     it('存在しないキーの場合、nullを返すべき', async () => {
-      vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(null);
+      mockSystemSettingRepository.get.mockResolvedValue(null);
 
       const result = await service.getSettingByKey('non-existent');
 
@@ -98,46 +90,47 @@ describe('SettingsService', () => {
 
   describe('updateSetting', () => {
     it('設定を更新すべき', async () => {
-      const mockSetting = {
-        id: 'setting-1',
-        key: 'app.theme',
+      const existingSetting = createMockSetting();
+      const updatedSetting = createMockSetting({
         value: { dark: false },
-        category: 'appearance',
-        updatedAt: new Date(),
         updatedBy: 'user-2',
-      };
+      });
 
-      vi.mocked(prisma.systemSetting.update).mockResolvedValue(mockSetting);
+      mockSystemSettingRepository.get.mockResolvedValue(existingSetting);
+      mockSystemSettingRepository.set.mockResolvedValue(updatedSetting);
 
       const result = await service.updateSetting('app.theme', {
         value: { dark: false },
         updatedBy: 'user-2',
       });
 
-      expect(result).toEqual(mockSetting);
-      expect(prisma.systemSetting.update).toHaveBeenCalledWith({
-        where: { key: 'app.theme' },
-        data: {
-          value: { dark: false },
-          updatedBy: 'user-2',
-        },
+      expect(result).toEqual(updatedSetting);
+      expect(mockSystemSettingRepository.set).toHaveBeenCalledWith({
+        key: 'app.theme',
+        value: { dark: false },
+        category: 'appearance',
+        updatedBy: 'user-2',
       });
+    });
+
+    it('存在しないキーの場合、エラーを投げるべき', async () => {
+      mockSystemSettingRepository.get.mockResolvedValue(null);
+
+      await expect(
+        service.updateSetting('non-existent', {
+          value: { dark: false },
+          updatedBy: 'user-1',
+        })
+      ).rejects.toThrow('設定が見つかりません: non-existent');
     });
   });
 
   describe('deleteSetting', () => {
     it('設定を削除し監査ログを記録すべき', async () => {
-      const mockSetting = {
-        id: 'setting-1',
-        key: 'app.theme',
-        value: { dark: true },
-        category: 'appearance',
-        updatedAt: new Date(),
-        updatedBy: null,
-      };
+      const mockSetting = createMockSetting();
 
-      vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(mockSetting);
-      vi.mocked(prisma.systemSetting.delete).mockResolvedValue(mockSetting);
+      mockSystemSettingRepository.get.mockResolvedValue(mockSetting);
+      mockSystemSettingRepository.delete.mockResolvedValue(undefined);
 
       await service.deleteSetting('app.theme', {
         userId: 'user-1',
@@ -145,17 +138,15 @@ describe('SettingsService', () => {
         userAgent: 'Test Agent',
       });
 
-      expect(prisma.systemSetting.findUnique).toHaveBeenCalledWith({
-        where: { key: 'app.theme' },
-      });
-      expect(prisma.systemSetting.delete).toHaveBeenCalledWith({
-        where: { key: 'app.theme' },
-      });
+      expect(mockSystemSettingRepository.get).toHaveBeenCalledWith('app.theme');
+      expect(mockSystemSettingRepository.delete).toHaveBeenCalledWith(
+        'app.theme'
+      );
       expect(mockAuditService.createLog).toHaveBeenCalledWith({
         userId: 'user-1',
         action: 'DELETE',
         resourceType: 'SETTING',
-        resourceId: 'setting-1',
+        resourceId: 'app.theme',
         details: { key: 'app.theme', category: 'appearance' },
         ipAddress: '192.168.1.1',
         userAgent: 'Test Agent',
@@ -163,15 +154,8 @@ describe('SettingsService', () => {
     });
 
     it('存在しない設定でも監査ログを記録すべき', async () => {
-      vi.mocked(prisma.systemSetting.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.systemSetting.delete).mockResolvedValue({
-        id: 'setting-1',
-        key: 'app.theme',
-        value: { dark: true },
-        category: 'appearance',
-        updatedAt: new Date(),
-        updatedBy: null,
-      });
+      mockSystemSettingRepository.get.mockResolvedValue(null);
+      mockSystemSettingRepository.delete.mockResolvedValue(undefined);
 
       await service.deleteSetting('app.theme', {
         userId: 'user-1',
@@ -181,7 +165,7 @@ describe('SettingsService', () => {
         userId: 'user-1',
         action: 'DELETE',
         resourceType: 'SETTING',
-        resourceId: undefined,
+        resourceId: 'app.theme',
         details: { key: 'app.theme', category: undefined },
         ipAddress: undefined,
         userAgent: undefined,
@@ -191,19 +175,9 @@ describe('SettingsService', () => {
 
   describe('listSettings', () => {
     it('設定一覧を取得すべき', async () => {
-      const mockSettings = [
-        {
-          id: 'setting-1',
-          key: 'app.theme',
-          value: { dark: true },
-          category: 'appearance',
-          updatedAt: new Date(),
-          updatedBy: null,
-        },
-      ];
+      const mockSettings = [createMockSetting()];
 
-      vi.mocked(prisma.systemSetting.findMany).mockResolvedValue(mockSettings);
-      vi.mocked(prisma.systemSetting.count).mockResolvedValue(1);
+      mockSystemSettingRepository.listAll.mockResolvedValue(mockSettings);
 
       const result = await service.listSettings({});
 
@@ -212,8 +186,7 @@ describe('SettingsService', () => {
     });
 
     it('カテゴリで設定を絞り込むべき', async () => {
-      vi.mocked(prisma.systemSetting.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.systemSetting.count).mockResolvedValue(0);
+      mockSystemSettingRepository.listByCategory.mockResolvedValue([]);
 
       const result = await service.listSettings({
         category: 'security',
@@ -222,37 +195,47 @@ describe('SettingsService', () => {
       });
 
       expect(result.settings).toEqual([]);
-      expect(prisma.systemSetting.findMany).toHaveBeenCalledWith({
-        where: { category: 'security' },
-        take: 10,
-        skip: 5,
-        orderBy: { key: 'asc' },
+      expect(mockSystemSettingRepository.listByCategory).toHaveBeenCalledWith(
+        'security'
+      );
+    });
+
+    it('ページネーションが機能すべき', async () => {
+      const mockSettings = [
+        createMockSetting({ key: 'setting-1' }),
+        createMockSetting({ key: 'setting-2' }),
+        createMockSetting({ key: 'setting-3' }),
+      ];
+
+      mockSystemSettingRepository.listAll.mockResolvedValue(mockSettings);
+
+      const result = await service.listSettings({
+        limit: 1,
+        offset: 1,
       });
+
+      expect(result.settings).toHaveLength(1);
+      expect(result.settings[0].key).toBe('setting-2');
+      expect(result.total).toBe(3);
     });
   });
 
   describe('getSettingsByCategory', () => {
     it('カテゴリで設定を取得すべき', async () => {
       const mockSettings = [
-        {
-          id: 'setting-1',
-          key: 'security.mfa',
-          value: { enabled: true },
-          category: 'security',
-          updatedAt: new Date(),
-          updatedBy: null,
-        },
+        createMockSetting({ key: 'security.mfa', category: 'security' }),
       ];
 
-      vi.mocked(prisma.systemSetting.findMany).mockResolvedValue(mockSettings);
+      mockSystemSettingRepository.listByCategory.mockResolvedValue(
+        mockSettings
+      );
 
       const result = await service.getSettingsByCategory('security');
 
       expect(result).toEqual(mockSettings);
-      expect(prisma.systemSetting.findMany).toHaveBeenCalledWith({
-        where: { category: 'security' },
-        orderBy: { key: 'asc' },
-      });
+      expect(mockSystemSettingRepository.listByCategory).toHaveBeenCalledWith(
+        'security'
+      );
     });
   });
 });
