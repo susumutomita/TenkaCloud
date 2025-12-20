@@ -1,7 +1,6 @@
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 import { SettingsService } from '../services/settings';
 import { createLogger } from '../lib/logger';
 
@@ -13,7 +12,7 @@ const settingsService = new SettingsService();
  * JSON 値として有効かを検証する型ガード
  * JSON.stringify で再帰的に検証し、function/undefined/symbol 等を検出
  */
-const isJsonValue = (val: unknown): val is Prisma.InputJsonValue => {
+const isJsonValue = (val: unknown): boolean => {
   try {
     JSON.stringify(val);
     return true;
@@ -24,24 +23,16 @@ const isJsonValue = (val: unknown): val is Prisma.InputJsonValue => {
 
 const createSettingSchema = z.object({
   key: z.string().min(1).max(255),
-  value: z
-    .unknown()
-    .refine(
-      (val): val is Prisma.InputJsonValue =>
-        val !== undefined && isJsonValue(val),
-      { message: '有効な JSON 値である必要があります' }
-    ),
+  value: z.unknown().refine((val) => val !== undefined && isJsonValue(val), {
+    message: '有効な JSON 値である必要があります',
+  }),
   category: z.string().min(1).max(100),
 });
 
 const updateSettingSchema = z.object({
-  value: z
-    .unknown()
-    .refine(
-      (val): val is Prisma.InputJsonValue =>
-        val !== undefined && isJsonValue(val),
-      { message: '有効な JSON 値である必要があります' }
-    ),
+  value: z.unknown().refine((val) => val !== undefined && isJsonValue(val), {
+    message: '有効な JSON 値である必要があります',
+  }),
 });
 
 const listSettingsSchema = z.object({
@@ -51,12 +42,12 @@ const listSettingsSchema = z.object({
 });
 
 /**
- * Prisma エラーコードを判定するヘルパー
+ * 設定が見つからないエラーかを判定するヘルパー
  */
-const isPrismaError = (
-  error: unknown
-): error is Prisma.PrismaClientKnownRequestError => {
-  return error instanceof Prisma.PrismaClientKnownRequestError;
+const isNotFoundError = (error: unknown): boolean => {
+  return (
+    error instanceof Error && error.message.startsWith('設定が見つかりません')
+  );
 };
 
 /**
@@ -95,9 +86,6 @@ settingsRoutes.post('/settings', async (c) => {
     });
     return c.json(setting, 201);
   } catch (error) {
-    if (isPrismaError(error) && error.code === 'P2002') {
-      return c.json({ error: '設定キーが既に存在します' }, 409);
-    }
     logger.error({ error }, '設定作成エラー');
     throw error;
   }
@@ -158,7 +146,7 @@ settingsRoutes.put('/settings/:key', async (c) => {
     });
     return c.json(setting);
   } catch (error) {
-    if (isPrismaError(error) && error.code === 'P2025') {
+    if (isNotFoundError(error)) {
       return c.json({ error: '設定が見つかりません' }, 404);
     }
     logger.error({ error }, '設定更新エラー');
@@ -186,9 +174,6 @@ settingsRoutes.delete('/settings/:key', async (c) => {
     });
     return c.body(null, 204);
   } catch (error) {
-    if (isPrismaError(error) && error.code === 'P2025') {
-      return c.json({ error: '設定が見つかりません' }, 404);
-    }
     logger.error({ error }, '設定削除エラー');
     throw error;
   }

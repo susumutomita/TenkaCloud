@@ -1,5 +1,10 @@
-import { BattleStatus, type BattleMode, type Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma';
+import {
+  BattleStatus,
+  type BattleMode,
+  type Battle,
+  type BattleParticipant,
+} from '@tenkacloud/dynamodb';
+import { battleRepository } from '../lib/dynamodb';
 
 export interface CreateBattleInput {
   tenantId: string;
@@ -13,7 +18,7 @@ export interface CreateBattleInput {
 export interface ListBattlesOptions {
   page: number;
   limit: number;
-  status?: BattleStatus;
+  status?: (typeof BattleStatus)[keyof typeof BattleStatus];
 }
 
 export interface UpdateBattleInput {
@@ -23,61 +28,65 @@ export interface UpdateBattleInput {
   timeLimit?: number;
 }
 
-export async function createBattle(input: CreateBattleInput) {
-  return prisma.battle.create({
-    data: input,
+export async function createBattle(input: CreateBattleInput): Promise<Battle> {
+  return battleRepository.create({
+    tenantId: input.tenantId,
+    title: input.title,
+    description: input.description,
+    mode: input.mode,
+    maxParticipants: input.maxParticipants,
+    timeLimit: input.timeLimit,
   });
 }
 
-export async function getBattle(battleId: string, tenantId: string) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-    include: { participants: true, teams: true },
-  });
+export async function getBattle(
+  battleId: string,
+  tenantId: string
+): Promise<(Battle & { participants: BattleParticipant[] }) | null> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     return null;
   }
 
-  return battle;
+  const participants = await battleRepository.listParticipants(battleId);
+
+  return {
+    ...battle,
+    participants,
+  };
 }
 
 export async function listBattles(
   tenantId: string,
   options: ListBattlesOptions
-) {
+): Promise<{ data: Battle[]; total: number; page: number; limit: number }> {
   const { page, limit, status } = options;
-  const skip = (page - 1) * limit;
 
-  const where: Prisma.BattleWhereInput = { tenantId };
-  if (status) {
-    where.status = status;
-  }
-
-  const [data, total] = await Promise.all([
-    prisma.battle.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: { participants: true },
+  const [listResult, total] = await Promise.all([
+    battleRepository.listByTenant(tenantId, {
+      status,
+      limit,
     }),
-    prisma.battle.count({ where }),
+    battleRepository.countByTenant(tenantId, status),
   ]);
 
-  return { data, total, page, limit };
+  return {
+    data: listResult.battles,
+    total,
+    page,
+    limit,
+  };
 }
 
 export async function updateBattle(
   battleId: string,
   tenantId: string,
   updates: UpdateBattleInput
-) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+): Promise<Battle | null> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     return null;
   }
 
@@ -85,18 +94,16 @@ export async function updateBattle(
     throw new Error('進行中のバトルは更新できません');
   }
 
-  return prisma.battle.update({
-    where: { id: battleId },
-    data: updates,
-  });
+  return battleRepository.update(battleId, updates);
 }
 
-export async function deleteBattle(battleId: string, tenantId: string) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+export async function deleteBattle(
+  battleId: string,
+  tenantId: string
+): Promise<void> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     return;
   }
 
@@ -104,17 +111,16 @@ export async function deleteBattle(battleId: string, tenantId: string) {
     throw new Error('進行中のバトルは削除できません');
   }
 
-  await prisma.battle.delete({
-    where: { id: battleId },
-  });
+  await battleRepository.delete(battleId);
 }
 
-export async function startBattle(battleId: string, tenantId: string) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+export async function startBattle(
+  battleId: string,
+  tenantId: string
+): Promise<Battle | null> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     return null;
   }
 
@@ -122,39 +128,32 @@ export async function startBattle(battleId: string, tenantId: string) {
     throw new Error('待機中のバトルのみ開始できます');
   }
 
-  const participantCount = await prisma.battleParticipant.count({
-    where: { battleId, leftAt: null },
-  });
+  const participantCount =
+    await battleRepository.countActiveParticipants(battleId);
 
   if (participantCount === 0) {
     throw new Error('参加者がいないためバトルを開始できません');
   }
 
-  const updatedBattle = await prisma.battle.update({
-    where: { id: battleId },
-    data: {
-      status: BattleStatus.IN_PROGRESS,
-      startedAt: new Date(),
-    },
+  const updatedBattle = await battleRepository.update(battleId, {
+    status: BattleStatus.IN_PROGRESS,
+    startedAt: new Date(),
   });
 
-  await prisma.battleHistory.create({
-    data: {
-      battleId,
-      eventType: 'BATTLE_STARTED',
-      payload: { participantCount },
-    },
+  await battleRepository.addHistory(battleId, 'BATTLE_STARTED', {
+    participantCount,
   });
 
   return updatedBattle;
 }
 
-export async function endBattle(battleId: string, tenantId: string) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+export async function endBattle(
+  battleId: string,
+  tenantId: string
+): Promise<Battle | null> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     return null;
   }
 
@@ -162,21 +161,12 @@ export async function endBattle(battleId: string, tenantId: string) {
     throw new Error('進行中でないバトルは終了できません');
   }
 
-  const updatedBattle = await prisma.battle.update({
-    where: { id: battleId },
-    data: {
-      status: BattleStatus.FINISHED,
-      endedAt: new Date(),
-    },
+  const updatedBattle = await battleRepository.update(battleId, {
+    status: BattleStatus.FINISHED,
+    endedAt: new Date(),
   });
 
-  await prisma.battleHistory.create({
-    data: {
-      battleId,
-      eventType: 'BATTLE_ENDED',
-      payload: {},
-    },
-  });
+  await battleRepository.addHistory(battleId, 'BATTLE_ENDED', {});
 
   return updatedBattle;
 }
@@ -186,12 +176,10 @@ export async function joinBattle(
   tenantId: string,
   userId: string,
   teamId?: string
-) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+): Promise<BattleParticipant> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     throw new Error('バトルが見つかりません');
   }
 
@@ -199,41 +187,29 @@ export async function joinBattle(
     throw new Error('待機中のバトルにのみ参加できます');
   }
 
-  const currentCount = await prisma.battleParticipant.count({
-    where: { battleId, leftAt: null },
-  });
+  const currentCount = await battleRepository.countActiveParticipants(battleId);
 
   if (currentCount >= battle.maxParticipants) {
     throw new Error('バトルの定員に達しています');
   }
 
-  const existing = await prisma.battleParticipant.findUnique({
-    where: { battleId_userId: { battleId, userId } },
-  });
+  const existing = await battleRepository.getParticipant(battleId, userId);
 
   if (existing && !existing.leftAt) {
     throw new Error('既にこのバトルに参加しています');
   }
 
-  return prisma.battleParticipant.create({
-    data: {
-      battleId,
-      userId,
-      teamId,
-    },
-  });
+  return battleRepository.addParticipant(battleId, userId, teamId);
 }
 
 export async function leaveBattle(
   battleId: string,
   tenantId: string,
   userId: string
-) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+): Promise<void> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     throw new Error('バトルが見つかりません');
   }
 
@@ -241,17 +217,14 @@ export async function leaveBattle(
     throw new Error('進行中のバトルからは退出できません');
   }
 
-  const participant = await prisma.battleParticipant.findUnique({
-    where: { battleId_userId: { battleId, userId } },
-  });
+  const participant = await battleRepository.getParticipant(battleId, userId);
 
   if (!participant) {
     throw new Error('参加者が見つかりません');
   }
 
-  await prisma.battleParticipant.update({
-    where: { battleId_userId: { battleId, userId } },
-    data: { leftAt: new Date() },
+  await battleRepository.updateParticipant(battleId, userId, {
+    leftAt: new Date(),
   });
 }
 
@@ -260,12 +233,10 @@ export async function updateScore(
   tenantId: string,
   userId: string,
   score: number
-) {
-  const battle = await prisma.battle.findUnique({
-    where: { id: battleId },
-  });
+): Promise<BattleParticipant> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
-  if (!battle || battle.tenantId !== tenantId) {
+  if (!battle) {
     throw new Error('バトルが見つかりません');
   }
 
@@ -273,25 +244,19 @@ export async function updateScore(
     throw new Error('進行中のバトルでのみスコアを更新できます');
   }
 
-  const participant = await prisma.battleParticipant.findUnique({
-    where: { battleId_userId: { battleId, userId } },
-  });
+  const participant = await battleRepository.getParticipant(battleId, userId);
 
   if (!participant) {
     throw new Error('参加者が見つかりません');
   }
 
-  const updated = await prisma.battleParticipant.update({
-    where: { battleId_userId: { battleId, userId } },
-    data: { score },
+  const updated = await battleRepository.updateParticipant(battleId, userId, {
+    score,
   });
 
-  await prisma.battleHistory.create({
-    data: {
-      battleId,
-      eventType: 'SCORE_UPDATED',
-      payload: { userId, score },
-    },
+  await battleRepository.addHistory(battleId, 'SCORE_UPDATED', {
+    userId,
+    score,
   });
 
   return updated;

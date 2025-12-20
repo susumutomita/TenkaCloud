@@ -1,5 +1,5 @@
-import type { DeploymentStatus, DeploymentType } from '@prisma/client';
-import { prisma } from '../lib/prisma';
+import type { DeploymentStatus } from '@tenkacloud/dynamodb';
+import { deploymentRepository } from '../lib/dynamodb';
 import { createK8sClient, type K8sClient } from '../lib/kubernetes-factory';
 import { createLogger } from '../lib/logger';
 
@@ -48,18 +48,15 @@ export class DeploymentService {
     const namespace = `tenant-${tenantSlug}`;
 
     // DBにデプロイメント記録を作成
-    const deployment = await prisma.deployment.create({
-      data: {
-        tenantId,
-        tenantSlug,
-        namespace,
-        serviceName,
-        image,
-        version,
-        replicas,
-        status: 'PENDING',
-        type: 'CREATE',
-      },
+    const deployment = await deploymentRepository.create({
+      tenantId,
+      tenantSlug,
+      namespace,
+      serviceName,
+      image,
+      version,
+      replicas,
+      type: 'CREATE',
     });
 
     // 履歴を記録
@@ -89,9 +86,8 @@ export class DeploymentService {
 
       // 完了ステータスに更新
       await this.updateStatus(deployment.id, 'SUCCEEDED');
-      await prisma.deployment.update({
-        where: { id: deployment.id },
-        data: { completedAt: new Date() },
+      await deploymentRepository.update(deployment.id, {
+        completedAt: new Date(),
       });
 
       logger.info(
@@ -111,13 +107,11 @@ export class DeploymentService {
       throw error;
     }
 
-    return prisma.deployment.findUnique({ where: { id: deployment.id } });
+    return deploymentRepository.findById(deployment.id);
   }
 
   async updateDeployment(deploymentId: string, input: UpdateDeploymentInput) {
-    const existing = await prisma.deployment.findUnique({
-      where: { id: deploymentId },
-    });
+    const existing = await deploymentRepository.findById(deploymentId);
 
     if (!existing) {
       return null;
@@ -126,19 +120,15 @@ export class DeploymentService {
     const { image, version, replicas = existing.replicas } = input;
 
     // 新しいデプロイメント記録を作成（ローリングアップデート用）
-    const deployment = await prisma.deployment.create({
-      data: {
-        tenantId: existing.tenantId,
-        tenantSlug: existing.tenantSlug,
-        namespace: existing.namespace,
-        serviceName: existing.serviceName,
-        image,
-        version,
-        replicas,
-        status: 'PENDING',
-        type: 'UPDATE',
-        previousImage: existing.image,
-      },
+    const deployment = await deploymentRepository.create({
+      tenantId: existing.tenantId,
+      tenantSlug: existing.tenantSlug,
+      namespace: existing.namespace,
+      serviceName: existing.serviceName,
+      image,
+      version,
+      replicas,
+      type: 'UPDATE',
     });
 
     await this.addHistory(
@@ -159,9 +149,8 @@ export class DeploymentService {
       );
 
       await this.updateStatus(deployment.id, 'SUCCEEDED');
-      await prisma.deployment.update({
-        where: { id: deployment.id },
-        data: { completedAt: new Date() },
+      await deploymentRepository.update(deployment.id, {
+        completedAt: new Date(),
       });
 
       logger.info(
@@ -177,13 +166,11 @@ export class DeploymentService {
       throw error;
     }
 
-    return prisma.deployment.findUnique({ where: { id: deployment.id } });
+    return deploymentRepository.findById(deployment.id);
   }
 
   async rollbackDeployment(deploymentId: string) {
-    const existing = await prisma.deployment.findUnique({
-      where: { id: deploymentId },
-    });
+    const existing = await deploymentRepository.findById(deploymentId);
 
     if (!existing) {
       return null;
@@ -194,19 +181,15 @@ export class DeploymentService {
     }
 
     // ロールバック用のデプロイメント記録を作成
-    const deployment = await prisma.deployment.create({
-      data: {
-        tenantId: existing.tenantId,
-        tenantSlug: existing.tenantSlug,
-        namespace: existing.namespace,
-        serviceName: existing.serviceName,
-        image: existing.previousImage,
-        version: `rollback-from-${existing.version}`,
-        replicas: existing.replicas,
-        status: 'PENDING',
-        type: 'ROLLBACK',
-        previousImage: existing.image,
-      },
+    const deployment = await deploymentRepository.create({
+      tenantId: existing.tenantId,
+      tenantSlug: existing.tenantSlug,
+      namespace: existing.namespace,
+      serviceName: existing.serviceName,
+      image: existing.previousImage,
+      version: `rollback-from-${existing.version}`,
+      replicas: existing.replicas,
+      type: 'ROLLBACK',
     });
 
     await this.addHistory(deployment.id, 'PENDING', 'ロールバックを開始します');
@@ -222,15 +205,13 @@ export class DeploymentService {
       );
 
       await this.updateStatus(deployment.id, 'SUCCEEDED');
-      await prisma.deployment.update({
-        where: { id: deployment.id },
-        data: { completedAt: new Date() },
+      await deploymentRepository.update(deployment.id, {
+        completedAt: new Date(),
       });
 
       // 元のデプロイメントをロールバック済みに更新
-      await prisma.deployment.update({
-        where: { id: deploymentId },
-        data: { status: 'ROLLED_BACK' },
+      await deploymentRepository.update(deploymentId, {
+        status: 'ROLLED_BACK',
       });
 
       logger.info(
@@ -246,13 +227,11 @@ export class DeploymentService {
       throw error;
     }
 
-    return prisma.deployment.findUnique({ where: { id: deployment.id } });
+    return deploymentRepository.findById(deployment.id);
   }
 
   async getDeploymentStatus(deploymentId: string) {
-    const deployment = await prisma.deployment.findUnique({
-      where: { id: deploymentId },
-    });
+    const deployment = await deploymentRepository.findById(deploymentId);
 
     if (!deployment) {
       return null;
@@ -271,38 +250,29 @@ export class DeploymentService {
   }
 
   async getDeploymentById(id: string) {
-    return prisma.deployment.findUnique({
-      where: { id },
-    });
+    return deploymentRepository.findById(id);
   }
 
   async listDeployments(input: ListDeploymentsInput) {
-    const { tenantId, tenantSlug, status, limit = 20, offset = 0 } = input;
+    const { tenantId, status, limit = 20 } = input;
 
-    const where = {
-      ...(tenantId && { tenantId }),
-      ...(tenantSlug && { tenantSlug }),
-      ...(status && { status }),
-    };
+    if (!tenantId) {
+      return { deployments: [], total: 0 };
+    }
 
-    const [deployments, total] = await Promise.all([
-      prisma.deployment.findMany({
-        where,
-        take: limit,
-        skip: offset,
-        orderBy: { createdAt: 'desc' },
+    const [result, total] = await Promise.all([
+      deploymentRepository.listByTenant(tenantId, {
+        status,
+        limit,
       }),
-      prisma.deployment.count({ where }),
+      deploymentRepository.countByTenant(tenantId, status),
     ]);
 
-    return { deployments, total };
+    return { deployments: result.deployments, total };
   }
 
   async getDeploymentHistory(deploymentId: string) {
-    return prisma.deploymentHistory.findMany({
-      where: { deploymentId },
-      orderBy: { createdAt: 'asc' },
-    });
+    return deploymentRepository.getHistory(deploymentId);
   }
 
   private async updateStatus(
@@ -324,10 +294,7 @@ export class DeploymentService {
       updateData.errorMessage = errorMessage;
     }
 
-    await prisma.deployment.update({
-      where: { id: deploymentId },
-      data: updateData,
-    });
+    await deploymentRepository.update(deploymentId, updateData);
 
     await this.addHistory(deploymentId, status, errorMessage);
   }
@@ -337,12 +304,10 @@ export class DeploymentService {
     status: DeploymentStatus,
     message?: string
   ) {
-    await prisma.deploymentHistory.create({
-      data: {
-        deploymentId,
-        status,
-        message,
-      },
+    await deploymentRepository.addHistory({
+      deploymentId,
+      status,
+      message,
     });
   }
 }

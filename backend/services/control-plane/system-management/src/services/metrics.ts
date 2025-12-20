@@ -1,4 +1,8 @@
-import { prisma } from '../lib/prisma';
+import {
+  auditLogRepository,
+  systemSettingRepository,
+  serviceHealthRepository,
+} from '../lib/dynamodb';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('metrics-service');
@@ -93,7 +97,12 @@ export class MetricsService {
   private async collectDatabaseMetrics(): Promise<DatabaseMetrics> {
     const startTime = Date.now();
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      // DynamoDB の疎通確認として自サービスのヘルスを取得/更新
+      await serviceHealthRepository.upsert({
+        serviceName: 'system-management',
+        status: 'active',
+        details: { metricsCheck: new Date().toISOString() },
+      });
       return {
         connectionStatus: 'connected',
         latencyMs: Date.now() - startTime,
@@ -108,14 +117,16 @@ export class MetricsService {
   }
 
   private async collectApplicationMetrics(): Promise<ApplicationMetrics> {
-    const [auditLogsCount, settingsCount] = await Promise.all([
-      prisma.auditLog.count(),
-      prisma.systemSetting.count(),
+    // DynamoDB ではカウントが効率的でないため、概算値を取得
+    const [auditResult, settings] = await Promise.all([
+      auditLogRepository.listByTenant('', { limit: 1 }),
+      systemSettingRepository.listAll(),
     ]);
 
     return {
-      auditLogsCount,
-      settingsCount,
+      // 概算: 取得できた数（本格的な集計は別途実装が必要）
+      auditLogsCount: auditResult.logs.length > 0 ? -1 : 0, // -1 = 集計不可
+      settingsCount: settings.length,
     };
   }
 }

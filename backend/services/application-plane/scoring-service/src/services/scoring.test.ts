@@ -20,43 +20,38 @@ import {
   evaluateTerraformState,
   evaluateCriterion,
 } from './scoring';
-import { prisma } from '../lib/prisma';
-import { EvaluationCategory, EvaluationStatus, Severity } from '@prisma/client';
+import {
+  EvaluationCategory,
+  EvaluationStatus,
+  Severity,
+} from '@tenkacloud/dynamodb';
 
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    evaluationCriteria: {
+// DynamoDB リポジトリのモック
+const { mockScoringSessionRepository, mockEvaluationCriteriaRepository } =
+  vi.hoisted(() => ({
+    mockScoringSessionRepository: {
       create: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
+      findById: vi.fn(),
+      findByIdAndTenant: vi.fn(),
+      listByTenant: vi.fn(),
+      countByTenant: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
-      count: vi.fn(),
     },
-    criteriaDetail: {
-      createMany: vi.fn(),
-      deleteMany: vi.fn(),
-    },
-    scoringSession: {
+    mockEvaluationCriteriaRepository: {
       create: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
+      findById: vi.fn(),
+      findByIdAndTenant: vi.fn(),
+      listByTenant: vi.fn(),
+      countByTenant: vi.fn(),
       update: vi.fn(),
-      count: vi.fn(),
+      delete: vi.fn(),
     },
-    evaluationItem: {
-      createMany: vi.fn(),
-      findMany: vi.fn(),
-    },
-    feedback: {
-      createMany: vi.fn(),
-      findMany: vi.fn(),
-    },
-    terraformSnapshot: {
-      create: vi.fn(),
-    },
-    $transaction: vi.fn((callback) => callback(prisma)),
-  },
+  }));
+
+vi.mock('../lib/dynamodb', () => ({
+  scoringSessionRepository: mockScoringSessionRepository,
+  evaluationCriteriaRepository: mockEvaluationCriteriaRepository,
 }));
 
 describe('評価基準管理', () => {
@@ -83,15 +78,19 @@ describe('評価基準管理', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.evaluationCriteria.create).mockResolvedValue(
-        mockCriteria as never
-      );
+      mockEvaluationCriteriaRepository.create.mockResolvedValue(mockCriteria);
 
       const result = await createEvaluationCriteria(input);
 
       expect(result).toEqual(mockCriteria);
-      expect(prisma.evaluationCriteria.create).toHaveBeenCalledWith({
-        data: input,
+      expect(mockEvaluationCriteriaRepository.create).toHaveBeenCalledWith({
+        tenantId: input.tenantId,
+        name: input.name,
+        description: input.description,
+        category: input.category,
+        weight: input.weight,
+        maxScore: input.maxScore,
+        criteriaDetails: undefined,
       });
     });
   });
@@ -106,8 +105,8 @@ describe('評価基準管理', () => {
         criteriaDetails: [],
       };
 
-      vi.mocked(prisma.evaluationCriteria.findUnique).mockResolvedValue(
-        mockCriteria as never
+      mockEvaluationCriteriaRepository.findByIdAndTenant.mockResolvedValue(
+        mockCriteria
       );
 
       const result = await getEvaluationCriteria('criteria-1', 'tenant-123');
@@ -116,14 +115,8 @@ describe('評価基準管理', () => {
     });
 
     it('異なるテナントの評価基準はnullを返すべき', async () => {
-      const mockCriteria = {
-        id: 'criteria-1',
-        tenantId: 'tenant-other',
-        name: 'VPC構成チェック',
-      };
-
-      vi.mocked(prisma.evaluationCriteria.findUnique).mockResolvedValue(
-        mockCriteria as never
+      mockEvaluationCriteriaRepository.findByIdAndTenant.mockResolvedValue(
+        null
       );
 
       const result = await getEvaluationCriteria('criteria-1', 'tenant-123');
@@ -139,10 +132,10 @@ describe('評価基準管理', () => {
         { id: 'criteria-2', name: 'セキュリティ' },
       ];
 
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue(
-        mockCriteria as never
-      );
-      vi.mocked(prisma.evaluationCriteria.count).mockResolvedValue(2);
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: mockCriteria,
+      });
+      mockEvaluationCriteriaRepository.countByTenant.mockResolvedValue(2);
 
       const result = await listEvaluationCriteria('tenant-123', {
         page: 1,
@@ -154,8 +147,10 @@ describe('評価基準管理', () => {
     });
 
     it('カテゴリでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.evaluationCriteria.count).mockResolvedValue(0);
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: [],
+      });
+      mockEvaluationCriteriaRepository.countByTenant.mockResolvedValue(0);
 
       await listEvaluationCriteria('tenant-123', {
         page: 1,
@@ -163,18 +158,21 @@ describe('評価基準管理', () => {
         category: EvaluationCategory.SECURITY,
       });
 
-      expect(prisma.evaluationCriteria.findMany).toHaveBeenCalledWith(
+      expect(
+        mockEvaluationCriteriaRepository.listByTenant
+      ).toHaveBeenCalledWith(
+        'tenant-123',
         expect.objectContaining({
-          where: expect.objectContaining({
-            category: EvaluationCategory.SECURITY,
-          }),
+          category: EvaluationCategory.SECURITY,
         })
       );
     });
 
     it('isActiveでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.evaluationCriteria.count).mockResolvedValue(0);
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: [],
+      });
+      mockEvaluationCriteriaRepository.countByTenant.mockResolvedValue(0);
 
       await listEvaluationCriteria('tenant-123', {
         page: 1,
@@ -182,18 +180,21 @@ describe('評価基準管理', () => {
         isActive: true,
       });
 
-      expect(prisma.evaluationCriteria.findMany).toHaveBeenCalledWith(
+      expect(
+        mockEvaluationCriteriaRepository.listByTenant
+      ).toHaveBeenCalledWith(
+        'tenant-123',
         expect.objectContaining({
-          where: expect.objectContaining({
-            isActive: true,
-          }),
+          activeOnly: true,
         })
       );
     });
 
     it('isActiveがfalseの場合もフィルタリングできるべき', async () => {
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.evaluationCriteria.count).mockResolvedValue(0);
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: [],
+      });
+      mockEvaluationCriteriaRepository.countByTenant.mockResolvedValue(0);
 
       await listEvaluationCriteria('tenant-123', {
         page: 1,
@@ -201,11 +202,13 @@ describe('評価基準管理', () => {
         isActive: false,
       });
 
-      expect(prisma.evaluationCriteria.findMany).toHaveBeenCalledWith(
+      // isActive=false の場合、activeOnly は undefined のまま
+      expect(
+        mockEvaluationCriteriaRepository.listByTenant
+      ).toHaveBeenCalledWith(
+        'tenant-123',
         expect.objectContaining({
-          where: expect.objectContaining({
-            isActive: false,
-          }),
+          limit: 10,
         })
       );
     });
@@ -219,13 +222,13 @@ describe('評価基準管理', () => {
         name: 'Old Name',
       };
 
-      vi.mocked(prisma.evaluationCriteria.findUnique).mockResolvedValue(
-        existingCriteria as never
+      mockEvaluationCriteriaRepository.findByIdAndTenant.mockResolvedValue(
+        existingCriteria
       );
-      vi.mocked(prisma.evaluationCriteria.update).mockResolvedValue({
+      mockEvaluationCriteriaRepository.update.mockResolvedValue({
         ...existingCriteria,
         name: 'New Name',
-      } as never);
+      });
 
       const result = await updateEvaluationCriteria(
         'criteria-1',
@@ -237,7 +240,9 @@ describe('評価基準管理', () => {
     });
 
     it('存在しない評価基準の更新はnullを返すべき', async () => {
-      vi.mocked(prisma.evaluationCriteria.findUnique).mockResolvedValue(null);
+      mockEvaluationCriteriaRepository.findByIdAndTenant.mockResolvedValue(
+        null
+      );
 
       const result = await updateEvaluationCriteria(
         'nonexistent',
@@ -256,33 +261,26 @@ describe('評価基準管理', () => {
         tenantId: 'tenant-123',
       };
 
-      vi.mocked(prisma.evaluationCriteria.findUnique).mockResolvedValue(
-        existingCriteria as never
+      mockEvaluationCriteriaRepository.findByIdAndTenant.mockResolvedValue(
+        existingCriteria
       );
-      vi.mocked(prisma.evaluationCriteria.delete).mockResolvedValue(
-        existingCriteria as never
-      );
+      mockEvaluationCriteriaRepository.delete.mockResolvedValue(undefined);
 
       await deleteEvaluationCriteria('criteria-1', 'tenant-123');
 
-      expect(prisma.evaluationCriteria.delete).toHaveBeenCalledWith({
-        where: { id: 'criteria-1' },
-      });
+      expect(mockEvaluationCriteriaRepository.delete).toHaveBeenCalledWith(
+        'criteria-1'
+      );
     });
 
     it('異なるテナントの評価基準は削除しないべき', async () => {
-      const existingCriteria = {
-        id: 'criteria-1',
-        tenantId: 'tenant-other',
-      };
-
-      vi.mocked(prisma.evaluationCriteria.findUnique).mockResolvedValue(
-        existingCriteria as never
+      mockEvaluationCriteriaRepository.findByIdAndTenant.mockResolvedValue(
+        null
       );
 
       await deleteEvaluationCriteria('criteria-1', 'tenant-123');
 
-      expect(prisma.evaluationCriteria.delete).not.toHaveBeenCalled();
+      expect(mockEvaluationCriteriaRepository.delete).not.toHaveBeenCalled();
     });
   });
 });
@@ -310,16 +308,12 @@ describe('採点セッション管理', () => {
         updatedAt: new Date(),
       };
 
-      vi.mocked(prisma.scoringSession.create).mockResolvedValue(
-        mockSession as never
-      );
+      mockScoringSessionRepository.create.mockResolvedValue(mockSession);
 
       const result = await createScoringSession(input);
 
       expect(result).toEqual(mockSession);
-      expect(prisma.scoringSession.create).toHaveBeenCalledWith({
-        data: input,
-      });
+      expect(mockScoringSessionRepository.create).toHaveBeenCalledWith(input);
     });
   });
 
@@ -333,8 +327,8 @@ describe('採点セッション管理', () => {
         feedbacks: [],
       };
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
 
       const result = await getScoringSession('session-1', 'tenant-123');
@@ -343,14 +337,7 @@ describe('採点セッション管理', () => {
     });
 
     it('異なるテナントのセッションはnullを返すべき', async () => {
-      const mockSession = {
-        id: 'session-1',
-        tenantId: 'tenant-other',
-      };
-
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
-      );
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await getScoringSession('session-1', 'tenant-123');
 
@@ -365,10 +352,10 @@ describe('採点セッション管理', () => {
         { id: 'session-2', status: EvaluationStatus.COMPLETED },
       ];
 
-      vi.mocked(prisma.scoringSession.findMany).mockResolvedValue(
-        mockSessions as never
-      );
-      vi.mocked(prisma.scoringSession.count).mockResolvedValue(2);
+      mockScoringSessionRepository.listByTenant.mockResolvedValue({
+        sessions: mockSessions,
+      });
+      mockScoringSessionRepository.countByTenant.mockResolvedValue(2);
 
       const result = await listScoringSessions('tenant-123', {
         page: 1,
@@ -380,8 +367,10 @@ describe('採点セッション管理', () => {
     });
 
     it('バトルIDでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.scoringSession.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.scoringSession.count).mockResolvedValue(0);
+      mockScoringSessionRepository.listByTenant.mockResolvedValue({
+        sessions: [],
+      });
+      mockScoringSessionRepository.countByTenant.mockResolvedValue(0);
 
       await listScoringSessions('tenant-123', {
         page: 1,
@@ -389,18 +378,19 @@ describe('採点セッション管理', () => {
         battleId: 'battle-456',
       });
 
-      expect(prisma.scoringSession.findMany).toHaveBeenCalledWith(
+      expect(mockScoringSessionRepository.listByTenant).toHaveBeenCalledWith(
+        'tenant-123',
         expect.objectContaining({
-          where: expect.objectContaining({
-            battleId: 'battle-456',
-          }),
+          battleId: 'battle-456',
         })
       );
     });
 
     it('参加者IDでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.scoringSession.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.scoringSession.count).mockResolvedValue(0);
+      mockScoringSessionRepository.listByTenant.mockResolvedValue({
+        sessions: [],
+      });
+      mockScoringSessionRepository.countByTenant.mockResolvedValue(0);
 
       await listScoringSessions('tenant-123', {
         page: 1,
@@ -408,18 +398,19 @@ describe('採点セッション管理', () => {
         participantId: 'participant-789',
       });
 
-      expect(prisma.scoringSession.findMany).toHaveBeenCalledWith(
+      expect(mockScoringSessionRepository.listByTenant).toHaveBeenCalledWith(
+        'tenant-123',
         expect.objectContaining({
-          where: expect.objectContaining({
-            participantId: 'participant-789',
-          }),
+          participantId: 'participant-789',
         })
       );
     });
 
     it('ステータスでフィルタリングできるべき', async () => {
-      vi.mocked(prisma.scoringSession.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.scoringSession.count).mockResolvedValue(0);
+      mockScoringSessionRepository.listByTenant.mockResolvedValue({
+        sessions: [],
+      });
+      mockScoringSessionRepository.countByTenant.mockResolvedValue(0);
 
       await listScoringSessions('tenant-123', {
         page: 1,
@@ -427,11 +418,10 @@ describe('採点セッション管理', () => {
         status: EvaluationStatus.COMPLETED,
       });
 
-      expect(prisma.scoringSession.findMany).toHaveBeenCalledWith(
+      expect(mockScoringSessionRepository.listByTenant).toHaveBeenCalledWith(
+        'tenant-123',
         expect.objectContaining({
-          where: expect.objectContaining({
-            status: EvaluationStatus.COMPLETED,
-          }),
+          status: EvaluationStatus.COMPLETED,
         })
       );
     });
@@ -459,16 +449,13 @@ describe('採点実行', () => {
         ],
       };
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
-      vi.mocked(prisma.scoringSession.update).mockResolvedValue({
+      mockScoringSessionRepository.update.mockResolvedValue({
         ...mockSession,
         status: EvaluationStatus.IN_PROGRESS,
-      } as never);
-      vi.mocked(prisma.terraformSnapshot.create).mockResolvedValue({
-        id: 'snapshot-1',
-      } as never);
+      });
 
       const result = await submitForEvaluation(
         'session-1',
@@ -477,7 +464,16 @@ describe('採点実行', () => {
       );
 
       expect(result?.status).toBe(EvaluationStatus.IN_PROGRESS);
-      expect(prisma.terraformSnapshot.create).toHaveBeenCalled();
+      expect(mockScoringSessionRepository.update).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          status: EvaluationStatus.IN_PROGRESS,
+          terraformSnapshot: expect.objectContaining({
+            stateVersion: 4,
+            resourceCount: 2,
+          }),
+        })
+      );
     });
 
     it('PENDING以外のセッションは提出できないべき', async () => {
@@ -487,8 +483,8 @@ describe('採点実行', () => {
         status: EvaluationStatus.IN_PROGRESS,
       };
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
 
       await expect(
@@ -505,28 +501,28 @@ describe('採点実行', () => {
 
       const terraformState = { version: 4 };
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
-      vi.mocked(prisma.scoringSession.update).mockResolvedValue({
+      mockScoringSessionRepository.update.mockResolvedValue({
         ...mockSession,
         status: EvaluationStatus.IN_PROGRESS,
-      } as never);
-      vi.mocked(prisma.terraformSnapshot.create).mockResolvedValue({
-        id: 'snapshot-1',
-      } as never);
+      });
 
       await submitForEvaluation('session-1', 'tenant-123', terraformState);
 
-      expect(prisma.terraformSnapshot.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          resourceCount: 0,
-        }),
-      });
+      expect(mockScoringSessionRepository.update).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          terraformSnapshot: expect.objectContaining({
+            resourceCount: 0,
+          }),
+        })
+      );
     });
 
     it('セッションが見つからない場合はnullを返すべき', async () => {
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(null);
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await submitForEvaluation('nonexistent', 'tenant-123', {
         version: 4,
@@ -536,15 +532,7 @@ describe('採点実行', () => {
     });
 
     it('異なるテナントのセッションはnullを返すべき', async () => {
-      const mockSession = {
-        id: 'session-1',
-        tenantId: 'tenant-other',
-        status: EvaluationStatus.PENDING,
-      };
-
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
-      );
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await submitForEvaluation('session-1', 'tenant-123', {
         version: 4,
@@ -560,48 +548,54 @@ describe('採点実行', () => {
         id: 'session-1',
         tenantId: 'tenant-123',
         status: EvaluationStatus.IN_PROGRESS,
+        terraformSnapshot: {
+          stateData: {
+            version: 4,
+            resources: [
+              {
+                type: 'aws_vpc',
+                instances: [{ attributes: { cidr_block: '10.0.0.0/16' } }],
+              },
+            ],
+          },
+        },
       };
 
       const mockCriteria = [
         {
           id: 'criteria-1',
           name: 'VPC構成',
+          category: EvaluationCategory.INFRASTRUCTURE,
           maxScore: 100,
           weight: 1,
           criteriaDetails: [
-            { ruleKey: 'vpc_exists', ruleValue: 'true', points: 50 },
-            { ruleKey: 'vpc_cidr', ruleValue: '10.0.0.0/16', points: 50 },
+            {
+              ruleKey: 'vpc_exists',
+              ruleValue: 'true',
+              points: 50,
+              severity: Severity.HIGH,
+            },
+            {
+              ruleKey: 'vpc_cidr',
+              ruleValue: '10.0.0.0/16',
+              points: 50,
+              severity: Severity.MEDIUM,
+            },
           ],
         },
       ];
 
-      const mockSnapshot = {
-        stateData: {
-          resources: [
-            {
-              type: 'aws_vpc',
-              instances: [{ attributes: { cidr_block: '10.0.0.0/16' } }],
-            },
-          ],
-        },
-      };
-
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue({
-        ...mockSession,
-        terraformSnapshot: mockSnapshot,
-      } as never);
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue(
-        mockCriteria as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
-      vi.mocked(prisma.evaluationItem.createMany).mockResolvedValue({
-        count: 1,
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: mockCriteria,
       });
-      vi.mocked(prisma.feedback.createMany).mockResolvedValue({ count: 1 });
-      vi.mocked(prisma.scoringSession.update).mockResolvedValue({
+      mockScoringSessionRepository.update.mockResolvedValue({
         ...mockSession,
         status: EvaluationStatus.COMPLETED,
         totalScore: 100,
-      } as never);
+      });
 
       const result = await evaluateSubmission('session-1', 'tenant-123');
 
@@ -616,8 +610,8 @@ describe('採点実行', () => {
         status: EvaluationStatus.PENDING,
       };
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
 
       await expect(
@@ -626,7 +620,7 @@ describe('採点実行', () => {
     });
 
     it('セッションが見つからない場合はnullを返すべき', async () => {
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(null);
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await evaluateSubmission('nonexistent', 'tenant-123');
 
@@ -634,15 +628,7 @@ describe('採点実行', () => {
     });
 
     it('異なるテナントのセッションはnullを返すべき', async () => {
-      const mockSession = {
-        id: 'session-1',
-        tenantId: 'tenant-other',
-        status: EvaluationStatus.IN_PROGRESS,
-      };
-
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
-      );
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await evaluateSubmission('session-1', 'tenant-123');
 
@@ -678,29 +664,44 @@ describe('採点実行', () => {
         },
       ];
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue(
-        mockCriteria as never
-      );
-      vi.mocked(prisma.evaluationItem.createMany).mockResolvedValue({
-        count: 1,
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: mockCriteria,
       });
-      vi.mocked(prisma.feedback.createMany).mockResolvedValue({ count: 1 });
-      vi.mocked(prisma.scoringSession.update).mockResolvedValue({
+      mockScoringSessionRepository.update.mockResolvedValue({
         ...mockSession,
         status: EvaluationStatus.COMPLETED,
         totalScore: 0,
-      } as never);
+        feedbacks: [
+          {
+            category: EvaluationCategory.INFRASTRUCTURE,
+            severity: Severity.HIGH,
+            title: 'VPC構成: vpc_exists チェック失敗',
+            message: 'VPCが必要です',
+            suggestion: 'VPCを作成してください',
+          },
+        ],
+      });
 
       const result = await evaluateSubmission('session-1', 'tenant-123');
 
       expect(result?.status).toBe(EvaluationStatus.COMPLETED);
-      expect(prisma.feedback.createMany).toHaveBeenCalled();
+      expect(mockScoringSessionRepository.update).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          feedbacks: expect.arrayContaining([
+            expect.objectContaining({
+              category: EvaluationCategory.INFRASTRUCTURE,
+              severity: Severity.HIGH,
+            }),
+          ]),
+        })
+      );
     });
 
-    it('評価項目がない場合はcreateMany呼び出しをスキップするべき', async () => {
+    it('評価項目がない場合でもセッションが更新されるべき', async () => {
       const mockSession = {
         id: 'session-1',
         tenantId: 'tenant-123',
@@ -710,20 +711,28 @@ describe('採点実行', () => {
         },
       };
 
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
-      vi.mocked(prisma.evaluationCriteria.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.scoringSession.update).mockResolvedValue({
+      mockEvaluationCriteriaRepository.listByTenant.mockResolvedValue({
+        criteria: [],
+      });
+      mockScoringSessionRepository.update.mockResolvedValue({
         ...mockSession,
         status: EvaluationStatus.COMPLETED,
         totalScore: 0,
-      } as never);
+      });
 
       await evaluateSubmission('session-1', 'tenant-123');
 
-      expect(prisma.evaluationItem.createMany).not.toHaveBeenCalled();
-      expect(prisma.feedback.createMany).not.toHaveBeenCalled();
+      expect(mockScoringSessionRepository.update).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          status: EvaluationStatus.COMPLETED,
+          evaluationItems: [],
+          feedbacks: [],
+        })
+      );
     });
   });
 });
@@ -738,36 +747,28 @@ describe('フィードバック取得', () => {
       const mockSession = {
         id: 'session-1',
         tenantId: 'tenant-123',
+        feedbacks: [
+          {
+            category: EvaluationCategory.SECURITY,
+            severity: Severity.HIGH,
+            title: 'セキュリティグループが開放されています',
+            message: 'ポート22が0.0.0.0/0に開放されています',
+            suggestion: 'アクセス元IPを制限してください',
+          },
+        ],
       };
 
-      const mockFeedbacks = [
-        {
-          id: 'fb-1',
-          category: EvaluationCategory.SECURITY,
-          severity: Severity.HIGH,
-          title: 'セキュリティグループが開放されています',
-          message: 'ポート22が0.0.0.0/0に開放されています',
-          suggestion: 'アクセス元IPを制限してください',
-        },
-      ];
-
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue(
-        mockSession as never
-      );
-      vi.mocked(prisma.feedback.findMany).mockResolvedValue(
-        mockFeedbacks as never
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
       );
 
       const result = await getSessionFeedback('session-1', 'tenant-123');
 
-      expect(result).toEqual(mockFeedbacks);
+      expect(result).toEqual(mockSession.feedbacks);
     });
 
     it('異なるテナントのフィードバックは取得できないべき', async () => {
-      vi.mocked(prisma.scoringSession.findUnique).mockResolvedValue({
-        id: 'session-1',
-        tenantId: 'tenant-other',
-      } as never);
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await getSessionFeedback('session-1', 'tenant-123');
 
@@ -1225,7 +1226,7 @@ describe('Terraform State 評価ヘルパー関数', () => {
             ruleValue: 'true',
             points: 100,
             severity: Severity.HIGH,
-            description: null,
+            description: undefined,
           },
         ],
       };
@@ -1252,7 +1253,7 @@ describe('Terraform State 評価ヘルパー関数', () => {
             ruleValue: 'true',
             points: 100,
             severity: Severity.HIGH,
-            description: null,
+            description: undefined,
           },
         ],
       };
@@ -1302,7 +1303,7 @@ describe('Terraform State 評価ヘルパー関数', () => {
             ruleValue: 'true',
             points: 100,
             severity: Severity.HIGH,
-            description: null,
+            description: undefined,
           },
         ],
       };

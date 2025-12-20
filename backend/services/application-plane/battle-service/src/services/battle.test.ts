@@ -1,36 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BattleStatus, BattleMode } from '@prisma/client';
+import { BattleStatus, BattleMode } from '@tenkacloud/dynamodb';
 
 // vi.hoisted を使用してモックをホイスト
-const { mockBattle, mockBattleParticipant, mockBattleHistory } = vi.hoisted(
-  () => ({
-    mockBattle: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      count: vi.fn(),
-    },
-    mockBattleParticipant: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      count: vi.fn(),
-    },
-    mockBattleHistory: {
-      create: vi.fn(),
-    },
-  })
-);
-
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    battle: mockBattle,
-    battleParticipant: mockBattleParticipant,
-    battleHistory: mockBattleHistory,
+const { mockBattleRepository } = vi.hoisted(() => ({
+  mockBattleRepository: {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByIdAndTenant: vi.fn(),
+    listByTenant: vi.fn(),
+    countByTenant: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    addParticipant: vi.fn(),
+    getParticipant: vi.fn(),
+    listParticipants: vi.fn(),
+    countActiveParticipants: vi.fn(),
+    updateParticipant: vi.fn(),
+    addHistory: vi.fn(),
   },
+}));
+
+vi.mock('../lib/dynamodb', () => ({
+  battleRepository: mockBattleRepository,
 }));
 
 // サービス関数のインポートはモック後に行う
@@ -67,19 +58,24 @@ describe('バトル管理サービス', () => {
         id: 'battle-1',
         ...input,
         status: BattleStatus.WAITING,
-        startedAt: null,
-        endedAt: null,
+        startedAt: undefined,
+        endedAt: undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      mockBattle.create.mockResolvedValue(expectedBattle);
+      mockBattleRepository.create.mockResolvedValue(expectedBattle);
 
       const result = await createBattle(input);
 
       expect(result).toEqual(expectedBattle);
-      expect(mockBattle.create).toHaveBeenCalledWith({
-        data: input,
+      expect(mockBattleRepository.create).toHaveBeenCalledWith({
+        tenantId: input.tenantId,
+        title: input.title,
+        description: input.description,
+        mode: input.mode,
+        maxParticipants: input.maxParticipants,
+        timeLimit: input.timeLimit,
       });
     });
 
@@ -95,15 +91,15 @@ describe('バトル管理サービス', () => {
       const expectedBattle = {
         id: 'battle-2',
         ...input,
-        description: null,
+        description: undefined,
         status: BattleStatus.WAITING,
-        startedAt: null,
-        endedAt: null,
+        startedAt: undefined,
+        endedAt: undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      mockBattle.create.mockResolvedValue(expectedBattle);
+      mockBattleRepository.create.mockResolvedValue(expectedBattle);
 
       const result = await createBattle(input);
 
@@ -120,36 +116,26 @@ describe('バトル管理サービス', () => {
         tenantId,
         title: 'テストバトル',
         status: BattleStatus.WAITING,
-        participants: [],
-        teams: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
-      mockBattle.findUnique.mockResolvedValue(expectedBattle);
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(expectedBattle);
+      mockBattleRepository.listParticipants.mockResolvedValue([]);
 
       const result = await getBattle(battleId, tenantId);
 
-      expect(result).toEqual(expectedBattle);
-      expect(mockBattle.findUnique).toHaveBeenCalledWith({
-        where: { id: battleId },
-        include: { participants: true, teams: true },
-      });
+      expect(result).toEqual({ ...expectedBattle, participants: [] });
+      expect(mockBattleRepository.findByIdAndTenant).toHaveBeenCalledWith(
+        battleId,
+        tenantId
+      );
     });
 
     it('存在しないバトルの場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await getBattle('non-existent', 'tenant-1');
-
-      expect(result).toBeNull();
-    });
-
-    it('テナントIDが一致しない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-      });
-
-      const result = await getBattle('battle-1', 'tenant-1');
 
       expect(result).toBeNull();
     });
@@ -163,8 +149,10 @@ describe('バトル管理サービス', () => {
         { id: 'battle-2', tenantId, title: 'バトル2' },
       ];
 
-      mockBattle.findMany.mockResolvedValue(expectedBattles);
-      mockBattle.count.mockResolvedValue(2);
+      mockBattleRepository.listByTenant.mockResolvedValue({
+        battles: expectedBattles,
+      });
+      mockBattleRepository.countByTenant.mockResolvedValue(2);
 
       const result = await listBattles(tenantId, { page: 1, limit: 10 });
 
@@ -174,8 +162,8 @@ describe('バトル管理サービス', () => {
 
     it('ステータスでフィルタできるべき', async () => {
       const tenantId = 'tenant-1';
-      mockBattle.findMany.mockResolvedValue([]);
-      mockBattle.count.mockResolvedValue(0);
+      mockBattleRepository.listByTenant.mockResolvedValue({ battles: [] });
+      mockBattleRepository.countByTenant.mockResolvedValue(0);
 
       await listBattles(tenantId, {
         page: 1,
@@ -183,11 +171,10 @@ describe('バトル管理サービス', () => {
         status: BattleStatus.IN_PROGRESS,
       });
 
-      expect(mockBattle.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { tenantId, status: BattleStatus.IN_PROGRESS },
-        })
-      );
+      expect(mockBattleRepository.listByTenant).toHaveBeenCalledWith(tenantId, {
+        status: BattleStatus.IN_PROGRESS,
+        limit: 10,
+      });
     });
   });
 
@@ -197,12 +184,12 @@ describe('バトル管理サービス', () => {
       const tenantId = 'tenant-1';
       const updates = { title: '更新されたタイトル' };
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.WAITING,
       });
-      mockBattle.update.mockResolvedValue({
+      mockBattleRepository.update.mockResolvedValue({
         id: battleId,
         tenantId,
         title: '更新されたタイトル',
@@ -217,7 +204,7 @@ describe('バトル管理サービス', () => {
       const battleId = 'battle-1';
       const tenantId = 'tenant-1';
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.IN_PROGRESS,
@@ -229,23 +216,9 @@ describe('バトル管理サービス', () => {
     });
 
     it('バトルが見つからない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
 
       const result = await updateBattle('non-existent', 'tenant-1', {
-        title: '新タイトル',
-      });
-
-      expect(result).toBeNull();
-    });
-
-    it('テナントIDが一致しない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.WAITING,
-      });
-
-      const result = await updateBattle('battle-1', 'tenant-1', {
         title: '新タイトル',
       });
 
@@ -258,22 +231,20 @@ describe('バトル管理サービス', () => {
       const battleId = 'battle-1';
       const tenantId = 'tenant-1';
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.WAITING,
       });
-      mockBattle.delete.mockResolvedValue({ id: battleId });
+      mockBattleRepository.delete.mockResolvedValue(undefined);
 
       await deleteBattle(battleId, tenantId);
 
-      expect(mockBattle.delete).toHaveBeenCalledWith({
-        where: { id: battleId },
-      });
+      expect(mockBattleRepository.delete).toHaveBeenCalledWith(battleId);
     });
 
     it('進行中のバトルは削除できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.IN_PROGRESS,
@@ -285,23 +256,11 @@ describe('バトル管理サービス', () => {
     });
 
     it('バトルが見つからない場合は何もしないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
 
       await deleteBattle('non-existent', 'tenant-1');
 
-      expect(mockBattle.delete).not.toHaveBeenCalled();
-    });
-
-    it('テナントIDが一致しない場合は何もしないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.WAITING,
-      });
-
-      await deleteBattle('battle-1', 'tenant-1');
-
-      expect(mockBattle.delete).not.toHaveBeenCalled();
+      expect(mockBattleRepository.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -311,40 +270,60 @@ describe('バトル管理サービス', () => {
       const tenantId = 'tenant-1';
       const now = new Date();
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.WAITING,
       });
-      mockBattleParticipant.count.mockResolvedValue(2);
-      mockBattle.update.mockResolvedValue({
+      mockBattleRepository.countActiveParticipants.mockResolvedValue(2);
+      mockBattleRepository.update.mockResolvedValue({
         id: battleId,
         status: BattleStatus.IN_PROGRESS,
         startedAt: now,
       });
+      mockBattleRepository.addHistory.mockResolvedValue({});
 
       const result = await startBattle(battleId, tenantId);
 
       expect(result?.status).toBe(BattleStatus.IN_PROGRESS);
-      expect(mockBattleHistory.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          battleId,
-          eventType: 'BATTLE_STARTED',
-        }),
-      });
+      expect(mockBattleRepository.addHistory).toHaveBeenCalledWith(
+        battleId,
+        'BATTLE_STARTED',
+        { participantCount: 2 }
+      );
     });
 
     it('参加者がいないバトルは開始できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.WAITING,
       });
-      mockBattleParticipant.count.mockResolvedValue(0);
+      mockBattleRepository.countActiveParticipants.mockResolvedValue(0);
 
       await expect(startBattle('battle-1', 'tenant-1')).rejects.toThrow(
         '参加者がいないためバトルを開始できません'
       );
+    });
+
+    it('待機中以外のバトルは開始できないべき', async () => {
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
+        id: 'battle-1',
+        tenantId: 'tenant-1',
+        status: BattleStatus.IN_PROGRESS,
+      });
+
+      await expect(startBattle('battle-1', 'tenant-1')).rejects.toThrow(
+        '待機中のバトルのみ開始できます'
+      );
+    });
+
+    it('バトルが見つからない場合はnullを返すべき', async () => {
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
+
+      const result = await startBattle('non-existent', 'tenant-1');
+
+      expect(result).toBeNull();
     });
   });
 
@@ -353,16 +332,17 @@ describe('バトル管理サービス', () => {
       const battleId = 'battle-1';
       const tenantId = 'tenant-1';
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.IN_PROGRESS,
       });
-      mockBattle.update.mockResolvedValue({
+      mockBattleRepository.update.mockResolvedValue({
         id: battleId,
         status: BattleStatus.FINISHED,
         endedAt: new Date(),
       });
+      mockBattleRepository.addHistory.mockResolvedValue({});
 
       const result = await endBattle(battleId, tenantId);
 
@@ -370,7 +350,7 @@ describe('バトル管理サービス', () => {
     });
 
     it('待機中のバトルは終了できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.WAITING,
@@ -380,6 +360,14 @@ describe('バトル管理サービス', () => {
         '進行中でないバトルは終了できません'
       );
     });
+
+    it('バトルが見つからない場合はnullを返すべき', async () => {
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
+
+      const result = await endBattle('non-existent', 'tenant-1');
+
+      expect(result).toBeNull();
+    });
   });
 
   describe('joinBattle', () => {
@@ -388,15 +376,15 @@ describe('バトル管理サービス', () => {
       const tenantId = 'tenant-1';
       const userId = 'user-1';
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.WAITING,
         maxParticipants: 10,
       });
-      mockBattleParticipant.count.mockResolvedValue(5);
-      mockBattleParticipant.findUnique.mockResolvedValue(null);
-      mockBattleParticipant.create.mockResolvedValue({
+      mockBattleRepository.countActiveParticipants.mockResolvedValue(5);
+      mockBattleRepository.getParticipant.mockResolvedValue(null);
+      mockBattleRepository.addParticipant.mockResolvedValue({
         id: 'participant-1',
         battleId,
         userId,
@@ -409,13 +397,13 @@ describe('バトル管理サービス', () => {
     });
 
     it('定員に達したバトルには参加できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.WAITING,
         maxParticipants: 10,
       });
-      mockBattleParticipant.count.mockResolvedValue(10);
+      mockBattleRepository.countActiveParticipants.mockResolvedValue(10);
 
       await expect(
         joinBattle('battle-1', 'tenant-1', 'user-1')
@@ -423,20 +411,42 @@ describe('バトル管理サービス', () => {
     });
 
     it('既に参加しているユーザーは重複参加できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.WAITING,
         maxParticipants: 10,
       });
-      mockBattleParticipant.count.mockResolvedValue(5);
-      mockBattleParticipant.findUnique.mockResolvedValue({
+      mockBattleRepository.countActiveParticipants.mockResolvedValue(5);
+      mockBattleRepository.getParticipant.mockResolvedValue({
         id: 'participant-1',
+        leftAt: undefined,
       });
 
       await expect(
         joinBattle('battle-1', 'tenant-1', 'user-1')
       ).rejects.toThrow('既にこのバトルに参加しています');
+    });
+
+    it('バトルが見つからない場合はエラーを投げるべき', async () => {
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
+
+      await expect(
+        joinBattle('battle-1', 'tenant-1', 'user-1')
+      ).rejects.toThrow('バトルが見つかりません');
+    });
+
+    it('待機中以外のバトルには参加できないべき', async () => {
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
+        id: 'battle-1',
+        tenantId: 'tenant-1',
+        status: BattleStatus.IN_PROGRESS,
+        maxParticipants: 10,
+      });
+
+      await expect(
+        joinBattle('battle-1', 'tenant-1', 'user-1')
+      ).rejects.toThrow('待機中のバトルにのみ参加できます');
     });
   });
 
@@ -446,31 +456,32 @@ describe('バトル管理サービス', () => {
       const tenantId = 'tenant-1';
       const userId = 'user-1';
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.WAITING,
       });
-      mockBattleParticipant.findUnique.mockResolvedValue({
+      mockBattleRepository.getParticipant.mockResolvedValue({
         id: 'participant-1',
         battleId,
         userId,
       });
-      mockBattleParticipant.update.mockResolvedValue({
+      mockBattleRepository.updateParticipant.mockResolvedValue({
         id: 'participant-1',
         leftAt: new Date(),
       });
 
       await leaveBattle(battleId, tenantId, userId);
 
-      expect(mockBattleParticipant.update).toHaveBeenCalledWith({
-        where: { battleId_userId: { battleId, userId } },
-        data: { leftAt: expect.any(Date) },
-      });
+      expect(mockBattleRepository.updateParticipant).toHaveBeenCalledWith(
+        battleId,
+        userId,
+        { leftAt: expect.any(Date) }
+      );
     });
 
     it('進行中のバトルからは退出できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.IN_PROGRESS,
@@ -482,7 +493,7 @@ describe('バトル管理サービス', () => {
     });
 
     it('バトルが見つからない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
 
       await expect(
         leaveBattle('battle-1', 'tenant-1', 'user-1')
@@ -490,12 +501,12 @@ describe('バトル管理サービス', () => {
     });
 
     it('参加者が見つからない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.WAITING,
       });
-      mockBattleParticipant.findUnique.mockResolvedValue(null);
+      mockBattleRepository.getParticipant.mockResolvedValue(null);
 
       await expect(
         leaveBattle('battle-1', 'tenant-1', 'user-1')
@@ -510,36 +521,35 @@ describe('バトル管理サービス', () => {
       const userId = 'user-1';
       const score = 100;
 
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: battleId,
         tenantId,
         status: BattleStatus.IN_PROGRESS,
       });
-      mockBattleParticipant.findUnique.mockResolvedValue({
+      mockBattleRepository.getParticipant.mockResolvedValue({
         id: 'participant-1',
         battleId,
         userId,
         score: 0,
       });
-      mockBattleParticipant.update.mockResolvedValue({
+      mockBattleRepository.updateParticipant.mockResolvedValue({
         id: 'participant-1',
         score,
       });
+      mockBattleRepository.addHistory.mockResolvedValue({});
 
       const result = await updateScore(battleId, tenantId, userId, score);
 
       expect(result.score).toBe(score);
-      expect(mockBattleHistory.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          battleId,
-          eventType: 'SCORE_UPDATED',
-          payload: { userId, score },
-        }),
-      });
+      expect(mockBattleRepository.addHistory).toHaveBeenCalledWith(
+        battleId,
+        'SCORE_UPDATED',
+        { userId, score }
+      );
     });
 
     it('進行中でないバトルのスコアは更新できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.FINISHED,
@@ -551,7 +561,7 @@ describe('バトル管理サービス', () => {
     });
 
     it('バトルが見つからない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue(null);
 
       await expect(
         updateScore('battle-1', 'tenant-1', 'user-1', 100)
@@ -559,138 +569,16 @@ describe('バトル管理サービス', () => {
     });
 
     it('参加者が見つからない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
+      mockBattleRepository.findByIdAndTenant.mockResolvedValue({
         id: 'battle-1',
         tenantId: 'tenant-1',
         status: BattleStatus.IN_PROGRESS,
       });
-      mockBattleParticipant.findUnique.mockResolvedValue(null);
+      mockBattleRepository.getParticipant.mockResolvedValue(null);
 
       await expect(
         updateScore('battle-1', 'tenant-1', 'user-1', 100)
       ).rejects.toThrow('参加者が見つかりません');
-    });
-  });
-
-  describe('joinBattle - 追加ケース', () => {
-    it('バトルが見つからない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
-
-      await expect(
-        joinBattle('battle-1', 'tenant-1', 'user-1')
-      ).rejects.toThrow('バトルが見つかりません');
-    });
-
-    it('待機中以外のバトルには参加できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'tenant-1',
-        status: BattleStatus.IN_PROGRESS,
-        maxParticipants: 10,
-      });
-
-      await expect(
-        joinBattle('battle-1', 'tenant-1', 'user-1')
-      ).rejects.toThrow('待機中のバトルにのみ参加できます');
-    });
-  });
-
-  describe('startBattle - 追加ケース', () => {
-    it('待機中以外のバトルは開始できないべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'tenant-1',
-        status: BattleStatus.IN_PROGRESS,
-      });
-
-      await expect(startBattle('battle-1', 'tenant-1')).rejects.toThrow(
-        '待機中のバトルのみ開始できます'
-      );
-    });
-
-    it('バトルが見つからない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
-
-      const result = await startBattle('non-existent', 'tenant-1');
-
-      expect(result).toBeNull();
-    });
-
-    it('テナントIDが一致しない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.WAITING,
-      });
-
-      const result = await startBattle('battle-1', 'tenant-1');
-
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('endBattle - 追加ケース', () => {
-    it('バトルが見つからない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue(null);
-
-      const result = await endBattle('non-existent', 'tenant-1');
-
-      expect(result).toBeNull();
-    });
-
-    it('テナントIDが一致しない場合はnullを返すべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.IN_PROGRESS,
-      });
-
-      const result = await endBattle('battle-1', 'tenant-1');
-
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('joinBattle - テナント不一致ケース', () => {
-    it('テナントIDが一致しない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.WAITING,
-        maxParticipants: 10,
-      });
-
-      await expect(
-        joinBattle('battle-1', 'tenant-1', 'user-1')
-      ).rejects.toThrow('バトルが見つかりません');
-    });
-  });
-
-  describe('leaveBattle - テナント不一致ケース', () => {
-    it('テナントIDが一致しない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.WAITING,
-      });
-
-      await expect(
-        leaveBattle('battle-1', 'tenant-1', 'user-1')
-      ).rejects.toThrow('バトルが見つかりません');
-    });
-  });
-
-  describe('updateScore - テナント不一致ケース', () => {
-    it('テナントIDが一致しない場合はエラーを投げるべき', async () => {
-      mockBattle.findUnique.mockResolvedValue({
-        id: 'battle-1',
-        tenantId: 'other-tenant',
-        status: BattleStatus.IN_PROGRESS,
-      });
-
-      await expect(
-        updateScore('battle-1', 'tenant-1', 'user-1', 100)
-      ).rejects.toThrow('バトルが見つかりません');
     });
   });
 });

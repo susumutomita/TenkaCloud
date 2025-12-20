@@ -1,16 +1,24 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { EvaluationCategory } from '@prisma/client';
+import { EvaluationCategory } from '@tenkacloud/dynamodb';
 import * as scoringService from '../services/scoring';
 
 export const scoringRoutes = new Hono();
 
 // ========== バリデーションスキーマ ==========
 
+const evaluationCategoryValues = [
+  EvaluationCategory.INFRASTRUCTURE,
+  EvaluationCategory.COST,
+  EvaluationCategory.SECURITY,
+  EvaluationCategory.PERFORMANCE,
+  EvaluationCategory.RELIABILITY,
+] as const;
+
 const createCriteriaSchema = z.object({
   name: z.string().min(1, '名前は必須です'),
   description: z.string().optional(),
-  category: z.nativeEnum(EvaluationCategory),
+  category: z.enum(evaluationCategoryValues),
   weight: z.number().int().min(1).max(10).optional(),
   maxScore: z.number().int().min(1).optional(),
 });
@@ -18,7 +26,7 @@ const createCriteriaSchema = z.object({
 const updateCriteriaSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  category: z.nativeEnum(EvaluationCategory).optional(),
+  category: z.enum(evaluationCategoryValues).optional(),
   weight: z.number().int().min(1).max(10).optional(),
   maxScore: z.number().int().min(1).optional(),
   isActive: z.boolean().optional(),

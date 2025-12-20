@@ -1,25 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DeploymentService } from './deployment';
-import { prisma } from '../lib/prisma';
-import { KubernetesClient } from '../lib/kubernetes';
+import type { Deployment, DeploymentHistory } from '@tenkacloud/dynamodb';
+import type { K8sClient } from '../lib/kubernetes-factory';
 
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    deployment: {
-      create: vi.fn(),
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn(),
-      update: vi.fn(),
-    },
-    deploymentHistory: {
-      create: vi.fn(),
-      findMany: vi.fn(),
-    },
-  },
+// DynamoDB モック
+const mockDeploymentRepository = vi.hoisted(() => ({
+  create: vi.fn(),
+  findById: vi.fn(),
+  listByTenant: vi.fn(),
+  countByTenant: vi.fn(),
+  update: vi.fn(),
+  addHistory: vi.fn(),
+  getHistory: vi.fn(),
 }));
 
-vi.mock('../lib/kubernetes');
+vi.mock('../lib/dynamodb', () => ({
+  deploymentRepository: mockDeploymentRepository,
+}));
+
+vi.mock('../lib/kubernetes-factory');
+
+// DeploymentService のインポートはモック設定後
+import { DeploymentService } from './deployment';
 
 describe('DeploymentService', () => {
   let service: DeploymentService;
@@ -31,6 +32,35 @@ describe('DeploymentService', () => {
     getDeploymentStatus: ReturnType<typeof vi.fn>;
   };
 
+  const createMockDeployment = (
+    overrides: Partial<Deployment> = {}
+  ): Deployment => ({
+    id: 'deploy-1',
+    tenantId: 'tenant-1',
+    tenantSlug: 'test-tenant',
+    namespace: 'tenant-test-tenant',
+    serviceName: 'app-service',
+    image: 'app:v1',
+    version: 'v1',
+    replicas: 2,
+    status: 'PENDING',
+    type: 'CREATE',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
+
+  const createMockHistory = (
+    overrides: Partial<DeploymentHistory> = {}
+  ): DeploymentHistory => ({
+    id: 'history-1',
+    deploymentId: 'deploy-1',
+    status: 'PENDING',
+    message: 'デプロイメントを作成しました',
+    createdAt: new Date(),
+    ...overrides,
+  });
+
   beforeEach(() => {
     mockK8sClient = {
       createNamespace: vi.fn(),
@@ -39,9 +69,7 @@ describe('DeploymentService', () => {
       createService: vi.fn(),
       getDeploymentStatus: vi.fn(),
     };
-    service = new DeploymentService(
-      mockK8sClient as unknown as KubernetesClient
-    );
+    service = new DeploymentService(mockK8sClient as unknown as K8sClient);
     vi.clearAllMocks();
   });
 
@@ -58,41 +86,15 @@ describe('DeploymentService', () => {
 
   describe('createDeployment', () => {
     it('デプロイメントを作成すべき', async () => {
-      const mockDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'PENDING' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-      };
+      const mockDeployment = createMockDeployment();
+      const succeededDeployment = createMockDeployment({ status: 'SUCCEEDED' });
 
-      vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
-        ...mockDeployment,
-        status: 'SUCCEEDED' as const,
-      });
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue({
-        ...mockDeployment,
-        status: 'SUCCEEDED' as const,
-      });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-1',
-        status: 'PENDING',
-        message: 'デプロイメントを作成しました',
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.create.mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.update.mockResolvedValue(succeededDeployment);
+      mockDeploymentRepository.findById.mockResolvedValue(succeededDeployment);
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory()
+      );
       mockK8sClient.createNamespace.mockResolvedValue('tenant-test-tenant');
       mockK8sClient.createDeployment.mockResolvedValue(undefined);
       mockK8sClient.createService.mockResolvedValue(undefined);
@@ -122,35 +124,14 @@ describe('DeploymentService', () => {
     });
 
     it('デフォルトのレプリカ数（1）で作成すべき', async () => {
-      const mockDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 1,
-        status: 'PENDING' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-      };
+      const mockDeployment = createMockDeployment({ replicas: 1 });
 
-      vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
-      vi.mocked(prisma.deployment.update).mockResolvedValue(mockDeployment);
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(mockDeployment);
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-1',
-        status: 'PENDING',
-        message: null,
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.create.mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.update.mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.findById.mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory()
+      );
 
       await service.createDeployment({
         tenantId: 'tenant-1',
@@ -160,43 +141,20 @@ describe('DeploymentService', () => {
         version: 'v1',
       });
 
-      expect(prisma.deployment.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ replicas: 1 }),
-      });
+      expect(mockDeploymentRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ replicas: 1 })
+      );
     });
 
     it('K8sエラー時にステータスをFAILEDに更新すべき', async () => {
-      const mockDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 1,
-        status: 'PENDING' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-      };
+      const mockDeployment = createMockDeployment();
+      const failedDeployment = createMockDeployment({ status: 'FAILED' });
 
-      vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
-        ...mockDeployment,
-        status: 'FAILED' as const,
-      });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-1',
-        status: 'FAILED',
-        message: 'K8s error',
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.create.mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.update.mockResolvedValue(failedDeployment);
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory({ status: 'FAILED' })
+      );
       mockK8sClient.createNamespace.mockRejectedValue(new Error('K8s error'));
 
       await expect(
@@ -211,38 +169,17 @@ describe('DeploymentService', () => {
     });
 
     it('非Errorオブジェクトのエラー時に「不明なエラー」メッセージを使用すべき', async () => {
-      const mockDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 1,
-        status: 'PENDING' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-      };
-
-      vi.mocked(prisma.deployment.create).mockResolvedValue(mockDeployment);
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
-        ...mockDeployment,
-        status: 'FAILED' as const,
+      const mockDeployment = createMockDeployment();
+      const failedDeployment = createMockDeployment({
+        status: 'FAILED',
         errorMessage: '不明なエラー',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-1',
-        status: 'FAILED',
-        message: '不明なエラー',
-        createdAt: new Date(),
-      });
+
+      mockDeploymentRepository.create.mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.update.mockResolvedValue(failedDeployment);
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory({ status: 'FAILED', message: '不明なエラー' })
+      );
       mockK8sClient.createNamespace.mockRejectedValue('string error');
 
       await expect(
@@ -259,50 +196,31 @@ describe('DeploymentService', () => {
 
   describe('updateDeployment', () => {
     it('ローリングアップデートを実行すべき', async () => {
-      const existingDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const existingDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      const newDeployment = {
-        ...existingDeployment,
+      const newDeployment = createMockDeployment({
         id: 'deploy-2',
         image: 'app:v2',
         version: 'v2',
-        status: 'PENDING' as const,
-        type: 'UPDATE' as const,
+        type: 'UPDATE',
         previousImage: 'app:v1',
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique)
+      mockDeploymentRepository.findById
         .mockResolvedValueOnce(existingDeployment)
         .mockResolvedValueOnce({ ...newDeployment, status: 'SUCCEEDED' });
-      vi.mocked(prisma.deployment.create).mockResolvedValue(newDeployment);
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.create.mockResolvedValue(newDeployment);
+      mockDeploymentRepository.update.mockResolvedValue({
         ...newDeployment,
         status: 'SUCCEEDED',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-2',
-        status: 'PENDING',
-        message: null,
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory()
+      );
       mockK8sClient.updateDeployment.mockResolvedValue(undefined);
 
       const result = await service.updateDeployment('deploy-1', {
@@ -320,7 +238,7 @@ describe('DeploymentService', () => {
     });
 
     it('存在しないデプロイメントの場合、nullを返すべき', async () => {
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(null);
+      mockDeploymentRepository.findById.mockResolvedValue(null);
 
       const result = await service.updateDeployment('non-existent', {
         image: 'app:v2',
@@ -331,44 +249,27 @@ describe('DeploymentService', () => {
     });
 
     it('レプリカ数を指定して更新すべき', async () => {
-      const existingDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const existingDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique)
+      mockDeploymentRepository.findById
         .mockResolvedValueOnce(existingDeployment)
         .mockResolvedValueOnce({ ...existingDeployment, replicas: 5 });
-      vi.mocked(prisma.deployment.create).mockResolvedValue({
+      mockDeploymentRepository.create.mockResolvedValue({
         ...existingDeployment,
         id: 'deploy-2',
         replicas: 5,
       });
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.update.mockResolvedValue({
         ...existingDeployment,
         replicas: 5,
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-2',
-        status: 'PENDING',
-        message: null,
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory()
+      );
       mockK8sClient.updateDeployment.mockResolvedValue(undefined);
 
       await service.updateDeployment('deploy-1', {
@@ -386,44 +287,25 @@ describe('DeploymentService', () => {
     });
 
     it('K8sエラー時にステータスをFAILEDに更新すべき', async () => {
-      const existingDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const existingDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(
-        existingDeployment
-      );
-      vi.mocked(prisma.deployment.create).mockResolvedValue({
+      mockDeploymentRepository.findById.mockResolvedValue(existingDeployment);
+      mockDeploymentRepository.create.mockResolvedValue({
         ...existingDeployment,
         id: 'deploy-2',
         type: 'UPDATE',
       });
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.update.mockResolvedValue({
         ...existingDeployment,
         status: 'FAILED',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-2',
-        status: 'FAILED',
-        message: 'Update failed',
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory({ status: 'FAILED' })
+      );
       mockK8sClient.updateDeployment.mockRejectedValue(
         new Error('Update failed')
       );
@@ -437,45 +319,26 @@ describe('DeploymentService', () => {
     });
 
     it('非Errorオブジェクトのエラー時に「不明なエラー」メッセージを使用すべき', async () => {
-      const existingDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const existingDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(
-        existingDeployment
-      );
-      vi.mocked(prisma.deployment.create).mockResolvedValue({
+      mockDeploymentRepository.findById.mockResolvedValue(existingDeployment);
+      mockDeploymentRepository.create.mockResolvedValue({
         ...existingDeployment,
         id: 'deploy-2',
         type: 'UPDATE',
       });
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.update.mockResolvedValue({
         ...existingDeployment,
         status: 'FAILED',
         errorMessage: '不明なエラー',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-2',
-        status: 'FAILED',
-        message: '不明なエラー',
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory({ status: 'FAILED', message: '不明なエラー' })
+      );
       mockK8sClient.updateDeployment.mockRejectedValue('string error');
 
       await expect(
@@ -489,49 +352,36 @@ describe('DeploymentService', () => {
 
   describe('rollbackDeployment', () => {
     it('ロールバックを実行すべき', async () => {
-      const existingDeployment = {
+      const existingDeployment = createMockDeployment({
         id: 'deploy-2',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
         image: 'app:v2',
         version: 'v2',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'UPDATE' as const,
+        type: 'UPDATE',
         previousImage: 'app:v1',
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      const rollbackDeployment = {
-        ...existingDeployment,
+      const rollbackDeployment = createMockDeployment({
         id: 'deploy-3',
         image: 'app:v1',
         version: 'rollback-from-v2',
-        type: 'ROLLBACK' as const,
+        type: 'ROLLBACK',
         previousImage: 'app:v2',
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique)
+      mockDeploymentRepository.findById
         .mockResolvedValueOnce(existingDeployment)
         .mockResolvedValueOnce({ ...rollbackDeployment, status: 'SUCCEEDED' });
-      vi.mocked(prisma.deployment.create).mockResolvedValue(rollbackDeployment);
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.create.mockResolvedValue(rollbackDeployment);
+      mockDeploymentRepository.update.mockResolvedValue({
         ...rollbackDeployment,
         status: 'SUCCEEDED',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-3',
-        status: 'PENDING',
-        message: null,
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory()
+      );
       mockK8sClient.updateDeployment.mockResolvedValue(undefined);
 
       const result = await service.rollbackDeployment('deploy-2');
@@ -546,7 +396,7 @@ describe('DeploymentService', () => {
     });
 
     it('存在しないデプロイメントの場合、nullを返すべき', async () => {
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(null);
+      mockDeploymentRepository.findById.mockResolvedValue(null);
 
       const result = await service.rollbackDeployment('non-existent');
 
@@ -554,28 +404,13 @@ describe('DeploymentService', () => {
     });
 
     it('previousImageがない場合、エラーをスローすべき', async () => {
-      const existingDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const existingDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(
-        existingDeployment
-      );
+      mockDeploymentRepository.findById.mockResolvedValue(existingDeployment);
 
       await expect(service.rollbackDeployment('deploy-1')).rejects.toThrow(
         'ロールバック先のイメージがありません'
@@ -583,44 +418,30 @@ describe('DeploymentService', () => {
     });
 
     it('K8sエラー時にステータスをFAILEDに更新すべき', async () => {
-      const existingDeployment = {
+      const existingDeployment = createMockDeployment({
         id: 'deploy-2',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
         image: 'app:v2',
         version: 'v2',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'UPDATE' as const,
+        type: 'UPDATE',
         previousImage: 'app:v1',
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(
-        existingDeployment
-      );
-      vi.mocked(prisma.deployment.create).mockResolvedValue({
+      mockDeploymentRepository.findById.mockResolvedValue(existingDeployment);
+      mockDeploymentRepository.create.mockResolvedValue({
         ...existingDeployment,
         id: 'deploy-3',
         type: 'ROLLBACK',
       });
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.update.mockResolvedValue({
         ...existingDeployment,
         status: 'FAILED',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-3',
-        status: 'FAILED',
-        message: 'Rollback failed',
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory({ status: 'FAILED' })
+      );
       mockK8sClient.updateDeployment.mockRejectedValue(
         new Error('Rollback failed')
       );
@@ -631,45 +452,31 @@ describe('DeploymentService', () => {
     });
 
     it('非Errorオブジェクトのエラー時に「不明なエラー」メッセージを使用すべき', async () => {
-      const existingDeployment = {
+      const existingDeployment = createMockDeployment({
         id: 'deploy-2',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
         image: 'app:v2',
         version: 'v2',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'UPDATE' as const,
+        type: 'UPDATE',
         previousImage: 'app:v1',
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(
-        existingDeployment
-      );
-      vi.mocked(prisma.deployment.create).mockResolvedValue({
+      mockDeploymentRepository.findById.mockResolvedValue(existingDeployment);
+      mockDeploymentRepository.create.mockResolvedValue({
         ...existingDeployment,
         id: 'deploy-3',
         type: 'ROLLBACK',
       });
-      vi.mocked(prisma.deployment.update).mockResolvedValue({
+      mockDeploymentRepository.update.mockResolvedValue({
         ...existingDeployment,
         status: 'FAILED',
         errorMessage: '不明なエラー',
       });
-      vi.mocked(prisma.deploymentHistory.create).mockResolvedValue({
-        id: 'history-1',
-        deploymentId: 'deploy-3',
-        status: 'FAILED',
-        message: '不明なエラー',
-        createdAt: new Date(),
-      });
+      mockDeploymentRepository.addHistory.mockResolvedValue(
+        createMockHistory({ status: 'FAILED', message: '不明なエラー' })
+      );
       mockK8sClient.updateDeployment.mockRejectedValue('string error');
 
       await expect(service.rollbackDeployment('deploy-2')).rejects.toBe(
@@ -680,24 +487,11 @@ describe('DeploymentService', () => {
 
   describe('getDeploymentStatus', () => {
     it('デプロイメントとK8sステータスを返すべき', async () => {
-      const mockDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const mockDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
       const k8sStatus = {
         availableReplicas: 2,
@@ -706,7 +500,7 @@ describe('DeploymentService', () => {
         updatedReplicas: 2,
       };
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.findById.mockResolvedValue(mockDeployment);
       mockK8sClient.getDeploymentStatus.mockResolvedValue(k8sStatus);
 
       const result = await service.getDeploymentStatus('deploy-1');
@@ -718,7 +512,7 @@ describe('DeploymentService', () => {
     });
 
     it('存在しないデプロイメントの場合、nullを返すべき', async () => {
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(null);
+      mockDeploymentRepository.findById.mockResolvedValue(null);
 
       const result = await service.getDeploymentStatus('non-existent');
 
@@ -728,26 +522,13 @@ describe('DeploymentService', () => {
 
   describe('getDeploymentById', () => {
     it('IDでデプロイメントを取得すべき', async () => {
-      const mockDeployment = {
-        id: 'deploy-1',
-        tenantId: 'tenant-1',
-        tenantSlug: 'test-tenant',
-        namespace: 'tenant-test-tenant',
-        serviceName: 'app-service',
-        image: 'app:v1',
-        version: 'v1',
-        replicas: 2,
-        status: 'SUCCEEDED' as const,
-        type: 'CREATE' as const,
-        previousImage: null,
-        errorMessage: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      const mockDeployment = createMockDeployment({
+        status: 'SUCCEEDED',
         startedAt: new Date(),
         completedAt: new Date(),
-      };
+      });
 
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(mockDeployment);
+      mockDeploymentRepository.findById.mockResolvedValue(mockDeployment);
 
       const result = await service.getDeploymentById('deploy-1');
 
@@ -755,7 +536,7 @@ describe('DeploymentService', () => {
     });
 
     it('存在しないIDの場合、nullを返すべき', async () => {
-      vi.mocked(prisma.deployment.findUnique).mockResolvedValue(null);
+      mockDeploymentRepository.findById.mockResolvedValue(null);
 
       const result = await service.getDeploymentById('non-existent');
 
@@ -766,28 +547,17 @@ describe('DeploymentService', () => {
   describe('listDeployments', () => {
     it('デプロイメント一覧を取得すべき', async () => {
       const mockDeployments = [
-        {
-          id: 'deploy-1',
-          tenantId: 'tenant-1',
-          tenantSlug: 'test-tenant',
-          namespace: 'tenant-test-tenant',
-          serviceName: 'app-service',
-          image: 'app:v1',
-          version: 'v1',
-          replicas: 2,
-          status: 'SUCCEEDED' as const,
-          type: 'CREATE' as const,
-          previousImage: null,
-          errorMessage: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+        createMockDeployment({
+          status: 'SUCCEEDED',
           startedAt: new Date(),
           completedAt: new Date(),
-        },
+        }),
       ];
 
-      vi.mocked(prisma.deployment.findMany).mockResolvedValue(mockDeployments);
-      vi.mocked(prisma.deployment.count).mockResolvedValue(1);
+      mockDeploymentRepository.listByTenant.mockResolvedValue({
+        deployments: mockDeployments,
+      });
+      mockDeploymentRepository.countByTenant.mockResolvedValue(1);
 
       const result = await service.listDeployments({ tenantId: 'tenant-1' });
 
@@ -795,9 +565,17 @@ describe('DeploymentService', () => {
       expect(result.total).toBe(1);
     });
 
+    it('tenantIdがない場合、空の結果を返すべき', async () => {
+      const result = await service.listDeployments({});
+
+      expect(result).toEqual({ deployments: [], total: 0 });
+    });
+
     it('フィルタ条件で絞り込むべき', async () => {
-      vi.mocked(prisma.deployment.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.deployment.count).mockResolvedValue(0);
+      mockDeploymentRepository.listByTenant.mockResolvedValue({
+        deployments: [],
+      });
+      mockDeploymentRepository.countByTenant.mockResolvedValue(0);
 
       await service.listDeployments({
         tenantId: 'tenant-1',
@@ -807,70 +585,49 @@ describe('DeploymentService', () => {
         offset: 5,
       });
 
-      expect(prisma.deployment.findMany).toHaveBeenCalledWith({
-        where: {
-          tenantId: 'tenant-1',
-          tenantSlug: 'test-tenant',
+      expect(mockDeploymentRepository.listByTenant).toHaveBeenCalledWith(
+        'tenant-1',
+        expect.objectContaining({
           status: 'SUCCEEDED',
-        },
-        take: 10,
-        skip: 5,
-        orderBy: { createdAt: 'desc' },
-      });
+          limit: 10,
+        })
+      );
     });
 
-    it('デフォルトのlimitとoffsetを使用すべき', async () => {
-      vi.mocked(prisma.deployment.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.deployment.count).mockResolvedValue(0);
-
-      await service.listDeployments({});
-
-      expect(prisma.deployment.findMany).toHaveBeenCalledWith({
-        where: {},
-        take: 20,
-        skip: 0,
-        orderBy: { createdAt: 'desc' },
+    it('デフォルトのlimitを使用すべき', async () => {
+      mockDeploymentRepository.listByTenant.mockResolvedValue({
+        deployments: [],
       });
+      mockDeploymentRepository.countByTenant.mockResolvedValue(0);
+
+      await service.listDeployments({ tenantId: 'tenant-1' });
+
+      expect(mockDeploymentRepository.listByTenant).toHaveBeenCalledWith(
+        'tenant-1',
+        expect.objectContaining({ limit: 20 })
+      );
     });
   });
 
   describe('getDeploymentHistory', () => {
     it('デプロイメント履歴を取得すべき', async () => {
       const mockHistory = [
-        {
-          id: 'history-1',
-          deploymentId: 'deploy-1',
-          status: 'PENDING' as const,
+        createMockHistory({
+          status: 'PENDING',
           message: 'デプロイメントを作成しました',
-          createdAt: new Date(),
-        },
-        {
-          id: 'history-2',
-          deploymentId: 'deploy-1',
-          status: 'IN_PROGRESS' as const,
-          message: null,
-          createdAt: new Date(),
-        },
-        {
-          id: 'history-3',
-          deploymentId: 'deploy-1',
-          status: 'SUCCEEDED' as const,
-          message: null,
-          createdAt: new Date(),
-        },
+        }),
+        createMockHistory({ id: 'history-2', status: 'IN_PROGRESS' }),
+        createMockHistory({ id: 'history-3', status: 'SUCCEEDED' }),
       ];
 
-      vi.mocked(prisma.deploymentHistory.findMany).mockResolvedValue(
-        mockHistory
-      );
+      mockDeploymentRepository.getHistory.mockResolvedValue(mockHistory);
 
       const result = await service.getDeploymentHistory('deploy-1');
 
       expect(result).toEqual(mockHistory);
-      expect(prisma.deploymentHistory.findMany).toHaveBeenCalledWith({
-        where: { deploymentId: 'deploy-1' },
-        orderBy: { createdAt: 'asc' },
-      });
+      expect(mockDeploymentRepository.getHistory).toHaveBeenCalledWith(
+        'deploy-1'
+      );
     });
   });
 });

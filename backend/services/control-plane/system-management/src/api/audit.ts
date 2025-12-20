@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 import { AuditService } from '../services/audit';
 import { createLogger } from '../lib/logger';
 
@@ -12,7 +11,7 @@ const auditService = new AuditService();
  * JSON 値として有効かを検証する型ガード
  * JSON.stringify で再帰的に検証し、function/undefined/symbol 等を検出
  */
-const isJsonValue = (val: unknown): val is Prisma.InputJsonValue => {
+const isJsonValue = (val: unknown): boolean => {
   try {
     JSON.stringify(val);
     return true;
@@ -37,11 +36,9 @@ const createAuditLogSchema = z.object({
   details: z
     .unknown()
     .optional()
-    .refine(
-      (val): val is Prisma.InputJsonValue | undefined =>
-        val === undefined || isJsonValue(val),
-      { message: '有効な JSON 値である必要があります' }
-    ),
+    .refine((val) => val === undefined || isJsonValue(val), {
+      message: '有効な JSON 値である必要があります',
+    }),
 });
 
 const listAuditLogsSchema = z.object({

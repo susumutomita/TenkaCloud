@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma';
+import { serviceHealthRepository } from '../lib/dynamodb';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('health-service');
@@ -83,7 +83,12 @@ export class HealthService {
   private async checkDatabase(): Promise<ComponentHealth> {
     const startTime = Date.now();
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      // DynamoDB の疎通確認として自サービスのヘルスを取得/更新
+      await serviceHealthRepository.upsert({
+        serviceName: 'system-management',
+        status: 'healthy',
+        details: { lastHealthCheck: new Date().toISOString() },
+      });
       const latency = Date.now() - startTime;
       return {
         status: 'healthy',
@@ -100,7 +105,11 @@ export class HealthService {
 
   private async isDatabaseReady(): Promise<boolean> {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await serviceHealthRepository.upsert({
+        serviceName: 'system-management',
+        status: 'ready',
+        details: { readinessCheck: new Date().toISOString() },
+      });
       return true;
     } catch {
       return false;

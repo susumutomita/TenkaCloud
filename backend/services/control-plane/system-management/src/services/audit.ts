@@ -1,5 +1,9 @@
-import type { AuditAction, AuditResourceType, Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma';
+import type {
+  AuditAction,
+  AuditResourceType,
+  AuditLog,
+} from '@tenkacloud/dynamodb';
+import { auditLogRepository } from '../lib/dynamodb';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('audit-service');
@@ -10,7 +14,7 @@ export interface CreateAuditLogInput {
   action: AuditAction;
   resourceType: AuditResourceType;
   resourceId?: string;
-  details?: Prisma.InputJsonValue;
+  details?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -26,42 +30,27 @@ export interface ListAuditLogsInput {
   offset?: number;
 }
 
-export interface AuditLogResult {
-  id: string;
-  tenantId: string | null;
-  userId: string | null;
-  action: AuditAction;
-  resourceType: AuditResourceType;
-  resourceId: string | null;
-  details: unknown;
-  ipAddress: string | null;
-  userAgent: string | null;
-  createdAt: Date;
-}
-
 export interface ListAuditLogsResult {
-  logs: AuditLogResult[];
+  logs: AuditLog[];
   total: number;
 }
 
 export class AuditService {
-  async createLog(input: CreateAuditLogInput): Promise<AuditLogResult> {
+  async createLog(input: CreateAuditLogInput): Promise<AuditLog> {
     logger.info(
       { action: input.action, resourceType: input.resourceType },
       '監査ログを記録します'
     );
 
-    const log = await prisma.auditLog.create({
-      data: {
-        tenantId: input.tenantId,
-        userId: input.userId,
-        action: input.action,
-        resourceType: input.resourceType,
-        resourceId: input.resourceId,
-        details: input.details,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
-      },
+    const log = await auditLogRepository.create({
+      tenantId: input.tenantId,
+      userId: input.userId,
+      action: input.action,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      details: input.details,
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
     });
 
     logger.info({ logId: log.id }, '監査ログを記録しました');
@@ -70,37 +59,57 @@ export class AuditService {
   }
 
   async listLogs(input: ListAuditLogsInput): Promise<ListAuditLogsResult> {
-    const where = {
-      ...(input.tenantId && { tenantId: input.tenantId }),
-      ...(input.userId && { userId: input.userId }),
-      ...(input.action && { action: input.action }),
-      ...(input.resourceType && { resourceType: input.resourceType }),
-      ...(input.startDate || input.endDate
-        ? {
-            createdAt: {
-              ...(input.startDate && { gte: input.startDate }),
-              ...(input.endDate && { lte: input.endDate }),
-            },
-          }
-        : {}),
-    };
+    // DynamoDB はテナント単位またはユーザー単位でクエリ
+    // ユーザー指定がある場合はユーザーベースでクエリ
+    if (input.userId && !input.tenantId) {
+      const result = await auditLogRepository.listByUser(input.userId, {
+        limit: input.limit ?? 50,
+      });
 
-    const [logs, total] = await Promise.all([
-      prisma.auditLog.findMany({
-        where,
-        take: input.limit ?? 50,
-        skip: input.offset ?? 0,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.auditLog.count({ where }),
-    ]);
+      // フィルタリング（action, resourceType, 日付範囲）
+      let logs = result.logs;
 
-    return { logs, total };
+      if (input.action) {
+        logs = logs.filter((log) => log.action === input.action);
+      }
+      if (input.resourceType) {
+        logs = logs.filter((log) => log.resourceType === input.resourceType);
+      }
+      if (input.startDate) {
+        logs = logs.filter((log) => log.createdAt >= input.startDate!);
+      }
+      if (input.endDate) {
+        logs = logs.filter((log) => log.createdAt <= input.endDate!);
+      }
+
+      return { logs, total: logs.length };
+    }
+
+    // テナント指定（またはシステムログ）
+    const tenantId = input.tenantId ?? '';
+    const result = await auditLogRepository.listByTenant(tenantId, {
+      action: input.action,
+      resourceType: input.resourceType,
+      limit: input.limit ?? 50,
+    });
+
+    // 日付フィルタはクライアント側で
+    let logs = result.logs;
+    if (input.startDate) {
+      logs = logs.filter((log) => log.createdAt >= input.startDate!);
+    }
+    if (input.endDate) {
+      logs = logs.filter((log) => log.createdAt <= input.endDate!);
+    }
+
+    return { logs, total: logs.length };
   }
 
-  async getLogById(id: string): Promise<AuditLogResult | null> {
-    return prisma.auditLog.findUnique({
-      where: { id },
-    });
+  async getLogById(id: string): Promise<AuditLog | null> {
+    // DynamoDB の Single Table Design では ID のみでの検索は非効率
+    // 実際の用途に応じて GSI を追加するか、listLogs を使用することを推奨
+    // 暫定的にシステムログを検索
+    const result = await auditLogRepository.listByTenant('', { limit: 100 });
+    return result.logs.find((log) => log.id === id) ?? null;
   }
 }

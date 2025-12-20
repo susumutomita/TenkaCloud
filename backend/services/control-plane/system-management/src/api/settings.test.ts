@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
-import { Prisma } from '@prisma/client';
 import * as settingsServiceModule from '../services/settings';
 
 vi.mock('../services/settings');
@@ -142,31 +141,6 @@ describe('Settings API', () => {
       expect(res.status).toBe(500);
     });
 
-    it('重複キーの場合 (P2002)、409を返すべき', async () => {
-      const prismaError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        { code: 'P2002', clientVersion: '5.0.0' }
-      );
-      mockCreateSetting.mockRejectedValue(prismaError);
-
-      const res = await app.request('/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': 'user-1',
-        },
-        body: JSON.stringify({
-          key: 'app.theme',
-          value: { dark: true },
-          category: 'appearance',
-        }),
-      });
-
-      expect(res.status).toBe(409);
-      const body = await res.json();
-      expect(body.error).toBe('設定キーが既に存在します');
-    });
-
     it('無効な JSON の場合、400を返すべき', async () => {
       const res = await app.request('/settings', {
         method: 'POST',
@@ -296,12 +270,10 @@ describe('Settings API', () => {
       expect(body.value).toEqual({ dark: false });
     });
 
-    it('存在しないキーの場合 (P2025)、404を返すべき', async () => {
-      const prismaError = new Prisma.PrismaClientKnownRequestError(
-        'Record to update not found',
-        { code: 'P2025', clientVersion: '5.0.0' }
+    it('存在しないキーの場合、404を返すべき', async () => {
+      mockUpdateSetting.mockRejectedValue(
+        new Error('設定が見つかりません: non-existent')
       );
-      mockUpdateSetting.mockRejectedValue(prismaError);
 
       const res = await app.request('/settings/non-existent', {
         method: 'PUT',
@@ -385,21 +357,6 @@ describe('Settings API', () => {
         ipAddress: '192.168.1.1',
         userAgent: 'Test Agent',
       });
-    });
-
-    it('存在しないキーの場合 (P2025)、404を返すべき', async () => {
-      const prismaError = new Prisma.PrismaClientKnownRequestError(
-        'Record to delete does not exist',
-        { code: 'P2025', clientVersion: '5.0.0' }
-      );
-      mockDeleteSetting.mockRejectedValue(prismaError);
-
-      const res = await app.request('/settings/non-existent', {
-        method: 'DELETE',
-        headers: { 'x-user-id': 'user-1' },
-      });
-
-      expect(res.status).toBe(404);
     });
 
     it('その他のエラーの場合、エラーを再スローすべき', async () => {

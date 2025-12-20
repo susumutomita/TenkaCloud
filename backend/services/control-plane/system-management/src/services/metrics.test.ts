@@ -1,17 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MetricsService } from './metrics';
-import { prisma } from '../lib/prisma';
 
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    $queryRaw: vi.fn(),
-    auditLog: {
-      count: vi.fn(),
-    },
-    systemSetting: {
-      count: vi.fn(),
-    },
-  },
+const mockAuditLogRepository = vi.hoisted(() => ({
+  listByTenant: vi.fn(),
+}));
+
+const mockSystemSettingRepository = vi.hoisted(() => ({
+  listAll: vi.fn(),
+}));
+
+const mockServiceHealthRepository = vi.hoisted(() => ({
+  upsert: vi.fn(),
+}));
+
+vi.mock('../lib/dynamodb', () => ({
+  auditLogRepository: mockAuditLogRepository,
+  systemSettingRepository: mockSystemSettingRepository,
+  serviceHealthRepository: mockServiceHealthRepository,
 }));
 
 describe('MetricsService', () => {
@@ -28,9 +33,21 @@ describe('MetricsService', () => {
 
   describe('collectMetrics', () => {
     it('正常にメトリクスを収集すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ '?column?': 1 }]);
-      vi.mocked(prisma.auditLog.count).mockResolvedValue(100);
-      vi.mocked(prisma.systemSetting.count).mockResolvedValue(10);
+      mockServiceHealthRepository.upsert.mockResolvedValue({
+        id: 'health-1',
+        serviceName: 'system-management',
+        status: 'active',
+        lastCheck: new Date(),
+        details: {},
+      });
+      mockAuditLogRepository.listByTenant.mockResolvedValue({
+        logs: [{ id: 'log-1' }],
+        lastKey: undefined,
+      });
+      mockSystemSettingRepository.listAll.mockResolvedValue([
+        { key: 'setting-1' },
+        { key: 'setting-2' },
+      ]);
 
       const result = await service.collectMetrics();
 
@@ -43,16 +60,19 @@ describe('MetricsService', () => {
       expect(result.system.cpu.system).toBeGreaterThanOrEqual(0);
       expect(result.database.connectionStatus).toBe('connected');
       expect(result.database.latencyMs).toBeGreaterThanOrEqual(0);
-      expect(result.application.auditLogsCount).toBe(100);
-      expect(result.application.settingsCount).toBe(10);
+      expect(result.application.auditLogsCount).toBe(-1); // 集計不可
+      expect(result.application.settingsCount).toBe(2);
     });
 
     it('データベース接続エラー時も他のメトリクスを収集すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockRejectedValue(
+      mockServiceHealthRepository.upsert.mockRejectedValue(
         new Error('Connection error')
       );
-      vi.mocked(prisma.auditLog.count).mockResolvedValue(0);
-      vi.mocked(prisma.systemSetting.count).mockResolvedValue(0);
+      mockAuditLogRepository.listByTenant.mockResolvedValue({
+        logs: [],
+        lastKey: undefined,
+      });
+      mockSystemSettingRepository.listAll.mockResolvedValue([]);
 
       const result = await service.collectMetrics();
 

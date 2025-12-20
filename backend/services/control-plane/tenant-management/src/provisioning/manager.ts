@@ -1,8 +1,8 @@
-import { prisma } from '../lib/prisma';
+import { tenantRepository } from '../lib/dynamodb';
 import { createLogger } from '../lib/logger';
 import { KeycloakProvisioner } from './keycloak';
 import { KubernetesProvisioner } from './kubernetes';
-import { Tenant } from '@prisma/client';
+import type { Tenant } from '@tenkacloud/dynamodb';
 
 const logger = createLogger('provisioning-manager');
 
@@ -23,10 +23,7 @@ export class ProvisioningManager {
 
     try {
       // Update status to IN_PROGRESS
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { provisioningStatus: 'IN_PROGRESS' },
-      });
+      await tenantRepository.updateProvisioningStatus(tenant.id, 'IN_PROGRESS');
 
       // 1. Create Keycloak Realm
       logger.info('Provisioning Keycloak Realm...');
@@ -41,12 +38,9 @@ export class ProvisioningManager {
       await this.k8sProvisioner.deployParticipantApp(tenant.slug, namespace);
 
       // 3. Update status to COMPLETED
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: {
-          provisioningStatus: 'COMPLETED',
-          status: 'ACTIVE',
-        },
+      await tenantRepository.update(tenant.id, {
+        provisioningStatus: 'COMPLETED',
+        status: 'ACTIVE',
       });
 
       logger.info(
@@ -57,10 +51,7 @@ export class ProvisioningManager {
       logger.error({ error, tenantId: tenant.id }, 'Provisioning failed');
 
       // Update status to FAILED
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { provisioningStatus: 'FAILED' },
-      });
+      await tenantRepository.updateProvisioningStatus(tenant.id, 'FAILED');
     }
   }
 }

@@ -10,8 +10,27 @@ vi.mock('jose', async () => {
     createRemoteJWKSet: vi.fn(),
     jwtVerify: vi.fn(),
     errors: {
-      JWTExpired: class JWTExpired extends Error {},
-      JWTClaimValidationFailed: class JWTClaimValidationFailed extends Error {},
+      JWTExpired: class JWTExpired extends Error {
+        constructor(
+          message: string,
+          _claim: string,
+          _payload: Record<string, unknown>
+        ) {
+          super(message);
+          this.name = 'JWTExpired';
+        }
+      },
+      JWTClaimValidationFailed: class JWTClaimValidationFailed extends Error {
+        constructor(
+          message: string,
+          _claim: string,
+          _reason: string,
+          _payload: Record<string, unknown>
+        ) {
+          super(message);
+          this.name = 'JWTClaimValidationFailed';
+        }
+      },
     },
   };
 });
@@ -93,9 +112,10 @@ describe('認証ミドルウェア', () => {
 
   it('期限切れトークンの場合は401を返すべき', async () => {
     vi.mocked(jose.createRemoteJWKSet).mockReturnValue(vi.fn() as never);
-    vi.mocked(jose.jwtVerify).mockRejectedValue(
-      new jose.errors.JWTExpired('expired')
-    );
+    const error = new Error('expired');
+    error.name = 'JWTExpired';
+    Object.setPrototypeOf(error, jose.errors.JWTExpired.prototype);
+    vi.mocked(jose.jwtVerify).mockRejectedValue(error);
 
     const res = await app.request('/test', {
       headers: { Authorization: 'Bearer expired-token' },
@@ -108,9 +128,13 @@ describe('認証ミドルウェア', () => {
 
   it('無効なトークンの場合は401を返すべき', async () => {
     vi.mocked(jose.createRemoteJWKSet).mockReturnValue(vi.fn() as never);
-    vi.mocked(jose.jwtVerify).mockRejectedValue(
-      new jose.errors.JWTClaimValidationFailed('invalid')
+    const error = new Error('invalid');
+    error.name = 'JWTClaimValidationFailed';
+    Object.setPrototypeOf(
+      error,
+      jose.errors.JWTClaimValidationFailed.prototype
     );
+    vi.mocked(jose.jwtVerify).mockRejectedValue(error);
 
     const res = await app.request('/test', {
       headers: { Authorization: 'Bearer invalid-token' },

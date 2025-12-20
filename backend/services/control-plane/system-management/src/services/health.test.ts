@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HealthService } from './health';
-import { prisma } from '../lib/prisma';
 
-vi.mock('../lib/prisma', () => ({
-  prisma: {
-    $queryRaw: vi.fn(),
-  },
+const mockServiceHealthRepository = vi.hoisted(() => ({
+  upsert: vi.fn(),
+  get: vi.fn(),
+  listAll: vi.fn(),
+}));
+
+vi.mock('../lib/dynamodb', () => ({
+  serviceHealthRepository: mockServiceHealthRepository,
 }));
 
 describe('HealthService', () => {
@@ -22,7 +25,13 @@ describe('HealthService', () => {
 
   describe('checkHealth', () => {
     it('データベースが正常な場合、healthy ステータスを返すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ '?column?': 1 }]);
+      mockServiceHealthRepository.upsert.mockResolvedValue({
+        id: 'health-1',
+        serviceName: 'system-management',
+        status: 'healthy',
+        lastCheck: new Date(),
+        details: {},
+      });
 
       const result = await service.checkHealth();
 
@@ -35,7 +44,7 @@ describe('HealthService', () => {
     });
 
     it('データベース接続エラーの場合、unhealthy ステータスを返すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockRejectedValue(
+      mockServiceHealthRepository.upsert.mockRejectedValue(
         new Error('Connection error')
       );
 
@@ -47,10 +56,15 @@ describe('HealthService', () => {
     });
 
     it('メモリ使用率が90%を超えた場合、unhealthy ステータスを返すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ '?column?': 1 }]);
+      mockServiceHealthRepository.upsert.mockResolvedValue({
+        id: 'health-1',
+        serviceName: 'system-management',
+        status: 'healthy',
+        lastCheck: new Date(),
+        details: {},
+      });
 
       // メモリ使用率を90%以上にモック
-      const originalMemoryUsage = process.memoryUsage;
       vi.spyOn(process, 'memoryUsage').mockReturnValue({
         heapUsed: 95000000,
         heapTotal: 100000000,
@@ -71,7 +85,13 @@ describe('HealthService', () => {
 
   describe('checkReadiness', () => {
     it('データベースが正常な場合、ready: true を返すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ '?column?': 1 }]);
+      mockServiceHealthRepository.upsert.mockResolvedValue({
+        id: 'health-1',
+        serviceName: 'system-management',
+        status: 'ready',
+        lastCheck: new Date(),
+        details: {},
+      });
 
       const result = await service.checkReadiness();
 
@@ -81,7 +101,7 @@ describe('HealthService', () => {
     });
 
     it('データベース接続エラーの場合、ready: false を返すべき', async () => {
-      vi.mocked(prisma.$queryRaw).mockRejectedValue(
+      mockServiceHealthRepository.upsert.mockRejectedValue(
         new Error('Connection error')
       );
 

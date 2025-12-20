@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { DeploymentStatus } from '@prisma/client';
+import type { DeploymentStatus } from '@tenkacloud/dynamodb';
 import { DeploymentService } from '../services/deployment';
 import { createLogger } from '../lib/logger';
 import type { AuthenticatedUser } from '../middleware/auth';
