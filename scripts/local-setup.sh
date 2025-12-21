@@ -65,11 +65,18 @@ echo "✅ LocalStack services are ready!"
 
 # 2. Lambda をビルド
 echo ""
-echo "🔨 Building Provisioning Lambda..."
+echo "🔨 Building Provisioning Lambda (Control Plane)..."
 cd "$PROJECT_ROOT/backend/services/control-plane/provisioning"
 bun install
 bun run deploy
-echo "✅ Lambda built!"
+echo "✅ Provisioning Lambda built!"
+
+echo ""
+echo "🔨 Building Tenant Provisioner Lambda (Application Plane)..."
+cd "$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner"
+bun install
+bun run deploy
+echo "✅ Tenant Provisioner Lambda built!"
 
 # 3. Terraform でデプロイ
 echo ""
@@ -95,6 +102,10 @@ echo "EventBridge Event Buses:"
 aws --endpoint-url=http://localhost:4566 events list-event-buses --region ap-northeast-1 --query 'EventBuses[].Name'
 
 echo ""
+echo "S3 Buckets:"
+aws --endpoint-url=http://localhost:4566 s3 ls --region ap-northeast-1
+
+echo ""
 echo "======================================"
 echo "✅ Local environment is ready!"
 echo ""
@@ -102,12 +113,20 @@ echo "Endpoints:"
 echo "  - LocalStack:  http://localhost:4566"
 echo "  - DynamoDB:    http://localhost:4566"
 echo "  - Lambda:      http://localhost:4566"
+echo "  - S3:          http://localhost:4566"
+echo ""
+echo "Architecture:"
+echo "  Control Plane:     DynamoDB Stream → Provisioning Lambda → EventBridge"
+echo "  Application Plane: EventBridge → Tenant Provisioner → S3"
 echo ""
 echo "Test commands:"
-echo "  # Create a tenant (triggers Lambda via DynamoDB Stream)"
+echo "  # Create a tenant (triggers full provisioning flow)"
 echo "  aws --endpoint-url=http://localhost:4566 dynamodb put-item \\"
 echo "    --table-name TenkaCloud-local \\"
 echo "    --item '{\"PK\":{\"S\":\"TENANT#test-tenant\"},\"SK\":{\"S\":\"METADATA\"},\"id\":{\"S\":\"test-tenant\"},\"name\":{\"S\":\"Test Tenant\"},\"slug\":{\"S\":\"test-tenant\"},\"tier\":{\"S\":\"FREE\"},\"status\":{\"S\":\"ACTIVE\"},\"provisioningStatus\":{\"S\":\"PENDING\"},\"EntityType\":{\"S\":\"TENANT\"},\"CreatedAt\":{\"S\":\"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'\"}}'"
 echo ""
-echo "  # Check Lambda logs"
+echo "  # Check Provisioning Lambda logs (Control Plane)"
 echo "  aws --endpoint-url=http://localhost:4566 logs tail /aws/lambda/tenkacloud-local-provisioning --follow"
+echo ""
+echo "  # Check Tenant Provisioner logs (Application Plane)"
+echo "  aws --endpoint-url=http://localhost:4566 logs tail /aws/lambda/tenkacloud-local-tenant-provisioner --follow"
