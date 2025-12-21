@@ -68,7 +68,7 @@ module "eventbridge" {
   }
 }
 
-# Provisioning Lambda Module
+# Provisioning Lambda Module (Control Plane)
 module "provisioning_lambda" {
   source = "../../modules/provisioning-lambda"
 
@@ -79,6 +79,41 @@ module "provisioning_lambda" {
   event_bus_arn       = module.eventbridge.event_bus_arn
   event_bus_name      = module.eventbridge.event_bus_name
   lambda_zip_path     = "${path.module}/../../../../backend/services/control-plane/provisioning/lambda.zip"
+
+  tags = {
+    Environment = "local"
+  }
+}
+
+# S3 Bucket for tenant data (Pool model)
+# Created manually via AWS CLI: aws s3 mb s3://tenkacloud-data-local
+# Note: LocalStack S3 is slow with Terraform, so we manage it externally
+
+# Tenant Provisioner Lambda Module (Application Plane)
+module "tenant_provisioner" {
+  source = "../../modules/tenant-provisioner"
+
+  name_prefix      = "tenkacloud-local"
+  event_bus_arn    = module.eventbridge.event_bus_arn
+  event_bus_name   = module.eventbridge.event_bus_name
+  data_bucket_name = "tenkacloud-data-local" # Managed externally
+  lambda_zip_path  = "${path.module}/../../../../backend/services/application-plane/tenant-provisioner/lambda.zip"
+
+  tags = {
+    Environment = "local"
+  }
+}
+
+# Provisioning Completion Lambda Module (Control Plane)
+# Receives TenantProvisioned events and updates tenant status
+module "provisioning_completion" {
+  source = "../../modules/provisioning-completion"
+
+  name_prefix         = "tenkacloud-local"
+  event_bus_name      = module.eventbridge.event_bus_name
+  dynamodb_table_arn  = module.dynamodb.table_arn
+  dynamodb_table_name = module.dynamodb.table_name
+  lambda_zip_path     = "${path.module}/../../../../backend/services/control-plane/provisioning-completion/lambda.zip"
 
   tags = {
     Environment = "local"
