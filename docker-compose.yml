@@ -12,7 +12,7 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3000
-      - AWS_ENDPOINT_URL=http://dynamodb-local:8000
+      - AWS_ENDPOINT_URL=http://localstack:4566
     networks:
       - tenkacloud
 
@@ -29,30 +29,27 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3001
-      - AWS_ENDPOINT_URL=http://dynamodb-local:8000
+      - AWS_ENDPOINT_URL=http://localstack:4566
       - AWS_REGION=${AWS_REGION:-ap-northeast-1}
     networks:
       - tenkacloud
 
-  landing-site:
-    build:
-      context: .
-      dockerfile: apps/landing-site/Dockerfile
+  # LocalStack - AWS サービスのローカルエミュレーション
+  # DynamoDB, Lambda, EventBridge, S3, IAM をサポート
+  localstack:
+    image: localstack/localstack:latest
     ports:
-      - "3003:3003"
+      - "4566:4566"           # LocalStack Gateway
+      - "4510-4559:4510-4559" # External services port range
     environment:
-      - NEXT_TELEMETRY_DISABLED=1
-    networks:
-      - tenkacloud
-
-  # ローカル開発用 DynamoDB
-  dynamodb-local:
-    image: amazon/dynamodb-local:latest
-    ports:
-      - "8000:8000"
-    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /data"
+      - SERVICES=dynamodb,lambda,events,s3,iam,logs,sts
+      - DEBUG=1
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=ap-northeast-1
     volumes:
-      - dynamodb_data:/data
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - tenkacloud
 
@@ -61,4 +58,4 @@ networks:
     driver: bridge
 
 volumes:
-  dynamodb_data:
+  localstack_data:

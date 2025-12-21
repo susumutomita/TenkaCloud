@@ -52,6 +52,37 @@ module "dynamodb" {
 
   table_name                    = "TenkaCloud-dev"
   enable_point_in_time_recovery = false # Disable for dev to reduce costs
+  enable_stream                 = true  # Enable for tenant provisioning
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# EventBridge Module - Tenant Lifecycle Events
+module "eventbridge" {
+  source = "../../modules/eventbridge"
+
+  name_prefix = "tenkacloud-dev"
+
+  tags = {
+    Environment = "dev"
+  }
+}
+
+# Provisioning Lambda Module
+# Note: Lambda zip must be built before applying
+# Run: cd backend/services/control-plane/provisioning && bun run deploy
+module "provisioning_lambda" {
+  source = "../../modules/provisioning-lambda"
+
+  name_prefix         = "tenkacloud-dev"
+  dynamodb_stream_arn = module.dynamodb.stream_arn
+  dynamodb_table_arn  = module.dynamodb.table_arn
+  dynamodb_table_name = module.dynamodb.table_name
+  event_bus_arn       = module.eventbridge.event_bus_arn
+  event_bus_name      = module.eventbridge.event_bus_name
+  lambda_zip_path     = "${path.module}/../../../../backend/services/control-plane/provisioning/lambda.zip"
 
   tags = {
     Environment = "dev"
@@ -64,11 +95,11 @@ module "auth0" {
 
   api_identifier = "https://api.dev.tenkacloud.com"
 
-  control_plane_callbacks     = ["http://localhost:3000/api/auth/callback/auth0"]
-  control_plane_logout_urls   = ["http://localhost:3000"]
-  control_plane_web_origins   = ["http://localhost:3000"]
+  control_plane_callbacks   = ["http://localhost:3000/api/auth/callback/auth0"]
+  control_plane_logout_urls = ["http://localhost:3000"]
+  control_plane_web_origins = ["http://localhost:3000"]
 
-  application_plane_callbacks     = ["http://localhost:3001/api/auth/callback/auth0"]
-  application_plane_logout_urls   = ["http://localhost:3001"]
-  application_plane_web_origins   = ["http://localhost:3001"]
+  application_plane_callbacks   = ["http://localhost:3001/api/auth/callback/auth0"]
+  application_plane_logout_urls = ["http://localhost:3001"]
+  application_plane_web_origins = ["http://localhost:3001"]
 }

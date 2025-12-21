@@ -1,0 +1,4 @@
+# Build artifacts
+lambda.zip
+dist/
+node_modules/

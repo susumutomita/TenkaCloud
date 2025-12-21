@@ -30,8 +30,7 @@ NLX ?= $(BUNX) nlx
 APPS_DIR := apps
 CONTROL_PLANE_DIR := $(APPS_DIR)/control-plane
 APPLICATION_PLANE_DIR := $(APPS_DIR)/application-plane
-LANDING_SITE_DIR := $(APPS_DIR)/landing-site
-FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR) $(LANDING_SITE_DIR)
+FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR)
 PACKAGES_DIR := packages
 CORE_PACKAGE_DIR := $(PACKAGES_DIR)/core
 SHARED_PACKAGE_DIR := $(PACKAGES_DIR)/shared
@@ -121,9 +120,6 @@ dev:
 
 dev-app:
 	cd $(APPLICATION_PLANE_DIR) && $(NR) dev
-
-dev-landing:
-	cd $(LANDING_SITE_DIR) && $(NR) dev
 
 # ========================================
 # 🧪 テスト
@@ -241,7 +237,6 @@ start-compose: check-docker
 	@echo "📋 アクセス先:"
 	@echo "  - Control Plane:      http://localhost:3000"
 	@echo "  - Application Plane:  http://localhost:3001"
-	@echo "  - Landing Site:       http://localhost:3002"
 	@echo "  - DynamoDB Local:     http://localhost:8000"
 	@echo ""
 	@echo "💡 Auth0 認証を使用するには .env.local で環境変数を設定してください"
@@ -347,7 +342,6 @@ docker-run: docker-build
 	@echo "📋 アクセス先:"
 	@echo "  - Control Plane:      http://localhost:3000"
 	@echo "  - Application Plane:  http://localhost:3001"
-	@echo "  - Landing Site:       http://localhost:3002"
 	@echo ""
 
 docker-stop:
@@ -426,6 +420,58 @@ help:
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
+	@echo "🧪 ローカル開発（LocalStack）:"
+	@echo "  make start-local      LocalStack + Terraform でローカル環境を起動"
+	@echo "  make stop-local       LocalStack を停止"
+	@echo "  make logs-local       プロビジョニング Lambda のログを表示"
+	@echo "  make test-lambda      テナント作成をシミュレート"
+	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📚 詳細: docs/QUICKSTART.md"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ========================================
+# 🧪 ローカル開発（LocalStack）
+# ========================================
+
+LOCALSTACK_ENDPOINT := http://localhost:4566
+LOCAL_TABLE := TenkaCloud-local
+LOCAL_LAMBDA := tenkacloud-local-provisioning
+
+check-aws-cli:
+	@command -v aws >/dev/null 2>&1 || { echo "❌ AWS CLI がインストールされていません。"; echo "   brew install awscli でインストールしてください。"; exit 1; }
+	@echo "✅ AWS CLI がインストールされています"
+
+check-terraform:
+	@command -v terraform >/dev/null 2>&1 || { echo "❌ Terraform がインストールされていません。"; echo "   brew install terraform でインストールしてください。"; exit 1; }
+	@echo "✅ Terraform がインストールされています"
+
+start-local: check-docker check-aws-cli check-terraform
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🚀 LocalStack でローカル環境を起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@./scripts/local-setup.sh
+
+stop-local:
+	@echo "🛑 LocalStack を停止しています..."
+	@docker compose stop localstack
+	@echo "✅ LocalStack を停止しました"
+
+logs-local: check-aws-cli
+	@echo "📋 プロビジョニング Lambda のログを表示しています..."
+	@aws --endpoint-url=$(LOCALSTACK_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow --region ap-northeast-1
+
+# UUID generation with fallback for systems without uuidgen
+generate-uuid = $(shell uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36)
+
+test-lambda: check-aws-cli
+	@echo "🧪 テナント作成をシミュレートしています..."
+	@TENANT_ID=$$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36 | tr '[:upper:]' '[:lower:]' | head -c 8); \
+	TIMESTAMP=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
+	aws --endpoint-url=$(LOCALSTACK_ENDPOINT) dynamodb put-item \
+		--table-name $(LOCAL_TABLE) \
+		--item "{\"PK\":{\"S\":\"TENANT#$$TENANT_ID\"},\"SK\":{\"S\":\"METADATA\"},\"id\":{\"S\":\"$$TENANT_ID\"},\"name\":{\"S\":\"Test Tenant $$TENANT_ID\"},\"slug\":{\"S\":\"test-$$TENANT_ID\"},\"tier\":{\"S\":\"FREE\"},\"status\":{\"S\":\"ACTIVE\"},\"provisioningStatus\":{\"S\":\"PENDING\"},\"EntityType\":{\"S\":\"TENANT\"},\"CreatedAt\":{\"S\":\"$$TIMESTAMP\"},\"UpdatedAt\":{\"S\":\"$$TIMESTAMP\"}}" \
+		--region ap-northeast-1
+	@echo "✅ テナントを作成しました"
+	@echo ""
+	@echo "💡 ログを確認: make logs-local"
