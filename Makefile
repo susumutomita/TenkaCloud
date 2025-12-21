@@ -426,6 +426,47 @@ help:
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
+	@echo "🧪 ローカル開発（LocalStack）:"
+	@echo "  make start-local      LocalStack + Terraform でローカル環境を起動"
+	@echo "  make stop-local       LocalStack を停止"
+	@echo "  make logs-local       プロビジョニング Lambda のログを表示"
+	@echo "  make test-lambda      テナント作成をシミュレート"
+	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📚 詳細: docs/QUICKSTART.md"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ========================================
+# 🧪 ローカル開発（LocalStack）
+# ========================================
+
+LOCALSTACK_ENDPOINT := http://localhost:4566
+LOCAL_TABLE := TenkaCloud-local
+LOCAL_LAMBDA := tenkacloud-local-provisioning
+
+start-local: check-docker
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🚀 LocalStack でローカル環境を起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@./scripts/local-setup.sh
+
+stop-local:
+	@echo "🛑 LocalStack を停止しています..."
+	@docker compose stop localstack
+	@echo "✅ LocalStack を停止しました"
+
+logs-local:
+	@echo "📋 プロビジョニング Lambda のログを表示しています..."
+	@aws --endpoint-url=$(LOCALSTACK_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow --region ap-northeast-1
+
+test-lambda:
+	@echo "🧪 テナント作成をシミュレートしています..."
+	@TENANT_ID=$$(uuidgen | tr '[:upper:]' '[:lower:]' | head -c 8); \
+	TIMESTAMP=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
+	aws --endpoint-url=$(LOCALSTACK_ENDPOINT) dynamodb put-item \
+		--table-name $(LOCAL_TABLE) \
+		--item "{\"PK\":{\"S\":\"TENANT#$$TENANT_ID\"},\"SK\":{\"S\":\"METADATA\"},\"id\":{\"S\":\"$$TENANT_ID\"},\"name\":{\"S\":\"Test Tenant $$TENANT_ID\"},\"slug\":{\"S\":\"test-$$TENANT_ID\"},\"tier\":{\"S\":\"FREE\"},\"status\":{\"S\":\"ACTIVE\"},\"provisioningStatus\":{\"S\":\"PENDING\"},\"EntityType\":{\"S\":\"TENANT\"},\"CreatedAt\":{\"S\":\"$$TIMESTAMP\"},\"UpdatedAt\":{\"S\":\"$$TIMESTAMP\"}}" \
+		--region ap-northeast-1
+	@echo "✅ テナントを作成しました"
+	@echo ""
+	@echo "💡 ログを確認: make logs-local"

@@ -72,5 +72,9 @@ resource "aws_dynamodb_table" "main" {
     enabled = var.enable_point_in_time_recovery
   }
 
+  # Enable DynamoDB Streams for tenant provisioning triggers
+  stream_enabled   = var.enable_stream
+  stream_view_type = var.enable_stream ? "NEW_AND_OLD_IMAGES" : null
+
   tags = var.tags
 }

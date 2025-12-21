@@ -15,3 +15,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_stream" {
+  description = "Enable DynamoDB Streams for event-driven processing"
+  type        = bool
+  default     = false
+}
