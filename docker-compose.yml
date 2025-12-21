@@ -42,7 +42,7 @@ services:
       - "4566:4566"           # LocalStack Gateway
       - "4510-4559:4510-4559" # External services port range
     environment:
-      - SERVICES=dynamodb,lambda,events,s3,iam,logs,sts
+      - SERVICES=dynamodb,lambda,events,s3,iam,logs,sts,sqs
       - DEBUG=1
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock

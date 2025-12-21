@@ -22,7 +22,7 @@ echo "⏳ Waiting for LocalStack to be ready..."
 MAX_RETRIES=30
 RETRY_COUNT=0
 
-until curl -s http://localhost:4566/_localstack/health | grep -q '"dynamodb": "running"'; do
+until curl -s http://localhost:4566/_localstack/health | grep -q '"dynamodb": "available"'; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
     echo "❌ LocalStack did not start within expected time"
@@ -36,7 +36,7 @@ echo "✅ DynamoDB is ready!"
 # Wait for Lambda service
 echo "⏳ Waiting for Lambda service..."
 RETRY_COUNT=0
-until curl -s http://localhost:4566/_localstack/health | grep -q '"lambda": "running"'; do
+until curl -s http://localhost:4566/_localstack/health | grep -q '"lambda": "available"'; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
     echo "⚠️  Lambda service did not start, continuing anyway..."
@@ -50,7 +50,7 @@ echo "✅ Lambda is ready!"
 # Wait for EventBridge service
 echo "⏳ Waiting for EventBridge service..."
 RETRY_COUNT=0
-until curl -s http://localhost:4566/_localstack/health | grep -q '"events": "running"'; do
+until curl -s http://localhost:4566/_localstack/health | grep -q '"events": "available"'; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
     echo "⚠️  EventBridge service did not start, continuing anyway..."
