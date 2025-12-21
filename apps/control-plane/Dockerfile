@@ -21,7 +21,7 @@ COPY backend/services/control-plane/deployment-management/package.json backend/s
 COPY backend/services/control-plane/tenant-management/package.json backend/services/control-plane/tenant-management/
 COPY backend/services/control-plane/provisioning/package.json backend/services/control-plane/provisioning/
 
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Builder
 FROM oven/bun:1.2.20 AS builder

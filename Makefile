@@ -438,7 +438,15 @@ LOCALSTACK_ENDPOINT := http://localhost:4566
 LOCAL_TABLE := TenkaCloud-local
 LOCAL_LAMBDA := tenkacloud-local-provisioning
 
-start-local: check-docker
+check-aws-cli:
+	@command -v aws >/dev/null 2>&1 || { echo "❌ AWS CLI がインストールされていません。"; echo "   brew install awscli でインストールしてください。"; exit 1; }
+	@echo "✅ AWS CLI がインストールされています"
+
+check-terraform:
+	@command -v terraform >/dev/null 2>&1 || { echo "❌ Terraform がインストールされていません。"; echo "   brew install terraform でインストールしてください。"; exit 1; }
+	@echo "✅ Terraform がインストールされています"
+
+start-local: check-docker check-aws-cli check-terraform
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "🚀 LocalStack でローカル環境を起動します"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -449,13 +457,16 @@ stop-local:
 	@docker compose stop localstack
 	@echo "✅ LocalStack を停止しました"
 
-logs-local:
+logs-local: check-aws-cli
 	@echo "📋 プロビジョニング Lambda のログを表示しています..."
 	@aws --endpoint-url=$(LOCALSTACK_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow --region ap-northeast-1
 
-test-lambda:
+# UUID generation with fallback for systems without uuidgen
+generate-uuid = $(shell uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36)
+
+test-lambda: check-aws-cli
 	@echo "🧪 テナント作成をシミュレートしています..."
-	@TENANT_ID=$$(uuidgen | tr '[:upper:]' '[:lower:]' | head -c 8); \
+	@TENANT_ID=$$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36 | tr '[:upper:]' '[:lower:]' | head -c 8); \
 	TIMESTAMP=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
 	aws --endpoint-url=$(LOCALSTACK_ENDPOINT) dynamodb put-item \
 		--table-name $(LOCAL_TABLE) \

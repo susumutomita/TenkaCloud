@@ -20,7 +20,6 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
     }),
   },
   UpdateCommand: vi.fn(),
-  GetCommand: vi.fn(),
 }));
 
 import { handler } from './handler';
@@ -64,7 +63,7 @@ describe('Provisioning Lambda Handler', () => {
     await expect(handler(event)).resolves.toBeUndefined();
   });
 
-  it('MODIFY イベントでステータス変更時に TenantUpdated を発行すべき', async () => {
+  it('MODIFY イベントで tier 変更時に TenantUpdated を発行すべき', async () => {
     const event: DynamoDBStreamEvent = {
       Records: [
         createTenantRecord(
@@ -75,6 +74,34 @@ describe('Provisioning Lambda Handler', () => {
             slug: 'test-tenant',
             tier: 'PRO',
             status: 'ACTIVE',
+            provisioningStatus: 'PROVISIONED',
+          },
+          {
+            id: 'tenant-123',
+            name: 'Test Tenant',
+            slug: 'test-tenant',
+            tier: 'FREE',
+            status: 'ACTIVE',
+            provisioningStatus: 'PROVISIONED',
+          }
+        ),
+      ],
+    };
+
+    await expect(handler(event)).resolves.toBeUndefined();
+  });
+
+  it('MODIFY イベントで status が DELETED に変更時に TenantOffboarding を発行すべき', async () => {
+    const event: DynamoDBStreamEvent = {
+      Records: [
+        createTenantRecord(
+          'MODIFY',
+          {
+            id: 'tenant-123',
+            name: 'Test Tenant',
+            slug: 'test-tenant',
+            tier: 'FREE',
+            status: 'DELETED',
             provisioningStatus: 'PROVISIONED',
           },
           {
@@ -115,6 +142,92 @@ describe('Provisioning Lambda Handler', () => {
   it('空のレコードリストを処理すべき', async () => {
     const event: DynamoDBStreamEvent = {
       Records: [],
+    };
+
+    await expect(handler(event)).resolves.toBeUndefined();
+  });
+
+  it('EventBridge 発行失敗時にエラーをログ出力して継続すべき', async () => {
+    // Mock EventBridge to fail
+    const { EventBridgeClient } = await import('@aws-sdk/client-eventbridge');
+    const mockSend = vi.fn().mockResolvedValue({
+      FailedEntryCount: 1,
+      Entries: [{ ErrorCode: 'InternalError', ErrorMessage: 'Test error' }],
+    });
+    vi.mocked(EventBridgeClient).mockImplementation(
+      () =>
+        ({
+          send: mockSend,
+        }) as unknown as InstanceType<typeof EventBridgeClient>
+    );
+
+    const event: DynamoDBStreamEvent = {
+      Records: [
+        createTenantRecord('INSERT', {
+          id: 'tenant-123',
+          name: 'Test Tenant',
+          slug: 'test-tenant',
+          tier: 'FREE',
+          status: 'ACTIVE',
+          provisioningStatus: 'PENDING',
+        }),
+      ],
+    };
+
+    // Should not throw, errors are logged and processing continues
+    await expect(handler(event)).resolves.toBeUndefined();
+  });
+
+  it('ConditionalCheckFailedException 発生時にスキップすべき', async () => {
+    // Mock DynamoDB to throw ConditionalCheckFailedException
+    const { DynamoDBDocumentClient } = await import('@aws-sdk/lib-dynamodb');
+    const error = new Error('The conditional request failed');
+    error.name = 'ConditionalCheckFailedException';
+    const mockSend = vi.fn().mockRejectedValue(error);
+    vi.mocked(DynamoDBDocumentClient.from).mockReturnValue({
+      send: mockSend,
+    } as unknown as ReturnType<typeof DynamoDBDocumentClient.from>);
+
+    const event: DynamoDBStreamEvent = {
+      Records: [
+        createTenantRecord('INSERT', {
+          id: 'tenant-123',
+          name: 'Test Tenant',
+          slug: 'test-tenant',
+          tier: 'FREE',
+          status: 'ACTIVE',
+          provisioningStatus: 'PENDING',
+        }),
+      ],
+    };
+
+    // Should not throw, condition failures are gracefully handled
+    await expect(handler(event)).resolves.toBeUndefined();
+  });
+
+  it('MODIFY イベントで変更がない場合はスキップすべき', async () => {
+    const event: DynamoDBStreamEvent = {
+      Records: [
+        createTenantRecord(
+          'MODIFY',
+          {
+            id: 'tenant-123',
+            name: 'Test Tenant',
+            slug: 'test-tenant',
+            tier: 'FREE',
+            status: 'ACTIVE',
+            provisioningStatus: 'PROVISIONED',
+          },
+          {
+            id: 'tenant-123',
+            name: 'Test Tenant',
+            slug: 'test-tenant',
+            tier: 'FREE',
+            status: 'ACTIVE',
+            provisioningStatus: 'PROVISIONED',
+          }
+        ),
+      ],
     };
 
     await expect(handler(event)).resolves.toBeUndefined();

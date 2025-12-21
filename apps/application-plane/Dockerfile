@@ -16,9 +16,8 @@ COPY backend/services/control-plane/system-management/package.json backend/servi
 COPY backend/services/control-plane/user-management/package.json backend/services/control-plane/user-management/
 COPY backend/services/control-plane/deployment-management/package.json backend/services/control-plane/deployment-management/
 COPY backend/services/control-plane/tenant-management/package.json backend/services/control-plane/tenant-management/
-COPY backend/services/control-plane/provisioning/package.json backend/services/control-plane/provisioning/
 
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 FROM oven/bun:1.2.20 AS builder
 WORKDIR /app

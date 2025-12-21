@@ -70,7 +70,7 @@ resource "aws_iam_role_policy" "tenant_dynamodb" {
           "ForAllValues:StringLike" = {
             "dynamodb:LeadingKeys" = [
               "TENANT#${var.tenant_id}*",
-              "EVENT#*" # Allow event access (for battles)
+              "EVENT#${var.tenant_id}*" # Tenant-scoped event access (battles)
             ]
           }
         }

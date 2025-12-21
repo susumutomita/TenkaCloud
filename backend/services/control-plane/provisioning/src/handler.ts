@@ -17,11 +17,7 @@ import {
   PutEventsCommand,
 } from '@aws-sdk/client-eventbridge';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import {
-  DynamoDBDocumentClient,
-  UpdateCommand,
-  GetCommand,
-} from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 
 const eventBridge = new EventBridgeClient({});
@@ -112,7 +108,7 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   switch (eventName) {
     case 'INSERT':
       eventType = 'TenantOnboarding';
-      await updateProvisioningStatus(tenantId, 'PROVISIONING');
+      await updateProvisioningStatus(tenantId, 'PROVISIONING', 'PENDING');
       break;
     case 'MODIFY':
       // Check if this is a status change that requires action
@@ -155,16 +151,20 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
       slug: tenantData.slug,
       tier: tenantData.tier,
       status: tenantData.status,
+      // Note: auth0OrganizationId is intentionally excluded from logs
+      // but included in the event for downstream processing
       auth0OrganizationId: tenantData.auth0OrganizationId,
     },
   };
 
   await publishEvent(tenantEvent);
 
+  // Log without sensitive data (auth0OrganizationId)
   console.log('Published tenant event', {
     tenantId,
     eventType,
     tier: tenantData.tier,
+    status: tenantData.status,
   });
 }
 
@@ -193,8 +193,22 @@ async function publishEvent(tenantEvent: TenantEvent): Promise<void> {
 
 async function updateProvisioningStatus(
   tenantId: string,
-  status: 'PENDING' | 'PROVISIONING' | 'PROVISIONED' | 'FAILED'
+  status: 'PENDING' | 'PROVISIONING' | 'PROVISIONED' | 'FAILED',
+  expectedCurrentStatus?: 'PENDING' | 'PROVISIONING' | 'PROVISIONED' | 'FAILED'
 ): Promise<void> {
+  // Build condition expression to prevent race conditions
+  // For PROVISIONING, we expect the current status to be PENDING
+  const conditionParts = ['attribute_exists(PK)'];
+  const expressionValues: Record<string, string> = {
+    ':status': status,
+    ':updatedAt': new Date().toISOString(),
+  };
+
+  if (expectedCurrentStatus) {
+    conditionParts.push('provisioningStatus = :expectedStatus');
+    expressionValues[':expectedStatus'] = expectedCurrentStatus;
+  }
+
   const command = new UpdateCommand({
     TableName: DYNAMODB_TABLE,
     Key: {
@@ -203,23 +217,23 @@ async function updateProvisioningStatus(
     },
     UpdateExpression:
       'SET provisioningStatus = :status, updatedAt = :updatedAt',
-    ExpressionAttributeValues: {
-      ':status': status,
-      ':updatedAt': new Date().toISOString(),
-    },
-    ConditionExpression: 'attribute_exists(PK)',
+    ExpressionAttributeValues: expressionValues,
+    ConditionExpression: conditionParts.join(' AND '),
   });
 
   try {
     await docClient.send(command);
     console.log('Updated provisioning status', { tenantId, status });
   } catch (error) {
-    // Ignore if tenant was deleted
+    // Ignore if tenant was deleted or condition failed (at-least-once delivery)
     if (
       error instanceof Error &&
       error.name === 'ConditionalCheckFailedException'
     ) {
-      console.log('Tenant no longer exists, skipping status update');
+      console.log(
+        'Tenant no longer exists or status already updated, skipping',
+        { tenantId, status }
+      );
       return;
     }
     throw error;

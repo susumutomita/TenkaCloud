@@ -5,8 +5,15 @@ variable "name_prefix" {
 }
 
 variable "dynamodb_stream_arn" {
-  description = "ARN of the DynamoDB Stream to trigger the Lambda"
+  description = "ARN of the DynamoDB Stream to trigger the Lambda (null if stream disabled)"
   type        = string
+  default     = null
+}
+
+variable "enable_stream_trigger" {
+  description = "Whether to enable the DynamoDB Stream trigger"
+  type        = bool
+  default     = true
 }
 
 variable "dynamodb_table_arn" {
