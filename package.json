@@ -14,7 +14,6 @@
   "scripts": {
     "dev:control-plane": "npm run dev --workspace=apps/control-plane",
     "dev:app": "npm run dev --workspace=apps/application-plane",
-    "dev:landing": "npm run dev --workspace=apps/landing-site",
     "build:apps": "npm run build --workspaces --if-present",
     "test:apps": "npm run test --workspaces --if-present",
     "typecheck:apps": "npm run typecheck --workspaces --if-present",

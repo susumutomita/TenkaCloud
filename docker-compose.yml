@@ -34,17 +34,6 @@ services:
     networks:
       - tenkacloud
 
-  landing-site:
-    build:
-      context: .
-      dockerfile: apps/landing-site/Dockerfile
-    ports:
-      - "3003:3003"
-    environment:
-      - NEXT_TELEMETRY_DISABLED=1
-    networks:
-      - tenkacloud
-
   # LocalStack - AWS サービスのローカルエミュレーション
   # DynamoDB, Lambda, EventBridge, S3, IAM をサポート
   localstack:

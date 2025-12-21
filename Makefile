@@ -30,8 +30,7 @@ NLX ?= $(BUNX) nlx
 APPS_DIR := apps
 CONTROL_PLANE_DIR := $(APPS_DIR)/control-plane
 APPLICATION_PLANE_DIR := $(APPS_DIR)/application-plane
-LANDING_SITE_DIR := $(APPS_DIR)/landing-site
-FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR) $(LANDING_SITE_DIR)
+FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR)
 PACKAGES_DIR := packages
 CORE_PACKAGE_DIR := $(PACKAGES_DIR)/core
 SHARED_PACKAGE_DIR := $(PACKAGES_DIR)/shared
@@ -121,9 +120,6 @@ dev:
 
 dev-app:
 	cd $(APPLICATION_PLANE_DIR) && $(NR) dev
-
-dev-landing:
-	cd $(LANDING_SITE_DIR) && $(NR) dev
 
 # ========================================
 # 🧪 テスト
@@ -241,7 +237,6 @@ start-compose: check-docker
 	@echo "📋 アクセス先:"
 	@echo "  - Control Plane:      http://localhost:3000"
 	@echo "  - Application Plane:  http://localhost:3001"
-	@echo "  - Landing Site:       http://localhost:3002"
 	@echo "  - DynamoDB Local:     http://localhost:8000"
 	@echo ""
 	@echo "💡 Auth0 認証を使用するには .env.local で環境変数を設定してください"
@@ -347,7 +342,6 @@ docker-run: docker-build
 	@echo "📋 アクセス先:"
 	@echo "  - Control Plane:      http://localhost:3000"
 	@echo "  - Application Plane:  http://localhost:3001"
-	@echo "  - Landing Site:       http://localhost:3002"
 	@echo ""
 
 docker-stop:

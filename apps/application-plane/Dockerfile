@@ -5,7 +5,6 @@ WORKDIR /app
 COPY bun.lock package.json ./
 COPY apps/control-plane/package.json apps/control-plane/
 COPY apps/application-plane/package.json apps/application-plane/
-COPY apps/landing-site/package.json apps/landing-site/
 COPY packages/core/package.json packages/core/
 COPY packages/shared/package.json packages/shared/
 COPY backend/services/application-plane/problem-service/package.json backend/services/application-plane/problem-service/
