@@ -2,7 +2,7 @@
 .PHONY: start-compose stop-compose stop restart status
 .PHONY: start-infrastructure start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
-.PHONY: start-local stop-local logs-local test-lambda
+.PHONY: start-local stop-local logs-local test-lambda test-tenant
 
 # デフォルトターゲットはhelp
 default: help
@@ -192,9 +192,11 @@ check-docker-hub:
 # 🚀 起動・停止（統合コマンド）
 # ========================================
 
-start: start-compose
+# make start: LocalStack + Lambda + Terraform で完全なローカル環境を起動
+start: start-local
 
-stop: stop-compose
+# make stop: LocalStack を停止
+stop: stop-local
 
 restart:
 	@echo "♻️  TenkaCloud を再起動します..."
@@ -208,6 +210,9 @@ status:
 	@echo ""
 	@echo "🐳 Docker Compose:"
 	@docker compose ps 2>/dev/null || echo "  ❌ 起動していません"
+	@echo ""
+	@echo "🔧 LocalStack サービス:"
+	@curl -s http://localhost:4566/_localstack/health 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "  ❌ LocalStack が起動していません"
 	@echo ""
 
 # ========================================
@@ -373,22 +378,20 @@ help:
 	@echo "📖 TenkaCloud Makefile ヘルプ"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
-	@echo "🚀 デプロイ（統合コマンド）:"
-	@echo "  make start            Docker Compose で全サービスを起動"
-	@echo "  make stop             Docker Compose サービスを停止"
+	@echo "🚀 起動・停止（統合コマンド）:"
+	@echo "  make start            LocalStack + Lambda + Terraform で完全なローカル環境を起動"
+	@echo "  make stop             LocalStack を停止"
 	@echo "  make restart          サービスを再起動"
 	@echo "  make status           サービス状態を表示"
 	@echo ""
-	@echo "🐳 Docker Compose（ローカル開発・推奨）:"
-	@echo "  make start-compose    Docker Compose で全サービスを起動"
+	@echo "🧪 LocalStack テスト:"
+	@echo "  make test-tenant      テスト用テナントを作成（プロビジョニングフロー起動）"
+	@echo "  make logs-local       プロビジョニング Lambda のログを表示"
+	@echo ""
+	@echo "🐳 Docker Compose（フロントエンド）:"
+	@echo "  make start-compose    Docker Compose で UI サービスを起動"
 	@echo "  make stop-compose     Docker Compose サービスを停止"
 	@echo "  make docker-status    Docker コンテナの起動状態を表示"
-	@echo ""
-	@echo "🏢 インフラストラクチャ管理:"
-	@echo "  make start-infrastructure  インフラ（DynamoDB Local）のみを起動"
-	@echo "  make start-control-plane   Control Plane UI のみを起動"
-	@echo "  make stop-infrastructure   インフラを停止"
-	@echo "  make setup-dynamodb        DynamoDB Local のみセットアップ"
 	@echo ""
 	@echo "📦 パッケージ管理:"
 	@echo "  make install          ルート + 全フロントエンドアプリの依存を bun でインストール"
@@ -464,6 +467,8 @@ logs-local: check-aws-cli
 # UUID generation with fallback for systems without uuidgen
 generate-uuid = $(shell uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36)
 
+# test-tenant / test-lambda: テスト用テナントを作成してプロビジョニングフローを起動
+test-tenant: test-lambda
 test-lambda: check-aws-cli
 	@echo "🧪 テナント作成をシミュレートしています..."
 	@TENANT_ID=$$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36 | tr '[:upper:]' '[:lower:]' | head -c 8); \
