@@ -78,6 +78,13 @@ bun install
 bun run deploy
 echo "✅ Tenant Provisioner Lambda built!"
 
+echo ""
+echo "🔨 Building Provisioning Completion Lambda (Control Plane)..."
+cd "$PROJECT_ROOT/backend/services/control-plane/provisioning-completion"
+bun install
+bun run deploy
+echo "✅ Provisioning Completion Lambda built!"
+
 # 3. Terraform でデプロイ
 echo ""
 echo "🏗  Deploying infrastructure to LocalStack..."
@@ -117,7 +124,8 @@ echo "  - S3:          http://localhost:4566"
 echo ""
 echo "Architecture:"
 echo "  Control Plane:     DynamoDB Stream → Provisioning Lambda → EventBridge"
-echo "  Application Plane: EventBridge → Tenant Provisioner → S3"
+echo "                     EventBridge → Provisioning Completion → DynamoDB"
+echo "  Application Plane: EventBridge → Tenant Provisioner → S3 → EventBridge"
 echo ""
 echo "Test commands:"
 echo "  # Create a tenant (triggers full provisioning flow)"
@@ -130,3 +138,6 @@ echo "  aws --endpoint-url=http://localhost:4566 logs tail /aws/lambda/tenkaclou
 echo ""
 echo "  # Check Tenant Provisioner logs (Application Plane)"
 echo "  aws --endpoint-url=http://localhost:4566 logs tail /aws/lambda/tenkacloud-local-tenant-provisioner --follow"
+echo ""
+echo "  # Check Provisioning Completion logs (Control Plane)"
+echo "  aws --endpoint-url=http://localhost:4566 logs tail /aws/lambda/tenkacloud-local-provisioning-completion --follow"
