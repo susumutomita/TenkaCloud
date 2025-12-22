@@ -38,7 +38,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 
 # DynamoDB Stream Read Policy (only if stream is enabled)
 resource "aws_iam_role_policy" "dynamodb_stream" {
-  count = var.enable_stream_trigger && var.dynamodb_stream_arn != null ? 1 : 0
+  count = var.enable_stream_trigger ? 1 : 0
   name  = "${var.name_prefix}-dynamodb-stream"
   role  = aws_iam_role.lambda_role.id
 
@@ -154,7 +154,7 @@ resource "aws_lambda_function" "provisioning" {
 
 # DynamoDB Stream Event Source Mapping (only if stream is enabled)
 resource "aws_lambda_event_source_mapping" "dynamodb_stream" {
-  count             = var.enable_stream_trigger && var.dynamodb_stream_arn != null ? 1 : 0
+  count             = var.enable_stream_trigger ? 1 : 0
   event_source_arn  = var.dynamodb_stream_arn
   function_name     = aws_lambda_function.provisioning.arn
   starting_position = "LATEST"
