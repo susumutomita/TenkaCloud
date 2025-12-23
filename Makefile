@@ -1,6 +1,6 @@
 .PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage dev build
 .PHONY: start-compose stop-compose stop restart status
-.PHONY: start-infrastructure start-control-plane stop-infrastructure stop-control-plane restart-all
+.PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
 .PHONY: start-local stop-local logs-local test-lambda test-tenant
 
@@ -192,8 +192,34 @@ check-docker-hub:
 # 🚀 起動・停止（統合コマンド）
 # ========================================
 
-# make start: LocalStack + Lambda + Terraform で完全なローカル環境を起動
-start: start-local
+# make start: LocalStack + フロントエンド開発サーバーをすべて起動
+start: start-infrastructure-bg start-dev-servers
+
+# make start-infrastructure: LocalStack のみ起動（バックグラウンド）
+start-infrastructure: start-local
+
+# バックグラウンドで LocalStack を起動し、準備完了を待つ
+start-infrastructure-bg: check-docker check-aws-cli check-terraform
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🚀 TenkaCloud を起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@./scripts/local-setup.sh
+
+# フロントエンド開発サーバーを起動
+start-dev-servers:
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🖥️  フロントエンド開発サーバーを起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Control Plane:      http://localhost:3000"
+	@echo "  - Application Plane:  http://localhost:3001"
+	@echo "  - LocalStack:         http://localhost:4566"
+	@echo ""
+	@echo "💡 終了するには Ctrl+C を押してください"
+	@echo ""
+	@$(NR) dev
 
 # make stop: LocalStack を停止
 stop: stop-local
@@ -379,7 +405,8 @@ help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "🚀 起動・停止（統合コマンド）:"
-	@echo "  make start            LocalStack + Lambda + Terraform で完全なローカル環境を起動"
+	@echo "  make start            LocalStack + フロントエンド開発サーバーをすべて起動"
+	@echo "  make start-infrastructure  LocalStack のみ起動（バックエンドのみ）"
 	@echo "  make stop             LocalStack を停止"
 	@echo "  make restart          サービスを再起動"
 	@echo "  make status           サービス状態を表示"

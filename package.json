@@ -12,6 +12,7 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
+    "dev": "concurrently -n cp,app -c blue,green \"bun run --cwd apps/control-plane dev\" \"bun run --cwd apps/application-plane dev -- -p 3001\"",
     "dev:control-plane": "npm run dev --workspace=apps/control-plane",
     "dev:app": "npm run dev --workspace=apps/application-plane",
     "build:apps": "npm run build --workspaces --if-present",
@@ -33,14 +34,14 @@
     "husky": "husky install",
     "start": "next start",
     "build": "next build",
-    "dev": "next dev",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@antfu/ni": "^27.0.1",
     "@types/bun": "latest",
-    "@vitest/coverage-v8": "^4.0.14"
+    "@vitest/coverage-v8": "^4.0.14",
+    "concurrently": "^9.2.1"
   },
   "peerDependencies": {
     "typescript": "^5.0.0",

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
+import { TenantList } from '@/components/tenants/tenant-list';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -8,16 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { tenantApi } from '@/lib/api/tenant-api';
-import { getStatusVariant } from '@/lib/tenant-utils';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'default-no-store';
@@ -76,89 +67,16 @@ export default async function TenantsPage() {
         ))}
       </div>
 
-      {/* Tenants Table */}
+      {/* Tenants Table with Search/Filter */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>テナント一覧</CardTitle>
-              <CardDescription>現在 {total} 件を表示中</CardDescription>
-            </div>
-          </div>
+          <CardTitle>テナント一覧</CardTitle>
+          <CardDescription>
+            テナントの検索・フィルタリングができます
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {tenants.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                テナントがまだ登録されていません
-              </p>
-              <Link href="/dashboard/tenants/new">
-                <Button variant="outline" className="mt-4">
-                  最初のテナントを作成
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>テナント</TableHead>
-                  <TableHead>ステータス</TableHead>
-                  <TableHead>Tier</TableHead>
-                  <TableHead>管理者 Email</TableHead>
-                  <TableHead>作成日</TableHead>
-                  <TableHead className="text-right">アクション</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tenants.map((tenant) => (
-                  <TableRow key={tenant.id}>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <Link
-                          href={`/dashboard/tenants/${tenant.id}`}
-                          className="font-semibold hover:underline"
-                        >
-                          {tenant.name}
-                        </Link>
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                          ID: {tenant.id}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusVariant(tenant.status)}>
-                        {tenant.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="capitalize">
-                        {tenant.tier}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{tenant.adminEmail}</TableCell>
-                    <TableCell>
-                      {new Date(tenant.createdAt).toLocaleDateString('ja-JP')}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-2">
-                        <Link href={`/dashboard/tenants/${tenant.id}`}>
-                          <Button variant="ghost" size="sm">
-                            詳細
-                          </Button>
-                        </Link>
-                        <Link href={`/dashboard/tenants/${tenant.id}/edit`}>
-                          <Button variant="ghost" size="sm">
-                            編集
-                          </Button>
-                        </Link>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <TenantList tenants={tenants} />
         </CardContent>
       </Card>
     </div>

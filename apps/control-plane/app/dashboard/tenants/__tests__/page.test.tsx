@@ -83,7 +83,10 @@ describe('TenantsPage コンポーネント', () => {
       expect(screen.getByText('総テナント')).toBeInTheDocument();
       expect(screen.getByText('稼働中')).toBeInTheDocument();
       expect(screen.getByText('一時停止')).toBeInTheDocument();
-      expect(screen.getByText('Enterprise')).toBeInTheDocument();
+      // Enterprise は統計カードとテナントテーブルの両方に存在するため getAllByText を使用
+      expect(screen.getAllByText('Enterprise').length).toBeGreaterThanOrEqual(
+        1
+      );
     });
   });
 
