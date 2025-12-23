@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -14,11 +10,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "types": [
-      "vitest/globals",
-      "@testing-library/jest-dom",
-      "node"
-    ],
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
@@ -28,12 +20,8 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./*"
-      ],
-      "vite": [
-        "../../node_modules/vite"
-      ]
+      "@/*": ["./*"],
+      "vite": ["../../node_modules/vite"]
     }
   },
   "include": [
@@ -44,10 +32,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "vitest.config.ts",
-    "vitest.setup.ts",
-    ".next"
-  ]
+  "exclude": ["node_modules", "vitest.config.ts", "vitest.setup.ts", ".next"]
 }

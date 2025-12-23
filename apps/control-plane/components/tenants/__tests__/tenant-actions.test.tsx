@@ -21,10 +21,8 @@ vi.mock('@/lib/api/tenant-api', () => ({
   },
 }));
 
-// window.confirm をモック
-const mockConfirm = vi.fn();
+// window.alert をモック
 const mockAlert = vi.fn();
-global.confirm = mockConfirm;
 global.alert = mockAlert;
 
 describe('TenantActions コンポーネント', () => {
@@ -32,7 +30,7 @@ describe('TenantActions コンポーネント', () => {
     vi.clearAllMocks();
   });
 
-  describe('削除ボタン', () => {
+  describe('削除ボタンとAlertDialog', () => {
     it('削除ボタンが表示されるべき', () => {
       render(<TenantActions tenantId="test-tenant-id" />);
       const deleteButton = screen.getByRole('button', { name: '削除' });
@@ -41,26 +39,31 @@ describe('TenantActions コンポーネント', () => {
 
     it('削除ボタンをクリックすると確認ダイアログが表示されるべき', async () => {
       const user = userEvent.setup();
-      mockConfirm.mockReturnValue(false);
-
       render(<TenantActions tenantId="test-tenant-id" />);
-      const deleteButton = screen.getByRole('button', { name: '削除' });
 
+      const deleteButton = screen.getByRole('button', { name: '削除' });
       await user.click(deleteButton);
 
-      expect(mockConfirm).toHaveBeenCalledWith(
-        '本当にこのテナントを削除しますか？この操作は取り消せません。'
-      );
+      // AlertDialog の内容が表示される
+      expect(screen.getByText('テナントを削除しますか？')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'この操作は取り消せません。テナントに関連するすべてのデータが完全に削除されます。'
+        )
+      ).toBeInTheDocument();
     });
 
     it('確認ダイアログでキャンセルした場合、削除処理が実行されないべき', async () => {
       const user = userEvent.setup();
-      mockConfirm.mockReturnValue(false);
-
       render(<TenantActions tenantId="test-tenant-id" />);
-      const deleteButton = screen.getByRole('button', { name: '削除' });
 
+      // ダイアログを開く
+      const deleteButton = screen.getByRole('button', { name: '削除' });
       await user.click(deleteButton);
+
+      // キャンセルボタンをクリック
+      const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
+      await user.click(cancelButton);
 
       expect(tenantApi.deleteTenant).not.toHaveBeenCalled();
       expect(mockPush).not.toHaveBeenCalled();
@@ -68,13 +71,17 @@ describe('TenantActions コンポーネント', () => {
 
     it('確認後に削除が成功した場合、テナント一覧ページに遷移するべき', async () => {
       const user = userEvent.setup();
-      mockConfirm.mockReturnValue(true);
       vi.mocked(tenantApi.deleteTenant).mockResolvedValue(true);
 
       render(<TenantActions tenantId="test-tenant-id" />);
-      const deleteButton = screen.getByRole('button', { name: '削除' });
 
+      // ダイアログを開く
+      const deleteButton = screen.getByRole('button', { name: '削除' });
       await user.click(deleteButton);
+
+      // 削除するボタンをクリック
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
 
       await waitFor(() => {
         expect(tenantApi.deleteTenant).toHaveBeenCalledWith('test-tenant-id');
@@ -85,7 +92,6 @@ describe('TenantActions コンポーネント', () => {
 
     it('削除中は「削除中...」と表示され、ボタンが無効化されるべき', async () => {
       const user = userEvent.setup();
-      mockConfirm.mockReturnValue(true);
 
       // deleteTenant を遅延させて削除中の状態をテスト
       let resolveDelete: (value: boolean) => void = () => {};
@@ -95,9 +101,14 @@ describe('TenantActions コンポーネント', () => {
       vi.mocked(tenantApi.deleteTenant).mockReturnValue(deletePromise);
 
       render(<TenantActions tenantId="test-tenant-id" />);
-      const deleteButton = screen.getByRole('button', { name: '削除' });
 
+      // ダイアログを開く
+      const deleteButton = screen.getByRole('button', { name: '削除' });
       await user.click(deleteButton);
+
+      // 削除するボタンをクリック
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
 
       // 削除中の状態を確認
       await waitFor(() => {
@@ -108,50 +119,67 @@ describe('TenantActions コンポーネント', () => {
       });
 
       // 削除を完了
-      resolveDelete?.(true);
-
-      await waitFor(() => {
-        const resetButton = screen.getByRole('button', { name: '削除' });
-        expect(resetButton).not.toBeDisabled();
-      });
-    });
-
-    it('削除失敗時にエラーメッセージが表示され、状態がリセットされるべき', async () => {
-      const user = userEvent.setup();
-      mockConfirm.mockReturnValue(true);
-      const error = new Error('削除に失敗しました');
-      vi.mocked(tenantApi.deleteTenant).mockRejectedValue(error);
-
-      render(<TenantActions tenantId="test-tenant-id" />);
-      const deleteButton = screen.getByRole('button', { name: '削除' });
-
-      await user.click(deleteButton);
-
-      await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('テナント削除に失敗しました');
-      });
-
-      // 状態がリセットされ、ボタンが再度有効になる
-      const resetButton = screen.getByRole('button', { name: '削除' });
-      expect(resetButton).not.toBeDisabled();
-    });
-
-    it('削除成功後も状態がリセットされるべき', async () => {
-      const user = userEvent.setup();
-      mockConfirm.mockReturnValue(true);
-      vi.mocked(tenantApi.deleteTenant).mockResolvedValue(true);
-
-      render(<TenantActions tenantId="test-tenant-id" />);
-      const deleteButton = screen.getByRole('button', { name: '削除' });
-
-      await user.click(deleteButton);
+      resolveDelete(true);
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith('/dashboard/tenants');
       });
+    });
 
-      // finally ブロックで状態がリセットされる
-      // （ただし、ページ遷移するので実際には見えない）
+    it('削除失敗時にエラーメッセージが表示されるべき', async () => {
+      const user = userEvent.setup();
+      const error = new Error('削除に失敗しました');
+      vi.mocked(tenantApi.deleteTenant).mockRejectedValue(error);
+
+      render(<TenantActions tenantId="test-tenant-id" />);
+
+      // ダイアログを開く
+      const deleteButton = screen.getByRole('button', { name: '削除' });
+      await user.click(deleteButton);
+
+      // 削除するボタンをクリック
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mockAlert).toHaveBeenCalledWith('テナント削除に失敗しました');
+      });
+    });
+
+    it('削除中はボタンが無効化されるべき', async () => {
+      const user = userEvent.setup();
+
+      // deleteTenant を遅延させて削除中の状態をテスト
+      let resolveDelete: (value: boolean) => void = () => {};
+      const deletePromise = new Promise<boolean>((resolve) => {
+        resolveDelete = resolve;
+      });
+      vi.mocked(tenantApi.deleteTenant).mockReturnValue(deletePromise);
+
+      render(<TenantActions tenantId="test-tenant-id" />);
+
+      // ダイアログを開く
+      const deleteButton = screen.getByRole('button', { name: '削除' });
+      await user.click(deleteButton);
+
+      // 削除するボタンをクリック
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      // 削除中の状態でボタンが無効化されていることを確認
+      await waitFor(() => {
+        const deletingButton = screen.getByRole('button', {
+          name: '削除中...',
+        });
+        expect(deletingButton).toBeDisabled();
+      });
+
+      // 削除を完了
+      resolveDelete(true);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalled();
+      });
     });
   });
 });
