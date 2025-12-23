@@ -441,6 +441,11 @@ LOCALSTACK_ENDPOINT := http://localhost:4566
 LOCAL_TABLE := TenkaCloud-local
 LOCAL_LAMBDA := tenkacloud-local-provisioning
 
+# LocalStack 用ダミー認証情報
+export AWS_ACCESS_KEY_ID := test
+export AWS_SECRET_ACCESS_KEY := test
+export AWS_DEFAULT_REGION := ap-northeast-1
+
 check-aws-cli:
 	@command -v aws >/dev/null 2>&1 || { echo "❌ AWS CLI がインストールされていません。"; echo "   brew install awscli でインストールしてください。"; exit 1; }
 	@echo "✅ AWS CLI がインストールされています"
@@ -462,7 +467,7 @@ stop-local:
 
 logs-local: check-aws-cli
 	@echo "📋 プロビジョニング Lambda のログを表示しています..."
-	@aws --endpoint-url=$(LOCALSTACK_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow --region ap-northeast-1
+	@aws --endpoint-url=$(LOCALSTACK_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow
 
 # UUID generation with fallback for systems without uuidgen
 generate-uuid = $(shell uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36)
@@ -475,8 +480,7 @@ test-lambda: check-aws-cli
 	TIMESTAMP=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
 	aws --endpoint-url=$(LOCALSTACK_ENDPOINT) dynamodb put-item \
 		--table-name $(LOCAL_TABLE) \
-		--item "{\"PK\":{\"S\":\"TENANT#$$TENANT_ID\"},\"SK\":{\"S\":\"METADATA\"},\"id\":{\"S\":\"$$TENANT_ID\"},\"name\":{\"S\":\"Test Tenant $$TENANT_ID\"},\"slug\":{\"S\":\"test-$$TENANT_ID\"},\"tier\":{\"S\":\"FREE\"},\"status\":{\"S\":\"ACTIVE\"},\"provisioningStatus\":{\"S\":\"PENDING\"},\"EntityType\":{\"S\":\"TENANT\"},\"CreatedAt\":{\"S\":\"$$TIMESTAMP\"},\"UpdatedAt\":{\"S\":\"$$TIMESTAMP\"}}" \
-		--region ap-northeast-1
+		--item "{\"PK\":{\"S\":\"TENANT#$$TENANT_ID\"},\"SK\":{\"S\":\"METADATA\"},\"id\":{\"S\":\"$$TENANT_ID\"},\"name\":{\"S\":\"Test Tenant $$TENANT_ID\"},\"slug\":{\"S\":\"test-$$TENANT_ID\"},\"tier\":{\"S\":\"FREE\"},\"status\":{\"S\":\"ACTIVE\"},\"provisioningStatus\":{\"S\":\"PENDING\"},\"EntityType\":{\"S\":\"TENANT\"},\"CreatedAt\":{\"S\":\"$$TIMESTAMP\"},\"UpdatedAt\":{\"S\":\"$$TIMESTAMP\"}}"
 	@echo "✅ テナントを作成しました"
 	@echo ""
 	@echo "💡 ログを確認: make logs-local"
