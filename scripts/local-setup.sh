@@ -22,7 +22,7 @@ echo "⏳ Waiting for LocalStack to be ready..."
 MAX_RETRIES=30
 RETRY_COUNT=0
 
-until curl -s http://localhost:4566/_localstack/health | grep -q '"dynamodb": "available"'; do
+until curl -s http://localhost:4566/_localstack/health | grep -qE '"dynamodb": "(available|running)"'; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
     echo "❌ LocalStack did not start within expected time"
@@ -50,7 +50,7 @@ echo "✅ Lambda is ready!"
 # Wait for EventBridge service
 echo "⏳ Waiting for EventBridge service..."
 RETRY_COUNT=0
-until curl -s http://localhost:4566/_localstack/health | grep -q '"events": "available"'; do
+until curl -s http://localhost:4566/_localstack/health | grep -qE '"events": "(available|running)"'; do
   RETRY_COUNT=$((RETRY_COUNT + 1))
   if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
     echo "⚠️  EventBridge service did not start, continuing anyway..."
@@ -96,21 +96,27 @@ echo "✅ Infrastructure deployed!"
 # 4. 確認
 echo ""
 echo "🔍 Verifying deployment..."
+
+# LocalStack 用ダミー認証情報
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=ap-northeast-1
+
 echo ""
 echo "DynamoDB Tables:"
-aws --endpoint-url=http://localhost:4566 dynamodb list-tables --region ap-northeast-1
+aws --endpoint-url=http://localhost:4566 dynamodb list-tables
 
 echo ""
 echo "Lambda Functions:"
-aws --endpoint-url=http://localhost:4566 lambda list-functions --region ap-northeast-1 --query 'Functions[].FunctionName'
+aws --endpoint-url=http://localhost:4566 lambda list-functions --query 'Functions[].FunctionName'
 
 echo ""
 echo "EventBridge Event Buses:"
-aws --endpoint-url=http://localhost:4566 events list-event-buses --region ap-northeast-1 --query 'EventBuses[].Name'
+aws --endpoint-url=http://localhost:4566 events list-event-buses --query 'EventBuses[].Name'
 
 echo ""
 echo "S3 Buckets:"
-aws --endpoint-url=http://localhost:4566 s3 ls --region ap-northeast-1
+aws --endpoint-url=http://localhost:4566 s3 ls
 
 echo ""
 echo "======================================"
