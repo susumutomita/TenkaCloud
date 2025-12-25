@@ -4,6 +4,8 @@ import { z } from 'zod';
 import {
   initDynamoDB,
   TenantRepository,
+  SystemSettingRepository,
+  AuditLogRepository,
   type TenantStatus,
   type TenantTier,
   type IsolationModel,
@@ -21,6 +23,8 @@ initDynamoDB({
 });
 
 const tenantRepository = new TenantRepository();
+const settingRepository = new SystemSettingRepository();
+const auditLogRepository = new AuditLogRepository();
 
 const app = new Hono();
 const appLogger = createLogger('tenant-api');
@@ -86,6 +90,58 @@ const updateTenantSchema = z.object({
   tier: z.enum(['FREE', 'PRO', 'ENTERPRISE'] as const).optional(),
 });
 
+// Settings schemas
+const platformSettingsSchema = z.object({
+  platformName: z.string().min(1).max(255),
+  language: z.enum(['ja', 'en'] as const),
+  timezone: z.string().min(1),
+});
+
+const securitySettingsSchema = z.object({
+  mfaRequired: z.boolean(),
+  sessionTimeoutMinutes: z.number().min(5).max(1440),
+  maxLoginAttempts: z.number().min(1).max(100),
+});
+
+const notificationSettingsSchema = z.object({
+  emailNotificationsEnabled: z.boolean(),
+  systemAlertsEnabled: z.boolean(),
+  maintenanceNotificationsEnabled: z.boolean(),
+});
+
+const appearanceSettingsSchema = z.object({
+  theme: z.enum(['light', 'dark', 'system'] as const),
+});
+
+const settingsSchema = z.object({
+  platform: platformSettingsSchema,
+  security: securitySettingsSchema,
+  notifications: notificationSettingsSchema,
+  appearance: appearanceSettingsSchema,
+});
+
+// Default settings
+const DEFAULT_SETTINGS = {
+  platform: {
+    platformName: 'TenkaCloud',
+    language: 'ja' as const,
+    timezone: 'Asia/Tokyo',
+  },
+  security: {
+    mfaRequired: false,
+    sessionTimeoutMinutes: 60,
+    maxLoginAttempts: 5,
+  },
+  notifications: {
+    emailNotificationsEnabled: true,
+    systemAlertsEnabled: true,
+    maintenanceNotificationsEnabled: true,
+  },
+  appearance: {
+    theme: 'system' as const,
+  },
+};
+
 // Pagination constants - DoS protection
 const MAX_LIMIT = 100; // Maximum items per page
 
@@ -102,6 +158,144 @@ function errorResponse(message: string, status: number, details?: unknown) {
 // Health check
 app.get('/health', (c) => {
   return c.json({ status: 'ok', service: 'tenant-management' });
+});
+
+// Dashboard stats (no auth required for initial load, minimal data)
+app.get('/api/stats', async (c) => {
+  try {
+    const [totalTenants, listResult] = await Promise.all([
+      tenantRepository.count(),
+      tenantRepository.list({ limit: 100 }),
+    ]);
+
+    // Count active tenants
+    const activeTenants = listResult.tenants.filter(
+      (t) => t.status === 'ACTIVE'
+    ).length;
+
+    return c.json({
+      activeTenants,
+      totalTenants,
+      systemStatus: 'healthy',
+      uptimePercentage: 100,
+    });
+  } catch (error) {
+    appLogger.error({ error }, 'Failed to fetch stats');
+    return c.json(errorResponse('Failed to fetch stats', 500), 500);
+  }
+});
+
+// Get settings
+app.get('/api/settings', async (c) => {
+  try {
+    const [platform, security, notifications, appearance] = await Promise.all([
+      settingRepository.get('platform'),
+      settingRepository.get('security'),
+      settingRepository.get('notifications'),
+      settingRepository.get('appearance'),
+    ]);
+
+    const settings = {
+      platform: platform?.value
+        ? JSON.parse(platform.value as string)
+        : DEFAULT_SETTINGS.platform,
+      security: security?.value
+        ? JSON.parse(security.value as string)
+        : DEFAULT_SETTINGS.security,
+      notifications: notifications?.value
+        ? JSON.parse(notifications.value as string)
+        : DEFAULT_SETTINGS.notifications,
+      appearance: appearance?.value
+        ? JSON.parse(appearance.value as string)
+        : DEFAULT_SETTINGS.appearance,
+    };
+
+    return c.json(settings);
+  } catch (error) {
+    appLogger.error({ error }, 'Failed to fetch settings');
+    return c.json(errorResponse('Failed to fetch settings', 500), 500);
+  }
+});
+
+// Save settings
+app.put('/api/settings', async (c) => {
+  try {
+    const body = await c.req.json();
+    const validated = settingsSchema.parse(body);
+
+    // Save each category as a separate key
+    await Promise.all([
+      settingRepository.set({
+        key: 'platform',
+        value: JSON.stringify(validated.platform),
+        category: 'system',
+        updatedBy: 'system',
+      }),
+      settingRepository.set({
+        key: 'security',
+        value: JSON.stringify(validated.security),
+        category: 'system',
+        updatedBy: 'system',
+      }),
+      settingRepository.set({
+        key: 'notifications',
+        value: JSON.stringify(validated.notifications),
+        category: 'system',
+        updatedBy: 'system',
+      }),
+      settingRepository.set({
+        key: 'appearance',
+        value: JSON.stringify(validated.appearance),
+        category: 'system',
+        updatedBy: 'system',
+      }),
+    ]);
+
+    appLogger.info('Settings updated successfully');
+    return c.json({ success: true, message: 'Settings saved successfully' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json(errorResponse('Validation error', 400, error.errors), 400);
+    }
+
+    appLogger.error({ error }, 'Failed to save settings');
+    return c.json(errorResponse('Failed to save settings', 500), 500);
+  }
+});
+
+// Get recent activities
+app.get('/api/activities', async (c) => {
+  try {
+    const limitParam = parseInt(c.req.query('limit') || '10', 10);
+    const limit = Math.min(
+      50,
+      Math.max(1, isNaN(limitParam) ? 10 : limitParam)
+    );
+
+    // Fetch system-wide activities (tenantId is empty for system events)
+    const result = await auditLogRepository.listByTenant('', { limit });
+
+    // Transform audit logs to activity format
+    const activities = result.logs.map((log) => ({
+      id: log.id,
+      action: log.action,
+      resourceType: log.resourceType,
+      resourceId: log.resourceId,
+      details: log.details,
+      timestamp: log.createdAt.toISOString(),
+    }));
+
+    return c.json({
+      data: activities,
+      pagination: {
+        limit,
+        hasNextPage: !!result.lastKey,
+      },
+    });
+  } catch (error) {
+    appLogger.error({ error }, 'Failed to fetch activities');
+    return c.json(errorResponse('Failed to fetch activities', 500), 500);
+  }
 });
 
 // List all tenants with pagination
