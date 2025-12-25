@@ -38,7 +38,7 @@ make start
 - Control Plane UI（フロントエンド）
 - Application Plane UI（フロントエンド）
 
-> **Note:** 認証には Auth0 を使用します。`.env.local` で `AUTH0_CLIENT_ID`、`AUTH0_CLIENT_SECRET`、`AUTH0_ISSUER` を設定してください。
+> **Note:** 認証には Auth0 を使用します。[Auth0 Dashboard](https://manage.auth0.com/) でアプリケーションを作成し、`apps/control-plane/.env.example` を参考に `.env.local` を作成してください。
 
 ブラウザで以下にアクセスしてください。
 
