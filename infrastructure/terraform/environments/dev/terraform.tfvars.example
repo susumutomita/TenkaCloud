@@ -1,6 +1,16 @@
 # Auth0 Configuration
 # Copy this file to terraform.tfvars and fill in your values
 # DO NOT commit terraform.tfvars to version control
+#
+# セットアップ手順:
+# 1. Auth0 Dashboard (https://manage.auth0.com) にログイン
+# 2. Applications > APIs > Auth0 Management API を選択
+# 3. Machine to Machine Applications タブで新しいアプリを作成
+# 4. 以下の権限を付与:
+#    - read:clients, create:clients, update:clients, delete:clients
+#    - read:resource_servers, create:resource_servers, update:resource_servers
+#    - read:client_credentials, create:client_credentials
+# 5. 作成したアプリの Settings から Domain, Client ID, Client Secret を取得
 
 auth0_domain        = "your-tenant.auth0.com"
 auth0_client_id     = "your-management-api-client-id"

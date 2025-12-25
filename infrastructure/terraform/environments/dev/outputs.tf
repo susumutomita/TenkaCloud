@@ -13,9 +13,21 @@ output "auth0_control_plane_client_id" {
   value       = module.auth0.control_plane_client_id
 }
 
+output "auth0_control_plane_client_secret" {
+  description = "Client secret for Control Plane Auth0 application"
+  value       = module.auth0.control_plane_client_secret
+  sensitive   = true
+}
+
 output "auth0_application_plane_client_id" {
   description = "Client ID for Application Plane Auth0 application"
   value       = module.auth0.application_plane_client_id
+}
+
+output "auth0_application_plane_client_secret" {
+  description = "Client secret for Application Plane Auth0 application"
+  value       = module.auth0.application_plane_client_secret
+  sensitive   = true
 }
 
 output "auth0_api_identifier" {

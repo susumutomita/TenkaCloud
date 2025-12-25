@@ -27,23 +27,35 @@ TenkaCloud は、クラウド技術者のための常設・オープンソース
 
 ```bash
 # Docker Desktop を起動してから実行
-make start-all
+make start
 ```
 
-これで以下が自動的に実行されます。
+これで以下が自動的に起動します。
 
-- Keycloak の起動
-- Keycloak の Realm と Client の自動作成
-- `.env.local` の作成（存在しない場合）
+- LocalStack（AWS ローカルエミュレーター）
+- DynamoDB（テナント・設定データ）
+- Tenant Management API（バックエンド）
+- Control Plane UI（フロントエンド）
+- Application Plane UI（フロントエンド）
 
-出力された環境変数を `frontend/control-plane/.env.local` に設定してから、Control Plane UI を起動してください。
+> **Note:** 認証には Auth0 を使用します。Makefile からセットアップできます:
+>
+> ```bash
+> # 1. terraform.tfvars を作成して Auth0 Management API の認証情報を設定
+> cp infrastructure/terraform/environments/dev/terraform.tfvars.example \
+>    infrastructure/terraform/environments/dev/terraform.tfvars
+> # terraform.tfvars を編集して認証情報を入力
+>
+> # 2. Auth0 をセットアップ（init + apply + 認証情報表示）
+> make auth0-setup
+>
+> # 3. 表示された認証情報を .env.local にコピー
+> ```
 
-```bash
-cd frontend/control-plane
-bun run dev
-```
+ブラウザで以下にアクセスしてください。
 
-ブラウザで <http://localhost:3000> を開いてログインしてください。
+- Control Plane: <http://localhost:3000>
+- Application Plane: <http://localhost:3001>
 
 ### 詳細な手順
 
@@ -53,24 +65,27 @@ bun run dev
 
 ```bash
 # ローカル環境管理
-make start-all        # ローカル環境を一括起動
-make stop-all         # ローカル環境を一括停止
-make restart-all      # ローカル環境を再起動
+make start            # ローカル環境を一括起動（推奨）
+make stop             # ローカル環境を一括停止
+make restart          # ローカル環境を再起動
 
 # コード品質
 make lint             # Linter を実行
 make format           # コードを自動整形
 make typecheck        # TypeScript 型チェック
-make before_commit    # コミット前チェック
+make before-commit    # コミット前チェック（lint, format, typecheck, test, build）
 
 # テスト
 make test             # テストを実行
-make test_coverage    # カバレッジレポート付きテスト
+make test-coverage    # カバレッジレポート付きテスト（99% 以上必須）
 
-# Docker ビルド
-make docker-build     # Control Plane UI の Docker イメージをビルド
-make docker-run       # Docker Compose で Control Plane UI を起動
-make docker-stop      # Docker Compose を停止
+# インフラ
+make localstack-up    # LocalStack を起動
+make localstack-down  # LocalStack を停止
+
+# Auth0 セットアップ
+make auth0-setup      # Auth0 を Terraform でセットアップ
+make auth0-output     # 認証情報を表示
 ```
 
 詳細は `make help` を実行してください。
@@ -151,28 +166,33 @@ make docker-stop      # Docker Compose を停止
 
 ```text
 TenkaCloud/
-├── frontend/              # Next.js アプリケーション
-│   ├── app/              # App Router
-│   ├── components/       # React コンポーネント
-│   ├── lib/              # ユーティリティ
-│   └── styles/           # スタイル
-├── backend/              # バックエンドサービス
-│   ├── api/              # API サービス
-│   ├── auth/             # 認証サービス
-│   ├── tenant/           # テナント管理
-│   ├── battle/           # バトル管理
-│   └── scoring/          # 採点システム
-├── infrastructure/       # インフラストラクチャコード
-│   ├── k8s/              # Kubernetes マニフェスト
-│   └── terraform/        # Terraform（マルチクラウド用）
-├── problems/             # 問題定義
-│   ├── templates/        # 問題テンプレート
-│   └── examples/         # サンプル問題
-├── ai/                   # AI 機能
-│   ├── problem-generator/ # 問題生成
-│   ├── scoring/          # 自動採点
-│   └── coaching/         # コーチング機能
-└── docs/                 # ドキュメント
+├── apps/                         # フロントエンドアプリケーション
+│   ├── control-plane/            # 管理者向け UI（Next.js 16）
+│   │   ├── app/                  # App Router
+│   │   ├── components/           # React コンポーネント
+│   │   └── lib/                  # API クライアント・ユーティリティ
+│   └── application-plane/        # 競技者向け UI（Next.js 16）
+│       ├── app/                  # App Router
+│       └── lib/                  # AWS STS フェデレーション等
+├── backend/                      # バックエンドサービス
+│   └── services/
+│       ├── control-plane/        # Control Plane サービス
+│       │   └── tenant-management/  # テナント管理 API（Hono + DynamoDB）
+│       ├── application-plane/    # Application Plane サービス
+│       └── shared/               # 共有ライブラリ
+├── packages/                     # 共有パッケージ
+│   ├── core/                     # コアロジック
+│   └── shared/                   # 共有型定義・DynamoDB リポジトリ
+├── infrastructure/               # インフラストラクチャコード
+│   └── terraform/                # Terraform（AWS CDK 移行予定）
+├── docker-compose.yml            # ローカル開発用 Docker Compose
+├── problems/                     # 問題定義
+│   ├── templates/                # 問題テンプレート
+│   └── examples/                 # サンプル問題
+├── reference/                    # 参考資料
+│   └── eks/                      # EKS Reference Architecture
+├── scripts/                      # ユーティリティスクリプト
+└── docs/                         # ドキュメント
 ```
 
 ## 🚦 開発環境のセットアップ
@@ -192,15 +212,13 @@ TenkaCloud/
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 
-# 依存関係のインストール
+# 依存関係のインストール（ni は lock ファイルから自動でパッケージマネージャを選択）
+ni
+# または
 bun install
-# または
-npm install
 
-# 開発サーバーの起動
-bun run dev
-# または
-npm run dev
+# ローカル環境を一括起動
+make start
 ```
 
 ### テスト実行
