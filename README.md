@@ -38,15 +38,18 @@ make start
 - Control Plane UI（フロントエンド）
 - Application Plane UI（フロントエンド）
 
-> **Note:** 認証には Auth0 を使用します。Terraform でセットアップできます:
+> **Note:** 認証には Auth0 を使用します。Makefile からセットアップできます:
 >
 > ```bash
-> cd infrastructure/terraform/environments/dev
-> cp terraform.tfvars.example terraform.tfvars
-> # terraform.tfvars に Auth0 Management API の認証情報を設定
-> terraform init && terraform apply
-> # 出力された client_id と client_secret を .env.local に設定
-> terraform output -json | jq -r '"AUTH0_CLIENT_ID=\(.auth0_control_plane_client_id.value)\nAUTH0_CLIENT_SECRET=\(.auth0_control_plane_client_secret.value)"'
+> # 1. terraform.tfvars を作成して Auth0 Management API の認証情報を設定
+> cp infrastructure/terraform/environments/dev/terraform.tfvars.example \
+>    infrastructure/terraform/environments/dev/terraform.tfvars
+> # terraform.tfvars を編集して認証情報を入力
+>
+> # 2. Auth0 をセットアップ（init + apply + 認証情報表示）
+> make auth0-setup
+>
+> # 3. 表示された認証情報を .env.local にコピー
 > ```
 
 ブラウザで以下にアクセスしてください。
@@ -79,6 +82,10 @@ make test-coverage    # カバレッジレポート付きテスト（99% 以上�
 # インフラ
 make localstack-up    # LocalStack を起動
 make localstack-down  # LocalStack を停止
+
+# Auth0 セットアップ
+make auth0-setup      # Auth0 を Terraform でセットアップ
+make auth0-output     # 認証情報を表示
 ```
 
 詳細は `make help` を実行してください。

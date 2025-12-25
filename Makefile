@@ -3,6 +3,7 @@
 .PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
 .PHONY: start-local stop-local logs-local test-lambda test-tenant
+.PHONY: auth0-check-tfvars auth0-init auth0-plan auth0-apply auth0-output auth0-setup
 
 # デフォルトターゲットはhelp
 default: help
@@ -456,6 +457,13 @@ help:
 	@echo "  make logs-local       プロビジョニング Lambda のログを表示"
 	@echo "  make test-lambda      テナント作成をシミュレート"
 	@echo ""
+	@echo "🔐 Auth0 セットアップ:"
+	@echo "  make auth0-setup      Auth0 を Terraform でセットアップ（init + apply + output）"
+	@echo "  make auth0-init       Terraform 初期化"
+	@echo "  make auth0-plan       変更内容をプレビュー"
+	@echo "  make auth0-apply      Auth0 設定を適用"
+	@echo "  make auth0-output     認証情報を表示（.env.local 用）"
+	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "📚 詳細: docs/QUICKSTART.md"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -511,3 +519,63 @@ test-lambda: check-aws-cli
 	@echo "✅ テナントを作成しました"
 	@echo ""
 	@echo "💡 ログを確認: make logs-local"
+
+# ========================================
+# 🔐 Auth0 セットアップ（Terraform）
+# ========================================
+
+AUTH0_TF_DIR := infrastructure/terraform/environments/dev
+
+auth0-check-tfvars:
+	@if [ ! -f $(AUTH0_TF_DIR)/terraform.tfvars ]; then \
+		echo "❌ terraform.tfvars が見つかりません"; \
+		echo ""; \
+		echo "📋 セットアップ手順:"; \
+		echo "  1. cp $(AUTH0_TF_DIR)/terraform.tfvars.example $(AUTH0_TF_DIR)/terraform.tfvars"; \
+		echo "  2. Auth0 Dashboard (https://manage.auth0.com) にログイン"; \
+		echo "  3. Applications > APIs > Auth0 Management API を選択"; \
+		echo "  4. Machine to Machine Applications タブで新しいアプリを作成"; \
+		echo "  5. 必要な権限を付与（詳細は terraform.tfvars.example を参照）"; \
+		echo "  6. terraform.tfvars に認証情報を設定"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "✅ terraform.tfvars が存在します"
+
+auth0-init: check-terraform auth0-check-tfvars
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🔐 Auth0 Terraform を初期化します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@cd $(AUTH0_TF_DIR) && terraform init
+
+auth0-plan: check-terraform auth0-check-tfvars
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🔐 Auth0 Terraform の変更を確認します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@cd $(AUTH0_TF_DIR) && terraform plan
+
+auth0-apply: check-terraform auth0-check-tfvars
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🔐 Auth0 設定を適用します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@cd $(AUTH0_TF_DIR) && terraform apply
+
+auth0-output:
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🔐 Auth0 認証情報を表示します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 Control Plane (.env.local に追加):"
+	@cd $(AUTH0_TF_DIR) && terraform output -json 2>/dev/null | jq -r '"AUTH0_CLIENT_ID=\(.auth0_control_plane_client_id.value)\nAUTH0_CLIENT_SECRET=\(.auth0_control_plane_client_secret.value)\nAUTH0_ISSUER=https://\(.auth0_api_identifier.value | split("/")[2])"' 2>/dev/null || echo "  ❌ Terraform output が取得できません。make auth0-apply を先に実行してください。"
+	@echo ""
+	@echo "📋 Application Plane (.env.local に追加):"
+	@cd $(AUTH0_TF_DIR) && terraform output -json 2>/dev/null | jq -r '"AUTH0_CLIENT_ID=\(.auth0_application_plane_client_id.value)\nAUTH0_CLIENT_SECRET=\(.auth0_application_plane_client_secret.value)"' 2>/dev/null || echo "  ❌ Terraform output が取得できません。make auth0-apply を先に実行してください。"
+	@echo ""
+
+auth0-setup: auth0-init auth0-apply auth0-output
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Auth0 セットアップが完了しました"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "💡 上記の環境変数を各アプリの .env.local にコピーしてください"
+	@echo ""
