@@ -34,7 +34,7 @@ CRITICAL: タスク完了前に必ず `make before-commit` を実行する。lin
 
 Dockerfile: ランタイムバージョンはローカル環境と一致させる（`oven/bun:1.2.20` など）。`latest` タグは lockfile エラーの原因になる。
 
-NextAuth + Keycloak: `signOut()` 実行後は `idToken` が `undefined` になる。Keycloak ログアウト URL 構築には事前に保存が必要。
+NextAuth + Auth0: 認証には Auth0 を使用。環境変数 `AUTH0_CLIENT_ID`、`AUTH0_CLIENT_SECRET`、`AUTH0_ISSUER` を `.env.local` で設定する。
 
 パッケージ管理: [@antfu/ni](https://github.com/antfu-collective/ni) を使用。`ni`、`nr`、`nlx` コマンドが lock ファイルから自動で bun を選択する。
 

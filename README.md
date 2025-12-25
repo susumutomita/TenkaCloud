@@ -32,18 +32,18 @@ make start
 
 これで以下が自動的に起動します。
 
-- Keycloak（認証サーバー）
 - LocalStack（AWS ローカルエミュレーター）
 - DynamoDB（テナント・設定データ）
 - Tenant Management API（バックエンド）
 - Control Plane UI（フロントエンド）
 - Application Plane UI（フロントエンド）
 
+> **Note:** 認証には Auth0 を使用します。`.env.local` で `AUTH0_CLIENT_ID`、`AUTH0_CLIENT_SECRET`、`AUTH0_ISSUER` を設定してください。
+
 ブラウザで以下にアクセスしてください。
 
 - Control Plane: <http://localhost:3000>
 - Application Plane: <http://localhost:3001>
-- Keycloak: <http://localhost:8080>
 
 ### 詳細な手順
 
@@ -70,8 +70,6 @@ make test-coverage    # カバレッジレポート付きテスト（99% 以上�
 # インフラ
 make localstack-up    # LocalStack を起動
 make localstack-down  # LocalStack を停止
-make keycloak-up      # Keycloak を起動
-make keycloak-down    # Keycloak を停止
 ```
 
 詳細は `make help` を実行してください。
