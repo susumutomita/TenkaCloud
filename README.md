@@ -38,7 +38,16 @@ make start
 - Control Plane UI（フロントエンド）
 - Application Plane UI（フロントエンド）
 
-> **Note:** 認証には Auth0 を使用します。[Auth0 Dashboard](https://manage.auth0.com/) でアプリケーションを作成し、`apps/control-plane/.env.example` を参考に `.env.local` を作成してください。
+> **Note:** 認証には Auth0 を使用します。Terraform でセットアップできます:
+>
+> ```bash
+> cd infrastructure/terraform/environments/dev
+> cp terraform.tfvars.example terraform.tfvars
+> # terraform.tfvars に Auth0 Management API の認証情報を設定
+> terraform init && terraform apply
+> # 出力された client_id と client_secret を .env.local に設定
+> terraform output -json | jq -r '"AUTH0_CLIENT_ID=\(.auth0_control_plane_client_id.value)\nAUTH0_CLIENT_SECRET=\(.auth0_control_plane_client_secret.value)"'
+> ```
 
 ブラウザで以下にアクセスしてください。
 
