@@ -189,6 +189,9 @@ TenkaCloud/
 ├── problems/                     # 問題定義
 │   ├── templates/                # 問題テンプレート
 │   └── examples/                 # サンプル問題
+├── reference/                    # 参考資料
+│   └── eks/                      # EKS Reference Architecture
+├── scripts/                      # ユーティリティスクリプト
 └── docs/                         # ドキュメント
 ```
 
