@@ -1,24 +1,42 @@
 import NextAuth from 'next-auth';
+import type { Session } from 'next-auth';
 import Auth0 from 'next-auth/providers/auth0';
 
 const getEnv = (key: string) => process.env[key];
 const skipAuth0Validation = getEnv('SKIP_AUTH0_VALIDATION') === '1';
+const authSkipEnabled = getEnv('AUTH_SKIP') === '1';
+
+// モックセッション（AUTH_SKIP=1 の場合に使用）
+const mockSession: Session = {
+  user: {
+    name: 'Dev User',
+    email: 'dev@example.com',
+    image: undefined,
+  },
+  expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  accessToken: 'mock-access-token',
+  idToken: 'mock-id-token',
+  roles: ['admin'],
+};
 
 // Auth0 設定のバリデーション
 const auth0Config = {
   clientId:
     getEnv('AUTH0_CLIENT_ID') ??
-    (skipAuth0Validation ? 'stub-client-id' : undefined),
+    (skipAuth0Validation || authSkipEnabled ? 'stub-client-id' : undefined),
   clientSecret:
     getEnv('AUTH0_CLIENT_SECRET') ??
-    (skipAuth0Validation ? 'stub-client-secret' : undefined),
+    (skipAuth0Validation || authSkipEnabled ? 'stub-client-secret' : undefined),
   issuer:
     getEnv('AUTH0_ISSUER') ??
-    (skipAuth0Validation ? 'https://example.com' : undefined),
+    (skipAuth0Validation || authSkipEnabled
+      ? 'https://example.com'
+      : undefined),
 };
 
 if (
   !skipAuth0Validation &&
+  !authSkipEnabled &&
   (!auth0Config.clientId || !auth0Config.clientSecret || !auth0Config.issuer)
 ) {
   throw new Error(
@@ -26,7 +44,7 @@ if (
   );
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const nextAuth = NextAuth({
   providers: [Auth0(auth0Config)],
   callbacks: {
     async jwt({ token, account, profile }) {
@@ -74,3 +92,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: '/login',
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+// AUTH_SKIP=1 の場合はモックセッションを返す
+export const auth = authSkipEnabled ? async () => mockSession : nextAuth.auth;

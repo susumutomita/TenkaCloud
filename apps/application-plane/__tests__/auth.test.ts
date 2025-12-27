@@ -30,6 +30,39 @@ describe('Auth0 認証設定', () => {
     process.env.AUTH0_CLIENT_ID = 'test-client-id';
     process.env.AUTH0_CLIENT_SECRET = 'test-client-secret';
     process.env.AUTH0_ISSUER = 'https://test.auth0.com';
+    delete process.env.AUTH_SKIP;
+  });
+
+  describe('AUTH_SKIP モード', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+      delete process.env.AUTH0_CLIENT_ID;
+      delete process.env.AUTH0_CLIENT_SECRET;
+      delete process.env.AUTH0_ISSUER;
+    });
+
+    it('AUTH_SKIP=1 の場合、モックセッションを返すべき', async () => {
+      process.env.AUTH_SKIP = '1';
+
+      const auth = await import('../auth');
+      const session = await auth.auth();
+
+      expect(session).toBeDefined();
+      expect(session?.user?.name).toBe('Dev User');
+      expect(session?.user?.email).toBe('dev@example.com');
+      expect(session?.roles).toEqual(['participant']);
+      expect(session?.tenantId).toBe('dev-tenant');
+      expect(session?.teamId).toBe('dev-team');
+      expect(session?.accessToken).toBe('mock-access-token');
+      expect(session?.idToken).toBe('mock-id-token');
+    });
+
+    it('AUTH_SKIP=1 の場合、Auth0 環境変数がなくてもエラーにならないべき', async () => {
+      process.env.AUTH_SKIP = '1';
+
+      await expect(import('../auth')).resolves.toBeDefined();
+    });
   });
 
   it('必須の環境変数が欠けている場合はエラーを投げるべき', async () => {

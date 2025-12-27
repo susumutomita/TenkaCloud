@@ -27,11 +27,44 @@ ni
 bun install
 ```
 
-### ステップ 3: Auth0 のセットアップ
+### ステップ 3: 認証の設定
+
+TenkaCloud は認証に Auth0 を使用します。開発目的であれば、認証スキップモードを使用して Auth0 のセットアップをスキップできます。
+
+#### オプション A: 認証スキップモード（開発用・推奨）
+
+Auth0 のセットアップをせずにすぐに開発を開始したい場合は、認証スキップモードを使用できます。
+
+**Control Plane (`apps/control-plane/.env.local`)**:
+
+```env
+AUTH_SKIP=1
+AUTH_SECRET=dev-secret-for-local-development
+AUTH_URL=http://localhost:3000
+```
+
+**Application Plane (`apps/application-plane/.env.local`)**:
+
+```env
+AUTH_SKIP=1
+AUTH_SECRET=dev-secret-for-local-development
+AUTH_URL=http://localhost:3001
+```
+
+認証スキップモードでは、自動的に以下のモックユーザーでログイン状態になります。
+
+- **Control Plane**: Dev User (dev@example.com) / admin ロール
+- **Application Plane**: Dev User (dev@example.com) / participant ロール
+
+このモードは開発専用です。本番環境では必ず Auth0 を設定してください。
+
+認証スキップモードを使用する場合は、**ステップ 4** に進んでください。
+
+#### オプション B: Auth0 のセットアップ（本番同等環境）
 
 TenkaCloud は認証に Auth0 を使用します。以下の手順で Auth0 を設定してください。
 
-#### 3.1 Auth0 Management API 認証情報の取得
+##### B.1 Auth0 Management API 認証情報の取得
 
 1. [Auth0 Dashboard](https://manage.auth0.com) にログイン
 2. 左サイドバーから **Applications** → **APIs** を選択
@@ -54,7 +87,7 @@ TenkaCloud は認証に Auth0 を使用します。以下の手順で Auth0 を�
    - **Client ID**
    - **Client Secret**
 
-#### 3.2 Terraform 変数ファイルの作成
+##### B.2 Terraform 変数ファイルの作成
 
 ```bash
 # terraform.tfvars を作成
@@ -72,7 +105,7 @@ auth0_client_secret = "取得した Client Secret"
 
 `terraform.tfvars` はシークレット情報を含むため、Git にコミットしないでください（`.gitignore` で除外済み）。
 
-#### 3.3 Auth0 リソースのプロビジョニング
+##### B.3 Auth0 リソースのプロビジョニング
 
 ```bash
 # Auth0 をセットアップ（init + apply + 認証情報表示）
@@ -81,7 +114,7 @@ make auth0-setup
 
 このコマンドにより、Control Plane 用 Auth0 Application、Application Plane 用 Auth0 Application、TenkaCloud API (Resource Server) が作成されます。
 
-#### 3.4 環境変数の設定
+##### B.4 環境変数の設定
 
 `make auth0-setup` の実行後に表示される認証情報を、各アプリの `.env.local` にコピーします。
 
