@@ -2,14 +2,45 @@
 # TenkaCloud Local Environment Setup
 #
 # LocalStack を起動し、Terraform でインフラをデプロイする
+# 冪等性: 既に起動・デプロイ済みの場合はスキップ
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# LocalStack 用ダミー認証情報
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=ap-northeast-1
+
+# 既に LocalStack が起動しているかチェック
+check_localstack_ready() {
+  curl -s http://localhost:4566/_localstack/health 2>/dev/null | grep -qE '"dynamodb": "(available|running)"'
+}
+
+check_infrastructure_deployed() {
+  # DynamoDB テーブルが存在するかチェック
+  aws --endpoint-url=http://localhost:4566 dynamodb describe-table --table-name TenkaCloud-local >/dev/null 2>&1
+}
+
 echo "🚀 TenkaCloud Local Environment Setup"
 echo "======================================"
+
+# 既に起動済みかチェック
+if check_localstack_ready && check_infrastructure_deployed; then
+  echo ""
+  echo "✅ LocalStack は既に起動しており、インフラもデプロイ済みです"
+  echo ""
+  echo "Endpoints:"
+  echo "  - LocalStack:  http://localhost:4566"
+  echo "  - DynamoDB:    http://localhost:4566"
+  echo "  - Lambda:      http://localhost:4566"
+  echo "  - S3:          http://localhost:4566"
+  echo ""
+  echo "💡 再デプロイが必要な場合は、まず make stop を実行してください"
+  exit 0
+fi
 
 # 1. LocalStack 起動
 echo ""
@@ -96,11 +127,6 @@ echo "✅ Infrastructure deployed!"
 # 4. 確認
 echo ""
 echo "🔍 Verifying deployment..."
-
-# LocalStack 用ダミー認証情報
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_DEFAULT_REGION=ap-northeast-1
 
 echo ""
 echo "DynamoDB Tables:"
