@@ -5,7 +5,12 @@ import Auth0 from 'next-auth/providers/auth0';
 const getEnv = (key: string) => process.env[key];
 const authSkipEnabled = getEnv('AUTH_SKIP') === '1';
 
-// モックセッション（AUTH_SKIP=1 の場合に使用）
+/**
+ * モックセッション（AUTH_SKIP=1 の場合に使用）
+ *
+ * Application Plane は特定テナントのビジネスロジックを実行するため、
+ * tenantId と teamId を含む。開発時はデフォルト値を使用。
+ */
 const mockSession: Session = {
   user: {
     name: 'Dev User',
@@ -19,6 +24,18 @@ const mockSession: Session = {
   tenantId: 'dev-tenant',
   teamId: 'dev-team',
 };
+
+// AUTH_SKIP モードの警告
+/* v8 ignore start -- Development-only warning */
+if (authSkipEnabled && typeof console !== 'undefined') {
+  console.warn(
+    '\x1b[33m⚠️  AUTH_SKIP mode is enabled. Authentication is bypassed with a mock session.\x1b[0m'
+  );
+  console.warn(
+    '\x1b[33m   This should only be used for local development.\x1b[0m'
+  );
+}
+/* v8 ignore stop */
 
 // Auth0 設定のバリデーション
 /* v8 ignore start -- Stub config only used when AUTH_SKIP=1 */
