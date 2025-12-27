@@ -1,210 +1,160 @@
 # TenkaCloud Quick Start Guide
 
-TenkaCloud Control Plane UI をローカル環境で起動するクイックスタートガイドです。
+TenkaCloud をローカル環境で起動するクイックスタートガイドです。
 
 ## 前提条件
 
 - **Docker Desktop** がインストールされていること
 - **Bun** (または Node.js) がインストールされていること
 - **Git** がインストールされていること
+- **Terraform** がインストールされていること（Auth0 セットアップ用）
 
 ## 🚀 クイックスタート（5分で起動）
 
-### 方法 1: Makefile で一括起動（推奨）
+### ステップ 1: リポジトリのクローン
 
 ```bash
-# Docker Desktop を起動してから実行
-make start-all
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
 ```
 
-これで以下が自動的に実行されます。
-
-- Keycloak の起動
-- Keycloak の Realm と Client の自動作成
-- `.env.local` の作成（存在しない場合）
-
-出力された環境変数を `frontend/control-plane/.env.local` に設定してから、Control Plane UI を起動してください。
+### ステップ 2: 依存関係のインストール
 
 ```bash
-cd frontend/control-plane
-bun run dev
-```
-
-ブラウザで <http://localhost:3000> を開いてログインしてください。
-
-### 方法 2: Docker Compose で起動（本番環境に近い）
-
-Docker イメージをビルドして、Keycloak と連携した環境で起動します。
-
-```bash
-# Docker イメージをビルドして起動
-make docker-run
-
-# アクセス先
-# - Control Plane UI: http://localhost:3000
-# - Keycloak: http://localhost:8080
-```
-
-停止する場合は次を実行します。
-
-```bash
-make docker-stop
-```
-
-この方法では `.env.local` ファイルが必要です。事前に `frontend/control-plane/.env.local` を作成してください。
-
-### 方法 3: 手動セットアップ
-
-#### 1. Docker Desktop を起動
-
-macOS の場合は次を実行する。
-```bash
-# アプリケーションフォルダから Docker.app を起動
-# メニューバーに Docker アイコンが緑色になるまで待つ
-```
-
-Docker が起動しているか確認する。
-```bash
-docker --version
-```
-
-#### 2. Keycloak を起動
-
-```bash
-cd infrastructure/docker/keycloak
-docker compose up -d
-```
-
-起動状態を確認する。
-```bash
-docker compose ps
-```
-
-以下のように表示されれば成功と判断できる。
-```
-NAME                  STATUS          PORTS
-keycloak-keycloak-1   Up 30 seconds   0.0.0.0:8080->8080/tcp
-keycloak-postgres-1   Up 30 seconds   5432/tcp
-```
-
-#### 3. Keycloak の初期設定
-
-##### 3.1 管理コンソールにアクセス
-
-ブラウザで http://localhost:8080 を開く。
-
-##### 3.2 ログイン
-
-- **Username**: `admin`
-- **Password**: `admin`
-
-##### 3.3 TenkaCloud Realm を作成
-
-1. 左上のドロップダウン（"Keycloak" と表示）をクリック
-2. "Create Realm" をクリック
-3. **Realm name**: `tenkacloud` と入力
-4. "Create" をクリック
-
-##### 3.4 Client を作成
-
-1. 左メニューから **Clients** をクリック
-2. "Create client" ボタンをクリック
-
-**General Settings**:
-- **Client type**: `OpenID Connect`
-- **Client ID**: `control-plane-ui`
-- "Next" をクリック
-
-**Capability config**:
-- **Client authentication**: `ON` に変更（トグルをクリック）
-- **Authentication flow**:
-  - ✅ Standard flow
-  - ✅ Direct access grants
-- "Next" をクリック
-
-**Login settings**:
-- **Valid redirect URIs**: `http://localhost:3000/*`
-- **Valid post logout redirect URIs**: `http://localhost:3000/*`
-- **Web origins**: `http://localhost:3000`
-- "Save" をクリック
-
-##### 3.5 Client Secret を取得
-
-1. 作成した `control-plane-ui` Client の **Credentials** タブを開く
-2. **Client secret** の値をコピーし、後で使用する。
-
-#### 4. 環境変数ファイルを作成
-
-```bash
-cd ../../frontend/control-plane
-cp .env.example .env.local
-```
-
-##### 4.1 AUTH_SECRET を生成
-
-```bash
-openssl rand -base64 32
-```
-
-出力された値をコピーする。
-
-##### 4.2 .env.local を編集
-
-`.env.local` ファイルを開いて、以下を設定する。
-
-```env
-# NextAuth.js Configuration
-AUTH_SECRET=<先ほど生成したランダム文字列>
-AUTH_URL=http://localhost:3000
-
-# Keycloak Configuration
-AUTH_KEYCLOAK_ID=control-plane-ui
-AUTH_KEYCLOAK_SECRET=<Keycloak で取得した Client Secret>
-AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/tenkacloud
-```
-
-#### 5. 依存関係をインストール
-
-```bash
+# ni は lock ファイルから自動でパッケージマネージャを選択
+ni
+# または
 bun install
 ```
 
-#### 6. Control Plane UI を起動
+### ステップ 3: Auth0 のセットアップ
+
+TenkaCloud は認証に Auth0 を使用します。以下の手順で Auth0 を設定してください。
+
+#### 3.1 Auth0 Management API 認証情報の取得
+
+1. [Auth0 Dashboard](https://manage.auth0.com) にログイン
+2. 左サイドバーから **Applications** → **APIs** を選択
+3. **Auth0 Management API** をクリック
+4. **Machine to Machine Applications** タブを開く
+5. **Create & Authorize** をクリックして新しい M2M アプリを作成
+6. 以下の権限（Permissions）を付与:
+   - `read:clients`
+   - `create:clients`
+   - `update:clients`
+   - `delete:clients`
+   - `read:resource_servers`
+   - `create:resource_servers`
+   - `update:resource_servers`
+   - `read:client_credentials`
+   - `create:client_credentials`
+7. **Authorize** をクリック
+8. 作成したアプリの **Settings** タブから以下を取得:
+   - **Domain** (例: `your-tenant.auth0.com`)
+   - **Client ID**
+   - **Client Secret**
+
+#### 3.2 Terraform 変数ファイルの作成
 
 ```bash
-bun run dev
+# terraform.tfvars を作成
+cp infrastructure/terraform/environments/dev/terraform.tfvars.example \
+   infrastructure/terraform/environments/dev/terraform.tfvars
 ```
 
-以下のように表示されれば成功と判断できる。
-```
-  ▲ Next.js 16.0.1
-  - Local:        http://localhost:3000
-  - Environments: .env.local
+`infrastructure/terraform/environments/dev/terraform.tfvars` を編集して、取得した認証情報を設定してください。
 
- ✓ Starting...
- ✓ Ready in 1.2s
+```hcl
+auth0_domain        = "your-tenant.auth0.com"
+auth0_client_id     = "取得した Client ID"
+auth0_client_secret = "取得した Client Secret"
 ```
 
-#### 7. アプリケーションにアクセス
+`terraform.tfvars` はシークレット情報を含むため、Git にコミットしないでください（`.gitignore` で除外済み）。
 
-ブラウザで http://localhost:3000 を開く。
+#### 3.3 Auth0 リソースのプロビジョニング
 
-## 🎯 動作確認
+```bash
+# Auth0 をセットアップ（init + apply + 認証情報表示）
+make auth0-setup
+```
 
-### ログインフロー
+このコマンドにより、Control Plane 用 Auth0 Application、Application Plane 用 Auth0 Application、TenkaCloud API (Resource Server) が作成されます。
 
-1. http://localhost:3000 にアクセスする。
-2. ログインページが表示されるのを確認する。
-3. "Keycloak でログイン" ボタンをクリックする。
-4. Keycloak のログイン画面にリダイレクトされる。
-5. **Username**: `admin` / **Password**: `admin` でログインする。
-6. ダッシュボード (`/dashboard`) にリダイレクトされる。
-7. セッション情報が表示されることを確認する。
+#### 3.4 環境変数の設定
 
-### ログアウト
+`make auth0-setup` の実行後に表示される認証情報を、各アプリの `.env.local` にコピーします。
 
-1. ダッシュボード右上の "ログアウト" ボタンをクリックする。
-2. ログインページにリダイレクトされることを確認する。
+**Control Plane (`apps/control-plane/.env.local`)**:
+
+```env
+# NextAuth.js Configuration
+AUTH_SECRET=<openssl rand -base64 32 で生成>
+AUTH_URL=http://localhost:3000
+
+# Auth0 Configuration
+AUTH0_CLIENT_ID=<表示された control_plane_client_id>
+AUTH0_CLIENT_SECRET=<表示された control_plane_client_secret>
+AUTH0_ISSUER=https://your-tenant.auth0.com
+```
+
+**Application Plane (`apps/application-plane/.env.local`)**:
+
+```env
+# NextAuth.js Configuration
+AUTH_SECRET=<openssl rand -base64 32 で生成>
+AUTH_URL=http://localhost:3001
+
+# Auth0 Configuration
+AUTH0_CLIENT_ID=<表示された application_plane_client_id>
+AUTH0_CLIENT_SECRET=<表示された application_plane_client_secret>
+AUTH0_ISSUER=https://your-tenant.auth0.com
+```
+
+### ステップ 4: ローカル環境の起動
+
+```bash
+# Docker Desktop を起動してから実行
+make start
+```
+
+これにより、LocalStack（AWS ローカルエミュレーター）、DynamoDB（テナント・設定データ）、Tenant Management API（バックエンド）、Control Plane UI、Application Plane UI が自動的に起動します。
+
+### ステップ 5: アプリケーションにアクセス
+
+ブラウザで Control Plane（<http://localhost:3000>）と Application Plane（<http://localhost:3001>）にアクセスしてください。
+
+## 📦 主な Makefile コマンド
+
+```bash
+# ローカル環境管理
+make start            # ローカル環境を一括起動（推奨）
+make stop             # ローカル環境を一括停止
+make restart          # ローカル環境を再起動
+
+# Auth0 セットアップ
+make auth0-setup      # Auth0 を Terraform でセットアップ（init + apply + output）
+make auth0-init       # Terraform 初期化
+make auth0-plan       # 変更プレビュー
+make auth0-apply      # 設定適用
+make auth0-output     # 認証情報を表示
+
+# コード品質
+make lint             # Linter を実行
+make format           # コードを自動整形
+make typecheck        # TypeScript 型チェック
+make before-commit    # コミット前チェック（lint, format, typecheck, test, build）
+
+# テスト
+make test             # テストを実行
+make test-coverage    # カバレッジレポート付きテスト（99% 以上必須）
+
+# インフラ
+make localstack-up    # LocalStack を起動
+make localstack-down  # LocalStack を停止
+```
+
+詳細は `make help` を実行してください。
 
 ## 🛠 トラブルシューティング
 
@@ -217,36 +167,15 @@ docker ps
 # エラーが出る場合は Docker Desktop を再起動
 ```
 
-### コンテナの状態を確認する
-
-起動中のコンテナの状態を一括で確認するには、以下のコマンドを使用します。
-
-```bash
-make docker-status
-```
-
-これにより、Keycloak、Control Plane UI、およびその他の実行中のコンテナの状態が表示されます。
-
-### Keycloak に接続できない
-
-```bash
-# Keycloak のログを確認
-cd infrastructure/docker/keycloak
-docker compose logs keycloak
-
-# Keycloak を再起動
-docker compose restart keycloak
-```
-
-### ログイン時にエラーが発生
+### Auth0 ログインでエラーが発生
 
 **エラー: "Invalid redirect URI"**
-- Keycloak の Client 設定で Redirect URI が正しいか確認
-- `http://localhost:3000/*` が設定されているか確認
+- Auth0 Dashboard で Application の **Allowed Callback URLs** を確認
+- `http://localhost:3000/api/auth/callback/auth0` が設定されているか確認
 
 **エラー: "Invalid client or Invalid client credentials"**
-- `.env.local` の `AUTH_KEYCLOAK_SECRET` が正しいか確認
-- Keycloak の Credentials タブから再度 Secret をコピー
+- `.env.local` の `AUTH0_CLIENT_SECRET` が正しいか確認
+- `make auth0-output` で再度認証情報を確認
 
 **エラー: "Configuration error"**
 - `.env.local` の `AUTH_SECRET` が設定されているか確認
@@ -254,140 +183,69 @@ docker compose restart keycloak
 
 ### ポートが既に使用されている
 
-**Keycloak (8080)**:
 ```bash
-# 8080 ポートを使用しているプロセスを確認
-lsof -i :8080
-
-# Keycloak のポートを変更する場合
-# infrastructure/docker/keycloak/docker-compose.yml を編集
-ports:
-  - "8081:8080"  # 8081 に変更
-
-# .env.local の AUTH_KEYCLOAK_ISSUER も変更
-AUTH_KEYCLOAK_ISSUER=http://localhost:8081/realms/tenkacloud
-```
-
-**Next.js (3000)**:
-```bash
-# 3000 ポートを使用しているプロセスを確認
+# 使用中のポートを確認
 lsof -i :3000
+lsof -i :3001
+lsof -i :4566
 
-# 別のポートで起動
-PORT=3001 bun run dev
+# プロセスを終了（PID を指定）
+kill -9 <PID>
 ```
+
+### LocalStack が起動しない
+
+```bash
+# LocalStack のログを確認
+docker compose logs localstack
+
+# LocalStack を再起動
+make localstack-down
+make localstack-up
+```
+
+### Terraform エラー
+
+**エラー: "terraform.tfvars が見つかりません"**
+```bash
+# terraform.tfvars を作成
+cp infrastructure/terraform/environments/dev/terraform.tfvars.example \
+   infrastructure/terraform/environments/dev/terraform.tfvars
+# ファイルを編集して認証情報を入力
+```
+
+**エラー: "Auth0 API error"**
+- Auth0 Management API の権限が正しく付与されているか確認
+- M2M アプリが Auth0 Management API に対して Authorized されているか確認
 
 ## 🧹 環境のクリーンアップ
 
-### すべて停止（推奨）
-
 ```bash
-make stop-all
-```
+# すべて停止
+make stop
 
-### Docker Compose 環境を停止
-
-```bash
-make docker-stop
-```
-
-### Keycloak のみ停止
-
-```bash
-cd infrastructure/docker/keycloak
-docker compose down
-```
-
-### データも削除する場合
-
-```bash
-cd infrastructure/docker/keycloak
+# LocalStack のデータも削除
 docker compose down -v
 ```
-
-### Next.js を停止
-
-開発サーバーを起動しているターミナルで `Ctrl + C` を押す。
 
 ## 📚 次のステップ
 
-- [Control Plane UI README](../frontend/control-plane/README.md) - 詳細なドキュメント
-- [Keycloak セットアップガイド](../infrastructure/docker/keycloak/README.md) - Keycloak の詳細設定
-- [Plan.md](../Plan.md) - 開発計画と進捗
-
-## 💡 開発時のヒント
-
-### 環境を再起動
-
-```bash
-# 全体を再起動
-make restart-all
-
-# Docker Compose 環境のみ再起動
-make docker-stop
-make docker-run
-```
-
-### Keycloak のデータをリセット
-
-```bash
-cd infrastructure/docker/keycloak
-docker compose down -v
-docker compose up -d
-# 再度 Realm と Client を作成（または make setup-keycloak を実行）
-```
-
-### Docker イメージを再ビルド
-
-コードを変更した後、Docker イメージを再ビルドする場合は次を実行します。
-
-```bash
-make docker-build
-```
-
-### Next.js のキャッシュをクリア
-
-```bash
-cd frontend/control-plane
-rm -rf .next
-bun run dev
-```
-
-### ログを確認
-
-**コンテナの状態確認**:
-```bash
-make docker-status
-```
-
-**Keycloak**:
-
-**Keycloak**:
-```bash
-cd infrastructure/docker/keycloak
-docker compose logs -f keycloak
-```
-
-**Control Plane UI (Docker Compose)**:
-```bash
-cd frontend/control-plane
-docker compose logs -f control-plane-ui
-```
-
-**Next.js (開発サーバー)**:
-ターミナルに表示される。
+- [README.md](../README.md) - プロジェクト概要
+- [CLAUDE.md](../CLAUDE.md) - 開発ガイド（Claude Code/AI エージェント向け）
+- [アーキテクチャ設計](./architecture.md)（予定）
 
 ## 🔐 セキュリティ注意事項
 
-⚠️ 本番環境では絶対に使用しないこと。
+ローカル開発環境の設定です。本番環境では以下の点に注意してください。
 
-- デフォルトパスワード (`admin` / `admin`) を使用している。
-- `.env.local` は Git にコミットしてはならない（`.gitignore` で除外済み）。
-- 本番環境では強力なパスワードと Secret を使用する。
+- `.env.local` は Git にコミットしないこと（`.gitignore` で除外済み）
+- `terraform.tfvars` も Git にコミットしないこと
+- 本番環境では強力なシークレットを使用すること
+- Auth0 の本番テナントでは厳格なアクセス制御を設定すること
 
 ---
 
-**所要時間**: 約 5〜10 分
+**所要時間**: 約 10〜15 分
 **難易度**: ⭐⭐☆☆☆（中級）
 
 質問や問題があれば、[GitHub Issues](https://github.com/susumutomita/TenkaCloud/issues) で報告してください。
