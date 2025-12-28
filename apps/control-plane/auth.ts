@@ -6,7 +6,13 @@ const getEnv = (key: string) => process.env[key];
 const skipAuth0Validation = getEnv('SKIP_AUTH0_VALIDATION') === '1';
 const authSkipEnabled = getEnv('AUTH_SKIP') === '1';
 
-// モックセッション（AUTH_SKIP=1 の場合に使用）
+/**
+ * モックセッション（AUTH_SKIP=1 の場合に使用）
+ *
+ * Control Plane は全テナントを管理する画面のため、
+ * 特定の tenantId/teamId には紐付かない。
+ * そのため、Application Plane と異なり tenantId/teamId を含まない。
+ */
 const mockSession: Session = {
   user: {
     name: 'Dev User',
@@ -18,6 +24,18 @@ const mockSession: Session = {
   idToken: 'mock-id-token',
   roles: ['admin'],
 };
+
+// AUTH_SKIP モードの警告
+/* v8 ignore start -- Development-only warning */
+if (authSkipEnabled && typeof console !== 'undefined') {
+  console.warn(
+    '\x1b[33m⚠️  AUTH_SKIP mode is enabled. Authentication is bypassed with a mock session.\x1b[0m'
+  );
+  console.warn(
+    '\x1b[33m   This should only be used for local development.\x1b[0m'
+  );
+}
+/* v8 ignore stop */
 
 // Auth0 設定のバリデーション
 const auth0Config = {
