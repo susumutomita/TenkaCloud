@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 13000",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "next start --port 13000",
     "typecheck": "tsc --noEmit",
     "lint": "biome check",
     "format": "biome format --write",

@@ -19,9 +19,9 @@ app.use(
   '*',
   cors({
     origin: [
-      'http://localhost:3000', // Admin App
-      'http://localhost:3001', // Participant App
-      'http://localhost:3002', // Landing Page
+      'http://localhost:13000', // Admin App
+      'http://localhost:13001', // Participant App
+      'http://localhost:13002', // Landing Page
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'AuthorizationToken'],

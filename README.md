@@ -54,8 +54,8 @@ make start
 
 ブラウザで以下にアクセスしてください。
 
-- Control Plane: <http://localhost:3000>
-- Application Plane: <http://localhost:3001>
+- Control Plane: <http://localhost:13000>
+- Application Plane: <http://localhost:13001>
 
 ### 詳細な手順
 

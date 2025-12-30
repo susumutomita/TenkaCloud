@@ -63,9 +63,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/control-plane/.next/static .
 USER nextjs
 
 # Expose port
-EXPOSE 3000
+EXPOSE 13000
 
-ENV PORT=3000
+ENV PORT=13000
 ENV HOSTNAME="0.0.0.0"
 
 # Start the application

@@ -4,10 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "13000:13000"
     environment:
       - AUTH_SECRET=${AUTH_SECRET}
-      - AUTH_URL=${AUTH_URL:-http://localhost:3000}
+      - AUTH_URL=${AUTH_URL:-http://localhost:13000}
       - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID}
       - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET}
       - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-http://localhost:8080/realms/tenkacloud}
