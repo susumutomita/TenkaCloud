@@ -53,8 +53,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/application-plane/.next/stat
 
 USER nextjs
 
-EXPOSE 3001
-ENV PORT=3001
+EXPOSE 13001
+ENV PORT=13001
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["bun", "server.js"]

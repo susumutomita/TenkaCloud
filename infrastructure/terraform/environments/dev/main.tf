@@ -95,11 +95,11 @@ module "auth0" {
 
   api_identifier = "https://api.dev.tenkacloud.com"
 
-  control_plane_callbacks   = ["http://localhost:3000/api/auth/callback/auth0"]
-  control_plane_logout_urls = ["http://localhost:3000"]
-  control_plane_web_origins = ["http://localhost:3000"]
+  control_plane_callbacks   = ["http://localhost:13000/api/auth/callback/auth0"]
+  control_plane_logout_urls = ["http://localhost:13000"]
+  control_plane_web_origins = ["http://localhost:13000"]
 
-  application_plane_callbacks   = ["http://localhost:3001/api/auth/callback/auth0"]
-  application_plane_logout_urls = ["http://localhost:3001"]
-  application_plane_web_origins = ["http://localhost:3001"]
+  application_plane_callbacks   = ["http://localhost:13001/api/auth/callback/auth0"]
+  application_plane_logout_urls = ["http://localhost:13001"]
+  application_plane_web_origins = ["http://localhost:13001"]
 }

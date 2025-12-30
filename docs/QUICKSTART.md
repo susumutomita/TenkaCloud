@@ -32,14 +32,14 @@ bun install
 cat > apps/control-plane/.env.local << 'EOF'
 AUTH_SKIP=1
 AUTH_SECRET=dev-secret-for-local-development
-AUTH_URL=http://localhost:3000
+AUTH_URL=http://localhost:13000
 EOF
 
 # Application Plane
 cat > apps/application-plane/.env.local << 'EOF'
 AUTH_SKIP=1
 AUTH_SECRET=dev-secret-for-local-development
-AUTH_URL=http://localhost:3001
+AUTH_URL=http://localhost:13001
 EOF
 ```
 
@@ -54,8 +54,8 @@ make start
 
 起動後、以下の URL にアクセスできます。
 
-- **Control Plane**: http://localhost:3000
-- **Application Plane**: http://localhost:3001
+- **Control Plane**: http://localhost:13000
+- **Application Plane**: http://localhost:13001
 - **LocalStack**: http://localhost:4566
 
 ## 📦 主な Makefile コマンド
@@ -139,7 +139,7 @@ make stop && make start
 
 | エラー | 対処 |
 |--------|------|
-| Invalid redirect URI | Auth0 Dashboard で Allowed Callback URLs に `http://localhost:3000/api/auth/callback/auth0` を設定 |
+| Invalid redirect URI | Auth0 Dashboard で Allowed Callback URLs に `http://localhost:13000/api/auth/callback/auth0` を設定 |
 | Invalid client credentials | `.env.local` の `AUTH0_CLIENT_SECRET` を確認、`make auth0-output` で再取得 |
 | Configuration error | `AUTH_SECRET` が設定されているか確認（`openssl rand -base64 32` で生成） |
 

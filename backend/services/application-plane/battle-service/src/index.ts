@@ -13,7 +13,7 @@ const app = new Hono();
 app.use(
   '/*',
   cors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:3000'],
+    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:13000'],
     credentials: true,
   })
 );

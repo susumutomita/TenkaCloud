@@ -31,7 +31,7 @@ cp .env.example .env.local
 ```env
 # NextAuth.js Configuration
 AUTH_SECRET=<openssl rand -base64 32 の結果>
-AUTH_URL=http://localhost:3000
+AUTH_URL=http://localhost:13000
 
 # Keycloak Configuration
 AUTH_KEYCLOAK_ID=control-plane-ui
@@ -57,8 +57,8 @@ docker compose up -d
    - Client ID: `control-plane-ui`
    - Client Type: `OpenID Connect`
    - Standard Flow Enabled: `ON`
-   - Valid Redirect URIs: `http://localhost:3000/api/auth/callback/keycloak`
-   - Web Origins: `http://localhost:3000`
+   - Valid Redirect URIs: `http://localhost:13000/api/auth/callback/keycloak`
+   - Web Origins: `http://localhost:13000`
 5. Credentials タブで発行された Client Secret を `.env.local` に反映する。
 
 ### 5. 開発サーバーを起動
@@ -67,7 +67,7 @@ docker compose up -d
 bun run dev
 ```
 
-`http://localhost:3000` にアクセスして画面を確認する。
+`http://localhost:13000` にアクセスして画面を確認する。
 
 ## 利用できるスクリプト
 
