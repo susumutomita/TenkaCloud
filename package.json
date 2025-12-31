@@ -12,7 +12,7 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n cp,app -c blue,green \"bun run --cwd apps/control-plane dev\" \"bun run --cwd apps/application-plane dev -- -p 3001\"",
+    "dev": "concurrently -n cp,app -c blue,green \"bun run --cwd apps/control-plane dev\" \"bun run --cwd apps/application-plane dev\"",
     "dev:control-plane": "npm run dev --workspace=apps/control-plane",
     "dev:app": "npm run dev --workspace=apps/application-plane",
     "build:apps": "npm run build --workspaces --if-present",
