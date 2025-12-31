@@ -1,4 +1,4 @@
-.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage dev build
+.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage test_e2e test_e2e_ui test_e2e_headed dev build
 .PHONY: start-compose stop-compose stop restart status
 .PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
@@ -154,6 +154,23 @@ test_coverage:
 	done
 	@echo ""
 	@echo "✅ すべてのカバレッジテストが成功しました"
+
+# E2E テスト（Playwright）
+test_e2e:
+	@echo "🎭 E2E テストを実行中..."
+	@cd $(CONTROL_PLANE_DIR) && $(NLX) playwright install chromium --with-deps
+	@cd $(CONTROL_PLANE_DIR) && $(NR) test:e2e
+	@echo "✅ E2E テストが成功しました"
+
+test_e2e_ui:
+	@echo "🎭 E2E テストを UI モードで実行中..."
+	@cd $(CONTROL_PLANE_DIR) && $(NLX) playwright install chromium --with-deps
+	@cd $(CONTROL_PLANE_DIR) && $(NR) test:e2e:ui
+
+test_e2e_headed:
+	@echo "🎭 E2E テストを headed モードで実行中..."
+	@cd $(CONTROL_PLANE_DIR) && $(NLX) playwright install chromium --with-deps
+	@cd $(CONTROL_PLANE_DIR) && $(NR) test:e2e:headed
 
 before_commit: lint_text format_check typecheck test_coverage build
 	@echo "✅ すべてのコミット前チェックが完了しました"
@@ -437,6 +454,9 @@ help:
 	@echo "  make test             全アプリのカバレッジテストを実行（デフォルト）"
 	@echo "  make test_quick       全アプリのテストを実行（カバレッジなし・高速）"
 	@echo "  make test_coverage    全アプリのカバレッジテストを実行（test と同じ）"
+	@echo "  make test_e2e         E2E テストを実行（Playwright）"
+	@echo "  make test_e2e_ui      E2E テストを UI モードで実行"
+	@echo "  make test_e2e_headed  E2E テストを headed モードで実行"
 	@echo ""
 	@echo "🏗  ビルド:"
 	@echo "  make dev              開発サーバーを起動 (Control Plane のみ)"
