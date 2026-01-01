@@ -37,7 +37,7 @@ export const colors = {
 
 export const typography = {
   fontFamily: {
-    sans: "'Inter', 'Noto Sans JP', system-ui, sans-serif",
+    sans: "'AXIS Std', 'Helvetica Neue', Helvetica, Arial, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif",
     mono: "'JetBrains Mono', 'Fira Code', monospace",
   },
   fontSize: {

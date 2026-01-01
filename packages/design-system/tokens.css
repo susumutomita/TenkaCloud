@@ -5,6 +5,15 @@
  * Features muted, comfortable colors with blue accent.
  */
 
+/* AXIS Std Font - Place axis-std.otf in public/fonts/ */
+@font-face {
+  font-family: 'AXIS Std';
+  src: url('/fonts/axis-std.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     /* ===== Core Palette ===== */
@@ -55,7 +64,9 @@
     --surface-elevated: #ffffff;
 
     /* Typography */
-    --font-sans: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+    --font-sans:
+      'AXIS Std', 'Helvetica Neue', Helvetica, Arial,
+      'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
     /* Shadows */

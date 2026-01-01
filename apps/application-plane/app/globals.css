@@ -7,8 +7,19 @@
  * Features muted, comfortable colors with blue accent.
  */
 
+/* AXIS Std Font */
+@font-face {
+  font-family: 'AXIS Std';
+  src: url('/fonts/axis-std.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-family-display: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  --font-family-display:
+    'AXIS Std', 'Helvetica Neue', Helvetica, Arial, 'Hiragino Kaku Gothic ProN',
+    'Yu Gothic', 'Noto Sans JP', sans-serif;
   --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* ===== HybridNext Core Palette ===== */

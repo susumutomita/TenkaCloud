@@ -54,9 +54,23 @@ This document enables AI assistants to reproduce the design consistently.
 
 ### Font Stack
 ```css
---font-sans: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+--font-sans: 'AXIS Std', 'Helvetica Neue', Helvetica, Arial,
+  'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
 --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 ```
+
+### Font Face Declaration
+```css
+@font-face {
+  font-family: 'AXIS Std';
+  src: url('/fonts/axis-std.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+```
+
+**Note:** Place `axis-std.otf` in your `public/fonts/` directory.
 
 ### Font Sizes
 | Token | Size | Usage |
@@ -224,9 +238,10 @@ When implementing HybridNext design:
 3. **Card background**: `#242e33`
 4. **Text color**: `#c5c8c6`
 5. **Border color**: `#3a4449`
-6. **Font**: Inter + Noto Sans JP
+6. **Font**: AXIS Std (primary), fallback to Helvetica Neue / Hiragino Kaku Gothic
 7. **Shadows**: Use `2px 2px 0` offset for neo-brutalism
 8. **Hover effects**: Shift shadow to `1px 1px 0` with `translate(1px, 1px)`
+9. **Font file**: Copy `axis-std.otf` to `public/fonts/`
 
 ---
 
