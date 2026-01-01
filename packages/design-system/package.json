@@ -1,0 +1,20 @@
+{
+  "name": "@tenkacloud/design-system",
+  "version": "1.0.0",
+  "description": "HybridNext Design System for TenkaCloud",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./tokens.css": "./tokens.css",
+    "./tailwind.preset": "./tailwind.preset.ts"
+  },
+  "files": [
+    "*.ts",
+    "*.css",
+    "*.md",
+    "DESIGN_SYSTEM.md"
+  ],
+  "keywords": ["design-system", "tailwind", "hybridnext"],
+  "license": "MIT"
+}
