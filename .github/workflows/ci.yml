@@ -61,3 +61,20 @@ jobs:
       - name: Build
         run: |
           make build
+
+      - name: Install Playwright browsers
+        run: |
+          cd apps/control-plane && bunx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: |
+          make test_e2e
+
+      - name: Upload Playwright report
+        # actions/upload-artifact v4.6.3
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/control-plane/playwright-report/
+          retention-days: 30
