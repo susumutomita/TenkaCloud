@@ -58,6 +58,30 @@ make start
 - **Application Plane**: http://localhost:13001
 - **LocalStack**: http://localhost:4566
 
+## ☁️ LocalStack（AWS ローカルエミュレーション）
+
+LocalStack 起動時に以下の AWS リソースが自動作成されます。
+
+| サービス | リソース | 用途 |
+|----------|----------|------|
+| DynamoDB | `tenants` | テナント情報 |
+| DynamoDB | `battles` | バトルセッション |
+| DynamoDB | `participants` | 参加者情報 |
+| Cognito | `tenkacloud-users` | ユーザープール |
+| S3 | `tenkacloud-assets` | 静的アセット |
+| S3 | `tenkacloud-uploads` | ユーザーアップロード |
+| S3 | `tenkacloud-logs` | ログ保存 |
+| SQS | `battle-events` | バトルイベントキュー |
+| SQS | `scoring-tasks` | 採点タスクキュー |
+
+```bash
+# リソース確認コマンド
+awslocal dynamodb list-tables
+awslocal cognito-idp list-user-pools --max-results 10
+awslocal s3 ls
+awslocal sqs list-queues
+```
+
 ## 📦 主な Makefile コマンド
 
 | コマンド | 説明 |
