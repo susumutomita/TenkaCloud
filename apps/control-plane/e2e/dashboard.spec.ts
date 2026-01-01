@@ -28,11 +28,12 @@ test.describe('ダッシュボード', () => {
 
     // クイックアクションセクションが表示されることを確認
     await expect(page.getByText('クイックアクション')).toBeVisible();
+    // メインコンテンツ内のクイックアクションリンクを確認（サイドバーと区別）
     await expect(
-      page.getByRole('link', { name: 'テナント管理' })
+      page.getByRole('main').getByRole('link', { name: 'テナント管理' })
     ).toBeVisible();
     await expect(
-      page.getByRole('link', { name: '新規テナント作成' })
+      page.getByRole('main').getByRole('link', { name: '新規テナント作成' })
     ).toBeVisible();
   });
 
@@ -41,7 +42,11 @@ test.describe('ダッシュボード', () => {
   }) => {
     await page.goto('/dashboard');
 
-    await page.getByRole('link', { name: 'テナント管理' }).click();
+    // メインコンテンツ内のクイックアクションリンクをクリック
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: 'テナント管理' })
+      .click();
     await expect(page).toHaveURL('/dashboard/tenants');
   });
 
@@ -50,7 +55,11 @@ test.describe('ダッシュボード', () => {
   }) => {
     await page.goto('/dashboard');
 
-    await page.getByRole('link', { name: '新規テナント作成' }).click();
+    // メインコンテンツ内のクイックアクションリンクをクリック
+    await page
+      .getByRole('main')
+      .getByRole('link', { name: '新規テナント作成' })
+      .click();
     await expect(page).toHaveURL('/dashboard/tenants/new');
   });
 });

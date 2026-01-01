@@ -15,13 +15,12 @@ test.describe('認証フロー（AUTH_SKIP モード）', () => {
     await expect(page).toHaveURL(/\/dashboard/);
   });
 
-  test('ルートパスにアクセスすると適切にリダイレクトされるべき', async ({
+  test('ルートパスにアクセスするとダッシュボードにリダイレクトされるべき', async ({
     page,
   }) => {
     await page.goto('/');
-    // AUTH_SKIP=1 モードでは認証済みとして扱われるので、ダッシュボードまたはホーム画面が表示される
-    // ミドルウェアが NextResponse.next() を返すので、ルートページがそのまま表示される
-    await expect(page).toHaveURL('/');
+    // AUTH_SKIP=1 モードでは認証済みとして扱われるので、ダッシュボードにリダイレクトされる
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 
   test('API 認証ルートにはアクセスできるべき', async ({ page }) => {
