@@ -35,14 +35,14 @@ services:
       - tenkacloud
 
   # LocalStack - AWS サービスのローカルエミュレーション
-  # DynamoDB, Lambda, EventBridge, S3, IAM をサポート
+  # DynamoDB, Cognito, S3, Lambda, EventBridge, IAM をサポート
   localstack:
     image: localstack/localstack:latest
     ports:
       - "4566:4566"           # LocalStack Gateway
       - "4510-4559:4510-4559" # External services port range
     environment:
-      - SERVICES=dynamodb,lambda,events,s3,iam,logs,sts,sqs
+      - SERVICES=dynamodb,cognito-idp,s3,lambda,events,iam,logs,sts,sqs
       - DEBUG=1
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
@@ -50,6 +50,12 @@ services:
     volumes:
       - localstack_data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - tenkacloud
 
