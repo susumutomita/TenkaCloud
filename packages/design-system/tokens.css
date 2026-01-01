@@ -1,7 +1,5 @@
-@import 'tailwindcss';
-
 /**
- * HybridNext Design System for TenkaCloud
+ * HybridNext Design System - CSS Tokens
  *
  * A developer-focused design system inspired by terminal color schemes.
  * Features muted, comfortable colors with blue accent.
@@ -9,7 +7,7 @@
 
 @layer base {
   :root {
-    /* ===== HybridNext Core Palette ===== */
+    /* ===== Core Palette ===== */
 
     /* Accent - Muted Blue (HybridNext signature) */
     --hn-accent: #81a2be;
@@ -157,50 +155,5 @@
   .focus-ring {
     outline: 2px solid var(--hn-accent);
     outline-offset: 2px;
-  }
-
-  /* Animations */
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-out;
-  }
-
-  .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
-  }
-
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-10px);
-    }
   }
 }

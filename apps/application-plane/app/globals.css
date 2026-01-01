@@ -1,106 +1,156 @@
 @import 'tailwindcss';
 
+/**
+ * HybridNext Design System for TenkaCloud
+ *
+ * A developer-focused design system inspired by terminal color schemes.
+ * Features muted, comfortable colors with blue accent.
+ */
+
 @theme {
-  --font-family-display: 'Inter', system-ui, sans-serif;
+  --font-family-display: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  /* カラーパレット - モダンで洗練されたダークモード対応 */
-  --color-primary-50: oklch(0.97 0.01 264);
-  --color-primary-100: oklch(0.93 0.03 264);
-  --color-primary-200: oklch(0.86 0.06 264);
-  --color-primary-300: oklch(0.76 0.1 264);
-  --color-primary-400: oklch(0.66 0.15 264);
-  --color-primary-500: oklch(0.56 0.2 264);
-  --color-primary-600: oklch(0.46 0.2 264);
-  --color-primary-700: oklch(0.36 0.18 264);
-  --color-primary-800: oklch(0.28 0.14 264);
-  --color-primary-900: oklch(0.22 0.1 264);
-  --color-primary-950: oklch(0.14 0.06 264);
+  /* ===== HybridNext Core Palette ===== */
 
-  --color-accent-50: oklch(0.97 0.01 180);
-  --color-accent-100: oklch(0.93 0.04 180);
-  --color-accent-200: oklch(0.86 0.08 180);
-  --color-accent-300: oklch(0.76 0.12 180);
-  --color-accent-400: oklch(0.66 0.16 180);
-  --color-accent-500: oklch(0.56 0.2 180);
-  --color-accent-600: oklch(0.46 0.2 180);
-  --color-accent-700: oklch(0.36 0.18 180);
+  /* Accent - Muted Blue (HybridNext signature) */
+  --color-hn-accent: #81a2be;
+  --color-hn-accent-bright: #99dbff;
+  --color-hn-accent-muted: #6a8aa8;
 
-  /* グラデーション */
-  --gradient-primary: linear-gradient(
+  /* Semantic Colors */
+  --color-hn-success: #b5bd68;
+  --color-hn-warning: #f0c674;
+  --color-hn-error: #cc6666;
+  --color-hn-info: #8abeb7;
+  --color-hn-purple: #b294bb;
+
+  /* Surface hierarchy (dark mode) */
+  --color-surface-0: #1d2528;
+  --color-surface-1: #242e33;
+  --color-surface-2: #2a363b;
+  --color-surface-elevated: #303d42;
+
+  /* Text colors */
+  --color-text-primary: #c5c8c6;
+  --color-text-muted: #6c7a80;
+  --color-border: #3a4449;
+
+  /* Gradients */
+  --gradient-accent: linear-gradient(
     135deg,
-    var(--color-primary-500),
-    var(--color-accent-500)
+    var(--color-hn-accent),
+    var(--color-hn-info)
   );
   --gradient-dark: linear-gradient(
     135deg,
-    oklch(0.12 0.02 264),
-    oklch(0.08 0.01 240)
+    var(--color-surface-0),
+    var(--color-surface-1)
   );
+
+  /* Shadows */
+  --shadow-brutal: 2px 2px 0 hsl(197 12% 20%);
+  --shadow-brutal-sm: 1px 1px 0 hsl(197 12% 20%);
+  --shadow-soft: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+  --shadow-glow: 0 0 40px -10px var(--color-hn-accent);
 
   /* Spacing */
   --spacing-section: 8rem;
 
   /* Border radius */
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
 
   /* Animation */
-  --animation-duration-fast: 200ms;
+  --animation-duration-fast: 150ms;
   --animation-duration-normal: 300ms;
   --animation-duration-slow: 500ms;
 }
 
 @layer base {
   * {
-    border-color: oklch(0.25 0.01 264);
+    border-color: var(--color-border);
   }
 
   body {
     font-family: var(--font-family-display);
-    background: oklch(0.02 0.01 264);
-    color: oklch(0.98 0.01 264);
+    background: var(--color-surface-0);
+    color: var(--color-text-primary);
     font-feature-settings:
       'rlig' 1,
       'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
 @layer utilities {
-  .text-gradient {
-    background: var(--gradient-primary);
+  /* Text gradient with accent color */
+  .text-accent-gradient {
+    background: var(--gradient-accent);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
+  /* Glass morphism effect */
   .glass {
-    background: oklch(0.15 0.02 264 / 0.5);
+    background: color-mix(in srgb, var(--color-surface-1) 70%, transparent);
     backdrop-filter: blur(12px);
-    border: 1px solid oklch(0.25 0.02 264 / 0.3);
+    border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
   }
 
-  .glow {
-    box-shadow: 0 0 60px -15px var(--color-primary-500);
+  /* Neo-brutalism card style */
+  .card-brutal {
+    background: var(--color-surface-1);
+    border: 2px solid var(--color-border);
+    box-shadow: var(--shadow-brutal);
+    transition: all var(--animation-duration-fast) ease;
+  }
+
+  .card-brutal:hover {
+    box-shadow: var(--shadow-brutal-sm);
+    transform: translate(1px, 1px);
+  }
+
+  /* Glow effect */
+  .glow-accent {
+    box-shadow: var(--shadow-glow);
+  }
+
+  /* Focus ring */
+  .focus-ring {
+    outline: 2px solid var(--color-hn-accent);
+    outline-offset: 2px;
+  }
+
+  /* Animations */
+  .animate-fade-in {
+    animation: fadeIn var(--animation-duration-slow) ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp var(--animation-duration-normal) ease-out;
   }
 
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
 
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0px);
-    }
-    50% {
-      transform: translateY(-20px);
-    }
-  }
-
-  .animate-fade-in {
-    animation: fadeIn var(--animation-duration-slow) ease-out;
-  }
-
   @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
     from {
       opacity: 0;
       transform: translateY(20px);
@@ -111,18 +161,17 @@
     }
   }
 
-  .gradient-text {
-    background: linear-gradient(
-      135deg,
-      oklch(0.75 0.2 264),
-      oklch(0.65 0.2 200),
-      oklch(0.7 0.18 180)
-    );
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
   }
 
+  /* Section spacing */
   .section-padding {
     padding-block: var(--spacing-section);
   }
