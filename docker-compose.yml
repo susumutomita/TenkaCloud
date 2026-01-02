@@ -13,6 +13,27 @@ services:
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:13000
       - AWS_ENDPOINT_URL=http://localstack:4566
+    depends_on:
+      tenant-management:
+        condition: service_started
+    networks:
+      - tenkacloud
+
+  tenant-management:
+    build:
+      context: .
+      dockerfile: backend/services/control-plane/tenant-management/Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      localstack:
+        condition: service_healthy
     networks:
       - tenkacloud
 

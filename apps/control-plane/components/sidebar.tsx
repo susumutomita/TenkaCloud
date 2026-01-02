@@ -17,8 +17,9 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col bg-gray-900">
       {/* Logo */}
-      <div className="flex h-16 items-center px-6">
+      <div className="flex h-16 flex-col justify-center px-6">
         <h1 className="text-xl font-bold text-white">TenkaCloud</h1>
+        <span className="text-xs text-gray-400">Control Plane</span>
       </div>
 
       {/* Navigation */}

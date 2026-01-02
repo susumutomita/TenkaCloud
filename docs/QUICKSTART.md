@@ -64,9 +64,7 @@ LocalStack 起動時に以下の AWS リソースが自動作成されます。
 
 | サービス | リソース | 用途 |
 |----------|----------|------|
-| DynamoDB | `tenants` | テナント情報 |
-| DynamoDB | `battles` | バトルセッション |
-| DynamoDB | `participants` | 参加者情報 |
+| DynamoDB | `TenkaCloud-dev` | メインテーブル（Single-Table Design） |
 | Cognito | `tenkacloud-users` | ユーザープール |
 | S3 | `tenkacloud-assets` | 静的アセット |
 | S3 | `tenkacloud-uploads` | ユーザーアップロード |
@@ -74,9 +72,12 @@ LocalStack 起動時に以下の AWS リソースが自動作成されます。
 | SQS | `battle-events` | バトルイベントキュー |
 | SQS | `scoring-tasks` | 採点タスクキュー |
 
+DynamoDB は Single-Table Design を採用しています。GSI1（スラッグ検索用）と GSI2（エンティティタイプ検索用）を持ちます。
+
 ```bash
 # リソース確認コマンド
 awslocal dynamodb list-tables
+awslocal dynamodb describe-table --table-name TenkaCloud-dev
 awslocal cognito-idp list-user-pools --max-results 10
 awslocal s3 ls
 awslocal sqs list-queues
