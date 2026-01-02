@@ -14,45 +14,32 @@ export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 
 # ============================================
-# DynamoDB テーブル作成
+# DynamoDB テーブル作成（Single-Table Design）
 # ============================================
 echo "📦 DynamoDB テーブルを作成中..."
 
-# テナントテーブル
+# メインテーブル（Single-Table Design）
+# PK/SK: プライマリキー
+# GSI1PK/GSI1SK: スラッグベースのクエリ用
+# EntityType: エンティティタイプ別クエリ用（GSI2）
 awslocal dynamodb create-table \
-  --table-name tenants \
+  --table-name TenkaCloud-dev \
   --attribute-definitions \
-    AttributeName=id,AttributeType=S \
+    AttributeName=PK,AttributeType=S \
+    AttributeName=SK,AttributeType=S \
+    AttributeName=GSI1PK,AttributeType=S \
+    AttributeName=GSI1SK,AttributeType=S \
+    AttributeName=EntityType,AttributeType=S \
   --key-schema \
-    AttributeName=id,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  2>/dev/null || echo "  テーブル 'tenants' は既に存在します"
-
-# バトルテーブル
-awslocal dynamodb create-table \
-  --table-name battles \
-  --attribute-definitions \
-    AttributeName=id,AttributeType=S \
-    AttributeName=tenantId,AttributeType=S \
-  --key-schema \
-    AttributeName=id,KeyType=HASH \
+    AttributeName=PK,KeyType=HASH \
+    AttributeName=SK,KeyType=RANGE \
   --global-secondary-indexes \
-    "[{\"IndexName\": \"tenantId-index\", \"KeySchema\": [{\"AttributeName\": \"tenantId\", \"KeyType\": \"HASH\"}], \"Projection\": {\"ProjectionType\": \"ALL\"}}]" \
+    "[
+      {\"IndexName\": \"GSI1\", \"KeySchema\": [{\"AttributeName\": \"GSI1PK\", \"KeyType\": \"HASH\"}, {\"AttributeName\": \"GSI1SK\", \"KeyType\": \"RANGE\"}], \"Projection\": {\"ProjectionType\": \"ALL\"}},
+      {\"IndexName\": \"GSI2\", \"KeySchema\": [{\"AttributeName\": \"EntityType\", \"KeyType\": \"HASH\"}, {\"AttributeName\": \"SK\", \"KeyType\": \"RANGE\"}], \"Projection\": {\"ProjectionType\": \"ALL\"}}
+    ]" \
   --billing-mode PAY_PER_REQUEST \
-  2>/dev/null || echo "  テーブル 'battles' は既に存在します"
-
-# 参加者テーブル
-awslocal dynamodb create-table \
-  --table-name participants \
-  --attribute-definitions \
-    AttributeName=id,AttributeType=S \
-    AttributeName=battleId,AttributeType=S \
-  --key-schema \
-    AttributeName=id,KeyType=HASH \
-  --global-secondary-indexes \
-    "[{\"IndexName\": \"battleId-index\", \"KeySchema\": [{\"AttributeName\": \"battleId\", \"KeyType\": \"HASH\"}], \"Projection\": {\"ProjectionType\": \"ALL\"}}]" \
-  --billing-mode PAY_PER_REQUEST \
-  2>/dev/null || echo "  テーブル 'participants' は既に存在します"
+  2>/dev/null || echo "  テーブル 'TenkaCloud-dev' は既に存在します"
 
 echo "✅ DynamoDB テーブル作成完了"
 
@@ -120,7 +107,7 @@ echo ""
 echo "🎉 LocalStack 初期化が完了しました！"
 echo ""
 echo "利用可能なリソース:"
-echo "  - DynamoDB: tenants, battles, participants"
+echo "  - DynamoDB: TenkaCloud-dev (Single-Table Design with GSI1, GSI2)"
 echo "  - Cognito: tenkacloud-users"
 echo "  - S3: tenkacloud-assets, tenkacloud-uploads, tenkacloud-logs"
 echo "  - SQS: battle-events, scoring-tasks"

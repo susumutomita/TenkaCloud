@@ -350,6 +350,10 @@
         "vitest": "^4.0.0",
       },
     },
+    "packages/design-system": {
+      "name": "@tenkacloud/design-system",
+      "version": "1.0.0",
+    },
     "packages/shared": {
       "name": "@tenkacloud/shared",
       "version": "0.1.0",
@@ -1006,6 +1010,8 @@
     "@tenkacloud/core": ["@tenkacloud/core@workspace:packages/core"],
 
     "@tenkacloud/deployment-management": ["@tenkacloud/deployment-management@workspace:backend/services/control-plane/deployment-management"],
+
+    "@tenkacloud/design-system": ["@tenkacloud/design-system@workspace:packages/design-system"],
 
     "@tenkacloud/dynamodb": ["@tenkacloud/dynamodb@workspace:backend/services/shared/dynamodb"],
 
