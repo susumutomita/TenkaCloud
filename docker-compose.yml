@@ -15,7 +15,7 @@ services:
       - AWS_ENDPOINT_URL=http://localstack:4566
     depends_on:
       tenant-management:
-        condition: service_started
+        condition: service_healthy
     networks:
       - tenkacloud
 
@@ -29,11 +29,16 @@ services:
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
       - DYNAMODB_ENDPOINT=http://localstack:4566
       - AWS_REGION=ap-northeast-1
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
     depends_on:
       localstack:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - tenkacloud
 

@@ -33,6 +33,7 @@ cat > apps/control-plane/.env.local << 'EOF'
 AUTH_SKIP=1
 AUTH_SECRET=dev-secret-for-local-development
 AUTH_URL=http://localhost:13000
+TENANT_API_BASE_URL=http://localhost:3004/api
 EOF
 
 # Application Plane
@@ -56,7 +57,32 @@ make start
 
 - **Control Plane**: http://localhost:13000
 - **Application Plane**: http://localhost:13001
+- **Tenant Management API**: http://localhost:3004
 - **LocalStack**: http://localhost:4566
+
+## 🔧 Tenant Management サービス
+
+テナント管理機能を使用するには、tenant-management サービスを起動します。
+
+```bash
+# 別ターミナルで実行
+cd backend/services/control-plane/tenant-management
+DYNAMODB_TABLE_NAME=TenkaCloud-dev \
+DYNAMODB_ENDPOINT=http://localhost:4566 \
+AWS_REGION=ap-northeast-1 \
+AWS_ACCESS_KEY_ID=test \
+AWS_SECRET_ACCESS_KEY=test \
+bun run dev
+```
+
+以下のコマンドで動作を確認します。
+
+```bash
+curl http://localhost:3004/health
+# {"status":"ok","service":"tenant-management"}
+```
+
+詳細は [tenant-management-integration.md](./architecture/tenant-management-integration.md) を参照してください。
 
 ## ☁️ LocalStack（AWS ローカルエミュレーション）
 
@@ -159,6 +185,14 @@ docker compose logs localstack
 # 再起動
 make stop && make start
 ```
+
+### `ENOTFOUND tenant-management` エラー
+
+テナント管理画面で `fetch failed` エラーが出る場合は、以下を確認します。
+
+1. `.env.local` に `TENANT_API_BASE_URL=http://localhost:3004/api` が設定されているか確認する。
+2. tenant-management サービスが起動しているか確認する。`curl http://localhost:3004/health` でヘルスチェックを行う。
+3. Control Plane を再起動する。
 
 ### Auth0 関連のエラー（Auth0 を使用する場合のみ）
 
