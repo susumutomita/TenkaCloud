@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
 import type { TenantTier } from '@/types/tenant';
 import { TENANT_TIER_LABELS, TENANT_TIERS } from '@/types/tenant';
@@ -12,9 +12,22 @@ export default function NewTenantPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
     adminEmail: '',
     tier: 'FREE' as TenantTier,
   });
+  // ユーザーが手動でスラッグを編集したかどうかを追跡
+  const isSlugManuallyEdited = useRef(false);
+
+  // テナント名からスラッグを自動生成
+  const generateSlug = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 63);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,10 +75,43 @@ export default function NewTenantPage() {
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
                 placeholder="例: 株式会社Acme"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setFormData({
+                    ...formData,
+                    name,
+                    // ユーザーが手動で編集していない場合のみスラッグを自動生成
+                    slug: isSlugManuallyEdited.current
+                      ? formData.slug
+                      : generateSlug(name),
+                  });
+                }}
               />
+            </div>
+            <div className="space-y-2">
+              <label
+                htmlFor="slug"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                スラッグ（URL識別子）
+              </label>
+              <input
+                id="slug"
+                required
+                pattern="^[a-z0-9-]+$"
+                minLength={3}
+                maxLength={63}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
+                placeholder="例: acme-corp"
+                value={formData.slug}
+                onChange={(e) => {
+                  isSlugManuallyEdited.current = true;
+                  setFormData({ ...formData, slug: e.target.value });
+                }}
+              />
+              <p className="text-xs text-gray-500">
+                小文字英数字とハイフンのみ（3〜63文字）
+              </p>
             </div>
             <div className="space-y-2">
               <label

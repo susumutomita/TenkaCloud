@@ -90,18 +90,28 @@ describe('Tenant 型定義', () => {
       const tenant: Tenant = {
         id: '1',
         name: 'Test Tenant',
+        slug: 'test-tenant',
         status: 'ACTIVE',
         tier: 'FREE',
         adminEmail: 'admin@example.com',
+        region: 'ap-northeast-1',
+        isolationModel: 'POOL',
+        computeType: 'SERVERLESS',
+        provisioningStatus: 'COMPLETED',
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T00:00:00Z',
       };
 
       expect(tenant.id).toBe('1');
       expect(tenant.name).toBe('Test Tenant');
+      expect(tenant.slug).toBe('test-tenant');
       expect(tenant.status).toBe('ACTIVE');
       expect(tenant.tier).toBe('FREE');
       expect(tenant.adminEmail).toBe('admin@example.com');
+      expect(tenant.region).toBe('ap-northeast-1');
+      expect(tenant.isolationModel).toBe('POOL');
+      expect(tenant.computeType).toBe('SERVERLESS');
+      expect(tenant.provisioningStatus).toBe('COMPLETED');
       expect(tenant.createdAt).toBe('2024-01-01T00:00:00Z');
       expect(tenant.updatedAt).toBe('2024-01-01T00:00:00Z');
     });

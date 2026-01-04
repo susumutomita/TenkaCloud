@@ -49,9 +49,14 @@ describe('EditTenantPage', () => {
   const mockTenant: Tenant = {
     id: 'test-tenant-id',
     name: 'Test Tenant',
+    slug: 'test-tenant',
     adminEmail: 'admin@test.com',
     tier: 'PRO',
     status: 'ACTIVE',
+    region: 'ap-northeast-1',
+    isolationModel: 'POOL',
+    computeType: 'SERVERLESS',
+    provisioningStatus: 'COMPLETED',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
   };
@@ -407,9 +412,14 @@ describe('submitTenantUpdate', () => {
     vi.mocked(tenantApi.updateTenant).mockResolvedValue({
       id: 'test-id',
       name: 'Test Tenant',
+      slug: 'test-tenant',
       adminEmail: 'test@example.com',
       tier: 'PRO',
       status: 'ACTIVE',
+      region: 'ap-northeast-1',
+      isolationModel: 'POOL',
+      computeType: 'SERVERLESS',
+      provisioningStatus: 'COMPLETED',
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });

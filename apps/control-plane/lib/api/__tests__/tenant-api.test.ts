@@ -24,9 +24,14 @@ global.fetch = mockFetch;
 const mockTenant: Tenant = {
   id: '1',
   name: 'テストテナント',
+  slug: 'test-tenant',
   status: 'ACTIVE',
   tier: 'FREE',
   adminEmail: 'admin@example.com',
+  region: 'ap-northeast-1',
+  isolationModel: 'POOL',
+  computeType: 'SERVERLESS',
+  provisioningStatus: 'COMPLETED',
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-01T00:00:00Z',
 };
@@ -126,6 +131,7 @@ describe('tenantApi', () => {
     it('テナントを作成すべき', async () => {
       const input: CreateTenantInput = {
         name: 'テストテナント',
+        slug: 'test-tenant',
         adminEmail: 'admin@example.com',
         tier: 'FREE',
       };
@@ -158,6 +164,7 @@ describe('tenantApi', () => {
       await expect(
         tenantApi.createTenant({
           name: '',
+          slug: '',
           adminEmail: 'invalid',
           tier: 'FREE',
         })
@@ -254,6 +261,88 @@ describe('tenantApi', () => {
       });
 
       await expect(tenantApi.deleteTenant('1')).rejects.toThrow(
+        'Tenant API request failed: 500 Server Error'
+      );
+    });
+  });
+
+  describe('triggerProvisioning', () => {
+    it('プロビジョニングを開始すべき', async () => {
+      const mockResponse = {
+        success: true,
+        message: 'Provisioning started',
+        provisioningStatus: 'IN_PROGRESS',
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await tenantApi.triggerProvisioning('1');
+
+      expect(result).toEqual(mockResponse);
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/tenants/1/provision'),
+        { method: 'POST' }
+      );
+    });
+
+    it('プロビジョニング開始失敗時に例外をスローすべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.BAD_REQUEST,
+        text: () => Promise.resolve('Provisioning not allowed'),
+      });
+
+      await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
+        'Tenant API request failed: 400 Provisioning not allowed'
+      );
+    });
+  });
+
+  describe('getProvisioningStatus', () => {
+    it('プロビジョニングステータスを取得すべき', async () => {
+      const mockResponse = {
+        tenantId: '1',
+        provisioningStatus: 'COMPLETED',
+        provisioningEnabled: true,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await tenantApi.getProvisioningStatus('1');
+
+      expect(result).toEqual(mockResponse);
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/tenants/1/provision'),
+        { cache: 'no-store' }
+      );
+    });
+
+    it('テナントが存在しない場合は null を返すべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.NOT_FOUND,
+        text: () => Promise.resolve('Not Found'),
+      });
+
+      const result = await tenantApi.getProvisioningStatus('not-found');
+
+      expect(result).toBeNull();
+    });
+
+    it('404 以外のエラー時に例外をスローすべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.INTERNAL_SERVER_ERROR,
+        text: () => Promise.resolve('Server Error'),
+      });
+
+      await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
         'Tenant API request failed: 500 Server Error'
       );
     });

@@ -10,6 +10,7 @@ vi.mock('@/lib/api/tenant-api', () => ({
   tenantApi: {
     getTenant: vi.fn(),
     deleteTenant: vi.fn(),
+    triggerProvisioning: vi.fn(),
   },
 }));
 
@@ -35,9 +36,14 @@ vi.mock('next/navigation', () => ({
 const mockTenant: Tenant = {
   id: 'tenant-123',
   name: 'テストテナント',
+  slug: 'test-tenant',
   status: 'ACTIVE',
   tier: 'PRO',
   adminEmail: 'admin@example.com',
+  region: 'ap-northeast-1',
+  isolationModel: 'POOL',
+  computeType: 'SERVERLESS',
+  provisioningStatus: 'COMPLETED',
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-02T00:00:00Z',
 };
@@ -111,12 +117,14 @@ describe('TenantDetailPage コンポーネント', () => {
       expect(screen.getByText('基本情報')).toBeInTheDocument();
     });
 
-    it('ステータスを表示すべき', async () => {
+    it('テナントステータスを表示すべき', async () => {
       const Component = await TenantDetailPage({
         params: Promise.resolve({ id: 'tenant-123' }),
       });
       render(Component);
-      expect(screen.getByText('ステータス')).toBeInTheDocument();
+      // 基本情報とプロビジョニングの両方にステータスがあるため、複数存在することを確認
+      const statusLabels = screen.getAllByText('ステータス');
+      expect(statusLabels.length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('ACTIVE')).toBeInTheDocument();
     });
 
@@ -144,6 +152,50 @@ describe('TenantDetailPage コンポーネント', () => {
       });
       render(Component);
       expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument();
+    });
+
+    it('Slug を表示すべき', async () => {
+      const Component = await TenantDetailPage({
+        params: Promise.resolve({ id: 'tenant-123' }),
+      });
+      render(Component);
+      expect(screen.getByText('Slug')).toBeInTheDocument();
+      expect(screen.getByText('test-tenant')).toBeInTheDocument();
+    });
+
+    it('プロビジョニングセクションを表示すべき', async () => {
+      const Component = await TenantDetailPage({
+        params: Promise.resolve({ id: 'tenant-123' }),
+      });
+      render(Component);
+      expect(screen.getByText('プロビジョニング')).toBeInTheDocument();
+    });
+
+    it('リージョンを表示すべき', async () => {
+      const Component = await TenantDetailPage({
+        params: Promise.resolve({ id: 'tenant-123' }),
+      });
+      render(Component);
+      expect(screen.getByText('リージョン')).toBeInTheDocument();
+      expect(screen.getByText('ap-northeast-1')).toBeInTheDocument();
+    });
+
+    it('分離モデルを表示すべき', async () => {
+      const Component = await TenantDetailPage({
+        params: Promise.resolve({ id: 'tenant-123' }),
+      });
+      render(Component);
+      expect(screen.getByText('分離モデル')).toBeInTheDocument();
+      expect(screen.getByText('POOL')).toBeInTheDocument();
+    });
+
+    it('コンピュートタイプを表示すべき', async () => {
+      const Component = await TenantDetailPage({
+        params: Promise.resolve({ id: 'tenant-123' }),
+      });
+      render(Component);
+      expect(screen.getByText('コンピュートタイプ')).toBeInTheDocument();
+      expect(screen.getByText('SERVERLESS')).toBeInTheDocument();
     });
   });
 

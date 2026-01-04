@@ -15,6 +15,7 @@ import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { createLogger } from './lib/logger';
 import { authMiddleware, requireRoles, UserRole } from './middleware/auth';
 import { auditMiddleware } from './middleware/audit';
+import { ProvisioningManager } from './provisioning/manager';
 
 // Initialize DynamoDB
 initDynamoDB({
@@ -25,6 +26,12 @@ initDynamoDB({
 const tenantRepository = new TenantRepository();
 const settingRepository = new SystemSettingRepository();
 const auditLogRepository = new AuditLogRepository();
+
+// Provisioning is optional and can be disabled for local development
+const provisioningEnabled = process.env.PROVISIONING_ENABLED === 'true';
+const provisioningManager = provisioningEnabled
+  ? new ProvisioningManager()
+  : null;
 
 const app = new Hono();
 const appLogger = createLogger('tenant-api');
@@ -173,11 +180,44 @@ app.get('/api/stats', async (c) => {
       (t) => t.status === 'ACTIVE'
     ).length;
 
+    // Determine system status based on provisioning state
+    const failedCount = listResult.tenants.filter(
+      (t) => t.provisioningStatus === 'FAILED'
+    ).length;
+    const inProgressCount = listResult.tenants.filter(
+      (t) => t.provisioningStatus === 'IN_PROGRESS'
+    ).length;
+
+    // Calculate system health:
+    // - degraded: any tenant has failed provisioning
+    // - healthy: all tenants completed or pending/in-progress
+    const systemStatus: 'healthy' | 'degraded' | 'down' =
+      failedCount > 0 ? 'degraded' : 'healthy';
+
+    // Calculate uptime percentage based on successful provisioning
+    // (tenants not in FAILED state / total tenants) * 100
+    const successfulTenants = totalTenants - failedCount;
+    const uptimePercentage =
+      totalTenants > 0
+        ? Math.round((successfulTenants / totalTenants) * 100)
+        : 100;
+
     return c.json({
       activeTenants,
       totalTenants,
-      systemStatus: 'healthy',
-      uptimePercentage: 100,
+      systemStatus,
+      uptimePercentage,
+      // Additional context for debugging
+      provisioningStats: {
+        completed: listResult.tenants.filter(
+          (t) => t.provisioningStatus === 'COMPLETED'
+        ).length,
+        inProgress: inProgressCount,
+        failed: failedCount,
+        pending: listResult.tenants.filter(
+          (t) => t.provisioningStatus === 'PENDING'
+        ).length,
+      },
     });
   } catch (error) {
     appLogger.error({ error }, 'Failed to fetch stats');
@@ -463,6 +503,110 @@ app.delete('/api/tenants/:id', async (c) => {
   } catch (error) {
     appLogger.error({ error, tenantId: id }, 'Failed to delete tenant');
     return c.json(errorResponse('Failed to delete tenant', 500), 500);
+  }
+});
+
+// Trigger provisioning for a tenant
+app.post('/api/tenants/:id/provision', async (c) => {
+  const id = c.req.param('id');
+
+  // Validate ULID
+  const idValidation = idSchema.safeParse(id);
+  if (!idValidation.success) {
+    return c.json(
+      errorResponse('Invalid tenant ID', 400, idValidation.error.errors),
+      400
+    );
+  }
+
+  try {
+    // Find tenant
+    const tenant = await tenantRepository.findById(idValidation.data);
+    if (!tenant) {
+      return c.json(errorResponse('Tenant not found', 404), 404);
+    }
+
+    // Check if provisioning is already in progress or completed
+    if (tenant.provisioningStatus === 'IN_PROGRESS') {
+      return c.json(
+        errorResponse('Provisioning is already in progress', 409),
+        409
+      );
+    }
+
+    if (tenant.provisioningStatus === 'COMPLETED') {
+      return c.json(errorResponse('Tenant is already provisioned', 409), 409);
+    }
+
+    // Check if provisioning is enabled
+    if (!provisioningManager) {
+      // Simulate provisioning in development mode
+      appLogger.info(
+        { tenantId: tenant.id },
+        'Provisioning disabled, marking as completed'
+      );
+      await tenantRepository.update(tenant.id, {
+        provisioningStatus: 'COMPLETED',
+      });
+      return c.json({
+        success: true,
+        message: 'Provisioning skipped (disabled in this environment)',
+        provisioningStatus: 'COMPLETED',
+      });
+    }
+
+    // Start async provisioning
+    appLogger.info({ tenantId: tenant.id }, 'Starting provisioning');
+
+    // Fire and forget - don't await
+    provisioningManager.provisionTenant(tenant).catch((error) => {
+      appLogger.error(
+        { error, tenantId: tenant.id },
+        'Background provisioning failed'
+      );
+    });
+
+    return c.json({
+      success: true,
+      message: 'Provisioning started',
+      provisioningStatus: 'IN_PROGRESS',
+    });
+  } catch (error) {
+    appLogger.error({ error, tenantId: id }, 'Failed to start provisioning');
+    return c.json(errorResponse('Failed to start provisioning', 500), 500);
+  }
+});
+
+// Get provisioning status for a tenant
+app.get('/api/tenants/:id/provision', async (c) => {
+  const id = c.req.param('id');
+
+  // Validate ULID
+  const idValidation = idSchema.safeParse(id);
+  if (!idValidation.success) {
+    return c.json(
+      errorResponse('Invalid tenant ID', 400, idValidation.error.errors),
+      400
+    );
+  }
+
+  try {
+    const tenant = await tenantRepository.findById(idValidation.data);
+    if (!tenant) {
+      return c.json(errorResponse('Tenant not found', 404), 404);
+    }
+
+    return c.json({
+      tenantId: tenant.id,
+      provisioningStatus: tenant.provisioningStatus,
+      provisioningEnabled,
+    });
+  } catch (error) {
+    appLogger.error(
+      { error, tenantId: id },
+      'Failed to get provisioning status'
+    );
+    return c.json(errorResponse('Failed to get provisioning status', 500), 500);
   }
 });
 

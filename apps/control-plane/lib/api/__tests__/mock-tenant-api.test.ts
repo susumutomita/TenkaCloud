@@ -54,6 +54,7 @@ describe('mockTenantApi', () => {
     it('新しいテナントを作成して返すべき', async () => {
       const input = {
         name: 'New Tenant',
+        slug: 'new-tenant',
         adminEmail: 'admin@new.com',
         tier: 'FREE' as const,
       };
@@ -101,6 +102,7 @@ describe('mockTenantApi', () => {
       // まず新しいテナントを作成
       const createPromise = mockTenantApi.createTenant({
         name: 'To Delete',
+        slug: 'to-delete',
         adminEmail: 'delete@test.com',
         tier: 'FREE',
       });

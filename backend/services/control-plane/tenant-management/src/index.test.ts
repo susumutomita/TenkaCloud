@@ -148,14 +148,17 @@ describe('テナント管理API', () => {
         createMockTenant({
           id: '01HJXK5K3VDXK5YPNZBKRT5001',
           status: 'ACTIVE',
+          provisioningStatus: 'COMPLETED',
         }),
         createMockTenant({
           id: '01HJXK5K3VDXK5YPNZBKRT5002',
           status: 'ACTIVE',
+          provisioningStatus: 'COMPLETED',
         }),
         createMockTenant({
           id: '01HJXK5K3VDXK5YPNZBKRT5003',
           status: 'SUSPENDED',
+          provisioningStatus: 'COMPLETED',
         }),
       ];
       mockTenantRepoFunctions.count.mockResolvedValue(3);
@@ -172,6 +175,12 @@ describe('テナント管理API', () => {
         totalTenants: 3,
         systemStatus: 'healthy',
         uptimePercentage: 100,
+        provisioningStats: {
+          completed: 3,
+          inProgress: 0,
+          failed: 0,
+          pending: 0,
+        },
       });
     });
 
@@ -190,6 +199,89 @@ describe('テナント管理API', () => {
         totalTenants: 0,
         systemStatus: 'healthy',
         uptimePercentage: 100,
+        provisioningStats: {
+          completed: 0,
+          inProgress: 0,
+          failed: 0,
+          pending: 0,
+        },
+      });
+    });
+
+    it('プロビジョニング失敗時は degraded ステータスを返すべき', async () => {
+      const mockTenants = [
+        createMockTenant({
+          id: '01HJXK5K3VDXK5YPNZBKRT5001',
+          status: 'ACTIVE',
+          provisioningStatus: 'COMPLETED',
+        }),
+        createMockTenant({
+          id: '01HJXK5K3VDXK5YPNZBKRT5002',
+          status: 'ACTIVE',
+          provisioningStatus: 'FAILED',
+        }),
+      ];
+      mockTenantRepoFunctions.count.mockResolvedValue(2);
+      mockTenantRepoFunctions.list.mockResolvedValue({
+        tenants: mockTenants,
+        lastKey: undefined,
+      });
+
+      const res = await app.request('/api/stats');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({
+        activeTenants: 2,
+        totalTenants: 2,
+        systemStatus: 'degraded',
+        uptimePercentage: 50,
+        provisioningStats: {
+          completed: 1,
+          inProgress: 0,
+          failed: 1,
+          pending: 0,
+        },
+      });
+    });
+
+    it('プロビジョニング中のテナントがある場合は健全ステータスを返すべき', async () => {
+      const mockTenants = [
+        createMockTenant({
+          id: '01HJXK5K3VDXK5YPNZBKRT5001',
+          status: 'ACTIVE',
+          provisioningStatus: 'COMPLETED',
+        }),
+        createMockTenant({
+          id: '01HJXK5K3VDXK5YPNZBKRT5002',
+          status: 'ACTIVE',
+          provisioningStatus: 'IN_PROGRESS',
+        }),
+        createMockTenant({
+          id: '01HJXK5K3VDXK5YPNZBKRT5003',
+          status: 'ACTIVE',
+          provisioningStatus: 'PENDING',
+        }),
+      ];
+      mockTenantRepoFunctions.count.mockResolvedValue(3);
+      mockTenantRepoFunctions.list.mockResolvedValue({
+        tenants: mockTenants,
+        lastKey: undefined,
+      });
+
+      const res = await app.request('/api/stats');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({
+        activeTenants: 3,
+        totalTenants: 3,
+        systemStatus: 'healthy',
+        uptimePercentage: 100,
+        provisioningStats: {
+          completed: 1,
+          inProgress: 1,
+          failed: 0,
+          pending: 1,
+        },
       });
     });
   });
@@ -964,6 +1056,129 @@ describe('テナント管理API', () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe('Failed to fetch activities');
+    });
+  });
+
+  describe('POST /api/tenants/:id/provision', () => {
+    it('PENDING ステータスのテナントをプロビジョニングできるべき', async () => {
+      const mockTenant = createMockTenant({ provisioningStatus: 'PENDING' });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+      mockTenantRepoFunctions.update.mockResolvedValue({
+        ...mockTenant,
+        provisioningStatus: 'COMPLETED',
+      });
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      // In test environment, provisioning is disabled so it should mark as COMPLETED
+      expect(body.provisioningStatus).toBe('COMPLETED');
+    });
+
+    it('FAILED ステータスのテナントを再プロビジョニングできるべき', async () => {
+      const mockTenant = createMockTenant({ provisioningStatus: 'FAILED' });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+      mockTenantRepoFunctions.update.mockResolvedValue({
+        ...mockTenant,
+        provisioningStatus: 'COMPLETED',
+      });
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+    });
+
+    it('IN_PROGRESS ステータスで 409 エラーになるべき', async () => {
+      const mockTenant = createMockTenant({
+        provisioningStatus: 'IN_PROGRESS',
+      });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe('Provisioning is already in progress');
+    });
+
+    it('COMPLETED ステータスで 409 エラーになるべき', async () => {
+      const mockTenant = createMockTenant({ provisioningStatus: 'COMPLETED' });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe('Tenant is already provisioned');
+    });
+
+    it('存在しないテナントで 404 エラーになるべき', async () => {
+      mockTenantRepoFunctions.findById.mockResolvedValue(null);
+
+      const nonExistentId = '01HJXK5K3VDXK5YPNZBKRT5XYZ';
+      const res = await app.request(`/api/tenants/${nonExistentId}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Tenant not found');
+    });
+
+    it('不正なULID形式で 400 エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid-ulid/provision', {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('Invalid tenant ID');
+    });
+  });
+
+  describe('GET /api/tenants/:id/provision', () => {
+    it('プロビジョニングステータスを取得できるべき', async () => {
+      const mockTenant = createMockTenant({ provisioningStatus: 'COMPLETED' });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tenantId).toBe(mockTenant.id);
+      expect(body.provisioningStatus).toBe('COMPLETED');
+      expect(body.provisioningEnabled).toBe(false); // Disabled in test env
+    });
+
+    it('存在しないテナントで 404 エラーになるべき', async () => {
+      mockTenantRepoFunctions.findById.mockResolvedValue(null);
+
+      const nonExistentId = '01HJXK5K3VDXK5YPNZBKRT5XYZ';
+      const res = await app.request(`/api/tenants/${nonExistentId}/provision`);
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Tenant not found');
+    });
+
+    it('不正なULID形式で 400 エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid-ulid/provision');
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('Invalid tenant ID');
     });
   });
 });
