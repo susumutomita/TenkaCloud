@@ -28,6 +28,7 @@ export const TENANT_TIER_LABELS: Record<TenantTier, string> = {
 export interface Tenant {
   id: string;
   name: string;
+  slug: string;
   status: TenantStatus;
   tier: TenantTier;
   adminEmail: string;
@@ -37,6 +38,7 @@ export interface Tenant {
 
 export interface CreateTenantInput {
   name: string;
+  slug: string;
   adminEmail: string;
   tier: TenantTier;
 }

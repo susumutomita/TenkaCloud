@@ -90,6 +90,7 @@ describe('Tenant 型定義', () => {
       const tenant: Tenant = {
         id: '1',
         name: 'Test Tenant',
+        slug: 'test-tenant',
         status: 'ACTIVE',
         tier: 'FREE',
         adminEmail: 'admin@example.com',
@@ -99,6 +100,7 @@ describe('Tenant 型定義', () => {
 
       expect(tenant.id).toBe('1');
       expect(tenant.name).toBe('Test Tenant');
+      expect(tenant.slug).toBe('test-tenant');
       expect(tenant.status).toBe('ACTIVE');
       expect(tenant.tier).toBe('FREE');
       expect(tenant.adminEmail).toBe('admin@example.com');

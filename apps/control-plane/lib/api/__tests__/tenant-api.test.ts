@@ -24,6 +24,7 @@ global.fetch = mockFetch;
 const mockTenant: Tenant = {
   id: '1',
   name: 'テストテナント',
+  slug: 'test-tenant',
   status: 'ACTIVE',
   tier: 'FREE',
   adminEmail: 'admin@example.com',
@@ -126,6 +127,7 @@ describe('tenantApi', () => {
     it('テナントを作成すべき', async () => {
       const input: CreateTenantInput = {
         name: 'テストテナント',
+        slug: 'test-tenant',
         adminEmail: 'admin@example.com',
         tier: 'FREE',
       };
@@ -158,6 +160,7 @@ describe('tenantApi', () => {
       await expect(
         tenantApi.createTenant({
           name: '',
+          slug: '',
           adminEmail: 'invalid',
           tier: 'FREE',
         })

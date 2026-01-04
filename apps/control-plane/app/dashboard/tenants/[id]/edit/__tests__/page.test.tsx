@@ -49,6 +49,7 @@ describe('EditTenantPage', () => {
   const mockTenant: Tenant = {
     id: 'test-tenant-id',
     name: 'Test Tenant',
+    slug: 'test-tenant',
     adminEmail: 'admin@test.com',
     tier: 'PRO',
     status: 'ACTIVE',
@@ -407,6 +408,7 @@ describe('submitTenantUpdate', () => {
     vi.mocked(tenantApi.updateTenant).mockResolvedValue({
       id: 'test-id',
       name: 'Test Tenant',
+      slug: 'test-tenant',
       adminEmail: 'test@example.com',
       tier: 'PRO',
       status: 'ACTIVE',

@@ -50,6 +50,13 @@ describe('NewTenantPage コンポーネント', () => {
       expect(screen.getByLabelText('管理者 Email')).toBeInTheDocument();
     });
 
+    it('スラッグ入力フィールドを表示すべき', () => {
+      render(<NewTenantPage />);
+      expect(
+        screen.getByLabelText('スラッグ（URL識別子）')
+      ).toBeInTheDocument();
+    });
+
     it('Tier 選択フィールドを表示すべき', () => {
       render(<NewTenantPage />);
       expect(screen.getByLabelText('Tier')).toBeInTheDocument();
@@ -88,6 +95,26 @@ describe('NewTenantPage コンポーネント', () => {
       expect(input).toHaveValue('admin@test.com');
     });
 
+    it('スラッグを入力できるべき', async () => {
+      const user = userEvent.setup();
+      render(<NewTenantPage />);
+
+      const input = screen.getByLabelText('スラッグ（URL識別子）');
+      await user.type(input, 'test-tenant');
+      expect(input).toHaveValue('test-tenant');
+    });
+
+    it('テナント名からスラッグが自動生成されるべき', async () => {
+      const user = userEvent.setup();
+      render(<NewTenantPage />);
+
+      const nameInput = screen.getByLabelText('テナント名');
+      const slugInput = screen.getByLabelText('スラッグ（URL識別子）');
+
+      await user.type(nameInput, 'Test Company');
+      expect(slugInput).toHaveValue('test-company');
+    });
+
     it('Tier を選択できるべき', async () => {
       const user = userEvent.setup();
       render(<NewTenantPage />);
@@ -112,7 +139,8 @@ describe('NewTenantPage コンポーネント', () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockResolvedValue({
         id: '1',
-        name: '株式会社テスト',
+        name: 'Test Company',
+        slug: 'test-company',
         status: 'ACTIVE',
         tier: 'FREE',
         adminEmail: 'admin@test.com',
@@ -122,13 +150,14 @@ describe('NewTenantPage コンポーネント', () => {
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText('テナント名'), '株式会社テスト');
+      await user.type(screen.getByLabelText('テナント名'), 'Test Company');
       await user.type(screen.getByLabelText('管理者 Email'), 'admin@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
         expect(tenantApi.createTenant).toHaveBeenCalledWith({
-          name: '株式会社テスト',
+          name: 'Test Company',
+          slug: 'test-company',
           adminEmail: 'admin@test.com',
           tier: 'FREE',
         });
@@ -139,7 +168,8 @@ describe('NewTenantPage コンポーネント', () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockResolvedValue({
         id: '1',
-        name: '株式会社テスト',
+        name: 'Test Company',
+        slug: 'test-company',
         status: 'ACTIVE',
         tier: 'FREE',
         adminEmail: 'admin@test.com',
@@ -149,7 +179,7 @@ describe('NewTenantPage コンポーネント', () => {
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText('テナント名'), '株式会社テスト');
+      await user.type(screen.getByLabelText('テナント名'), 'Test Company');
       await user.type(screen.getByLabelText('管理者 Email'), 'admin@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
@@ -167,7 +197,11 @@ describe('NewTenantPage コンポーネント', () => {
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText('テナント名'), 'テスト');
+      await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
+      await user.type(
+        screen.getByLabelText('スラッグ（URL識別子）'),
+        'test-tenant'
+      );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
@@ -184,7 +218,11 @@ describe('NewTenantPage コンポーネント', () => {
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText('テナント名'), 'テスト');
+      await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
+      await user.type(
+        screen.getByLabelText('スラッグ（URL識別子）'),
+        'test-tenant'
+      );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
@@ -200,7 +238,11 @@ describe('NewTenantPage コンポーネント', () => {
 
       render(<NewTenantPage />);
 
-      await user.type(screen.getByLabelText('テナント名'), 'テスト');
+      await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
+      await user.type(
+        screen.getByLabelText('スラッグ（URL識別子）'),
+        'test-tenant'
+      );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 

@@ -8,6 +8,7 @@ const MOCK_TENANTS: Tenant[] = [
   {
     id: '1',
     name: 'Acme Corp',
+    slug: 'acme-corp',
     status: 'ACTIVE',
     tier: 'ENTERPRISE',
     adminEmail: 'admin@acme.com',
@@ -17,6 +18,7 @@ const MOCK_TENANTS: Tenant[] = [
   {
     id: '2',
     name: 'Beta Inc',
+    slug: 'beta-inc',
     status: 'SUSPENDED',
     tier: 'PRO',
     adminEmail: 'admin@beta.com',
@@ -26,6 +28,7 @@ const MOCK_TENANTS: Tenant[] = [
   {
     id: '3',
     name: 'Charlie LLC',
+    slug: 'charlie-llc',
     status: 'ACTIVE',
     tier: 'FREE',
     adminEmail: 'admin@charlie.com',

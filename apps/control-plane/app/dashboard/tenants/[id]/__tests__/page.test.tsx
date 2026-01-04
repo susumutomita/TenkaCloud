@@ -35,6 +35,7 @@ vi.mock('next/navigation', () => ({
 const mockTenant: Tenant = {
   id: 'tenant-123',
   name: 'テストテナント',
+  slug: 'test-tenant',
   status: 'ACTIVE',
   tier: 'PRO',
   adminEmail: 'admin@example.com',

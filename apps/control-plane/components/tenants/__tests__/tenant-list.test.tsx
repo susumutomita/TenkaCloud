@@ -8,6 +8,7 @@ const mockTenants: Tenant[] = [
   {
     id: '1',
     name: 'テナント1',
+    slug: 'tenant-1',
     status: 'ACTIVE',
     tier: 'FREE',
     adminEmail: 'admin1@example.com',
@@ -17,6 +18,7 @@ const mockTenants: Tenant[] = [
   {
     id: '2',
     name: 'テナント2',
+    slug: 'tenant-2',
     status: 'SUSPENDED',
     tier: 'PRO',
     adminEmail: 'admin2@example.com',
@@ -26,6 +28,7 @@ const mockTenants: Tenant[] = [
   {
     id: '3',
     name: 'テナント3',
+    slug: 'tenant-3',
     status: 'ARCHIVED',
     tier: 'ENTERPRISE',
     adminEmail: 'admin3@example.com',

@@ -39,9 +39,13 @@ export default async function TenantsPage() {
             <Link href="/dashboard/tenants/new">
               <Button>新規テナントを作成</Button>
             </Link>
-            <Link href="/docs/architecture">
+            <a
+              href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/tenant-management-integration.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Button variant="outline">設計ドキュメント</Button>
-            </Link>
+            </a>
           </div>
         </div>
       </div>

@@ -63,6 +63,7 @@ describe('tenant-utils', () => {
       vi.mocked(tenantApi.updateTenant).mockResolvedValue({
         id: 'test-id',
         name: 'Test Tenant',
+        slug: 'test-tenant',
         adminEmail: 'test@example.com',
         tier: 'PRO',
         status: 'ACTIVE',
