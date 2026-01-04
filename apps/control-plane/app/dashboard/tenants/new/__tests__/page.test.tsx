@@ -144,6 +144,10 @@ describe('NewTenantPage コンポーネント', () => {
         status: 'ACTIVE',
         tier: 'FREE',
         adminEmail: 'admin@test.com',
+        region: 'ap-northeast-1',
+        isolationModel: 'POOL',
+        computeType: 'SERVERLESS',
+        provisioningStatus: 'PENDING',
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T00:00:00Z',
       });
@@ -173,6 +177,10 @@ describe('NewTenantPage コンポーネント', () => {
         status: 'ACTIVE',
         tier: 'FREE',
         adminEmail: 'admin@test.com',
+        region: 'ap-northeast-1',
+        isolationModel: 'POOL',
+        computeType: 'SERVERLESS',
+        provisioningStatus: 'PENDING',
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T00:00:00Z',
       });

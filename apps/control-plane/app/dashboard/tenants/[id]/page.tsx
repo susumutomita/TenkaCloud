@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ProvisioningCard } from '@/components/tenants/provisioning-card';
 import { TenantActions } from '@/components/tenants/tenant-actions';
 import { tenantApi } from '@/lib/api/tenant-api';
 
@@ -74,6 +75,10 @@ export default async function TenantDetailPage({
                 <dd className="col-span-2 capitalize">{tenant.tier}</dd>
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
+                <dt className="font-medium text-sm text-gray-500">Slug</dt>
+                <dd className="col-span-2 font-mono text-sm">{tenant.slug}</dd>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
                 <dt className="font-medium text-sm text-gray-500">
                   管理者 Email
                 </dt>
@@ -94,6 +99,8 @@ export default async function TenantDetailPage({
             </dl>
           </div>
         </div>
+
+        <ProvisioningCard tenant={tenant} />
       </div>
     </div>
   );

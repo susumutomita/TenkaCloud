@@ -4,11 +4,19 @@ const apiBaseUrl = isServer
   ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:3004/api'
   : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:3004/api';
 
+export interface ProvisioningStats {
+  completed: number;
+  inProgress: number;
+  failed: number;
+  pending: number;
+}
+
 export interface DashboardStats {
   activeTenants: number;
   totalTenants: number;
   systemStatus: 'healthy' | 'degraded' | 'down';
   uptimePercentage: number;
+  provisioningStats?: ProvisioningStats;
 }
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {

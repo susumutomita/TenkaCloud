@@ -76,4 +76,35 @@ export const tenantApi = {
     await handleResponse<unknown>(res);
     return true;
   },
+
+  async triggerProvisioning(id: string): Promise<{
+    success: boolean;
+    message: string;
+    provisioningStatus: string;
+  }> {
+    const res = await fetch(`${apiBaseUrl}/tenants/${id}/provision`, {
+      method: 'POST',
+    });
+    return handleResponse<{
+      success: boolean;
+      message: string;
+      provisioningStatus: string;
+    }>(res);
+  },
+
+  async getProvisioningStatus(id: string): Promise<{
+    tenantId: string;
+    provisioningStatus: string;
+    provisioningEnabled: boolean;
+  } | null> {
+    const res = await fetch(`${apiBaseUrl}/tenants/${id}/provision`, {
+      cache: 'no-store',
+    });
+    if (res.status === StatusCodes.NOT_FOUND) return null;
+    return handleResponse<{
+      tenantId: string;
+      provisioningStatus: string;
+      provisioningEnabled: boolean;
+    }>(res);
+  },
 };

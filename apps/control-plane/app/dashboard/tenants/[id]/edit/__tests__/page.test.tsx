@@ -53,6 +53,10 @@ describe('EditTenantPage', () => {
     adminEmail: 'admin@test.com',
     tier: 'PRO',
     status: 'ACTIVE',
+    region: 'ap-northeast-1',
+    isolationModel: 'POOL',
+    computeType: 'SERVERLESS',
+    provisioningStatus: 'COMPLETED',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
   };
@@ -412,6 +416,10 @@ describe('submitTenantUpdate', () => {
       adminEmail: 'test@example.com',
       tier: 'PRO',
       status: 'ACTIVE',
+      region: 'ap-northeast-1',
+      isolationModel: 'POOL',
+      computeType: 'SERVERLESS',
+      provisioningStatus: 'COMPLETED',
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     });
