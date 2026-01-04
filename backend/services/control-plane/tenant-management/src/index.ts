@@ -97,6 +97,13 @@ const updateTenantSchema = z.object({
   tier: z.enum(['FREE', 'PRO', 'ENTERPRISE'] as const).optional(),
 });
 
+// Tier to IsolationModel mapping - defines the required isolation model for each tier
+const TIER_ISOLATION_MODEL: Record<TenantTier, IsolationModel> = {
+  FREE: 'POOL',
+  PRO: 'POOL',
+  ENTERPRISE: 'SILO',
+};
+
 // Settings schemas
 const platformSettingsSchema = z.object({
   platformName: z.string().min(1).max(255),
@@ -459,7 +466,45 @@ app.patch('/api/tenants/:id', async (c) => {
     const body = await c.req.json();
     const validated = updateTenantSchema.parse(body);
 
-    const tenant = await tenantRepository.update(idValidation.data, validated);
+    // Build update input with tier change business logic
+    const updateInput: {
+      name?: string;
+      status?: TenantStatus;
+      tier?: TenantTier;
+      isolationModel?: IsolationModel;
+      provisioningStatus?: 'PENDING';
+    } = { ...validated };
+
+    // If tier is being changed, check if isolationModel needs to change
+    if (validated.tier) {
+      // Get current tenant to check current isolationModel
+      const currentTenant = await tenantRepository.findById(idValidation.data);
+      if (!currentTenant) {
+        return c.json(errorResponse('Tenant not found', 404), 404);
+      }
+
+      const requiredIsolationModel = TIER_ISOLATION_MODEL[validated.tier];
+
+      // If isolationModel needs to change, update it and trigger re-provisioning
+      if (currentTenant.isolationModel !== requiredIsolationModel) {
+        updateInput.isolationModel = requiredIsolationModel;
+        updateInput.provisioningStatus = 'PENDING';
+
+        appLogger.info(
+          {
+            tenantId: id,
+            tierChange: `${currentTenant.tier} -> ${validated.tier}`,
+            isolationModelChange: `${currentTenant.isolationModel} -> ${requiredIsolationModel}`,
+          },
+          'Tier change requires re-provisioning'
+        );
+      }
+    }
+
+    const tenant = await tenantRepository.update(
+      idValidation.data,
+      updateInput
+    );
 
     return c.json(tenant);
   } catch (error) {

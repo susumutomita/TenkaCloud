@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { PlanCard } from '@/components/tenants/plan-card';
 import { ProvisioningCard } from '@/components/tenants/provisioning-card';
+import { TenantAccessCard } from '@/components/tenants/tenant-access-card';
 import { TenantActions } from '@/components/tenants/tenant-actions';
 import { tenantApi } from '@/lib/api/tenant-api';
 
@@ -102,6 +104,10 @@ export default async function TenantDetailPage({
 
         <ProvisioningCard tenant={tenant} />
       </div>
+
+      <TenantAccessCard tenant={tenant} />
+
+      <PlanCard tenant={tenant} />
     </div>
   );
 }

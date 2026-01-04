@@ -576,7 +576,13 @@ describe('テナント管理API', () => {
 
     it('テナントのtierを更新できるべき', async () => {
       const mockTenant = createMockTenant();
-      const updatedTenant = { ...mockTenant, tier: 'ENTERPRISE' as const };
+      const updatedTenant = {
+        ...mockTenant,
+        tier: 'ENTERPRISE' as const,
+        isolationModel: 'SILO' as const,
+        provisioningStatus: 'PENDING' as const,
+      };
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
       mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
 
       const res = await app.request(`/api/tenants/${mockTenant.id}`, {
@@ -598,6 +604,8 @@ describe('テナント管理API', () => {
         tier: 'PRO' as const,
         status: 'ACTIVE' as const,
       };
+      // tier変更が含まれる場合はfindByIdが呼ばれる
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
       mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
 
       const res = await app.request(`/api/tenants/${mockTenant.id}`, {
@@ -649,6 +657,267 @@ describe('テナント管理API', () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe('Invalid tenant ID');
+    });
+
+    describe('tier変更ビジネスロジック', () => {
+      it('FREE→PRO変更時はisolationModelが変わらないためre-provisioningが発生しないべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'FREE',
+          isolationModel: 'POOL',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = { ...mockTenant, tier: 'PRO' as const };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'PRO' }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.tier).toBe('PRO');
+        // update should NOT include isolationModel or provisioningStatus changes
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          expect.not.objectContaining({
+            isolationModel: expect.anything(),
+            provisioningStatus: expect.anything(),
+          })
+        );
+      });
+
+      it('PRO→FREE変更時はisolationModelが変わらないためre-provisioningが発生しないべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'PRO',
+          isolationModel: 'POOL',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = { ...mockTenant, tier: 'FREE' as const };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'FREE' }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.tier).toBe('FREE');
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          expect.not.objectContaining({
+            isolationModel: expect.anything(),
+            provisioningStatus: expect.anything(),
+          })
+        );
+      });
+
+      it('FREE→ENTERPRISE変更時はPOOL→SILOに変わりre-provisioningが発生すべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'FREE',
+          isolationModel: 'POOL',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = {
+          ...mockTenant,
+          tier: 'ENTERPRISE' as const,
+          isolationModel: 'SILO' as const,
+          provisioningStatus: 'PENDING' as const,
+        };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'ENTERPRISE' }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.tier).toBe('ENTERPRISE');
+        expect(body.isolationModel).toBe('SILO');
+        expect(body.provisioningStatus).toBe('PENDING');
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          {
+            tier: 'ENTERPRISE',
+            isolationModel: 'SILO',
+            provisioningStatus: 'PENDING',
+          }
+        );
+      });
+
+      it('PRO→ENTERPRISE変更時はPOOL→SILOに変わりre-provisioningが発生すべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'PRO',
+          isolationModel: 'POOL',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = {
+          ...mockTenant,
+          tier: 'ENTERPRISE' as const,
+          isolationModel: 'SILO' as const,
+          provisioningStatus: 'PENDING' as const,
+        };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'ENTERPRISE' }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.tier).toBe('ENTERPRISE');
+        expect(body.isolationModel).toBe('SILO');
+        expect(body.provisioningStatus).toBe('PENDING');
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          {
+            tier: 'ENTERPRISE',
+            isolationModel: 'SILO',
+            provisioningStatus: 'PENDING',
+          }
+        );
+      });
+
+      it('ENTERPRISE→FREE変更時はSILO→POOLに変わりre-provisioningが発生すべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'ENTERPRISE',
+          isolationModel: 'SILO',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = {
+          ...mockTenant,
+          tier: 'FREE' as const,
+          isolationModel: 'POOL' as const,
+          provisioningStatus: 'PENDING' as const,
+        };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'FREE' }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.tier).toBe('FREE');
+        expect(body.isolationModel).toBe('POOL');
+        expect(body.provisioningStatus).toBe('PENDING');
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          {
+            tier: 'FREE',
+            isolationModel: 'POOL',
+            provisioningStatus: 'PENDING',
+          }
+        );
+      });
+
+      it('ENTERPRISE→PRO変更時はSILO→POOLに変わりre-provisioningが発生すべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'ENTERPRISE',
+          isolationModel: 'SILO',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = {
+          ...mockTenant,
+          tier: 'PRO' as const,
+          isolationModel: 'POOL' as const,
+          provisioningStatus: 'PENDING' as const,
+        };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'PRO' }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.tier).toBe('PRO');
+        expect(body.isolationModel).toBe('POOL');
+        expect(body.provisioningStatus).toBe('PENDING');
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          {
+            tier: 'PRO',
+            isolationModel: 'POOL',
+            provisioningStatus: 'PENDING',
+          }
+        );
+      });
+
+      it('tier変更時に存在しないテナントは404エラーになるべき', async () => {
+        mockTenantRepoFunctions.findById.mockResolvedValue(null);
+
+        const nonExistentId = '01HJXK5K3VDXK5YPNZBKRT5XYZ';
+        const res = await app.request(`/api/tenants/${nonExistentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tier: 'ENTERPRISE' }),
+        });
+
+        expect(res.status).toBe(404);
+        const body = await res.json();
+        expect(body.error).toBe('Tenant not found');
+        expect(mockTenantRepoFunctions.update).not.toHaveBeenCalled();
+      });
+
+      it('tier変更とname変更を同時に行えるべき', async () => {
+        const mockTenant = createMockTenant({
+          tier: 'FREE',
+          isolationModel: 'POOL',
+          provisioningStatus: 'COMPLETED',
+        });
+        const updatedTenant = {
+          ...mockTenant,
+          name: 'Updated Enterprise Tenant',
+          tier: 'ENTERPRISE' as const,
+          isolationModel: 'SILO' as const,
+          provisioningStatus: 'PENDING' as const,
+        };
+        mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+        mockTenantRepoFunctions.update.mockResolvedValue(updatedTenant);
+
+        const res = await app.request(`/api/tenants/${mockTenant.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Updated Enterprise Tenant',
+            tier: 'ENTERPRISE',
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.name).toBe('Updated Enterprise Tenant');
+        expect(body.tier).toBe('ENTERPRISE');
+        expect(body.isolationModel).toBe('SILO');
+        expect(body.provisioningStatus).toBe('PENDING');
+        expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(
+          mockTenant.id,
+          {
+            name: 'Updated Enterprise Tenant',
+            tier: 'ENTERPRISE',
+            isolationModel: 'SILO',
+            provisioningStatus: 'PENDING',
+          }
+        );
+      });
     });
   });
 
