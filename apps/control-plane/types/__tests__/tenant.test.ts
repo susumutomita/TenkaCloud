@@ -4,9 +4,12 @@ import {
   TENANT_STATUSES,
   TENANT_TIER_LABELS,
   TENANT_TIERS,
+  TIER_FEATURES,
+  type SupportLevel,
   type Tenant,
   type TenantStatus,
   type TenantTier,
+  type TierFeatures,
 } from '../tenant';
 
 describe('Tenant 型定義', () => {
@@ -82,6 +85,69 @@ describe('Tenant 型定義', () => {
       for (const tier of TENANT_TIERS) {
         expect(TENANT_TIER_LABELS[tier]).toBeDefined();
       }
+    });
+  });
+
+  describe('TIER_FEATURES', () => {
+    it('すべてのTierに対応する機能定義を持つべき', () => {
+      for (const tier of TENANT_TIERS) {
+        expect(TIER_FEATURES[tier]).toBeDefined();
+      }
+    });
+
+    it('FREE Tierは基本的な制限を持つべき', () => {
+      const features = TIER_FEATURES.FREE;
+      expect(features.maxParticipants).toBe(10);
+      expect(features.maxBattles).toBe(5);
+      expect(features.maxProblems).toBe(20);
+      expect(features.customBranding).toBe(false);
+      expect(features.apiAccess).toBe(false);
+      expect(features.ssoEnabled).toBe(false);
+      expect(features.supportLevel).toBe('community');
+      expect(features.isolationModel).toBe('POOL');
+    });
+
+    it('PRO Tierは拡張機能を持つべき', () => {
+      const features = TIER_FEATURES.PRO;
+      expect(features.maxParticipants).toBe(100);
+      expect(features.maxBattles).toBe(50);
+      expect(features.maxProblems).toBe(200);
+      expect(features.customBranding).toBe(true);
+      expect(features.apiAccess).toBe(true);
+      expect(features.ssoEnabled).toBe(false);
+      expect(features.supportLevel).toBe('email');
+      expect(features.isolationModel).toBe('POOL');
+    });
+
+    it('ENTERPRISE Tierは無制限と専用環境を持つべき', () => {
+      const features = TIER_FEATURES.ENTERPRISE;
+      expect(features.maxParticipants).toBe(-1); // 無制限
+      expect(features.maxBattles).toBe(-1);
+      expect(features.maxProblems).toBe(-1);
+      expect(features.customBranding).toBe(true);
+      expect(features.apiAccess).toBe(true);
+      expect(features.ssoEnabled).toBe(true);
+      expect(features.supportLevel).toBe('priority');
+      expect(features.isolationModel).toBe('SILO');
+    });
+
+    it('TierFeatures型が正しい構造を持つべき', () => {
+      const features: TierFeatures = {
+        maxParticipants: 10,
+        maxBattles: 5,
+        maxProblems: 20,
+        customBranding: false,
+        apiAccess: false,
+        ssoEnabled: false,
+        supportLevel: 'community',
+        isolationModel: 'POOL',
+      };
+      expect(features).toBeDefined();
+    });
+
+    it('SupportLevel型が有効な値のみを受け入れるべき', () => {
+      const levels: SupportLevel[] = ['community', 'email', 'priority'];
+      expect(levels).toHaveLength(3);
     });
   });
 

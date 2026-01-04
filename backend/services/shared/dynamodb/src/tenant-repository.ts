@@ -200,6 +200,12 @@ export class TenantRepository {
       expressionValues[':tier'] = input.tier;
     }
 
+    if (input.isolationModel !== undefined) {
+      updateExpressions.push('#isolationModel = :isolationModel');
+      expressionNames['#isolationModel'] = 'isolationModel';
+      expressionValues[':isolationModel'] = input.isolationModel;
+    }
+
     if (input.provisioningStatus !== undefined) {
       updateExpressions.push('#provisioningStatus = :provisioningStatus');
       expressionNames['#provisioningStatus'] = 'provisioningStatus';

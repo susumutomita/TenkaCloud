@@ -1,5 +1,6 @@
 export type TenantStatus = 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
 export type TenantTier = 'FREE' | 'PRO' | 'ENTERPRISE';
+export type SupportLevel = 'community' | 'email' | 'priority';
 export type ProvisioningStatus =
   | 'PENDING'
   | 'IN_PROGRESS'
@@ -64,6 +65,50 @@ export const ISOLATION_MODEL_LABELS: Record<IsolationModel, string> = {
 export const COMPUTE_TYPE_LABELS: Record<ComputeType, string> = {
   SERVERLESS: 'Serverless',
   KUBERNETES: 'Kubernetes',
+};
+
+export interface TierFeatures {
+  maxParticipants: number; // -1 = 無制限
+  maxBattles: number; // 月間最大バトル数, -1 = 無制限
+  maxProblems: number; // 最大問題数, -1 = 無制限
+  customBranding: boolean;
+  apiAccess: boolean;
+  ssoEnabled: boolean;
+  supportLevel: SupportLevel;
+  isolationModel: IsolationModel;
+}
+
+export const TIER_FEATURES: Record<TenantTier, TierFeatures> = {
+  FREE: {
+    maxParticipants: 10,
+    maxBattles: 5,
+    maxProblems: 20,
+    customBranding: false,
+    apiAccess: false,
+    ssoEnabled: false,
+    supportLevel: 'community',
+    isolationModel: 'POOL',
+  },
+  PRO: {
+    maxParticipants: 100,
+    maxBattles: 50,
+    maxProblems: 200,
+    customBranding: true,
+    apiAccess: true,
+    ssoEnabled: false,
+    supportLevel: 'email',
+    isolationModel: 'POOL',
+  },
+  ENTERPRISE: {
+    maxParticipants: -1,
+    maxBattles: -1,
+    maxProblems: -1,
+    customBranding: true,
+    apiAccess: true,
+    ssoEnabled: true,
+    supportLevel: 'priority',
+    isolationModel: 'SILO',
+  },
 };
 
 export interface Tenant {

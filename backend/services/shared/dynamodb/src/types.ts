@@ -204,6 +204,7 @@ export interface UpdateTenantInput {
   name?: string;
   status?: TenantStatus;
   tier?: TenantTier;
+  isolationModel?: IsolationModel;
   provisioningStatus?: ProvisioningStatus;
   auth0OrgId?: string;
 }
