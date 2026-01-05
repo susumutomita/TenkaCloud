@@ -5,7 +5,7 @@ import type {
   Tenant,
   UpdateTenantInput,
 } from '@/types/tenant';
-import { tenantApi } from '../tenant-api';
+import { tenantApi, TenantApiError } from '../tenant-api';
 
 // API base URL 環境変数のテスト
 describe('API Base URL の決定', () => {
@@ -72,15 +72,48 @@ describe('tenantApi', () => {
       );
     });
 
-    it('API エラー時に例外をスローすべき', async () => {
+    it('API エラー時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () => Promise.resolve('Server Error'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: { message: 'サーバーエラーが発生しました' },
+            })
+          ),
       });
 
+      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
       await expect(tenantApi.listTenants()).rejects.toThrow(
-        'Tenant API request failed: 500 Server Error'
+        'サーバーエラーが発生しました'
+      );
+    });
+
+    it('トップレベル message 形式のエラーレスポンスを処理すべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.BAD_REQUEST,
+        text: () =>
+          Promise.resolve(JSON.stringify({ message: 'バリデーションエラー' })),
+      });
+
+      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
+      await expect(tenantApi.listTenants()).rejects.toThrow(
+        'バリデーションエラー'
+      );
+    });
+
+    it('非 JSON エラーレスポンスでデフォルトメッセージを使用すべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.INTERNAL_SERVER_ERROR,
+        text: () => Promise.resolve('Internal Server Error'),
+      });
+
+      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
+      await expect(tenantApi.listTenants()).rejects.toThrow(
+        'APIリクエストに失敗しました'
       );
     });
   });
@@ -114,15 +147,21 @@ describe('tenantApi', () => {
       expect(tenant).toBeNull();
     });
 
-    it('404 以外のエラー時に例外をスローすべき', async () => {
+    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () => Promise.resolve('Server Error'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: { message: 'サーバーエラーが発生しました' },
+            })
+          ),
       });
 
+      await expect(tenantApi.getTenant('1')).rejects.toThrow(TenantApiError);
       await expect(tenantApi.getTenant('1')).rejects.toThrow(
-        'Tenant API request failed: 500 Server Error'
+        'サーバーエラーが発生しました'
       );
     });
   });
@@ -154,11 +193,14 @@ describe('tenantApi', () => {
       );
     });
 
-    it('作成失敗時に例外をスローすべき', async () => {
+    it('作成失敗時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.BAD_REQUEST,
-        text: () => Promise.resolve('Validation Error'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ error: { message: 'バリデーションエラーです' } })
+          ),
       });
 
       await expect(
@@ -168,7 +210,15 @@ describe('tenantApi', () => {
           adminEmail: 'invalid',
           tier: 'FREE',
         })
-      ).rejects.toThrow('Tenant API request failed: 400 Validation Error');
+      ).rejects.toThrow(TenantApiError);
+      await expect(
+        tenantApi.createTenant({
+          name: '',
+          slug: '',
+          adminEmail: 'invalid',
+          tier: 'FREE',
+        })
+      ).rejects.toThrow('バリデーションエラーです');
     });
   });
 
@@ -211,16 +261,24 @@ describe('tenantApi', () => {
       expect(tenant).toBeNull();
     });
 
-    it('404 以外のエラー時に例外をスローすべき', async () => {
+    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () => Promise.resolve('Server Error'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: { message: 'サーバーエラーが発生しました' },
+            })
+          ),
       });
 
       await expect(
         tenantApi.updateTenant('1', { name: 'テスト' })
-      ).rejects.toThrow('Tenant API request failed: 500 Server Error');
+      ).rejects.toThrow(TenantApiError);
+      await expect(
+        tenantApi.updateTenant('1', { name: 'テスト' })
+      ).rejects.toThrow('サーバーエラーが発生しました');
     });
   });
 
@@ -253,15 +311,21 @@ describe('tenantApi', () => {
       expect(result).toBe(false);
     });
 
-    it('404 以外のエラー時に例外をスローすべき', async () => {
+    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () => Promise.resolve('Server Error'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: { message: 'サーバーエラーが発生しました' },
+            })
+          ),
       });
 
+      await expect(tenantApi.deleteTenant('1')).rejects.toThrow(TenantApiError);
       await expect(tenantApi.deleteTenant('1')).rejects.toThrow(
-        'Tenant API request failed: 500 Server Error'
+        'サーバーエラーが発生しました'
       );
     });
   });
@@ -288,15 +352,23 @@ describe('tenantApi', () => {
       );
     });
 
-    it('プロビジョニング開始失敗時に例外をスローすべき', async () => {
+    it('プロビジョニング開始失敗時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.BAD_REQUEST,
-        text: () => Promise.resolve('Provisioning not allowed'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: { message: 'プロビジョニングは許可されていません' },
+            })
+          ),
       });
 
       await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
-        'Tenant API request failed: 400 Provisioning not allowed'
+        TenantApiError
+      );
+      await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
+        'プロビジョニングは許可されていません'
       );
     });
   });
@@ -335,15 +407,23 @@ describe('tenantApi', () => {
       expect(result).toBeNull();
     });
 
-    it('404 以外のエラー時に例外をスローすべき', async () => {
+    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () => Promise.resolve('Server Error'),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: { message: 'サーバーエラーが発生しました' },
+            })
+          ),
       });
 
       await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
-        'Tenant API request failed: 500 Server Error'
+        TenantApiError
+      );
+      await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
+        'サーバーエラーが発生しました'
       );
     });
   });

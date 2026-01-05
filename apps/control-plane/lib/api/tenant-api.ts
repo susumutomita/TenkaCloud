@@ -11,10 +11,31 @@ const apiBaseUrl = isServer
   ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:3004/api'
   : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:3004/api';
 
+export class TenantApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly userMessage: string
+  ) {
+    super(userMessage);
+    this.name = 'TenantApiError';
+  }
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Tenant API request failed: ${res.status} ${body}`);
+    let userMessage = 'APIリクエストに失敗しました';
+    try {
+      const json = JSON.parse(body);
+      if (json.error?.message) {
+        userMessage = json.error.message;
+      } else if (json.message) {
+        userMessage = json.message;
+      }
+    } catch {
+      // JSON パース失敗時はデフォルトメッセージを使用
+    }
+    throw new TenantApiError(res.status, userMessage);
   }
   return res.json() as Promise<T>;
 }

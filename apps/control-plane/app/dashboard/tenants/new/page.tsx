@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
-import { tenantApi } from '@/lib/api/tenant-api';
+import { tenantApi, TenantApiError } from '@/lib/api/tenant-api';
 import type { TenantTier } from '@/types/tenant';
 import { TENANT_TIER_LABELS, TENANT_TIERS } from '@/types/tenant';
 
 export default function NewTenantPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -32,14 +33,19 @@ export default function NewTenantPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
     try {
       await tenantApi.createTenant(formData);
       router.push('/dashboard/tenants');
       router.refresh(); // 一覧データを更新
-    } catch (error) {
-      console.error('Failed to create tenant:', error);
-      alert('テナント作成に失敗しました');
+    } catch (err) {
+      console.error('Failed to create tenant:', err);
+      if (err instanceof TenantApiError) {
+        setError(err.userMessage);
+      } else {
+        setError('テナント作成に失敗しました');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -50,6 +56,27 @@ export default function NewTenantPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">新規テナント作成</h1>
       </div>
+
+      {error && (
+        <div className="max-w-2xl rounded-md bg-red-50 border border-red-200 p-4">
+          <div className="flex">
+            <svg
+              className="h-5 w-5 text-red-400"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border bg-card text-card-foreground shadow max-w-2xl">
         <form onSubmit={handleSubmit}>

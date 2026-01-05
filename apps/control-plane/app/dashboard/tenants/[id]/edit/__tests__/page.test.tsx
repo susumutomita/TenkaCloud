@@ -23,12 +23,16 @@ vi.mock('next/navigation', () => ({
 }));
 
 // tenantApi をモック（API ベース URL が未設定でも強制的にモックを使用）
-vi.mock('@/lib/api/tenant-api', () => ({
-  tenantApi: {
-    getTenant: vi.fn(),
-    updateTenant: vi.fn(),
-  },
-}));
+vi.mock('@/lib/api/tenant-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/tenant-api')>();
+  return {
+    ...actual,
+    tenantApi: {
+      getTenant: vi.fn(),
+      updateTenant: vi.fn(),
+    },
+  };
+});
 
 // window.alert をモック
 const mockAlert = vi.fn();

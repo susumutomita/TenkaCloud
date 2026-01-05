@@ -9,6 +9,12 @@ interface TenantAccessCardProps {
 }
 
 export function getApplicationPlaneUrl(slug: string): string {
+  // ローカル開発用の環境変数が設定されている場合はそれを使用
+  const localUrl = process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL;
+  if (localUrl) {
+    return localUrl;
+  }
+  // 本番環境: テナントスラッグに基づくサブドメイン
   return `https://${slug}.tenka.cloud`;
 }
 
