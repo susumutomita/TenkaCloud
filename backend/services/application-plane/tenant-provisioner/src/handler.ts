@@ -222,7 +222,7 @@ export async function handler(
     resources.iamRoleArn = iamResult.roleArn;
     console.log('IAM Role created', {
       tenantId,
-      roleArn: iamResult.roleArn,
+      roleName: iamResult.roleName,
     });
 
     // 4. CloudWatch Logs をプロビジョニング
