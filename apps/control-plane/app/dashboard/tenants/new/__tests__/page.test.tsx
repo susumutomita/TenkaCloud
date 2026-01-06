@@ -1,15 +1,19 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { tenantApi } from '@/lib/api/tenant-api';
+import { tenantApi, TenantApiError } from '@/lib/api/tenant-api';
 import NewTenantPage from '../page';
 
 // tenant-api のモック
-vi.mock('@/lib/api/tenant-api', () => ({
-  tenantApi: {
-    createTenant: vi.fn(),
-  },
-}));
+vi.mock('@/lib/api/tenant-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/tenant-api')>();
+  return {
+    ...actual,
+    tenantApi: {
+      createTenant: vi.fn(),
+    },
+  };
+});
 
 // next/navigation のモック
 const mockPush = vi.fn();
@@ -237,9 +241,8 @@ describe('NewTenantPage コンポーネント', () => {
       expect(screen.getByRole('button', { name: '作成中...' })).toBeDisabled();
     });
 
-    it('作成失敗時にアラートを表示すべき', async () => {
+    it('作成失敗時にエラーメッセージを表示すべき', async () => {
       const user = userEvent.setup();
-      const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
       vi.mocked(tenantApi.createTenant).mockRejectedValue(
         new Error('API Error')
       );
@@ -255,10 +258,33 @@ describe('NewTenantPage コンポーネント', () => {
       await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
-        expect(alertMock).toHaveBeenCalledWith('テナント作成に失敗しました');
+        expect(
+          screen.getByText('テナント作成に失敗しました')
+        ).toBeInTheDocument();
       });
+    });
 
-      alertMock.mockRestore();
+    it('TenantApiError 発生時に API のエラーメッセージを表示すべき', async () => {
+      const user = userEvent.setup();
+      vi.mocked(tenantApi.createTenant).mockRejectedValue(
+        new TenantApiError(409, 'このスラッグは既に使用されています')
+      );
+
+      render(<NewTenantPage />);
+
+      await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
+      await user.type(
+        screen.getByLabelText('スラッグ（URL識別子）'),
+        'test-tenant'
+      );
+      await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
+      await user.click(screen.getByRole('button', { name: '作成' }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('このスラッグは既に使用されています')
+        ).toBeInTheDocument();
+      });
     });
   });
 });

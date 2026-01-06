@@ -1,12 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tenant } from '@/types/tenant';
 import {
   defaultCopyToClipboard,
   getApplicationPlaneUrl,
   TenantAccessCard,
 } from '../tenant-access-card';
+
+// 各テスト前に環境変数をクリアして本番環境の動作をテスト
+const originalEnv = process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL;
 
 const createMockTenant = (overrides: Partial<Tenant> = {}): Tenant => ({
   id: '01HJXK5K3VDXK5YPNZBKRT5ABC',
@@ -25,6 +28,20 @@ const createMockTenant = (overrides: Partial<Tenant> = {}): Tenant => ({
 });
 
 describe('TenantAccessCard コンポーネント', () => {
+  beforeEach(() => {
+    // 各テスト前に環境変数をクリア（本番環境の動作をテスト）
+    delete process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL;
+  });
+
+  afterEach(() => {
+    // テスト後に元の環境変数を復元
+    if (originalEnv !== undefined) {
+      process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL = originalEnv;
+    } else {
+      delete process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL;
+    }
+  });
+
   describe('レンダリング', () => {
     it('セクションタイトルを表示すべき', () => {
       render(<TenantAccessCard tenant={createMockTenant()} />);
@@ -76,11 +93,19 @@ describe('TenantAccessCard コンポーネント', () => {
   });
 
   describe('ヘルパー関数', () => {
-    it('getApplicationPlaneUrl が正しい URL を生成すべき', () => {
+    it('getApplicationPlaneUrl が本番環境用の URL を生成すべき', () => {
       expect(getApplicationPlaneUrl('test-tenant')).toBe(
         'https://test-tenant.tenka.cloud'
       );
       expect(getApplicationPlaneUrl('acme')).toBe('https://acme.tenka.cloud');
+    });
+
+    it('getApplicationPlaneUrl が環境変数設定時にローカル URL を返すべき', () => {
+      process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL = 'http://localhost:13001';
+      expect(getApplicationPlaneUrl('test-tenant')).toBe(
+        'http://localhost:13001'
+      );
+      expect(getApplicationPlaneUrl('acme')).toBe('http://localhost:13001');
     });
 
     it('defaultCopyToClipboard が navigator.clipboard.writeText を呼ぶべき', async () => {
