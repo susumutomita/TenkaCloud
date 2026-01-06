@@ -19,6 +19,7 @@ import {
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { EventSource } from '@tenkacloud/events';
 
 const eventBridge = new EventBridgeClient({});
 const dynamoClient = new DynamoDBClient({});
@@ -35,7 +36,7 @@ interface TenantRecord {
   slug: string;
   tier: 'FREE' | 'PRO' | 'ENTERPRISE';
   status: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  provisioningStatus: 'PENDING' | 'PROVISIONING' | 'PROVISIONED' | 'FAILED';
+  provisioningStatus: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
   auth0OrganizationId?: string;
   createdAt: string;
   updatedAt: string;
@@ -108,7 +109,7 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   switch (eventName) {
     case 'INSERT':
       eventType = 'TenantOnboarding';
-      await updateProvisioningStatus(tenantId, 'PROVISIONING', 'PENDING');
+      await updateProvisioningStatus(tenantId, 'IN_PROGRESS', 'PENDING');
       break;
     case 'MODIFY':
       // Check if this is a status change that requires action
@@ -173,7 +174,7 @@ async function publishEvent(tenantEvent: TenantEvent): Promise<void> {
     Entries: [
       {
         EventBusName: EVENT_BUS_NAME,
-        Source: 'tenkacloud.control-plane',
+        Source: EventSource.CONTROL_PLANE,
         DetailType: tenantEvent.eventType,
         Detail: JSON.stringify(tenantEvent),
         Time: new Date(),
@@ -193,8 +194,8 @@ async function publishEvent(tenantEvent: TenantEvent): Promise<void> {
 
 async function updateProvisioningStatus(
   tenantId: string,
-  status: 'PENDING' | 'PROVISIONING' | 'PROVISIONED' | 'FAILED',
-  expectedCurrentStatus?: 'PENDING' | 'PROVISIONING' | 'PROVISIONED' | 'FAILED'
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED',
+  expectedCurrentStatus?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
 ): Promise<void> {
   // Build condition expression to prevent race conditions
   // For PROVISIONING, we expect the current status to be PENDING

@@ -13,18 +13,10 @@
 import type { EventBridgeEvent, Context } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-
-// TenantProvisioned イベントの詳細
-interface TenantProvisionedDetail {
-  tenantId: string;
-  status: 'COMPLETED' | 'FAILED';
-  resources: {
-    s3Prefix?: string;
-    dedicatedBucket?: string;
-  };
-  error?: string;
-  timestamp: string;
-}
+import type {
+  TenantProvisionedDetail,
+  ProvisionedResources,
+} from '@tenkacloud/events';
 
 // 環境変数
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE ?? 'TenkaCloud';
@@ -41,8 +33,8 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient);
  */
 async function updateProvisioningStatus(
   tenantId: string,
-  status: 'PROVISIONED' | 'FAILED',
-  resources?: TenantProvisionedDetail['resources'],
+  status: 'COMPLETED' | 'FAILED',
+  resources?: ProvisionedResources,
   error?: string
 ): Promise<void> {
   const now = new Date().toISOString();
@@ -55,7 +47,7 @@ async function updateProvisioningStatus(
   const expressionValues: Record<string, unknown> = {
     ':status': status,
     ':updatedAt': now,
-    ':expectedStatus': 'PROVISIONING',
+    ':expectedStatus': 'IN_PROGRESS',
   };
 
   // リソース情報があれば追加
@@ -71,7 +63,7 @@ async function updateProvisioningStatus(
   }
 
   // 完了時刻を記録
-  if (status === 'PROVISIONED') {
+  if (status === 'COMPLETED') {
     updateExpressionParts.push('provisionedAt = :provisionedAt');
     expressionValues[':provisionedAt'] = now;
   }
@@ -98,7 +90,7 @@ async function updateProvisioningStatus(
       err instanceof Error &&
       err.name === 'ConditionalCheckFailedException'
     ) {
-      console.log('Tenant not in PROVISIONING state, skipping update', {
+      console.log('Tenant not in IN_PROGRESS state, skipping update', {
         tenantId,
         status,
       });
@@ -122,19 +114,11 @@ export async function handler(
 
   const { tenantId, status, resources, error } = event.detail;
 
-  // ステータスを DynamoDB の provisioningStatus にマッピング
-  const provisioningStatus = status === 'COMPLETED' ? 'PROVISIONED' : 'FAILED';
-
-  await updateProvisioningStatus(
-    tenantId,
-    provisioningStatus,
-    resources,
-    error
-  );
+  await updateProvisioningStatus(tenantId, status, resources, error);
 
   console.log('Provisioning completion processed', {
     tenantId,
-    provisioningStatus,
+    status,
     hasResources: !!resources && Object.keys(resources).length > 0,
     hasError: !!error,
   });

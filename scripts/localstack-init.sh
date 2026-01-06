@@ -101,6 +101,15 @@ awslocal sqs create-queue --queue-name scoring-tasks 2>/dev/null || echo "  キ�
 echo "✅ SQS キュー作成完了"
 
 # ============================================
+# EventBridge イベントバス作成
+# ============================================
+echo "🚌 EventBridge イベントバスを作成中..."
+
+awslocal events create-event-bus --name tenkacloud-events 2>/dev/null || echo "  イベントバス 'tenkacloud-events' は既に存在します"
+
+echo "✅ EventBridge セットアップ完了"
+
+# ============================================
 # 初期化完了
 # ============================================
 echo ""
@@ -111,5 +120,6 @@ echo "  - DynamoDB: TenkaCloud-dev (Single-Table Design with GSI1, GSI2)"
 echo "  - Cognito: tenkacloud-users"
 echo "  - S3: tenkacloud-assets, tenkacloud-uploads, tenkacloud-logs"
 echo "  - SQS: battle-events, scoring-tasks"
+echo "  - EventBridge: tenkacloud-events"
 echo ""
 echo "エンドポイント: http://localhost:4566"

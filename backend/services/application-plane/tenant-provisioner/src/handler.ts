@@ -3,6 +3,12 @@
  *
  * EventBridge から TenantOnboarding イベントを受信し、
  * テナント固有のリソースをプロビジョニングする Application Plane Lambda
+ *
+ * プロビジョニング対象:
+ * - Auth0 Organization（LocalStack 環境ではスキップ）
+ * - S3 ストレージ（Pool: 共有バケット + プレフィックス、Silo: 専用バケット）
+ * - IAM Role（TODO: Phase 3 で実装）
+ * - CloudWatch Logs（TODO: Phase 3 で実装）
  */
 
 import type { EventBridgeEvent, Context } from 'aws-lambda';
@@ -16,8 +22,14 @@ import {
   CreateBucketCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
+import { Auth0Provisioner } from '@tenkacloud/auth0';
+import type { ProvisionedResources } from '@tenkacloud/events';
+import { EventSource, EventDetailType } from '@tenkacloud/events';
+import { createTenantRole } from './iam-provisioner';
+import { createTenantLogGroup } from './cloudwatch-provisioner';
 
 // イベント型定義（Control Plane からのイベント形式）
+// NOTE: provisioning Lambda が発行する形式に合わせる
 interface TenantOnboardingDetail {
   tenantId: string;
   tenantSlug: string;
@@ -34,11 +46,6 @@ interface TenantOnboardingDetail {
   };
 }
 
-interface ProvisionedResources {
-  s3Prefix?: string;
-  dedicatedBucket?: string;
-}
-
 // 環境変数
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? 'default';
 const DATA_BUCKET_NAME = process.env.DATA_BUCKET_NAME ?? 'tenkacloud-data';
@@ -53,6 +60,9 @@ const s3Client = new S3Client({
   ...(AWS_ENDPOINT_URL && { endpoint: AWS_ENDPOINT_URL }),
   forcePathStyle: true, // LocalStack 用
 });
+
+// Auth0 Provisioner（LocalStack 環境では自動的にスキップモードになる）
+const auth0Provisioner = new Auth0Provisioner();
 
 /**
  * Pool モデルでのプロビジョニング
@@ -124,7 +134,7 @@ async function provisionSiloResources(
     })
   );
 
-  return { dedicatedBucket: bucketName };
+  return { s3Bucket: bucketName };
 }
 
 /**
@@ -141,8 +151,8 @@ async function publishProvisionedEvent(
       Entries: [
         {
           EventBusName: EVENT_BUS_NAME,
-          Source: 'tenkacloud.application-plane',
-          DetailType: 'TenantProvisioned',
+          Source: EventSource.APPLICATION_PLANE,
+          DetailType: EventDetailType.TENANT_PROVISIONED,
           Detail: JSON.stringify({
             tenantId,
             status,
@@ -170,25 +180,68 @@ export async function handler(
     tier: event.detail.tenantTier,
   });
 
-  const { tenantId, tenantTier: tier, details } = event.detail;
+  const { tenantId, tenantSlug, tenantTier: tier, details } = event.detail;
   const tenantName = details.name;
 
   try {
-    let resources: ProvisionedResources;
+    const resources: ProvisionedResources = {};
 
-    // ティアに応じたプロビジョニング
+    // 1. Auth0 Organization をプロビジョニング
+    // LocalStack 環境では自動的にスキップされる
+    const auth0Result = await auth0Provisioner.createTenantOrganization(
+      tenantSlug,
+      tenantName,
+      tier
+    );
+    resources.auth0OrganizationId = auth0Result.organizationId;
+    console.log('Auth0 Organization created', {
+      tenantId,
+      organizationId: auth0Result.organizationId,
+    });
+
+    // 2. S3 ストレージをプロビジョニング
+    // ティアに応じたモデルを選択
     if (tier === 'ENTERPRISE') {
       // ENTERPRISE: Silo モデル（専用リソース）
-      resources = await provisionSiloResources(tenantId, tenantName);
+      const siloResources = await provisionSiloResources(tenantId, tenantName);
+      resources.s3Bucket = siloResources.s3Bucket;
     } else {
       // FREE/PRO: Pool モデル（共有リソース）
-      resources = await provisionPoolResources(tenantId);
+      const poolResources = await provisionPoolResources(tenantId);
+      resources.s3Prefix = poolResources.s3Prefix;
     }
+
+    // 3. IAM Role をプロビジョニング
+    // LocalStack 環境では自動的にダミー ARN を返す
+    const iamResult = await createTenantRole(
+      tenantId,
+      tenantSlug,
+      tier,
+      DATA_BUCKET_NAME
+    );
+    resources.iamRoleArn = iamResult.roleArn;
+    console.log('IAM Role created', {
+      tenantId,
+      roleName: iamResult.roleName,
+    });
+
+    // 4. CloudWatch Logs をプロビジョニング
+    const logsResult = await createTenantLogGroup(tenantId, tenantSlug, tier);
+    resources.cloudwatchLogGroup = logsResult.logGroupName;
+    console.log('CloudWatch Log Group created', {
+      tenantId,
+      logGroupName: logsResult.logGroupName,
+      retentionDays: logsResult.retentionDays,
+    });
 
     // 成功イベント発行
     await publishProvisionedEvent(tenantId, 'COMPLETED', resources);
 
-    console.log('Tenant provisioning completed', { tenantId, tier, resources });
+    console.log('Tenant provisioning completed', {
+      tenantId,
+      tier,
+      provisionedResources: Object.keys(resources),
+    });
   } catch (error) {
     console.error('Tenant provisioning failed', { tenantId, error });
 
