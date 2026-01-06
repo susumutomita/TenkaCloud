@@ -94,7 +94,7 @@ export default function LeaderboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header userName="参加者" />
+        <Header />
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
         </div>
@@ -105,7 +105,7 @@ export default function LeaderboardPage() {
   if (error || !leaderboard) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header userName="参加者" />
+        <Header />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card className="p-8 text-center">
             <p className="text-red-600 mb-4">
@@ -124,7 +124,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName="参加者" />
+      <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}

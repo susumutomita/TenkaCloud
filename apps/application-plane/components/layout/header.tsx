@@ -8,13 +8,16 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useTenantOptional } from '@/lib/tenant';
 
-interface HeaderProps {
-  userName?: string;
-}
-
-export function Header({ userName }: HeaderProps) {
+export function Header() {
+  const { data: session, status } = useSession();
+  const tenant = useTenantOptional();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const userName = session?.user?.name;
+  const isLoading = status === 'loading';
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -50,7 +53,9 @@ export function Header({ userName }: HeaderProps) {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
-            {userName ? (
+            {isLoading ? (
+              <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse" />
+            ) : session ? (
               <div className="relative">
                 <button
                   type="button"
@@ -60,10 +65,10 @@ export function Header({ userName }: HeaderProps) {
                   aria-haspopup="true"
                 >
                   <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
-                    {userName.charAt(0).toUpperCase()}
+                    {userName ? userName.charAt(0).toUpperCase() : 'U'}
                   </div>
                   <span className="hidden sm:block font-medium">
-                    {userName}
+                    {userName || 'ユーザー'}
                   </span>
                   <svg
                     className="w-4 h-4"
@@ -110,7 +115,7 @@ export function Header({ userName }: HeaderProps) {
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                       onClick={() => {
                         setIsMenuOpen(false);
-                        // TODO: ログアウト処理
+                        signOut({ callbackUrl: '/login' });
                       }}
                     >
                       ログアウト
