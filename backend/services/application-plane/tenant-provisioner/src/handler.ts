@@ -237,7 +237,11 @@ export async function handler(
     // 成功イベント発行
     await publishProvisionedEvent(tenantId, 'COMPLETED', resources);
 
-    console.log('Tenant provisioning completed', { tenantId, tier, resources });
+    console.log('Tenant provisioning completed', {
+      tenantId,
+      tier,
+      provisionedResources: Object.keys(resources),
+    });
   } catch (error) {
     console.error('Tenant provisioning failed', { tenantId, error });
 
