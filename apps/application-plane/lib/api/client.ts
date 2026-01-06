@@ -4,6 +4,8 @@
  * バックエンド API 呼び出しの共通設定（参加者向け）
  */
 
+import { getSession } from 'next-auth/react';
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
@@ -14,16 +16,12 @@ interface FetchOptions extends RequestInit {
 /**
  * 認証トークンを取得
  *
- * TODO: Keycloak 統合後に NextAuth セッションからトークンを取得
- * @see frontend/control-plane/lib/api/client.ts の実装を参考
+ * NextAuth セッションからアクセストークンを取得
+ * クライアントコンポーネントで使用
  */
 async function getAuthToken(): Promise<string | null> {
-  // Keycloak 統合後は以下のように実装:
-  // const session = await getSession();
-  // return session?.accessToken ?? null;
-
-  // 現在は未認証状態を返す（API 側で適切に処理される想定）
-  return null;
+  const session = await getSession();
+  return session?.accessToken ?? null;
 }
 
 /**
