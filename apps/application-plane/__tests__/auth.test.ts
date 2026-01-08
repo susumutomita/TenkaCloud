@@ -51,7 +51,7 @@ describe('Auth0 認証設定', () => {
       expect(session).toBeDefined();
       expect(session?.user?.name).toBe('Dev User');
       expect(session?.user?.email).toBe('dev@example.com');
-      expect(session?.roles).toEqual(['participant']);
+      expect(session?.roles).toEqual(['admin', 'participant']);
       expect(session?.tenantId).toBe('dev-tenant');
       expect(session?.teamId).toBe('dev-team');
       expect(session?.accessToken).toBe('mock-access-token');
