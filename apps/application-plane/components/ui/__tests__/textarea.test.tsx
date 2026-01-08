@@ -33,31 +33,31 @@ describe('Textarea コンポーネント', () => {
     it('default variant のスタイルを適用すべき', () => {
       render(<Textarea variant="default" data-testid="textarea" />);
       const textarea = screen.getByTestId('textarea');
-      expect(textarea).toHaveClass('border-gray-300');
+      expect(textarea).toHaveClass('border-border');
     });
 
     it('error variant のスタイルを適用すべき', () => {
       render(<Textarea variant="error" data-testid="textarea" />);
       const textarea = screen.getByTestId('textarea');
-      expect(textarea).toHaveClass('border-red-500');
+      expect(textarea).toHaveClass('border-hn-error');
     });
   });
 
   describe('sizes', () => {
     it('sm サイズのスタイルを適用すべき', () => {
-      render(<Textarea size="sm" data-testid="textarea" />);
+      render(<Textarea textareaSize="sm" data-testid="textarea" />);
       const textarea = screen.getByTestId('textarea');
       expect(textarea).toHaveClass('text-sm');
     });
 
     it('md サイズのスタイルを適用すべき', () => {
-      render(<Textarea size="md" data-testid="textarea" />);
+      render(<Textarea textareaSize="md" data-testid="textarea" />);
       const textarea = screen.getByTestId('textarea');
       expect(textarea).toHaveClass('text-base');
     });
 
     it('lg サイズのスタイルを適用すべき', () => {
-      render(<Textarea size="lg" data-testid="textarea" />);
+      render(<Textarea textareaSize="lg" data-testid="textarea" />);
       const textarea = screen.getByTestId('textarea');
       expect(textarea).toHaveClass('text-lg');
     });
@@ -107,7 +107,7 @@ describe('Textarea コンポーネント', () => {
     it('error がある場合 error variant を自動適用すべき', () => {
       render(<Textarea error="エラー" data-testid="textarea" />);
       const textarea = screen.getByTestId('textarea');
-      expect(textarea).toHaveClass('border-red-500');
+      expect(textarea).toHaveClass('border-hn-error');
     });
   });
 

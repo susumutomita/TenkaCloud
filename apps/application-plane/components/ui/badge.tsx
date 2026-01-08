@@ -1,7 +1,8 @@
 /**
  * Badge Component
  *
- * ステータス表示用バッジコンポーネント
+ * HybridNext Design System - Terminal Command Center style
+ * Neo-brutalist badges for status and category display
  */
 
 import type { ReactNode } from 'react';
@@ -12,41 +13,105 @@ type BadgeVariant =
   | 'success'
   | 'warning'
   | 'danger'
-  | 'info';
+  | 'info'
+  | 'purple';
+type BadgeStyle = 'solid' | 'outline' | 'subtle';
 type BadgeSize = 'sm' | 'md' | 'lg';
 
 interface BadgeProps {
   children: ReactNode;
   variant?: BadgeVariant;
+  badgeStyle?: BadgeStyle;
   size?: BadgeSize;
   className?: string;
+  dot?: boolean;
 }
 
-const variantClasses: Record<BadgeVariant, string> = {
-  default: 'bg-gray-100 text-gray-800',
-  primary: 'bg-blue-100 text-blue-800',
-  success: 'bg-green-100 text-green-800',
-  warning: 'bg-yellow-100 text-yellow-800',
-  danger: 'bg-red-100 text-red-800',
-  info: 'bg-cyan-100 text-cyan-800',
+const variantColors: Record<
+  BadgeVariant,
+  { solid: string; outline: string; subtle: string; dot: string }
+> = {
+  default: {
+    solid: 'bg-surface-3 text-text-primary border-transparent',
+    outline: 'bg-transparent text-text-secondary border-border',
+    subtle: 'bg-surface-2/50 text-text-secondary border-transparent',
+    dot: 'bg-text-muted',
+  },
+  primary: {
+    solid: 'bg-hn-accent text-surface-0 border-transparent',
+    outline: 'bg-transparent text-hn-accent border-hn-accent',
+    subtle: 'bg-hn-accent/10 text-hn-accent border-transparent',
+    dot: 'bg-hn-accent',
+  },
+  success: {
+    solid: 'bg-hn-success text-surface-0 border-transparent',
+    outline: 'bg-transparent text-hn-success border-hn-success',
+    subtle: 'bg-hn-success/10 text-hn-success border-transparent',
+    dot: 'bg-hn-success',
+  },
+  warning: {
+    solid: 'bg-hn-warning text-surface-0 border-transparent',
+    outline: 'bg-transparent text-hn-warning border-hn-warning',
+    subtle: 'bg-hn-warning/10 text-hn-warning border-transparent',
+    dot: 'bg-hn-warning',
+  },
+  danger: {
+    solid: 'bg-hn-error text-surface-0 border-transparent',
+    outline: 'bg-transparent text-hn-error border-hn-error',
+    subtle: 'bg-hn-error/10 text-hn-error border-transparent',
+    dot: 'bg-hn-error',
+  },
+  info: {
+    solid: 'bg-hn-info text-surface-0 border-transparent',
+    outline: 'bg-transparent text-hn-info border-hn-info',
+    subtle: 'bg-hn-info/10 text-hn-info border-transparent',
+    dot: 'bg-hn-info',
+  },
+  purple: {
+    solid: 'bg-hn-purple text-surface-0 border-transparent',
+    outline: 'bg-transparent text-hn-purple border-hn-purple',
+    subtle: 'bg-hn-purple/10 text-hn-purple border-transparent',
+    dot: 'bg-hn-purple',
+  },
 };
 
 const sizeClasses: Record<BadgeSize, string> = {
-  sm: 'px-2 py-0.5 text-xs',
-  md: 'px-2.5 py-1 text-sm',
-  lg: 'px-3 py-1.5 text-base',
+  sm: 'px-2 py-0.5 text-xs gap-1',
+  md: 'px-2.5 py-1 text-sm gap-1.5',
+  lg: 'px-3 py-1.5 text-base gap-2',
+};
+
+const dotSizeClasses: Record<BadgeSize, string> = {
+  sm: 'w-1.5 h-1.5',
+  md: 'w-2 h-2',
+  lg: 'w-2.5 h-2.5',
 };
 
 export function Badge({
   children,
   variant = 'default',
+  badgeStyle = 'subtle',
   size = 'md',
   className = '',
+  dot = false,
 }: BadgeProps) {
+  const baseClasses = [
+    'inline-flex items-center',
+    'font-medium',
+    'rounded-[var(--radius-sm)]',
+    'border',
+    'transition-colors duration-[var(--animation-duration-fast)]',
+  ].join(' ');
+
   return (
     <span
-      className={`inline-flex items-center font-medium rounded-full ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`${baseClasses} ${variantColors[variant][badgeStyle]} ${sizeClasses[size]} ${className}`}
     >
+      {dot && (
+        <span
+          className={`${dotSizeClasses[size]} ${variantColors[variant].dot} rounded-full shrink-0`}
+        />
+      )}
       {children}
     </span>
   );
@@ -54,55 +119,79 @@ export function Badge({
 
 // Event Status Badge
 export function EventStatusBadge({ status }: { status: string }) {
-  const statusConfig: Record<string, { variant: BadgeVariant; label: string }> =
-    {
-      draft: { variant: 'default', label: '下書き' },
-      scheduled: { variant: 'info', label: '予定' },
-      active: { variant: 'success', label: '開催中' },
-      paused: { variant: 'warning', label: '一時停止' },
-      completed: { variant: 'default', label: '終了' },
-      cancelled: { variant: 'danger', label: 'キャンセル' },
-    };
+  const statusConfig: Record<
+    string,
+    { variant: BadgeVariant; badgeStyle: BadgeStyle; label: string }
+  > = {
+    draft: { variant: 'default', badgeStyle: 'subtle', label: '下書き' },
+    scheduled: { variant: 'info', badgeStyle: 'subtle', label: '予定' },
+    active: { variant: 'success', badgeStyle: 'solid', label: '開催中' },
+    paused: { variant: 'warning', badgeStyle: 'outline', label: '一時停止' },
+    completed: { variant: 'default', badgeStyle: 'subtle', label: '終了' },
+    cancelled: {
+      variant: 'danger',
+      badgeStyle: 'outline',
+      label: 'キャンセル',
+    },
+  };
 
   const config = statusConfig[status] || {
     variant: 'default' as BadgeVariant,
+    badgeStyle: 'subtle' as BadgeStyle,
     label: status,
   };
 
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  return (
+    <Badge variant={config.variant} badgeStyle={config.badgeStyle} dot>
+      {config.label}
+    </Badge>
+  );
 }
 
 // Difficulty Badge
 export function DifficultyBadge({ difficulty }: { difficulty: string }) {
   const difficultyConfig: Record<
     string,
-    { variant: BadgeVariant; label: string }
+    { variant: BadgeVariant; badgeStyle: BadgeStyle; label: string }
   > = {
-    easy: { variant: 'success', label: '初級' },
-    medium: { variant: 'warning', label: '中級' },
-    hard: { variant: 'danger', label: '上級' },
-    expert: { variant: 'primary', label: 'エキスパート' },
+    easy: { variant: 'success', badgeStyle: 'subtle', label: '初級' },
+    medium: { variant: 'warning', badgeStyle: 'subtle', label: '中級' },
+    hard: { variant: 'danger', badgeStyle: 'subtle', label: '上級' },
+    expert: { variant: 'purple', badgeStyle: 'solid', label: 'エキスパート' },
   };
 
   const config = difficultyConfig[difficulty] || {
     variant: 'default' as BadgeVariant,
+    badgeStyle: 'subtle' as BadgeStyle,
     label: difficulty,
   };
 
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  return (
+    <Badge variant={config.variant} badgeStyle={config.badgeStyle}>
+      {config.label}
+    </Badge>
+  );
 }
 
 // Problem Type Badge
 export function ProblemTypeBadge({ type }: { type: string }) {
-  const typeConfig: Record<string, { variant: BadgeVariant; label: string }> = {
-    gameday: { variant: 'primary', label: 'GameDay' },
-    jam: { variant: 'info', label: 'JAM' },
+  const typeConfig: Record<
+    string,
+    { variant: BadgeVariant; badgeStyle: BadgeStyle; label: string }
+  > = {
+    gameday: { variant: 'primary', badgeStyle: 'solid', label: 'GameDay' },
+    jam: { variant: 'info', badgeStyle: 'solid', label: 'JAM' },
   };
 
   const config = typeConfig[type] || {
     variant: 'default' as BadgeVariant,
+    badgeStyle: 'subtle' as BadgeStyle,
     label: type,
   };
 
-  return <Badge variant={config.variant}>{config.label}</Badge>;
+  return (
+    <Badge variant={config.variant} badgeStyle={config.badgeStyle}>
+      {config.label}
+    </Badge>
+  );
 }

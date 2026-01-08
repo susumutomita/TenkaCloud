@@ -1,7 +1,8 @@
 /**
  * Admin Layout
  *
- * 管理者画面用レイアウト（サイドバー付き）
+ * HybridNext Design System - Terminal Command Center style
+ * Dark-themed admin layout with sidebar navigation
  */
 
 'use client';
@@ -139,39 +140,39 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-0">
       {/* Top Header */}
-      <header className="bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-50">
+      <header className="bg-surface-1 border-b border-border fixed top-0 left-0 right-0 z-[var(--z-sticky)]">
         <div className="flex items-center justify-between h-16 px-4">
           <div className="flex items-center space-x-4">
-            <Link href="/admin" className="flex items-center space-x-2">
+            <Link href="/admin" className="flex items-center space-x-2 group">
               <span className="text-2xl">⚔️</span>
-              <span className="font-bold text-xl text-gray-900">
+              <span className="font-bold text-xl text-text-primary group-hover:text-hn-accent transition-colors">
                 TenkaCloud
               </span>
-              <span className="text-sm font-medium text-gray-500 border-l border-gray-300 pl-4 ml-2">
-                管理画面
+              <span className="text-sm font-mono text-text-muted border-l border-border pl-4 ml-2">
+                [ADMIN]
               </span>
             </Link>
           </div>
 
           <div className="flex items-center space-x-4">
             {tenant?.slug && (
-              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+              <span className="text-sm font-mono text-hn-accent bg-hn-accent/10 px-3 py-1 rounded-[var(--radius)] border border-hn-accent/30">
                 {tenant.slug}
               </span>
             )}
             <Link
               href="/dashboard"
-              className="text-sm text-gray-600 hover:text-gray-900"
+              className="text-sm text-text-secondary hover:text-hn-accent transition-colors"
             >
-              参加者画面へ
+              参加者画面へ →
             </Link>
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
+              <div className="w-8 h-8 bg-hn-accent rounded-[var(--radius)] flex items-center justify-center text-surface-0 font-semibold shadow-[2px_2px_0_var(--color-hn-accent-dim)]">
                 {session?.user?.name?.charAt(0).toUpperCase() || 'A'}
               </div>
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-medium text-text-primary">
                 {session?.user?.name || '管理者'}
               </span>
             </div>
@@ -180,23 +181,39 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       </header>
 
       {/* Sidebar */}
-      <aside className="fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 overflow-y-auto">
+      <aside className="fixed left-0 top-16 bottom-0 w-64 bg-surface-1 border-r border-border overflow-y-auto">
         <nav className="p-4 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
-                isActive(item.href)
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              {item.icon}
-              <span className="font-medium">{item.label}</span>
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center space-x-3 px-3 py-2.5 rounded-[var(--radius)] transition-all duration-[var(--animation-duration-fast)] ${
+                  active
+                    ? 'bg-hn-accent text-surface-0 shadow-[2px_2px_0_var(--color-hn-accent-dim)]'
+                    : 'text-text-secondary hover:bg-surface-2 hover:text-text-primary'
+                }`}
+              >
+                <span className={active ? 'text-surface-0' : 'text-text-muted'}>
+                  {item.icon}
+                </span>
+                <span className="font-medium">{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
+
+        {/* Terminal-style footer */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border bg-surface-2">
+          <div className="text-xs font-mono text-text-muted">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-hn-success animate-pulse" />
+              <span>システム稼働中</span>
+            </div>
+            <div className="mt-1 text-text-muted/60">v0.1.0-alpha</div>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content */}

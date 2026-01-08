@@ -3,6 +3,17 @@
  */
 
 export {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from './alert-dialog';
+export {
   Badge,
   DifficultyBadge,
   EventStatusBadge,
@@ -11,6 +22,18 @@ export {
 export { Button } from './button';
 export { Card, CardContent, CardFooter, CardHeader } from './card';
 export { Input } from './input';
+export { Pagination } from './pagination';
 export { Progress, ScoreProgress } from './progress';
 export { Select } from './select';
+export { Skeleton, SkeletonButton, SkeletonText } from './skeleton';
+export {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './table';
 export { Textarea } from './textarea';
