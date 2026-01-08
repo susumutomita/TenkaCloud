@@ -23,7 +23,7 @@ describe('Skeleton コンポーネント', () => {
     it('背景色クラスを持つべき', () => {
       render(<Skeleton data-testid="skeleton" />);
       const skeleton = screen.getByTestId('skeleton');
-      expect(skeleton).toHaveClass('bg-gray-200');
+      expect(skeleton).toHaveClass('bg-surface-2');
     });
 
     it('カスタム className を適用すべき', () => {
@@ -63,7 +63,7 @@ describe('Skeleton コンポーネント', () => {
     it('rounded クラスをデフォルトで持つべき', () => {
       render(<Skeleton data-testid="skeleton" />);
       const skeleton = screen.getByTestId('skeleton');
-      expect(skeleton).toHaveClass('rounded-md');
+      expect(skeleton).toHaveClass('rounded-[var(--radius)]');
     });
 
     it('circle variant で完全な円にすべき', () => {
@@ -164,7 +164,7 @@ describe('SkeletonButton コンポーネント', () => {
     it('角丸を持つべき', () => {
       render(<SkeletonButton data-testid="skeleton-button" />);
       const skeleton = screen.getByTestId('skeleton-button');
-      expect(skeleton).toHaveClass('rounded-lg');
+      expect(skeleton).toHaveClass('rounded-[var(--radius)]');
     });
   });
 

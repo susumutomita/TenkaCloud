@@ -1,7 +1,8 @@
 /**
  * AlertDialog Component
  *
- * 削除確認などのモーダルダイアログコンポーネント
+ * HybridNext Design System - Terminal Command Center style
+ * Dark-themed modal dialogs with smooth animations
  */
 
 'use client';
@@ -163,7 +164,7 @@ const AlertDialogOverlay = forwardRef<
 >(({ className = '', ...props }, ref) => (
   <div
     ref={ref}
-    className={`fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 ${className}`}
+    className={`fixed inset-0 z-[var(--z-overlay)] bg-surface-0/80 backdrop-blur-sm animate-in fade-in-0 duration-[var(--animation-duration-fast)] ${className}`}
     {...props}
   />
 ));
@@ -212,7 +213,7 @@ const AlertDialogContent = forwardRef<HTMLDivElement, AlertDialogContentProps>(
           aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={descriptionId}
-          className={`fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-white p-6 shadow-lg duration-200 sm:rounded-lg ${className}`}
+          className={`fixed left-1/2 top-1/2 z-[var(--z-modal)] grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border border-border bg-surface-1 p-6 shadow-lg rounded-[var(--radius-lg)] animate-in fade-in-0 zoom-in-95 slide-in-from-left-1/2 slide-in-from-top-[48%] duration-[var(--animation-duration-normal)] ${className}`}
           {...props}
         >
           {children}
@@ -252,7 +253,7 @@ const AlertDialogTitle = forwardRef<
     <h2
       ref={ref}
       id={titleId}
-      className={`text-lg font-semibold ${className}`}
+      className={`text-lg font-semibold text-text-primary ${className}`}
       {...props}
     />
   );
@@ -272,7 +273,7 @@ const AlertDialogDescription = forwardRef<
     <p
       ref={ref}
       id={descriptionId}
-      className={`text-sm text-gray-500 ${className}`}
+      className={`text-sm text-text-muted ${className}`}
       {...props}
     />
   );
@@ -289,7 +290,7 @@ const AlertDialogFooter = forwardRef<
 >(({ className = '', ...props }, ref) => (
   <div
     ref={ref}
-    className={`flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 ${className}`}
+    className={`flex flex-col-reverse sm:flex-row sm:justify-end gap-2 ${className}`}
     {...props}
   />
 ));
@@ -314,7 +315,7 @@ const AlertDialogCancel = forwardRef<
     <button
       ref={ref}
       type="button"
-      className={`mt-2 inline-flex h-10 items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 sm:mt-0 ${className}`}
+      className={`inline-flex h-10 items-center justify-center rounded-[var(--radius)] border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-hn-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-1 transition-colors duration-[var(--animation-duration-fast)] ${className}`}
       onClick={handleClick}
       {...props}
     />
@@ -326,27 +327,51 @@ AlertDialogCancel.displayName = 'AlertDialogCancel';
 // AlertDialogAction
 // ============================================================================
 
-const AlertDialogAction = forwardRef<
-  HTMLButtonElement,
-  HTMLAttributes<HTMLButtonElement>
->(({ className = '', onClick, ...props }, ref) => {
-  const { setOpen } = useAlertDialog();
+type AlertDialogActionVariant = 'danger' | 'primary';
 
-  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
-    onClick?.(e as unknown as MouseEvent<HTMLButtonElement>);
-    setOpen(false);
-  };
+interface AlertDialogActionProps extends HTMLAttributes<HTMLButtonElement> {
+  variant?: AlertDialogActionVariant;
+}
 
-  return (
-    <button
-      ref={ref}
-      type="button"
-      className={`inline-flex h-10 items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${className}`}
-      onClick={handleClick}
-      {...props}
-    />
-  );
-});
+const variantClasses: Record<AlertDialogActionVariant, string> = {
+  danger: [
+    'bg-hn-error text-surface-0',
+    'hover:bg-hn-error/90',
+    'focus-visible:ring-hn-error',
+    'shadow-[2px_2px_0_#8a4444]',
+    'hover:shadow-[1px_1px_0_#8a4444]',
+    'active:translate-x-[1px] active:translate-y-[1px] active:shadow-none',
+  ].join(' '),
+  primary: [
+    'bg-hn-accent text-surface-0',
+    'hover:bg-hn-accent-bright',
+    'focus-visible:ring-hn-accent',
+    'shadow-[2px_2px_0_var(--color-hn-accent-dim)]',
+    'hover:shadow-[1px_1px_0_var(--color-hn-accent-dim)]',
+    'active:translate-x-[1px] active:translate-y-[1px] active:shadow-none',
+  ].join(' '),
+};
+
+const AlertDialogAction = forwardRef<HTMLButtonElement, AlertDialogActionProps>(
+  ({ className = '', variant = 'danger', onClick, ...props }, ref) => {
+    const { setOpen } = useAlertDialog();
+
+    const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+      onClick?.(e as unknown as MouseEvent<HTMLButtonElement>);
+      setOpen(false);
+    };
+
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className={`inline-flex h-10 items-center justify-center rounded-[var(--radius)] px-4 py-2 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-1 transition-all duration-[var(--animation-duration-fast)] ${variantClasses[variant]} ${className}`}
+        onClick={handleClick}
+        {...props}
+      />
+    );
+  }
+);
 AlertDialogAction.displayName = 'AlertDialogAction';
 
 // ============================================================================

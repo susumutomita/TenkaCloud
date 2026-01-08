@@ -283,14 +283,14 @@ describe('Pagination コンポーネント', () => {
           showPageInfo
         />
       );
-      expect(screen.getByText('3 / 10 ページ')).toBeInTheDocument();
+      expect(screen.getByText('3 / 10')).toBeInTheDocument();
     });
 
     it('デフォルトではページ情報を非表示にすべき', () => {
       render(
         <Pagination currentPage={3} totalPages={10} onPageChange={() => {}} />
       );
-      expect(screen.queryByText('3 / 10 ページ')).not.toBeInTheDocument();
+      expect(screen.queryByText('3 / 10')).not.toBeInTheDocument();
     });
   });
 

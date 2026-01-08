@@ -57,31 +57,31 @@ describe('Select コンポーネント', () => {
         <Select options={options} variant="default" data-testid="select" />
       );
       const select = screen.getByTestId('select');
-      expect(select).toHaveClass('border-gray-300');
+      expect(select).toHaveClass('border-border');
     });
 
     it('error variant のスタイルを適用すべき', () => {
       render(<Select options={options} variant="error" data-testid="select" />);
       const select = screen.getByTestId('select');
-      expect(select).toHaveClass('border-red-500');
+      expect(select).toHaveClass('border-hn-error');
     });
   });
 
   describe('sizes', () => {
     it('sm サイズのスタイルを適用すべき', () => {
-      render(<Select options={options} size="sm" data-testid="select" />);
+      render(<Select options={options} selectSize="sm" data-testid="select" />);
       const select = screen.getByTestId('select');
       expect(select).toHaveClass('text-sm');
     });
 
     it('md サイズのスタイルを適用すべき', () => {
-      render(<Select options={options} size="md" data-testid="select" />);
+      render(<Select options={options} selectSize="md" data-testid="select" />);
       const select = screen.getByTestId('select');
       expect(select).toHaveClass('text-base');
     });
 
     it('lg サイズのスタイルを適用すべき', () => {
-      render(<Select options={options} size="lg" data-testid="select" />);
+      render(<Select options={options} selectSize="lg" data-testid="select" />);
       const select = screen.getByTestId('select');
       expect(select).toHaveClass('text-lg');
     });
@@ -131,7 +131,7 @@ describe('Select コンポーネント', () => {
     it('error がある場合 error variant を自動適用すべき', () => {
       render(<Select options={options} error="エラー" data-testid="select" />);
       const select = screen.getByTestId('select');
-      expect(select).toHaveClass('border-red-500');
+      expect(select).toHaveClass('border-hn-error');
     });
   });
 

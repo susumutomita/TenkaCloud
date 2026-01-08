@@ -1,7 +1,8 @@
 /**
  * Skeleton Component
  *
- * ローディング状態を表示するスケルトンコンポーネント
+ * HybridNext Design System - Terminal Command Center style
+ * Dark-themed loading skeletons with shimmer effect
  */
 
 import type { CSSProperties, HTMLAttributes } from 'react';
@@ -22,17 +23,26 @@ interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   width?: number | string;
   height?: number | string;
   variant?: SkeletonVariant;
+  animate?: boolean;
 }
 
 const variantClasses: Record<SkeletonVariant, string> = {
-  default: 'rounded-md',
+  default: 'rounded-[var(--radius)]',
   circle: 'rounded-full',
   rectangular: 'rounded-none',
 };
 
 const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
   (
-    { className = '', width, height, variant = 'default', style, ...props },
+    {
+      className = '',
+      width,
+      height,
+      variant = 'default',
+      animate = true,
+      style,
+      ...props
+    },
     ref
   ) => {
     const computedStyle: CSSProperties = {
@@ -48,7 +58,7 @@ const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
     return (
       <div
         ref={ref}
-        className={`animate-pulse bg-gray-200 ${variantClasses[variant]} ${className}`}
+        className={`bg-surface-2 ${animate ? 'animate-pulse' : ''} ${variantClasses[variant]} ${className}`}
         style={computedStyle}
         {...props}
       />
@@ -84,7 +94,7 @@ const SkeletonText = forwardRef<HTMLDivElement, SkeletonTextProps>(
             <div
               key={index}
               data-skeleton-line=""
-              className={`animate-pulse bg-gray-200 rounded-md ${sizeClasses[size]}`}
+              className={`animate-pulse bg-surface-2 rounded-[var(--radius-sm)] ${sizeClasses[size]}`}
               style={{ width: lineWidth }}
             />
           );
@@ -121,7 +131,7 @@ const SkeletonButton = forwardRef<HTMLDivElement, SkeletonButtonProps>(
     return (
       <div
         ref={ref}
-        className={`animate-pulse bg-gray-200 rounded-lg ${height} ${widthClass} ${className}`}
+        className={`animate-pulse bg-surface-2 rounded-[var(--radius)] ${height} ${widthClass} ${className}`}
         {...props}
       />
     );
@@ -130,7 +140,87 @@ const SkeletonButton = forwardRef<HTMLDivElement, SkeletonButtonProps>(
 SkeletonButton.displayName = 'SkeletonButton';
 
 // ============================================================================
+// SkeletonCard
+// ============================================================================
+
+interface SkeletonCardProps extends HTMLAttributes<HTMLDivElement> {
+  hasImage?: boolean;
+  hasAction?: boolean;
+}
+
+const SkeletonCard = forwardRef<HTMLDivElement, SkeletonCardProps>(
+  ({ className = '', hasImage = false, hasAction = false, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={`bg-surface-1 border border-border rounded-[var(--radius)] p-4 ${className}`}
+        {...props}
+      >
+        {hasImage && (
+          <Skeleton className="w-full h-40 mb-4" variant="rectangular" />
+        )}
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-3/4" />
+          <SkeletonText lines={2} size="sm" />
+          {hasAction && (
+            <div className="flex gap-2 pt-2">
+              <SkeletonButton size="sm" />
+              <SkeletonButton size="sm" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+);
+SkeletonCard.displayName = 'SkeletonCard';
+
+// ============================================================================
+// SkeletonTable
+// ============================================================================
+
+interface SkeletonTableProps extends HTMLAttributes<HTMLDivElement> {
+  rows?: number;
+  columns?: number;
+}
+
+const SkeletonTable = forwardRef<HTMLDivElement, SkeletonTableProps>(
+  ({ className = '', rows = 5, columns = 4, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={`rounded-[var(--radius)] border border-border overflow-hidden ${className}`}
+        {...props}
+      >
+        {/* Header */}
+        <div className="bg-surface-2 border-b border-border p-4">
+          <div className="flex gap-4">
+            {Array.from({ length: columns }).map((_, i) => (
+              <Skeleton key={i} className="h-4 flex-1" />
+            ))}
+          </div>
+        </div>
+        {/* Rows */}
+        <div className="bg-surface-1">
+          {Array.from({ length: rows }).map((_, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="flex gap-4 p-4 border-b border-border last:border-b-0"
+            >
+              {Array.from({ length: columns }).map((_, colIndex) => (
+                <Skeleton key={colIndex} className="h-4 flex-1" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+);
+SkeletonTable.displayName = 'SkeletonTable';
+
+// ============================================================================
 // Exports
 // ============================================================================
 
-export { Skeleton, SkeletonText, SkeletonButton };
+export { Skeleton, SkeletonText, SkeletonButton, SkeletonCard, SkeletonTable };

@@ -33,31 +33,31 @@ describe('Input コンポーネント', () => {
     it('default variant のスタイルを適用すべき', () => {
       render(<Input variant="default" data-testid="input" />);
       const input = screen.getByTestId('input');
-      expect(input).toHaveClass('border-gray-300');
+      expect(input).toHaveClass('border-border');
     });
 
     it('error variant のスタイルを適用すべき', () => {
       render(<Input variant="error" data-testid="input" />);
       const input = screen.getByTestId('input');
-      expect(input).toHaveClass('border-red-500');
+      expect(input).toHaveClass('border-hn-error');
     });
   });
 
   describe('sizes', () => {
     it('sm サイズのスタイルを適用すべき', () => {
-      render(<Input size="sm" data-testid="input" />);
+      render(<Input inputSize="sm" data-testid="input" />);
       const input = screen.getByTestId('input');
       expect(input).toHaveClass('text-sm');
     });
 
     it('md サイズのスタイルを適用すべき', () => {
-      render(<Input size="md" data-testid="input" />);
+      render(<Input inputSize="md" data-testid="input" />);
       const input = screen.getByTestId('input');
       expect(input).toHaveClass('text-base');
     });
 
     it('lg サイズのスタイルを適用すべき', () => {
-      render(<Input size="lg" data-testid="input" />);
+      render(<Input inputSize="lg" data-testid="input" />);
       const input = screen.getByTestId('input');
       expect(input).toHaveClass('text-lg');
     });
@@ -107,7 +107,7 @@ describe('Input コンポーネント', () => {
     it('error がある場合 error variant を自動適用すべき', () => {
       render(<Input error="エラー" data-testid="input" />);
       const input = screen.getByTestId('input');
-      expect(input).toHaveClass('border-red-500');
+      expect(input).toHaveClass('border-hn-error');
     });
   });
 

@@ -1,7 +1,8 @@
 /**
  * Pagination Component
  *
- * ページネーションコンポーネント
+ * HybridNext Design System - Terminal Command Center style
+ * Dark-themed pagination with neo-brutalist active states
  */
 
 import type { HTMLAttributes } from 'react';
@@ -132,15 +133,19 @@ const Pagination = forwardRef<HTMLElement, PaginationProps>(
     const isLastPage = normalizedCurrentPage >= normalizedTotalPages;
 
     const baseButtonClasses = [
-      'inline-flex items-center justify-center rounded-md font-medium',
-      'transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500',
-      'focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+      'inline-flex items-center justify-center',
+      'rounded-[var(--radius)]',
+      'font-medium',
+      'transition-all duration-[var(--animation-duration-fast)]',
+      'focus:outline-none focus-visible:ring-2 focus-visible:ring-hn-accent',
+      'focus-visible:ring-offset-2 focus-visible:ring-offset-surface-0',
+      'disabled:pointer-events-none disabled:opacity-50',
       buttonSizeClasses[size],
     ].join(' ');
 
     const navButtonClasses = [
       baseButtonClasses,
-      'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+      'border border-border bg-surface-1 text-text-secondary hover:bg-surface-2 hover:text-text-primary',
     ].join(' ');
 
     return (
@@ -167,7 +172,7 @@ const Pagination = forwardRef<HTMLElement, PaginationProps>(
           if (page === 'ellipsis') {
             const ellipsisClasses = [
               buttonSizeClasses[size],
-              'inline-flex items-center justify-center text-gray-500',
+              'inline-flex items-center justify-center text-text-muted',
             ].join(' ');
             return (
               <span key={`ellipsis-${index}`} className={ellipsisClasses}>
@@ -177,9 +182,15 @@ const Pagination = forwardRef<HTMLElement, PaginationProps>(
           }
 
           const isCurrentPage = page === normalizedCurrentPage;
-          const activeStyle = 'bg-blue-600 text-white hover:bg-blue-700';
-          const inactiveStyle =
-            'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50';
+          const activeStyle = [
+            'bg-hn-accent text-surface-0',
+            'shadow-[2px_2px_0_var(--color-hn-accent-dim)]',
+            'hover:bg-hn-accent-bright',
+          ].join(' ');
+          const inactiveStyle = [
+            'border border-border bg-surface-1 text-text-secondary',
+            'hover:bg-surface-2 hover:text-text-primary',
+          ].join(' ');
           const pageButtonStyle = isCurrentPage ? activeStyle : inactiveStyle;
 
           return (
@@ -209,8 +220,8 @@ const Pagination = forwardRef<HTMLElement, PaginationProps>(
 
         {/* ページ情報 */}
         {showPageInfo && (
-          <span className="ml-2 text-gray-500">
-            {normalizedCurrentPage} / {normalizedTotalPages} ページ
+          <span className="ml-2 text-text-muted font-mono text-sm">
+            {normalizedCurrentPage} / {normalizedTotalPages}
           </span>
         )}
       </nav>
