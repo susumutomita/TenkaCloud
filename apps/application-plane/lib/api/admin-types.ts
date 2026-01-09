@@ -130,7 +130,7 @@ export interface AdminTeamFilters {
 /**
  * 参加者のロール
  */
-export type ParticipantRole = 'participant' | 'admin' | 'spectator';
+export type ParticipantRole = 'participant' | 'admin';
 
 /**
  * 参加者のステータス
