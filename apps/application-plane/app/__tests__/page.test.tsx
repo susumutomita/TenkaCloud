@@ -3,52 +3,75 @@ import { describe, expect, it } from 'vitest';
 import Home from '../page';
 
 describe('Participant App ホームページ', () => {
-  it('ページタイトル「TenkaCloud」が表示されるべき', () => {
+  it('ヒーローセクションのキャッチコピーが表示されるべき', () => {
     render(<Home />);
-    const title = screen.getByText('TenkaCloud');
-    expect(title).toBeInTheDocument();
+    expect(screen.getByText('クラウドスキルを競い')).toBeInTheDocument();
+    expect(screen.getByText('高め合う場所')).toBeInTheDocument();
   });
 
-  it('サブタイトル「クラウド天下一武道会」が表示されるべき', () => {
+  it('「イベントを探す」リンクが /events へのリンクを持つべき', () => {
     render(<Home />);
-    const subtitle = screen.getByText('クラウド天下一武道会');
-    expect(subtitle).toBeInTheDocument();
-  });
-
-  it('キャッチフレーズ「最強のクラウドエンジニアを目指せ」が表示されるべき', () => {
-    render(<Home />);
-    const catchphrase = screen.getByText('最強のクラウドエンジニアを目指せ');
-    expect(catchphrase).toBeInTheDocument();
-  });
-
-  it('「バトルに参加する」ボタンが /events へのリンクを持つべき', () => {
-    render(<Home />);
-    const joinButton = screen.getByRole('button', { name: 'バトルに参加する' });
-    expect(joinButton).toBeInTheDocument();
-    const link = joinButton.closest('a');
+    const link = screen.getByRole('link', { name: /イベントを探す/ });
     expect(link).toHaveAttribute('href', '/events');
   });
 
-  it('「観戦モード」ボタンが /events へのリンクを持つべき', () => {
+  it('「ランキングを見る」リンクが /rankings へのリンクを持つべき', () => {
     render(<Home />);
-    const spectateButton = screen.getByRole('button', { name: '観戦モード' });
-    expect(spectateButton).toBeInTheDocument();
-    const link = spectateButton.closest('a');
-    expect(link).toHaveAttribute('href', '/events');
+    const links = screen.getAllByRole('link', { name: /ランキングを見る/ });
+    expect(links[0]).toHaveAttribute('href', '/rankings');
   });
 
-  it('統計情報のプレースホルダーが3つ表示されるべき（API 接続前）', () => {
-    render(<Home />);
-    // API 接続前はプレースホルダー値「---」が表示される
-    const placeholders = screen.getAllByText('---');
-    expect(placeholders).toHaveLength(3);
+  describe('統計セクション', () => {
+    it.each(['Cloud Providers', 'Problems', 'Auto Grading', 'Engineers'])(
+      '統計ラベル「%s」が表示されるべき',
+      (label) => {
+        render(<Home />);
+        expect(screen.getByText(label)).toBeInTheDocument();
+      }
+    );
   });
 
-  it.each(['Status', 'Participants', 'Problems'])(
-    '統計ラベル「%s」が表示されるべき',
-    (label) => {
+  describe('特徴セクション', () => {
+    it('「TenkaCloud とは」セクションが表示されるべき', () => {
       render(<Home />);
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
-  );
+      expect(screen.getByText('TenkaCloud とは')).toBeInTheDocument();
+    });
+
+    it.each([
+      'マルチクラウド対応',
+      '実践的な課題',
+      'チーム or 個人',
+      'リアルタイム採点',
+    ])('特徴「%s」が表示されるべき', (feature) => {
+      render(<Home />);
+      expect(screen.getByText(feature)).toBeInTheDocument();
+    });
+  });
+
+  describe('イベントタイプセクション', () => {
+    it('「イベントタイプ」セクションが表示されるべき', () => {
+      render(<Home />);
+      expect(screen.getByText('イベントタイプ')).toBeInTheDocument();
+    });
+
+    it.each(['GameDay', 'Jam'])(
+      'イベントタイプ「%s」が表示されるべき',
+      (eventType) => {
+        render(<Home />);
+        expect(screen.getByText(eventType)).toBeInTheDocument();
+      }
+    );
+  });
+
+  it('観戦 CTA セクションが表示されるべき', () => {
+    render(<Home />);
+    expect(screen.getByText('まずは観戦してみよう')).toBeInTheDocument();
+  });
+
+  it('フッターが表示されるべき', () => {
+    render(<Home />);
+    expect(
+      screen.getByText('TenkaCloud - The Open Cloud Battle Arena')
+    ).toBeInTheDocument();
+  });
 });
