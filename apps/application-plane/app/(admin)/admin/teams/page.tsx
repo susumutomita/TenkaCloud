@@ -19,57 +19,42 @@ export default function AdminTeamsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputId = useId();
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    // TODO: Replace with actual API call
     const fetchTeams = async () => {
       try {
         setLoading(true);
-        // Mock data
-        setTeams([
-          {
-            id: 'team-1',
-            name: 'Cloud Warriors',
-            members: [],
-            captainId: 'user-1',
-            inviteCode: 'CW2024',
-            memberCount: 4,
-            maxMembers: 5,
-            eventsCount: 3,
-            totalScore: 8500,
-            createdAt: new Date(Date.now() - 2592000000).toISOString(),
-          },
-          {
-            id: 'team-2',
-            name: 'Lambda Legends',
-            members: [],
-            captainId: 'user-2',
-            inviteCode: 'LL2024',
-            memberCount: 5,
-            maxMembers: 5,
-            eventsCount: 2,
-            totalScore: 6200,
-            createdAt: new Date(Date.now() - 1296000000).toISOString(),
-          },
-          {
-            id: 'team-3',
-            name: 'Serverless Samurai',
-            members: [],
-            captainId: 'user-3',
-            inviteCode: 'SS2024',
-            memberCount: 3,
-            maxMembers: 5,
-            eventsCount: 1,
-            totalScore: 2100,
-            createdAt: new Date(Date.now() - 604800000).toISOString(),
-          },
-        ]);
+        setError(null);
+
+        const params = new URLSearchParams();
+        if (searchQuery) params.set('search', searchQuery);
+
+        const response = await fetch(`/api/admin/teams?${params.toString()}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error || `チームの取得に失敗しました (${response.status})`
+          );
+        }
+
+        const data = await response.json();
+        setTeams(data.teams || []);
+      } catch (err) {
+        console.error('Failed to fetch teams:', err);
+        setError(
+          err instanceof Error ? err.message : 'チームの取得に失敗しました'
+        );
+        setTeams([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTeams();
-  }, []);
+    // デバウンス用のタイマー
+    const timeoutId = setTimeout(fetchTeams, searchQuery ? 300 : 0);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -80,9 +65,8 @@ export default function AdminTeamsPage() {
     });
   };
 
-  const filteredTeams = teams.filter((t) =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // API がフィルタリングするため、クライアント側ではそのまま使用
+  const filteredTeams = teams;
 
   const totalMembers = teams.reduce((acc, t) => acc + t.memberCount, 0);
   const avgScore =
@@ -172,8 +156,24 @@ export default function AdminTeamsPage() {
         </Card>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <Card className="border-hn-error/50 bg-hn-error/10">
+          <CardContent className="p-6 text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h2 className="text-xl font-semibold text-hn-error mb-2">
+              エラーが発生しました
+            </h2>
+            <p className="text-text-muted mb-4">{error}</p>
+            <Button variant="secondary" onClick={() => setSearchQuery('')}>
+              再読み込み
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Teams Grid */}
-      {loading ? (
+      {!error && loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i}>
@@ -187,7 +187,7 @@ export default function AdminTeamsPage() {
             </Card>
           ))}
         </div>
-      ) : filteredTeams.length === 0 ? (
+      ) : !error && filteredTeams.length === 0 ? (
         <Card className="text-center py-12">
           <div className="text-4xl mb-4">🏆</div>
           <h2 className="text-xl font-semibold text-text-primary mb-2">
@@ -199,7 +199,7 @@ export default function AdminTeamsPage() {
               : '参加者がチームを作成するとここに表示されます。'}
           </p>
         </Card>
-      ) : (
+      ) : !error ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTeams.map((team) => (
             <Card
@@ -264,7 +264,7 @@ export default function AdminTeamsPage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Terminal-style footer */}
       <div className="text-center text-text-muted text-xs font-mono py-4">

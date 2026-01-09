@@ -23,54 +23,44 @@ export default function AdminParticipantsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputId = useId();
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    // TODO: Replace with actual API call
     const fetchParticipants = async () => {
       try {
         setLoading(true);
-        // Mock data
-        setParticipants([
-          {
-            id: 'participant-1',
-            userId: 'user-1',
-            displayName: '山田太郎',
-            email: 'yamada@example.com',
-            role: 'participant',
-            joinedAt: new Date(Date.now() - 2592000000).toISOString(),
-            status: 'active',
-            eventsCount: 5,
-            totalScore: 2500,
-          },
-          {
-            id: 'participant-2',
-            userId: 'user-2',
-            displayName: '佐藤花子',
-            email: 'sato@example.com',
-            role: 'admin',
-            joinedAt: new Date(Date.now() - 1296000000).toISOString(),
-            status: 'active',
-            eventsCount: 3,
-            totalScore: 1800,
-          },
-          {
-            id: 'participant-3',
-            userId: 'user-3',
-            displayName: '鈴木一郎',
-            email: 'suzuki@example.com',
-            role: 'participant',
-            joinedAt: new Date(Date.now() - 604800000).toISOString(),
-            status: 'inactive',
-            eventsCount: 1,
-            totalScore: 400,
-          },
-        ]);
+        setError(null);
+
+        const params = new URLSearchParams();
+        if (searchQuery) params.set('search', searchQuery);
+
+        const response = await fetch(
+          `/api/admin/participants?${params.toString()}`
+        );
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error || `参加者の取得に失敗しました (${response.status})`
+          );
+        }
+
+        const data = await response.json();
+        setParticipants(data.participants || []);
+      } catch (err) {
+        console.error('Failed to fetch participants:', err);
+        setError(
+          err instanceof Error ? err.message : '参加者の取得に失敗しました'
+        );
+        setParticipants([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchParticipants();
-  }, []);
+    // デバウンス用のタイマー
+    const timeoutId = setTimeout(fetchParticipants, searchQuery ? 300 : 0);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -81,11 +71,8 @@ export default function AdminParticipantsPage() {
     });
   };
 
-  const filteredParticipants = participants.filter(
-    (p) =>
-      p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // API がフィルタリングするため、クライアント側ではそのまま使用
+  const filteredParticipants = participants;
 
   const getStatusBadgeVariant = (
     status: ParticipantStatus
@@ -220,8 +207,24 @@ export default function AdminParticipantsPage() {
         </Card>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <Card className="border-hn-error/50 bg-hn-error/10">
+          <CardContent className="p-6 text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h2 className="text-xl font-semibold text-hn-error mb-2">
+              エラーが発生しました
+            </h2>
+            <p className="text-text-muted mb-4">{error}</p>
+            <Button variant="secondary" onClick={() => setSearchQuery('')}>
+              再読み込み
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Participants List */}
-      {loading ? (
+      {!error && loading ? (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i}>
@@ -237,7 +240,7 @@ export default function AdminParticipantsPage() {
             </Card>
           ))}
         </div>
-      ) : filteredParticipants.length === 0 ? (
+      ) : !error && filteredParticipants.length === 0 ? (
         <Card className="text-center py-12">
           <div className="text-4xl mb-4">👥</div>
           <h2 className="text-xl font-semibold text-text-primary mb-2">
@@ -250,7 +253,7 @@ export default function AdminParticipantsPage() {
           </p>
           <Button>参加者を招待</Button>
         </Card>
-      ) : (
+      ) : !error ? (
         <div className="space-y-3">
           {filteredParticipants.map((participant) => (
             <Card
@@ -310,7 +313,7 @@ export default function AdminParticipantsPage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Terminal-style footer */}
       <div className="text-center text-text-muted text-xs font-mono py-4">

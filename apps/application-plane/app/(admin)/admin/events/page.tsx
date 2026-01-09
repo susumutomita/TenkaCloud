@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EventStatusBadge, ProblemTypeBadge } from '@/components/ui';
 import type { AdminEvent, EventStatus } from '@/lib/api/admin-types';
-import type { ProblemType } from '@/lib/api/types';
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -22,71 +21,34 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<{ status?: EventStatus }>({});
   const statusFilterId = useId();
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    // TODO: Replace with actual API call
     const fetchEvents = async () => {
       try {
         setLoading(true);
-        // Mock data for now
-        setEvents([
-          {
-            id: 'evt-1',
-            name: 'AWS GameDay 2024 Winter',
-            status: 'active',
-            type: 'gameday' as ProblemType,
-            startTime: new Date().toISOString(),
-            endTime: new Date(Date.now() + 86400000).toISOString(),
-            participantCount: 45,
-            maxParticipants: 100,
-            timezone: 'Asia/Tokyo',
-            participantType: 'team',
-            cloudProvider: 'aws',
-            regions: ['ap-northeast-1'],
-            scoringType: 'realtime',
-            leaderboardVisible: true,
-            problemCount: 5,
-            isRegistered: false,
-            slug: 'aws-gameday-2024-winter',
-          },
-          {
-            id: 'evt-2',
-            name: 'Security JAM',
-            status: 'scheduled',
-            type: 'jam' as ProblemType,
-            startTime: new Date(Date.now() + 172800000).toISOString(),
-            endTime: new Date(Date.now() + 259200000).toISOString(),
-            participantCount: 23,
-            maxParticipants: 50,
-            timezone: 'Asia/Tokyo',
-            participantType: 'individual',
-            cloudProvider: 'aws',
-            regions: ['ap-northeast-1'],
-            scoringType: 'realtime',
-            leaderboardVisible: true,
-            problemCount: 8,
-            isRegistered: false,
-            slug: 'security-jam',
-          },
-          {
-            id: 'evt-3',
-            name: 'Cloud Architecture Challenge',
-            status: 'draft',
-            type: 'gameday' as ProblemType,
-            startTime: new Date(Date.now() + 604800000).toISOString(),
-            endTime: new Date(Date.now() + 691200000).toISOString(),
-            participantCount: 0,
-            maxParticipants: 100,
-            timezone: 'Asia/Tokyo',
-            participantType: 'team',
-            cloudProvider: 'aws',
-            regions: ['ap-northeast-1'],
-            scoringType: 'realtime',
-            leaderboardVisible: false,
-            problemCount: 0,
-            isRegistered: false,
-            slug: 'cloud-architecture-challenge',
-          },
-        ]);
+        setError(null);
+
+        const params = new URLSearchParams();
+        if (filter.status) params.set('status', filter.status);
+
+        const response = await fetch(`/api/admin/events?${params.toString()}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error ||
+              `イベントの取得に失敗しました (${response.status})`
+          );
+        }
+
+        const data = await response.json();
+        setEvents(data.events || []);
+      } catch (err) {
+        console.error('Failed to fetch events:', err);
+        setError(
+          err instanceof Error ? err.message : 'イベントの取得に失敗しました'
+        );
+        setEvents([]);
       } finally {
         setLoading(false);
       }
@@ -173,8 +135,27 @@ export default function AdminEventsPage() {
         </CardContent>
       </Card>
 
+      {/* Error State */}
+      {error && (
+        <Card className="border-hn-error/50 bg-hn-error/10">
+          <CardContent className="p-6 text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h2 className="text-xl font-semibold text-hn-error mb-2">
+              エラーが発生しました
+            </h2>
+            <p className="text-text-muted mb-4">{error}</p>
+            <Button
+              variant="secondary"
+              onClick={() => setFilter({ ...filter })}
+            >
+              再読み込み
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Events List */}
-      {loading ? (
+      {!error && loading ? (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i}>
@@ -190,7 +171,7 @@ export default function AdminEventsPage() {
             </Card>
           ))}
         </div>
-      ) : filteredEvents.length === 0 ? (
+      ) : !error && filteredEvents.length === 0 ? (
         <Card className="text-center py-12">
           <div className="text-4xl mb-4">📭</div>
           <h2 className="text-xl font-semibold text-text-primary mb-2">
@@ -203,7 +184,7 @@ export default function AdminEventsPage() {
             <Link href="/admin/events/new">新規イベント作成</Link>
           </Button>
         </Card>
-      ) : (
+      ) : !error ? (
         <div className="space-y-4">
           {filteredEvents.map((event) => (
             <Card
@@ -321,7 +302,7 @@ export default function AdminEventsPage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Terminal-style footer */}
       <div className="text-center text-text-muted text-xs font-mono py-4">
