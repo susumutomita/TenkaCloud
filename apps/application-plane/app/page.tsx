@@ -1,7 +1,8 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import { Eye, Swords, Trophy, Users, Zap } from 'lucide-react';
+import Link from 'next/link';
 
 // 統計情報は API 接続後に動的に取得予定
 const stats = [
@@ -10,22 +11,20 @@ const stats = [
   { label: 'Problems', value: '---', icon: Trophy },
 ];
 
-export default function Home() {
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 },
+  },
+};
 
-  const item = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 },
-  };
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0 },
+};
 
+export default function Home(): React.JSX.Element {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -35,12 +34,12 @@ export default function Home() {
       </div>
 
       <motion.main
-        variants={container}
+        variants={containerVariants}
         initial="hidden"
         animate="show"
         className="text-center max-w-2xl w-full glass rounded-3xl p-12"
       >
-        <motion.div variants={item}>
+        <motion.div variants={itemVariants}>
           <h1 className="text-5xl md:text-6xl font-black mb-4 gradient-text">
             TenkaCloud
           </h1>
@@ -52,29 +51,33 @@ export default function Home() {
           </p>
         </motion.div>
 
-        <motion.div variants={item} className="space-y-4">
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="w-full bg-gradient-to-r from-primary-500 to-accent-500 text-white font-bold py-4 px-8 rounded-xl text-lg shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-shadow flex items-center justify-center gap-3"
-          >
-            <Swords className="w-5 h-5" />
-            バトルに参加する
-          </motion.button>
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="w-full bg-white/5 hover:bg-white/10 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
-          >
-            <Eye className="w-5 h-5" />
-            観戦モード
-          </motion.button>
+        <motion.div variants={itemVariants} className="space-y-4">
+          <Link href="/events">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full bg-gradient-to-r from-primary-500 to-accent-500 text-white font-bold py-4 px-8 rounded-xl text-lg shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-shadow flex items-center justify-center gap-3"
+            >
+              <Swords className="w-5 h-5" />
+              バトルに参加する
+            </motion.button>
+          </Link>
+          <Link href="/events">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full bg-white/5 hover:bg-white/10 text-white font-semibold py-4 px-8 rounded-xl text-lg transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-3"
+            >
+              <Eye className="w-5 h-5" />
+              観戦モード
+            </motion.button>
+          </Link>
         </motion.div>
 
         <motion.div
-          variants={item}
+          variants={itemVariants}
           className="mt-12 grid grid-cols-3 gap-4 text-center"
         >
           {stats.map((stat) => (
