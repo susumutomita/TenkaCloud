@@ -233,6 +233,7 @@ start-dev-servers:
 	@echo "📋 アクセス先:"
 	@echo "  - Control Plane:      http://localhost:13000"
 	@echo "  - Application Plane:  http://localhost:13001"
+	@echo "  - Tenant API:         http://localhost:13004"
 	@echo "  - LocalStack:         http://localhost:4566"
 	@echo ""
 	@echo "💡 終了するには Ctrl+C を押してください"
