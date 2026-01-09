@@ -133,7 +133,7 @@ describe('Stats API', () => {
       await fetchDashboardStats();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3004/api/stats',
+        'http://localhost:13004/api/stats',
         { cache: 'no-store' }
       );
 

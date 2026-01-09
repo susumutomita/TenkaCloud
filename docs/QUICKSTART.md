@@ -33,7 +33,7 @@ cat > apps/control-plane/.env.local << 'EOF'
 AUTH_SKIP=1
 AUTH_SECRET=dev-secret-for-local-development
 AUTH_URL=http://localhost:13000
-TENANT_API_BASE_URL=http://localhost:3004/api
+TENANT_API_BASE_URL=http://localhost:13004/api
 EOF
 
 # Application Plane
@@ -57,7 +57,7 @@ make start
 
 - **Control Plane**: http://localhost:13000
 - **Application Plane**: http://localhost:13001
-- **Tenant Management API**: http://localhost:3004
+- **Tenant Management API**: http://localhost:13004
 - **LocalStack**: http://localhost:4566
 
 ## 🔧 Tenant Management サービス
@@ -78,7 +78,7 @@ bun run dev
 以下のコマンドで動作を確認します。
 
 ```bash
-curl http://localhost:3004/health
+curl http://localhost:13004/health
 # {"status":"ok","service":"tenant-management"}
 ```
 
@@ -190,8 +190,8 @@ make stop && make start
 
 テナント管理画面で `fetch failed` エラーが出る場合は、以下を確認します。
 
-1. `.env.local` に `TENANT_API_BASE_URL=http://localhost:3004/api` が設定されているか確認する。
-2. tenant-management サービスが起動しているか確認する。`curl http://localhost:3004/health` でヘルスチェックを行う。
+1. `.env.local` に `TENANT_API_BASE_URL=http://localhost:13004/api` が設定されているか確認する。
+2. tenant-management サービスが起動しているか確認する。`curl http://localhost:13004/health` でヘルスチェックを行う。
 3. Control Plane を再起動する。
 
 ### Auth0 関連のエラー（Auth0 を使用する場合のみ）

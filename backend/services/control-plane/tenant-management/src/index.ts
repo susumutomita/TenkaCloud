@@ -45,6 +45,7 @@ app.use(
       'http://localhost:13001',
       'http://localhost:13002',
       'http://localhost:13003',
+      'http://localhost:13004',
       process.env.ALLOWED_ORIGIN || '',
     ].filter(Boolean),
     credentials: true,
@@ -655,7 +656,7 @@ app.get('/api/tenants/:id/provision', async (c) => {
   }
 });
 
-const port = 3004;
+const port = 13004;
 
 // Only log when not in test environment
 if (process.env.NODE_ENV !== 'test') {

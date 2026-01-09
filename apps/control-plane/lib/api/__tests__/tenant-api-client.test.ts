@@ -35,7 +35,7 @@ describe('tenant-api クライアントサイドテスト', () => {
     // 環境変数を設定
     const originalEnv = process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
     process.env.NEXT_PUBLIC_TENANT_API_BASE_URL =
-      'http://custom-client-api:3004/api';
+      'http://custom-client-api:13004/api';
 
     // fetch をモック
     const mockFetch = vi.fn().mockResolvedValue({
@@ -49,7 +49,7 @@ describe('tenant-api クライアントサイドテスト', () => {
       await tenantApi.listTenants();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://custom-client-api:3004/api/tenants',
+        'http://custom-client-api:13004/api/tenants',
         { cache: 'no-store' }
       );
     } finally {
@@ -80,7 +80,7 @@ describe('tenant-api クライアントサイドテスト', () => {
       await tenantApi.listTenants();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:3004/api/tenants',
+        'http://localhost:13004/api/tenants',
         { cache: 'no-store' }
       );
     } finally {
