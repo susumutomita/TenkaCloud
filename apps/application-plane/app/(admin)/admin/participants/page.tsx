@@ -1,25 +1,24 @@
 /**
  * Admin Participants Page
  *
+ * HybridNext Design System - Terminal Command Center style
  * 参加者管理
  */
 
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-
-interface Participant {
-  id: string;
-  name: string;
-  email: string;
-  joinedAt: string;
-  eventsCount: number;
-  totalScore: number;
-  status: 'active' | 'inactive';
-}
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui';
+import type {
+  AdminParticipant,
+  ParticipantStatus,
+} from '@/lib/api/admin-types';
 
 export default function AdminParticipantsPage() {
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [participants, setParticipants] = useState<AdminParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputId = useId();
@@ -32,31 +31,37 @@ export default function AdminParticipantsPage() {
         // Mock data
         setParticipants([
           {
-            id: 'user-1',
-            name: '山田太郎',
+            id: 'participant-1',
+            userId: 'user-1',
+            displayName: '山田太郎',
             email: 'yamada@example.com',
+            role: 'participant',
             joinedAt: new Date(Date.now() - 2592000000).toISOString(),
+            status: 'active',
             eventsCount: 5,
             totalScore: 2500,
-            status: 'active',
           },
           {
-            id: 'user-2',
-            name: '佐藤花子',
+            id: 'participant-2',
+            userId: 'user-2',
+            displayName: '佐藤花子',
             email: 'sato@example.com',
+            role: 'admin',
             joinedAt: new Date(Date.now() - 1296000000).toISOString(),
+            status: 'active',
             eventsCount: 3,
             totalScore: 1800,
-            status: 'active',
           },
           {
-            id: 'user-3',
-            name: '鈴木一郎',
+            id: 'participant-3',
+            userId: 'user-3',
+            displayName: '鈴木一郎',
             email: 'suzuki@example.com',
+            role: 'participant',
             joinedAt: new Date(Date.now() - 604800000).toISOString(),
+            status: 'inactive',
             eventsCount: 1,
             totalScore: 400,
-            status: 'inactive',
           },
         ]);
       } finally {
@@ -78,18 +83,56 @@ export default function AdminParticipantsPage() {
 
   const filteredParticipants = participants.filter(
     (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const getStatusBadgeVariant = (
+    status: ParticipantStatus
+  ): 'default' | 'success' | 'warning' | 'danger' => {
+    switch (status) {
+      case 'active':
+        return 'success';
+      case 'inactive':
+        return 'warning';
+      case 'banned':
+        return 'danger';
+      default:
+        return 'default';
+    }
+  };
+
+  const getStatusLabel = (status: ParticipantStatus): string => {
+    switch (status) {
+      case 'active':
+        return 'アクティブ';
+      case 'inactive':
+        return '非アクティブ';
+      case 'banned':
+        return 'BAN';
+      default:
+        return status;
+    }
+  };
+
+  const activeCount = participants.filter((p) => p.status === 'active').length;
+  const avgScore =
+    participants.length > 0
+      ? Math.round(
+          participants.reduce((acc, p) => acc + (p.totalScore || 0), 0) /
+            participants.length
+        )
+      : 0;
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">参加者管理</h1>
-        <button
-          type="button"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
+          <span className="text-hn-accent font-mono">&gt;_</span>
+          参加者管理
+        </h1>
+        <Button>
           <svg
             className="w-5 h-5 mr-2"
             fill="none"
@@ -104,166 +147,176 @@ export default function AdminParticipantsPage() {
             />
           </svg>
           参加者を招待
-        </button>
+        </Button>
       </div>
 
       {/* Search */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="max-w-md">
-          <label htmlFor={searchInputId} className="sr-only">
-            検索
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg
-                className="h-5 w-5 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+      <Card>
+        <CardContent className="p-4">
+          <div className="max-w-md">
+            <label htmlFor={searchInputId} className="sr-only">
+              検索
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg
+                  className="h-5 w-5 text-text-muted"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+              </div>
+              <input
+                id={searchInputId}
+                type="text"
+                placeholder="名前またはメールアドレスで検索..."
+                className="block w-full pl-10 pr-3 py-2 bg-surface-1 border border-border rounded-[var(--radius)] text-text-primary placeholder:text-text-muted focus:ring-hn-accent focus:border-hn-accent focus:outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-            <input
-              id={searchInputId}
-              type="text"
-              placeholder="名前またはメールアドレスで検索..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="text-sm font-medium text-gray-500">総参加者数</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">
-            {participants.length}
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="text-sm font-medium text-gray-500">
-            アクティブユーザー
-          </div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">
-            {participants.filter((p) => p.status === 'active').length}
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="text-sm font-medium text-gray-500">平均スコア</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">
-            {participants.length > 0
-              ? Math.round(
-                  participants.reduce((acc, p) => acc + p.totalScore, 0) /
-                    participants.length
-                )
-              : 0}
-          </div>
-        </div>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-text-muted">
+              総参加者数
+            </div>
+            <div className="text-3xl font-bold text-text-primary mt-1 font-mono">
+              {participants.length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-text-muted">
+              アクティブユーザー
+            </div>
+            <div className="text-3xl font-bold text-hn-success mt-1 font-mono">
+              {activeCount}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-text-muted">
+              平均スコア
+            </div>
+            <div className="text-3xl font-bold text-hn-accent mt-1 font-mono">
+              {avgScore.toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Participants Table */}
+      {/* Participants List */}
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : filteredParticipants.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+        <Card className="text-center py-12">
           <div className="text-4xl mb-4">👥</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+          <h2 className="text-xl font-semibold text-text-primary mb-2">
             参加者が見つかりません
           </h2>
-          <p className="text-gray-500">
+          <p className="text-text-muted mb-6">
             {searchQuery
               ? '検索条件を変更してください。'
               : '参加者を招待して始めましょう。'}
           </p>
-        </div>
+          <Button>参加者を招待</Button>
+        </Card>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  参加者
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ステータス
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  参加イベント数
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  累計スコア
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  登録日
-                </th>
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredParticipants.map((participant) => (
-                <tr key={participant.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
-                        {participant.name.charAt(0)}
+        <div className="space-y-3">
+          {filteredParticipants.map((participant) => (
+            <Card
+              key={participant.id}
+              className="group hover:border-hn-accent/50 transition-all duration-[var(--animation-duration-fast)]"
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-hn-accent rounded-full flex items-center justify-center text-surface-0 font-bold">
+                      {participant.displayName.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-text-primary">
+                          {participant.displayName}
+                        </span>
+                        <Badge
+                          variant={getStatusBadgeVariant(participant.status)}
+                        >
+                          {getStatusLabel(participant.status)}
+                        </Badge>
+                        {participant.role === 'admin' && (
+                          <Badge variant="default">管理者</Badge>
+                        )}
                       </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {participant.name}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {participant.email}
-                        </div>
+                      <div className="text-sm text-text-muted">
+                        {participant.email}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        participant.status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {participant.status === 'active'
-                        ? 'アクティブ'
-                        : '非アクティブ'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {participant.eventsCount}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {participant.totalScore.toLocaleString()} pts
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(participant.joinedAt)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      type="button"
-                      className="text-blue-600 hover:text-blue-900"
-                    >
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <div className="text-sm text-text-muted">イベント</div>
+                      <div className="font-mono text-text-primary">
+                        {participant.eventsCount || 0}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-text-muted">スコア</div>
+                      <div className="font-mono text-hn-accent">
+                        {(participant.totalScore || 0).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-text-muted">登録日</div>
+                      <div className="font-mono text-text-secondary text-sm">
+                        {formatDate(participant.joinedAt)}
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm">
                       詳細
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
+
+      {/* Terminal-style footer */}
+      <div className="text-center text-text-muted text-xs font-mono py-4">
+        <span className="text-hn-accent">$</span> participants --list --count=
+        {filteredParticipants.length}
+      </div>
     </div>
   );
 }
