@@ -1,6 +1,7 @@
 /**
  * Admin Events List Page
  *
+ * HybridNext Design System - Terminal Command Center style
  * イベント管理一覧
  */
 
@@ -8,22 +9,17 @@
 
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
-
-interface AdminEvent {
-  id: string;
-  name: string;
-  status: 'draft' | 'scheduled' | 'active' | 'ended';
-  type: 'gameday' | 'jam';
-  startTime: string;
-  endTime: string;
-  participantCount: number;
-  maxParticipants: number;
-}
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EventStatusBadge, ProblemTypeBadge } from '@/components/ui';
+import type { AdminEvent, EventStatus } from '@/lib/api/admin-types';
+import type { ProblemType } from '@/lib/api/types';
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<{ status?: string }>({});
+  const [filter, setFilter] = useState<{ status?: EventStatus }>({});
   const statusFilterId = useId();
 
   useEffect(() => {
@@ -37,31 +33,58 @@ export default function AdminEventsPage() {
             id: 'evt-1',
             name: 'AWS GameDay 2024 Winter',
             status: 'active',
-            type: 'gameday',
+            type: 'gameday' as ProblemType,
             startTime: new Date().toISOString(),
             endTime: new Date(Date.now() + 86400000).toISOString(),
             participantCount: 45,
             maxParticipants: 100,
+            timezone: 'Asia/Tokyo',
+            participantType: 'team',
+            cloudProvider: 'aws',
+            regions: ['ap-northeast-1'],
+            scoringType: 'realtime',
+            leaderboardVisible: true,
+            problemCount: 5,
+            isRegistered: false,
+            slug: 'aws-gameday-2024-winter',
           },
           {
             id: 'evt-2',
             name: 'Security JAM',
             status: 'scheduled',
-            type: 'jam',
+            type: 'jam' as ProblemType,
             startTime: new Date(Date.now() + 172800000).toISOString(),
             endTime: new Date(Date.now() + 259200000).toISOString(),
             participantCount: 23,
             maxParticipants: 50,
+            timezone: 'Asia/Tokyo',
+            participantType: 'individual',
+            cloudProvider: 'aws',
+            regions: ['ap-northeast-1'],
+            scoringType: 'realtime',
+            leaderboardVisible: true,
+            problemCount: 8,
+            isRegistered: false,
+            slug: 'security-jam',
           },
           {
             id: 'evt-3',
             name: 'Cloud Architecture Challenge',
             status: 'draft',
-            type: 'gameday',
+            type: 'gameday' as ProblemType,
             startTime: new Date(Date.now() + 604800000).toISOString(),
             endTime: new Date(Date.now() + 691200000).toISOString(),
             participantCount: 0,
             maxParticipants: 100,
+            timezone: 'Asia/Tokyo',
+            participantType: 'team',
+            cloudProvider: 'aws',
+            regions: ['ap-northeast-1'],
+            scoringType: 'realtime',
+            leaderboardVisible: false,
+            problemCount: 0,
+            isRegistered: false,
+            slug: 'cloud-architecture-challenge',
           },
         ]);
       } finally {
@@ -83,213 +106,228 @@ export default function AdminEventsPage() {
     });
   };
 
-  const getStatusBadge = (status: AdminEvent['status']) => {
-    const styles = {
-      draft: 'bg-gray-100 text-gray-800',
-      scheduled: 'bg-blue-100 text-blue-800',
-      active: 'bg-green-100 text-green-800',
-      ended: 'bg-gray-100 text-gray-500',
-    };
-    const labels = {
-      draft: '下書き',
-      scheduled: '予定',
-      active: '開催中',
-      ended: '終了',
-    };
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}
-      >
-        {labels[status]}
-      </span>
-    );
-  };
-
-  const getTypeBadge = (type: AdminEvent['type']) => {
-    const styles = {
-      gameday: 'bg-orange-100 text-orange-800',
-      jam: 'bg-purple-100 text-purple-800',
-    };
-    const labels = {
-      gameday: 'GameDay',
-      jam: 'JAM',
-    };
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[type]}`}
-      >
-        {labels[type]}
-      </span>
-    );
-  };
-
   const filteredEvents = filter.status
     ? events.filter((e) => e.status === filter.status)
     : events;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">イベント管理</h1>
-        <Link
-          href="/admin/events/new"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <svg
-            className="w-5 h-5 mr-2"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          新規イベント
-        </Link>
+        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
+          <span className="text-hn-accent font-mono">&gt;_</span>
+          イベント管理
+        </h1>
+        <Button asChild>
+          <Link href="/admin/events/new">
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4v16m8-8H4"
+              />
+            </svg>
+            新規イベント
+          </Link>
+        </Button>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-wrap gap-4">
-          <div>
-            <label
-              htmlFor={statusFilterId}
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              ステータス
-            </label>
-            <select
-              id={statusFilterId}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-              value={filter.status || ''}
-              onChange={(e) =>
-                setFilter({ status: e.target.value || undefined })
-              }
-            >
-              <option value="">すべて</option>
-              <option value="draft">下書き</option>
-              <option value="scheduled">予定</option>
-              <option value="active">開催中</option>
-              <option value="ended">終了</option>
-            </select>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div>
+              <label
+                htmlFor={statusFilterId}
+                className="block text-sm font-medium text-text-muted mb-1"
+              >
+                ステータス
+              </label>
+              <select
+                id={statusFilterId}
+                className="bg-surface-1 border border-border rounded-[var(--radius)] px-3 py-2 text-text-primary focus:ring-hn-accent focus:border-hn-accent focus:outline-none"
+                value={filter.status || ''}
+                onChange={(e) =>
+                  setFilter({
+                    status: (e.target.value as EventStatus) || undefined,
+                  })
+                }
+              >
+                <option value="">すべて</option>
+                <option value="draft">下書き</option>
+                <option value="scheduled">予定</option>
+                <option value="active">開催中</option>
+                <option value="completed">終了</option>
+              </select>
+            </div>
+            <div className="text-sm text-text-muted font-mono">
+              {filteredEvents.length} 件のイベント
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Events Table */}
+      {/* Events List */}
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-64" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                  <Skeleton className="h-10 w-24" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+        <Card className="text-center py-12">
           <div className="text-4xl mb-4">📭</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+          <h2 className="text-xl font-semibold text-text-primary mb-2">
             イベントがありません
           </h2>
-          <p className="text-gray-500 mb-6">
+          <p className="text-text-muted mb-6">
             新しいイベントを作成して始めましょう。
           </p>
-          <Link
-            href="/admin/events/new"
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            新規イベント作成
-          </Link>
-        </div>
+          <Button asChild>
+            <Link href="/admin/events/new">新規イベント作成</Link>
+          </Button>
+        </Card>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  イベント名
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  タイプ
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  ステータス
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  期間
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  参加者
-                </th>
-                <th scope="col" className="relative px-6 py-3">
-                  <span className="sr-only">アクション</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEvents.map((event) => (
-                <tr key={event.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Link
-                      href={`/admin/events/${event.id}`}
-                      className="text-sm font-medium text-gray-900 hover:text-blue-600"
-                    >
-                      {event.name}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getTypeBadge(event.type)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(event.status)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div>{formatDate(event.startTime)}</div>
-                    <div className="text-xs text-gray-400">
-                      〜 {formatDate(event.endTime)}
+        <div className="space-y-4">
+          {filteredEvents.map((event) => (
+            <Card
+              key={event.id}
+              className="group hover:border-hn-accent/50 transition-all duration-[var(--animation-duration-fast)]"
+            >
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Link
+                        href={`/admin/events/${event.id}`}
+                        className="text-lg font-semibold text-text-primary hover:text-hn-accent transition-colors"
+                      >
+                        {event.name}
+                      </Link>
+                      <ProblemTypeBadge type={event.type} />
+                      <EventStatusBadge status={event.status} />
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {event.participantCount} / {event.maxParticipants}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Link
-                      href={`/admin/events/${event.id}`}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      編集
-                    </Link>
-                    <button
-                      type="button"
-                      className="text-red-600 hover:text-red-900"
+                    <div className="flex items-center gap-6 text-sm text-text-muted">
+                      <span className="flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                        {formatDate(event.startTime)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
+                        </svg>
+                        {event.participantCount} / {event.maxParticipants}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                          />
+                        </svg>
+                        {event.problemCount} 問
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" size="sm" asChild>
+                      <Link href={`/admin/events/${event.id}`}>
+                        <svg
+                          className="w-4 h-4 mr-1"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                          />
+                        </svg>
+                        編集
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-hn-error hover:text-hn-error hover:bg-hn-error/10"
                       onClick={() => {
                         // TODO: Implement delete
                       }}
                     >
-                      削除
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
+
+      {/* Terminal-style footer */}
+      <div className="text-center text-text-muted text-xs font-mono py-4">
+        <span className="text-hn-accent">$</span> events --list --count=
+        {filteredEvents.length}
+      </div>
     </div>
   );
 }
