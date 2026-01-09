@@ -21,6 +21,7 @@ export {
 } from './badge';
 export { Button } from './button';
 export { Card, CardContent, CardFooter, CardHeader } from './card';
+export { ErrorState, getErrorMessage, getErrorType } from './error-state';
 export { Input } from './input';
 export { Pagination } from './pagination';
 export { Progress, ScoreProgress } from './progress';

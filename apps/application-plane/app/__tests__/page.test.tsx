@@ -21,16 +21,20 @@ describe('Participant App ホームページ', () => {
     expect(catchphrase).toBeInTheDocument();
   });
 
-  it('「バトルに参加する」ボタンが表示されるべき', () => {
+  it('「バトルに参加する」ボタンが /events へのリンクを持つべき', () => {
     render(<Home />);
     const joinButton = screen.getByRole('button', { name: 'バトルに参加する' });
     expect(joinButton).toBeInTheDocument();
+    const link = joinButton.closest('a');
+    expect(link).toHaveAttribute('href', '/events');
   });
 
-  it('「観戦モード」ボタンが表示されるべき', () => {
+  it('「観戦モード」ボタンが /events へのリンクを持つべき', () => {
     render(<Home />);
     const spectateButton = screen.getByRole('button', { name: '観戦モード' });
     expect(spectateButton).toBeInTheDocument();
+    const link = spectateButton.closest('a');
+    expect(link).toHaveAttribute('href', '/events');
   });
 
   it('統計情報のプレースホルダーが3つ表示されるべき（API 接続前）', () => {
@@ -40,21 +44,11 @@ describe('Participant App ホームページ', () => {
     expect(placeholders).toHaveLength(3);
   });
 
-  it('ステータスラベル「Status」が表示されるべき', () => {
-    render(<Home />);
-    const statusLabel = screen.getByText('Status');
-    expect(statusLabel).toBeInTheDocument();
-  });
-
-  it('参加者ラベル「Participants」が表示されるべき', () => {
-    render(<Home />);
-    const participantsLabel = screen.getByText('Participants');
-    expect(participantsLabel).toBeInTheDocument();
-  });
-
-  it('問題ラベル「Problems」が表示されるべき', () => {
-    render(<Home />);
-    const problemsLabel = screen.getByText('Problems');
-    expect(problemsLabel).toBeInTheDocument();
-  });
+  it.each(['Status', 'Participants', 'Problems'])(
+    '統計ラベル「%s」が表示されるべき',
+    (label) => {
+      render(<Home />);
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+  );
 });

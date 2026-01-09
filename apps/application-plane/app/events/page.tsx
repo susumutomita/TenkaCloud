@@ -14,7 +14,10 @@ import {
   Button,
   Card,
   CardContent,
+  ErrorState,
   EventStatusBadge,
+  getErrorMessage,
+  getErrorType,
   ProblemTypeBadge,
 } from '../../components/ui';
 import { getAvailableEvents } from '../../lib/api/events';
@@ -27,7 +30,7 @@ import type {
 export default function EventsPage() {
   const [events, setEvents] = useState<ParticipantEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const [filter, setFilter] = useState<{
     status?: EventStatus;
     type?: ProblemType;
@@ -49,7 +52,9 @@ export default function EventsPage() {
         });
         setEvents(res.events);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '読み込みに失敗しました');
+        setError(
+          err instanceof Error ? err : new Error('読み込みに失敗しました')
+        );
       } finally {
         setLoading(false);
       }
@@ -90,18 +95,18 @@ export default function EventsPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen bg-surface-0 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary-500/20 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-accent-500/20 rounded-full blur-[100px]" />
+        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-hn-accent/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-hn-purple/10 rounded-full blur-[100px]" />
       </div>
 
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-white">イベント一覧</h1>
+          <h1 className="text-2xl font-bold text-text-primary">イベント一覧</h1>
         </div>
 
         {/* Filters */}
@@ -109,13 +114,13 @@ export default function EventsPage() {
           <div>
             <label
               htmlFor={statusFilterId}
-              className="block text-sm font-medium text-white/70 mb-1"
+              className="block text-sm font-medium text-text-secondary mb-1"
             >
               ステータス
             </label>
             <select
               id={statusFilterId}
-              className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500"
+              className="bg-surface-1 border border-border text-text-primary rounded-lg px-3 py-2 focus:ring-hn-accent focus:border-hn-accent"
               value={filter.status || ''}
               onChange={(e) =>
                 setFilter((f) => ({
@@ -124,13 +129,13 @@ export default function EventsPage() {
                 }))
               }
             >
-              <option value="" className="bg-gray-900">
+              <option value="" className="bg-surface-1">
                 すべて
               </option>
-              <option value="active" className="bg-gray-900">
+              <option value="active" className="bg-surface-1">
                 開催中
               </option>
-              <option value="scheduled" className="bg-gray-900">
+              <option value="scheduled" className="bg-surface-1">
                 開催予定
               </option>
             </select>
@@ -138,13 +143,13 @@ export default function EventsPage() {
           <div>
             <label
               htmlFor={typeFilterId}
-              className="block text-sm font-medium text-white/70 mb-1"
+              className="block text-sm font-medium text-text-secondary mb-1"
             >
               タイプ
             </label>
             <select
               id={typeFilterId}
-              className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500"
+              className="bg-surface-1 border border-border text-text-primary rounded-lg px-3 py-2 focus:ring-hn-accent focus:border-hn-accent"
               value={filter.type || ''}
               onChange={(e) =>
                 setFilter((f) => ({
@@ -153,13 +158,13 @@ export default function EventsPage() {
                 }))
               }
             >
-              <option value="" className="bg-gray-900">
+              <option value="" className="bg-surface-1">
                 すべて
               </option>
-              <option value="gameday" className="bg-gray-900">
+              <option value="gameday" className="bg-surface-1">
                 GameDay
               </option>
-              <option value="jam" className="bg-gray-900">
+              <option value="jam" className="bg-surface-1">
                 JAM
               </option>
             </select>
@@ -168,20 +173,21 @@ export default function EventsPage() {
 
         {loading ? (
           <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-400" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
           </div>
         ) : error ? (
-          <Card className="p-8 text-center">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={() => window.location.reload()}>再読み込み</Button>
-          </Card>
+          <ErrorState
+            message={getErrorMessage(error)}
+            type={getErrorType(error)}
+            onRetry={() => window.location.reload()}
+          />
         ) : events.length === 0 ? (
           <Card className="text-center py-12">
             <div className="text-4xl mb-4">📭</div>
-            <h2 className="text-xl font-semibold text-white mb-2">
+            <h2 className="text-xl font-semibold text-text-primary mb-2">
               イベントが見つかりません
             </h2>
-            <p className="text-white/60">
+            <p className="text-text-muted">
               条件に一致するイベントがありません。
             </p>
           </Card>
@@ -210,17 +216,17 @@ export default function EventsPage() {
                       </div>
 
                       <div>
-                        <h3 className="font-semibold text-lg text-white">
+                        <h3 className="font-semibold text-lg text-text-primary">
                           {event.name}
                         </h3>
                         {timeUntil && (
-                          <p className="text-primary-400 font-medium text-sm mt-1">
+                          <p className="text-hn-accent font-medium text-sm mt-1">
                             {timeUntil}
                           </p>
                         )}
                       </div>
 
-                      <div className="text-sm text-white/60 space-y-1">
+                      <div className="text-sm text-text-secondary space-y-1">
                         <p>
                           <span className="font-medium">開始:</span>{' '}
                           {formatDate(event.startTime)}
@@ -231,16 +237,16 @@ export default function EventsPage() {
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-between text-sm text-white/50">
+                      <div className="flex items-center justify-between text-sm text-text-muted">
                         <span>問題数: {event.problemCount}</span>
                         <span>参加者: {event.participantCount}</span>
                       </div>
 
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="px-2 py-1 bg-white/10 rounded text-white/80">
+                        <span className="px-2 py-1 bg-surface-2 rounded text-text-secondary">
                           {event.cloudProvider.toUpperCase()}
                         </span>
-                        <span className="text-white/50">
+                        <span className="text-text-muted">
                           {event.participantType === 'team'
                             ? 'チーム参加'
                             : '個人参加'}
