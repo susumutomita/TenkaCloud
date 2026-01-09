@@ -336,7 +336,7 @@ export function EventForm({
 
   return (
     <Card>
-      <form role="form" onSubmit={handleSubmit}>
+      <form role="form" noValidate onSubmit={handleSubmit}>
         <CardHeader>
           <h2 className="text-xl font-semibold">
             {mode === 'create' ? 'イベント作成' : 'イベント編集'}

@@ -160,16 +160,19 @@ describe('EventForm', () => {
         ).toBeInTheDocument();
       });
 
-      // 101文字（長すぎる）
+      // 有効な値（3文字以上）
       await userEvent.clear(nameInput);
-      await userEvent.type(nameInput, 'A'.repeat(101));
+      await userEvent.type(nameInput, 'ABC');
       fireEvent.blur(nameInput);
 
       await waitFor(() => {
         expect(
-          screen.getByText(/イベント名は3文字以上100文字以下/)
-        ).toBeInTheDocument();
+          screen.queryByText(/イベント名は3文字以上100文字以下/)
+        ).not.toBeInTheDocument();
       });
+
+      // 100文字超過は maxLength 属性で制限される
+      expect(nameInput).toHaveAttribute('maxLength', '100');
     });
 
     it('slug フォーマットをバリデーションすべき', async () => {
@@ -304,18 +307,13 @@ describe('EventForm', () => {
       });
     });
 
-    it('説明の長さをバリデーションすべき', async () => {
+    it('説明の長さ制限を持つべき', () => {
       render(<EventForm {...createDefaultProps()} />);
 
       const descriptionInput = screen.getByLabelText(/説明/);
 
-      // 2001文字（長すぎる）
-      await userEvent.type(descriptionInput, 'A'.repeat(2001));
-      fireEvent.blur(descriptionInput);
-
-      await waitFor(() => {
-        expect(screen.getByText(/説明は2000文字以下/)).toBeInTheDocument();
-      });
+      // 2000文字超過は maxLength 属性で制限される
+      expect(descriptionInput).toHaveAttribute('maxLength', '2000');
     });
   });
 
