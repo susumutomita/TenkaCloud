@@ -139,8 +139,8 @@ describe('Admin Types 型互換性テスト', () => {
     });
 
     it('ParticipantRole の値が正しく設定できるべき', () => {
-      const roles: ParticipantRole[] = ['participant', 'admin', 'spectator'];
-      expect(roles).toHaveLength(3);
+      const roles: ParticipantRole[] = ['participant', 'admin'];
+      expect(roles).toHaveLength(2);
     });
 
     it('ParticipantStatus の値が正しく設定できるべき', () => {
