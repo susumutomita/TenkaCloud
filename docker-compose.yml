@@ -24,7 +24,7 @@ services:
       context: .
       dockerfile: backend/services/control-plane/tenant-management/Dockerfile
     ports:
-      - "3004:3004"
+      - "13004:13004"
     environment:
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
       - DYNAMODB_ENDPOINT=http://localstack:4566
@@ -35,7 +35,7 @@ services:
       localstack:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:13004/health"]
       interval: 10s
       timeout: 5s
       retries: 5

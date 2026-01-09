@@ -252,7 +252,7 @@ describe('Settings API', () => {
       await fetchSettings();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3004/api/settings',
+        'http://localhost:13004/api/settings',
         { cache: 'no-store' }
       );
 

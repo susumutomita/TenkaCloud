@@ -160,7 +160,7 @@ describe('Activities API', () => {
       await fetchActivities();
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:3004/api/activities?limit=10',
+        'http://localhost:13004/api/activities?limit=10',
         { cache: 'no-store' }
       );
 

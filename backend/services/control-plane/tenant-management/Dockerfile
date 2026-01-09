@@ -21,6 +21,6 @@ WORKDIR /app/backend/services/control-plane/tenant-management
 # Build the application
 RUN bun run build
 
-EXPOSE 3004
+EXPOSE 13004
 
 CMD ["bun", "run", "start"]

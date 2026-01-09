@@ -8,8 +8,8 @@ import type {
 // Use NEXT_PUBLIC_TENANT_API_BASE_URL for client components, fall back to server-side env.
 const isServer = typeof window === 'undefined';
 const apiBaseUrl = isServer
-  ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:3004/api'
-  : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:3004/api';
+  ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:13004/api'
+  : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:13004/api';
 
 export class TenantApiError extends Error {
   constructor(

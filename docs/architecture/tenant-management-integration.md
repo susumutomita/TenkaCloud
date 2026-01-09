@@ -7,7 +7,7 @@ Control Plane と Tenant Management Service 間の統合仕様を定義します
 | 項目 | 値 |
 |------|-----|
 | サービス名 | tenant-management |
-| ポート | 3004 |
+| ポート | 13004 |
 | ベース URL | `/api` |
 | データストア | DynamoDB (Single-Table Design) |
 
@@ -16,7 +16,7 @@ Control Plane と Tenant Management Service 間の統合仕様を定義します
 ```
 ┌─────────────────┐     HTTP      ┌─────────────────────┐     AWS SDK    ┌─────────────┐
 │  Control Plane  │ ───────────▶ │  Tenant Management  │ ─────────────▶ │  DynamoDB   │
-│  (Next.js)      │   :3004      │  (Hono)             │                │  LocalStack │
+│  (Next.js)      │   :13004     │  (Hono)             │                │  LocalStack │
 │  :13000         │              │                     │                │  :4566      │
 └─────────────────┘              └─────────────────────┘                └─────────────┘
 ```
@@ -27,10 +27,10 @@ Control Plane と Tenant Management Service 間の統合仕様を定義します
 
 ```bash
 # ローカル開発時（必須）
-TENANT_API_BASE_URL=http://localhost:3004/api
+TENANT_API_BASE_URL=http://localhost:13004/api
 
 # クライアントサイド用（ブラウザから直接呼ぶ場合）
-NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:3004/api
+NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:13004/api
 ```
 
 ### Tenant Management (`backend/services/control-plane/tenant-management`)
@@ -191,10 +191,10 @@ bun run dev
 
 ```bash
 # ヘルスチェック
-curl http://localhost:3004/health
+curl http://localhost:13004/health
 
 # テナント一覧
-curl http://localhost:3004/api/tenants
+curl http://localhost:13004/api/tenants
 
 # Control Plane でテナント管理画面にアクセス
 open http://localhost:13000/dashboard/tenants
@@ -209,7 +209,7 @@ open http://localhost:13000/dashboard/tenants
 **解決策:**
 ```bash
 # apps/control-plane/.env.local に追加
-TENANT_API_BASE_URL=http://localhost:3004/api
+TENANT_API_BASE_URL=http://localhost:13004/api
 ```
 
 ### `lockfile had changes` エラー（Docker ビルド時）
