@@ -51,6 +51,7 @@ import {
   detectFormat,
   type ExternalFormat,
 } from '../problems/converter';
+import type { ProblemCategory, DifficultyLevel, CloudProvider } from '../types';
 
 const adminRouter = new Hono();
 
@@ -59,6 +60,178 @@ const eventRepository = new PrismaEventRepository();
 const problemRepository = new PrismaProblemRepository();
 const marketplaceRepository = new PrismaMarketplaceRepository();
 const templateRepository = new PrismaProblemTemplateRepository();
+
+// ====================
+// AI 問題生成ヘルパー
+// ====================
+
+interface AiGenerationInput {
+  topic: string;
+  type: 'gameday' | 'jam';
+  category: ProblemCategory;
+  difficulty: DifficultyLevel;
+  cloudProvider: CloudProvider;
+  targetServices?: string[];
+  additionalContext?: string;
+  language: 'ja' | 'en';
+}
+
+interface AiGeneratedProblem {
+  title: string;
+  description: {
+    overview: string;
+    objectives: string[];
+    hints: string[];
+    prerequisites: string[];
+    estimatedTime?: number;
+  };
+  scoring?: {
+    criteria: {
+      name: string;
+      description?: string;
+      weight: number;
+      maxPoints: number;
+    }[];
+  };
+  suggestedResources?: string[];
+}
+
+async function callAnthropicApi(
+  input: AiGenerationInput
+): Promise<
+  | { success: true; data: AiGeneratedProblem }
+  | { success: false; error: string }
+> {
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicApiKey) {
+    return {
+      success: false,
+      error: 'AI generation not configured: ANTHROPIC_API_KEY is missing',
+    };
+  }
+
+  const systemPrompt = `あなたはクラウド技術の競技問題を作成する専門家です。
+TenkaCloud プラットフォーム用の問題を生成してください。
+
+出力は以下の JSON 形式で返してください：
+{
+  "title": "問題タイトル",
+  "description": {
+    "overview": "問題の概要（シナリオ背景を含む）",
+    "objectives": ["目標1", "目標2", ...],
+    "hints": ["ヒント1", "ヒント2", ...],
+    "prerequisites": ["前提知識1", "前提知識2", ...],
+    "estimatedTime": 60
+  },
+  "scoring": {
+    "criteria": [
+      {"name": "criterion_1", "description": "評価基準の説明", "weight": 0.5, "maxPoints": 50},
+      ...
+    ]
+  },
+  "suggestedResources": ["参考リソースURL1", ...]
+}
+
+注意事項:
+- 問題は実践的で、実際のクラウド運用シナリオに基づくこと
+- 難易度に応じた適切な複雑さにすること
+- セキュリティベストプラクティスを考慮すること`;
+
+  const userPrompt = `以下の条件で問題を生成してください：
+
+トピック: ${input.topic}
+タイプ: ${input.type === 'gameday' ? 'GameDay（トラブルシューティング）' : 'Jam（構築課題）'}
+カテゴリ: ${input.category}
+難易度: ${input.difficulty}
+クラウドプロバイダー: ${input.cloudProvider.toUpperCase()}
+${input.targetServices ? `使用サービス: ${input.targetServices.join(', ')}` : ''}
+${input.additionalContext ? `追加コンテキスト: ${input.additionalContext}` : ''}
+言語: ${input.language === 'ja' ? '日本語' : '英語'}`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Anthropic API error:', errorText);
+      return { success: false, error: 'AI generation failed' };
+    }
+
+    const result = (await response.json()) as {
+      content?: { type: string; text: string }[];
+    };
+    const content = result.content?.[0]?.text;
+
+    if (!content) {
+      return { success: false, error: 'AI returned empty response' };
+    }
+
+    // JSON を抽出（マークダウンコードブロック対応）
+    let jsonContent = content;
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    const generatedProblem = JSON.parse(jsonContent) as AiGeneratedProblem;
+    return { success: true, data: generatedProblem };
+  } catch (error) {
+    console.error('Failed to generate problem with AI:', error);
+    if (error instanceof SyntaxError) {
+      return { success: false, error: 'AI returned invalid JSON format' };
+    }
+    return { success: false, error: 'Failed to generate problem with AI' };
+  }
+}
+
+function buildProblemFromAiResult(
+  input: AiGenerationInput,
+  generated: AiGeneratedProblem,
+  includeSuggestedResources: boolean
+): Record<string, unknown> {
+  const base = {
+    title: generated.title,
+    type: input.type,
+    category: input.category,
+    difficulty: input.difficulty,
+    description: generated.description,
+    metadata: {
+      author: 'AI Generated',
+      version: '1.0.0',
+      tags: [input.topic, input.cloudProvider, input.category],
+    },
+    deployment: {
+      providers: [input.cloudProvider],
+      timeout: 60,
+      templates: {},
+      regions: {},
+    },
+    scoring: {
+      type: 'manual' as const,
+      path: '',
+      timeoutMinutes: 5,
+      criteria: generated.scoring?.criteria || [],
+    },
+  };
+
+  if (includeSuggestedResources) {
+    return { ...base, suggestedResources: generated.suggestedResources || [] };
+  }
+  return base;
+}
 
 // 認証ミドルウェア
 adminRouter.use('*', async (c, next) => {
@@ -82,7 +255,7 @@ adminRouter.use('*', async (c, next) => {
   }
 
   c.set('user', authContext.user);
-  await next();
+  return next();
 });
 
 // ====================
@@ -1537,132 +1710,29 @@ adminRouter.post(
   zValidator('json', aiGenerateProblemSchema),
   async (c) => {
     const data = c.req.valid('json');
+    const input: AiGenerationInput = {
+      topic: data.topic,
+      type: data.type,
+      category: data.category,
+      difficulty: data.difficulty,
+      cloudProvider: data.cloudProvider,
+      targetServices: data.targetServices,
+      additionalContext: data.additionalContext,
+      language: data.language,
+    };
+    const result = await callAnthropicApi(input);
 
-    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicApiKey) {
-      return c.json(
-        { error: 'AI generation not configured: ANTHROPIC_API_KEY is missing' },
-        503
-      );
+    if (result.success === false) {
+      const statusCode = result.error.includes('not configured') ? 503 : 500;
+      return c.json({ error: result.error }, statusCode);
     }
 
-    try {
-      const systemPrompt = `あなたはクラウド技術の競技問題を作成する専門家です。
-TenkaCloud プラットフォーム用の問題を生成してください。
-
-出力は以下の JSON 形式で返してください：
-{
-  "title": "問題タイトル",
-  "description": {
-    "overview": "問題の概要（シナリオ背景を含む）",
-    "objectives": ["目標1", "目標2", ...],
-    "hints": ["ヒント1", "ヒント2", ...],
-    "prerequisites": ["前提知識1", "前提知識2", ...],
-    "estimatedTime": 60
-  },
-  "scoring": {
-    "criteria": [
-      {"name": "criterion_1", "description": "評価基準の説明", "weight": 0.5, "maxPoints": 50},
-      ...
-    ]
-  },
-  "suggestedResources": ["参考リソースURL1", ...]
-}
-
-注意事項:
-- 問題は実践的で、実際のクラウド運用シナリオに基づくこと
-- 難易度に応じた適切な複雑さにすること
-- セキュリティベストプラクティスを考慮すること`;
-
-      const userPrompt = `以下の条件で問題を生成してください：
-
-トピック: ${data.topic}
-タイプ: ${data.type === 'gameday' ? 'GameDay（トラブルシューティング）' : 'Jam（構築課題）'}
-カテゴリ: ${data.category}
-難易度: ${data.difficulty}
-クラウドプロバイダー: ${data.cloudProvider.toUpperCase()}
-${data.targetServices ? `使用サービス: ${data.targetServices.join(', ')}` : ''}
-${data.additionalContext ? `追加コンテキスト: ${data.additionalContext}` : ''}
-言語: ${data.language === 'ja' ? '日本語' : '英語'}`;
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicApiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Anthropic API error:', errorText);
-        return c.json({ error: 'AI generation failed' }, 500);
-      }
-
-      const result = (await response.json()) as {
-        content?: { type: string; text: string }[];
-      };
-      const content = result.content?.[0]?.text;
-
-      if (!content) {
-        return c.json({ error: 'AI returned empty response' }, 500);
-      }
-
-      // JSON を抽出（マークダウンコードブロック対応）
-      let jsonContent = content;
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonContent = jsonMatch[1].trim();
-      }
-
-      const generatedProblem = JSON.parse(jsonContent);
-
-      // プレビュー用の完全な問題構造を構築
-      const preview = {
-        title: generatedProblem.title,
-        type: data.type,
-        category: data.category,
-        difficulty: data.difficulty,
-        description: generatedProblem.description,
-        metadata: {
-          author: 'AI Generated',
-          version: '1.0.0',
-          tags: [data.topic, data.cloudProvider, data.category],
-        },
-        deployment: {
-          providers: [data.cloudProvider],
-          timeout: 60,
-          templates: {},
-          regions: {},
-        },
-        scoring: {
-          type: 'manual' as const,
-          path: '',
-          timeoutMinutes: 5,
-          criteria: generatedProblem.scoring?.criteria || [],
-        },
-        suggestedResources: generatedProblem.suggestedResources || [],
-      };
-
-      return c.json({
-        preview,
-        rawResponse: generatedProblem,
-        inputParameters: data,
-      });
-    } catch (error) {
-      console.error('Failed to generate problem with AI:', error);
-      if (error instanceof SyntaxError) {
-        return c.json({ error: 'AI returned invalid JSON format' }, 500);
-      }
-      return c.json({ error: 'Failed to generate problem with AI' }, 500);
-    }
+    const preview = buildProblemFromAiResult(input, result.data, true);
+    return c.json({
+      preview,
+      rawResponse: result.data,
+      inputParameters: data,
+    });
   }
 );
 
@@ -1672,129 +1742,58 @@ adminRouter.post(
   zValidator('json', aiGenerateProblemSchema),
   async (c) => {
     const data = c.req.valid('json');
+    const input: AiGenerationInput = {
+      topic: data.topic,
+      type: data.type,
+      category: data.category,
+      difficulty: data.difficulty,
+      cloudProvider: data.cloudProvider,
+      targetServices: data.targetServices,
+      additionalContext: data.additionalContext,
+      language: data.language,
+    };
+    const result = await callAnthropicApi(input);
 
-    const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicApiKey) {
-      return c.json(
-        { error: 'AI generation not configured: ANTHROPIC_API_KEY is missing' },
-        503
-      );
+    if (result.success === false) {
+      const statusCode = result.error.includes('not configured') ? 503 : 500;
+      return c.json({ error: result.error }, statusCode);
     }
 
-    try {
-      const systemPrompt = `あなたはクラウド技術の競技問題を作成する専門家です。
-TenkaCloud プラットフォーム用の問題を生成してください。
+    const now = new Date().toISOString();
+    const problem = await problemRepository.create({
+      id: crypto.randomUUID(),
+      title: result.data.title,
+      type: input.type,
+      category: input.category,
+      difficulty: input.difficulty,
+      description: result.data.description,
+      metadata: {
+        author: 'AI Generated',
+        version: '1.0.0',
+        createdAt: now,
+        updatedAt: now,
+        tags: [
+          input.topic,
+          input.cloudProvider,
+          input.category,
+          'ai-generated',
+        ],
+      },
+      deployment: {
+        providers: [input.cloudProvider],
+        timeout: 60,
+        templates: {},
+        regions: {},
+      },
+      scoring: {
+        type: 'manual',
+        path: '',
+        timeoutMinutes: 5,
+        criteria: result.data.scoring?.criteria || [],
+      },
+    });
 
-出力は以下の JSON 形式で返してください：
-{
-  "title": "問題タイトル",
-  "description": {
-    "overview": "問題の概要（シナリオ背景を含む）",
-    "objectives": ["目標1", "目標2", ...],
-    "hints": ["ヒント1", "ヒント2", ...],
-    "prerequisites": ["前提知識1", "前提知識2", ...],
-    "estimatedTime": 60
-  },
-  "scoring": {
-    "criteria": [
-      {"name": "criterion_1", "description": "評価基準の説明", "weight": 0.5, "maxPoints": 50},
-      ...
-    ]
-  }
-}
-
-注意事項:
-- 問題は実践的で、実際のクラウド運用シナリオに基づくこと
-- 難易度に応じた適切な複雑さにすること
-- セキュリティベストプラクティスを考慮すること`;
-
-      const userPrompt = `以下の条件で問題を生成してください：
-
-トピック: ${data.topic}
-タイプ: ${data.type === 'gameday' ? 'GameDay（トラブルシューティング）' : 'Jam（構築課題）'}
-カテゴリ: ${data.category}
-難易度: ${data.difficulty}
-クラウドプロバイダー: ${data.cloudProvider.toUpperCase()}
-${data.targetServices ? `使用サービス: ${data.targetServices.join(', ')}` : ''}
-${data.additionalContext ? `追加コンテキスト: ${data.additionalContext}` : ''}
-言語: ${data.language === 'ja' ? '日本語' : '英語'}`;
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicApiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Anthropic API error:', errorText);
-        return c.json({ error: 'AI generation failed' }, 500);
-      }
-
-      const result = (await response.json()) as {
-        content?: { type: string; text: string }[];
-      };
-      const content = result.content?.[0]?.text;
-
-      if (!content) {
-        return c.json({ error: 'AI returned empty response' }, 500);
-      }
-
-      // JSON を抽出
-      let jsonContent = content;
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonContent = jsonMatch[1].trim();
-      }
-
-      const generatedProblem = JSON.parse(jsonContent);
-
-      // 問題を作成
-      const problem = await problemRepository.create({
-        id: crypto.randomUUID(),
-        title: generatedProblem.title,
-        type: data.type,
-        category: data.category,
-        difficulty: data.difficulty,
-        description: generatedProblem.description,
-        metadata: {
-          author: 'AI Generated',
-          version: '1.0.0',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          tags: [data.topic, data.cloudProvider, data.category, 'ai-generated'],
-        },
-        deployment: {
-          providers: [data.cloudProvider],
-          timeout: 60,
-          templates: {},
-          regions: {},
-        },
-        scoring: {
-          type: 'manual',
-          path: '',
-          timeoutMinutes: 5,
-          criteria: generatedProblem.scoring?.criteria || [],
-        },
-      });
-
-      return c.json(problem, 201);
-    } catch (error) {
-      console.error('Failed to generate and create problem with AI:', error);
-      if (error instanceof SyntaxError) {
-        return c.json({ error: 'AI returned invalid JSON format' }, 500);
-      }
-      return c.json({ error: 'Failed to generate and create problem' }, 500);
-    }
+    return c.json(problem, 201);
   }
 );
 
