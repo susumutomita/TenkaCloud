@@ -126,32 +126,16 @@ awslocal sqs list-queues
 
 開発時は認証スキップモードで十分ですが、本番同等の環境を構築したい場合は Auth0 を設定します。
 
+詳細は **[Auth0 セットアップガイド](./AUTH0_SETUP.md)** を参照してください。
+
 <details>
-<summary>詳細手順を表示</summary>
+<summary>クイック手順を表示</summary>
 
-### Auth0 Management API 認証情報の取得
-
-1. [Auth0 Dashboard](https://manage.auth0.com) にログイン
-2. **Applications** → **APIs** → **Auth0 Management API** を選択
-3. **Machine to Machine Applications** タブで新しい M2M アプリを作成
-4. 以下の権限を付与して **Authorize**:
-   - `read:clients`, `create:clients`, `update:clients`, `delete:clients`
-   - `read:resource_servers`, `create:resource_servers`, `update:resource_servers`
-   - `read:client_credentials`, `create:client_credentials`
-5. **Settings** タブから Domain, Client ID, Client Secret を取得
-
-### Terraform でセットアップ
-
-```bash
-# 変数ファイルを作成
-cp infrastructure/terraform/environments/dev/terraform.tfvars.example \
-   infrastructure/terraform/environments/dev/terraform.tfvars
-
-# 取得した認証情報を terraform.tfvars に設定してから実行
-make auth0-setup
-```
-
-表示された認証情報を各アプリの `.env.local` に設定してください。
+1. [Auth0 Dashboard](https://manage.auth0.com) で Machine-to-Machine アプリを作成
+2. Auth0 Management API に必要な権限を付与
+3. terraform.tfvars に認証情報を設定
+4. `make auth0-setup` を実行
+5. 出力された認証情報を `.env.local` に設定
 
 </details>
 
