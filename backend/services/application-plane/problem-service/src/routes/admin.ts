@@ -1780,15 +1780,24 @@ adminRouter.post(
       includeTimestamps: true,
       includeAiGeneratedTag: true,
     });
-    const problem = await problemRepository.create({
-      id: crypto.randomUUID(),
-      ...(problemData as Omit<
-        Parameters<typeof problemRepository.create>[0],
-        'id'
-      >),
-    });
 
-    return c.json(problem, 201);
+    try {
+      const problem = await problemRepository.create({
+        id: crypto.randomUUID(),
+        ...(problemData as Omit<
+          Parameters<typeof problemRepository.create>[0],
+          'id'
+        >),
+      });
+
+      return c.json(problem, 201);
+    } catch (error) {
+      console.error('Failed to save AI-generated problem:', error);
+      return c.json(
+        { error: 'Failed to save generated problem to database' },
+        500
+      );
+    }
   }
 );
 
