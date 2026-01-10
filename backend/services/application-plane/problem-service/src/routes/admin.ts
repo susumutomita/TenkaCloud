@@ -149,6 +149,9 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
 言語: ${input.language === 'ja' ? '日本語' : '英語'}`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -162,7 +165,10 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -190,6 +196,9 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
     return { success: true, data: generatedProblem };
   } catch (error) {
     console.error('Failed to generate problem with AI:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, error: 'AI generation request timed out' };
+    }
     if (error instanceof SyntaxError) {
       return { success: false, error: 'AI returned invalid JSON format' };
     }
@@ -197,8 +206,9 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
   }
 }
 
-function getAiErrorStatusCode(error: string): 400 | 500 | 503 {
+function getAiErrorStatusCode(error: string): 500 | 503 | 504 {
   if (error.includes('not configured')) return 503;
+  if (error.includes('timed out')) return 504;
   return 500;
 }
 
@@ -788,57 +798,12 @@ adminRouter.put(
     const data = c.req.valid('json');
 
     try {
-      const exists = await problemRepository.exists(problemId);
-      if (!exists) {
+      const existing = await problemRepository.findById(problemId);
+      if (!existing) {
         return c.json({ error: 'Problem not found' }, 404);
       }
 
-      // Partial<Problem> に変換
-      const updates: Partial<{
-        title: string;
-        type: 'gameday' | 'jam';
-        category:
-          | 'architecture'
-          | 'security'
-          | 'cost'
-          | 'performance'
-          | 'reliability'
-          | 'operations';
-        difficulty: 'easy' | 'medium' | 'hard' | 'expert';
-        description: {
-          overview: string;
-          objectives: string[];
-          hints: string[];
-          prerequisites: string[];
-          estimatedTime?: number;
-        };
-        metadata: {
-          author: string;
-          version: string;
-          tags: string[];
-          license?: string;
-          createdAt: string;
-          updatedAt: string;
-        };
-        deployment: {
-          providers: ('aws' | 'gcp' | 'azure' | 'local')[];
-          timeout?: number;
-          templates: Record<string, unknown>;
-          regions: Record<string, unknown>;
-        };
-        scoring: {
-          type: 'lambda' | 'container' | 'api' | 'manual';
-          path: string;
-          timeoutMinutes: number;
-          intervalMinutes?: number;
-          criteria: {
-            name: string;
-            description?: string;
-            weight: number;
-            maxPoints: number;
-          }[];
-        };
-      }> = {};
+      const updates: Record<string, unknown> = {};
 
       if (data.title) updates.title = data.title;
       if (data.type) updates.type = data.type;
@@ -848,7 +813,7 @@ adminRouter.put(
       if (data.metadata) {
         updates.metadata = {
           ...data.metadata,
-          createdAt: new Date().toISOString(),
+          createdAt: existing.metadata.createdAt,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -1715,7 +1680,7 @@ adminRouter.post(
 
 // AI 問題生成リクエストスキーマ
 const aiGenerateProblemSchema = z.object({
-  topic: z.string().min(1).describe('生成する問題のトピック'),
+  topic: z.string().min(1).max(200).describe('生成する問題のトピック'),
   type: z.enum(['gameday', 'jam']),
   category: z.enum([
     'architecture',
@@ -1728,10 +1693,15 @@ const aiGenerateProblemSchema = z.object({
   difficulty: z.enum(['easy', 'medium', 'hard', 'expert']),
   cloudProvider: z.enum(['aws', 'gcp', 'azure', 'local']),
   targetServices: z
-    .array(z.string())
+    .array(z.string().max(100))
+    .max(20)
     .optional()
     .describe('使用するクラウドサービス'),
-  additionalContext: z.string().optional().describe('追加のコンテキスト'),
+  additionalContext: z
+    .string()
+    .max(4000)
+    .optional()
+    .describe('追加のコンテキスト'),
   language: z.enum(['ja', 'en']).default('ja'),
 });
 
@@ -1780,15 +1750,24 @@ adminRouter.post(
       includeTimestamps: true,
       includeAiGeneratedTag: true,
     });
-    const problem = await problemRepository.create({
-      id: crypto.randomUUID(),
-      ...(problemData as Omit<
-        Parameters<typeof problemRepository.create>[0],
-        'id'
-      >),
-    });
 
-    return c.json(problem, 201);
+    try {
+      const problem = await problemRepository.create({
+        id: crypto.randomUUID(),
+        ...(problemData as Omit<
+          Parameters<typeof problemRepository.create>[0],
+          'id'
+        >),
+      });
+
+      return c.json(problem, 201);
+    } catch (error) {
+      console.error('Failed to save AI-generated problem:', error);
+      return c.json(
+        { error: 'Failed to save generated problem to database' },
+        500
+      );
+    }
   }
 );
 

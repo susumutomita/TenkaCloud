@@ -27,9 +27,14 @@ const {
     findAll: vi.fn().mockResolvedValue([]),
     findById: vi.fn().mockResolvedValue(null),
     count: vi.fn().mockResolvedValue(0),
+    exists: vi.fn().mockResolvedValue(false),
     create: vi
       .fn()
       .mockResolvedValue({ id: 'problem-1', name: 'Test Problem' }),
+    update: vi
+      .fn()
+      .mockResolvedValue({ id: 'problem-1', name: 'Updated Problem' }),
+    delete: vi.fn().mockResolvedValue(undefined),
   },
   mockMarketplaceRepository: {
     search: vi.fn().mockResolvedValue({ problems: [], total: 0 }),
@@ -85,7 +90,10 @@ vi.mock('../repositories', () => ({
     findAll = mockProblemRepository.findAll;
     findById = mockProblemRepository.findById;
     count = mockProblemRepository.count;
+    exists = mockProblemRepository.exists;
     create = mockProblemRepository.create;
+    update = mockProblemRepository.update;
+    delete = mockProblemRepository.delete;
   },
   PrismaMarketplaceRepository: class {
     search = mockMarketplaceRepository.search;
@@ -1396,6 +1404,220 @@ describe('Admin Routes', () => {
             }),
           }
         );
+        expect(res.status).toBe(500);
+      });
+    });
+  });
+
+  describe('問題管理API', () => {
+    beforeEach(() => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        token: 'test-token',
+        user: {
+          id: 'user-1',
+          email: 'user@example.com',
+          username: 'user1',
+          tenantId: 'tenant-1',
+          roles: ['platform-admin'],
+        },
+      });
+      vi.mocked(hasRole).mockReturnValue(true);
+    });
+
+    describe('POST /problems', () => {
+      const validProblem = {
+        title: 'Test Problem',
+        type: 'jam',
+        difficulty: 'medium',
+        category: 'security',
+        description: {
+          overview: 'Test overview',
+          objectives: ['Objective 1'],
+          hints: ['Hint 1'],
+          prerequisites: ['AWS account'],
+          estimatedTime: 60,
+        },
+        deployment: {
+          providers: ['aws'],
+          timeout: 30,
+        },
+        scoring: {
+          type: 'lambda',
+          path: '/path/to/scorer',
+          criteria: [
+            {
+              name: 'criterion_1',
+              description: 'Task 1',
+              maxPoints: 100,
+              weight: 1,
+            },
+          ],
+          timeoutMinutes: 5,
+        },
+        metadata: {
+          author: 'test-user',
+          version: '1.0.0',
+          tags: ['aws', 'security'],
+        },
+      };
+
+      it('問題を作成できるべき', async () => {
+        mockProblemRepository.create.mockResolvedValueOnce({
+          id: 'problem-1',
+          ...validProblem,
+        });
+        const res = await app.request('/api/admin/problems', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validProblem),
+        });
+        expect(res.status).toBe(201);
+        const body = await res.json();
+        expect(body.id).toBe('problem-1');
+      });
+
+      it('バリデーションエラー時に 400 を返すべき', async () => {
+        const res = await app.request('/api/admin/problems', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: '' }),
+        });
+        expect(res.status).toBe(400);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockProblemRepository.create.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/problems', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validProblem),
+        });
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('PUT /problems/:problemId', () => {
+      it('問題を更新できるべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce({
+          id: 'problem-1',
+          title: 'Original Problem',
+          metadata: {
+            createdAt: '2025-01-01T00:00:00.000Z',
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        });
+        mockProblemRepository.update.mockResolvedValueOnce({
+          id: 'problem-1',
+          title: 'Updated Problem',
+        });
+
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Updated Problem' }),
+        });
+        expect(res.status).toBe(200);
+      });
+
+      it('問題が見つからない場合は 404 を返すべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce(null);
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Updated Problem' }),
+        });
+        expect(res.status).toBe(404);
+      });
+
+      it('更新時に createdAt を保持すべき', async () => {
+        const originalCreatedAt = '2025-01-01T00:00:00.000Z';
+        mockProblemRepository.findById.mockResolvedValueOnce({
+          id: 'problem-1',
+          title: 'Original Problem',
+          metadata: {
+            author: 'original-author',
+            version: '1.0.0',
+            tags: ['tag1'],
+            createdAt: originalCreatedAt,
+            updatedAt: '2025-01-01T00:00:00.000Z',
+          },
+        });
+        mockProblemRepository.update.mockResolvedValueOnce({
+          id: 'problem-1',
+          title: 'Updated Problem',
+          metadata: {
+            author: 'new-author',
+            version: '2.0.0',
+            tags: ['tag1', 'tag2'],
+            createdAt: originalCreatedAt,
+            updatedAt: '2025-01-10T00:00:00.000Z',
+          },
+        });
+
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'Updated Problem',
+            metadata: {
+              author: 'new-author',
+              version: '2.0.0',
+              tags: ['tag1', 'tag2'],
+            },
+          }),
+        });
+        expect(res.status).toBe(200);
+
+        // update が呼ばれた際の引数を確認（createdAt が元の値で保持されている）
+        const updateCall = mockProblemRepository.update.mock.calls[0];
+        expect(updateCall[1].metadata.createdAt).toBe(originalCreatedAt);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce({
+          id: 'problem-1',
+          metadata: { createdAt: '2025-01-01T00:00:00.000Z' },
+        });
+        mockProblemRepository.update.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'Updated Problem' }),
+        });
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('DELETE /problems/:problemId', () => {
+      it('問題を削除できるべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'DELETE',
+        });
+        expect(res.status).toBe(200);
+      });
+
+      it('問題が見つからない場合は 404 を返すべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(false);
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'DELETE',
+        });
+        expect(res.status).toBe(404);
+      });
+
+      it('エラー発生時に 500 を返すべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+        mockProblemRepository.delete.mockRejectedValueOnce(
+          new Error('Database error')
+        );
+        const res = await app.request('/api/admin/problems/problem-1', {
+          method: 'DELETE',
+        });
         expect(res.status).toBe(500);
       });
     });
