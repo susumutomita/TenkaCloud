@@ -197,22 +197,52 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
   }
 }
 
+function getAiErrorStatusCode(error: string): 400 | 500 | 503 {
+  if (error.includes('not configured')) return 503;
+  return 500;
+}
+
+interface BuildProblemOptions {
+  includeSuggestedResources?: boolean;
+  includeTimestamps?: boolean;
+  includeAiGeneratedTag?: boolean;
+}
+
 function buildProblemFromAiResult(
   input: AiGenerationInput,
   generated: AiGeneratedProblem,
-  includeSuggestedResources: boolean
+  options: BuildProblemOptions = {}
 ): Record<string, unknown> {
-  const base = {
+  const {
+    includeSuggestedResources = false,
+    includeTimestamps = false,
+    includeAiGeneratedTag = false,
+  } = options;
+
+  const tags = [input.topic, input.cloudProvider, input.category];
+  if (includeAiGeneratedTag) {
+    tags.push('ai-generated');
+  }
+
+  const metadata: Record<string, unknown> = {
+    author: 'AI Generated',
+    version: '1.0.0',
+    tags,
+  };
+
+  if (includeTimestamps) {
+    const now = new Date().toISOString();
+    metadata.createdAt = now;
+    metadata.updatedAt = now;
+  }
+
+  const problem: Record<string, unknown> = {
     title: generated.title,
     type: input.type,
     category: input.category,
     difficulty: input.difficulty,
     description: generated.description,
-    metadata: {
-      author: 'AI Generated',
-      version: '1.0.0',
-      tags: [input.topic, input.cloudProvider, input.category],
-    },
+    metadata,
     deployment: {
       providers: [input.cloudProvider],
       timeout: 60,
@@ -228,9 +258,10 @@ function buildProblemFromAiResult(
   };
 
   if (includeSuggestedResources) {
-    return { ...base, suggestedResources: generated.suggestedResources || [] };
+    problem.suggestedResources = generated.suggestedResources || [];
   }
-  return base;
+
+  return problem;
 }
 
 // 認証ミドルウェア
@@ -1709,29 +1740,23 @@ adminRouter.post(
   '/ai/generate/preview',
   zValidator('json', aiGenerateProblemSchema),
   async (c) => {
-    const data = c.req.valid('json');
-    const input: AiGenerationInput = {
-      topic: data.topic,
-      type: data.type,
-      category: data.category,
-      difficulty: data.difficulty,
-      cloudProvider: data.cloudProvider,
-      targetServices: data.targetServices,
-      additionalContext: data.additionalContext,
-      language: data.language,
-    };
+    const input = c.req.valid('json');
     const result = await callAnthropicApi(input);
 
-    if (result.success === false) {
-      const statusCode = result.error.includes('not configured') ? 503 : 500;
-      return c.json({ error: result.error }, statusCode);
+    if (!result.success) {
+      return c.json(
+        { error: result.error },
+        getAiErrorStatusCode(result.error)
+      );
     }
 
-    const preview = buildProblemFromAiResult(input, result.data, true);
+    const preview = buildProblemFromAiResult(input, result.data, {
+      includeSuggestedResources: true,
+    });
     return c.json({
       preview,
       rawResponse: result.data,
-      inputParameters: data,
+      inputParameters: input,
     });
   }
 );
@@ -1741,56 +1766,26 @@ adminRouter.post(
   '/ai/generate',
   zValidator('json', aiGenerateProblemSchema),
   async (c) => {
-    const data = c.req.valid('json');
-    const input: AiGenerationInput = {
-      topic: data.topic,
-      type: data.type,
-      category: data.category,
-      difficulty: data.difficulty,
-      cloudProvider: data.cloudProvider,
-      targetServices: data.targetServices,
-      additionalContext: data.additionalContext,
-      language: data.language,
-    };
+    const input = c.req.valid('json');
     const result = await callAnthropicApi(input);
 
-    if (result.success === false) {
-      const statusCode = result.error.includes('not configured') ? 503 : 500;
-      return c.json({ error: result.error }, statusCode);
+    if (!result.success) {
+      return c.json(
+        { error: result.error },
+        getAiErrorStatusCode(result.error)
+      );
     }
 
-    const now = new Date().toISOString();
+    const problemData = buildProblemFromAiResult(input, result.data, {
+      includeTimestamps: true,
+      includeAiGeneratedTag: true,
+    });
     const problem = await problemRepository.create({
       id: crypto.randomUUID(),
-      title: result.data.title,
-      type: input.type,
-      category: input.category,
-      difficulty: input.difficulty,
-      description: result.data.description,
-      metadata: {
-        author: 'AI Generated',
-        version: '1.0.0',
-        createdAt: now,
-        updatedAt: now,
-        tags: [
-          input.topic,
-          input.cloudProvider,
-          input.category,
-          'ai-generated',
-        ],
-      },
-      deployment: {
-        providers: [input.cloudProvider],
-        timeout: 60,
-        templates: {},
-        regions: {},
-      },
-      scoring: {
-        type: 'manual',
-        path: '',
-        timeoutMinutes: 5,
-        criteria: result.data.scoring?.criteria || [],
-      },
+      ...(problemData as Omit<
+        Parameters<typeof problemRepository.create>[0],
+        'id'
+      >),
     });
 
     return c.json(problem, 201);
