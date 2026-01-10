@@ -51,6 +51,7 @@ import {
   detectFormat,
   type ExternalFormat,
 } from '../problems/converter';
+import type { ProblemCategory, DifficultyLevel, CloudProvider } from '../types';
 
 const adminRouter = new Hono();
 
@@ -59,6 +60,209 @@ const eventRepository = new PrismaEventRepository();
 const problemRepository = new PrismaProblemRepository();
 const marketplaceRepository = new PrismaMarketplaceRepository();
 const templateRepository = new PrismaProblemTemplateRepository();
+
+// ====================
+// AI 問題生成ヘルパー
+// ====================
+
+interface AiGenerationInput {
+  topic: string;
+  type: 'gameday' | 'jam';
+  category: ProblemCategory;
+  difficulty: DifficultyLevel;
+  cloudProvider: CloudProvider;
+  targetServices?: string[];
+  additionalContext?: string;
+  language: 'ja' | 'en';
+}
+
+interface AiGeneratedProblem {
+  title: string;
+  description: {
+    overview: string;
+    objectives: string[];
+    hints: string[];
+    prerequisites: string[];
+    estimatedTime?: number;
+  };
+  scoring?: {
+    criteria: {
+      name: string;
+      description?: string;
+      weight: number;
+      maxPoints: number;
+    }[];
+  };
+  suggestedResources?: string[];
+}
+
+async function callAnthropicApi(
+  input: AiGenerationInput
+): Promise<
+  | { success: true; data: AiGeneratedProblem }
+  | { success: false; error: string }
+> {
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicApiKey) {
+    return {
+      success: false,
+      error: 'AI generation not configured: ANTHROPIC_API_KEY is missing',
+    };
+  }
+
+  const systemPrompt = `あなたはクラウド技術の競技問題を作成する専門家です。
+TenkaCloud プラットフォーム用の問題を生成してください。
+
+出力は以下の JSON 形式で返してください：
+{
+  "title": "問題タイトル",
+  "description": {
+    "overview": "問題の概要（シナリオ背景を含む）",
+    "objectives": ["目標1", "目標2", ...],
+    "hints": ["ヒント1", "ヒント2", ...],
+    "prerequisites": ["前提知識1", "前提知識2", ...],
+    "estimatedTime": 60
+  },
+  "scoring": {
+    "criteria": [
+      {"name": "criterion_1", "description": "評価基準の説明", "weight": 0.5, "maxPoints": 50},
+      ...
+    ]
+  },
+  "suggestedResources": ["参考リソースURL1", ...]
+}
+
+注意事項:
+- 問題は実践的で、実際のクラウド運用シナリオに基づくこと
+- 難易度に応じた適切な複雑さにすること
+- セキュリティベストプラクティスを考慮すること`;
+
+  const userPrompt = `以下の条件で問題を生成してください：
+
+トピック: ${input.topic}
+タイプ: ${input.type === 'gameday' ? 'GameDay（トラブルシューティング）' : 'Jam（構築課題）'}
+カテゴリ: ${input.category}
+難易度: ${input.difficulty}
+クラウドプロバイダー: ${input.cloudProvider.toUpperCase()}
+${input.targetServices ? `使用サービス: ${input.targetServices.join(', ')}` : ''}
+${input.additionalContext ? `追加コンテキスト: ${input.additionalContext}` : ''}
+言語: ${input.language === 'ja' ? '日本語' : '英語'}`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Anthropic API error:', errorText);
+      return { success: false, error: 'AI generation failed' };
+    }
+
+    const result = (await response.json()) as {
+      content?: { type: string; text: string }[];
+    };
+    const content = result.content?.[0]?.text;
+
+    if (!content) {
+      return { success: false, error: 'AI returned empty response' };
+    }
+
+    // JSON を抽出（マークダウンコードブロック対応）
+    let jsonContent = content;
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    const generatedProblem = JSON.parse(jsonContent) as AiGeneratedProblem;
+    return { success: true, data: generatedProblem };
+  } catch (error) {
+    console.error('Failed to generate problem with AI:', error);
+    if (error instanceof SyntaxError) {
+      return { success: false, error: 'AI returned invalid JSON format' };
+    }
+    return { success: false, error: 'Failed to generate problem with AI' };
+  }
+}
+
+function getAiErrorStatusCode(error: string): 400 | 500 | 503 {
+  if (error.includes('not configured')) return 503;
+  return 500;
+}
+
+interface BuildProblemOptions {
+  includeSuggestedResources?: boolean;
+  includeTimestamps?: boolean;
+  includeAiGeneratedTag?: boolean;
+}
+
+function buildProblemFromAiResult(
+  input: AiGenerationInput,
+  generated: AiGeneratedProblem,
+  options: BuildProblemOptions = {}
+): Record<string, unknown> {
+  const {
+    includeSuggestedResources = false,
+    includeTimestamps = false,
+    includeAiGeneratedTag = false,
+  } = options;
+
+  const tags = [input.topic, input.cloudProvider, input.category];
+  if (includeAiGeneratedTag) {
+    tags.push('ai-generated');
+  }
+
+  const metadata: Record<string, unknown> = {
+    author: 'AI Generated',
+    version: '1.0.0',
+    tags,
+  };
+
+  if (includeTimestamps) {
+    const now = new Date().toISOString();
+    metadata.createdAt = now;
+    metadata.updatedAt = now;
+  }
+
+  const problem: Record<string, unknown> = {
+    title: generated.title,
+    type: input.type,
+    category: input.category,
+    difficulty: input.difficulty,
+    description: generated.description,
+    metadata,
+    deployment: {
+      providers: [input.cloudProvider],
+      timeout: 60,
+      templates: {},
+      regions: {},
+    },
+    scoring: {
+      type: 'manual' as const,
+      path: '',
+      timeoutMinutes: 5,
+      criteria: generated.scoring?.criteria || [],
+    },
+  };
+
+  if (includeSuggestedResources) {
+    problem.suggestedResources = generated.suggestedResources || [];
+  }
+
+  return problem;
+}
 
 // 認証ミドルウェア
 adminRouter.use('*', async (c, next) => {
@@ -82,7 +286,7 @@ adminRouter.use('*', async (c, next) => {
   }
 
   c.set('user', authContext.user);
-  await next();
+  return next();
 });
 
 // ====================
@@ -165,42 +369,45 @@ adminRouter.get('/events/:eventId', async (c) => {
   const eventId = c.req.param('eventId');
 
   try {
-    const eventWithProblems = await getEventWithProblems(eventId);
-    if (!eventWithProblems) {
+    const result = await getEventWithProblems(eventId);
+    if (!result) {
       return c.json({ error: 'Event not found' }, 404);
     }
 
+    const { event: eventData, problems } = result;
+
     // レスポンス形式に変換
     const event = {
-      id: eventWithProblems.id,
-      externalId: eventWithProblems.externalId,
-      name: eventWithProblems.name,
-      type: eventWithProblems.type.toLowerCase(),
-      status: eventWithProblems.status.toLowerCase(),
-      tenantId: eventWithProblems.tenantId,
-      startTime: eventWithProblems.startTime.toISOString(),
-      endTime: eventWithProblems.endTime.toISOString(),
-      timezone: eventWithProblems.timezone,
-      participantType: eventWithProblems.participantType.toLowerCase(),
-      maxParticipants: eventWithProblems.maxParticipants,
-      minTeamSize: eventWithProblems.minTeamSize,
-      maxTeamSize: eventWithProblems.maxTeamSize,
-      cloudProvider: eventWithProblems.cloudProvider.toLowerCase(),
-      regions: eventWithProblems.regions,
-      scoringType: eventWithProblems.scoringType.toLowerCase(),
-      scoringIntervalMinutes: eventWithProblems.scoringIntervalMinutes,
-      leaderboardVisible: eventWithProblems.leaderboardVisible,
-      freezeLeaderboardMinutes: eventWithProblems.freezeLeaderboardMinutes,
-      problemCount: eventWithProblems.problems.length,
-      problems: eventWithProblems.problems.map((ep) => ({
+      id: eventData.id,
+      externalId: eventData.externalId,
+      name: eventData.name,
+      type: eventData.type.toLowerCase(),
+      status: eventData.status.toLowerCase(),
+      tenantId: eventData.tenantId,
+      startTime: eventData.startTime.toISOString(),
+      endTime: eventData.endTime.toISOString(),
+      timezone: eventData.timezone,
+      participantType: eventData.participantType.toLowerCase(),
+      maxParticipants: eventData.maxParticipants,
+      minTeamSize: eventData.minTeamSize,
+      maxTeamSize: eventData.maxTeamSize,
+      cloudProvider: eventData.cloudProvider.toLowerCase(),
+      regions: eventData.regions,
+      scoringType: eventData.scoringType.toLowerCase(),
+      scoringIntervalMinutes: eventData.scoringIntervalMinutes,
+      leaderboardVisible: eventData.leaderboardVisible,
+      freezeLeaderboardMinutes: eventData.freezeLeaderboardMinutes,
+      problemCount: problems.length,
+      problems: problems.map((ep) => ({
         problemId: ep.problemId,
-        problemTitle: ep.problem.title,
+        problemTitle:
+          (ep as { problem?: { title: string } }).problem?.title || 'Unknown',
         order: ep.order,
         unlockTime: ep.unlockTime?.toISOString(),
         pointMultiplier: ep.pointMultiplier,
       })),
-      createdAt: eventWithProblems.createdAt.toISOString(),
-      updatedAt: eventWithProblems.updatedAt.toISOString(),
+      createdAt: eventData.createdAt.toISOString(),
+      updatedAt: eventData.updatedAt.toISOString(),
     };
 
     return c.json(event);
@@ -462,6 +669,222 @@ adminRouter.get('/problems/:problemId', async (c) => {
   } catch (error) {
     console.error('Failed to get problem:', error);
     return c.json({ error: 'Failed to get problem' }, 500);
+  }
+});
+
+// 問題スキーマ
+const createProblemSchema = z.object({
+  title: z.string().min(1),
+  type: z.enum(['gameday', 'jam']),
+  category: z.enum([
+    'architecture',
+    'security',
+    'cost',
+    'performance',
+    'reliability',
+    'operations',
+  ]),
+  difficulty: z.enum(['easy', 'medium', 'hard', 'expert']),
+  description: z.object({
+    overview: z.string(),
+    objectives: z.array(z.string()).default([]),
+    hints: z.array(z.string()).default([]),
+    prerequisites: z.array(z.string()).default([]),
+    estimatedTime: z.number().optional(),
+  }),
+  metadata: z.object({
+    author: z.string(),
+    version: z.string().default('1.0.0'),
+    tags: z.array(z.string()).default([]),
+    license: z.string().optional(),
+  }),
+  deployment: z.object({
+    providers: z.array(z.enum(['aws', 'gcp', 'azure', 'local'])).min(1),
+    timeout: z.number().optional(),
+    templates: z
+      .record(
+        z.object({
+          type: z.enum([
+            'cloudformation',
+            'sam',
+            'cdk',
+            'terraform',
+            'deployment-manager',
+            'arm',
+            'docker-compose',
+          ]),
+          path: z.string(),
+          parameters: z.record(z.string()).optional(),
+        })
+      )
+      .optional(),
+    regions: z.record(z.array(z.string())).optional(),
+  }),
+  scoring: z.object({
+    type: z.enum(['lambda', 'container', 'api', 'manual']),
+    path: z.string(),
+    timeoutMinutes: z.number().default(5),
+    intervalMinutes: z.number().optional(),
+    criteria: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          weight: z.number(),
+          maxPoints: z.number(),
+        })
+      )
+      .default([]),
+  }),
+});
+
+const updateProblemSchema = createProblemSchema.partial();
+
+// 問題作成
+adminRouter.post(
+  '/problems',
+  zValidator('json', createProblemSchema),
+  async (c) => {
+    const data = c.req.valid('json');
+
+    try {
+      const problem = await problemRepository.create({
+        id: crypto.randomUUID(),
+        title: data.title,
+        type: data.type,
+        category: data.category,
+        difficulty: data.difficulty,
+        description: data.description,
+        metadata: {
+          author: data.metadata.author,
+          version: data.metadata.version,
+          tags: data.metadata.tags,
+          license: data.metadata.license,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        deployment: {
+          providers: data.deployment.providers,
+          timeout: data.deployment.timeout,
+          templates: data.deployment.templates || {},
+          regions: data.deployment.regions || {},
+        },
+        scoring: data.scoring,
+      });
+      return c.json(problem, 201);
+    } catch (error) {
+      console.error('Failed to create problem:', error);
+      return c.json({ error: 'Failed to create problem' }, 500);
+    }
+  }
+);
+
+// 問題更新
+adminRouter.put(
+  '/problems/:problemId',
+  zValidator('json', updateProblemSchema),
+  async (c) => {
+    const problemId = c.req.param('problemId');
+    const data = c.req.valid('json');
+
+    try {
+      const exists = await problemRepository.exists(problemId);
+      if (!exists) {
+        return c.json({ error: 'Problem not found' }, 404);
+      }
+
+      // Partial<Problem> に変換
+      const updates: Partial<{
+        title: string;
+        type: 'gameday' | 'jam';
+        category:
+          | 'architecture'
+          | 'security'
+          | 'cost'
+          | 'performance'
+          | 'reliability'
+          | 'operations';
+        difficulty: 'easy' | 'medium' | 'hard' | 'expert';
+        description: {
+          overview: string;
+          objectives: string[];
+          hints: string[];
+          prerequisites: string[];
+          estimatedTime?: number;
+        };
+        metadata: {
+          author: string;
+          version: string;
+          tags: string[];
+          license?: string;
+          createdAt: string;
+          updatedAt: string;
+        };
+        deployment: {
+          providers: ('aws' | 'gcp' | 'azure' | 'local')[];
+          timeout?: number;
+          templates: Record<string, unknown>;
+          regions: Record<string, unknown>;
+        };
+        scoring: {
+          type: 'lambda' | 'container' | 'api' | 'manual';
+          path: string;
+          timeoutMinutes: number;
+          intervalMinutes?: number;
+          criteria: {
+            name: string;
+            description?: string;
+            weight: number;
+            maxPoints: number;
+          }[];
+        };
+      }> = {};
+
+      if (data.title) updates.title = data.title;
+      if (data.type) updates.type = data.type;
+      if (data.category) updates.category = data.category;
+      if (data.difficulty) updates.difficulty = data.difficulty;
+      if (data.description) updates.description = data.description;
+      if (data.metadata) {
+        updates.metadata = {
+          ...data.metadata,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      if (data.deployment) {
+        updates.deployment = {
+          ...data.deployment,
+          templates: data.deployment.templates || {},
+          regions: data.deployment.regions || {},
+        };
+      }
+      if (data.scoring) updates.scoring = data.scoring;
+
+      const problem = await problemRepository.update(problemId, updates);
+      return c.json(problem);
+    } catch (error) {
+      console.error('Failed to update problem:', error);
+      return c.json({ error: 'Failed to update problem' }, 500);
+    }
+  }
+);
+
+// 問題削除
+adminRouter.delete('/problems/:problemId', async (c) => {
+  const problemId = c.req.param('problemId');
+
+  try {
+    const exists = await problemRepository.exists(problemId);
+    if (!exists) {
+      return c.json({ error: 'Problem not found' }, 404);
+    }
+
+    await problemRepository.delete(problemId);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete problem:', error);
+    return c.json({ error: 'Failed to delete problem' }, 500);
   }
 });
 
@@ -973,29 +1396,6 @@ const createTemplateSchema = z.object({
 
 const updateTemplateSchema = createTemplateSchema.partial();
 
-// テンプレート検索スキーマ
-const templateSearchSchema = z.object({
-  query: z.string().optional(),
-  type: z.enum(['gameday', 'jam']).optional(),
-  category: z
-    .enum([
-      'architecture',
-      'security',
-      'cost',
-      'performance',
-      'reliability',
-      'operations',
-    ])
-    .optional(),
-  difficulty: z.enum(['easy', 'medium', 'hard', 'expert']).optional(),
-  provider: z.enum(['aws', 'gcp', 'azure', 'local']).optional(),
-  status: z.enum(['draft', 'published', 'archived']).optional(),
-  tags: z.array(z.string()).optional(),
-  sortBy: z.enum(['name', 'usageCount', 'newest', 'updated']).optional(),
-  page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).max(100).default(20),
-});
-
 // テンプレート一覧取得
 adminRouter.get('/templates', async (c) => {
   const type = c.req.query('type');
@@ -1242,6 +1642,7 @@ adminRouter.post(
 
       // テンプレートから問題を生成
       const problemData = {
+        id: crypto.randomUUID(),
         title: data.title,
         type: template.type,
         category: data.overrides?.category || template.category,
@@ -1250,6 +1651,7 @@ adminRouter.post(
           author: template.author,
           version: template.version,
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           tags: data.overrides?.tags || template.tags,
         },
         description: {
@@ -1304,6 +1706,89 @@ adminRouter.post(
       console.error('Failed to create problem from template:', error);
       return c.json({ error: 'Failed to create problem from template' }, 500);
     }
+  }
+);
+
+// ====================
+// AI 問題生成
+// ====================
+
+// AI 問題生成リクエストスキーマ
+const aiGenerateProblemSchema = z.object({
+  topic: z.string().min(1).describe('生成する問題のトピック'),
+  type: z.enum(['gameday', 'jam']),
+  category: z.enum([
+    'architecture',
+    'security',
+    'cost',
+    'performance',
+    'reliability',
+    'operations',
+  ]),
+  difficulty: z.enum(['easy', 'medium', 'hard', 'expert']),
+  cloudProvider: z.enum(['aws', 'gcp', 'azure', 'local']),
+  targetServices: z
+    .array(z.string())
+    .optional()
+    .describe('使用するクラウドサービス'),
+  additionalContext: z.string().optional().describe('追加のコンテキスト'),
+  language: z.enum(['ja', 'en']).default('ja'),
+});
+
+// AI 問題生成（プレビュー）
+adminRouter.post(
+  '/ai/generate/preview',
+  zValidator('json', aiGenerateProblemSchema),
+  async (c) => {
+    const input = c.req.valid('json');
+    const result = await callAnthropicApi(input);
+
+    if (!result.success) {
+      return c.json(
+        { error: result.error },
+        getAiErrorStatusCode(result.error)
+      );
+    }
+
+    const preview = buildProblemFromAiResult(input, result.data, {
+      includeSuggestedResources: true,
+    });
+    return c.json({
+      preview,
+      rawResponse: result.data,
+      inputParameters: input,
+    });
+  }
+);
+
+// AI 問題生成（作成）
+adminRouter.post(
+  '/ai/generate',
+  zValidator('json', aiGenerateProblemSchema),
+  async (c) => {
+    const input = c.req.valid('json');
+    const result = await callAnthropicApi(input);
+
+    if (!result.success) {
+      return c.json(
+        { error: result.error },
+        getAiErrorStatusCode(result.error)
+      );
+    }
+
+    const problemData = buildProblemFromAiResult(input, result.data, {
+      includeTimestamps: true,
+      includeAiGeneratedTag: true,
+    });
+    const problem = await problemRepository.create({
+      id: crypto.randomUUID(),
+      ...(problemData as Omit<
+        Parameters<typeof problemRepository.create>[0],
+        'id'
+      >),
+    });
+
+    return c.json(problem, 201);
   }
 );
 

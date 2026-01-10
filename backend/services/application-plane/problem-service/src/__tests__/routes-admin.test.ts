@@ -457,25 +457,29 @@ describe('Admin Routes', () => {
 
     it('イベント詳細を取得できるべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        externalId: 'ext-1',
-        name: 'Test Event',
-        type: 'JAM',
-        status: 'DRAFT',
-        tenantId: 'tenant-1',
-        startTime: new Date('2025-01-01'),
-        endTime: new Date('2025-01-02'),
-        timezone: 'Asia/Tokyo',
-        participantType: 'TEAM',
-        maxParticipants: 100,
-        minTeamSize: 2,
-        maxTeamSize: 5,
-        cloudProvider: 'AWS',
-        regions: ['ap-northeast-1'],
-        scoringType: 'REALTIME',
-        scoringIntervalMinutes: 5,
-        leaderboardVisible: true,
-        freezeLeaderboardMinutes: 30,
+        event: {
+          id: 'event-1',
+          externalId: 'ext-1',
+          name: 'Test Event',
+          type: 'JAM',
+          status: 'DRAFT',
+          tenantId: 'tenant-1',
+          startTime: new Date('2025-01-01'),
+          endTime: new Date('2025-01-02'),
+          timezone: 'Asia/Tokyo',
+          participantType: 'TEAM',
+          maxParticipants: 100,
+          minTeamSize: 2,
+          maxTeamSize: 5,
+          cloudProvider: 'AWS',
+          regions: ['ap-northeast-1'],
+          scoringType: 'REALTIME',
+          scoringIntervalMinutes: 5,
+          leaderboardVisible: true,
+          freezeLeaderboardMinutes: 30,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
         problems: [
           {
             problemId: 'problem-1',
@@ -485,8 +489,6 @@ describe('Admin Routes', () => {
             problem: { title: 'Test Problem' },
           },
         ],
-        createdAt: new Date(),
-        updatedAt: new Date(),
       } as any);
 
       const res = await app.request('/api/admin/events/event-1');
@@ -960,7 +962,14 @@ describe('Admin Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
+        token: 'test-token',
+        user: {
+          id: 'user-1',
+          email: 'user@example.com',
+          username: 'user1',
+          tenantId: 'tenant-1',
+          roles: ['platform-admin'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
@@ -978,7 +987,14 @@ describe('Admin Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
+        token: 'test-token',
+        user: {
+          id: 'user-1',
+          email: 'user@example.com',
+          username: 'user1',
+          tenantId: 'tenant-1',
+          roles: ['platform-admin'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
@@ -986,7 +1002,7 @@ describe('Admin Routes', () => {
     it('チーム登録失敗時に 400 を返すべき', async () => {
       vi.mocked(registerTeamToContest).mockResolvedValueOnce({
         success: false,
-        error: 'Error',
+        message: 'Error',
       });
       const res = await app.request('/api/admin/events/event-1/teams', {
         method: 'POST',
@@ -1001,7 +1017,14 @@ describe('Admin Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
+        token: 'test-token',
+        user: {
+          id: 'user-1',
+          email: 'user@example.com',
+          username: 'user1',
+          tenantId: 'tenant-1',
+          roles: ['platform-admin'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
