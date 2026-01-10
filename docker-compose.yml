@@ -70,6 +70,7 @@ services:
     environment:
       - SERVICES=dynamodb,cognito-idp,s3,lambda,events,iam,logs,sts,sqs
       - DEBUG=1
+      - PERSISTENCE=1
       - LAMBDA_EXECUTOR=docker
       - DOCKER_HOST=unix:///var/run/docker.sock
       - AWS_DEFAULT_REGION=ap-northeast-1
