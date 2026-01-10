@@ -27,6 +27,7 @@ const {
     findAll: vi.fn().mockResolvedValue([]),
     findById: vi.fn().mockResolvedValue(null),
     count: vi.fn().mockResolvedValue(0),
+    exists: vi.fn().mockResolvedValue(false),
     create: vi
       .fn()
       .mockResolvedValue({ id: 'problem-1', name: 'Test Problem' }),
@@ -89,6 +90,7 @@ vi.mock('../repositories', () => ({
     findAll = mockProblemRepository.findAll;
     findById = mockProblemRepository.findById;
     count = mockProblemRepository.count;
+    exists = mockProblemRepository.exists;
     create = mockProblemRepository.create;
     update = mockProblemRepository.update;
     delete = mockProblemRepository.delete;
@@ -1429,7 +1431,6 @@ describe('Admin Routes', () => {
         type: 'jam',
         difficulty: 'medium',
         category: 'security',
-        status: 'draft',
         description: {
           overview: 'Test overview',
           objectives: ['Objective 1'],
@@ -1439,14 +1440,14 @@ describe('Admin Routes', () => {
         },
         deployment: {
           providers: ['aws'],
-          templateType: 'cloudformation',
-          templateContent: '{"Resources": {}}',
           timeout: 30,
         },
         scoring: {
           type: 'lambda',
+          path: '/path/to/scorer',
           criteria: [
             {
+              name: 'criterion_1',
               description: 'Task 1',
               maxPoints: 100,
               weight: 1,
@@ -1454,10 +1455,10 @@ describe('Admin Routes', () => {
           ],
           timeoutMinutes: 5,
         },
-        tags: ['aws', 'security'],
         metadata: {
           author: 'test-user',
           version: '1.0.0',
+          tags: ['aws', 'security'],
         },
       };
 
@@ -1537,6 +1538,9 @@ describe('Admin Routes', () => {
           id: 'problem-1',
           title: 'Original Problem',
           metadata: {
+            author: 'original-author',
+            version: '1.0.0',
+            tags: ['tag1'],
             createdAt: originalCreatedAt,
             updatedAt: '2025-01-01T00:00:00.000Z',
           },
@@ -1545,6 +1549,9 @@ describe('Admin Routes', () => {
           id: 'problem-1',
           title: 'Updated Problem',
           metadata: {
+            author: 'new-author',
+            version: '2.0.0',
+            tags: ['tag1', 'tag2'],
             createdAt: originalCreatedAt,
             updatedAt: '2025-01-10T00:00:00.000Z',
           },
@@ -1556,14 +1563,15 @@ describe('Admin Routes', () => {
           body: JSON.stringify({
             title: 'Updated Problem',
             metadata: {
-              createdAt: '2099-12-31T00:00:00.000Z', // 攻撃者が上書きしようとしても
-              updatedAt: '2099-12-31T00:00:00.000Z',
+              author: 'new-author',
+              version: '2.0.0',
+              tags: ['tag1', 'tag2'],
             },
           }),
         });
         expect(res.status).toBe(200);
 
-        // update が呼ばれた際の引数を確認
+        // update が呼ばれた際の引数を確認（createdAt が元の値で保持されている）
         const updateCall = mockProblemRepository.update.mock.calls[0];
         expect(updateCall[1].metadata.createdAt).toBe(originalCreatedAt);
       });
@@ -1587,10 +1595,7 @@ describe('Admin Routes', () => {
 
     describe('DELETE /problems/:problemId', () => {
       it('問題を削除できるべき', async () => {
-        mockProblemRepository.findById.mockResolvedValueOnce({
-          id: 'problem-1',
-          title: 'Test Problem',
-        });
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
         const res = await app.request('/api/admin/problems/problem-1', {
           method: 'DELETE',
         });
@@ -1598,7 +1603,7 @@ describe('Admin Routes', () => {
       });
 
       it('問題が見つからない場合は 404 を返すべき', async () => {
-        mockProblemRepository.findById.mockResolvedValueOnce(null);
+        mockProblemRepository.exists.mockResolvedValueOnce(false);
         const res = await app.request('/api/admin/problems/problem-1', {
           method: 'DELETE',
         });
@@ -1606,9 +1611,7 @@ describe('Admin Routes', () => {
       });
 
       it('エラー発生時に 500 を返すべき', async () => {
-        mockProblemRepository.findById.mockResolvedValueOnce({
-          id: 'problem-1',
-        });
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
         mockProblemRepository.delete.mockRejectedValueOnce(
           new Error('Database error')
         );

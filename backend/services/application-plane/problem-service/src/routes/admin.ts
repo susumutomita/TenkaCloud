@@ -803,52 +803,7 @@ adminRouter.put(
         return c.json({ error: 'Problem not found' }, 404);
       }
 
-      // Partial<Problem> に変換
-      const updates: Partial<{
-        title: string;
-        type: 'gameday' | 'jam';
-        category:
-          | 'architecture'
-          | 'security'
-          | 'cost'
-          | 'performance'
-          | 'reliability'
-          | 'operations';
-        difficulty: 'easy' | 'medium' | 'hard' | 'expert';
-        description: {
-          overview: string;
-          objectives: string[];
-          hints: string[];
-          prerequisites: string[];
-          estimatedTime?: number;
-        };
-        metadata: {
-          author: string;
-          version: string;
-          tags: string[];
-          license?: string;
-          createdAt: string;
-          updatedAt: string;
-        };
-        deployment: {
-          providers: ('aws' | 'gcp' | 'azure' | 'local')[];
-          timeout?: number;
-          templates: Record<string, unknown>;
-          regions: Record<string, unknown>;
-        };
-        scoring: {
-          type: 'lambda' | 'container' | 'api' | 'manual';
-          path: string;
-          timeoutMinutes: number;
-          intervalMinutes?: number;
-          criteria: {
-            name: string;
-            description?: string;
-            weight: number;
-            maxPoints: number;
-          }[];
-        };
-      }> = {};
+      const updates: Record<string, unknown> = {};
 
       if (data.title) updates.title = data.title;
       if (data.type) updates.type = data.type;
