@@ -1910,10 +1910,10 @@ adminRouter.post(
       );
     }
 
-    // スタック名の生成
+    // スタック名の生成（UUID で一意性を保証）
     const stackName =
       input.stackName ||
-      `tenkacloud-${problem.id.slice(0, 8)}-${Date.now().toString(36)}`;
+      `tenkacloud-${problem.id.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
 
     const awsProvider = getAWSProvider();
 
@@ -1931,7 +1931,10 @@ adminRouter.post(
       tags: {
         ...input.tags,
         'tenkacloud:admin-deploy': 'true',
-        'tenkacloud:problem-title': problem.title,
+        'tenkacloud:problem-id': problem.id,
+        'tenkacloud:problem-title': problem.title
+          .slice(0, 256)
+          .replace(/[^\w\s.:\-/=+@]/g, '_'),
       },
       dryRun: input.dryRun,
       timeoutSeconds: (problem.deployment.timeout || 60) * 60,
