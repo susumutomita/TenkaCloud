@@ -4,7 +4,7 @@
  * 管理画面APIの統合テスト
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Hono } from 'hono';
 
 // vi.hoisted でモックを作成（ホイスティングされても参照可能）
@@ -13,6 +13,7 @@ const {
   mockProblemRepository,
   mockMarketplaceRepository,
   mockTemplateRepository,
+  mockAWSProvider,
 } = vi.hoisted(() => ({
   mockEventRepository: {
     findByTenant: vi.fn().mockResolvedValue([]),
@@ -61,6 +62,35 @@ const {
     count: vi.fn().mockResolvedValue(0),
     exists: vi.fn().mockResolvedValue(false),
     incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+  },
+  mockAWSProvider: {
+    validateCredentials: vi.fn().mockResolvedValue(true),
+    deployStack: vi.fn().mockResolvedValue({
+      success: true,
+      stackId:
+        'arn:aws:cloudformation:ap-northeast-1:123456789012:stack/test-stack/xxx',
+      stackName: 'test-stack',
+      outputs: { OutputKey: 'OutputValue' },
+      startedAt: new Date(),
+      completedAt: new Date(),
+    }),
+    getStackStatus: vi.fn().mockResolvedValue({
+      stackName: 'test-stack',
+      stackId:
+        'arn:aws:cloudformation:ap-northeast-1:123456789012:stack/test-stack/xxx',
+      status: 'CREATE_COMPLETE',
+      outputs: { OutputKey: 'OutputValue' },
+    }),
+    deleteStack: vi.fn().mockResolvedValue({
+      success: true,
+      stackName: 'test-stack',
+      startedAt: new Date(),
+      completedAt: new Date(),
+    }),
+    getAvailableRegions: vi.fn().mockResolvedValue([
+      { code: 'ap-northeast-1', name: 'Asia Pacific (Tokyo)', available: true },
+      { code: 'us-east-1', name: 'US East (N. Virginia)', available: true },
+    ]),
   },
 }));
 
@@ -142,6 +172,10 @@ vi.mock('../jam/eventlog', () => ({
   getEventLogs: vi.fn().mockResolvedValue({ logs: [], total: 0 }),
 }));
 
+vi.mock('../providers/aws', () => ({
+  getAWSProvider: () => mockAWSProvider,
+}));
+
 import { authenticateRequest, hasRole } from '../auth';
 import { adminRouter } from '../routes/admin';
 import {
@@ -154,6 +188,25 @@ import {
   removeChallengeFromContest,
   registerTeamToContest,
 } from '../jam/contest';
+
+// テスト用の管理者ユーザー
+const mockAdminUser = {
+  id: 'user-1',
+  tenantId: 'tenant-1',
+  roles: ['platform-admin'],
+  email: 'admin@example.com',
+  username: 'admin',
+};
+
+// 管理者認証をモックするヘルパー
+function setupAdminAuth(): void {
+  vi.mocked(authenticateRequest).mockResolvedValue({
+    isValid: true,
+    user: mockAdminUser,
+    token: 'test-token',
+  });
+  vi.mocked(hasRole).mockReturnValue(true);
+}
 
 describe('Admin Routes', () => {
   let app: Hono;
@@ -168,6 +221,7 @@ describe('Admin Routes', () => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: false,
         user: null,
+        token: null,
       });
 
       const res = await app.request('/api/admin/events');
@@ -177,7 +231,14 @@ describe('Admin Routes', () => {
     it('管理者権限がない場合は 403 を返すべき', async () => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', roles: ['competitor'] },
+        user: {
+          id: 'user-1',
+          tenantId: 'tenant-1',
+          roles: ['competitor'],
+          email: 'user@example.com',
+          username: 'user',
+        },
+        token: 'test-token',
       });
       vi.mocked(hasRole).mockReturnValue(false);
 
@@ -188,11 +249,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベント一覧を取得できるべき', async () => {
@@ -206,11 +263,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/contest/start', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('コンテストを開始できるべき', async () => {
@@ -225,11 +278,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/contest/stop', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('コンテストを停止できるべき', async () => {
@@ -244,11 +293,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/contest/pause', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('コンテストを一時停止できるべき', async () => {
@@ -261,11 +306,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/contest/resume', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('コンテストを再開できるべき', async () => {
@@ -281,11 +322,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events/:eventId/teams', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('チーム一覧を取得できるべき', async () => {
@@ -298,11 +335,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/teams', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('チームを登録できるべき', async () => {
@@ -317,11 +350,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events/:eventId/dashboard', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントダッシュボードを取得できるべき', async () => {
@@ -332,11 +361,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events/:eventId/leaderboard', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('リーダーボードを取得できるべき', async () => {
@@ -349,11 +374,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/leaderboard/snapshot', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('リーダーボードスナップショットを保存できるべき', async () => {
@@ -369,11 +390,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events/:eventId/challenges/stats', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('チャレンジ統計を取得できるべき', async () => {
@@ -388,11 +405,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events/:eventId/logs', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントログを取得できるべき', async () => {
@@ -403,11 +416,7 @@ describe('Admin Routes', () => {
 
   describe('GET /problems', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('問題一覧を取得できるべき', async () => {
@@ -420,11 +429,7 @@ describe('Admin Routes', () => {
 
   describe('GET /marketplace', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('マーケットプレイスを検索できるべき', async () => {
@@ -450,11 +455,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events/:eventId', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントが見つからない場合は 404 を返すべき', async () => {
@@ -517,11 +518,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントを作成できるべき', async () => {
@@ -594,11 +591,7 @@ describe('Admin Routes', () => {
 
   describe('PUT /events/:eventId', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントを更新できるべき', async () => {
@@ -641,11 +634,7 @@ describe('Admin Routes', () => {
 
   describe('DELETE /events/:eventId', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントを削除できるべき', async () => {
@@ -668,11 +657,7 @@ describe('Admin Routes', () => {
 
   describe('PATCH /events/:eventId/status', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントステータスを更新できるべき', async () => {
@@ -699,11 +684,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/problems', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントに問題を追加できるべき', async () => {
@@ -735,11 +716,7 @@ describe('Admin Routes', () => {
 
   describe('DELETE /events/:eventId/problems/:problemId', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('イベントから問題を削除できるべき', async () => {
@@ -768,11 +745,7 @@ describe('Admin Routes', () => {
 
   describe('GET /problems/:problemId', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('問題が見つからない場合は 404 を返すべき', async () => {
@@ -803,11 +776,7 @@ describe('Admin Routes', () => {
 
   describe('POST /marketplace/:marketplaceId/install', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('問題をインストールできるべき', async () => {
@@ -850,11 +819,7 @@ describe('Admin Routes', () => {
 
   describe('POST /events/:eventId/challenges', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('チャレンジを追加できるべき', async () => {
@@ -886,7 +851,7 @@ describe('Admin Routes', () => {
     it('失敗時に 400 を返すべき', async () => {
       vi.mocked(addChallengeToContest).mockResolvedValueOnce({
         success: false,
-        error: 'Error',
+        message: 'Error',
       });
       const res = await app.request('/api/admin/events/event-1/challenges', {
         method: 'POST',
@@ -916,11 +881,7 @@ describe('Admin Routes', () => {
 
   describe('DELETE /events/:eventId/challenges/:challengeId', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('チャレンジを削除できるべき', async () => {
@@ -936,7 +897,7 @@ describe('Admin Routes', () => {
     it('失敗時に 400 を返すべき', async () => {
       vi.mocked(removeChallengeFromContest).mockResolvedValueOnce({
         success: false,
-        error: 'Error',
+        message: 'Error',
       });
       const res = await app.request(
         '/api/admin/events/event-1/challenges/challenge-1',
@@ -950,11 +911,7 @@ describe('Admin Routes', () => {
 
   describe('GET /events エラーハンドリング', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['platform-admin'] },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('エラー発生時に 500 を返すべき', async () => {
@@ -968,18 +925,7 @@ describe('Admin Routes', () => {
 
   describe('GET /problems エラーハンドリング', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        token: 'test-token',
-        user: {
-          id: 'user-1',
-          email: 'user@example.com',
-          username: 'user1',
-          tenantId: 'tenant-1',
-          roles: ['platform-admin'],
-        },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('エラー発生時に 500 を返すべき', async () => {
@@ -993,18 +939,7 @@ describe('Admin Routes', () => {
 
   describe('チーム登録', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        token: 'test-token',
-        user: {
-          id: 'user-1',
-          email: 'user@example.com',
-          username: 'user1',
-          tenantId: 'tenant-1',
-          roles: ['platform-admin'],
-        },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     it('チーム登録失敗時に 400 を返すべき', async () => {
@@ -1023,18 +958,7 @@ describe('Admin Routes', () => {
 
   describe('テンプレート管理API', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        token: 'test-token',
-        user: {
-          id: 'user-1',
-          email: 'user@example.com',
-          username: 'user1',
-          tenantId: 'tenant-1',
-          roles: ['platform-admin'],
-        },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     describe('GET /templates', () => {
@@ -1411,18 +1335,7 @@ describe('Admin Routes', () => {
 
   describe('問題管理API', () => {
     beforeEach(() => {
-      vi.mocked(authenticateRequest).mockResolvedValue({
-        isValid: true,
-        token: 'test-token',
-        user: {
-          id: 'user-1',
-          email: 'user@example.com',
-          username: 'user1',
-          tenantId: 'tenant-1',
-          roles: ['platform-admin'],
-        },
-      });
-      vi.mocked(hasRole).mockReturnValue(true);
+      setupAdminAuth();
     });
 
     describe('POST /problems', () => {
@@ -1619,6 +1532,312 @@ describe('Admin Routes', () => {
           method: 'DELETE',
         });
         expect(res.status).toBe(500);
+      });
+    });
+  });
+
+  describe('AWS デプロイメント', () => {
+    const mockProblemWithAWS = {
+      id: 'problem-1',
+      title: 'Test Problem',
+      type: 'gameday',
+      category: 'architecture',
+      difficulty: 'medium',
+      deployment: {
+        providers: ['aws'],
+        templates: {
+          aws: {
+            type: 'cloudformation',
+            path: '/templates/test.yaml',
+            parameters: {},
+          },
+        },
+        regions: { aws: ['ap-northeast-1'] },
+        timeout: 60,
+      },
+      scoring: {
+        type: 'lambda',
+        path: '/scoring/test.ts',
+        criteria: [],
+        timeoutMinutes: 5,
+      },
+      metadata: {
+        author: 'test',
+        version: '1.0.0',
+        createdAt: '2025-01-01T00:00:00.000Z',
+      },
+      description: {
+        overview: 'Test problem overview',
+        objectives: [],
+        hints: [],
+      },
+    };
+
+    beforeEach(() => {
+      setupAdminAuth();
+      // Set AWS credentials in environment
+      process.env.AWS_ACCESS_KEY_ID = 'test-access-key';
+      process.env.AWS_SECRET_ACCESS_KEY = 'test-secret-key';
+      process.env.AWS_ACCOUNT_ID = '123456789012';
+    });
+
+    afterEach(() => {
+      delete process.env.AWS_ACCESS_KEY_ID;
+      delete process.env.AWS_SECRET_ACCESS_KEY;
+      delete process.env.AWS_ACCOUNT_ID;
+    });
+
+    describe('POST /problems/:problemId/deploy', () => {
+      it('問題をAWSにデプロイできるべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce(
+          mockProblemWithAWS
+        );
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+            stackName: 'test-stack',
+          }),
+        });
+
+        expect(res.status).toBe(201);
+        const body = await res.json();
+        expect(body.message).toBe('Deployment completed successfully');
+        expect(body.stackName).toBe('test-stack');
+        expect(mockAWSProvider.deployStack).toHaveBeenCalled();
+      });
+
+      it('問題が見つからない場合は 404 を返すべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce(null);
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+          }),
+        });
+
+        expect(res.status).toBe(404);
+      });
+
+      it('AWS テンプレートがない問題は 400 を返すべき', async () => {
+        const problemWithoutAWS = {
+          ...mockProblemWithAWS,
+          deployment: {
+            providers: ['gcp'],
+            templates: {},
+            regions: {},
+          },
+        };
+        mockProblemRepository.findById.mockResolvedValueOnce(problemWithoutAWS);
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+          }),
+        });
+
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain('AWS deployment template');
+      });
+
+      it('AWS クレデンシャルがない場合は 400 を返すべき', async () => {
+        delete process.env.AWS_ACCESS_KEY_ID;
+        delete process.env.AWS_SECRET_ACCESS_KEY;
+        delete process.env.AWS_ACCOUNT_ID;
+
+        mockProblemRepository.findById.mockResolvedValueOnce(
+          mockProblemWithAWS
+        );
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+          }),
+        });
+
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain('AWS credentials');
+      });
+
+      it('無効なクレデンシャルの場合は 401 を返すべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce(
+          mockProblemWithAWS
+        );
+        mockAWSProvider.validateCredentials.mockResolvedValueOnce(false);
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+          }),
+        });
+
+        expect(res.status).toBe(401);
+      });
+
+      it('dryRun モードでテンプレート検証ができるべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce(
+          mockProblemWithAWS
+        );
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+            dryRun: true,
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.message).toBe('Template validation successful');
+      });
+
+      it('デプロイ失敗時は 500 を返すべき', async () => {
+        mockProblemRepository.findById.mockResolvedValueOnce(
+          mockProblemWithAWS
+        );
+        mockAWSProvider.deployStack.mockResolvedValueOnce({
+          success: false,
+          stackName: 'test-stack',
+          error: 'Stack creation failed',
+          startedAt: new Date(),
+          completedAt: new Date(),
+        });
+
+        const res = await app.request('/api/admin/problems/problem-1/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            region: 'ap-northeast-1',
+          }),
+        });
+
+        expect(res.status).toBe(500);
+        const body = await res.json();
+        expect(body.error).toBe('Deployment failed');
+      });
+    });
+
+    describe('GET /problems/:problemId/deployments/:stackName/status', () => {
+      it('デプロイメント状態を取得できるべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack/status?region=ap-northeast-1'
+        );
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.stackName).toBe('test-stack');
+        expect(body.status).toBe('CREATE_COMPLETE');
+      });
+
+      it('region クエリパラメータがない場合は 400 を返すべき', async () => {
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack/status'
+        );
+
+        expect(res.status).toBe(400);
+      });
+
+      it('問題が見つからない場合は 404 を返すべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(false);
+
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack/status?region=ap-northeast-1'
+        );
+
+        expect(res.status).toBe(404);
+      });
+
+      it('スタックが見つからない場合は 404 を返すべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+        mockAWSProvider.getStackStatus.mockResolvedValueOnce(null);
+
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack/status?region=ap-northeast-1'
+        );
+
+        expect(res.status).toBe(404);
+      });
+    });
+
+    describe('DELETE /problems/:problemId/deployments/:stackName', () => {
+      it('デプロイメントを削除できるべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack?region=ap-northeast-1',
+          { method: 'DELETE' }
+        );
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.message).toBe('Stack deletion completed');
+        expect(mockAWSProvider.deleteStack).toHaveBeenCalled();
+      });
+
+      it('region クエリパラメータがない場合は 400 を返すべき', async () => {
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack',
+          { method: 'DELETE' }
+        );
+
+        expect(res.status).toBe(400);
+      });
+
+      it('スタックが見つからない場合は 404 を返すべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+        mockAWSProvider.getStackStatus.mockResolvedValueOnce(null);
+
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack?region=ap-northeast-1',
+          { method: 'DELETE' }
+        );
+
+        expect(res.status).toBe(404);
+      });
+
+      it('削除失敗時は 500 を返すべき', async () => {
+        mockProblemRepository.exists.mockResolvedValueOnce(true);
+        mockAWSProvider.deleteStack.mockResolvedValueOnce({
+          success: false,
+          stackName: 'test-stack',
+          error: 'Deletion failed',
+          startedAt: new Date(),
+          completedAt: new Date(),
+        });
+
+        const res = await app.request(
+          '/api/admin/problems/problem-1/deployments/test-stack?region=ap-northeast-1',
+          { method: 'DELETE' }
+        );
+
+        expect(res.status).toBe(500);
+      });
+    });
+
+    describe('GET /aws/regions', () => {
+      it('利用可能なリージョン一覧を取得できるべき', async () => {
+        const res = await app.request('/api/admin/aws/regions');
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.regions).toHaveLength(2);
+        expect(body.regions[0].code).toBe('ap-northeast-1');
       });
     });
   });
