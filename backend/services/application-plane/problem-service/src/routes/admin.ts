@@ -51,7 +51,13 @@ import {
   detectFormat,
   type ExternalFormat,
 } from '../problems/converter';
-import type { ProblemCategory, DifficultyLevel, CloudProvider } from '../types';
+import { getAWSProvider } from '../providers/aws';
+import type {
+  ProblemCategory,
+  DifficultyLevel,
+  CloudProvider,
+  CloudCredentials,
+} from '../types';
 
 const adminRouter = new Hono();
 
@@ -1770,5 +1776,284 @@ adminRouter.post(
     }
   }
 );
+
+// ====================
+// AWS デプロイメント
+// ====================
+
+// AWS クレデンシャルを環境変数から取得するヘルパー
+function getAWSCredentialsFromEnv(
+  region: string,
+  overrides?: Partial<CloudCredentials>
+): CloudCredentials | null {
+  const accessKeyId =
+    overrides?.accessKeyId || process.env.AWS_ACCESS_KEY_ID || '';
+  const secretAccessKey =
+    overrides?.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || '';
+  const accountId = overrides?.accountId || process.env.AWS_ACCOUNT_ID || '';
+
+  if (!accessKeyId || !secretAccessKey || !accountId) {
+    return null;
+  }
+
+  return {
+    provider: 'aws',
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    sessionToken: overrides?.sessionToken || process.env.AWS_SESSION_TOKEN,
+    roleArn: overrides?.roleArn || process.env.AWS_ROLE_ARN,
+    region,
+  };
+}
+
+// デプロイメント操作の共通バリデーション結果
+type DeploymentValidation =
+  | { valid: true; credentials: CloudCredentials }
+  | { valid: false; error: string; status: 400 | 404 };
+
+// デプロイメント操作の共通バリデーション
+async function validateDeploymentRequest(
+  problemId: string,
+  region: string | undefined
+): Promise<DeploymentValidation> {
+  if (!region) {
+    return {
+      valid: false,
+      error: 'region query parameter is required',
+      status: 400,
+    };
+  }
+
+  const exists = await problemRepository.exists(problemId);
+  if (!exists) {
+    return { valid: false, error: 'Problem not found', status: 404 };
+  }
+
+  const credentials = getAWSCredentialsFromEnv(region);
+  if (!credentials) {
+    return {
+      valid: false,
+      error: 'AWS credentials not configured',
+      status: 400,
+    };
+  }
+
+  return { valid: true, credentials };
+}
+
+// デプロイリクエストスキーマ
+const deployProblemSchema = z.object({
+  region: z.string().min(1).describe('デプロイ先リージョン'),
+  stackName: z
+    .string()
+    .regex(/^[a-zA-Z][a-zA-Z0-9-]*$/)
+    .min(1)
+    .max(128)
+    .optional()
+    .describe('CloudFormation スタック名（省略時は自動生成）'),
+  parameters: z
+    .record(z.string())
+    .optional()
+    .describe('CloudFormation パラメータ'),
+  tags: z.record(z.string()).optional().describe('スタックに付けるタグ'),
+  dryRun: z.boolean().optional().describe('テンプレート検証のみ実行'),
+  credentials: z
+    .object({
+      accessKeyId: z.string().optional(),
+      secretAccessKey: z.string().optional(),
+      sessionToken: z.string().optional(),
+      accountId: z.string().optional(),
+      roleArn: z.string().optional(),
+    })
+    .optional()
+    .describe('AWS クレデンシャル（省略時は環境変数を使用）'),
+});
+
+// 問題をAWSにデプロイ
+adminRouter.post(
+  '/problems/:problemId/deploy',
+  zValidator('json', deployProblemSchema),
+  async (c) => {
+    const { problemId } = c.req.param();
+    const input = c.req.valid('json');
+
+    // 問題を取得
+    const problem = await problemRepository.findById(problemId);
+    if (!problem) {
+      return c.json({ error: 'Problem not found' }, 404);
+    }
+
+    // AWS テンプレートの確認
+    if (
+      !problem.deployment.providers.includes('aws') ||
+      !problem.deployment.templates.aws
+    ) {
+      return c.json(
+        { error: 'This problem does not have an AWS deployment template' },
+        400
+      );
+    }
+
+    // クレデンシャルの取得
+    const credentials = getAWSCredentialsFromEnv(
+      input.region,
+      input.credentials
+    );
+    if (!credentials) {
+      return c.json(
+        {
+          error:
+            'AWS credentials not configured. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_ACCOUNT_ID environment variables or provide them in the request.',
+        },
+        400
+      );
+    }
+
+    // スタック名の生成（UUID で一意性を保証）
+    const stackName =
+      input.stackName ||
+      `tenkacloud-${problem.id.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
+
+    const awsProvider = getAWSProvider();
+
+    // クレデンシャル検証
+    const isValid = await awsProvider.validateCredentials(credentials);
+    if (!isValid) {
+      return c.json({ error: 'Invalid AWS credentials' }, 401);
+    }
+
+    // デプロイ実行
+    const result = await awsProvider.deployStack(problem, credentials, {
+      stackName,
+      region: input.region,
+      parameters: input.parameters,
+      tags: {
+        ...input.tags,
+        'tenkacloud:admin-deploy': 'true',
+        'tenkacloud:problem-id': problem.id,
+        'tenkacloud:problem-title': problem.title
+          .slice(0, 256)
+          .replace(/[^\w\s.:\-/=+@]/g, '_'),
+      },
+      dryRun: input.dryRun,
+      timeoutSeconds: (problem.deployment.timeout || 60) * 60,
+      rollbackOnFailure: true,
+    });
+
+    if (result.success) {
+      return c.json(
+        {
+          message: input.dryRun
+            ? 'Template validation successful'
+            : 'Deployment completed successfully',
+          stackName: result.stackName,
+          stackId: result.stackId,
+          outputs: result.outputs,
+          startedAt: result.startedAt,
+          completedAt: result.completedAt,
+        },
+        input.dryRun ? 200 : 201
+      );
+    }
+
+    return c.json(
+      {
+        error: 'Deployment failed',
+        details: result.error,
+        stackName: result.stackName,
+        startedAt: result.startedAt,
+        completedAt: result.completedAt,
+      },
+      500
+    );
+  }
+);
+
+// デプロイメント状態取得
+adminRouter.get(
+  '/problems/:problemId/deployments/:stackName/status',
+  async (c) => {
+    const { problemId, stackName } = c.req.param();
+    const region = c.req.query('region');
+
+    const validation = await validateDeploymentRequest(problemId, region);
+    if (!validation.valid) {
+      return c.json({ error: validation.error }, validation.status);
+    }
+
+    const awsProvider = getAWSProvider();
+    const status = await awsProvider.getStackStatus(
+      stackName,
+      validation.credentials
+    );
+
+    if (!status) {
+      return c.json({ error: 'Stack not found' }, 404);
+    }
+
+    return c.json({
+      stackName: status.stackName,
+      stackId: status.stackId,
+      status: status.status,
+      statusReason: status.statusReason,
+      outputs: status.outputs,
+      lastUpdatedTime: status.lastUpdatedTime,
+    });
+  }
+);
+
+// デプロイメント削除
+adminRouter.delete('/problems/:problemId/deployments/:stackName', async (c) => {
+  const { problemId, stackName } = c.req.param();
+  const region = c.req.query('region');
+
+  const validation = await validateDeploymentRequest(problemId, region);
+  if (!validation.valid) {
+    return c.json({ error: validation.error }, validation.status);
+  }
+
+  const awsProvider = getAWSProvider();
+
+  // スタックの存在確認
+  const status = await awsProvider.getStackStatus(
+    stackName,
+    validation.credentials
+  );
+  if (!status) {
+    return c.json({ error: 'Stack not found' }, 404);
+  }
+
+  // 削除実行
+  const result = await awsProvider.deleteStack(
+    stackName,
+    validation.credentials
+  );
+
+  if (result.success) {
+    return c.json({
+      message: 'Stack deletion completed',
+      stackName,
+      startedAt: result.startedAt,
+      completedAt: result.completedAt,
+    });
+  }
+
+  return c.json(
+    {
+      error: 'Stack deletion failed',
+      details: result.error,
+      stackName,
+    },
+    500
+  );
+});
+
+// 利用可能なリージョン一覧
+adminRouter.get('/aws/regions', async (c) => {
+  const awsProvider = getAWSProvider();
+  const regions = await awsProvider.getAvailableRegions();
+  return c.json({ regions });
+});
 
 export { adminRouter };
