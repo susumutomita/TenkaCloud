@@ -7,11 +7,14 @@
  */
 
 import type {
+  CloudProvider,
+  DifficultyLevel,
   EventStatus,
   ParticipantEvent,
+  ProblemCategory,
+  ProblemType,
   TeamInfo,
   TeamMember,
-  ProblemType,
 } from './types';
 
 // Re-export common types for convenience
@@ -286,4 +289,186 @@ export interface AdminChallengeFilters {
   difficulty?: AdminChallenge['difficulty'];
   isPublished?: boolean;
   search?: string;
+}
+
+// =============================================================================
+// Admin Problem Types
+// =============================================================================
+
+/**
+ * 問題の説明
+ */
+export interface ProblemDescription {
+  overview: string;
+  objectives: string[];
+  hints: string[];
+  prerequisites: string[];
+  estimatedTime?: number;
+}
+
+/**
+ * 問題のメタデータ
+ */
+export interface ProblemMetadata {
+  author: string;
+  version: string;
+  tags: string[];
+  license?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * デプロイメントテンプレート
+ */
+export interface DeploymentTemplate {
+  type:
+    | 'cloudformation'
+    | 'sam'
+    | 'cdk'
+    | 'terraform'
+    | 'deployment-manager'
+    | 'arm'
+    | 'docker-compose';
+  path: string;
+  parameters?: Record<string, string>;
+}
+
+/**
+ * 問題のデプロイメント設定
+ */
+export interface ProblemDeployment {
+  providers: CloudProvider[];
+  timeout?: number;
+  templates: Record<string, DeploymentTemplate>;
+  regions: Record<string, string[]>;
+}
+
+/**
+ * 問題の採点基準
+ */
+export interface ProblemScoringCriterion {
+  name: string;
+  description?: string;
+  weight: number;
+  maxPoints: number;
+}
+
+/**
+ * 問題の採点設定
+ */
+export interface ProblemScoring {
+  type: 'lambda' | 'container' | 'api' | 'manual';
+  path: string;
+  timeoutMinutes: number;
+  intervalMinutes?: number;
+  criteria: ProblemScoringCriterion[];
+}
+
+/**
+ * Admin 用問題型
+ */
+export interface AdminProblem {
+  id: string;
+  title: string;
+  type: ProblemType;
+  category: ProblemCategory;
+  difficulty: DifficultyLevel;
+  description: ProblemDescription;
+  metadata: ProblemMetadata;
+  deployment: ProblemDeployment;
+  scoring: ProblemScoring;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * 問題作成リクエスト型
+ */
+export interface CreateProblemRequest {
+  title: string;
+  type: ProblemType;
+  category: ProblemCategory;
+  difficulty: DifficultyLevel;
+  description: ProblemDescription;
+  metadata: Omit<ProblemMetadata, 'createdAt' | 'updatedAt'>;
+  deployment: ProblemDeployment;
+  scoring: ProblemScoring;
+}
+
+/**
+ * 問題更新リクエスト型
+ */
+export type UpdateProblemRequest = Partial<CreateProblemRequest>;
+
+/**
+ * 問題フィルター型
+ */
+export interface AdminProblemFilters {
+  type?: ProblemType;
+  category?: ProblemCategory;
+  difficulty?: DifficultyLevel;
+  search?: string;
+}
+
+/**
+ * 問題一覧レスポンス型
+ */
+export interface AdminProblemListResponse {
+  problems: AdminProblem[];
+  total: number;
+}
+
+// =============================================================================
+// Admin Problem Deployment Types
+// =============================================================================
+
+/**
+ * デプロイリクエスト型
+ */
+export interface DeployProblemRequest {
+  region: string;
+  stackName?: string;
+  parameters?: Record<string, string>;
+  tags?: Record<string, string>;
+  dryRun?: boolean;
+  credentials?: {
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    sessionToken?: string;
+    accountId?: string;
+    roleArn?: string;
+  };
+}
+
+/**
+ * デプロイレスポンス型
+ */
+export interface DeployProblemResponse {
+  message: string;
+  stackName: string;
+  stackId?: string;
+  outputs?: Record<string, string>;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+/**
+ * デプロイステータス型
+ */
+export interface DeploymentStatus {
+  stackName: string;
+  stackId?: string;
+  status: string;
+  statusReason?: string;
+  outputs?: Record<string, string>;
+  lastUpdatedTime?: string;
+}
+
+/**
+ * AWS リージョン情報
+ */
+export interface AWSRegion {
+  code: string;
+  name: string;
 }
