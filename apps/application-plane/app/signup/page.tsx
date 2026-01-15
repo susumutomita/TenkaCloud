@@ -63,7 +63,9 @@ export default function SignupPage() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       router.push('/onboarding');
     } catch {
-      setErrors({ submit: 'サインアップに失敗しました。もう一度お試しください。' });
+      setErrors({
+        submit: 'サインアップに失敗しました。もう一度お試しください。',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -149,9 +151,7 @@ export default function SignupPage() {
             type="text"
             placeholder="山田 太郎"
             value={formData.name}
-            onChange={(e) =>
-              setFormData({ ...formData, name: e.target.value })
-            }
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             error={errors.name}
             required
           />

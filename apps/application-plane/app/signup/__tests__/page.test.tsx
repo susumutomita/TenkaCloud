@@ -35,7 +35,9 @@ describe('SignupPage', () => {
     fireEvent.change(inputs[1], { target: { value: 'test@example.com' } });
     fireEvent.change(passwordInputs[0], { target: { value: 'password123' } });
     fireEvent.change(passwordInputs[1], { target: { value: 'different' } });
-    const submitButton = screen.getByRole('button', { name: /メールアドレスで登録/ });
+    const submitButton = screen.getByRole('button', {
+      name: /メールアドレスで登録/,
+    });
     fireEvent.click(submitButton);
     await waitFor(() => {
       expect(screen.getByText('パスワードが一致しません')).toBeInTheDocument();
@@ -54,10 +56,15 @@ describe('SignupPage', () => {
     fireEvent.change(passwordInputs[0], { target: { value: 'password123' } });
     // パスワード（確認）
     fireEvent.change(passwordInputs[1], { target: { value: 'password123' } });
-    const submitButton = screen.getByRole('button', { name: /メールアドレスで登録/ });
+    const submitButton = screen.getByRole('button', {
+      name: /メールアドレスで登録/,
+    });
     fireEvent.click(submitButton);
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/onboarding');
-    }, { timeout: 2000 });
+    await waitFor(
+      () => {
+        expect(mockPush).toHaveBeenCalledWith('/onboarding');
+      },
+      { timeout: 2000 }
+    );
   });
 });
