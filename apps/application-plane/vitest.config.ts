@@ -25,6 +25,9 @@ export default defineConfig({
         'components/**',
         'app/events/**',
         'app/dashboard/**',
+        'app/signup/**',
+        'app/onboarding/**',
+        'app/rankings/**',
       ],
       thresholds: {
         lines: 99,
