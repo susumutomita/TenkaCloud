@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
-const authSkipEnabled = process.env.AUTH_SKIP === '1';
+// next.config.ts の basePath と一致させる
+const BASE_PATH = '/control';
 
 /**
  * 認証ミドルウェアのコアロジック
@@ -17,26 +18,39 @@ function handleAuth(isLoggedIn: boolean, req: NextRequest): NextResponse {
 
   // 未認証ユーザーがログインページ以外にアクセスした場合、ログインページにリダイレクト
   if (!isLoggedIn && !isOnLoginPage) {
-    return NextResponse.redirect(new URL('/login', req.nextUrl.origin));
+    return NextResponse.redirect(
+      new URL(`${BASE_PATH}/login`, req.nextUrl.origin)
+    );
   }
 
   // 認証済みユーザーがログインページにアクセスした場合、ダッシュボードにリダイレクト
   if (isLoggedIn && isOnLoginPage) {
-    return NextResponse.redirect(new URL('/dashboard', req.nextUrl.origin));
+    return NextResponse.redirect(
+      new URL(`${BASE_PATH}/dashboard`, req.nextUrl.origin)
+    );
   }
 
   return NextResponse.next();
 }
 
 /**
+ * NextAuth のミドルウェアラッパー
+ * AUTH_SKIP=1 の場合は authReq.auth が設定されていなくても true として扱う
+ */
+const authMiddleware = auth((authReq) => {
+  // ランタイムで AUTH_SKIP を評価
+  const isAuthSkip = process.env.AUTH_SKIP === '1';
+  const isLoggedIn = isAuthSkip || !!authReq.auth;
+  return handleAuth(isLoggedIn, authReq);
+});
+
+/**
  * Next.js Middleware
  *
- * AUTH_SKIP=1 の場合は常に認証済みとして扱う
- * それ以外は NextAuth のミドルウェアラッパーを使用
+ * NextAuth のミドルウェアラッパーを使用し、
+ * AUTH_SKIP=1 の場合は常に認証済みとして扱う（ランタイム評価）
  */
-export const middleware = authSkipEnabled
-  ? (req: NextRequest) => handleAuth(true, req)
-  : auth((req) => handleAuth(!!req.auth, req));
+export { authMiddleware as middleware };
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],

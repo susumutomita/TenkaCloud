@@ -3,16 +3,16 @@ import { redirect } from 'next/navigation';
 import type { Session } from 'next-auth';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { auth } from '@/auth';
+import { getSession } from '@/auth';
 import DashboardPage from '../page';
 
 // API のモック（hoisted で先に定義）
 const mockFetchDashboardStats = vi.hoisted(() => vi.fn());
 const mockFetchActivities = vi.hoisted(() => vi.fn());
 
-// auth のモック
+// getSession のモック
 vi.mock('@/auth', () => ({
-  auth: vi.fn(),
+  getSession: vi.fn(),
 }));
 
 vi.mock('@/lib/api/stats-api', () => ({
@@ -37,8 +37,10 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-// auth を正しい型でモック
-const mockedAuth = auth as unknown as Mock<() => Promise<Session | null>>;
+// getSession を正しい型でモック
+const mockedGetSession = getSession as unknown as Mock<
+  () => Promise<Session | null>
+>;
 
 describe('DashboardPage コンポーネント', () => {
   beforeEach(() => {
@@ -47,14 +49,14 @@ describe('DashboardPage コンポーネント', () => {
 
   describe('認証チェック', () => {
     it('未認証ユーザーは /login へリダイレクトされるべき', async () => {
-      mockedAuth.mockResolvedValue(null);
+      mockedGetSession.mockResolvedValue(null);
 
       await expect(DashboardPage()).rejects.toThrow('NEXT_REDIRECT: /login');
       expect(redirect).toHaveBeenCalledWith('/login');
     });
 
     it('session が存在するが user がない場合は /login へリダイレクトされるべき', async () => {
-      mockedAuth.mockResolvedValue({
+      mockedGetSession.mockResolvedValue({
         user: undefined as unknown as Session['user'],
         expires: '',
       });
@@ -66,7 +68,7 @@ describe('DashboardPage コンポーネント', () => {
 
   describe('認証済みユーザー', () => {
     beforeEach(() => {
-      mockedAuth.mockResolvedValue({
+      mockedGetSession.mockResolvedValue({
         user: { name: 'Test User', email: 'test@example.com' },
         expires: '',
       });
@@ -95,7 +97,7 @@ describe('DashboardPage コンポーネント', () => {
     });
 
     it('ユーザー名がない場合はメールで挨拶すべき', async () => {
-      mockedAuth.mockResolvedValue({
+      mockedGetSession.mockResolvedValue({
         user: {
           name: undefined as unknown as string,
           email: 'test@example.com',

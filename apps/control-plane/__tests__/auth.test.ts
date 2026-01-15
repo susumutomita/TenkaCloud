@@ -47,7 +47,7 @@ describe('Auth0 認証設定', () => {
       process.env.AUTH_SKIP = '1';
 
       const auth = await import('../auth');
-      const session = await auth.auth();
+      const session = await auth.getSession();
 
       expect(session).toBeDefined();
       expect(session?.user?.name).toBe('Dev User');
@@ -67,7 +67,7 @@ describe('Auth0 認証設定', () => {
       process.env.AUTH_SKIP = '1';
 
       const auth = await import('../auth');
-      const session = await auth.auth();
+      const session = await auth.getSession();
 
       // Control Plane はテナント横断の管理画面のため、
       // 特定のテナントに紐付かない

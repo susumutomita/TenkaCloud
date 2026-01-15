@@ -12,7 +12,8 @@ test.describe('認証フロー（AUTH_SKIP モード）', () => {
   }) => {
     // AUTH_SKIP=1 モードでは認証済みユーザーはダッシュボードにリダイレクトされる
     await page.goto('/login');
-    await expect(page).toHaveURL(/\/dashboard/);
+    // basePath の有無に関わらず /dashboard で終わることを確認
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 
   test('ルートパスにアクセスするとダッシュボードにリダイレクトされるべき', async ({
@@ -20,7 +21,7 @@ test.describe('認証フロー（AUTH_SKIP モード）', () => {
   }) => {
     await page.goto('/');
     // AUTH_SKIP=1 モードでは認証済みとして扱われるので、ダッシュボードにリダイレクトされる
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 
   test('API 認証ルートにはアクセスできるべき', async ({ page }) => {

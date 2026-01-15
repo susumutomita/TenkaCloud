@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
+import { getSession } from '@/auth';
 
 export default async function HomePage() {
-  const session = await auth();
+  const session = await getSession();
 
   // 認証済みユーザーはダッシュボードへ、未認証ユーザーはログインページへ
   if (session?.user) {
