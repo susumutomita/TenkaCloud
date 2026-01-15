@@ -11,7 +11,7 @@ const BASE_PATH = '/control';
 test.describe('ダッシュボード', () => {
   test('ダッシュボードページにアクセスできるべき', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page).toHaveURL(`${BASE_PATH}/dashboard`);
+    await expect(page).toHaveURL(new RegExp(`${BASE_PATH}/dashboard$`));
 
     // ダッシュボードタイトルが表示されることを確認
     await expect(
@@ -50,7 +50,7 @@ test.describe('ダッシュボード', () => {
       .getByRole('main')
       .getByRole('link', { name: 'テナント管理' })
       .click();
-    await expect(page).toHaveURL(`${BASE_PATH}/dashboard/tenants`);
+    await expect(page).toHaveURL(new RegExp(`${BASE_PATH}/dashboard/tenants$`));
   });
 
   test('新規テナント作成リンクをクリックするとテナント作成ページに遷移するべき', async ({
@@ -63,25 +63,31 @@ test.describe('ダッシュボード', () => {
       .getByRole('main')
       .getByRole('link', { name: '新規テナント作成' })
       .click();
-    await expect(page).toHaveURL(`${BASE_PATH}/dashboard/tenants/new`);
+    await expect(page).toHaveURL(
+      new RegExp(`${BASE_PATH}/dashboard/tenants/new$`)
+    );
   });
 });
 
 test.describe('テナント管理ページ', () => {
   test('テナント一覧ページにアクセスできるべき', async ({ page }) => {
     await page.goto('/dashboard/tenants');
-    await expect(page).toHaveURL(`${BASE_PATH}/dashboard/tenants`);
+    await expect(page).toHaveURL(new RegExp(`${BASE_PATH}/dashboard/tenants$`));
   });
 
   test('新規テナント作成ページにアクセスできるべき', async ({ page }) => {
     await page.goto('/dashboard/tenants/new');
-    await expect(page).toHaveURL(`${BASE_PATH}/dashboard/tenants/new`);
+    await expect(page).toHaveURL(
+      new RegExp(`${BASE_PATH}/dashboard/tenants/new$`)
+    );
   });
 });
 
 test.describe('設定ページ', () => {
   test('設定ページにアクセスできるべき', async ({ page }) => {
     await page.goto('/dashboard/settings');
-    await expect(page).toHaveURL(`${BASE_PATH}/dashboard/settings`);
+    await expect(page).toHaveURL(
+      new RegExp(`${BASE_PATH}/dashboard/settings$`)
+    );
   });
 });
