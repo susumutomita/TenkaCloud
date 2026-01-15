@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ProvisioningPage from '../page';
 
-// Mock next/navigation
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -11,11 +10,10 @@ vi.mock('next/navigation', () => ({
 describe('ProvisioningPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.clearAllTimers();
   });
 
   it('プロビジョニングステップが表示されるべき', () => {
@@ -25,5 +23,23 @@ describe('ProvisioningPage', () => {
     expect(screen.getByText('データベースの作成')).toBeInTheDocument();
     expect(screen.getByText('アプリケーションのデプロイ')).toBeInTheDocument();
     expect(screen.getByText('DNS の設定')).toBeInTheDocument();
+  });
+
+  it('TenkaCloud ロゴが表示されるべき', () => {
+    render(<ProvisioningPage />);
+    expect(screen.getByText('TenkaCloud')).toBeInTheDocument();
+  });
+
+  it('進捗メッセージが表示されるべき', () => {
+    render(<ProvisioningPage />);
+    expect(
+      screen.getByText('あなたのテナント環境を準備しています')
+    ).toBeInTheDocument();
+  });
+
+  it('ホームリンクが表示されるべき', () => {
+    render(<ProvisioningPage />);
+    const homeLink = screen.getByRole('link');
+    expect(homeLink).toHaveAttribute('href', '/');
   });
 });
