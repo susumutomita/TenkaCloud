@@ -24,15 +24,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI
-      ? 'AUTH_SKIP=1 PORT=13000 node .next/standalone/apps/control-plane/server.js'
-      : 'AUTH_SKIP=1 bun run dev',
-    url: 'http://localhost:13000',
+    command: 'AUTH_SKIP=1 bun run dev',
+    url: 'http://localhost:13000/control',
     reuseExistingServer: !process.env.CI,
-    timeout: 180 * 1000,
+    timeout: 300 * 1000,
     env: {
       AUTH_SKIP: '1',
-      PORT: '13000',
     },
   },
 });
