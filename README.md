@@ -166,33 +166,35 @@ make auth0-output     # 認証情報を表示
 
 ```text
 TenkaCloud/
-├── apps/                         # フロントエンドアプリケーション
-│   ├── control-plane/            # 管理者向け UI（Next.js 16）
-│   │   ├── app/                  # App Router
-│   │   ├── components/           # React コンポーネント
-│   │   └── lib/                  # API クライアント・ユーティリティ
-│   └── application-plane/        # 競技者向け UI（Next.js 16）
-│       ├── app/                  # App Router
-│       └── lib/                  # AWS STS フェデレーション等
-├── backend/                      # バックエンドサービス
-│   └── services/
-│       ├── control-plane/        # Control Plane サービス
-│       │   └── tenant-management/  # テナント管理 API（Hono + DynamoDB）
-│       ├── application-plane/    # Application Plane サービス
-│       └── shared/               # 共有ライブラリ
-├── packages/                     # 共有パッケージ
-│   ├── core/                     # コアロジック
-│   └── shared/                   # 共有型定義・DynamoDB リポジトリ
-├── infrastructure/               # インフラストラクチャコード
-│   └── terraform/                # Terraform（AWS CDK 移行予定）
-├── docker-compose.yml            # ローカル開発用 Docker Compose
-├── problems/                     # 問題定義
-│   ├── templates/                # 問題テンプレート
-│   └── examples/                 # サンプル問題
-├── reference/                    # 参考資料
-│   └── eks/                      # EKS Reference Architecture
-├── scripts/                      # ユーティリティスクリプト
-└── docs/                         # ドキュメント
+├── apps/                              # フロントエンド
+│   ├── control-plane/                 # プラットフォーム管理 UI（Next.js 16）
+│   └── application-plane/             # 競技者・テナント管理 UI（Next.js 16）
+│
+├── backend/services/                  # バックエンド（マイクロサービス）
+│   ├── control-plane/                 # 共有プラットフォームサービス
+│   │   ├── tenant-management/         # テナント CRUD（Hono + DynamoDB）
+│   │   ├── registration/              # テナント登録
+│   │   ├── provisioning/              # リソースプロビジョニング
+│   │   └── user-management/           # ユーザー管理
+│   │
+│   ├── application-plane/             # テナント固有サービス
+│   │   ├── problem-service/           # 問題管理・AI 生成
+│   │   ├── battle-service/            # バトルセッション
+│   │   ├── scoring-service/           # 採点システム
+│   │   └── leaderboard-service/       # ランキング
+│   │
+│   └── shared/                        # 共有ライブラリ
+│       ├── dynamodb/                  # DynamoDB リポジトリ層
+│       └── cloud-abstraction/         # マルチクラウド抽象化
+│
+├── packages/                          # 共有 npm パッケージ
+│   ├── core/                          # コアロジック
+│   ├── shared/                        # 型定義・ユーティリティ
+│   └── design-system/                 # UI コンポーネントライブラリ
+│
+├── infrastructure/terraform/          # IaC（Terraform）
+├── docs/                              # ドキュメント
+└── Makefile                           # 開発コマンド集
 ```
 
 ## 🚦 開発環境のセットアップ
@@ -240,9 +242,11 @@ make format_check
 
 ## 📖 ドキュメント
 
-- [開発ガイド](./CLAUDE.md) - Claude Code/AI エージェント向け開発プレイブック
-- [アーキテクチャ設計](./docs/architecture.md)（予定）
-- [API ドキュメント](./docs/api.md)（予定）
+- [プロジェクト概要](./docs/OVERVIEW.md) - コンセプト・アーキテクチャ・用語集
+- [クイックスタート](./docs/QUICKSTART.md) - ローカル環境のセットアップ
+- [アーキテクチャ設計](./docs/architecture/architecture.md) - 詳細な技術設計書
+- [コントリビューションガイド](./docs/CONTRIBUTING.md) - 開発に参加する方法
+- [開発ガイド](./CLAUDE.md) - AI エージェント向けプレイブック
 
 ## 🤝 コントリビューション
 
@@ -266,37 +270,33 @@ MIT License（予定）
 
 ## 🔮 ロードマップ
 
-### Phase 1: 基盤構築
+### Phase 1: 基盤構築 ✅
 
-- [ ] Next.js プロジェクトセットアップ
-- [ ] AWS EKS クラスター構築
-- [ ] 基本的なマルチテナント構造
-- [ ] 認証・認可システム
+- [x] Next.js 16 プロジェクトセットアップ（App Router）
+- [x] マルチテナントアーキテクチャ設計
+- [x] Auth0 認証・認可システム
+- [x] LocalStack 統合（ローカル開発環境）
+- [x] DynamoDB Single-Table Design
 
-### Phase 2: コア機能
+### Phase 2: コア機能 🚧
 
-- [ ] バトルアリーナ機能
-- [ ] 問題管理システム
-- [ ] 基本的な採点システム
+- [x] テナント管理（登録・プロビジョニング）
+- [x] 問題管理システム（CRUD API）
+- [x] AI 問題生成機能
+- [ ] バトルアリーナ機能（進行中）
+- [ ] 採点システム（進行中）
 
-### Phase 3: AI 統合
+### Phase 3: 高度な機能
 
-- [ ] AI 問題生成
-- [ ] 自動採点システム
+- [ ] リーダーボード・統計
+- [ ] 観戦モード
 - [ ] コーチング機能
 
-### Phase 4: マルチクラウド対応
+### Phase 4: 本番環境・マルチクラウド
 
+- [ ] AWS EKS 本番クラスター構築
 - [ ] GCP 対応
 - [ ] Azure 対応
-- [ ] OCI 対応
-- [ ] LocalStack 統合
-
-### Phase 5: 高度な機能
-
-- [ ] 観戦モード
-- [ ] リーダーボード
-- [ ] 統計・分析機能
 
 ## 🎓 参考リソース
 

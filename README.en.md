@@ -97,28 +97,35 @@ A permanent battle arena where cloud warriors from around the world gather to ho
 
 ```text
 TenkaCloud/
-├── frontend/              # Next.js application
-│   ├── app/              # App Router
-│   ├── components/       # React components
-│   ├── lib/              # Utilities
-│   └── styles/           # Styles
-├── backend/              # Backend services
-│   ├── api/              # API service
-│   ├── auth/             # Authentication service
-│   ├── tenant/           # Tenant management
-│   ├── battle/           # Battle management
-│   └── scoring/          # Scoring system
-├── infrastructure/       # Infrastructure code
-│   ├── k8s/              # Kubernetes manifests
-│   └── terraform/        # Terraform (multi-cloud)
-├── problems/             # Problem definitions
-│   ├── templates/        # Problem templates
-│   └── examples/         # Sample problems
-├── ai/                   # AI features
-│   ├── problem-generator/ # Problem generation
-│   ├── scoring/          # Auto-grading
-│   └── coaching/         # Coaching features
-└── docs/                 # Documentation
+├── apps/                              # Frontend
+│   ├── control-plane/                 # Platform admin UI (Next.js 16)
+│   └── application-plane/             # Participant & tenant UI (Next.js 16)
+│
+├── backend/services/                  # Backend (Microservices)
+│   ├── control-plane/                 # Shared platform services
+│   │   ├── tenant-management/         # Tenant CRUD (Hono + DynamoDB)
+│   │   ├── registration/              # Tenant registration
+│   │   ├── provisioning/              # Resource provisioning
+│   │   └── user-management/           # User management
+│   │
+│   ├── application-plane/             # Tenant-specific services
+│   │   ├── problem-service/           # Problem management & AI generation
+│   │   ├── battle-service/            # Battle sessions
+│   │   ├── scoring-service/           # Scoring system
+│   │   └── leaderboard-service/       # Rankings
+│   │
+│   └── shared/                        # Shared libraries
+│       ├── dynamodb/                  # DynamoDB repository layer
+│       └── cloud-abstraction/         # Multi-cloud abstraction
+│
+├── packages/                          # Shared npm packages
+│   ├── core/                          # Core logic
+│   ├── shared/                        # Type definitions & utilities
+│   └── design-system/                 # UI component library
+│
+├── infrastructure/terraform/          # IaC (Terraform)
+├── docs/                              # Documentation
+└── Makefile                           # Development commands
 ```
 
 ## 🚦 Development Setup
@@ -168,9 +175,11 @@ make format_check
 
 ## 📖 Documentation
 
-- [Development Guide](./CLAUDE.md) - Developer playbook for Claude Code/AI agents
-- [Architecture Design](./docs/architecture.md) (planned)
-- [API Documentation](./docs/api.md) (planned)
+- [Project Overview](./docs/OVERVIEW.md) - Concept, architecture, glossary (Japanese)
+- [Quick Start](./docs/QUICKSTART.md) - Local environment setup (Japanese)
+- [Architecture Design](./docs/architecture/architecture.md) - Detailed technical design (Japanese)
+- [Contributing Guide](./docs/CONTRIBUTING.md) - How to contribute (Japanese)
+- [Development Guide](./CLAUDE.md) - AI agent playbook
 
 ## 🤝 Contributing
 
@@ -194,37 +203,33 @@ MIT License (planned)
 
 ## 🔮 Roadmap
 
-### Phase 1: Foundation
+### Phase 1: Foundation ✅
 
-- [ ] Next.js project setup
-- [ ] AWS EKS cluster setup
-- [ ] Basic multi-tenant structure
-- [ ] Authentication and authorization system
+- [x] Next.js 16 project setup (App Router)
+- [x] Multi-tenant architecture design
+- [x] Auth0 authentication & authorization
+- [x] LocalStack integration (local development)
+- [x] DynamoDB Single-Table Design
 
-### Phase 2: Core Features
+### Phase 2: Core Features 🚧
 
-- [ ] Battle arena features
-- [ ] Problem management system
-- [ ] Basic scoring system
+- [x] Tenant management (registration, provisioning)
+- [x] Problem management system (CRUD API)
+- [x] AI problem generation
+- [ ] Battle arena features (in progress)
+- [ ] Scoring system (in progress)
 
-### Phase 3: AI Integration
+### Phase 3: Advanced Features
 
-- [ ] AI problem generation
-- [ ] Auto-grading system
+- [ ] Leaderboard & statistics
+- [ ] Spectator mode
 - [ ] Coaching features
 
-### Phase 4: Multi-Cloud Support
+### Phase 4: Production & Multi-Cloud
 
+- [ ] AWS EKS production cluster
 - [ ] GCP support
 - [ ] Azure support
-- [ ] OCI support
-- [ ] LocalStack integration
-
-### Phase 5: Advanced Features
-
-- [ ] Spectator mode
-- [ ] Leaderboard
-- [ ] Statistics and analytics
 
 ## 🎓 References
 
