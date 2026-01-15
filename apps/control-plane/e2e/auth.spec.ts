@@ -5,14 +5,17 @@ import { test, expect } from '@playwright/test';
  *
  * AUTH_SKIP=1 モードでの認証フローを検証する
  * このモードでは全ユーザーが認証済みとして扱われる
+ * basePath: /control が設定されているため、URL は /control/... になる
  */
+const BASE_PATH = '/control';
+
 test.describe('認証フロー（AUTH_SKIP モード）', () => {
   test('ログインページにアクセスするとダッシュボードにリダイレクトされるべき', async ({
     page,
   }) => {
     // AUTH_SKIP=1 モードでは認証済みユーザーはダッシュボードにリダイレクトされる
     await page.goto('/login');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(new RegExp(`${BASE_PATH}/dashboard`));
   });
 
   test('ルートパスにアクセスするとダッシュボードにリダイレクトされるべき', async ({
@@ -20,7 +23,7 @@ test.describe('認証フロー（AUTH_SKIP モード）', () => {
   }) => {
     await page.goto('/');
     // AUTH_SKIP=1 モードでは認証済みとして扱われるので、ダッシュボードにリダイレクトされる
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(new RegExp(`${BASE_PATH}/dashboard`));
   });
 
   test('API 認証ルートにはアクセスできるべき', async ({ page }) => {
