@@ -24,7 +24,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI ? 'AUTH_SKIP=1 bun run start' : 'AUTH_SKIP=1 bun run dev',
+    command: process.env.CI
+      ? 'AUTH_SKIP=1 bun run start'
+      : 'AUTH_SKIP=1 bun run dev',
     url: 'http://localhost:13000',
     reuseExistingServer: !process.env.CI,
     timeout: 180 * 1000,
