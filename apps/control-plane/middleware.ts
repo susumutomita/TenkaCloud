@@ -3,6 +3,9 @@ import { auth } from '@/auth';
 
 const authSkipEnabled = process.env.AUTH_SKIP === '1';
 
+// next.config.ts の basePath と一致させる
+const BASE_PATH = '/control';
+
 /**
  * 認証ミドルウェアのコアロジック
  */
@@ -17,12 +20,16 @@ function handleAuth(isLoggedIn: boolean, req: NextRequest): NextResponse {
 
   // 未認証ユーザーがログインページ以外にアクセスした場合、ログインページにリダイレクト
   if (!isLoggedIn && !isOnLoginPage) {
-    return NextResponse.redirect(new URL('/login', req.nextUrl.origin));
+    return NextResponse.redirect(
+      new URL(`${BASE_PATH}/login`, req.nextUrl.origin)
+    );
   }
 
   // 認証済みユーザーがログインページにアクセスした場合、ダッシュボードにリダイレクト
   if (isLoggedIn && isOnLoginPage) {
-    return NextResponse.redirect(new URL('/dashboard', req.nextUrl.origin));
+    return NextResponse.redirect(
+      new URL(`${BASE_PATH}/dashboard`, req.nextUrl.origin)
+    );
   }
 
   return NextResponse.next();
