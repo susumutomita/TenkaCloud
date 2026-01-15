@@ -27,7 +27,7 @@ export default defineConfig({
     command: 'AUTH_SKIP=1 bun run dev',
     url: 'http://localhost:13000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    timeout: 180 * 1000,
     env: {
       AUTH_SKIP: '1',
     },
