@@ -13,7 +13,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'html',
   use: {
-    baseURL: 'http://localhost:13000',
+    baseURL: 'http://localhost:13000/control',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
