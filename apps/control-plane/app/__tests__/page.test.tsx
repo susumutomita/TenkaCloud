@@ -2,12 +2,12 @@ import { redirect } from 'next/navigation';
 import type { Session } from 'next-auth';
 import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { auth } from '@/auth';
+import { getSession } from '@/auth';
 import HomePage from '../page';
 
-// auth のモック
+// getSession のモック
 vi.mock('@/auth', () => ({
-  auth: vi.fn(),
+  getSession: vi.fn(),
 }));
 
 // next/navigation のモック
@@ -15,8 +15,10 @@ vi.mock('next/navigation', () => ({
   redirect: vi.fn(),
 }));
 
-// auth を正しい型でモック
-const mockedAuth = auth as unknown as Mock<() => Promise<Session | null>>;
+// getSession を正しい型でモック
+const mockedGetSession = getSession as unknown as Mock<
+  () => Promise<Session | null>
+>;
 
 describe('HomePage コンポーネント', () => {
   beforeEach(() => {
@@ -24,7 +26,7 @@ describe('HomePage コンポーネント', () => {
   });
 
   it('認証済みユーザーは /dashboard へリダイレクトされるべき', async () => {
-    mockedAuth.mockResolvedValue({
+    mockedGetSession.mockResolvedValue({
       user: { name: 'Test User', email: 'test@example.com' },
       expires: '',
     });
@@ -35,7 +37,7 @@ describe('HomePage コンポーネント', () => {
   });
 
   it('未認証ユーザーは /login へリダイレクトされるべき', async () => {
-    mockedAuth.mockResolvedValue(null);
+    mockedGetSession.mockResolvedValue(null);
 
     await HomePage();
 
@@ -43,7 +45,7 @@ describe('HomePage コンポーネント', () => {
   });
 
   it('session が存在するが user がない場合は /login へリダイレクトされるべき', async () => {
-    mockedAuth.mockResolvedValue({
+    mockedGetSession.mockResolvedValue({
       user: undefined as unknown as Session['user'],
       expires: '',
     });

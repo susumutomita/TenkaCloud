@@ -113,5 +113,24 @@ const nextAuth = NextAuth({
 
 export const { handlers, signIn, signOut } = nextAuth;
 
-// AUTH_SKIP=1 の場合はモックセッションを返す
-export const auth = authSkipEnabled ? async () => mockSession : nextAuth.auth;
+/**
+ * NextAuth の認証ミドルウェア
+ *
+ * ミドルウェアで使用する場合は常に nextAuth.auth を export する。
+ * AUTH_SKIP のチェックは middleware.ts 側でランタイムに行う。
+ */
+export const auth = nextAuth.auth;
+
+/**
+ * セッション取得関数（クライアント/サーバーコンポーネント用）
+ *
+ * AUTH_SKIP=1 の場合はモックセッションを返す。
+ * この関数はランタイムで AUTH_SKIP を評価する。
+ */
+export async function getSession(): Promise<Session | null> {
+  // ランタイムで AUTH_SKIP を評価
+  if (process.env.AUTH_SKIP === '1') {
+    return mockSession;
+  }
+  return nextAuth.auth();
+}

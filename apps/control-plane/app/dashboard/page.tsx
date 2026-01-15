@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
+import { getSession } from '@/auth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -74,7 +74,7 @@ function formatRelativeTime(timestamp: string): string {
 }
 
 export default async function DashboardPage() {
-  const session = await auth();
+  const session = await getSession();
 
   if (!session?.user) {
     redirect('/login');
