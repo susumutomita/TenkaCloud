@@ -13,14 +13,15 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui';
-import { getProblem, deleteProblem } from '@/lib/api/admin-problems';
+import {
+  CategoryBadge,
+  DifficultyBadge,
+  getCategoryIcon,
+  ProblemTypeBadge,
+  ProviderBadge,
+} from '@/components/ui';
+import { deleteProblem, getProblem } from '@/lib/api/admin-problems';
 import type { AdminProblem } from '@/lib/api/admin-types';
-import type {
-  CloudProvider,
-  DifficultyLevel,
-  ProblemCategory,
-} from '@/lib/api/types';
 
 export default function AdminProblemDetailPage() {
   const params = useParams();
@@ -63,91 +64,6 @@ export default function AdminProblemDetailPage() {
     } catch (err) {
       console.error('Failed to delete problem:', err);
       alert('問題の削除に失敗しました');
-    }
-  };
-
-  const getDifficultyBadgeVariant = (
-    difficulty: DifficultyLevel
-  ): 'default' | 'success' | 'warning' | 'danger' | 'purple' => {
-    switch (difficulty) {
-      case 'easy':
-        return 'success';
-      case 'medium':
-        return 'warning';
-      case 'hard':
-        return 'danger';
-      case 'expert':
-        return 'purple';
-      default:
-        return 'default';
-    }
-  };
-
-  const getDifficultyLabel = (difficulty: DifficultyLevel): string => {
-    switch (difficulty) {
-      case 'easy':
-        return '初級';
-      case 'medium':
-        return '中級';
-      case 'hard':
-        return '上級';
-      case 'expert':
-        return 'エキスパート';
-      default:
-        return difficulty;
-    }
-  };
-
-  const getCategoryLabel = (category: ProblemCategory): string => {
-    switch (category) {
-      case 'architecture':
-        return 'アーキテクチャ';
-      case 'security':
-        return 'セキュリティ';
-      case 'cost':
-        return 'コスト最適化';
-      case 'performance':
-        return 'パフォーマンス';
-      case 'reliability':
-        return '信頼性';
-      case 'operations':
-        return '運用';
-      default:
-        return category;
-    }
-  };
-
-  const getCategoryIcon = (category: ProblemCategory): string => {
-    switch (category) {
-      case 'architecture':
-        return '🏗️';
-      case 'security':
-        return '🔒';
-      case 'cost':
-        return '💰';
-      case 'performance':
-        return '⚡';
-      case 'reliability':
-        return '🛡️';
-      case 'operations':
-        return '🔧';
-      default:
-        return '📦';
-    }
-  };
-
-  const getProviderLabel = (provider: CloudProvider): string => {
-    switch (provider) {
-      case 'aws':
-        return 'AWS';
-      case 'gcp':
-        return 'Google Cloud';
-      case 'azure':
-        return 'Azure';
-      case 'local':
-        return 'LocalStack';
-      default:
-        return provider;
     }
   };
 
@@ -433,17 +349,9 @@ export default function AdminProblemDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <Badge
-                  variant={problem.type === 'gameday' ? 'primary' : 'info'}
-                >
-                  {problem.type === 'gameday' ? 'GameDay' : 'JAM'}
-                </Badge>
-                <Badge variant={getDifficultyBadgeVariant(problem.difficulty)}>
-                  {getDifficultyLabel(problem.difficulty)}
-                </Badge>
-                <Badge variant="default">
-                  {getCategoryLabel(problem.category)}
-                </Badge>
+                <ProblemTypeBadge type={problem.type} />
+                <DifficultyBadge difficulty={problem.difficulty} />
+                <CategoryBadge category={problem.category} />
               </div>
 
               <div className="space-y-2 text-sm">
@@ -487,13 +395,7 @@ export default function AdminProblemDetailPage() {
                 <p className="text-sm text-text-muted mb-2">対応プロバイダー</p>
                 <div className="flex flex-wrap gap-2">
                   {problem.deployment.providers.map((provider) => (
-                    <Badge
-                      key={provider}
-                      variant="default"
-                      className="font-mono uppercase"
-                    >
-                      {getProviderLabel(provider)}
-                    </Badge>
+                    <ProviderBadge key={provider} provider={provider} />
                   ))}
                 </div>
               </div>

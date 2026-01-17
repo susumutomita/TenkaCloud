@@ -13,13 +13,13 @@ import { useEffect, useId, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, Input, Select } from '@/components/ui';
+import { Badge, Input, ProblemTypeBadge, Select } from '@/components/ui';
 import {
-  getProblem,
-  getAWSRegions,
-  deployProblem,
-  getDeploymentStatus,
   deleteDeployment,
+  deployProblem,
+  getAWSRegions,
+  getDeploymentStatus,
+  getProblem,
 } from '@/lib/api/admin-problems';
 import type {
   AdminProblem,
@@ -559,9 +559,7 @@ export default function AdminProblemDeployPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-text-muted">タイプ</p>
-              <Badge variant={problem.type === 'gameday' ? 'primary' : 'info'}>
-                {problem.type === 'gameday' ? 'GameDay' : 'JAM'}
-              </Badge>
+              <ProblemTypeBadge type={problem.type} />
             </div>
             <div>
               <p className="text-text-muted">難易度</p>
