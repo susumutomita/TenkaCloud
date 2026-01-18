@@ -274,3 +274,37 @@ export function getProviderLabel(provider: string): string {
   };
   return labels[provider] || provider;
 }
+
+// Participant Status Badge
+export type ParticipantStatus = 'active' | 'inactive' | 'banned';
+
+export function ParticipantStatusBadge({
+  status,
+}: {
+  status: ParticipantStatus;
+}) {
+  const config: Record<
+    ParticipantStatus,
+    { variant: BadgeVariant; badgeStyle: BadgeStyle; label: string }
+  > = {
+    active: { variant: 'success', badgeStyle: 'subtle', label: 'アクティブ' },
+    inactive: {
+      variant: 'warning',
+      badgeStyle: 'subtle',
+      label: '非アクティブ',
+    },
+    banned: { variant: 'danger', badgeStyle: 'subtle', label: 'BAN' },
+  };
+
+  const { variant, badgeStyle, label } = config[status] || {
+    variant: 'default' as BadgeVariant,
+    badgeStyle: 'subtle' as BadgeStyle,
+    label: status,
+  };
+
+  return (
+    <Badge variant={variant} badgeStyle={badgeStyle}>
+      {label}
+    </Badge>
+  );
+}
