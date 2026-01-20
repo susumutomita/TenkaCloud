@@ -80,6 +80,10 @@ module "provisioning_lambda" {
   event_bus_name      = module.eventbridge.event_bus_name
   lambda_zip_path     = "${path.module}/../../../../backend/services/control-plane/provisioning/lambda.zip"
 
+  # Disable DynamoDB Stream trigger for LocalStack (unstable)
+  # Provisioning is triggered via API instead
+  enable_stream_trigger = false
+
   tags = {
     Environment = "local"
   }
