@@ -10,6 +10,11 @@ services:
       - control-plane
       - application-plane
       - tenant-management
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - tenkacloud
 
@@ -26,6 +31,7 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3000/control
+      - NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:3000/api
       - AWS_ENDPOINT_URL=http://localstack:4566
     depends_on:
       tenant-management:
