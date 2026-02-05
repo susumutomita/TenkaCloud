@@ -7,6 +7,7 @@
 
 'use client';
 
+import { UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   AdminPageFooter,
@@ -15,13 +16,10 @@ import {
   SearchInput,
   StatCard,
 } from '@/components/admin';
-import { Badge, Skeleton } from '@/components/ui';
+import { Badge, ParticipantStatusBadge, Skeleton } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type {
-  AdminParticipant,
-  ParticipantStatus,
-} from '@/lib/api/admin-types';
+import type { AdminParticipant } from '@/lib/api/admin-types';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminParticipantsPage() {
@@ -85,7 +83,7 @@ export default function AdminParticipantsPage() {
         title="参加者管理"
         actions={
           <Button>
-            <UserPlusIcon className="w-5 h-5 mr-2" />
+            <UserPlus className="w-5 h-5 mr-2" />
             参加者を招待
           </Button>
         }
@@ -196,7 +194,11 @@ function ParticipantCard({ participant }: ParticipantCardProps) {
                 <span className="font-medium text-text-primary">
                   {participant.displayName}
                 </span>
-                <ParticipantStatusBadge status={participant.status} />
+                <ParticipantStatusBadge
+                  status={
+                    participant.status as 'active' | 'inactive' | 'banned'
+                  }
+                />
                 {participant.role === 'admin' && (
                   <Badge variant="default">管理者</Badge>
                 )}
@@ -245,46 +247,5 @@ function ParticipantStat({
       <div className="text-sm text-text-muted">{label}</div>
       <div className={`font-mono ${valueClassName}`}>{value}</div>
     </div>
-  );
-}
-
-interface ParticipantStatusBadgeProps {
-  status: ParticipantStatus;
-}
-
-function ParticipantStatusBadge({ status }: ParticipantStatusBadgeProps) {
-  const config: Record<
-    ParticipantStatus,
-    { variant: 'success' | 'warning' | 'danger'; label: string }
-  > = {
-    active: { variant: 'success', label: 'アクティブ' },
-    inactive: { variant: 'warning', label: '非アクティブ' },
-    banned: { variant: 'danger', label: 'BAN' },
-  };
-
-  const { variant, label } = config[status] || {
-    variant: 'default' as const,
-    label: status,
-  };
-
-  return <Badge variant={variant}>{label}</Badge>;
-}
-
-function UserPlusIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      aria-hidden="true"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-      />
-    </svg>
   );
 }

@@ -195,3 +195,116 @@ export function ProblemTypeBadge({ type }: { type: string }) {
     </Badge>
   );
 }
+
+// Problem Category Badge
+export function CategoryBadge({ category }: { category: string }) {
+  const categoryConfig: Record<string, { label: string; icon: string }> = {
+    architecture: { label: 'アーキテクチャ', icon: '🏗️' },
+    security: { label: 'セキュリティ', icon: '🔒' },
+    cost: { label: 'コスト最適化', icon: '💰' },
+    performance: { label: 'パフォーマンス', icon: '⚡' },
+    reliability: { label: '信頼性', icon: '🛡️' },
+    operations: { label: '運用', icon: '🔧' },
+  };
+
+  const config = categoryConfig[category] || { label: category, icon: '📦' };
+
+  return (
+    <Badge variant="default" badgeStyle="subtle">
+      {config.label}
+    </Badge>
+  );
+}
+
+// Category Icon (for standalone use)
+export function getCategoryIcon(category: string): string {
+  const icons: Record<string, string> = {
+    architecture: '🏗️',
+    security: '🔒',
+    cost: '💰',
+    performance: '⚡',
+    reliability: '🛡️',
+    operations: '🔧',
+  };
+  return icons[category] || '📦';
+}
+
+// Category Label (for standalone use)
+export function getCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    architecture: 'アーキテクチャ',
+    security: 'セキュリティ',
+    cost: 'コスト最適化',
+    performance: 'パフォーマンス',
+    reliability: '信頼性',
+    operations: '運用',
+  };
+  return labels[category] || category;
+}
+
+// Cloud Provider Badge
+export function ProviderBadge({ provider }: { provider: string }) {
+  const providerConfig: Record<string, string> = {
+    aws: 'AWS',
+    gcp: 'Google Cloud',
+    azure: 'Azure',
+    local: 'LocalStack',
+  };
+
+  const label = providerConfig[provider] || provider;
+
+  return (
+    <Badge
+      variant="default"
+      badgeStyle="subtle"
+      className="font-mono uppercase"
+    >
+      {label}
+    </Badge>
+  );
+}
+
+// Provider Label (for standalone use)
+export function getProviderLabel(provider: string): string {
+  const labels: Record<string, string> = {
+    aws: 'AWS',
+    gcp: 'Google Cloud',
+    azure: 'Azure',
+    local: 'LocalStack',
+  };
+  return labels[provider] || provider;
+}
+
+// Participant Status Badge
+export type ParticipantStatus = 'active' | 'inactive' | 'banned';
+
+export function ParticipantStatusBadge({
+  status,
+}: {
+  status: ParticipantStatus;
+}) {
+  const config: Record<
+    ParticipantStatus,
+    { variant: BadgeVariant; badgeStyle: BadgeStyle; label: string }
+  > = {
+    active: { variant: 'success', badgeStyle: 'subtle', label: 'アクティブ' },
+    inactive: {
+      variant: 'warning',
+      badgeStyle: 'subtle',
+      label: '非アクティブ',
+    },
+    banned: { variant: 'danger', badgeStyle: 'subtle', label: 'BAN' },
+  };
+
+  const { variant, badgeStyle, label } = config[status] || {
+    variant: 'default' as BadgeVariant,
+    badgeStyle: 'subtle' as BadgeStyle,
+    label: status,
+  };
+
+  return (
+    <Badge variant={variant} badgeStyle={badgeStyle}>
+      {label}
+    </Badge>
+  );
+}

@@ -7,12 +7,21 @@
 
 'use client';
 
+import {
+  ChevronRight,
+  Clock,
+  Inbox,
+  Plus,
+  Settings,
+  UserPlus,
+  Zap,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useTenantOptional } from '@/lib/tenant';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTenantOptional } from '@/lib/tenant';
 
 interface DashboardStats {
   activeEvents: number;
@@ -71,19 +80,7 @@ function StatCard({ title, value, icon, href, accentColor }: StatCardProps) {
           className="text-sm text-hn-accent hover:text-hn-accent-bright mt-4 inline-flex items-center gap-1 group-hover:gap-2 transition-all"
         >
           詳細を見る
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
+          <ChevronRight className="w-4 h-4" />
         </Link>
       </CardContent>
     </Card>
@@ -268,19 +265,7 @@ export default function AdminDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-hn-accent"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
+            <Zap className="w-5 h-5 text-hn-accent" />
             クイックアクション
           </CardTitle>
         </CardHeader>
@@ -288,61 +273,19 @@ export default function AdminDashboardPage() {
           <div className="flex flex-wrap gap-4">
             <Button asChild>
               <Link href="/admin/events/new">
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
+                <Plus className="w-5 h-5 mr-2" />
                 新規イベント作成
               </Link>
             </Button>
             <Button variant="secondary" asChild>
               <Link href="/admin/participants/invite">
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-                  />
-                </svg>
+                <UserPlus className="w-5 h-5 mr-2" />
                 参加者を招待
               </Link>
             </Button>
             <Button variant="ghost" asChild>
               <Link href="/admin/settings">
-                <svg
-                  className="w-5 h-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
+                <Settings className="w-5 h-5 mr-2" />
                 設定
               </Link>
             </Button>
@@ -354,19 +297,7 @@ export default function AdminDashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-hn-accent"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
+            <Clock className="w-5 h-5 text-hn-accent" />
             最近のアクティビティ
           </CardTitle>
         </CardHeader>
@@ -385,19 +316,7 @@ export default function AdminDashboardPage() {
             </div>
           ) : recentActivities.length === 0 ? (
             <div className="text-center py-8 text-text-muted">
-              <svg
-                className="w-12 h-12 mx-auto mb-4 text-text-muted/50"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-                />
-              </svg>
+              <Inbox className="w-12 h-12 mx-auto mb-4 text-text-muted/50" />
               <p className="font-mono">アクティビティはありません</p>
             </div>
           ) : (

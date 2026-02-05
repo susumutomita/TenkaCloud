@@ -15,10 +15,17 @@ export {
 } from './alert-dialog';
 export {
   Badge,
+  CategoryBadge,
   DifficultyBadge,
   EventStatusBadge,
+  getCategoryIcon,
+  getCategoryLabel,
+  getProviderLabel,
+  ParticipantStatusBadge,
   ProblemTypeBadge,
+  ProviderBadge,
 } from './badge';
+export type { ParticipantStatus } from './badge';
 export { Button } from './button';
 export { Card, CardContent, CardFooter, CardHeader } from './card';
 export { ErrorState, getErrorMessage, getErrorType } from './error-state';
