@@ -3,11 +3,10 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createLogger } from './lib/logger';
 import { healthRoutes } from './api/health';
-import { scoringRoutes } from './api/scoring';
-import { scoresRoutes } from './api/scores';
+import { leaderboardRoutes } from './api/leaderboard';
 import { authMiddleware } from './middleware/auth';
 
-const logger = createLogger('scoring-service');
+const logger = createLogger('leaderboard-service');
 const app = new Hono();
 
 // CORS設定
@@ -19,19 +18,16 @@ app.use(
   })
 );
 
-// 採点ルートに認証を適用
-app.use('/criteria/*', authMiddleware);
-app.use('/sessions/*', authMiddleware);
-app.use('/api/scores/*', authMiddleware);
+// リーダーボードルートに認証を適用
+app.use('/api/leaderboards/*', authMiddleware);
 
 // ルート登録
 app.route('/', healthRoutes);
-app.route('/', scoringRoutes);
-app.route('/', scoresRoutes);
+app.route('/', leaderboardRoutes);
 
 // PORT バリデーション
 const parsePort = (value: string | undefined): number => {
-  const defaultPort = 3011;
+  const defaultPort = 3012;
   if (!value) return defaultPort;
 
   const parsed = parseInt(value, 10);
@@ -53,7 +49,7 @@ const server = serve(
     port,
   },
   (info) => {
-    logger.info({ port: info.port }, '採点サービスが起動しました');
+    logger.info({ port: info.port }, 'リーダーボードサービスが起動しました');
   }
 );
 

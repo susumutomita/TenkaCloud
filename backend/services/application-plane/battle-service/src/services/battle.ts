@@ -28,6 +28,15 @@ export interface UpdateBattleInput {
   timeLimit?: number;
 }
 
+// 有効な状態遷移マップ
+const validTransitions: Record<string, string[]> = {
+  [BattleStatus.DRAFT]: [BattleStatus.OPEN],
+  [BattleStatus.OPEN]: [BattleStatus.RUNNING],
+  [BattleStatus.RUNNING]: [BattleStatus.FINISHED],
+  [BattleStatus.FINISHED]: [BattleStatus.ARCHIVED],
+  [BattleStatus.ARCHIVED]: [],
+};
+
 export async function createBattle(input: CreateBattleInput): Promise<Battle> {
   return battleRepository.create({
     tenantId: input.tenantId,
@@ -90,8 +99,12 @@ export async function updateBattle(
     return null;
   }
 
-  if (battle.status === BattleStatus.IN_PROGRESS) {
-    throw new Error('進行中のバトルは更新できません');
+  if (
+    battle.status === BattleStatus.RUNNING ||
+    battle.status === BattleStatus.FINISHED ||
+    battle.status === BattleStatus.ARCHIVED
+  ) {
+    throw new Error('実行中・終了済み・アーカイブ済みのバトルは更新できません');
   }
 
   return battleRepository.update(battleId, updates);
@@ -107,16 +120,17 @@ export async function deleteBattle(
     return;
   }
 
-  if (battle.status === BattleStatus.IN_PROGRESS) {
-    throw new Error('進行中のバトルは削除できません');
+  if (battle.status !== BattleStatus.DRAFT) {
+    throw new Error('下書き状態のバトルのみ削除できます');
   }
 
   await battleRepository.delete(battleId);
 }
 
-export async function startBattle(
+export async function transitionBattle(
   battleId: string,
-  tenantId: string
+  tenantId: string,
+  targetStatus: (typeof BattleStatus)[keyof typeof BattleStatus]
 ): Promise<Battle | null> {
   const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
 
@@ -124,49 +138,46 @@ export async function startBattle(
     return null;
   }
 
-  if (battle.status !== BattleStatus.WAITING) {
-    throw new Error('待機中のバトルのみ開始できます');
+  const allowed = validTransitions[battle.status];
+  if (!allowed || !allowed.includes(targetStatus)) {
+    throw new Error(
+      `${battle.status} から ${targetStatus} への遷移はできません`
+    );
   }
 
-  const participantCount =
-    await battleRepository.countActiveParticipants(battleId);
-
-  if (participantCount === 0) {
-    throw new Error('参加者がいないためバトルを開始できません');
+  // OPEN → RUNNING: 参加者が必要
+  if (targetStatus === BattleStatus.RUNNING) {
+    const participantCount =
+      await battleRepository.countActiveParticipants(battleId);
+    if (participantCount === 0) {
+      throw new Error('参加者がいないためバトルを開始できません');
+    }
   }
 
-  const updatedBattle = await battleRepository.update(battleId, {
-    status: BattleStatus.IN_PROGRESS,
-    startedAt: new Date(),
+  const updateData: Record<string, unknown> = {
+    status: targetStatus,
+  };
+
+  if (targetStatus === BattleStatus.RUNNING) {
+    updateData.startedAt = new Date();
+  }
+
+  if (targetStatus === BattleStatus.FINISHED) {
+    updateData.endedAt = new Date();
+  }
+
+  const updatedBattle = await battleRepository.update(battleId, updateData);
+
+  const eventTypeMap: Record<string, string> = {
+    [BattleStatus.OPEN]: 'BATTLE_OPENED',
+    [BattleStatus.RUNNING]: 'BATTLE_STARTED',
+    [BattleStatus.FINISHED]: 'BATTLE_FINISHED',
+    [BattleStatus.ARCHIVED]: 'BATTLE_ARCHIVED',
+  };
+
+  await battleRepository.addHistory(battleId, eventTypeMap[targetStatus], {
+    previousStatus: battle.status,
   });
-
-  await battleRepository.addHistory(battleId, 'BATTLE_STARTED', {
-    participantCount,
-  });
-
-  return updatedBattle;
-}
-
-export async function endBattle(
-  battleId: string,
-  tenantId: string
-): Promise<Battle | null> {
-  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
-
-  if (!battle) {
-    return null;
-  }
-
-  if (battle.status !== BattleStatus.IN_PROGRESS) {
-    throw new Error('進行中でないバトルは終了できません');
-  }
-
-  const updatedBattle = await battleRepository.update(battleId, {
-    status: BattleStatus.FINISHED,
-    endedAt: new Date(),
-  });
-
-  await battleRepository.addHistory(battleId, 'BATTLE_ENDED', {});
 
   return updatedBattle;
 }
@@ -183,8 +194,8 @@ export async function joinBattle(
     throw new Error('バトルが見つかりません');
   }
 
-  if (battle.status !== BattleStatus.WAITING) {
-    throw new Error('待機中のバトルにのみ参加できます');
+  if (battle.status !== BattleStatus.OPEN) {
+    throw new Error('募集中のバトルにのみ参加できます');
   }
 
   const currentCount = await battleRepository.countActiveParticipants(battleId);
@@ -213,8 +224,8 @@ export async function leaveBattle(
     throw new Error('バトルが見つかりません');
   }
 
-  if (battle.status === BattleStatus.IN_PROGRESS) {
-    throw new Error('進行中のバトルからは退出できません');
+  if (battle.status === BattleStatus.RUNNING) {
+    throw new Error('実行中のバトルからは退出できません');
   }
 
   const participant = await battleRepository.getParticipant(battleId, userId);
@@ -240,8 +251,8 @@ export async function updateScore(
     throw new Error('バトルが見つかりません');
   }
 
-  if (battle.status !== BattleStatus.IN_PROGRESS) {
-    throw new Error('進行中のバトルでのみスコアを更新できます');
+  if (battle.status !== BattleStatus.RUNNING) {
+    throw new Error('実行中のバトルでのみスコアを更新できます');
   }
 
   const participant = await battleRepository.getParticipant(battleId, userId);
@@ -260,4 +271,27 @@ export async function updateScore(
   });
 
   return updated;
+}
+
+export async function addProblem(
+  battleId: string,
+  tenantId: string,
+  problemId: string
+): Promise<void> {
+  const battle = await battleRepository.findByIdAndTenant(battleId, tenantId);
+
+  if (!battle) {
+    throw new Error('バトルが見つかりません');
+  }
+
+  if (
+    battle.status !== BattleStatus.DRAFT &&
+    battle.status !== BattleStatus.OPEN
+  ) {
+    throw new Error('下書きまたは募集中のバトルにのみ問題を追加できます');
+  }
+
+  await battleRepository.addHistory(battleId, 'PROBLEM_ADDED', {
+    problemId,
+  });
 }

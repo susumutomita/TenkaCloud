@@ -13,7 +13,6 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.test.ts',
         'vitest.config.ts',
-        'src/lib/prisma.ts',
         'src/lib/logger.ts',
         'src/lib/dynamodb.ts',
         'src/index.ts',

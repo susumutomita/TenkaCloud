@@ -102,7 +102,7 @@ export class BattleRepository {
       title: input.title,
       description: input.description,
       mode: input.mode,
-      status: 'WAITING',
+      status: 'DRAFT',
       maxParticipants: input.maxParticipants ?? 10,
       timeLimit: input.timeLimit ?? 3600,
     };
