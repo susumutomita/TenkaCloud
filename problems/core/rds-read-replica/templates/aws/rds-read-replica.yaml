@@ -73,7 +73,7 @@ Resources:
       Engine: aurora-mysql
       EngineVersion: "8.0.mysql_aurora.3.07.1"
       MasterUsername: !Sub "{{resolve:secretsmanager:${DBSecret}:SecretString:username}}"
-      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DBSecret}:SecretString:password}}"
+      ManageMasterUserPassword: true
       DBSubnetGroupName: !Ref DBSubnetGroup
       VpcSecurityGroupIds:
         - !Ref DBSecurityGroup
