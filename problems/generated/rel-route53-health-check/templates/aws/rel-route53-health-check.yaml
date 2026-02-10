@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Route 53 ヘルスチェックとフェイルオーバールーティング（正解テンプレート）
+  HTTP ヘルスチェック、フェイルオーバーレコード、SNS 通知を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-r53
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+  PrimaryEndpoint:
+    Type: String
+    Default: 203.0.113.10
+    Description: プライマリエンドポイントの IP アドレス
+
+  SecondaryEndpoint:
+    Type: String
+    Default: 203.0.113.20
+    Description: セカンダリエンドポイントの IP アドレス
+
+  DomainName:
+    Type: String
+    Default: example.tenkacloud.com
+    Description: ドメイン名
+
+Resources:
+  # 要件1: HTTP ヘルスチェック
+  PrimaryHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        IPAddress: !Ref PrimaryEndpoint
+        Port: 80
+        Type: HTTP
+        ResourcePath: /health
+        RequestInterval: 30
+        FailureThreshold: 3
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-primary-hc"
+
+  # 要件2: ホストゾーン
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: !Sub "${EnvironmentPrefix} failover hosted zone"
+
+  # 要件3: プライマリフェイルオーバーレコード
+  PrimaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "app.${DomainName}"
+      Type: A
+      TTL: 60
+      SetIdentifier: primary
+      Failover: PRIMARY
+      HealthCheckId: !Ref PrimaryHealthCheck
+      ResourceRecords:
+        - !Ref PrimaryEndpoint
+
+  # 要件3: セカンダリフェイルオーバーレコード
+  SecondaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "app.${DomainName}"
+      Type: A
+      TTL: 60
+      SetIdentifier: secondary
+      Failover: SECONDARY
+      ResourceRecords:
+        - !Ref SecondaryEndpoint
+
+  # 要件4: SNS 通知
+  HealthCheckAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentPrefix}-health-alerts"
+
+  HealthCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${EnvironmentPrefix}-health-check-alarm"
+      AlarmDescription: Route 53 ヘルスチェック失敗時にアラームを発報
+      Namespace: AWS/Route53
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !Ref PrimaryHealthCheck
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref HealthCheckAlertTopic
+
+Outputs:
+  HealthCheckId:
+    Description: プライマリヘルスチェック ID
+    Value: !Ref PrimaryHealthCheck
+
+  HostedZoneId:
+    Description: ホストゾーン ID
+    Value: !Ref HostedZone
+
+  SNSTopicArn:
+    Description: ヘルスチェックアラート SNS トピック ARN
+    Value: !Ref HealthCheckAlertTopic

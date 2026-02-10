@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: ElastiCache と Lambda@Edge によるパフォーマンス最適化（正解テンプレート）
+  Redis クラスター、Lambda@Edge、CloudFront 統合による多層キャッシュアーキテクチャ。
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: ElastiCache クラスターを配置する VPC ID
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: ElastiCache サブネットグループのサブネット ID リスト
+
+  ProjectName:
+    Type: String
+    Default: tenka-edge-perf
+    Description: プロジェクト名プレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  # --- ElastiCache Redis クラスター ---
+
+  # Redis サブネットグループ
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet group for Redis cluster
+      SubnetGroupName: !Sub "${ProjectName}-redis-subnet"
+      SubnetIds: !Ref SubnetIds
+
+  # Redis セキュリティグループ
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Redis cluster
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: 10.0.0.0/8
+          Description: Allow Redis from VPC
+
+  # 要件2: Redis パラメータグループ（maxmemory-policy 設定）
+  RedisParameterGroup:
+    Type: AWS::ElastiCache::ParameterGroup
+    Properties:
+      CacheParameterGroupFamily: redis7
+      Description: Optimized Redis parameter group for performance
+      Properties:
+        maxmemory-policy: allkeys-lru
+
+  # 要件1: ElastiCache Redis レプリケーショングループ（暗号化有効）
+  # 要件2: 自動フェイルオーバー有効
+  RedisReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupId: !Sub "${ProjectName}-redis"
+      ReplicationGroupDescription: Performance-optimized Redis cluster
+      Engine: redis
+      EngineVersion: "7.1"
+      CacheNodeType: cache.r7g.large
+      NumCacheClusters: 2
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      CacheParameterGroupName: !Ref RedisParameterGroup
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      # 暗号化設定
+      TransitEncryptionEnabled: true
+      AtRestEncryptionEnabled: true
+      # スナップショット設定
+      SnapshotRetentionLimit: 3
+      SnapshotWindow: "03:00-05:00"
+      PreferredMaintenanceWindow: "sun:05:00-sun:07:00"
+
+  # --- Lambda@Edge ---
+
+  # Lambda@Edge 実行ロール
+  EdgeFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-edge-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # 要件3: Lambda@Edge 関数（viewer-request）
+  EdgeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-edge-handler"
+      Runtime: nodejs20.x
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      Role: !GetAtt EdgeFunctionRole.Arn
+      Code:
+        ZipFile: |
+          'use strict';
+          exports.handler = async (event) => {
+            const request = event.Records[0].cf.request;
+            const headers = request.headers;
+
+            // キャッシュキーの正規化（クエリストリングのソート）
+            if (request.querystring) {
+              const params = new URLSearchParams(request.querystring);
+              params.sort();
+              request.querystring = params.toString();
+            }
+
+            // セキュリティヘッダーの追加
+            headers['x-edge-processed'] = [{ key: 'X-Edge-Processed', value: 'true' }];
+
+            return request;
+          };
+
+  # Lambda@Edge バージョン（CloudFront 連携に必要）
+  EdgeFunctionVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref EdgeFunction
+      Description: Lambda@Edge version for CloudFront
+
+  # --- CloudFront + Lambda@Edge ---
+
+  # オリジン用 S3 バケット
+  OriginBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-origin-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  # CloudFront OAC
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${ProjectName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # キャッシュポリシー
+  EdgeCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${ProjectName}-edge-cache-policy"
+        DefaultTTL: 86400
+        MaxTTL: 604800
+        MinTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: all
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+
+  # 要件4: CloudFront ディストリビューション（Lambda@Edge 連携）
+  EdgeDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Comment: !Sub "${ProjectName} edge-optimized distribution"
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt OriginBucket.RegionalDomainName
+            OriginAccessControlId: !Ref OriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: !Ref EdgeCachePolicy
+          Compress: true
+          # Lambda@Edge 関連付け
+          LambdaFunctionAssociations:
+            - EventType: viewer-request
+              LambdaFunctionARN: !Ref EdgeFunctionVersion
+              IncludeBody: false
+        HttpVersion: http2and3
+        PriceClass: PriceClass_All
+
+  # S3 バケットポリシー
+  OriginBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref OriginBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${OriginBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "AWS:SourceArn": !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${EdgeDistribution}"
+
+Outputs:
+  RedisEndpoint:
+    Description: Redis プライマリエンドポイント
+    Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+
+  RedisReaderEndpoint:
+    Description: Redis リーダーエンドポイント
+    Value: !GetAtt RedisReplicationGroup.ReaderEndPoint.Address
+
+  EdgeFunctionArn:
+    Description: Lambda@Edge 関数 ARN
+    Value: !Ref EdgeFunctionVersion
+
+  DistributionDomainName:
+    Description: CloudFront ディストリビューションドメイン名
+    Value: !GetAtt EdgeDistribution.DomainName
+
+  DistributionId:
+    Description: CloudFront ディストリビューション ID
+    Value: !Ref EdgeDistribution

@@ -15,6 +15,7 @@ export default defineConfig({
         'vitest.config.ts',
         'src/lib/prisma.ts',
         'src/lib/logger.ts',
+        'src/lib/dynamodb.ts',
         'src/index.ts',
       ],
       thresholds: {

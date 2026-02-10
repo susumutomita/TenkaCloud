@@ -1,0 +1,124 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: ops-xray-tracing
+# タイプ: GAMEDAY（構築型）
+
+id: ops-xray-tracing
+title: X-Ray 分散トレーシング構成
+type: gameday
+category: operations
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - xray
+    - tracing
+    - lambda
+    - api-gateway
+    - sampling
+    - service-map
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、サーバーレスアプリケーションの
+    分散トレーシング基盤を構築する任務を与えられました。
+
+    ## 背景
+    API Gateway + Lambda + DynamoDB のサーバーレスアプリケーションで
+    パフォーマンス問題の原因特定が困難です。X-Ray でリクエストの
+    エンドツーエンドトレーシングを有効化する必要があります。
+
+    ## あなたのミッション
+    X-Ray 分散トレーシングを構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **API Gateway トレーシング**: API Gateway で X-Ray トレーシングを有効化する
+    2. **Lambda トレーシング**: Lambda 関数で X-Ray アクティブトレーシングを有効化する
+    3. **サンプリングルール**: カスタムサンプリングルールを作成する
+    4. **X-Ray グループ**: フィルタ式でトレースをグループ化する X-Ray グループを作成する
+    5. **IAM ロール**: X-Ray に必要な権限を持つ IAM ロールを作成する
+
+  objectives:
+    - API Gateway で X-Ray トレーシングを有効化する
+    - Lambda 関数のアクティブトレーシングを有効化する
+    - カスタムサンプリングルールを作成する
+    - X-Ray グループを作成する
+    - X-Ray 権限を持つ IAM ロールを作成する
+
+  hints:
+    - "API Gateway の TracingEnabled プロパティで X-Ray を有効化できます"
+    - "Lambda の TracingConfig で Mode を Active に設定します"
+    - "AWS::XRay::SamplingRule でカスタムサンプリングルールを作成できます"
+    - "AWS::XRay::Group でフィルタ式を使ったグループを作成できます"
+
+  prerequisites:
+    - X-Ray の基本的な知識
+    - Lambda と API Gateway の知識
+    - 分散トレーシングの概念理解
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-xray-tracing.yaml
+      parameters:
+        EnvironmentPrefix: tenka-xray
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-xray-tracing.yaml
+      parameters:
+        EnvironmentPrefix: tenka-xray-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: API Gateway トレーシング
+      description: API Gateway で X-Ray トレーシングが有効化されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Lambda トレーシング
+      description: Lambda 関数で X-Ray アクティブトレーシングが有効化されている
+      weight: 25
+      maxPoints: 25
+
+    - name: サンプリングルール
+      description: カスタムサンプリングルールが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: X-Ray グループ
+      description: フィルタ式を持つ X-Ray グループが作成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: IAM ロール
+      description: X-Ray 権限を持つ IAM ロールが作成されている
+      weight: 15
+      maxPoints: 15
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

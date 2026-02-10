@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Aurora MySQL クラスター + リードレプリカ構成（正解テンプレート）
+  Aurora クラスター、リードレプリカ、パラメータグループ、暗号化を含む構成。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-aurora
+    Description: 環境名プレフィックス
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: プライベートサブネット 1
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: プライベートサブネット 2
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+  MasterUsername:
+    Type: String
+    Default: admin
+    NoEcho: true
+  MasterUserPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+
+Resources:
+  # --- DB サブネットグループ ---
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "${EnvironmentName} Aurora Subnet Group"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-db-subnet-group"
+
+  # --- クラスターパラメータグループ ---
+  ClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: !Sub "${EnvironmentName} Aurora Cluster Parameter Group"
+      Family: aurora-mysql8.0
+      Parameters:
+        character_set_server: utf8mb4
+        character_set_client: utf8mb4
+        character_set_connection: utf8mb4
+        character_set_database: utf8mb4
+        character_set_results: utf8mb4
+        collation_server: utf8mb4_unicode_ci
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-cluster-pg"
+
+  # --- DB セキュリティグループ ---
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${EnvironmentName} Aurora Security Group"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: "10.0.0.0/16"
+          Description: Allow MySQL from VPC
+
+  # --- Aurora クラスター ---
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Sub "${EnvironmentName}-cluster"
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.04.0"
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBClusterParameterGroupName: !Ref ClusterParameterGroup
+      VpcSecurityGroupIds:
+        - !GetAtt DBSecurityGroup.GroupId
+      StorageEncrypted: true
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-cluster"
+
+  # --- ライターインスタンス ---
+  WriterInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${EnvironmentName}-writer"
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.r6g.large
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-writer"
+
+  # --- リーダーインスタンス ---
+  ReaderInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${EnvironmentName}-reader"
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.r6g.large
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-reader"
+
+Outputs:
+  ClusterEndpoint:
+    Description: Aurora クラスターエンドポイント（ライター）
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+
+  ReaderEndpoint:
+    Description: Aurora リーダーエンドポイント
+    Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+
+  ClusterIdentifier:
+    Description: Aurora クラスター識別子
+    Value: !Ref AuroraCluster
+
+  DBSubnetGroupName:
+    Description: DB サブネットグループ名
+    Value: !Ref DBSubnetGroup

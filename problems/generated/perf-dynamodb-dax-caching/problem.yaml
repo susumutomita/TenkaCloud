@@ -1,0 +1,116 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: perf-dynamodb-dax-caching
+# タイプ: GAMEDAY（構築型）
+
+id: perf-dynamodb-dax-caching
+title: DynamoDB DAX クラスターによるマイクロ秒レイテンシ
+type: gameday
+category: performance
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - dynamodb
+    - dax
+    - performance
+    - caching
+    - in-memory
+    - microsecond
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはバックエンドアーキテクトとして、リアルタイムゲーミングプラットフォームの
+    DynamoDB アクセスレイテンシ改善を担当しています。ミリ秒単位のレイテンシが
+    ゲーム体験に影響しており、マイクロ秒レベルのレスポンスが必要です。
+
+    ## 背景
+    パフォーマンス分析の結果から以下が判明しました。
+    - DynamoDB のレスポンスタイムが P99 で 5ms（単一桁ミリ秒）
+    - ゲームのリアルタイム性を確保するにはマイクロ秒レベルが必要
+    - 同一アイテムへの読み取りが秒間 50,000 回以上でホットキーが発生
+    - DAX（DynamoDB Accelerator）を導入すればマイクロ秒レベルの応答が可能
+
+    ## あなたのミッション
+    DynamoDB DAX クラスターを構成し、マイクロ秒レベルの読み取りレイテンシを実現してください。
+
+    ### 要件
+    1. **DAX クラスター**: dax.r5.large ノードで 2 ノード構成の DAX クラスターを作成する
+    2. **暗号化**: サーバーサイド暗号化（SSESpecification）を有効にする
+    3. **パラメータグループ**: TTL を 300000 ミリ秒（5 分）に設定したパラメータグループを作成する
+    4. **DynamoDB テーブル**: DAX 対象の DynamoDB テーブルをオンデマンドモードで作成する
+
+  objectives:
+    - DAX クラスターを構成する
+    - 暗号化を有効にする
+    - キャッシュ TTL を最適化する
+    - DynamoDB テーブルを構成する
+
+  hints:
+    - "AWS::DAX::Cluster でクラスターを作成します"
+    - "NodeType と ReplicationFactor でノード構成を指定します"
+    - "AWS::DAX::ParameterGroup でキャッシュ TTL を設定します"
+    - "SSESpecification で暗号化を有効にします"
+
+  prerequisites:
+    - DynamoDB の運用経験
+    - DAX の概念理解
+    - VPC ネットワーキングの知識
+    - CloudFormation の実務経験
+
+  estimatedTime: 50
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/perf-dynamodb-dax-caching.yaml
+      parameters:
+        ProjectName: tenka-dax-perf
+        VpcId: ""
+        SubnetIds: ""
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: DAX クラスター
+      description: dax.r5.large 2 ノードの DAX クラスターが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: 暗号化
+      description: SSESpecification が有効になっている
+      weight: 20
+      maxPoints: 20
+
+    - name: パラメータグループ
+      description: TTL が 300000ms のパラメータグループが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: DynamoDB テーブル
+      description: オンデマンドモードの DynamoDB テーブルが存在する
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 15
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

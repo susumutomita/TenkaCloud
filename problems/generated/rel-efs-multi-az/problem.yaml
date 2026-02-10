@@ -1,0 +1,117 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-efs-multi-az
+# タイプ: GAMEDAY（構築型）
+
+id: rel-efs-multi-az
+title: EFS マルチ AZ 高可用性ファイルストレージ
+type: gameday
+category: reliability
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - efs
+    - multi-az
+    - file-storage
+    - encryption
+    - backup
+    - lifecycle
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、複数の EC2 インスタンスから
+    共有アクセス可能な高可用性ファイルストレージを構築する任務を与えられました。
+
+    ## 背景
+    アプリケーションサーバー群が共有ファイルシステムを必要としていますが、
+    単一 AZ のストレージではリージョン障害時にデータにアクセスできなくなります。
+    EFS を使い、マルチ AZ 構成でデータの冗長性と可用性を確保します。
+
+    ## あなたのミッション
+    EFS ファイルシステムをマルチ AZ 構成で構築し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **ファイルシステム**: EFS ファイルシステムを作成し、暗号化を有効化する
+    2. **マウントターゲット**: 2 つ以上の AZ にマウントターゲットを作成する
+    3. **ライフサイクルポリシー**: 30 日未アクセスファイルを IA ストレージへ移行するポリシーを設定する
+    4. **バックアップ**: AWS Backup による自動バックアップを有効化する
+
+  objectives:
+    - 暗号化された EFS ファイルシステムを作成する
+    - 2 つ以上の AZ にマウントターゲットを配置する
+    - ライフサイクルポリシーで IA への自動階層化を設定する
+    - AWS Backup による自動バックアップを有効化する
+
+  hints:
+    - "AWS::EFS::FileSystem で Encrypted を true にして暗号化します"
+    - "AWS::EFS::MountTarget を複数の AZ に作成してください"
+    - "LifecyclePolicies で TransitionToIA を設定できます"
+    - "BackupPolicy で Status を ENABLED にするとバックアップが有効化されます"
+
+  prerequisites:
+    - EFS の基本的な知識
+    - VPC サブネットの知識
+    - ストレージクラスの概念理解
+
+  estimatedTime: 40
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-efs-multi-az.yaml
+      parameters:
+        EnvironmentPrefix: tenka-efs
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-efs-multi-az.yaml
+      parameters:
+        EnvironmentPrefix: tenka-efs-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ファイルシステム
+      description: 暗号化された EFS ファイルシステムが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: マウントターゲット
+      description: 2 つ以上の AZ にマウントターゲットが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: ライフサイクルポリシー
+      description: 30 日未アクセスファイルの IA 自動移行ポリシーが設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: バックアップ
+      description: AWS Backup による自動バックアップが有効化されている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

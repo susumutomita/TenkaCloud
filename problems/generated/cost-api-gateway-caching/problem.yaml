@@ -1,0 +1,112 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: cost-api-gateway-caching
+# タイプ: GAMEDAY（構築型）
+
+id: cost-api-gateway-caching
+title: API Gateway キャッシュによるバックエンドコスト削減
+type: gameday
+category: cost
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - api-gateway
+    - cost
+    - caching
+    - lambda
+    - throttling
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたは API プラットフォームを管理するクラウドエンジニアです。
+    API Gateway 経由で Lambda 関数を呼び出す REST API が、
+    同一リクエストの繰り返しでバックエンドのコストを無駄に発生させています。
+
+    ## 背景
+    CloudWatch メトリクスの分析から以下が判明しました。
+    - API の 80% が同一パラメータの GET リクエスト（カタログデータ取得）
+    - Lambda 関数の実行回数が毎日 100 万回を超過し、コストが増大
+    - API のスロットリング設定がなく、バーストトラフィックでさらにコスト増加
+    - API Gateway のステージ設定が最適化されていない
+
+    ## あなたのミッション
+    API Gateway のキャッシュとスロットリングを設定し、バックエンドコストを削減してください。
+
+    ### 要件
+    1. **API Gateway キャッシュ**: ステージレベルでキャッシュを有効化し、容量 0.5 GB、TTL 300 秒を設定する
+    2. **スロットリング設定**: レート制限を 100 req/sec、バーストを 200 に設定する
+    3. **Lambda 統合**: Lambda 関数を API Gateway と統合する
+    4. **CloudWatch ログ**: ステージのアクセスログを有効にする
+
+  objectives:
+    - API Gateway REST API にキャッシュを設定する
+    - スロットリングでバックエンド呼び出しを制限する
+    - Lambda 関数との統合を構成する
+    - アクセスログを有効にする
+
+  hints:
+    - "StageDescription の CacheClusterEnabled と CacheClusterSize でキャッシュを設定します"
+    - "MethodSettings で CachingEnabled を true にします"
+    - "ThrottlingBurstLimit と ThrottlingRateLimit でスロットリングを制御します"
+    - "AccessLogSetting でアクセスログの出力先を指定します"
+
+  prerequisites:
+    - API Gateway の基本的な知識
+    - Lambda の基本的な知識
+    - CloudFormation の知識
+
+  estimatedTime: 35
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/cost-api-gateway-caching.yaml
+      parameters:
+        ProjectName: tenka-apigw-cost
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: API Gateway キャッシュ
+      description: キャッシュが有効で容量 0.5 GB、TTL 300 秒が設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: スロットリング設定
+      description: レート 100 req/sec、バースト 200 が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Lambda 統合
+      description: Lambda 関数が API Gateway と統合されている
+      weight: 25
+      maxPoints: 25
+
+    - name: アクセスログ
+      description: ステージのアクセスログが有効になっている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

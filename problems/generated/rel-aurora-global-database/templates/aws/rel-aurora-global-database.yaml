@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Aurora Global Database によるクロスリージョン DR（正解テンプレート）
+  Aurora Global Database、暗号化、Enhanced Monitoring を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-aurora-global
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+  DBMasterUsername:
+    Type: String
+    Default: admin
+    NoEcho: true
+
+  DBMasterPassword:
+    Type: String
+    Default: ChangeMe123!
+    NoEcho: true
+    MinLength: 8
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-vpc"
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private-a"
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private-c"
+
+  # 要件4: DB サブネットグループ
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Multi-AZ Aurora subnet group
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-subnet-group"
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Aurora cluster
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-db-sg"
+
+  # 要件5: Enhanced Monitoring 用 IAM ロール
+  MonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-monitoring-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+
+  # 要件2: グローバルクラスター
+  GlobalCluster:
+    Type: AWS::RDS::GlobalCluster
+    Properties:
+      GlobalClusterIdentifier: !Sub "${EnvironmentPrefix}-global"
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.04.0"
+      StorageEncrypted: true
+
+  # 要件1: プライマリ Aurora クラスター
+  PrimaryCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Sub "${EnvironmentPrefix}-primary"
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.04.0"
+      GlobalClusterIdentifier: !Ref GlobalCluster
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterPassword
+      StorageEncrypted: true
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+        - !GetAtt DBSecurityGroup.GroupId
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+
+  # プライマリインスタンス
+  PrimaryInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${EnvironmentPrefix}-primary-instance"
+      DBClusterIdentifier: !Ref PrimaryCluster
+      DBInstanceClass: db.r6g.large
+      Engine: aurora-mysql
+      MonitoringInterval: 60
+      MonitoringRoleArn: !GetAtt MonitoringRole.Arn
+      PubliclyAccessible: false
+
+  # 要件5: CloudWatch アラーム
+  CPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${EnvironmentPrefix}-cpu-high"
+      AlarmDescription: Aurora CPU 使用率が 80% を超過
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref PrimaryCluster
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+
+  ReplicaLagAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${EnvironmentPrefix}-replica-lag"
+      AlarmDescription: Aurora レプリカラグが 100ms を超過
+      Namespace: AWS/RDS
+      MetricName: AuroraReplicaLag
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref PrimaryCluster
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+
+Outputs:
+  GlobalClusterIdentifier:
+    Description: グローバルクラスター ID
+    Value: !Ref GlobalCluster
+
+  PrimaryClusterEndpoint:
+    Description: プライマリクラスターエンドポイント
+    Value: !GetAtt PrimaryCluster.Endpoint.Address
+
+  PrimaryClusterReaderEndpoint:
+    Description: プライマリクラスターリーダーエンドポイント
+    Value: !GetAtt PrimaryCluster.ReadEndpoint.Address

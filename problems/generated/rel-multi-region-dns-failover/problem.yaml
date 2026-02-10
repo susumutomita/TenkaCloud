@@ -1,0 +1,126 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-multi-region-dns-failover
+# タイプ: GAMEDAY（構築型）
+
+id: rel-multi-region-dns-failover
+title: マルチリージョン DNS フェイルオーバーとヘルスチェック連携
+type: gameday
+category: reliability
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - route53
+    - multi-region
+    - dns-failover
+    - cloudwatch
+    - health-check
+    - alb
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、複数リージョンにまたがる
+    Web アプリケーションの DNS フェイルオーバーを構築する任務を与えられました。
+
+    ## 背景
+    東京リージョンと大阪リージョンの両方にアプリケーションが展開されており、
+    複合的なヘルスチェック（Route 53 + CloudWatch）を組み合わせて
+    より精度の高い障害検知と自動フェイルオーバーを実現する必要があります。
+
+    ## あなたのミッション
+    Route 53 と CloudWatch を組み合わせたマルチリージョン DNS フェイルオーバーを構築し、
+    以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **個別ヘルスチェック**: 各リージョンの ALB に対する HTTP ヘルスチェックを作成する
+    2. **計算済みヘルスチェック**: 複数のヘルスチェックを組み合わせた計算済みヘルスチェックを作成する
+    3. **フェイルオーバーレコード**: Route 53 フェイルオーバールーティングレコードを構成する
+    4. **CloudWatch アラーム**: ヘルスチェック状態に基づく CloudWatch アラームを設定する
+    5. **SNS 通知**: フェイルオーバー発生時の SNS 通知を構成する
+
+  objectives:
+    - 各リージョンの ALB に HTTP ヘルスチェックを作成する
+    - 計算済みヘルスチェックで複合判定を構成する
+    - Route 53 フェイルオーバールーティングレコードを設定する
+    - CloudWatch アラームでヘルスチェックを監視する
+    - フェイルオーバー発生時の SNS 通知を設定する
+
+  hints:
+    - "AWS::Route53::HealthCheck の Type を CALCULATED にすると計算済みヘルスチェックを作成できます"
+    - "ChildHealthChecks で複数のヘルスチェックを組み合わせます"
+    - "HealthCheckCustomConfig を使ってカスタムヘルスチェックロジックを構成できます"
+    - "CloudWatch の AWS/Route53 名前空間で HealthCheckStatus メトリクスを監視します"
+
+  prerequisites:
+    - Route 53 のヘルスチェック知識
+    - CloudWatch の知識
+    - ALB の知識
+    - DNS フェイルオーバーの理解
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-multi-region-dns-failover.yaml
+      parameters:
+        EnvironmentPrefix: tenka-dns-fo
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-multi-region-dns-failover.yaml
+      parameters:
+        EnvironmentPrefix: tenka-dns-fo-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: 個別ヘルスチェック
+      description: 各リージョンの ALB に対する HTTP ヘルスチェックが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: 計算済みヘルスチェック
+      description: 複数のヘルスチェックを組み合わせた計算済みヘルスチェックが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: フェイルオーバーレコード
+      description: Route 53 フェイルオーバールーティングレコードが構成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: CloudWatch アラーム
+      description: ヘルスチェック状態に基づく CloudWatch アラームが設定されている
+      weight: 15
+      maxPoints: 15
+
+    - name: SNS 通知
+      description: フェイルオーバー発生時の SNS 通知が構成されている
+      weight: 15
+      maxPoints: 15
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

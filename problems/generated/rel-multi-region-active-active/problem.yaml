@@ -1,0 +1,135 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-multi-region-active-active
+# タイプ: GAMEDAY（構築型）
+
+id: rel-multi-region-active-active
+title: マルチリージョンアクティブ-アクティブ構成
+type: gameday
+category: reliability
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - multi-region
+    - active-active
+    - global-accelerator
+    - dynamodb-global-tables
+    - route53
+    - alb
+    - sqs
+    - lambda
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、グローバルユーザーに対して
+    常にアクティブなマルチリージョンアーキテクチャを構築する任務を与えられました。
+
+    ## 背景
+    ビジネス要件として、リージョン障害時もゼロダウンタイムで
+    サービスを継続する必要があります。アクティブ-アクティブ構成で
+    両リージョンが同時にトラフィックを処理し、データを双方向同期します。
+
+    ## あなたのミッション
+    以下の要件をすべて満たすマルチリージョンアクティブ-アクティブ構成を構築してください。
+
+    ### 要件
+    1. **Global Accelerator**: グローバルエントリポイントとして構成する
+    2. **マルチリージョン ALB**: 2 リージョンに ALB を配置しトラフィックを分散する
+    3. **DynamoDB Global Tables**: データ層にグローバルテーブルを使用する
+    4. **SQS + Lambda**: 各リージョンで非同期処理パイプラインを構成する
+    5. **ヘルスチェックと監視**: 各リージョンのヘルスチェックと CloudWatch アラームを設定する
+    6. **SNS 通知**: 障害検知時のクロスリージョン通知を構成する
+
+  objectives:
+    - Global Accelerator で 2 リージョンにトラフィックを分散する
+    - 各リージョンに ALB + ターゲットグループを構成する
+    - DynamoDB グローバルテーブルでデータを双方向同期する
+    - SQS + Lambda の非同期処理パイプラインを各リージョンに構成する
+    - Route 53 ヘルスチェックと CloudWatch アラームを設定する
+    - SNS でクロスリージョン障害通知を構成する
+
+  hints:
+    - "Global Accelerator の EndpointGroup で TrafficDialPercentage を 50:50 にします"
+    - "DynamoDB GlobalTable の Replicas で両リージョンを指定します"
+    - "各リージョンで独立した SQS + Lambda パイプラインを構成してください"
+    - "CloudWatch のクロスリージョンメトリクスで一元監視できます"
+
+  prerequisites:
+    - Global Accelerator の知識
+    - DynamoDB グローバルテーブルの知識
+    - ALB と Auto Scaling の知識
+    - Lambda と SQS の知識
+    - Route 53 ヘルスチェックの知識
+
+  estimatedTime: 120
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-multi-region-active-active.yaml
+      parameters:
+        EnvironmentPrefix: tenka-active-active
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-multi-region-active-active.yaml
+      parameters:
+        EnvironmentPrefix: tenka-active-active-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - name: Global Accelerator
+      description: Global Accelerator がグローバルエントリポイントとして構成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: マルチリージョン ALB
+      description: 2 リージョンに ALB が配置されトラフィックが分散されている
+      weight: 20
+      maxPoints: 20
+
+    - name: DynamoDB Global Tables
+      description: DynamoDB グローバルテーブルでデータが双方向同期されている
+      weight: 20
+      maxPoints: 20
+
+    - name: SQS + Lambda パイプライン
+      description: 各リージョンに SQS + Lambda の非同期処理パイプラインが構成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: ヘルスチェックと監視
+      description: Route 53 ヘルスチェックと CloudWatch アラームが設定されている
+      weight: 15
+      maxPoints: 15
+
+    - name: SNS 通知
+      description: 障害検知時のクロスリージョン通知が構成されている
+      weight: 10
+      maxPoints: 10
+
+  timeoutMinutes: 10
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

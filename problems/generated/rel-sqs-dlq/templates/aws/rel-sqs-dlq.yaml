@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: SQS デッドレターキューによるメッセージ信頼性確保（正解テンプレート）
+  メインキュー、DLQ、リドライブポリシー、暗号化を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-sqs
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  # 要件2: デッドレターキュー
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-dlq"
+
+  # 要件1: メインキュー（リドライブポリシー付き）
+  MainQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-main"
+      MessageRetentionPeriod: 345600
+      VisibilityTimeout: 30
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-main"
+
+Outputs:
+  MainQueueUrl:
+    Description: メインキュー URL
+    Value: !Ref MainQueue
+
+  MainQueueArn:
+    Description: メインキュー ARN
+    Value: !GetAtt MainQueue.Arn
+
+  DeadLetterQueueUrl:
+    Description: デッドレターキュー URL
+    Value: !Ref DeadLetterQueue
+
+  DeadLetterQueueArn:
+    Description: デッドレターキュー ARN
+    Value: !GetAtt DeadLetterQueue.Arn

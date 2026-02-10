@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: マルチリージョン DNS フェイルオーバーとヘルスチェック連携（正解テンプレート）
+  複合ヘルスチェック、フェイルオーバールーティング、CloudWatch アラーム、SNS 通知を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-dns-fo
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+  PrimaryEndpoint:
+    Type: String
+    Default: 203.0.113.10
+    Description: プライマリリージョンの ALB IP
+
+  SecondaryEndpoint:
+    Type: String
+    Default: 203.0.113.20
+    Description: セカンダリリージョンの ALB IP
+
+  DomainName:
+    Type: String
+    Default: failover.tenkacloud.com
+    Description: ドメイン名
+
+Resources:
+  # 要件1: プライマリ HTTP ヘルスチェック
+  PrimaryHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        IPAddress: !Ref PrimaryEndpoint
+        Port: 80
+        Type: HTTP
+        ResourcePath: /health
+        RequestInterval: 10
+        FailureThreshold: 3
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-primary-hc"
+
+  # 要件1: セカンダリ HTTP ヘルスチェック
+  SecondaryHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        IPAddress: !Ref SecondaryEndpoint
+        Port: 80
+        Type: HTTP
+        ResourcePath: /health
+        RequestInterval: 10
+        FailureThreshold: 3
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-secondary-hc"
+
+  # 要件2: 計算済みヘルスチェック
+  CalculatedHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: CALCULATED
+        ChildHealthChecks:
+          - !Ref PrimaryHealthCheck
+          - !Ref SecondaryHealthCheck
+        HealthThreshold: 1
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-calculated-hc"
+
+  # 要件3: ホストゾーン
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+
+  # 要件3: プライマリフェイルオーバーレコード
+  PrimaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "app.${DomainName}"
+      Type: A
+      TTL: 60
+      SetIdentifier: primary
+      Failover: PRIMARY
+      HealthCheckId: !Ref PrimaryHealthCheck
+      ResourceRecords:
+        - !Ref PrimaryEndpoint
+
+  # 要件3: セカンダリフェイルオーバーレコード
+  SecondaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "app.${DomainName}"
+      Type: A
+      TTL: 60
+      SetIdentifier: secondary
+      Failover: SECONDARY
+      HealthCheckId: !Ref SecondaryHealthCheck
+      ResourceRecords:
+        - !Ref SecondaryEndpoint
+
+  # 要件5: SNS トピック
+  FailoverAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentPrefix}-failover-alerts"
+
+  # 要件4: CloudWatch アラーム - プライマリ
+  PrimaryHealthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${EnvironmentPrefix}-primary-health"
+      AlarmDescription: プライマリリージョンのヘルスチェック失敗
+      Namespace: AWS/Route53
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !Ref PrimaryHealthCheck
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref FailoverAlertTopic
+
+  # 要件4: CloudWatch アラーム - セカンダリ
+  SecondaryHealthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${EnvironmentPrefix}-secondary-health"
+      AlarmDescription: セカンダリリージョンのヘルスチェック失敗
+      Namespace: AWS/Route53
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !Ref SecondaryHealthCheck
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref FailoverAlertTopic
+
+Outputs:
+  PrimaryHealthCheckId:
+    Description: プライマリヘルスチェック ID
+    Value: !Ref PrimaryHealthCheck
+
+  SecondaryHealthCheckId:
+    Description: セカンダリヘルスチェック ID
+    Value: !Ref SecondaryHealthCheck
+
+  CalculatedHealthCheckId:
+    Description: 計算済みヘルスチェック ID
+    Value: !Ref CalculatedHealthCheck
+
+  SNSTopicArn:
+    Description: フェイルオーバーアラート SNS トピック ARN
+    Value: !Ref FailoverAlertTopic

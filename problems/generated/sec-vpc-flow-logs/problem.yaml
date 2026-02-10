@@ -1,0 +1,110 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: sec-vpc-flow-logs
+# タイプ: GAMEDAY（構築型）
+
+id: sec-vpc-flow-logs
+title: VPC Flow Logs + CloudWatch 分析
+type: gameday
+category: security
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - vpc
+    - flow-logs
+    - cloudwatch
+    - metric-filter
+    - alarm
+    - network-monitoring
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはセキュリティエンジニアとして、VPC のネットワークトラフィックを
+    監視・分析する仕組みを構築する任務を与えられました。
+
+    ## 背景
+    不正アクセスの試みを検知するため、VPC Flow Logs を有効にし、
+    拒否されたトラフィックを CloudWatch で監視する仕組みが求められています。
+
+    ## あなたのミッション
+    以下の要件を満たす VPC Flow Logs 監視構成を構築してください。
+
+    ### 要件
+    1. **VPC Flow Logs**: VPC の Flow Logs を CloudWatch Logs に出力する
+    2. **メトリクスフィルター**: 拒否されたトラフィック（REJECT）をカウントするメトリクスフィルターを作成する
+    3. **CloudWatch Alarm**: REJECT 数が閾値を超えた場合にアラームを発報する
+    4. **SNS 通知**: アラーム発報時に SNS トピック経由で通知する
+
+  objectives:
+    - VPC Flow Logs を CloudWatch Logs に出力する
+    - REJECT トラフィックのメトリクスフィルターを作成する
+    - CloudWatch Alarm を設定する
+    - SNS 通知を設定する
+
+  hints:
+    - "VPC Flow Logs は AWS::EC2::FlowLog で作成します"
+    - "TrafficType: ALL で全トラフィックを記録します"
+    - "MetricFilter の FilterPattern で REJECT をフィルタリングします"
+    - "CloudWatch Alarm の ComparisonOperator で GreaterThanThreshold を使います"
+
+  prerequisites:
+    - VPC Flow Logs の基本概念
+    - CloudWatch Logs の基本知識
+    - CloudWatch Alarm の設定知識
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 40
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/sec-vpc-flow-logs.yaml
+      parameters:
+        EnvironmentName: tenka-flowlogs
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: VPC Flow Logs
+      description: VPC Flow Logs が CloudWatch Logs に出力されている
+      weight: 30
+      maxPoints: 30
+
+    - name: メトリクスフィルター
+      description: REJECT トラフィックをカウントするメトリクスフィルターが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: CloudWatch Alarm
+      description: REJECT 数の閾値アラームが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: SNS 通知
+      description: アラーム発報時に SNS 通知が送信される
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

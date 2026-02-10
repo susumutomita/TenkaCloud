@@ -1,0 +1,112 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: perf-sqs-batch-processing
+# タイプ: GAMEDAY（構築型）
+
+id: perf-sqs-batch-processing
+title: SQS バッチ処理とデッドレターキューの最適化
+type: gameday
+category: performance
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - sqs
+    - performance
+    - batch
+    - dead-letter-queue
+    - lambda
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはメッセージング基盤を担当するエンジニアです。
+    SQS キューと Lambda の連携でメッセージ処理のスループットが低く、
+    エラーメッセージの管理もできていません。
+
+    ## 背景
+    運用チームの分析から以下が判明しました。
+    - Lambda が 1 メッセージずつ処理しておりスループットが低い
+    - バッチサイズを増やせば Lambda 呼び出し回数を削減しスループット向上が可能
+    - 処理失敗メッセージがキューに残り続けてリトライが無限ループ
+    - デッドレターキュー（DLQ）が未設定
+
+    ## あなたのミッション
+    SQS キューのバッチ処理設定と DLQ を構成し、処理効率を改善してください。
+
+    ### 要件
+    1. **バッチサイズ**: Lambda の SQS イベントソースマッピングで BatchSize を 10 に設定する
+    2. **DLQ 設定**: メインキューに maxReceiveCount 3 の DLQ を設定する
+    3. **可視性タイムアウト**: VisibilityTimeout を 300 秒に設定する
+    4. **暗号化**: SQS マネージド SSE を有効にする
+
+  objectives:
+    - SQS キューのバッチ処理を設定する
+    - デッドレターキューを構成する
+    - 可視性タイムアウトを適切に設定する
+    - メッセージ暗号化を有効にする
+
+  hints:
+    - "AWS::Lambda::EventSourceMapping で BatchSize を設定します"
+    - "RedrivePolicy の maxReceiveCount でリトライ上限を指定します"
+    - "VisibilityTimeout は Lambda のタイムアウトの 6 倍が推奨です"
+    - "SqsManagedSseEnabled で SQS マネージド暗号化を有効にします"
+
+  prerequisites:
+    - SQS の基本的な知識
+    - Lambda イベントソースの理解
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 20
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/perf-sqs-batch-processing.yaml
+      parameters:
+        ProjectName: tenka-sqs-perf
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: バッチサイズ
+      description: Lambda イベントソースマッピングの BatchSize が 10
+      weight: 30
+      maxPoints: 30
+
+    - name: DLQ 設定
+      description: maxReceiveCount 3 の DLQ が設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: 可視性タイムアウト
+      description: VisibilityTimeout が 300 秒に設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: 暗号化
+      description: SQS マネージド SSE が有効になっている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

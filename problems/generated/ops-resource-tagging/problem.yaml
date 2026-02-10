@@ -1,0 +1,115 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: ops-resource-tagging
+# タイプ: GAMEDAY（構築型）
+
+id: ops-resource-tagging
+title: リソースタグ付けポリシーと自動適用
+type: gameday
+category: operations
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - tagging
+    - config-rules
+    - lambda
+    - automation
+    - governance
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、AWS リソースのタグ付けポリシーを
+    自動的に適用・監視する仕組みを構築する任務を与えられました。
+
+    ## 背景
+    コスト管理やリソース管理のため、すべてのリソースに必須タグ（Environment、Owner、Project）
+    を付与するルールがあります。タグ未設定リソースを自動検出し通知する仕組みが必要です。
+
+    ## あなたのミッション
+    タグ付けポリシーの監視と通知の仕組みを構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **Config ルール**: 必須タグ（Environment）の存在をチェックする Config ルールを作成する
+    2. **SNS 通知**: タグ未設定リソース検出時の SNS 通知を設定する
+    3. **Config レコーダー**: AWS Config レコーダーを有効化する
+    4. **S3 バケット**: Config のデリバリーチャンネル用 S3 バケットを作成する
+
+  objectives:
+    - 必須タグチェックの Config ルールを作成する
+    - タグ未設定リソース検出時の SNS 通知を設定する
+    - Config レコーダーとデリバリーチャンネルを設定する
+    - デリバリーチャンネル用 S3 バケットを作成する
+
+  hints:
+    - "マネージドルール required-tags を使用できます"
+    - "InputParameters で必須タグキーを指定します"
+    - "AWS::Config::ConfigurationRecorder で記録を有効化します"
+    - "AWS::Config::DeliveryChannel でデリバリーチャンネルを設定します"
+
+  prerequisites:
+    - AWS Config の基本的な知識
+    - タグ付け戦略の理解
+    - SNS の基本的な知識
+
+  estimatedTime: 30
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-resource-tagging.yaml
+      parameters:
+        EnvironmentPrefix: tenka-tagging
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-resource-tagging.yaml
+      parameters:
+        EnvironmentPrefix: tenka-tagging-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Config ルール
+      description: 必須タグチェックの Config ルールが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: SNS 通知
+      description: タグ未設定リソース検出時の SNS 通知が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Config レコーダー
+      description: AWS Config レコーダーが有効化されている
+      weight: 25
+      maxPoints: 25
+
+    - name: S3 バケット
+      description: デリバリーチャンネル用 S3 バケットが作成されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

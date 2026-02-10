@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: クロスアカウント IAM ロール設計（正解テンプレート）
+  ExternalId、読み取り専用ポリシー、セッション制限、監査を含む構成。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-cross-account
+    Description: 環境名プレフィックス
+  AuditAccountId:
+    Type: String
+    Default: "111122223333"
+    Description: 監査アカウント ID
+  ExternalId:
+    Type: String
+    Default: "tenka-audit-2026-secure"
+    Description: ExternalId
+  AllowedIPRange:
+    Type: String
+    Default: "203.0.113.0/24"
+    Description: 許可する IP レンジ
+
+Resources:
+  # --- クロスアカウントロール ---
+  AuditRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-audit-role"
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCrossAccountAssumeRole
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AuditAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                "sts:ExternalId": !Ref ExternalId
+              IpAddress:
+                "aws:SourceIp": !Ref AllowedIPRange
+
+  # --- 読み取り専用ポリシー ---
+  ReadOnlyPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${EnvironmentName}-readonly-policy"
+      Roles:
+        - !Ref AuditRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: S3ReadOnly
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+              - s3:ListAllMyBuckets
+              - s3:GetBucketLocation
+              - s3:GetBucketPolicy
+              - s3:GetEncryptionConfiguration
+            Resource: "*"
+          - Sid: CloudWatchLogsReadOnly
+            Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+            Resource: "*"
+          - Sid: DenyWriteOperations
+            Effect: Deny
+            Action:
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:DeleteBucket
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DeleteLogGroup
+            Resource: "*"
+
+  # --- CloudTrail ---
+  TrailBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvironmentName}-trail-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  TrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TrailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt TrailBucket.Arn
+          - Sid: AllowCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${TrailBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "s3:x-amz-acl": bucket-owner-full-control
+
+  TrailLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/cloudtrail/${EnvironmentName}"
+      RetentionInDays: 90
+
+  TrailLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-trail-log-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchLogsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt TrailLogGroup.Arn
+
+  AuditTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: TrailBucketPolicy
+    Properties:
+      TrailName: !Sub "${EnvironmentName}-audit-trail"
+      IsLogging: true
+      S3BucketName: !Ref TrailBucket
+      CloudWatchLogsLogGroupArn: !GetAtt TrailLogGroup.Arn
+      CloudWatchLogsRoleArn: !GetAtt TrailLogRole.Arn
+      EnableLogFileValidation: true
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true
+
+  # --- メトリクスフィルター + アラーム ---
+  AssumeRoleMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref TrailLogGroup
+      FilterPattern: '{ $.eventName = "AssumeRole" && $.errorCode = "AccessDenied" }'
+      MetricTransformations:
+        - MetricNamespace: !Sub "${EnvironmentName}/Security"
+          MetricName: FailedAssumeRoleAttempts
+          MetricValue: "1"
+          DefaultValue: 0
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentName}-audit-alerts"
+
+  FailedAssumeRoleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${EnvironmentName}-failed-assume-role"
+      AlarmDescription: 失敗した AssumeRole 試行が閾値を超えた
+      Namespace: !Sub "${EnvironmentName}/Security"
+      MetricName: FailedAssumeRoleAttempts
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref AlertTopic
+
+Outputs:
+  AuditRoleArn:
+    Description: 監査ロール ARN
+    Value: !GetAtt AuditRole.Arn
+
+  TrailName:
+    Description: CloudTrail 名
+    Value: !Ref AuditTrail
+
+  AlertTopicArn:
+    Description: アラートトピック ARN
+    Value: !Ref AlertTopic

@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { scoringRoutes } from './scoring';
 import * as scoringService from '../services/scoring';
-import { EvaluationCategory, EvaluationStatus, Severity } from '@prisma/client';
+import {
+  EvaluationCategory,
+  EvaluationStatus,
+  Severity,
+} from '@tenkacloud/dynamodb';
 
 vi.mock('../services/scoring');
 

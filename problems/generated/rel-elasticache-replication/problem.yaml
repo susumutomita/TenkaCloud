@@ -1,0 +1,117 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-elasticache-replication
+# タイプ: GAMEDAY（構築型）
+
+id: rel-elasticache-replication
+title: ElastiCache レプリケーショングループによる高可用性キャッシュ
+type: gameday
+category: reliability
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - elasticache
+    - redis
+    - replication
+    - multi-az
+    - failover
+    - encryption
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、高可用性を備えた
+    インメモリキャッシュ基盤を構築する任務を与えられました。
+
+    ## 背景
+    アプリケーションのレスポンス改善のためキャッシュ層を導入しますが、
+    単一ノードでは障害時にキャッシュ全喪失のリスクがあります。
+    レプリケーションと自動フェイルオーバーで可用性を確保する必要があります。
+
+    ## あなたのミッション
+    ElastiCache Redis レプリケーショングループを構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **レプリケーショングループ**: マルチ AZ のレプリケーショングループを作成する（リードレプリカ 1 台以上）
+    2. **自動フェイルオーバー**: 自動フェイルオーバーを有効化する
+    3. **暗号化**: 転送中暗号化と保管時暗号化を有効化する
+    4. **サブネットグループ**: 複数 AZ にまたがるキャッシュサブネットグループを作成する
+
+  objectives:
+    - ElastiCache Redis レプリケーショングループを作成する
+    - 自動フェイルオーバーを有効化する
+    - 転送中暗号化と保管時暗号化を設定する
+    - マルチ AZ のキャッシュサブネットグループを構成する
+
+  hints:
+    - "AWS::ElastiCache::ReplicationGroup でレプリケーショングループを作成できます"
+    - "AutomaticFailoverEnabled を true にして自動フェイルオーバーを有効化します"
+    - "TransitEncryptionEnabled と AtRestEncryptionEnabled で暗号化を制御します"
+    - "NumCacheClusters を 2 以上にしてリードレプリカを構成します"
+
+  prerequisites:
+    - ElastiCache の基本的な知識
+    - Redis の基本的な知識
+    - VPC ネットワーキングの知識
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-elasticache-replication.yaml
+      parameters:
+        EnvironmentPrefix: tenka-cache
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-elasticache-replication.yaml
+      parameters:
+        EnvironmentPrefix: tenka-cache-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: レプリケーショングループ
+      description: マルチ AZ のレプリケーショングループが作成されリードレプリカが 1 台以上ある
+      weight: 30
+      maxPoints: 30
+
+    - name: 自動フェイルオーバー
+      description: 自動フェイルオーバーが有効化されている
+      weight: 25
+      maxPoints: 25
+
+    - name: 暗号化
+      description: 転送中暗号化と保管時暗号化が有効化されている
+      weight: 25
+      maxPoints: 25
+
+    - name: サブネットグループ
+      description: 複数 AZ にまたがるキャッシュサブネットグループが構成されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md
