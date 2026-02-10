@@ -1,0 +1,78 @@
+# TenkaCloud 統一問題フォーマット
+id: ops-gitops-infrastructure
+title: GitOps インフラストラクチャ管理パイプライン
+type: gameday
+category: operations
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags: [codepipeline, codebuild, cloudformation, s3, lambda, eventbridge, gitops, iac]
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、インフラの変更をコードで管理し、
+    パイプラインで自動適用する GitOps 基盤を構築する任務を与えられました。
+
+    ## 背景
+    CloudFormation テンプレートの変更を自動的に検証、変更セット作成、
+    承認、適用する一連のパイプラインが必要です。ドリフト検出も組み込みます。
+
+    ## あなたのミッション
+    ### 要件
+    1. **CodePipeline**: Source → Validate → ChangeSet → Approve → Deploy の 5 ステージパイプラインを作成する
+    2. **CodeBuild（検証）**: cfn-lint でテンプレートを検証する CodeBuild プロジェクトを作成する
+    3. **CloudFormation アクション**: 変更セットの作成と実行を行うパイプラインアクションを設定する
+    4. **承認ゲート**: 変更セットレビュー後の手動承認ステージを設定する
+    5. **Lambda（ドリフト検出）**: デプロイ後にドリフト検出を実行する Lambda を作成する
+    6. **EventBridge**: パイプライン完了後にドリフト検出をトリガーする EventBridge ルールを作成する
+
+  objectives:
+    - 5 ステージの GitOps パイプラインを作成する
+    - cfn-lint 検証の CodeBuild を構成する
+    - 変更セット作成/実行の CloudFormation アクションを設定する
+    - 手動承認ステージを設定する
+    - ドリフト検出 Lambda を作成する
+    - パイプライン完了トリガーの EventBridge ルールを作成する
+  hints:
+    - "CodePipeline で CloudFormation アクションの ActionMode: CHANGE_SET_CREATE と CHANGE_SET_EXECUTE を使います"
+    - "cfn-lint はpip install cfn-lint で CodeBuild にインストールできます"
+    - "EventBridge で codepipeline の SUCCEEDED イベントをキャプチャします"
+  prerequisites: [CodePipeline と CloudFormation の深い知識, CodeBuild の知識, GitOps の概念理解, cfn-lint の知識]
+  estimatedTime: 120
+
+deployment:
+  providers: [aws, local]
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-gitops-infrastructure.yaml
+      parameters: { EnvironmentPrefix: tenka-gitops }
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-gitops-infrastructure.yaml
+      parameters: { EnvironmentPrefix: tenka-gitops-local }
+  regions:
+    aws: [ap-northeast-1, us-east-1]
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - { name: CodePipeline, description: 5 ステージ GitOps パイプラインが作成されている, weight: 20, maxPoints: 20 }
+    - { name: CodeBuild 検証, description: cfn-lint 検証 CodeBuild が作成されている, weight: 15, maxPoints: 15 }
+    - { name: CloudFormation アクション, description: 変更セット作成/実行アクションが設定されている, weight: 25, maxPoints: 25 }
+    - { name: 承認ゲート, description: 手動承認ステージが設定されている, weight: 10, maxPoints: 10 }
+    - { name: Lambda ドリフト検出, description: ドリフト検出 Lambda が作成されている, weight: 15, maxPoints: 15 }
+    - { name: EventBridge, description: パイプライン完了トリガーが作成されている, weight: 15, maxPoints: 15 }
+  timeoutMinutes: 10
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

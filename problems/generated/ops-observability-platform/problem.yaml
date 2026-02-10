@@ -1,0 +1,78 @@
+# TenkaCloud 統一問題フォーマット
+id: ops-observability-platform
+title: 統合オブザーバビリティプラットフォーム
+type: gameday
+category: operations
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags: [cloudwatch, xray, logs-insights, composite-alarm, dashboard, lambda, sns, observability]
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、マイクロサービスアーキテクチャの
+    統合オブザーバビリティプラットフォームを構築する任務を与えられました。
+
+    ## 背景
+    メトリクス、ログ、トレースの 3 本柱を統合し、
+    サービス間の問題を迅速に特定・解決できる基盤が必要です。
+
+    ## あなたのミッション
+    ### 要件
+    1. **CloudWatch ダッシュボード**: サービスメトリクスを一覧表示するダッシュボードを作成する
+    2. **複合アラーム**: 複数のメトリクスアラームを組み合わせた複合アラームを作成する
+    3. **Logs Insights**: CloudWatch Logs Insights のクエリ定義を作成する
+    4. **X-Ray トレーシング**: Lambda 関数の X-Ray トレーシングを有効化する
+    5. **メトリクスフィルター**: ログからカスタムメトリクスを抽出するフィルターを作成する
+    6. **SNS 通知**: 複合アラーム発火時の通知を設定する
+
+  objectives:
+    - サービスメトリクスダッシュボードを作成する
+    - 複合アラームを作成する
+    - Logs Insights クエリ定義を保存する
+    - Lambda X-Ray トレーシングを有効化する
+    - ログからカスタムメトリクスフィルターを作成する
+    - 複合アラーム通知を設定する
+  hints:
+    - "AWS::CloudWatch::CompositeAlarm で複数アラームを組み合わせます"
+    - "AlarmRule で ALARM(alarmName) AND ALARM(alarmName) の式を使います"
+    - "AWS::Logs::MetricFilter でログパターンからメトリクスを抽出します"
+  prerequisites: [CloudWatch の深い知識, X-Ray の知識, ログ分析の知識]
+  estimatedTime: 120
+
+deployment:
+  providers: [aws, local]
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-observability-platform.yaml
+      parameters: { EnvironmentPrefix: tenka-observ }
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-observability-platform.yaml
+      parameters: { EnvironmentPrefix: tenka-observ-local }
+  regions:
+    aws: [ap-northeast-1, us-east-1]
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - { name: ダッシュボード, description: サービスメトリクスダッシュボードが作成されている, weight: 15, maxPoints: 15 }
+    - { name: 複合アラーム, description: 複合アラームが作成されている, weight: 25, maxPoints: 25 }
+    - { name: Logs Insights, description: クエリ定義が保存されている, weight: 15, maxPoints: 15 }
+    - { name: X-Ray トレーシング, description: Lambda X-Ray が有効化されている, weight: 15, maxPoints: 15 }
+    - { name: メトリクスフィルター, description: カスタムメトリクスフィルターが作成されている, weight: 20, maxPoints: 20 }
+    - { name: SNS 通知, description: 複合アラーム通知が設定されている, weight: 10, maxPoints: 10 }
+  timeoutMinutes: 10
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

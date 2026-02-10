@@ -1,0 +1,119 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: sec-guardduty-detective
+# タイプ: GAMEDAY（構築型）
+
+id: sec-guardduty-detective
+title: GuardDuty 脅威検知 + 自動対応
+type: gameday
+category: security
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - guardduty
+    - eventbridge
+    - lambda
+    - sns
+    - threat-detection
+    - automated-response
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはセキュリティアーキテクトとして、脅威検知と自動対応の
+    仕組みを構築する任務を与えられました。
+
+    ## 背景
+    組織のセキュリティ態勢を強化するため、GuardDuty による脅威検知と、
+    検知された脅威に対する自動対応（侵害された EC2 インスタンスの隔離等）が
+    求められています。
+
+    ## あなたのミッション
+    以下の要件を満たす脅威検知 + 自動対応構成を構築してください。
+
+    ### 要件
+    1. **GuardDuty**: GuardDuty ディテクターを有効化し、S3 保護と EKS 保護を含める
+    2. **EventBridge ルール**: High/Critical の検出結果をフィルタリングするルールを作成する
+    3. **自動対応 Lambda**: 侵害された EC2 インスタンスのセキュリティグループを隔離用に変更する Lambda を作成する
+    4. **SNS 通知**: 検出結果をセキュリティチームに通知する
+    5. **検出結果のアーカイブ**: 検出結果を S3 に保存する
+
+  objectives:
+    - GuardDuty ディテクターを有効化する
+    - EventBridge ルールで High/Critical をフィルタリングする
+    - 自動対応 Lambda を作成する
+    - SNS 通知を設定する
+    - S3 へのアーカイブを設定する
+
+  hints:
+    - "GuardDuty の DataSources で S3Logs と Kubernetes を有効にします"
+    - "EventBridge の detail.severity で 7 以上（High/Critical）をフィルタリングします"
+    - "Lambda で ec2:ModifyInstanceAttribute を使って SG を変更します"
+    - "GuardDuty の PublishingDestination で S3 バケットを指定します"
+
+  prerequisites:
+    - GuardDuty の基本概念
+    - EventBridge の設定知識
+    - Lambda の基本知識
+    - セキュリティインシデント対応の基本概念
+    - CloudFormation の中級以上の知識
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/sec-guardduty-detective.yaml
+      parameters:
+        EnvironmentName: tenka-guardduty
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: GuardDuty 有効化
+      description: GuardDuty ディテクターが有効化され、S3 と EKS 保護が含まれている
+      weight: 20
+      maxPoints: 20
+
+    - name: EventBridge フィルタリング
+      description: High/Critical の検出結果をフィルタリングする EventBridge ルールが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: 自動対応 Lambda
+      description: 侵害 EC2 の隔離を行う Lambda が作成され、EventBridge と接続されている
+      weight: 25
+      maxPoints: 25
+
+    - name: SNS 通知
+      description: 検出結果がセキュリティチームに通知される
+      weight: 15
+      maxPoints: 15
+
+    - name: S3 アーカイブ
+      description: 検出結果が暗号化された S3 バケットに保存される
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

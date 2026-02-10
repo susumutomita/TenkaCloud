@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: データレイク多層ストレージとクエリコスト最適化（正解テンプレート）
+  S3 Intelligent-Tiering、Glue パーティション、Athena ワークグループを構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-datalake-cost
+    Description: プロジェクト名のプレフィックス
+
+Resources:
+  # 要件1, 5: S3 バケット（Intelligent-Tiering + ライフサイクル）
+  DataLakeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-lake-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      # 要件1: Intelligent-Tiering
+      IntelligentTieringConfigurations:
+        - Id: ArchiveTiering
+          Status: Enabled
+          Tierings:
+            - AccessTier: ARCHIVE_ACCESS
+              Days: 90
+            - AccessTier: DEEP_ARCHIVE_ACCESS
+              Days: 180
+      # 要件5: ライフサイクルルール
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierDeepArchiveRule
+            Status: Enabled
+            Transitions:
+              - StorageClass: DEEP_ARCHIVE
+                TransitionInDays: 365
+
+  QueryResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-results-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  # 要件2: Glue Database + パーティションテーブル
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Sub "${ProjectName}_db"
+        Description: Data lake database with partitioned tables
+
+  GluePartitionedTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabase
+      TableInput:
+        Name: access_logs
+        Description: Partitioned access logs table
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+          compressionType: snappy
+        PartitionKeys:
+          - Name: year
+            Type: string
+          - Name: month
+            Type: string
+          - Name: day
+            Type: string
+        StorageDescriptor:
+          Location: !Sub "s3://${DataLakeBucket}/access_logs/"
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+          Columns:
+            - Name: request_id
+              Type: string
+            - Name: timestamp
+              Type: timestamp
+            - Name: source_ip
+              Type: string
+            - Name: method
+              Type: string
+            - Name: path
+              Type: string
+            - Name: status_code
+              Type: int
+            - Name: response_time_ms
+              Type: bigint
+
+  # 要件3, 4: Athena ワークグループ
+  AthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Sub "${ProjectName}-workgroup"
+      Description: Cost-optimized Athena workgroup
+      State: ENABLED
+      WorkGroupConfiguration:
+        # 要件3: クエリスキャン上限 1 GB
+        BytesScannedCutoffPerQuery: 1073741824
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        # 要件4: 結果暗号化
+        ResultConfiguration:
+          OutputLocation: !Sub "s3://${QueryResultsBucket}/results/"
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+
+Outputs:
+  DataLakeBucketName:
+    Description: データレイク S3 バケット名
+    Value: !Ref DataLakeBucket
+
+  GlueDatabaseName:
+    Description: Glue データベース名
+    Value: !Ref GlueDatabase
+
+  AthenaWorkGroupName:
+    Description: Athena ワークグループ名
+    Value: !Ref AthenaWorkGroup

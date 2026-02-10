@@ -1,0 +1,118 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: s3-lifecycle-policy
+# タイプ: GAMEDAY（構築型）
+
+id: s3-lifecycle-policy
+title: S3 ライフサイクルポリシーによるコスト最適化
+type: gameday
+category: cost
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - s3
+    - cost
+    - lifecycle
+    - storage-class
+    - multipart-upload
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、急増するストレージコストの削減を任されました。
+    社内の S3 バケットにはアクセス頻度が低い古いデータが大量に蓄積されており、
+    すべてが Standard ストレージクラスのままになっています。
+
+    ## 背景
+    月次のコストレポートで S3 ストレージ費用が前月比 40% 増加していることが判明しました。
+    調査の結果、90 日以上アクセスされていないオブジェクトが全体の 70% を占めており、
+    不完全なマルチパートアップロードも放置されていました。
+
+    ## あなたのミッション
+    S3 バケットにライフサイクルポリシーを設定し、ストレージコストを最適化してください。
+
+    ### 要件
+    1. **ストレージクラス移行（30 日）**: 作成から 30 日後に Standard-IA へ移行する
+    2. **ストレージクラス移行（90 日）**: 作成から 90 日後に Glacier Instant Retrieval へ移行する
+    3. **オブジェクト有効期限**: 作成から 365 日後にオブジェクトを自動削除する
+    4. **不完全マルチパートアップロード削除**: 7 日以上経過した不完全マルチパートアップロードを削除する
+
+  objectives:
+    - S3 バケットを作成し、ライフサイクルポリシーを設定する
+    - 30 日後に Standard-IA へ移行するルールを作成する
+    - 90 日後に Glacier Instant Retrieval へ移行するルールを作成する
+    - 365 日後にオブジェクトを自動削除するルールを作成する
+    - 不完全マルチパートアップロードを 7 日で削除するルールを作成する
+
+  hints:
+    - "CloudFormation の AWS::S3::Bucket で LifecycleConfiguration を設定できます"
+    - "Transitions プロパティで複数のストレージクラス移行ルールを定義できます"
+    - "ExpirationInDays でオブジェクトの有効期限を設定できます"
+    - "AbortIncompleteMultipartUpload で不完全アップロードの削除日数を指定します"
+
+  prerequisites:
+    - AWS の基本的な知識
+    - S3 ストレージクラスの理解
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 20
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/s3-lifecycle-policy.yaml
+      parameters:
+        BucketNamePrefix: tenka-lifecycle
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/s3-lifecycle-policy.yaml
+      parameters:
+        BucketNamePrefix: tenka-lifecycle-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Standard-IA 移行ルール
+      description: 30 日後に STANDARD_IA へ移行するトランジションルールが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Glacier Instant Retrieval 移行ルール
+      description: 90 日後に GLACIER_IR へ移行するトランジションルールが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: オブジェクト有効期限
+      description: 365 日後にオブジェクトが自動削除される有効期限が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: 不完全マルチパートアップロード削除
+      description: 7 日以上経過した不完全マルチパートアップロードが自動削除される
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

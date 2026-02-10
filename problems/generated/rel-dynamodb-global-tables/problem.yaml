@@ -1,0 +1,116 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-dynamodb-global-tables
+# タイプ: GAMEDAY（構築型）
+
+id: rel-dynamodb-global-tables
+title: DynamoDB グローバルテーブルによるマルチリージョン構成
+type: gameday
+category: reliability
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - dynamodb
+    - global-tables
+    - multi-region
+    - high-availability
+    - replication
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、グローバルに展開するアプリケーション向けに
+    マルチリージョンで利用可能なデータベースを構築する任務を与えられました。
+
+    ## 背景
+    アプリケーションは複数リージョンからアクセスされるため、
+    低レイテンシーかつ高可用性を実現するデータストアが必要です。
+    DynamoDB グローバルテーブルを使い、自動レプリケーションを実現します。
+
+    ## あなたのミッション
+    DynamoDB グローバルテーブルを構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **テーブル作成**: パーティションキーとソートキーを持つ DynamoDB テーブルを作成する
+    2. **レプリカ設定**: 別リージョンへのレプリカを設定する
+    3. **オンデマンドキャパシティ**: PAY_PER_REQUEST（オンデマンド）モードを設定する
+    4. **ポイントインタイムリカバリ**: PITR を有効化する
+
+  objectives:
+    - DynamoDB テーブルをパーティションキー + ソートキーで作成する
+    - グローバルテーブルのレプリカを設定する
+    - オンデマンドキャパシティモードを有効化する
+    - ポイントインタイムリカバリを有効化する
+
+  hints:
+    - "AWS::DynamoDB::GlobalTable リソースを使用してください"
+    - "Replicas プロパティでレプリカリージョンを指定できます"
+    - "BillingMode を PAY_PER_REQUEST に設定してオンデマンドモードにします"
+    - "PointInTimeRecoverySpecification で PITR を有効化できます"
+
+  prerequisites:
+    - DynamoDB の基本的な知識
+    - グローバルテーブルの概念理解
+    - キー設計の基本
+
+  estimatedTime: 30
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-dynamodb-global-tables.yaml
+      parameters:
+        EnvironmentPrefix: tenka-ddb-global
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-dynamodb-global-tables.yaml
+      parameters:
+        EnvironmentPrefix: tenka-ddb-global-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: テーブル作成
+      description: パーティションキーとソートキーを持つ DynamoDB テーブルが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: レプリカ設定
+      description: 別リージョンへのレプリカが構成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: オンデマンドキャパシティ
+      description: PAY_PER_REQUEST モードが設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: ポイントインタイムリカバリ
+      description: PITR が有効化されている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

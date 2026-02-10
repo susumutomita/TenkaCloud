@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: EFS マルチ AZ 高可用性ファイルストレージ（正解テンプレート）
+  暗号化、マルチ AZ マウントターゲット、ライフサイクル、バックアップを構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-efs
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-vpc"
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private-a"
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private-c"
+
+  EFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EFS mount targets
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-efs-sg"
+
+  # 要件1: 暗号化 EFS ファイルシステム + 要件3: ライフサイクル + 要件4: バックアップ
+  FileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: elastic
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+      BackupPolicy:
+        Status: ENABLED
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-fs"
+
+  # 要件2: マウントターゲット AZ-a
+  MountTargetA:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref PrivateSubnetA
+      SecurityGroups:
+        - !GetAtt EFSSecurityGroup.GroupId
+
+  # 要件2: マウントターゲット AZ-c
+  MountTargetC:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystem
+      SubnetId: !Ref PrivateSubnetC
+      SecurityGroups:
+        - !GetAtt EFSSecurityGroup.GroupId
+
+Outputs:
+  FileSystemId:
+    Description: EFS ファイルシステム ID
+    Value: !Ref FileSystem
+
+  FileSystemArn:
+    Description: EFS ファイルシステム ARN
+    Value: !GetAtt FileSystem.Arn
+
+  MountTargetAId:
+    Description: マウントターゲット A ID
+    Value: !Ref MountTargetA
+
+  MountTargetCId:
+    Description: マウントターゲット C ID
+    Value: !Ref MountTargetC

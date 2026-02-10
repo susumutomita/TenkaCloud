@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: SQS バッチ処理とデッドレターキューの最適化（正解テンプレート）
+  バッチ処理、DLQ、可視性タイムアウト、暗号化を構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-sqs-perf
+    Description: プロジェクト名のプレフィックス
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SQSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ProcessingQueue.Arn
+
+  ProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-processor"
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 50
+      Architectures:
+        - arm64
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          def handler(event, context):
+              for record in event.get("Records", []):
+                  body = record.get("body", "")
+                  print(f"Processing: {body}")
+              return {"batchItemFailures": []}
+
+  # 要件4: DLQ（暗号化付き）
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  # 要件2, 3, 4: メインキュー
+  ProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-queue"
+      # 要件3: 可視性タイムアウト 300 秒
+      VisibilityTimeout: 300
+      # 要件4: 暗号化
+      SqsManagedSseEnabled: true
+      # 要件2: DLQ 設定
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  # 要件1: Lambda イベントソースマッピング（バッチサイズ 10）
+  EventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref ProcessorFunction
+      EventSourceArn: !GetAtt ProcessingQueue.Arn
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+
+Outputs:
+  QueueUrl:
+    Description: SQS キュー URL
+    Value: !Ref ProcessingQueue
+
+  DLQUrl:
+    Description: DLQ URL
+    Value: !Ref DeadLetterQueue
+
+  FunctionName:
+    Description: プロセッサ Lambda 関数名
+    Value: !Ref ProcessorFunction

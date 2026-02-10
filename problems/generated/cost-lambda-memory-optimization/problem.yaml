@@ -1,0 +1,117 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: cost-lambda-memory-optimization
+# タイプ: GAMEDAY（構築型）
+
+id: cost-lambda-memory-optimization
+title: Lambda 関数のメモリとタイムアウト最適化
+type: gameday
+category: cost
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - lambda
+    - cost
+    - memory
+    - timeout
+    - arm64
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはサーバーレスアプリケーションのコスト管理を担当するクラウドエンジニアです。
+    開発チームが作成した Lambda 関数が、デフォルト設定のまま運用されており、
+    過剰なメモリ割り当てとアーキテクチャ選択のミスにより無駄なコストが発生しています。
+
+    ## 背景
+    AWS Cost Explorer の分析から以下が判明しました。
+    - 複数の Lambda 関数がデフォルトの 1024 MB メモリで動作しているが、実使用量は 128 MB 程度
+    - すべての関数が x86_64 アーキテクチャで動作しており、Graviton（arm64）が未活用
+    - タイムアウトがデフォルトの 3 秒で、リトライによる二重実行が発生している
+
+    ## あなたのミッション
+    Lambda 関数を最適な設定で構築し、コストを削減してください。
+
+    ### 要件
+    1. **メモリ最適化**: メモリサイズを 128 MB に設定する
+    2. **ARM アーキテクチャ**: Graviton2（arm64）アーキテクチャを使用する
+    3. **タイムアウト設定**: タイムアウトを 30 秒に設定する
+    4. **環境変数によるコスト追跡**: COST_CENTER 環境変数を設定する
+
+  objectives:
+    - Lambda 関数のメモリサイズを 128 MB に最適化する
+    - arm64 アーキテクチャで Lambda 関数を構成する
+    - 適切なタイムアウト値を設定する
+    - コスト追跡用の環境変数を設定する
+
+  hints:
+    - "Lambda の MemorySize プロパティでメモリを設定できます"
+    - "Architectures プロパティで arm64 を指定すると Graviton2 で実行されます"
+    - "arm64 は x86_64 より最大 20% のコスト削減が期待できます"
+    - "Timeout プロパティで実行時間の上限を秒単位で設定します"
+
+  prerequisites:
+    - AWS Lambda の基本的な知識
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 15
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/cost-lambda-memory-optimization.yaml
+      parameters:
+        ProjectName: tenka-lambda-cost
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/cost-lambda-memory-optimization.yaml
+      parameters:
+        ProjectName: tenka-lambda-cost-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: メモリサイズ最適化
+      description: Lambda 関数のメモリサイズが 128 MB に設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: ARM アーキテクチャ
+      description: Lambda 関数が arm64 アーキテクチャで構成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: タイムアウト設定
+      description: タイムアウトが 30 秒に設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: コスト追跡環境変数
+      description: COST_CENTER 環境変数が設定されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

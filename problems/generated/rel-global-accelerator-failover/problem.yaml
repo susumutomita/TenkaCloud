@@ -1,0 +1,126 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-global-accelerator-failover
+# タイプ: GAMEDAY（構築型）
+
+id: rel-global-accelerator-failover
+title: Global Accelerator マルチリージョンフェイルオーバー
+type: gameday
+category: reliability
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - global-accelerator
+    - multi-region
+    - failover
+    - alb
+    - health-check
+    - anycast
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、グローバルに展開する Web アプリケーションの
+    マルチリージョンフェイルオーバーを構築する任務を与えられました。
+
+    ## 背景
+    リージョン障害時に自動的に別リージョンへトラフィックを切り替える
+    グローバルなエントリポイントが必要です。AWS Global Accelerator を使い、
+    Anycast IP による低レイテンシーアクセスと自動フェイルオーバーを実現します。
+
+    ## あなたのミッション
+    Global Accelerator を使ったマルチリージョンフェイルオーバーを構築し、
+    以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **Global Accelerator**: アクセラレーターとリスナーを作成する
+    2. **エンドポイントグループ**: 2 つのリージョンにエンドポイントグループを作成する
+    3. **ヘルスチェック**: エンドポイントグループにヘルスチェックを設定する
+    4. **ALB エンドポイント**: 各リージョンの ALB をエンドポイントとして登録する
+    5. **トラフィック配分**: プライマリリージョンに 100% のトラフィック配分を設定する
+
+  objectives:
+    - Global Accelerator とリスナーを作成する
+    - 2 リージョンにエンドポイントグループを構成する
+    - ヘルスチェックを設定して自動フェイルオーバーを実現する
+    - ALB をエンドポイントとして登録する
+    - トラフィックダイヤルでプライマリ優先を構成する
+
+  hints:
+    - "AWS::GlobalAccelerator::Accelerator でアクセラレーターを作成できます"
+    - "AWS::GlobalAccelerator::Listener でポートとプロトコルを設定します"
+    - "AWS::GlobalAccelerator::EndpointGroup でリージョンごとのグループを作成します"
+    - "TrafficDialPercentage で各リージョンへのトラフィック比率を制御できます"
+    - "HealthCheckPort と HealthCheckPath でヘルスチェックを構成します"
+
+  prerequisites:
+    - Global Accelerator の基本的な知識
+    - ALB の知識
+    - マルチリージョンアーキテクチャの理解
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-global-accelerator-failover.yaml
+      parameters:
+        EnvironmentPrefix: tenka-ga
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-global-accelerator-failover.yaml
+      parameters:
+        EnvironmentPrefix: tenka-ga-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Global Accelerator
+      description: アクセラレーターとリスナーが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: エンドポイントグループ
+      description: 2 つのリージョンにエンドポイントグループが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: ヘルスチェック
+      description: エンドポイントグループにヘルスチェックが設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: ALB エンドポイント
+      description: 各リージョンの ALB がエンドポイントとして登録されている
+      weight: 20
+      maxPoints: 20
+
+    - name: トラフィック配分
+      description: プライマリリージョンに 100% のトラフィック配分が設定されている
+      weight: 15
+      maxPoints: 15
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

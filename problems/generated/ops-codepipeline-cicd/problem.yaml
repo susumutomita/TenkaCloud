@@ -1,0 +1,123 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: ops-codepipeline-cicd
+# タイプ: GAMEDAY（構築型）
+
+id: ops-codepipeline-cicd
+title: CodePipeline CI/CD パイプライン構築
+type: gameday
+category: operations
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - codepipeline
+    - codebuild
+    - s3
+    - iam
+    - cicd
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、アプリケーションの
+    CI/CD パイプラインを構築する任務を与えられました。
+
+    ## 背景
+    手動デプロイはヒューマンエラーのリスクがあり、リリース頻度の向上を妨げています。
+    CodePipeline と CodeBuild を使い、ソースコードの変更を自動的にビルド・テスト・
+    デプロイするパイプラインを構築します。
+
+    ## あなたのミッション
+    CodePipeline CI/CD パイプラインを構築し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **ソースステージ**: S3 バケットをソースとするパイプラインステージを作成する
+    2. **ビルドステージ**: CodeBuild プロジェクトを使ったビルドステージを作成する
+    3. **アーティファクトストア**: パイプラインアーティファクト用の S3 バケットを作成する
+    4. **IAM ロール**: CodePipeline と CodeBuild に必要な IAM ロールを作成する
+    5. **SNS 通知**: パイプライン実行結果の通知を設定する
+
+  objectives:
+    - S3 ソースステージのパイプラインを作成する
+    - CodeBuild ビルドプロジェクトを構成する
+    - アーティファクトストア S3 バケットを作成する
+    - CodePipeline と CodeBuild の IAM ロールを作成する
+    - パイプライン通知を SNS で構成する
+
+  hints:
+    - "AWS::CodePipeline::Pipeline で Stages を定義します"
+    - "AWS::CodeBuild::Project で BuildSpec を定義してビルド手順を記述します"
+    - "ArtifactStore でアーティファクト保存先の S3 バケットを指定します"
+    - "AWS::CodeStarNotifications::NotificationRule でパイプライン通知を設定できます"
+
+  prerequisites:
+    - CodePipeline の基本的な知識
+    - CodeBuild の基本的な知識
+    - IAM ロールとポリシーの知識
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-codepipeline-cicd.yaml
+      parameters:
+        EnvironmentPrefix: tenka-cicd
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-codepipeline-cicd.yaml
+      parameters:
+        EnvironmentPrefix: tenka-cicd-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ソースステージ
+      description: S3 バケットをソースとするパイプラインステージが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: ビルドステージ
+      description: CodeBuild プロジェクトを使ったビルドステージが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: アーティファクトストア
+      description: パイプラインアーティファクト用の S3 バケットが作成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: IAM ロール
+      description: CodePipeline と CodeBuild の IAM ロールが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: SNS 通知
+      description: パイプライン実行結果の SNS 通知が設定されている
+      weight: 15
+      maxPoints: 15
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

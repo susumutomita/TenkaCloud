@@ -1,0 +1,94 @@
+# TenkaCloud 統一問題フォーマット
+id: ops-codedeploy-bluegreen
+title: CodeDeploy Blue/Green デプロイメント構築
+type: gameday
+category: operations
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags: [codedeploy, blue-green, alb, auto-scaling, deployment, rollback]
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、ゼロダウンタイムの Blue/Green デプロイメントを構築する任務を与えられました。
+
+    ## 背景
+    インプレースデプロイではダウンタイムが発生し、ロールバックも困難です。
+    CodeDeploy の Blue/Green デプロイメントで安全なリリースとロールバックを実現します。
+
+    ## あなたのミッション
+    ### 要件
+    1. **CodeDeploy アプリケーション**: EC2/オンプレミスのアプリケーションを作成する
+    2. **デプロイグループ**: Blue/Green デプロイメントグループを作成する
+    3. **ALB とターゲットグループ**: Blue/Green 用の ALB と 2 つのターゲットグループを構成する
+    4. **Auto Scaling グループ**: Blue 環境の ASG を作成する
+    5. **ロールバック設定**: 自動ロールバック設定を構成する
+
+  objectives:
+    - CodeDeploy アプリケーションを作成する
+    - Blue/Green デプロイメントグループを構成する
+    - ALB と 2 つのターゲットグループを作成する
+    - Blue 環境の Auto Scaling グループを構成する
+    - 自動ロールバック設定を有効化する
+
+  hints:
+    - "DeploymentStyle で deploymentType を BLUE_GREEN にします"
+    - "BlueGreenDeploymentConfiguration でトラフィック切り替え方法を指定します"
+    - "AutoRollbackConfiguration で自動ロールバックを有効化します"
+    - "2 つのターゲットグループが必要です（Blue 用と Green 用）"
+
+  prerequisites: [CodeDeploy の知識, ALB の知識, Auto Scaling の知識]
+  estimatedTime: 60
+
+deployment:
+  providers: [aws, local]
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-codedeploy-bluegreen.yaml
+      parameters:
+        EnvironmentPrefix: tenka-bgdeploy
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-codedeploy-bluegreen.yaml
+      parameters:
+        EnvironmentPrefix: tenka-bgdeploy-local
+  regions:
+    aws: [ap-northeast-1, us-east-1]
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: CodeDeploy アプリケーション
+      description: EC2/オンプレミスのアプリケーションが作成されている
+      weight: 15
+      maxPoints: 15
+    - name: デプロイグループ
+      description: Blue/Green デプロイメントグループが作成されている
+      weight: 30
+      maxPoints: 30
+    - name: ALB とターゲットグループ
+      description: ALB と 2 つのターゲットグループが構成されている
+      weight: 20
+      maxPoints: 20
+    - name: Auto Scaling グループ
+      description: Blue 環境の ASG が作成されている
+      weight: 15
+      maxPoints: 15
+    - name: ロールバック設定
+      description: 自動ロールバック設定が構成されている
+      weight: 20
+      maxPoints: 20
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

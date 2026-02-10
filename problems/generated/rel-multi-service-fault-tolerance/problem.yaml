@@ -1,0 +1,136 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-multi-service-fault-tolerance
+# タイプ: GAMEDAY（構築型）
+
+id: rel-multi-service-fault-tolerance
+title: 複合サービス耐障害性アーキテクチャ
+type: gameday
+category: reliability
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - circuit-breaker
+    - step-functions
+    - sqs
+    - lambda
+    - dynamodb
+    - api-gateway
+    - sns
+    - fault-tolerance
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、マイクロサービスアーキテクチャの
+    耐障害性パターンを実装する任務を与えられました。
+
+    ## 背景
+    複数のマイクロサービスが連携するシステムでは、1 つのサービスの障害が
+    カスケード障害を引き起こすリスクがあります。サーキットブレーカーパターン、
+    リトライ、フォールバックを組み合わせた堅牢な設計が必要です。
+
+    ## あなたのミッション
+    Step Functions を中心とした複合サービス耐障害性アーキテクチャを構築し、
+    以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **API Gateway**: REST API エンドポイントを作成する
+    2. **Step Functions**: リトライとキャッチを備えたステートマシンを作成する
+    3. **Lambda 関数群**: 処理用、フォールバック用の Lambda 関数を作成する
+    4. **SQS バッファ**: 過負荷時のバッファキューを作成する
+    5. **DynamoDB**: サーキットブレーカー状態を管理するテーブルを作成する
+    6. **SNS 通知**: サーキットブレーカー開放時の通知を設定する
+
+  objectives:
+    - API Gateway REST API を作成する
+    - リトライ/キャッチ付き Step Functions ステートマシンを作成する
+    - 処理用とフォールバック用の Lambda 関数を作成する
+    - SQS バッファキューを作成する
+    - DynamoDB でサーキットブレーカー状態を管理する
+    - SNS でサーキットブレーカー開放通知を設定する
+
+  hints:
+    - "Step Functions の Retry フィールドでリトライポリシーを定義できます"
+    - "Catch フィールドでエラー時のフォールバック先を指定できます"
+    - "DynamoDB テーブルでサーキットブレーカーの状態（CLOSED/OPEN/HALF_OPEN）を管理します"
+    - "API Gateway と Step Functions の統合で StartSyncExecution を使用できます"
+
+  prerequisites:
+    - Step Functions の知識
+    - Lambda の知識
+    - API Gateway の知識
+    - サーキットブレーカーパターンの理解
+    - DynamoDB の基本的な知識
+
+  estimatedTime: 120
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-multi-service-fault-tolerance.yaml
+      parameters:
+        EnvironmentPrefix: tenka-fault-tol
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-multi-service-fault-tolerance.yaml
+      parameters:
+        EnvironmentPrefix: tenka-fault-tol-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - name: API Gateway
+      description: REST API エンドポイントが作成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: Step Functions
+      description: リトライとキャッチを備えたステートマシンが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Lambda 関数群
+      description: 処理用とフォールバック用の Lambda 関数が作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: SQS バッファ
+      description: 過負荷時のバッファキューが作成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: DynamoDB サーキットブレーカー
+      description: サーキットブレーカー状態管理テーブルが作成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: SNS 通知
+      description: サーキットブレーカー開放時の SNS 通知が設定されている
+      weight: 10
+      maxPoints: 10
+
+  timeoutMinutes: 10
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

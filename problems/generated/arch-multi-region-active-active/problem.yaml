@@ -1,0 +1,121 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: arch-multi-region-active-active
+# タイプ: GAMEDAY（構築型）
+
+id: arch-multi-region-active-active
+title: マルチリージョン Active-Active 構成
+type: gameday
+category: architecture
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - multi-region
+    - active-active
+    - route53
+    - dynamodb-global-tables
+    - cloudfront
+    - s3-replication
+    - disaster-recovery
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはプリンシパルアーキテクトとして、グローバルユーザー向けの
+    マルチリージョン Active-Active 構成を設計・構築する任務を与えられました。
+
+    ## 背景
+    アプリケーションの利用者が東京とバージニアに分散しており、
+    RTO/RPO をゼロに近づけるため、両リージョンでアクティブに
+    リクエストを処理する構成が求められています。
+
+    ## あなたのミッション
+    以下の要件を満たすマルチリージョン Active-Active 構成を構築してください。
+
+    ### 要件
+    1. **Route 53 ヘルスチェック + フェイルオーバー**: レイテンシーベースルーティングとヘルスチェックを設定する
+    2. **DynamoDB Global Tables**: 2 リージョンでレプリケーションするグローバルテーブルを作成する
+    3. **S3 クロスリージョンレプリケーション**: 2 リージョン間の双方向レプリケーションを設定する
+    4. **CloudFront**: マルチオリジンの CloudFront ディストリビューションをオリジングループで設定する
+    5. **ACM**: 各リージョンに SSL 証明書をプロビジョニングする
+
+  objectives:
+    - Route 53 でレイテンシーベースルーティングとヘルスチェックを設定する
+    - DynamoDB Global Tables を 2 リージョンで作成する
+    - S3 クロスリージョンレプリケーションを設定する
+    - CloudFront オリジングループでフェイルオーバーを設定する
+    - ACM 証明書を作成する
+
+  hints:
+    - "Route 53 のレイテンシーベースルーティングは SetIdentifier と Region を指定します"
+    - "DynamoDB Global Tables は AWS::DynamoDB::GlobalTable で作成できます"
+    - "S3 レプリケーションには ReplicationConfiguration とバージョニング有効が必要です"
+    - "CloudFront オリジングループは OriginGroups でプライマリとフェイルオーバーオリジンを定義します"
+
+  prerequisites:
+    - マルチリージョンアーキテクチャの設計経験
+    - Route 53 の高度なルーティング知識
+    - DynamoDB Global Tables の概念
+    - CloudFront の上級知識
+    - CloudFormation の上級知識
+
+  estimatedTime: 150
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/arch-multi-region-active-active.yaml
+      parameters:
+        EnvironmentName: tenka-multi-region
+        PrimaryRegion: ap-northeast-1
+        SecondaryRegion: us-east-1
+
+  regions:
+    aws:
+      - ap-northeast-1
+
+  timeout: 60
+
+scoring:
+  type: api
+  criteria:
+    - name: Route 53 ルーティング + ヘルスチェック
+      description: レイテンシーベースルーティングとヘルスチェックが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: DynamoDB Global Tables
+      description: 2 リージョンでレプリケーションするグローバルテーブルが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: S3 クロスリージョンレプリケーション
+      description: 2 リージョン間の S3 レプリケーションが設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: CloudFront オリジングループ
+      description: マルチオリジンのオリジングループでフェイルオーバーが設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: ACM 証明書
+      description: SSL 証明書がプロビジョニングされている
+      weight: 10
+      maxPoints: 10
+
+  timeoutMinutes: 20
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

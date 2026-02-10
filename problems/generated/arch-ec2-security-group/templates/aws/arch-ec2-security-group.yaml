@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: EC2 インスタンス + セキュリティグループ設計（正解テンプレート）
+  セキュリティグループ、Launch Template、EBS 暗号化を含む EC2 構成。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-ec2-sg
+    Description: 環境名プレフィックス
+  AllowedSSHCidr:
+    Type: String
+    Default: "203.0.113.0/24"
+    Description: SSH アクセスを許可する CIDR ブロック
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  # --- セキュリティグループ ---
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${EnvironmentName} Web Server Security Group"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+          Description: Allow HTTP from anywhere
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSSHCidr
+          Description: Allow SSH from specific CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-web-sg"
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # --- Launch Template ---
+  WebServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${EnvironmentName}-web-lt"
+      LaunchTemplateData:
+        InstanceType: t3.micro
+        ImageId: !Ref LatestAmiId
+        SecurityGroupIds:
+          - !GetAtt WebServerSecurityGroup.GroupId
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 20
+              Encrypted: true
+              Iops: 3000
+              Throughput: 125
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${EnvironmentName}-web-server"
+              - Key: Environment
+                Value: !Ref EnvironmentName
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${EnvironmentName}-web-ebs"
+              - Key: Environment
+                Value: !Ref EnvironmentName
+
+  # --- EC2 インスタンス ---
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebServerLaunchTemplate
+        Version: !GetAtt WebServerLaunchTemplate.LatestVersionNumber
+
+Outputs:
+  InstanceId:
+    Description: EC2 インスタンス ID
+    Value: !Ref WebServerInstance
+
+  SecurityGroupId:
+    Description: セキュリティグループ ID
+    Value: !GetAtt WebServerSecurityGroup.GroupId
+
+  LaunchTemplateId:
+    Description: Launch Template ID
+    Value: !Ref WebServerLaunchTemplate

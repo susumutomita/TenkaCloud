@@ -1,0 +1,111 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: arch-api-gateway-lambda
+# タイプ: GAMEDAY（構築型）
+
+id: arch-api-gateway-lambda
+title: API Gateway + Lambda REST API 構成
+type: gameday
+category: architecture
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - api-gateway
+    - lambda
+    - rest-api
+    - serverless
+    - throttling
+    - cors
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、サーバーレスの REST API を
+    API Gateway と Lambda で構築する任務を与えられました。
+
+    ## 背景
+    モバイルアプリ向けの新しい API バックエンドが必要です。
+    サーバー管理不要で自動スケーリングされるサーバーレス構成が求められています。
+    API のスロットリングと CORS 設定も必須です。
+
+    ## あなたのミッション
+    以下の要件を満たす API Gateway + Lambda 構成を構築してください。
+
+    ### 要件
+    1. **Lambda 関数**: Python ランタイムの Lambda 関数を作成し、適切な IAM ロールを設定する
+    2. **REST API**: API Gateway REST API を作成し、GET / POST メソッドを設定する
+    3. **スロットリング**: API ステージにスロットリング設定（レート制限）を適用する
+    4. **CORS**: クロスオリジンリクエストを許可する CORS 設定を行う
+
+  objectives:
+    - Lambda 関数と実行ロールを作成する
+    - API Gateway REST API を作成し、リソースとメソッドを定義する
+    - Lambda プロキシ統合を設定する
+    - スロットリングと CORS を設定する
+
+  hints:
+    - "Lambda の実行ロールには AWSLambdaBasicExecutionRole を付与します"
+    - "API Gateway のメソッドでは AWS_PROXY 統合タイプを使用します"
+    - "CORS は OPTIONS メソッドの Mock 統合で設定できます"
+    - "StageDescription の ThrottlingBurstLimit と ThrottlingRateLimit で制限します"
+
+  prerequisites:
+    - Lambda の基本概念
+    - API Gateway の基本知識
+    - REST API の設計知識
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/arch-api-gateway-lambda.yaml
+      parameters:
+        EnvironmentName: tenka-apigw-lambda
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Lambda 関数 + IAM ロール
+      description: Lambda 関数が作成され、適切な実行ロールが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: REST API + メソッド
+      description: API Gateway REST API が作成され、GET/POST メソッドが Lambda プロキシ統合で設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: スロットリング
+      description: API ステージにスロットリング設定が適用されている
+      weight: 20
+      maxPoints: 20
+
+    - name: CORS 設定
+      description: OPTIONS メソッドが設定され、CORS ヘッダーが返される
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

@@ -1,0 +1,116 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: ec2-cost-optimization
+# タイプ: GAMEDAY（構築型）
+
+id: ec2-cost-optimization
+title: EC2 インスタンスのコスト最適化
+type: gameday
+category: cost
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - ec2
+    - cost
+    - ebs
+    - instance-type
+    - savings-plans
+    - auto-scaling
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、本番環境の EC2 コスト削減プロジェクトを担当しています。
+    現在の構成は過剰なスペックのインスタンスが常時稼働しており、
+    EBS ボリュームも最適化されていません。
+
+    ## 背景
+    AWS Cost Explorer の分析結果から、以下の問題が判明しました。
+    - CPU 使用率が平均 15% の m5.2xlarge インスタンスが稼働中
+    - 汎用 SSD（gp2）の IOPS が不足し、追加 Provisioned IOPS を購入している
+    - Savings Plans や Reserved Instances が未適用
+    - Auto Scaling が未設定で、夜間・休日も同じ台数が稼働
+
+    ## あなたのミッション
+    EC2 環境を再構築し、コストを最適化してください。
+
+    ### 要件
+    1. **適切なインスタンスタイプ**: ワークロードに合った t3.medium を使用し、無制限モード（Unlimited）を無効にする
+    2. **EBS ボリューム最適化**: gp3 ボリューム（3000 IOPS, 125 MB/s スループット）を使用する
+    3. **Auto Scaling グループ**: 最小 1 台、最大 3 台、希望 1 台の Auto Scaling グループを構成する
+    4. **Savings Plans 識別タグ**: `SavingsPlanEligible: true` タグを EC2 インスタンスに付与する
+
+  objectives:
+    - コスト効率の良いインスタンスタイプ t3.medium で起動テンプレートを作成する
+    - EBS ボリュームを gp3 に設定し、ベースライン IOPS とスループットを活用する
+    - Auto Scaling グループを構成して需要に応じたスケーリングを実現する
+    - Savings Plans 対象を識別するためのタグを付与する
+
+  hints:
+    - "LaunchTemplate でインスタンスタイプと EBS ボリュームを設定できます"
+    - "gp3 はベースラインで 3000 IOPS、125 MB/s を追加料金なしで提供します"
+    - "CreditSpecification で Unlimited モードの有効・無効を制御できます"
+    - "Auto Scaling グループの MinSize, MaxSize, DesiredCapacity を設定してください"
+
+  prerequisites:
+    - EC2 インスタンスタイプの知識
+    - EBS ボリュームタイプの理解
+    - Auto Scaling の基本的な知識
+    - CloudFormation の知識
+
+  estimatedTime: 40
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ec2-cost-optimization.yaml
+      parameters:
+        VpcId: ""
+        SubnetIds: ""
+        LatestAmiId: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: インスタンスタイプ最適化
+      description: t3.medium インスタンスが使用され、Unlimited モードが無効になっている
+      weight: 25
+      maxPoints: 25
+
+    - name: EBS ボリューム最適化
+      description: gp3 ボリューム（3000 IOPS, 125 MB/s）が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Auto Scaling グループ
+      description: MinSize=1, MaxSize=3, DesiredCapacity=1 の Auto Scaling グループが構成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: Savings Plans タグ
+      description: EC2 インスタンスに SavingsPlanEligible=true タグが付与されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

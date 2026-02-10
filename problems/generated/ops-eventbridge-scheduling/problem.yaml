@@ -1,0 +1,116 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: ops-eventbridge-scheduling
+# タイプ: GAMEDAY（構築型）
+
+id: ops-eventbridge-scheduling
+title: EventBridge スケジュールによる運用タスク自動化
+type: gameday
+category: operations
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - eventbridge
+    - schedule
+    - lambda
+    - automation
+    - cron
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、定期的な運用タスクを
+    自動化する仕組みを構築する任務を与えられました。
+
+    ## 背景
+    毎日深夜に不要な一時リソースをクリーンアップする作業や、
+    定期的なヘルスチェックレポートの生成を手動で行っています。
+    EventBridge スケジュールルールで自動化する必要があります。
+
+    ## あなたのミッション
+    EventBridge スケジュールルールと Lambda を構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **スケジュールルール**: 毎日 UTC 15:00（JST 0:00）に実行される EventBridge ルールを作成する
+    2. **Lambda 関数**: スケジュールで起動される Lambda 関数を作成する
+    3. **IAM ロール**: Lambda 実行に必要な IAM ロールを作成する
+    4. **DLQ**: Lambda 実行失敗時のデッドレターキューを設定する
+
+  objectives:
+    - cron 式の EventBridge スケジュールルールを作成する
+    - スケジュール起動の Lambda 関数を作成する
+    - Lambda 実行用の IAM ロールを作成する
+    - 実行失敗時の DLQ を構成する
+
+  hints:
+    - "AWS::Events::Rule の ScheduleExpression で cron 式を指定できます"
+    - "cron(0 15 * * ? *) で毎日 UTC 15:00 に実行されます"
+    - "AWS::Lambda::Permission で EventBridge からの呼び出しを許可します"
+    - "Lambda の DeadLetterConfig で DLQ を指定できます"
+
+  prerequisites:
+    - EventBridge の基本的な知識
+    - Lambda の基本的な知識
+    - cron 式の理解
+
+  estimatedTime: 25
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-eventbridge-scheduling.yaml
+      parameters:
+        EnvironmentPrefix: tenka-schedule
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-eventbridge-scheduling.yaml
+      parameters:
+        EnvironmentPrefix: tenka-schedule-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: スケジュールルール
+      description: 毎日 UTC 15:00 に実行される EventBridge スケジュールルールが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: Lambda 関数
+      description: スケジュールで起動される Lambda 関数が作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: IAM ロール
+      description: Lambda 実行に必要な IAM ロールが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: DLQ
+      description: Lambda 実行失敗時のデッドレターキューが設定されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

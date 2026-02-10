@@ -1,0 +1,113 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: cost-ecs-fargate-rightsizing
+# タイプ: GAMEDAY（構築型）
+
+id: cost-ecs-fargate-rightsizing
+title: ECS Fargate タスクのリソースライトサイジング
+type: gameday
+category: cost
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - ecs
+    - fargate
+    - cost
+    - rightsizing
+    - auto-scaling
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはコンテナプラットフォームを担当するクラウドエンジニアです。
+    ECS Fargate で動作するマイクロサービスが過剰なリソースを割り当てられており、
+    月額コストが予算を大幅に超過しています。
+
+    ## 背景
+    CloudWatch Container Insights の分析から以下が判明しました。
+    - タスクに 2 vCPU / 4 GB メモリが割り当てられているが、実使用は 0.25 vCPU / 512 MB 程度
+    - 常時 4 タスクが稼働しているが、夜間のトラフィックはほぼゼロ
+    - Fargate Spot が未活用で、すべてオンデマンドで実行中
+
+    ## あなたのミッション
+    ECS Fargate タスクをライトサイジングし、Auto Scaling を構成してください。
+
+    ### 要件
+    1. **タスクサイズ最適化**: CPU を 256（0.25 vCPU）、メモリを 512 MB に設定する
+    2. **Fargate Spot**: キャパシティプロバイダー戦略で FARGATE_SPOT を使用する
+    3. **Auto Scaling**: ターゲット追跡スケーリングで CPU 使用率 70% をターゲットにする
+    4. **スケーリング範囲**: 最小タスク数 1、最大タスク数 4 に設定する
+
+  objectives:
+    - ECS タスク定義で適切な CPU とメモリを設定する
+    - FARGATE_SPOT キャパシティプロバイダーを活用する
+    - Application Auto Scaling を構成する
+    - スケーリングポリシーを設定する
+
+  hints:
+    - "TaskDefinition の Cpu と Memory でリソースを設定します"
+    - "CapacityProviderStrategy で FARGATE_SPOT を指定できます"
+    - "AWS::ApplicationAutoScaling::ScalableTarget でスケーリング範囲を定義します"
+    - "AWS::ApplicationAutoScaling::ScalingPolicy でターゲット追跡ポリシーを設定します"
+
+  prerequisites:
+    - ECS Fargate の基本的な知識
+    - Auto Scaling の理解
+    - CloudFormation の知識
+
+  estimatedTime: 35
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/cost-ecs-fargate-rightsizing.yaml
+      parameters:
+        ProjectName: tenka-ecs-cost
+        VpcId: ""
+        SubnetIds: ""
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: タスクサイズ最適化
+      description: CPU が 256、メモリが 512 に設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: Fargate Spot 活用
+      description: FARGATE_SPOT キャパシティプロバイダーが使用されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Auto Scaling ターゲット
+      description: CPU 使用率 70% のターゲット追跡ポリシーが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: スケーリング範囲
+      description: 最小タスク数 1、最大タスク数 4 が設定されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md
