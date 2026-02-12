@@ -4,22 +4,8 @@
 FROM oven/bun:1.2.20 AS deps
 WORKDIR /app
 
-# Copy workspace manifests for deterministic installs
-COPY bun.lock package.json ./
-COPY apps/control-plane/package.json apps/control-plane/
-COPY apps/application-plane/package.json apps/application-plane/
-COPY packages/core/package.json packages/core/
-COPY packages/shared/package.json packages/shared/
-COPY backend/services/application-plane/problem-service/package.json backend/services/application-plane/problem-service/
-COPY backend/services/application-plane/battle-service/package.json backend/services/application-plane/battle-service/
-COPY backend/services/application-plane/scoring-service/package.json backend/services/application-plane/scoring-service/
-COPY backend/services/shared/dynamodb/package.json backend/services/shared/dynamodb/
-COPY backend/services/control-plane/registration/package.json backend/services/control-plane/registration/
-COPY backend/services/control-plane/system-management/package.json backend/services/control-plane/system-management/
-COPY backend/services/control-plane/user-management/package.json backend/services/control-plane/user-management/
-COPY backend/services/control-plane/deployment-management/package.json backend/services/control-plane/deployment-management/
-COPY backend/services/control-plane/tenant-management/package.json backend/services/control-plane/tenant-management/
-COPY backend/services/control-plane/provisioning/package.json backend/services/control-plane/provisioning/
+# Copy repo (dockerignore should exclude node_modules etc.)
+COPY . .
 
 RUN bun install --frozen-lockfile --ignore-scripts
 
