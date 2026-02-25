@@ -25,13 +25,13 @@
                  ╱──────╲
                 ╱ 統合    ╲      ← API・コンポーネント間の連携
                ╱────────────╲
-              ╱    単体       ╲   ← ビジネスロジック・ユーティリティ
+              ╱  ユニット     ╲   ← ビジネスロジック・ユーティリティ
              ╱────────────────────╲
 ```
 
 ### E2E テストの範囲
 
-E2E テストは **クリティカルなユーザーフロー** に集中する：
+E2E テストは **クリティカルなユーザーフロー** に集中する。対象は以下のとおり。
 
 | 優先度 | フロー | 理由 |
 |--------|--------|------|
@@ -45,7 +45,7 @@ E2E テストは **クリティカルなユーザーフロー** に集中する�
 ### テストしないこと
 
 - 外部サービス（Auth0、AWS）の内部動作
-- 単体テストでカバー済みのロジック
+- ユニットテストでカバー済みのロジック
 - スタイリング・レイアウトの詳細（Visual Regression は別途検討）
 
 ---
@@ -135,7 +135,7 @@ export function middleware(request: NextRequest) {
 
 ### モックユーザー
 
-`AUTH_SKIP=1` 時に使用されるモックユーザー：
+`AUTH_SKIP=1` 時に使用されるモックユーザーは以下のとおり。
 
 ```typescript
 // lib/auth/mock-user.ts
@@ -165,7 +165,7 @@ export const mockUsers = {
 
 ### ロール切り替え
 
-E2E テストでは `?mock_role=` クエリパラメータでロールを切り替える：
+E2E テストでは `?mock_role=` クエリパラメータでロールを切り替える。以下に例を示す。
 
 ```typescript
 // e2e/fixtures.ts
@@ -196,7 +196,7 @@ export const test = base.extend({
 
 ### シードデータ
 
-テスト実行前にシードデータを投入する。
+テスト実行前にシードデータを投入する。以下はシードスクリプトの例。
 
 ```typescript
 // e2e/seed/index.ts
@@ -285,7 +285,7 @@ async function seedBattles() {
 
 ### データクリーンアップ
 
-各テストスイート終了後にデータをクリーンアップ：
+各テストスイート終了後にデータをクリーンアップする。
 
 ```typescript
 // e2e/global-teardown.ts
@@ -405,7 +405,7 @@ export default defineConfig({
 
 ### Page Object Model
 
-複雑なページには Page Object を使用：
+複雑なページには Page Object を使用する。
 
 ```typescript
 // e2e/pages/tenant-list.page.ts
@@ -533,7 +533,7 @@ jobs:
 
 ### テスト並列化
 
-CI では時間短縮のためシャーディングを使用：
+CI では時間短縮のためシャーディングを使用する。
 
 ```yaml
 jobs:
