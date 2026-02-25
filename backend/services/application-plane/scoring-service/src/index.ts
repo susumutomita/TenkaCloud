@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { createLogger } from './lib/logger';
 import { healthRoutes } from './api/health';
 import { scoringRoutes } from './api/scoring';
+import { scoresRoutes } from './api/scores';
 import { authMiddleware } from './middleware/auth';
 
 const logger = createLogger('scoring-service');
@@ -21,10 +22,12 @@ app.use(
 // 採点ルートに認証を適用
 app.use('/criteria/*', authMiddleware);
 app.use('/sessions/*', authMiddleware);
+app.use('/api/scores/*', authMiddleware);
 
 // ルート登録
 app.route('/', healthRoutes);
 app.route('/', scoringRoutes);
+app.route('/', scoresRoutes);
 
 // PORT バリデーション
 const parsePort = (value: string | undefined): number => {

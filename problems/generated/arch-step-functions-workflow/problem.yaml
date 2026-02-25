@@ -1,0 +1,115 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: arch-step-functions-workflow
+# タイプ: GAMEDAY（構築型）
+
+id: arch-step-functions-workflow
+title: Step Functions ワークフロー設計
+type: gameday
+category: architecture
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - step-functions
+    - lambda
+    - sns
+    - workflow
+    - error-handling
+    - state-machine
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドアーキテクトとして、注文処理ワークフローを
+    Step Functions で設計・構築する任務を与えられました。
+
+    ## 背景
+    ECサイトの注文処理を自動化するため、複数の Lambda 関数を
+    オーケストレーションするワークフローが必要です。
+    エラーハンドリングとリトライ、失敗通知の仕組みも求められています。
+
+    ## あなたのミッション
+    以下の要件を満たす Step Functions ステートマシンを構築してください。
+
+    ### 要件
+    1. **ステートマシン**: 注文検証 → 在庫確認 → 決済処理 → 完了通知の 4 ステップワークフローを作成する
+    2. **エラーハンドリング**: 各ステップに Retry（指数バックオフ）と Catch（エラー分岐）を設定する
+    3. **並列処理**: 在庫確認と与信チェックを Parallel ステートで並列実行する
+    4. **失敗通知**: エラー時に SNS トピックへ通知を送信する
+    5. **ログ設定**: ステートマシンの実行ログを CloudWatch Logs に出力する
+
+  objectives:
+    - Step Functions ステートマシンを作成する
+    - Lambda 関数 4 つを作成しワークフローに組み込む
+    - Retry と Catch でエラーハンドリングを設定する
+    - Parallel ステートで並列処理を実装する
+    - SNS 通知と CloudWatch Logs を設定する
+
+  hints:
+    - "ステートマシン定義は Amazon States Language（ASL）で記述します"
+    - "Retry の IntervalSeconds, MaxAttempts, BackoffRate で指数バックオフを設定します"
+    - "Parallel ステートの Branches で複数の分岐を定義します"
+    - "Catch の ResultPath でエラー情報を保持しながら分岐できます"
+    - "LoggingConfiguration で CloudWatch Logs へのログ出力を設定します"
+
+  prerequisites:
+    - Step Functions の基本概念（ステートマシン、ASL）
+    - Lambda の基本知識
+    - SNS の基本知識
+    - エラーハンドリングパターンの理解
+    - CloudFormation の中級知識
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/arch-step-functions-workflow.yaml
+      parameters:
+        EnvironmentName: tenka-sfn
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ステートマシン構成
+      description: 4 ステップの注文処理ワークフローがステートマシンとして作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: エラーハンドリング
+      description: 各ステップに Retry（指数バックオフ）と Catch が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: 並列処理
+      description: Parallel ステートで在庫確認と与信チェックが並列実行される
+      weight: 20
+      maxPoints: 20
+
+    - name: 失敗通知 + ログ
+      description: エラー時の SNS 通知と CloudWatch Logs へのログ出力が設定されている
+      weight: 30
+      maxPoints: 30
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

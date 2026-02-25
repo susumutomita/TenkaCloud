@@ -1,0 +1,111 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: alb-auto-scaling
+# タイプ: GAMEDAY（構築型）
+
+id: alb-auto-scaling
+title: ALB + Auto Scaling グループ構成
+type: gameday
+category: architecture
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - alb
+    - auto-scaling
+    - ec2
+    - load-balancer
+    - health-check
+    - scaling-policy
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、トラフィック変動に対応できる
+    高可用性な Web アプリケーション基盤を構築する任務を与えられました。
+
+    ## 背景
+    新規リリースする Web アプリケーションは、ピーク時に通常の 3 倍の
+    トラフィックが予想されています。手動スケーリングでは対応が遅れるため、
+    ALB と Auto Scaling を組み合わせた自動スケーリング基盤が求められています。
+
+    ## あなたのミッション
+    以下の要件を満たす ALB + Auto Scaling 構成を構築してください。
+
+    ### 要件
+    1. **ALB**: Internet-facing の Application Load Balancer を作成し、HTTP リスナーを設定する
+    2. **ターゲットグループ**: ヘルスチェック付きのターゲットグループを作成する
+    3. **Auto Scaling グループ**: Launch Template を使用し、最小 2 台・最大 6 台の ASG を作成する
+    4. **スケーリングポリシー**: CPU 使用率ベースの Target Tracking スケーリングポリシーを設定する
+
+  objectives:
+    - ALB を作成し、HTTP リスナーとターゲットグループを設定する
+    - ターゲットグループに適切なヘルスチェックを設定する
+    - Launch Template と Auto Scaling グループを作成する
+    - Target Tracking スケーリングポリシーを設定する
+
+  hints:
+    - "ALB は 2 つ以上のパブリックサブネットに配置する必要があります"
+    - "ヘルスチェックパスは / を設定し、適切なインターバルとしきい値を設定してください"
+    - "ASG のヘルスチェックタイプを ELB にすると ALB のヘルスチェックが使われます"
+    - "TargetTrackingScaling で ASGAverageCPUUtilization を使用します"
+
+  prerequisites:
+    - AWS の基本的な知識
+    - EC2 と ALB の基本概念
+    - Auto Scaling の基本概念
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/alb-auto-scaling.yaml
+      parameters:
+        EnvironmentName: tenka-alb-asg
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ALB + リスナー設定
+      description: Internet-facing ALB が作成され、HTTP リスナーがターゲットグループに転送されている
+      weight: 25
+      maxPoints: 25
+
+    - name: ターゲットグループ + ヘルスチェック
+      description: ターゲットグループにヘルスチェックが適切に設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Auto Scaling グループ
+      description: Launch Template を使用した ASG が最小 2・最大 6 で作成され、ALB と統合されている
+      weight: 25
+      maxPoints: 25
+
+    - name: スケーリングポリシー
+      description: CPU 使用率ベースの Target Tracking スケーリングポリシーが設定されている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

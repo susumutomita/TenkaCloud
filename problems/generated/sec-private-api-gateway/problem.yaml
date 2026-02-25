@@ -1,0 +1,118 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: sec-private-api-gateway
+# タイプ: GAMEDAY（構築型）
+
+id: sec-private-api-gateway
+title: Private API Gateway + VPC エンドポイント
+type: gameday
+category: security
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - api-gateway
+    - vpc-endpoint
+    - private-api
+    - resource-policy
+    - lambda
+    - network-isolation
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはセキュリティアーキテクトとして、社内限定の API を
+    Private API Gateway で構築する任務を与えられました。
+
+    ## 背景
+    機密データを扱う社内 API はインターネットからアクセスできてはなりません。
+    VPC 内からのみアクセス可能な Private API Gateway を構築し、
+    リソースポリシーで VPC エンドポイント経由のアクセスのみを許可する必要があります。
+
+    ## あなたのミッション
+    以下の要件を満たす Private API Gateway 構成を構築してください。
+
+    ### 要件
+    1. **VPC エンドポイント**: API Gateway 用の Interface VPC エンドポイントを作成する
+    2. **Private REST API**: エンドポイントタイプ PRIVATE の REST API を作成する
+    3. **リソースポリシー**: 特定の VPC エンドポイントからのみアクセスを許可する
+    4. **Lambda 統合**: Lambda 関数と統合し、VPC 内の Lambda からのみ呼び出し可能にする
+    5. **API キー + 使用量プラン**: API キー認証と使用量制限を設定する
+
+  objectives:
+    - API Gateway 用 VPC エンドポイントを作成する
+    - Private REST API を作成する
+    - VPC エンドポイント制限のリソースポリシーを設定する
+    - Lambda 統合を設定する
+    - API キーと使用量プランを設定する
+
+  hints:
+    - "Private API は EndpointConfiguration の Types に PRIVATE を指定します"
+    - "Policy でリソースポリシーを設定し、aws:sourceVpce でエンドポイントを制限します"
+    - "API キーは ApiKeyRequired: true をメソッドに設定します"
+    - "UsagePlan で Throttle と Quota を設定できます"
+
+  prerequisites:
+    - API Gateway の詳細知識
+    - VPC エンドポイントの概念
+    - IAM リソースポリシーの知識
+    - CloudFormation の中級以上の知識
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/sec-private-api-gateway.yaml
+      parameters:
+        EnvironmentName: tenka-private-api
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: VPC エンドポイント
+      description: API Gateway 用の Interface VPC エンドポイントが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: Private REST API
+      description: エンドポイントタイプ PRIVATE の REST API が作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: リソースポリシー
+      description: 特定の VPC エンドポイントからのみアクセスが許可されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Lambda 統合
+      description: Lambda プロキシ統合が設定されている
+      weight: 15
+      maxPoints: 15
+
+    - name: API キー + 使用量プラン
+      description: API キー認証とスロットリング + クォータが設定されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

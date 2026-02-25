@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: 複合サービス耐障害性アーキテクチャ（正解テンプレート）
+  API Gateway、Step Functions、Lambda、SQS、DynamoDB、SNS を組み合わせた耐障害性構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-fault-tol
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  # --- 要件3: Lambda 実行ロール ---
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ServiceAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt CircuitBreakerTable.Arn
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !GetAtt BufferQueue.Arn
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref AlertTopic
+
+  # --- 要件3: 処理用 Lambda ---
+  ProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentPrefix}-processor"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          CB_TABLE: !Ref CircuitBreakerTable
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import boto3
+          dynamodb = boto3.resource('dynamodb')
+          def handler(event, context):
+              table = dynamodb.Table(os.environ['CB_TABLE'])
+              cb = table.get_item(Key={'PK': 'circuit', 'SK': 'main'}).get('Item', {})
+              if cb.get('state') == 'OPEN':
+                  raise Exception('CircuitBreakerOpen')
+              result = {'statusCode': 200, 'body': json.dumps({'result': 'processed'})}
+              return result
+
+  # --- 要件3: フォールバック用 Lambda ---
+  FallbackFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentPrefix}-fallback"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          BUFFER_QUEUE_URL: !Ref BufferQueue
+          ALERT_TOPIC_ARN: !Ref AlertTopic
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import boto3
+          sqs = boto3.client('sqs')
+          sns = boto3.client('sns')
+          def handler(event, context):
+              sqs.send_message(
+                  QueueUrl=os.environ['BUFFER_QUEUE_URL'],
+                  MessageBody=json.dumps(event)
+              )
+              sns.publish(
+                  TopicArn=os.environ['ALERT_TOPIC_ARN'],
+                  Subject='Circuit Breaker Triggered',
+                  Message=json.dumps({'event': 'fallback_activated', 'detail': event})
+              )
+              return {'statusCode': 202, 'body': 'Queued for retry'}
+
+  # --- 要件2: Step Functions ロール ---
+  StepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-sfn-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt ProcessorFunction.Arn
+                  - !GetAtt FallbackFunction.Arn
+
+  # --- 要件2: Step Functions ステートマシン ---
+  ProcessingStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub "${EnvironmentPrefix}-processing"
+      StateMachineType: EXPRESS
+      RoleArn: !GetAtt StepFunctionsRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "耐障害性処理パイプライン",
+          "StartAt": "ProcessRequest",
+          "States": {
+            "ProcessRequest": {
+              "Type": "Task",
+              "Resource": "${ProcessorFunction.Arn}",
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2.0
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "Next": "Fallback"
+                }
+              ],
+              "End": true
+            },
+            "Fallback": {
+              "Type": "Task",
+              "Resource": "${FallbackFunction.Arn}",
+              "End": true
+            }
+          }
+        }
+
+  # --- 要件1: API Gateway ---
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${EnvironmentPrefix}-api"
+      Description: 耐障害性 API
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-api-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartSyncExecution
+                Resource: !Ref ProcessingStateMachine
+
+  ProcessResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: process
+
+  ProcessMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProcessResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:states:action/StartSyncExecution"
+        Credentials: !GetAtt ApiRole.Arn
+        RequestTemplates:
+          application/json: !Sub |
+            {
+              "input": "$util.escapeJavaScript($input.body)",
+              "stateMachineArn": "${ProcessingStateMachine}"
+            }
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: ProcessMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      StageName: prod
+
+  # --- 要件4: SQS バッファキュー ---
+  BufferDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-buffer-dlq"
+      SqsManagedSseEnabled: true
+
+  BufferQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-buffer"
+      VisibilityTimeout: 300
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt BufferDLQ.Arn
+        maxReceiveCount: 5
+
+  # --- 要件5: DynamoDB サーキットブレーカー状態テーブル ---
+  CircuitBreakerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${EnvironmentPrefix}-circuit-breaker"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # --- 要件6: SNS 通知 ---
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentPrefix}-circuit-alerts"
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway エンドポイント
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod/process"
+
+  StateMachineArn:
+    Description: ステートマシン ARN
+    Value: !Ref ProcessingStateMachine
+
+  BufferQueueUrl:
+    Description: バッファキュー URL
+    Value: !Ref BufferQueue
+
+  CircuitBreakerTableName:
+    Description: サーキットブレーカーテーブル名
+    Value: !Ref CircuitBreakerTable

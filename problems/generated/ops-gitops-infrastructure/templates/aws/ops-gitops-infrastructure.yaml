@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: GitOps インフラストラクチャ管理パイプライン（正解テンプレート）
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-gitops
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+
+Resources:
+  # S3 バケット
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvironmentPrefix}-source-${AWS::AccountId}"
+      VersioningConfiguration: { Status: Enabled }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvironmentPrefix}-artifacts-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+
+  # SNS
+  ApprovalTopic:
+    Type: AWS::SNS::Topic
+    Properties: { TopicName: !Sub "${EnvironmentPrefix}-approval" }
+
+  # 要件2: CodeBuild
+  CBRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-cb-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: codebuild.amazonaws.com }, Action: sts:AssumeRole }
+      Policies:
+        - PolicyName: Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: ["logs:*"], Resource: "*" }
+              - { Effect: Allow, Action: ["s3:GetObject", "s3:PutObject"], Resource: [!Sub "${ArtifactBucket.Arn}/*"] }
+
+  ValidateProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${EnvironmentPrefix}-validate"
+      ServiceRole: !GetAtt CBRole.Arn
+      Artifacts: { Type: CODEPIPELINE }
+      Environment: { Type: LINUX_CONTAINER, ComputeType: BUILD_GENERAL1_SMALL, Image: "aws/codebuild/amazonlinux2-x86_64-standard:5.0" }
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                - pip install cfn-lint
+            build:
+              commands:
+                - cfn-lint templates/*.yaml
+                - echo "Validation passed"
+          artifacts:
+            files: ['**/*']
+
+  # CFN ロール
+  CFNRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-cfn-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: cloudformation.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  # 要件5: ドリフト検出 Lambda
+  DriftLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-drift-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CFNDrift
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: [cloudformation:DetectStackDrift, cloudformation:DescribeStackDriftDetectionStatus], Resource: "*" }
+
+  DriftDetectorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentPrefix}-drift-check"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt DriftLambdaRole.Arn
+      Timeout: 120
+      Code:
+        ZipFile: |
+          import boto3
+          def handler(event, context):
+              cfn = boto3.client('cloudformation')
+              stack_name = event.get('detail', {}).get('pipeline', 'unknown')
+              try:
+                  result = cfn.detect_stack_drift(StackName=stack_name)
+                  return {'driftDetectionId': result['StackDriftDetectionId']}
+              except Exception as e:
+                  print(f"Drift detection skipped: {e}")
+                  return {'status': 'skipped'}
+
+  # Pipeline ロール
+  PipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-pipe-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - { Effect: Allow, Principal: { Service: codepipeline.amazonaws.com }, Action: sts:AssumeRole }
+      Policies:
+        - PolicyName: Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: ["s3:*"], Resource: [!GetAtt ArtifactBucket.Arn, !Sub "${ArtifactBucket.Arn}/*", !GetAtt SourceBucket.Arn, !Sub "${SourceBucket.Arn}/*"] }
+              - { Effect: Allow, Action: ["codebuild:*"], Resource: !GetAtt ValidateProject.Arn }
+              - { Effect: Allow, Action: ["cloudformation:*"], Resource: "*" }
+              - { Effect: Allow, Action: ["iam:PassRole"], Resource: !GetAtt CFNRole.Arn }
+              - { Effect: Allow, Action: ["sns:Publish"], Resource: !Ref ApprovalTopic }
+
+  # 要件1: Pipeline
+  GitOpsPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub "${EnvironmentPrefix}-pipeline"
+      RoleArn: !GetAtt PipeRole.Arn
+      ArtifactStore: { Type: S3, Location: !Ref ArtifactBucket }
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: S3Source
+              ActionTypeId: { Category: Source, Owner: AWS, Provider: S3, Version: "1" }
+              Configuration: { S3Bucket: !Ref SourceBucket, S3ObjectKey: infra.zip, PollForSourceChanges: true }
+              OutputArtifacts: [{ Name: SourceOutput }]
+        - Name: Validate
+          Actions:
+            - Name: CfnLint
+              ActionTypeId: { Category: Build, Owner: AWS, Provider: CodeBuild, Version: "1" }
+              Configuration: { ProjectName: !Ref ValidateProject }
+              InputArtifacts: [{ Name: SourceOutput }]
+              OutputArtifacts: [{ Name: ValidatedOutput }]
+        - Name: ChangeSet
+          Actions:
+            - Name: CreateChangeSet
+              ActionTypeId: { Category: Deploy, Owner: AWS, Provider: CloudFormation, Version: "1" }
+              Configuration:
+                ActionMode: CHANGE_SET_CREATE
+                StackName: !Sub "${EnvironmentPrefix}-infra"
+                ChangeSetName: !Sub "${EnvironmentPrefix}-changeset"
+                TemplatePath: ValidatedOutput::templates/main.yaml
+                RoleArn: !GetAtt CFNRole.Arn
+              InputArtifacts: [{ Name: ValidatedOutput }]
+        - Name: Approve
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId: { Category: Approval, Owner: AWS, Provider: Manual, Version: "1" }
+              Configuration: { NotificationArn: !Ref ApprovalTopic, CustomData: "変更セットをレビューして承認してください" }
+        - Name: Deploy
+          Actions:
+            - Name: ExecuteChangeSet
+              ActionTypeId: { Category: Deploy, Owner: AWS, Provider: CloudFormation, Version: "1" }
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                StackName: !Sub "${EnvironmentPrefix}-infra"
+                ChangeSetName: !Sub "${EnvironmentPrefix}-changeset"
+
+  # 要件6: EventBridge
+  PipelineCompletedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${EnvironmentPrefix}-deploy-completed"
+      EventPattern:
+        source: [aws.codepipeline]
+        detail-type: ["CodePipeline Pipeline Execution State Change"]
+        detail:
+          state: [SUCCEEDED]
+          pipeline: [!Ref GitOpsPipeline]
+      Targets:
+        - Arn: !GetAtt DriftDetectorFunction.Arn
+          Id: DriftCheckTarget
+
+  DriftLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DriftDetectorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PipelineCompletedRule.Arn
+
+Outputs:
+  PipelineName:
+    Value: !Ref GitOpsPipeline
+  DriftFunctionArn:
+    Value: !GetAtt DriftDetectorFunction.Arn

@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Kinesis Data Streams のシャードとモード最適化（正解テンプレート）
+  オンデマンドモード、暗号化、Firehose S3 配信を構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-kinesis-cost
+    Description: プロジェクト名のプレフィックス
+
+Resources:
+  # 要件1, 2: Kinesis Data Streams（オンデマンド + 暗号化）
+  DataStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Sub "${ProjectName}-stream"
+      # 要件1: オンデマンドモード
+      StreamModeDetails:
+        StreamMode: ON_DEMAND
+      # 要件2: KMS 暗号化
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: alias/aws/kinesis
+
+  DeliveryBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-delivery-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-firehose-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt DeliveryBucket.Arn
+                  - !Sub "${DeliveryBucket.Arn}/*"
+        - PolicyName: KinesisAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesis:DescribeStream
+                  - kinesis:GetShardIterator
+                  - kinesis:GetRecords
+                  - kinesis:ListShards
+                Resource: !GetAtt DataStream.Arn
+        - PolicyName: KMSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "kinesis.${AWS::Region}.amazonaws.com"
+
+  # 要件3, 4: Kinesis Data Firehose
+  DeliveryStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Sub "${ProjectName}-firehose"
+      DeliveryStreamType: KinesisStreamAsSource
+      KinesisStreamSourceConfiguration:
+        KinesisStreamARN: !GetAtt DataStream.Arn
+        RoleARN: !GetAtt FirehoseRole.Arn
+      S3DestinationConfiguration:
+        BucketARN: !GetAtt DeliveryBucket.Arn
+        RoleARN: !GetAtt FirehoseRole.Arn
+        Prefix: "data/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/"
+        ErrorOutputPrefix: "errors/"
+        # 要件4: バッファリング設定
+        BufferingHints:
+          SizeInMBs: 5
+          IntervalInSeconds: 300
+
+Outputs:
+  StreamName:
+    Description: Kinesis Data Stream 名
+    Value: !Ref DataStream
+
+  DeliveryStreamName:
+    Description: Kinesis Firehose 配信ストリーム名
+    Value: !Ref DeliveryStream
+
+  DeliveryBucketName:
+    Description: 配信先 S3 バケット名
+    Value: !Ref DeliveryBucket

@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Lambda デッドレターキューとリトライ構成（正解テンプレート）
+  Lambda 関数、SQS トリガー、DLQ、非同期送信先を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-lambda-dlq
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  # 要件5: IAM ロール
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SQSAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:SendMessage
+                Resource:
+                  - !GetAtt SourceQueue.Arn
+                  - !GetAtt DeadLetterQueue.Arn
+                  - !GetAtt AsyncFailureQueue.Arn
+
+  # 要件2: デッドレターキュー
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  # 要件2: ソースキュー
+  SourceQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-source"
+      VisibilityTimeout: 360
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  # 要件4: 非同期呼び出し失敗用キュー
+  AsyncFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentPrefix}-async-failure"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  # 要件1: Lambda 関数
+  ProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentPrefix}-processor"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          def handler(event, context):
+              for record in event.get('Records', []):
+                  body = json.loads(record['body'])
+                  print(f"Processing message: {body}")
+              return {'statusCode': 200}
+
+  # 要件3: イベントソースマッピング
+  SQSEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt SourceQueue.Arn
+      FunctionName: !Ref ProcessorFunction
+      BatchSize: 10
+      MaximumBatchingWindowInSeconds: 5
+      Enabled: true
+
+  # 要件4: 非同期呼び出し設定
+  AsyncInvokeConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref ProcessorFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 2
+      MaximumEventAgeInSeconds: 3600
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt AsyncFailureQueue.Arn
+
+Outputs:
+  FunctionName:
+    Description: Lambda 関数名
+    Value: !Ref ProcessorFunction
+
+  SourceQueueUrl:
+    Description: ソースキュー URL
+    Value: !Ref SourceQueue
+
+  DeadLetterQueueUrl:
+    Description: DLQ URL
+    Value: !Ref DeadLetterQueue
+
+  AsyncFailureQueueUrl:
+    Description: 非同期失敗キュー URL
+    Value: !Ref AsyncFailureQueue

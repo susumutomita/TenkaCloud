@@ -1,0 +1,242 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: マルチリージョン Active-Active 構成（正解テンプレート）
+  Route 53 フェイルオーバー、DynamoDB Global Tables、S3 CRR、CloudFront オリジングループ。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-multi-region
+    Description: 環境名プレフィックス
+  PrimaryRegion:
+    Type: String
+    Default: ap-northeast-1
+  SecondaryRegion:
+    Type: String
+    Default: us-east-1
+  DomainName:
+    Type: String
+    Default: app.tenkacloud.com
+
+Resources:
+  # ============================================================
+  # DynamoDB Global Table
+  # ============================================================
+  GlobalTable:
+    Type: AWS::DynamoDB::GlobalTable
+    Properties:
+      TableName: !Sub "${EnvironmentName}-sessions"
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      Replicas:
+        - Region: !Ref PrimaryRegion
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          Tags:
+            - Key: Name
+              Value: !Sub "${EnvironmentName}-sessions-primary"
+        - Region: !Ref SecondaryRegion
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          Tags:
+            - Key: Name
+              Value: !Sub "${EnvironmentName}-sessions-secondary"
+
+  # ============================================================
+  # S3 バケット + クロスリージョンレプリケーション
+  # ============================================================
+  ReplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-s3-replication-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3ReplicationPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetReplicationConfiguration
+                  - s3:ListBucket
+                Resource: !Sub "arn:aws:s3:::${EnvironmentName}-primary-${AWS::AccountId}"
+              - Effect: Allow
+                Action:
+                  - s3:GetObjectVersionForReplication
+                  - s3:GetObjectVersionAcl
+                  - s3:GetObjectVersionTagging
+                Resource: !Sub "arn:aws:s3:::${EnvironmentName}-primary-${AWS::AccountId}/*"
+              - Effect: Allow
+                Action:
+                  - s3:ReplicateObject
+                  - s3:ReplicateDelete
+                  - s3:ReplicateTags
+                Resource: !Sub "arn:aws:s3:::${EnvironmentName}-secondary-${AWS::AccountId}/*"
+
+  PrimaryBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvironmentName}-primary-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      ReplicationConfiguration:
+        Role: !GetAtt ReplicationRole.Arn
+        Rules:
+          - Id: ReplicateToSecondary
+            Status: Enabled
+            Destination:
+              Bucket: !Sub "arn:aws:s3:::${EnvironmentName}-secondary-${AWS::AccountId}"
+              StorageClass: STANDARD
+
+  SecondaryBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvironmentName}-secondary-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  # ============================================================
+  # CloudFront + オリジングループ
+  # ============================================================
+  PrimaryOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${EnvironmentName}-primary-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Comment: !Sub "${EnvironmentName} multi-region distribution"
+        Origins:
+          - Id: PrimaryS3Origin
+            DomainName: !GetAtt PrimaryBucket.RegionalDomainName
+            OriginAccessControlId: !Ref PrimaryOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+          - Id: SecondaryS3Origin
+            DomainName: !GetAtt SecondaryBucket.RegionalDomainName
+            OriginAccessControlId: !Ref PrimaryOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        OriginGroups:
+          Quantity: 1
+          Items:
+            - Id: S3OriginGroup
+              FailoverCriteria:
+                StatusCodes:
+                  Quantity: 2
+                  Items:
+                    - 500
+                    - 502
+              Members:
+                Quantity: 2
+                Items:
+                  - OriginId: PrimaryS3Origin
+                  - OriginId: SecondaryS3Origin
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+          TargetOriginId: S3OriginGroup
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          Compress: true
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+        HttpVersion: http2and3
+
+  # ============================================================
+  # Route 53 ヘルスチェック + レイテンシーベースルーティング
+  # ============================================================
+  PrimaryHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: HTTPS
+        FullyQualifiedDomainName: !GetAtt Distribution.DomainName
+        Port: 443
+        ResourcePath: /health
+        RequestInterval: 10
+        FailureThreshold: 2
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-primary-hc"
+
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Sub "${DomainName}."
+
+  PrimaryRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "${DomainName}."
+      Type: A
+      SetIdentifier: primary
+      Region: !Ref PrimaryRegion
+      HealthCheckId: !Ref PrimaryHealthCheck
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+
+Outputs:
+  CloudFrontDomainName:
+    Description: CloudFront ドメイン名
+    Value: !GetAtt Distribution.DomainName
+
+  GlobalTableName:
+    Description: DynamoDB Global Table 名
+    Value: !Ref GlobalTable
+
+  PrimaryBucketName:
+    Description: プライマリ S3 バケット名
+    Value: !Ref PrimaryBucket
+
+  SecondaryBucketName:
+    Description: セカンダリ S3 バケット名
+    Value: !Ref SecondaryBucket

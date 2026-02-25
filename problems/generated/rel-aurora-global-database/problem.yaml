@@ -1,0 +1,125 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-aurora-global-database
+# タイプ: GAMEDAY（構築型）
+
+id: rel-aurora-global-database
+title: Aurora Global Database によるクロスリージョン DR
+type: gameday
+category: reliability
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - aurora
+    - global-database
+    - cross-region
+    - disaster-recovery
+    - encryption
+    - monitoring
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、ミッションクリティカルなデータベースの
+    クロスリージョンディザスタリカバリ構成を構築する任務を与えられました。
+
+    ## 背景
+    RPO 1 秒以下、RTO 1 分以内の厳格な DR 要件があります。
+    Aurora Global Database を使い、リージョン間の自動レプリケーションと
+    高速フェイルオーバーを実現する必要があります。
+
+    ## あなたのミッション
+    Aurora Global Database を構築し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **Aurora クラスター**: プライマリリージョンに Aurora MySQL クラスターを作成する
+    2. **グローバルクラスター**: Aurora Global Database を構成する
+    3. **暗号化**: ストレージ暗号化を有効化する
+    4. **サブネットグループ**: 複数 AZ にまたがる DB サブネットグループを作成する
+    5. **監視**: Enhanced Monitoring を有効化し、CloudWatch アラームを設定する
+
+  objectives:
+    - Aurora MySQL クラスターをプライマリリージョンに作成する
+    - Aurora Global Database を構成する
+    - ストレージ暗号化を有効化する
+    - マルチ AZ の DB サブネットグループを構成する
+    - Enhanced Monitoring と CloudWatch アラームを設定する
+
+  hints:
+    - "AWS::RDS::GlobalCluster でグローバルクラスターを作成できます"
+    - "AWS::RDS::DBCluster で Aurora クラスターを作成し GlobalClusterIdentifier を指定します"
+    - "StorageEncrypted を true にして暗号化を有効化します"
+    - "MonitoringInterval を設定すると Enhanced Monitoring が有効化されます"
+
+  prerequisites:
+    - Aurora の知識
+    - グローバルデータベースの概念理解
+    - VPC ネットワーキングの知識
+    - CloudWatch の基本的な知識
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-aurora-global-database.yaml
+      parameters:
+        EnvironmentPrefix: tenka-aurora-global
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-aurora-global-database.yaml
+      parameters:
+        EnvironmentPrefix: tenka-aurora-global-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Aurora クラスター
+      description: Aurora MySQL クラスターがプライマリリージョンに作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: グローバルクラスター
+      description: Aurora Global Database が構成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: 暗号化
+      description: ストレージ暗号化が有効化されている
+      weight: 15
+      maxPoints: 15
+
+    - name: サブネットグループ
+      description: 複数 AZ にまたがる DB サブネットグループが構成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: 監視
+      description: Enhanced Monitoring と CloudWatch アラームが設定されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

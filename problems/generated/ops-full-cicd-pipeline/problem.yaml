@@ -1,0 +1,78 @@
+# TenkaCloud 統一問題フォーマット
+id: ops-full-cicd-pipeline
+title: フル CI/CD パイプライン（CodePipeline + CodeBuild + CodeDeploy）
+type: gameday
+category: operations
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags: [codepipeline, codebuild, codedeploy, s3, alb, auto-scaling, sns, cicd]
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、ソースからデプロイまで完全自動化された
+    エンタープライズグレードの CI/CD パイプラインを構築する任務を与えられました。
+
+    ## 背景
+    ソースコードのコミットから、ビルド、テスト、ステージング環境へのデプロイ、
+    承認ゲート、本番環境への Blue/Green デプロイまでを自動化します。
+
+    ## あなたのミッション
+    ### 要件
+    1. **CodePipeline**: 4 ステージのパイプライン（Source → Build → Staging → Production）を作成する
+    2. **CodeBuild**: ビルドとテストを実行する CodeBuild プロジェクトを作成する
+    3. **CodeDeploy**: ステージング用インプレースと本番用 Blue/Green のデプロイグループを作成する
+    4. **承認ゲート**: ステージングと本番の間に手動承認ステージを設定する
+    5. **ALB + ASG**: 本番環境の ALB + Auto Scaling を構成する
+    6. **SNS 通知**: パイプラインステージ結果と承認リクエストの通知を設定する
+
+  objectives:
+    - 4 ステージの CodePipeline を作成する
+    - CodeBuild プロジェクトを構成する
+    - ステージング用と本番用のデプロイグループを作成する
+    - 手動承認ステージを設定する
+    - 本番環境の ALB + ASG を構成する
+    - パイプライン通知と承認通知を設定する
+  hints:
+    - "ActionTypeId の Category: Approval で承認ゲートを設定します"
+    - "NotificationArn で承認リクエストの通知先を指定します"
+    - "CodeDeploy の DeploymentStyle で BLUE_GREEN を指定します"
+  prerequisites: [CodePipeline/CodeBuild/CodeDeploy の知識, ALB と Auto Scaling の知識, CI/CD パイプライン設計の理解]
+  estimatedTime: 120
+
+deployment:
+  providers: [aws, local]
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-full-cicd-pipeline.yaml
+      parameters: { EnvironmentPrefix: tenka-fullcicd }
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-full-cicd-pipeline.yaml
+      parameters: { EnvironmentPrefix: tenka-fullcicd-local }
+  regions:
+    aws: [ap-northeast-1, us-east-1]
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - { name: CodePipeline, description: 4 ステージパイプラインが作成されている, weight: 20, maxPoints: 20 }
+    - { name: CodeBuild, description: ビルド/テスト用 CodeBuild プロジェクトが作成されている, weight: 15, maxPoints: 15 }
+    - { name: CodeDeploy, description: ステージング+本番デプロイグループが作成されている, weight: 20, maxPoints: 20 }
+    - { name: 承認ゲート, description: 手動承認ステージが設定されている, weight: 15, maxPoints: 15 }
+    - { name: ALB + ASG, description: 本番環境の ALB+ASG が構成されている, weight: 15, maxPoints: 15 }
+    - { name: SNS 通知, description: パイプライン/承認通知が設定されている, weight: 15, maxPoints: 15 }
+  timeoutMinutes: 10
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

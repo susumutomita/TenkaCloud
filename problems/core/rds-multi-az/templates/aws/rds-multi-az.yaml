@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: マルチ AZ RDS の高可用性構築（正解テンプレート）
+  マルチ AZ、自動バックアップ、暗号化を設定した RDS MySQL インスタンス。
+
+Parameters:
+  DBInstanceIdentifierPrefix:
+    Type: String
+    Default: tenka-rds
+    Description: RDS インスタンス識別子のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+  DBMasterUsername:
+    Type: String
+    Default: admin
+    Description: マスターユーザー名
+    NoEcho: true
+
+  DBMasterPassword:
+    Type: String
+    Default: ChangeMe123!
+    Description: マスターパスワード
+    NoEcho: true
+    MinLength: 8
+
+Resources:
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${DBInstanceIdentifierPrefix}-vpc"
+
+  # プライベートサブネット AZ-a
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${DBInstanceIdentifierPrefix}-private-a"
+
+  # プライベートサブネット AZ-c
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${DBInstanceIdentifierPrefix}-private-c"
+
+  # 要件4: 複数 AZ にまたがる DB サブネットグループ
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Multi-AZ DB subnet group
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
+      Tags:
+        - Key: Name
+          Value: !Sub "${DBInstanceIdentifierPrefix}-subnet-group"
+
+  # セキュリティグループ
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub "${DBInstanceIdentifierPrefix}-sg"
+
+  # RDS MySQL インスタンス（高可用性要件をすべて満たす）
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${DBInstanceIdentifierPrefix}-${AWS::AccountId}"
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: "8.0"
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterPassword
+      AllocatedStorage: 20
+      # 要件1: マルチ AZ 配置（自動フェイルオーバー）
+      MultiAZ: true
+      # 要件2: 自動バックアップ（保持期間 7 日）
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: "03:00-04:00"
+      # 要件3: ストレージ暗号化
+      StorageEncrypted: true
+      # サブネットグループ
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !GetAtt DBSecurityGroup.GroupId
+      # 追加のベストプラクティス
+      DeletionProtection: false
+      PubliclyAccessible: false
+      CopyTagsToSnapshot: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${DBInstanceIdentifierPrefix}-instance"
+
+Outputs:
+  DBInstanceEndpoint:
+    Description: RDS インスタンスのエンドポイント
+    Value: !GetAtt DBInstance.Endpoint.Address
+
+  DBInstanceIdentifier:
+    Description: RDS インスタンス識別子
+    Value: !Ref DBInstance
+
+  DBSubnetGroupName:
+    Description: DB サブネットグループ名
+    Value: !Ref DBSubnetGroup

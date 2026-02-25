@@ -1,0 +1,112 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: sec-acm-certificate
+# タイプ: GAMEDAY（構築型）
+
+id: sec-acm-certificate
+title: ACM 証明書 + HTTPS 強制設定
+type: gameday
+category: security
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - acm
+    - certificate
+    - https
+    - alb
+    - tls
+    - redirect
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはセキュリティエンジニアとして、Web アプリケーションの
+    HTTPS 通信を強制する設定を構築する任務を与えられました。
+
+    ## 背景
+    現在 HTTP でアクセス可能な Web アプリケーションに対して、
+    ACM 証明書を発行し HTTPS を強制する要件が追加されました。
+    HTTP でアクセスした場合は HTTPS にリダイレクトする必要があります。
+
+    ## あなたのミッション
+    以下の要件を満たす HTTPS 構成を構築してください。
+
+    ### 要件
+    1. **ACM 証明書**: DNS 検証で ACM 証明書をリクエストする
+    2. **HTTPS リスナー**: ALB に HTTPS リスナー（443）を追加し、ACM 証明書を設定する
+    3. **HTTP リダイレクト**: HTTP（80）リスナーで HTTPS へのリダイレクトを設定する
+    4. **TLS ポリシー**: セキュリティポリシーで TLS 1.2 以上を強制する
+
+  objectives:
+    - ACM 証明書を DNS 検証でリクエストする
+    - ALB に HTTPS リスナーを追加する
+    - HTTP → HTTPS リダイレクトを設定する
+    - TLS 1.2 以上のセキュリティポリシーを設定する
+
+  hints:
+    - "ACM 証明書は AWS::CertificateManager::Certificate で作成します"
+    - "ValidationMethod: DNS を指定します"
+    - "HTTP リスナーの DefaultActions で Type: redirect を使います"
+    - "SslPolicy で ELBSecurityPolicy-TLS13-1-2-2021-06 等を指定します"
+
+  prerequisites:
+    - SSL/TLS の基本概念
+    - ACM の基本知識
+    - ALB リスナーの設定知識
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 25
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/sec-acm-certificate.yaml
+      parameters:
+        EnvironmentName: tenka-acm
+        DomainName: app.tenkacloud.com
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ACM 証明書
+      description: DNS 検証の ACM 証明書がリクエストされている
+      weight: 25
+      maxPoints: 25
+
+    - name: HTTPS リスナー
+      description: ALB に HTTPS（443）リスナーが ACM 証明書付きで設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: HTTP リダイレクト
+      description: HTTP（80）リスナーが HTTPS へリダイレクトする設定になっている
+      weight: 25
+      maxPoints: 25
+
+    - name: TLS ポリシー
+      description: TLS 1.2 以上を強制するセキュリティポリシーが設定されている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

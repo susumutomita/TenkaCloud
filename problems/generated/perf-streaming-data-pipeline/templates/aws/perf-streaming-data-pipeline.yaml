@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: リアルタイムストリーミングデータパイプラインの最適化（正解テンプレート）
+  Kinesis、Lambda（最適化設定）、DynamoDB のパイプラインを構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-stream-perf
+    Description: プロジェクト名のプレフィックス
+
+Resources:
+  # 要件1: Kinesis Data Stream（オンデマンド）
+  IoTStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Sub "${ProjectName}-iot-stream"
+      StreamModeDetails:
+        StreamMode: ON_DEMAND
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: alias/aws/kinesis
+
+  # 要件4: DynamoDB テーブル
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-events"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: deviceId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        Enabled: true
+        AttributeName: expiresAt
+      SSESpecification:
+        SSEEnabled: true
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: KinesisAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesis:DescribeStream
+                  - kinesis:DescribeStreamSummary
+                  - kinesis:GetRecords
+                  - kinesis:GetShardIterator
+                  - kinesis:ListShards
+                  - kinesis:ListStreams
+                  - kinesis:SubscribeToShard
+                Resource: !GetAtt IoTStream.Arn
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:BatchWriteItem
+                Resource: !GetAtt EventsTable.Arn
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-processor"
+      RetentionInDays: 7
+
+  # 要件3: Lambda 関数（arm64、512 MB、60 秒）
+  StreamProcessor:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-processor"
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 512
+      Timeout: 60
+      Architectures:
+        - arm64
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref EventsTable
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import base64
+          def handler(event, context):
+              records = event.get("Records", [])
+              for record in records:
+                  data = base64.b64decode(record["kinesis"]["data"])
+                  print(f"Processed: {data}")
+              return {"batchItemFailures": []}
+
+  # 要件2, 5: Lambda イベントソースマッピング
+  KinesisEventMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref StreamProcessor
+      EventSourceArn: !GetAtt IoTStream.Arn
+      StartingPosition: LATEST
+      # 要件2: バッチ最適化
+      BatchSize: 100
+      MaximumBatchingWindowInSeconds: 5
+      ParallelizationFactor: 10
+      # 要件5: エラーハンドリング
+      BisectBatchOnFunctionError: true
+      MaximumRetryAttempts: 3
+      MaximumRecordAgeInSeconds: 86400
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+
+Outputs:
+  StreamName:
+    Description: Kinesis Data Stream 名
+    Value: !Ref IoTStream
+
+  ProcessorFunctionName:
+    Description: Lambda プロセッサ関数名
+    Value: !Ref StreamProcessor
+
+  EventsTableName:
+    Description: DynamoDB テーブル名
+    Value: !Ref EventsTable

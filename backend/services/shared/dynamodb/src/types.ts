@@ -222,10 +222,11 @@ export interface UpdateUserInput {
 
 // Battle Status
 export const BattleStatus = {
-  WAITING: 'WAITING',
-  IN_PROGRESS: 'IN_PROGRESS',
+  DRAFT: 'DRAFT',
+  OPEN: 'OPEN',
+  RUNNING: 'RUNNING',
   FINISHED: 'FINISHED',
-  CANCELLED: 'CANCELLED',
+  ARCHIVED: 'ARCHIVED',
 } as const;
 
 export type BattleStatus = (typeof BattleStatus)[keyof typeof BattleStatus];

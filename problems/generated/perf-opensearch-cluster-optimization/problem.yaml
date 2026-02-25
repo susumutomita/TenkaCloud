@@ -1,0 +1,114 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: perf-opensearch-cluster-optimization
+# タイプ: GAMEDAY（構築型）
+
+id: perf-opensearch-cluster-optimization
+title: OpenSearch クラスターのパフォーマンス最適化
+type: gameday
+category: performance
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - opensearch
+    - performance
+    - cluster
+    - ebs
+    - zone-awareness
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたは検索基盤を担当するエンジニアとして、OpenSearch クラスターの
+    パフォーマンス最適化を担当しています。検索レスポンスタイムが遅く、
+    クラスターの可用性にも課題があります。
+
+    ## 背景
+    パフォーマンス監視の結果から以下が判明しました。
+    - 単一ノードの OpenSearch クラスターで検索レイテンシが P99 で 2 秒超過
+    - EBS ボリュームが gp2 で IOPS がボトルネック
+    - Zone Awareness が未有効で AZ 障害時にダウンリスク
+    - 専用マスターノードが未設定でクラスターの安定性に問題
+
+    ## あなたのミッション
+    OpenSearch クラスターを最適化し、検索パフォーマンスと可用性を向上させてください。
+
+    ### 要件
+    1. **データノード**: m6g.large インスタンスタイプで 2 ノード構成にする
+    2. **EBS 最適化**: gp3 ボリューム 100 GB、3000 IOPS を設定する
+    3. **Zone Awareness**: マルチ AZ 構成を有効にする
+    4. **暗号化**: ノード間暗号化と保存時暗号化を有効にする
+
+  objectives:
+    - OpenSearch ドメインを作成する
+    - データノードを適切なインスタンスタイプとサイズで構成する
+    - EBS ボリュームを gp3 で最適化する
+    - マルチ AZ と暗号化を有効にする
+
+  hints:
+    - "ClusterConfig で InstanceType と InstanceCount を設定します"
+    - "EBSOptions で VolumeType と VolumeSize を設定します"
+    - "ZoneAwarenessEnabled でマルチ AZ を有効にします"
+    - "NodeToNodeEncryptionOptions と EncryptionAtRestOptions で暗号化を設定します"
+
+  prerequisites:
+    - OpenSearch の基本的な知識
+    - EBS ボリュームの理解
+    - CloudFormation の知識
+
+  estimatedTime: 40
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/perf-opensearch-cluster-optimization.yaml
+      parameters:
+        ProjectName: tenka-os-perf
+        VpcId: ""
+        SubnetIds: ""
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: データノード
+      description: m6g.large で 2 ノード構成になっている
+      weight: 25
+      maxPoints: 25
+
+    - name: EBS 最適化
+      description: gp3 ボリューム 100 GB、3000 IOPS が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Zone Awareness
+      description: マルチ AZ が有効になっている
+      weight: 25
+      maxPoints: 25
+
+    - name: 暗号化
+      description: ノード間暗号化と保存時暗号化が有効になっている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 15
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

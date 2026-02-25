@@ -1,0 +1,116 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: rel-route53-health-check
+# タイプ: GAMEDAY（構築型）
+
+id: rel-route53-health-check
+title: Route 53 ヘルスチェックとフェイルオーバールーティング
+type: gameday
+category: reliability
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - route53
+    - health-check
+    - failover
+    - dns
+    - high-availability
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、Web アプリケーションの
+    DNS レベルでのフェイルオーバーを構築する任務を与えられました。
+
+    ## 背景
+    プライマリリージョンの障害時に、自動的にセカンダリリージョンへ
+    トラフィックを切り替える仕組みが必要です。Route 53 のヘルスチェックと
+    フェイルオーバールーティングポリシーを組み合わせて実現します。
+
+    ## あなたのミッション
+    Route 53 ヘルスチェックとフェイルオーバールーティングを構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **ヘルスチェック**: プライマリエンドポイントの HTTP ヘルスチェックを作成する
+    2. **ホストゾーン**: Route 53 ホストゾーンを作成する
+    3. **フェイルオーバーレコード**: プライマリとセカンダリのフェイルオーバーレコードセットを作成する
+    4. **SNS 通知**: ヘルスチェック状態変化時の SNS 通知を設定する
+
+  objectives:
+    - Route 53 HTTP ヘルスチェックを作成する
+    - フェイルオーバールーティングポリシーのレコードセットを構成する
+    - プライマリとセカンダリのエンドポイントを設定する
+    - ヘルスチェック状態変化の SNS 通知を構成する
+
+  hints:
+    - "AWS::Route53::HealthCheck で HTTP ヘルスチェックを作成できます"
+    - "AWS::Route53::RecordSet で Failover ルーティングポリシーを設定できます"
+    - "SetIdentifier と Failover プロパティでプライマリ/セカンダリを区別します"
+    - "AWS::CloudWatch::Alarm でヘルスチェックのメトリクスを監視できます"
+
+  prerequisites:
+    - DNS の基本的な知識
+    - Route 53 の基本的な知識
+    - フェイルオーバーの概念理解
+
+  estimatedTime: 30
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/rel-route53-health-check.yaml
+      parameters:
+        EnvironmentPrefix: tenka-r53
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/rel-route53-health-check.yaml
+      parameters:
+        EnvironmentPrefix: tenka-r53-local
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ヘルスチェック
+      description: プライマリエンドポイントの HTTP ヘルスチェックが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: ホストゾーン
+      description: Route 53 ホストゾーンが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: フェイルオーバーレコード
+      description: プライマリとセカンダリのフェイルオーバーレコードセットが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: SNS 通知
+      description: ヘルスチェック状態変化時に SNS トピックへ通知される設定がある
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

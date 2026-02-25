@@ -1,0 +1,231 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Systems Manager による運用自動化の構築（正解テンプレート）
+  パッチベースライン、メンテナンスウィンドウ、インベントリ収集、IAM ロール、SNS 通知を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-ssm
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Amazon Linux 2023 AMI ID
+
+Resources:
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-vpc"
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private"
+
+  # 要件4: EC2 用 SSM 対応 IAM ロール
+  SSMInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-instance-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  # インスタンスプロファイル
+  SSMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${EnvironmentPrefix}-instance-profile"
+      Roles:
+        - !Ref SSMInstanceRole
+
+  # 管理対象 EC2 インスタンス
+  ManagedInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref PrivateSubnet
+      IamInstanceProfile: !Ref SSMInstanceProfile
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-managed-instance"
+        - Key: PatchGroup
+          Value: !Sub "${EnvironmentPrefix}-patch-group"
+
+  # 要件1: カスタムパッチベースライン
+  PatchBaseline:
+    Type: AWS::SSM::PatchBaseline
+    Properties:
+      Name: !Sub "${EnvironmentPrefix}-patch-baseline"
+      Description: Amazon Linux 2023 用カスタムパッチベースライン
+      OperatingSystem: AMAZON_LINUX_2023
+      ApprovalRules:
+        PatchRules:
+          # セキュリティパッチは即時承認
+          - PatchFilterGroup:
+              PatchFilters:
+                - Key: CLASSIFICATION
+                  Values:
+                    - Security
+                - Key: SEVERITY
+                  Values:
+                    - Critical
+                    - Important
+            ApproveAfterDays: 0
+            ComplianceLevel: CRITICAL
+          # その他のパッチは 7 日後に承認
+          - PatchFilterGroup:
+              PatchFilters:
+                - Key: CLASSIFICATION
+                  Values:
+                    - Bugfix
+                    - Enhancement
+            ApproveAfterDays: 7
+            ComplianceLevel: MEDIUM
+      PatchGroups:
+        - !Sub "${EnvironmentPrefix}-patch-group"
+
+  # 要件5: SNS 通知トピック
+  MaintenanceNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentPrefix}-maintenance-notifications"
+
+  # メンテナンスウィンドウ用 IAM ロール
+  MaintenanceWindowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentPrefix}-maintenance-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonSSMMaintenanceWindowRole
+      Policies:
+        - PolicyName: SNSPublishPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref MaintenanceNotificationTopic
+
+  # 要件2: メンテナンスウィンドウ（毎週日曜 AM 3:00、2 時間）
+  MaintenanceWindow:
+    Type: AWS::SSM::MaintenanceWindow
+    Properties:
+      Name: !Sub "${EnvironmentPrefix}-patch-window"
+      Description: 毎週日曜の定期パッチ適用ウィンドウ
+      Schedule: cron(0 3 ? * SUN *)
+      Duration: 2
+      Cutoff: 1
+      AllowUnassociatedTargets: false
+
+  # メンテナンスウィンドウターゲット
+  MaintenanceWindowTarget:
+    Type: AWS::SSM::MaintenanceWindowTarget
+    Properties:
+      WindowId: !Ref MaintenanceWindow
+      ResourceType: INSTANCE
+      Targets:
+        - Key: tag:PatchGroup
+          Values:
+            - !Sub "${EnvironmentPrefix}-patch-group"
+
+  # メンテナンスウィンドウタスク（パッチ適用）
+  MaintenanceWindowTask:
+    Type: AWS::SSM::MaintenanceWindowTask
+    Properties:
+      WindowId: !Ref MaintenanceWindow
+      TaskArn: AWS-RunPatchBaseline
+      TaskType: RUN_COMMAND
+      ServiceRoleArn: !GetAtt MaintenanceWindowRole.Arn
+      MaxConcurrency: "50%"
+      MaxErrors: "25%"
+      Targets:
+        - Key: WindowTargetIds
+          Values:
+            - !Ref MaintenanceWindowTarget
+      TaskInvocationParameters:
+        MaintenanceWindowRunCommandParameters:
+          Parameters:
+            Operation:
+              - Install
+          NotificationConfig:
+            NotificationArn: !Ref MaintenanceNotificationTopic
+            NotificationEvents:
+              - All
+            NotificationType: Command
+          ServiceRoleArn: !GetAtt MaintenanceWindowRole.Arn
+      Priority: 1
+
+  # 要件3: SSM インベントリアソシエーション
+  InventoryAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: !Sub "${EnvironmentPrefix}-inventory"
+      Name: AWS-GatherSoftwareInventory
+      Targets:
+        - Key: tag:PatchGroup
+          Values:
+            - !Sub "${EnvironmentPrefix}-patch-group"
+      ScheduleExpression: rate(12 hours)
+      Parameters:
+        applications:
+          - Enabled
+        awsComponents:
+          - Enabled
+        networkConfig:
+          - Enabled
+        windowsUpdates:
+          - Enabled
+        services:
+          - Enabled
+
+Outputs:
+  PatchBaselineName:
+    Description: パッチベースライン名
+    Value: !Ref PatchBaseline
+
+  MaintenanceWindowId:
+    Description: メンテナンスウィンドウ ID
+    Value: !Ref MaintenanceWindow
+
+  InventoryAssociationId:
+    Description: インベントリアソシエーション ID
+    Value: !Ref InventoryAssociation
+
+  SSMInstanceRoleArn:
+    Description: SSM インスタンスロール ARN
+    Value: !GetAtt SSMInstanceRole.Arn
+
+  NotificationTopicArn:
+    Description: メンテナンス通知 SNS トピック ARN
+    Value: !Ref MaintenanceNotificationTopic
