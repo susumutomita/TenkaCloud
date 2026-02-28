@@ -10,6 +10,10 @@ services:
       - control-plane
       - application-plane
       - tenant-management
+      - battle-service
+      - scoring-service
+      - leaderboard-service
+      - problem-service
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
       interval: 10s
@@ -62,6 +66,108 @@ services:
     networks:
       - tenkacloud
 
+  battle-service:
+    build:
+      context: .
+      dockerfile: backend/services/application-plane/battle-service/Dockerfile
+    expose:
+      - "3010"
+    environment:
+      - PORT=3010
+      - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenkacloud
+
+  scoring-service:
+    build:
+      context: .
+      dockerfile: backend/services/application-plane/scoring-service/Dockerfile
+    expose:
+      - "3011"
+    environment:
+      - PORT=3011
+      - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenkacloud
+
+  leaderboard-service:
+    build:
+      context: .
+      dockerfile: backend/services/application-plane/leaderboard-service/Dockerfile
+    expose:
+      - "3012"
+    environment:
+      - PORT=3012
+      - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3012/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenkacloud
+
+  problem-service:
+    build:
+      context: .
+      dockerfile: backend/services/application-plane/problem-service/Dockerfile
+    expose:
+      - "3100"
+    environment:
+      - PORT=3100
+      - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=tenkacloud
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenkacloud
+
   application-plane:
     build:
       context: .
@@ -77,6 +183,7 @@ services:
       - NEXTAUTH_URL=http://localhost:3000
       - AWS_ENDPOINT_URL=http://localstack:4566
       - AWS_REGION=${AWS_REGION:-ap-northeast-1}
+      - NEXT_PUBLIC_API_URL=http://localhost:3000/api
     networks:
       - tenkacloud
 
