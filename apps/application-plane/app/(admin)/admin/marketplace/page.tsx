@@ -471,10 +471,15 @@ export default function AdminMarketplacePage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" className="flex-1">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="flex-1"
+                    disabled
+                  >
                     プレビュー
                   </Button>
-                  <Button size="sm" className="flex-1">
+                  <Button size="sm" className="flex-1" disabled>
                     イベントに追加
                   </Button>
                 </div>

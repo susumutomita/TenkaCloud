@@ -7,18 +7,41 @@
 
 'use client';
 
-import { useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { put } from '@/lib/api/client';
+import { get, put } from '@/lib/api/client';
 import { useTenantOptional } from '@/lib/tenant';
+
+interface TenantSettings {
+  tenantName: string;
+  contactEmail: string;
+  defaultCloudProvider: string;
+  maxParticipantsPerEvent: number;
+  maxTeamSize: number;
+  enableTeamRegistration: boolean;
+  enableIndividualRegistration: boolean;
+  requireEmailVerification: boolean;
+}
+
+const DEFAULT_SETTINGS: TenantSettings = {
+  tenantName: '',
+  contactEmail: '',
+  defaultCloudProvider: 'aws',
+  maxParticipantsPerEvent: 100,
+  maxTeamSize: 5,
+  enableTeamRegistration: true,
+  enableIndividualRegistration: true,
+  requireEmailVerification: true,
+};
 
 export default function AdminSettingsPage() {
   const tenant = useTenantOptional();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Form field IDs
   const tenantNameId = useId();
@@ -31,18 +54,28 @@ export default function AdminSettingsPage() {
   const emailVerificationId = useId();
 
   // Form state
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<TenantSettings>({
+    ...DEFAULT_SETTINGS,
     tenantName: tenant?.slug || '',
-    contactEmail: 'admin@example.com',
-    defaultCloudProvider: 'aws',
-    maxParticipantsPerEvent: 100,
-    maxTeamSize: 5,
-    enableTeamRegistration: true,
-    enableIndividualRegistration: true,
-    requireEmailVerification: true,
   });
 
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await get<Partial<TenantSettings>>('/admin/settings');
+      setSettings((prev) => ({ ...prev, ...data }));
+    } catch {
+      // Settings endpoint may not exist yet; use defaults
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -69,7 +102,7 @@ export default function AdminSettingsPage() {
           <span className="text-hn-accent font-mono">&gt;_</span>
           設定
         </h1>
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving || loading}>
           {saving ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
@@ -387,17 +420,7 @@ export default function AdminSettingsPage() {
                   すべてのイベント、参加者、チームデータを削除します。この操作は取り消せません。
                 </p>
               </div>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => {
-                  const confirmed = window.confirm(
-                    '全データを削除しますか？この操作は取り消せません。'
-                  );
-                  if (!confirmed) return;
-                  // Data deletion requires a dedicated admin endpoint
-                }}
-              >
+              <Button variant="danger" size="sm" disabled>
                 削除
               </Button>
             </div>
