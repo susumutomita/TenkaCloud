@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { put } from '@/lib/api/client';
 import { useTenantOptional } from '@/lib/tenant';
 
 export default function AdminSettingsPage() {
@@ -41,14 +42,20 @@ export default function AdminSettingsPage() {
     requireEmailVerification: true,
   });
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
-      // TODO: Implement actual save logic
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await put('/admin/settings', settings);
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      window.setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : '設定の保存に失敗しました'
+      );
     } finally {
       setSaving(false);
     }
@@ -90,6 +97,15 @@ export default function AdminSettingsPage() {
           )}
         </Button>
       </div>
+
+      {/* Save Error */}
+      {saveError && (
+        <Card className="border-hn-error/50 bg-hn-error/10">
+          <CardContent className="p-4 text-center">
+            <p className="text-sm text-hn-error">{saveError}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* General Settings */}
       <Card>
@@ -375,7 +391,11 @@ export default function AdminSettingsPage() {
                 variant="danger"
                 size="sm"
                 onClick={() => {
-                  // TODO: Implement delete confirmation
+                  const confirmed = window.confirm(
+                    '全データを削除しますか？この操作は取り消せません。'
+                  );
+                  if (!confirmed) return;
+                  // Data deletion requires a dedicated admin endpoint
                 }}
               >
                 削除

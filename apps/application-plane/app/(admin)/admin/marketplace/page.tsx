@@ -7,26 +7,30 @@
 
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, Input, Select } from '@/components/ui';
-import type {
-  CloudProvider,
-  DifficultyLevel,
-  ProblemCategory,
-  ProblemType,
-} from '@/lib/api/types';
+import {
+  Badge,
+  ErrorState,
+  getErrorMessage,
+  getErrorType,
+  Input,
+  Select,
+  Skeleton,
+} from '@/components/ui';
+import { getProblems } from '@/lib/api/admin-problems';
+import type { AdminProblem } from '@/lib/api/admin-types';
+import type { DifficultyLevel, ProblemCategory } from '@/lib/api/types';
 
 interface MarketplaceProblem {
   id: string;
   title: string;
   description: string;
-  type: ProblemType;
+  type: AdminProblem['type'];
   category: ProblemCategory;
   difficulty: DifficultyLevel;
-  cloudProvider: CloudProvider;
+  cloudProvider: string;
   estimatedTimeMinutes: number;
   authorName: string;
   rating: number;
@@ -35,9 +39,28 @@ interface MarketplaceProblem {
   createdAt: string;
 }
 
+function toMarketplaceProblem(p: AdminProblem): MarketplaceProblem {
+  return {
+    id: p.id,
+    title: p.title,
+    description: p.description.overview,
+    type: p.type,
+    category: p.category,
+    difficulty: p.difficulty,
+    cloudProvider: p.deployment.providers[0] ?? 'aws',
+    estimatedTimeMinutes: p.description.estimatedTime ?? 0,
+    authorName: p.metadata.author,
+    rating: 0,
+    usageCount: 0,
+    tags: p.metadata.tags,
+    createdAt: p.metadata.createdAt ?? p.createdAt ?? '',
+  };
+}
+
 export default function AdminMarketplacePage() {
   const [problems, setProblems] = useState<MarketplaceProblem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
@@ -49,101 +72,25 @@ export default function AdminMarketplacePage() {
   const difficultyFilterId = useId();
   const cloudProviderFilterId = useId();
 
-  useEffect(() => {
-    // TODO: Replace with actual API call
-    const fetchProblems = async () => {
-      try {
-        setLoading(true);
-        // Mock data
-        setProblems([
-          {
-            id: 'prob-1',
-            title: 'VPC ネットワーク設計',
-            description:
-              'マルチ AZ 構成の VPC を設計・構築し、セキュアなネットワーク環境を実現する課題です。',
-            type: 'gameday',
-            category: 'architecture',
-            difficulty: 'medium',
-            cloudProvider: 'aws',
-            estimatedTimeMinutes: 45,
-            authorName: 'AWS Solutions Architect',
-            rating: 4.8,
-            usageCount: 156,
-            tags: ['VPC', 'Networking', 'Security Group'],
-            createdAt: new Date(Date.now() - 2592000000).toISOString(),
-          },
-          {
-            id: 'prob-2',
-            title: 'Lambda コスト最適化',
-            description:
-              'Lambda 関数のメモリ設定とタイムアウトを最適化してコストを削減する課題です。',
-            type: 'jam',
-            category: 'cost',
-            difficulty: 'easy',
-            cloudProvider: 'aws',
-            estimatedTimeMinutes: 30,
-            authorName: 'Cloud Cost Optimizer',
-            rating: 4.5,
-            usageCount: 89,
-            tags: ['Lambda', 'Cost Optimization', 'Serverless'],
-            createdAt: new Date(Date.now() - 1296000000).toISOString(),
-          },
-          {
-            id: 'prob-3',
-            title: 'IAM セキュリティ強化',
-            description:
-              '最小権限の原則に基づいた IAM ポリシーを設計し、セキュリティを強化する課題です。',
-            type: 'gameday',
-            category: 'security',
-            difficulty: 'hard',
-            cloudProvider: 'aws',
-            estimatedTimeMinutes: 60,
-            authorName: 'Security Specialist',
-            rating: 4.9,
-            usageCount: 234,
-            tags: ['IAM', 'Security', 'Policy'],
-            createdAt: new Date(Date.now() - 604800000).toISOString(),
-          },
-          {
-            id: 'prob-4',
-            title: 'Auto Scaling 設計',
-            description:
-              '負荷に応じて自動スケーリングする構成を設計・実装する課題です。',
-            type: 'gameday',
-            category: 'performance',
-            difficulty: 'medium',
-            cloudProvider: 'aws',
-            estimatedTimeMinutes: 50,
-            authorName: 'Performance Engineer',
-            rating: 4.6,
-            usageCount: 178,
-            tags: ['Auto Scaling', 'EC2', 'High Availability'],
-            createdAt: new Date(Date.now() - 172800000).toISOString(),
-          },
-          {
-            id: 'prob-5',
-            title: 'マルチリージョン DR 構成',
-            description:
-              'マルチリージョンの災害復旧（DR）構成を設計・実装する上級課題です。',
-            type: 'gameday',
-            category: 'reliability',
-            difficulty: 'expert',
-            cloudProvider: 'aws',
-            estimatedTimeMinutes: 90,
-            authorName: 'DR Architect',
-            rating: 4.7,
-            usageCount: 67,
-            tags: ['DR', 'Multi-Region', 'RTO/RPO'],
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-          },
-        ]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProblems();
+  const fetchProblems = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getProblems();
+      setProblems(data.problems.map(toMarketplaceProblem));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err : new Error('問題の取得に失敗しました')
+      );
+      setProblems([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchProblems();
+  }, [fetchProblems]);
 
   const getDifficultyBadgeVariant = (
     difficulty: DifficultyLevel
@@ -359,39 +306,58 @@ export default function AdminMarketplacePage() {
         </CardContent>
       </Card>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm font-medium text-text-muted">
-              公開問題数
-            </div>
-            <div className="text-3xl font-bold text-text-primary mt-1 font-mono">
-              {totalProblems}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm font-medium text-text-muted">平均評価</div>
-            <div className="text-3xl font-bold text-hn-warning mt-1 font-mono flex items-center gap-2">
-              <span>★</span>
-              {avgRating}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm font-medium text-text-muted">検索結果</div>
-            <div className="text-3xl font-bold text-hn-accent mt-1 font-mono">
-              {filteredProblems.length}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Error State */}
+      {error && (
+        <ErrorState
+          message={getErrorMessage(error)}
+          type={getErrorType(error)}
+          onRetry={fetchProblems}
+        />
+      )}
 
-      {/* Problems Grid */}
-      {loading ? (
+      {/* Stats - hidden when error */}
+      {!error && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="text-sm font-medium text-text-muted">
+                公開問題数
+              </div>
+              <div className="text-3xl font-bold text-text-primary mt-1 font-mono">
+                {loading ? <Skeleton className="h-9 w-12" /> : totalProblems}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-6">
+              <div className="text-sm font-medium text-text-muted">
+                平均評価
+              </div>
+              <div className="text-3xl font-bold text-hn-warning mt-1 font-mono flex items-center gap-2">
+                <span>★</span>
+                {loading ? <Skeleton className="h-9 w-12" /> : avgRating}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-6">
+              <div className="text-sm font-medium text-text-muted">
+                検索結果
+              </div>
+              <div className="text-3xl font-bold text-hn-accent mt-1 font-mono">
+                {loading ? (
+                  <Skeleton className="h-9 w-12" />
+                ) : (
+                  filteredProblems.length
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Problems Grid - hidden when error */}
+      {!error && loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
@@ -409,7 +375,7 @@ export default function AdminMarketplacePage() {
             </Card>
           ))}
         </div>
-      ) : filteredProblems.length === 0 ? (
+      ) : !error && filteredProblems.length === 0 ? (
         <Card className="text-center py-12">
           <div className="text-4xl mb-4">🔍</div>
           <h2 className="text-xl font-semibold text-text-primary mb-2">
@@ -417,7 +383,7 @@ export default function AdminMarketplacePage() {
           </h2>
           <p className="text-text-muted">検索条件を変更してください。</p>
         </Card>
-      ) : (
+      ) : !error ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {filteredProblems.map((problem) => (
             <Card
@@ -516,7 +482,7 @@ export default function AdminMarketplacePage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Terminal-style footer */}
       <div className="text-center text-text-muted text-xs font-mono py-4">

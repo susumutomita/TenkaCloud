@@ -12,6 +12,7 @@ export * from './profile';
 export * from './teams';
 
 // Admin API Functions
+export * from './admin-dashboard';
 export * from './admin-problems';
 
 // Types
