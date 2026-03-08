@@ -25,7 +25,7 @@ import { getEventDetails, getMyRanking } from '@/lib/api/events';
 import type { EventDetails } from '@/lib/api/types';
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 interface MyScore {
   rank: number;

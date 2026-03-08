@@ -7,5 +7,7 @@ coverage
 .git
 plans.md
 Plan.md
+docs/plans/
+docs/plans/**
 reference/
 reference/**

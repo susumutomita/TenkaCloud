@@ -17,18 +17,21 @@ import {
   Zap,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  ErrorState,
+  getErrorMessage,
+  getErrorType,
+  Skeleton,
+} from '@/components/ui';
+import {
+  getDashboardStats,
+  getRecentActivities,
+} from '@/lib/api/admin-dashboard';
+import type { DashboardStats, ActivityEntry } from '@/lib/api/admin-dashboard';
 import { useTenantOptional } from '@/lib/tenant';
-
-interface DashboardStats {
-  activeEvents: number;
-  totalParticipants: number;
-  totalTeams: number;
-  upcomingEvents: number;
-}
 
 interface RecentActivity {
   id: string;
@@ -43,7 +46,7 @@ interface RecentActivity {
 
 interface StatCardProps {
   title: string;
-  value: number;
+  value: number | undefined;
   icon: string;
   href: string;
   accentColor: 'success' | 'accent' | 'warning' | 'error';
@@ -66,7 +69,7 @@ function StatCard({ title, value, icon, href, accentColor }: StatCardProps) {
               {title}
             </p>
             <p className="text-4xl font-bold text-text-primary mt-2 font-mono">
-              {value.toLocaleString()}
+              {value !== undefined ? value.toLocaleString() : '-'}
             </p>
           </div>
           <div
@@ -106,56 +109,46 @@ function StatCardSkeleton() {
 
 export default function AdminDashboardPage() {
   const tenant = useTenantOptional();
-  const [stats, setStats] = useState<DashboardStats>({
-    activeEvents: 0,
-    totalParticipants: 0,
-    totalTeams: 0,
-    upcomingEvents: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>(
     []
   );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [statsData, activitiesData] = await Promise.all([
+        getDashboardStats(),
+        getRecentActivities(),
+      ]);
+
+      setStats(statsData);
+      setRecentActivities(
+        activitiesData.activities.map(
+          (a: ActivityEntry): RecentActivity => ({
+            id: a.id,
+            type: a.type as RecentActivity['type'],
+            message: a.message,
+            timestamp: a.timestamp,
+          })
+        )
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err : new Error('データの読み込みに失敗しました')
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // TODO: Replace with actual API call
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        // Mock data for now
-        setStats({
-          activeEvents: 2,
-          totalParticipants: 156,
-          totalTeams: 23,
-          upcomingEvents: 5,
-        });
-        setRecentActivities([
-          {
-            id: '1',
-            type: 'event_started',
-            message: 'AWS GameDay 2024 Winter が開始されました',
-            timestamp: new Date().toISOString(),
-          },
-          {
-            id: '2',
-            type: 'participant_joined',
-            message: '新しい参加者が登録しました',
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-          },
-          {
-            id: '3',
-            type: 'event_created',
-            message: 'Security JAM が作成されました',
-            timestamp: new Date(Date.now() - 7200000).toISOString(),
-          },
-        ]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
-  }, []);
+  }, [fetchDashboardData]);
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -221,43 +214,56 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Stats Grid */}
-      {loading ? (
+      {/* Error State */}
+      {error && (
+        <ErrorState
+          message={getErrorMessage(error)}
+          type={getErrorType(error)}
+          onRetry={fetchDashboardData}
+        />
+      )}
+
+      {/* Stats Grid - hidden when error */}
+      {!error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <StatCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard
-            title="開催中のイベント"
-            value={stats.activeEvents}
-            icon="🎮"
-            href="/admin/events?status=active"
-            accentColor="success"
-          />
-          <StatCard
-            title="総参加者数"
-            value={stats.totalParticipants}
-            icon="👥"
-            href="/admin/participants"
-            accentColor="accent"
-          />
-          <StatCard
-            title="総チーム数"
-            value={stats.totalTeams}
-            icon="🏆"
-            href="/admin/teams"
-            accentColor="warning"
-          />
-          <StatCard
-            title="予定イベント"
-            value={stats.upcomingEvents}
-            icon="📅"
-            href="/admin/events?status=scheduled"
-            accentColor="error"
-          />
+          {loading ? (
+            <>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <StatCardSkeleton key={i} />
+              ))}
+            </>
+          ) : (
+            <>
+              <StatCard
+                title="開催中のイベント"
+                value={stats?.activeEvents}
+                icon="🎮"
+                href="/admin/events?status=active"
+                accentColor="success"
+              />
+              <StatCard
+                title="総参加者数"
+                value={stats?.totalParticipants}
+                icon="👥"
+                href="/admin/participants"
+                accentColor="accent"
+              />
+              <StatCard
+                title="総チーム数"
+                value={stats?.totalTeams}
+                icon="🏆"
+                href="/admin/teams"
+                accentColor="warning"
+              />
+              <StatCard
+                title="予定イベント"
+                value={stats?.upcomingEvents}
+                icon="📅"
+                href="/admin/events?status=scheduled"
+                accentColor="error"
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -293,61 +299,63 @@ export default function AdminDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-hn-accent" />
-            最近のアクティビティ
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-start space-x-3">
-                  <Skeleton className="w-10 h-10 rounded-[var(--radius)]" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-20" />
+      {/* Recent Activity - hidden when error */}
+      {!error && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-hn-accent" />
+              最近のアクティビティ
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-start space-x-3">
+                    <Skeleton className="w-10 h-10 rounded-[var(--radius)]" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : recentActivities.length === 0 ? (
-            <div className="text-center py-8 text-text-muted">
-              <Inbox className="w-12 h-12 mx-auto mb-4 text-text-muted/50" />
-              <p className="font-mono">アクティビティはありません</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {recentActivities.map((activity) => {
-                const { icon, color } = getActivityIcon(activity.type);
-                return (
-                  <div
-                    key={activity.id}
-                    className="flex items-start space-x-3 pb-4 border-b border-border last:border-0 last:pb-0"
-                  >
+                ))}
+              </div>
+            ) : recentActivities.length === 0 ? (
+              <div className="text-center py-8 text-text-muted">
+                <Inbox className="w-12 h-12 mx-auto mb-4 text-text-muted/50" />
+                <p className="font-mono">まだアクティビティはありません</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentActivities.map((activity) => {
+                  const { icon, color } = getActivityIcon(activity.type);
+                  return (
                     <div
-                      className={`w-10 h-10 rounded-[var(--radius)] bg-surface-2 flex items-center justify-center ${color}`}
+                      key={activity.id}
+                      className="flex items-start space-x-3 pb-4 border-b border-border last:border-0 last:pb-0"
                     >
-                      <span className="text-xl">{icon}</span>
+                      <div
+                        className={`w-10 h-10 rounded-[var(--radius)] bg-surface-2 flex items-center justify-center ${color}`}
+                      >
+                        <span className="text-xl">{icon}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-text-primary">
+                          {activity.message}
+                        </p>
+                        <p className="text-xs text-text-muted mt-1 font-mono">
+                          {formatTimestamp(activity.timestamp)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-text-primary">
-                        {activity.message}
-                      </p>
-                      <p className="text-xs text-text-muted mt-1 font-mono">
-                        {formatTimestamp(activity.timestamp)}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Terminal-style footer */}
       <div className="text-center text-text-muted text-xs font-mono py-4">
