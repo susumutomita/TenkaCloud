@@ -2,6 +2,13 @@ import { gamedayRepository } from '../lib/dynamodb';
 import type { GameState, AttackLog } from '../types';
 import type { TeamState } from '../repositories/gameday-repository';
 
+export class GameNotFoundError extends Error {
+  constructor() {
+    super('ゲームが見つかりません');
+    this.name = 'GameNotFoundError';
+  }
+}
+
 export async function startGame(
   eventId: string,
   tenantId: string,
@@ -17,7 +24,7 @@ export async function startGame(
 export async function stopGame(eventId: string): Promise<GameState> {
   const result = await gamedayRepository.stopGame(eventId);
   if (!result) {
-    throw new Error('ゲームが見つかりません');
+    throw new GameNotFoundError();
   }
   return result;
 }
@@ -31,7 +38,7 @@ export async function getGameStatus(
 export async function toggleScoreWeight(eventId: string): Promise<GameState> {
   const result = await gamedayRepository.toggleScoreWeight(eventId);
   if (!result) {
-    throw new Error('ゲームが見つかりません');
+    throw new GameNotFoundError();
   }
   return result;
 }
@@ -39,7 +46,7 @@ export async function toggleScoreWeight(eventId: string): Promise<GameState> {
 export async function toggleBlackout(eventId: string): Promise<GameState> {
   const result = await gamedayRepository.toggleBlackout(eventId);
   if (!result) {
-    throw new Error('ゲームが見つかりません');
+    throw new GameNotFoundError();
   }
   return result;
 }

@@ -28,6 +28,7 @@ import {
   executeFaultInjection,
   listTeams,
   listAttackLogs,
+  GameNotFoundError,
 } from './game-controller';
 
 describe('ゲームコントローラーサービス', () => {
@@ -78,9 +79,10 @@ describe('ゲームコントローラーサービス', () => {
       expect(mockGamedayRepository.stopGame).toHaveBeenCalledWith('event-1');
     });
 
-    it('ゲームが見つからない場合エラーを投げるべき', async () => {
+    it('ゲームが見つからない場合 GameNotFoundError を投げるべき', async () => {
       mockGamedayRepository.stopGame.mockResolvedValue(null);
 
+      await expect(stopGame('nonexistent')).rejects.toThrow(GameNotFoundError);
       await expect(stopGame('nonexistent')).rejects.toThrow(
         'ゲームが見つかりません'
       );
@@ -132,9 +134,12 @@ describe('ゲームコントローラーサービス', () => {
       expect(result).toEqual(expected);
     });
 
-    it('ゲームが見つからない場合エラーを投げるべき', async () => {
+    it('ゲームが見つからない場合 GameNotFoundError を投げるべき', async () => {
       mockGamedayRepository.toggleScoreWeight.mockResolvedValue(null);
 
+      await expect(toggleScoreWeight('nonexistent')).rejects.toThrow(
+        GameNotFoundError
+      );
       await expect(toggleScoreWeight('nonexistent')).rejects.toThrow(
         'ゲームが見つかりません'
       );
@@ -159,9 +164,12 @@ describe('ゲームコントローラーサービス', () => {
       expect(result).toEqual(expected);
     });
 
-    it('ゲームが見つからない場合エラーを投げるべき', async () => {
+    it('ゲームが見つからない場合 GameNotFoundError を投げるべき', async () => {
       mockGamedayRepository.toggleBlackout.mockResolvedValue(null);
 
+      await expect(toggleBlackout('nonexistent')).rejects.toThrow(
+        GameNotFoundError
+      );
       await expect(toggleBlackout('nonexistent')).rejects.toThrow(
         'ゲームが見つかりません'
       );

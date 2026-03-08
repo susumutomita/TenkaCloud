@@ -1,19 +1,14 @@
 import { z } from 'zod';
 
+// 共通: eventId のみのリクエスト
+export const eventIdSchema = z.object({
+  eventId: z.string().min(1),
+});
+
 // 管理者: ゲーム開始
 export const startGameSchema = z.object({
   eventId: z.string().min(1),
   durationMinutes: z.number().int().min(1).max(480).default(240),
-});
-
-// 管理者: スコア重み切替
-export const toggleScoreWeightSchema = z.object({
-  eventId: z.string().min(1),
-});
-
-// 管理者: ブラックアウト切替
-export const toggleBlackoutSchema = z.object({
-  eventId: z.string().min(1),
 });
 
 // 管理者: 障害注入

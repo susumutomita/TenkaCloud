@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import {
+  eventIdSchema,
   startGameSchema,
-  toggleScoreWeightSchema,
-  toggleBlackoutSchema,
   faultInjectionSchema,
 } from '../schemas';
 import {
@@ -14,6 +13,7 @@ import {
   executeFaultInjection,
   listTeams,
   listAttackLogs,
+  GameNotFoundError,
 } from '../services/game-controller';
 
 export const adminRoutes = new Hono();
@@ -31,7 +31,7 @@ adminRoutes.post('/game/start', async (c) => {
       400
     );
   }
-  const auth = c.get('auth' as never) as { tenantId: string } | undefined;
+  const auth = c.get('auth');
   const tenantId = auth?.tenantId ?? '';
   const result = await startGame(
     parsed.data.eventId,
@@ -47,15 +47,22 @@ adminRoutes.post('/game/stop', async (c) => {
   if (body === null) {
     return c.json({ error: 'JSON の解析に失敗しました' }, 400);
   }
-  const parsed = toggleScoreWeightSchema.safeParse(body);
+  const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
       400
     );
   }
-  const result = await stopGame(parsed.data.eventId);
-  return c.json(result, 200);
+  try {
+    const result = await stopGame(parsed.data.eventId);
+    return c.json(result, 200);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, 404);
+    }
+    throw error;
+  }
 });
 
 // ゲーム状態取得
@@ -77,15 +84,22 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
   if (body === null) {
     return c.json({ error: 'JSON の解析に失敗しました' }, 400);
   }
-  const parsed = toggleScoreWeightSchema.safeParse(body);
+  const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
       400
     );
   }
-  const result = await toggleScoreWeight(parsed.data.eventId);
-  return c.json(result, 200);
+  try {
+    const result = await toggleScoreWeight(parsed.data.eventId);
+    return c.json(result, 200);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, 404);
+    }
+    throw error;
+  }
 });
 
 // ブラックアウト切替
@@ -94,15 +108,22 @@ adminRoutes.post('/blackout/toggle', async (c) => {
   if (body === null) {
     return c.json({ error: 'JSON の解析に失敗しました' }, 400);
   }
-  const parsed = toggleBlackoutSchema.safeParse(body);
+  const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
       400
     );
   }
-  const result = await toggleBlackout(parsed.data.eventId);
-  return c.json(result, 200);
+  try {
+    const result = await toggleBlackout(parsed.data.eventId);
+    return c.json(result, 200);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, 404);
+    }
+    throw error;
+  }
 });
 
 // 障害注入

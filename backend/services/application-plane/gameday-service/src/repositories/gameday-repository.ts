@@ -4,6 +4,7 @@ import {
   UpdateCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { ulid } from 'ulid';
 import { getDocClient, getTableName } from '@tenkacloud/dynamodb';
 import type { GameState, AttackLog, ScoreWeight } from '../types';
@@ -110,6 +111,13 @@ function toTeamState(item: TeamStateItem): TeamState {
   };
 }
 
+export class GameAlreadyExistsError extends Error {
+  constructor(eventId: string) {
+    super(`ゲームは既に存在します: ${eventId}`);
+    this.name = 'GameAlreadyExistsError';
+  }
+}
+
 export class GamedayRepository {
   async createGameState(input: {
     eventId: string;
@@ -137,13 +145,20 @@ export class GamedayRepository {
       UpdatedAt: now,
     };
 
-    await client.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: item,
-        ConditionExpression: 'attribute_not_exists(PK)',
-      })
-    );
+    try {
+      await client.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: item,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        throw new GameAlreadyExistsError(input.eventId);
+      }
+      throw error;
+    }
 
     return toGameState(item);
   }
@@ -174,28 +189,35 @@ export class GamedayRepository {
     const tableName = getTableName();
     const now = new Date().toISOString();
 
-    const result = await client.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: {
-          PK: buildGamedayPK(eventId),
-          SK: buildMetadataSK(),
-        },
-        UpdateExpression: 'SET isRunning = :running, UpdatedAt = :now',
-        ExpressionAttributeValues: {
-          ':running': false,
-          ':now': now,
-        },
-        ConditionExpression: 'attribute_exists(PK)',
-        ReturnValues: 'ALL_NEW',
-      })
-    );
+    try {
+      const result = await client.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: {
+            PK: buildGamedayPK(eventId),
+            SK: buildMetadataSK(),
+          },
+          UpdateExpression: 'SET isRunning = :running, UpdatedAt = :now',
+          ExpressionAttributeValues: {
+            ':running': false,
+            ':now': now,
+          },
+          ConditionExpression: 'attribute_exists(PK)',
+          ReturnValues: 'ALL_NEW',
+        })
+      );
 
-    if (!result.Attributes) {
-      return null;
+      if (!result.Attributes) {
+        return null;
+      }
+
+      return toGameState(result.Attributes as GameStateItem);
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        return null;
+      }
+      throw error;
     }
-
-    return toGameState(result.Attributes as GameStateItem);
   }
 
   async toggleScoreWeight(eventId: string): Promise<GameState | null> {
@@ -210,28 +232,37 @@ export class GamedayRepository {
     const tableName = getTableName();
     const now = new Date().toISOString();
 
-    const result = await client.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: {
-          PK: buildGamedayPK(eventId),
-          SK: buildMetadataSK(),
-        },
-        UpdateExpression: 'SET scoreWeight = :weight, UpdatedAt = :now',
-        ExpressionAttributeValues: {
-          ':weight': newWeight,
-          ':now': now,
-        },
-        ConditionExpression: 'attribute_exists(PK)',
-        ReturnValues: 'ALL_NEW',
-      })
-    );
+    try {
+      const result = await client.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: {
+            PK: buildGamedayPK(eventId),
+            SK: buildMetadataSK(),
+          },
+          UpdateExpression: 'SET scoreWeight = :weight, UpdatedAt = :now',
+          ExpressionAttributeValues: {
+            ':weight': newWeight,
+            ':now': now,
+            ':expectedWeight': current.scoreWeight,
+          },
+          ConditionExpression:
+            'attribute_exists(PK) AND scoreWeight = :expectedWeight',
+          ReturnValues: 'ALL_NEW',
+        })
+      );
 
-    if (!result.Attributes) {
-      return null;
+      if (!result.Attributes) {
+        return null;
+      }
+
+      return toGameState(result.Attributes as GameStateItem);
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        return null;
+      }
+      throw error;
     }
-
-    return toGameState(result.Attributes as GameStateItem);
   }
 
   async toggleBlackout(eventId: string): Promise<GameState | null> {
@@ -244,28 +275,37 @@ export class GamedayRepository {
     const tableName = getTableName();
     const now = new Date().toISOString();
 
-    const result = await client.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: {
-          PK: buildGamedayPK(eventId),
-          SK: buildMetadataSK(),
-        },
-        UpdateExpression: 'SET blackout = :blackout, UpdatedAt = :now',
-        ExpressionAttributeValues: {
-          ':blackout': !current.blackout,
-          ':now': now,
-        },
-        ConditionExpression: 'attribute_exists(PK)',
-        ReturnValues: 'ALL_NEW',
-      })
-    );
+    try {
+      const result = await client.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: {
+            PK: buildGamedayPK(eventId),
+            SK: buildMetadataSK(),
+          },
+          UpdateExpression: 'SET blackout = :blackout, UpdatedAt = :now',
+          ExpressionAttributeValues: {
+            ':blackout': !current.blackout,
+            ':now': now,
+            ':expectedBlackout': current.blackout,
+          },
+          ConditionExpression:
+            'attribute_exists(PK) AND blackout = :expectedBlackout',
+          ReturnValues: 'ALL_NEW',
+        })
+      );
 
-    if (!result.Attributes) {
-      return null;
+      if (!result.Attributes) {
+        return null;
+      }
+
+      return toGameState(result.Attributes as GameStateItem);
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        return null;
+      }
+      throw error;
     }
-
-    return toGameState(result.Attributes as GameStateItem);
   }
 
   async addAttackLog(input: {

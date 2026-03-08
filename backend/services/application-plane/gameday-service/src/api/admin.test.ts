@@ -1,16 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 
-const mockGameController = vi.hoisted(() => ({
-  startGame: vi.fn(),
-  stopGame: vi.fn(),
-  getGameStatus: vi.fn(),
-  toggleScoreWeight: vi.fn(),
-  toggleBlackout: vi.fn(),
-  executeFaultInjection: vi.fn(),
-  listTeams: vi.fn(),
-  listAttackLogs: vi.fn(),
-}));
+const mockGameController = vi.hoisted(() => {
+  class GameNotFoundError extends Error {
+    constructor() {
+      super('ゲームが見つかりません');
+      this.name = 'GameNotFoundError';
+    }
+  }
+  return {
+    startGame: vi.fn(),
+    stopGame: vi.fn(),
+    getGameStatus: vi.fn(),
+    toggleScoreWeight: vi.fn(),
+    toggleBlackout: vi.fn(),
+    executeFaultInjection: vi.fn(),
+    listTeams: vi.fn(),
+    listAttackLogs: vi.fn(),
+    GameNotFoundError,
+  };
+});
 
 vi.mock('../services/game-controller', () => mockGameController);
 
@@ -139,6 +148,34 @@ describe('管理者 API', () => {
       expect(body.isRunning).toBe(false);
     });
 
+    it('ゲームが見つからない場合 404 を返すべき', async () => {
+      mockGameController.stopGame.mockRejectedValue(
+        new mockGameController.GameNotFoundError()
+      );
+
+      const res = await app.request('/game/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'nonexistent' }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('ゲームが見つかりません');
+    });
+
+    it('予期しないエラーの場合 500 を返すべき', async () => {
+      mockGameController.stopGame.mockRejectedValue(new Error('DB接続エラー'));
+
+      const res = await app.request('/game/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+
+      expect(res.status).toBe(500);
+    });
+
     it('eventId が空の場合 400 を返すべき', async () => {
       const res = await app.request('/game/stop', {
         method: 'POST',
@@ -220,6 +257,36 @@ describe('管理者 API', () => {
       expect(body.scoreWeight).toBe('high');
     });
 
+    it('ゲームが見つからない場合 404 を返すべき', async () => {
+      mockGameController.toggleScoreWeight.mockRejectedValue(
+        new mockGameController.GameNotFoundError()
+      );
+
+      const res = await app.request('/score-weight/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'nonexistent' }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('ゲームが見つかりません');
+    });
+
+    it('予期しないエラーの場合 500 を返すべき', async () => {
+      mockGameController.toggleScoreWeight.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+
+      const res = await app.request('/score-weight/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+
+      expect(res.status).toBe(500);
+    });
+
     it('eventId が空の場合 400 を返すべき', async () => {
       const res = await app.request('/score-weight/toggle', {
         method: 'POST',
@@ -263,6 +330,36 @@ describe('管理者 API', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.blackout).toBe(true);
+    });
+
+    it('ゲームが見つからない場合 404 を返すべき', async () => {
+      mockGameController.toggleBlackout.mockRejectedValue(
+        new mockGameController.GameNotFoundError()
+      );
+
+      const res = await app.request('/blackout/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'nonexistent' }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('ゲームが見つかりません');
+    });
+
+    it('予期しないエラーの場合 500 を返すべき', async () => {
+      mockGameController.toggleBlackout.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+
+      const res = await app.request('/blackout/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+
+      expect(res.status).toBe(500);
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
