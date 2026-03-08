@@ -5,7 +5,7 @@ import { createLogger } from './lib/logger';
 import { healthRoutes } from './api/health';
 import { adminRoutes } from './api/admin';
 import { participantRoutes } from './api/participant';
-import { authMiddleware } from './middleware/auth';
+import { authMiddleware, requireAdmin } from './middleware/auth';
 
 const logger = createLogger('gameday-service');
 const app = new Hono();
@@ -21,7 +21,7 @@ app.use(
 
 // 認証を適用
 app.use('/api/gameday/*', authMiddleware);
-app.use('/api/gameday/admin/*', authMiddleware);
+app.use('/api/gameday/admin/*', requireAdmin);
 
 // ルート登録
 app.route('/', healthRoutes);

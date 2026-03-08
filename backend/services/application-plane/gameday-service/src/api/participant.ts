@@ -20,7 +20,10 @@ participantRoutes.get('/attacks/catalog', async (c) => {
 
 // 攻撃購入
 participantRoutes.post('/attacks/purchase', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = purchaseAttackSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -29,12 +32,15 @@ participantRoutes.post('/attacks/purchase', async (c) => {
     );
   }
   // TODO: 攻撃購入ロジック実装
-  return c.json({ message: '攻撃を購入しました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 攻撃実行
 participantRoutes.post('/attacks/execute', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = executeAttackSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -43,7 +49,7 @@ participantRoutes.post('/attacks/execute', async (c) => {
     );
   }
   // TODO: 攻撃実行ロジック実装
-  return c.json({ message: '攻撃を実行しました', success: false }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 攻撃履歴
@@ -62,7 +68,10 @@ participantRoutes.get('/defense/active', async (c) => {
 
 // ヒント購入
 participantRoutes.post('/defense/hint', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = purchaseHintSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -71,12 +80,15 @@ participantRoutes.post('/defense/hint', async (c) => {
     );
   }
   // TODO: ヒント購入ロジック実装
-  return c.json({ hint: '' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 脆弱性修正報告
 participantRoutes.post('/defense/report-fix', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = reportFixSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -85,7 +97,7 @@ participantRoutes.post('/defense/report-fix', async (c) => {
     );
   }
   // TODO: 脆弱性修正報告ロジック実装
-  return c.json({ message: '修正を報告しました', verified: false }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // === 同盟 ===
@@ -98,7 +110,10 @@ participantRoutes.get('/alliances', async (c) => {
 
 // 同盟申請
 participantRoutes.post('/alliances/request', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = requestAllianceSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -107,21 +122,21 @@ participantRoutes.post('/alliances/request', async (c) => {
     );
   }
   // TODO: 同盟申請ロジック実装
-  return c.json({ message: '同盟を申請しました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 同盟承認
 participantRoutes.post('/alliances/:id/accept', async (c) => {
-  const { id } = c.req.param();
+  const { id: _id } = c.req.param();
   // TODO: 同盟承認ロジック実装
-  return c.json({ message: '同盟を承認しました', allianceId: id }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 同盟破棄
 participantRoutes.post('/alliances/:id/break', async (c) => {
-  const { id } = c.req.param();
+  const { id: _id } = c.req.param();
   // TODO: 同盟破棄ロジック実装
-  return c.json({ message: '同盟を破棄しました', allianceId: id }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // === モニタリング ===
@@ -136,7 +151,10 @@ participantRoutes.get('/monitoring/status', async (c) => {
 
 // 投票
 participantRoutes.post('/voting/vote', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = voteSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -145,7 +163,7 @@ participantRoutes.post('/voting/vote', async (c) => {
     );
   }
   // TODO: 投票ロジック実装
-  return c.json({ message: '投票しました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 投票結果

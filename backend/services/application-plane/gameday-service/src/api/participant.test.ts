@@ -10,13 +10,15 @@ describe('プレーヤー API', () => {
       expect(body.attacks).toEqual([]);
     });
 
-    it('POST /attacks/purchase で攻撃を購入できるべき', async () => {
+    it('POST /attacks/purchase で有効なリクエストに 501 を返すべき', async () => {
       const res = await participantRoutes.request('/attacks/purchase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attackId: 'atk-1' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
     it('POST /attacks/purchase で不正なリクエストに 400 を返すべき', async () => {
@@ -28,13 +30,26 @@ describe('プレーヤー API', () => {
       expect(res.status).toBe(400);
     });
 
-    it('POST /attacks/execute で攻撃を実行できるべき', async () => {
+    it('POST /attacks/purchase で不正な JSON の場合 400 を返すべき', async () => {
+      const res = await participantRoutes.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('POST /attacks/execute で有効なリクエストに 501 を返すべき', async () => {
       const res = await participantRoutes.request('/attacks/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attackId: 'atk-1', targetTeamId: 'team-2' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
     it('POST /attacks/execute で不正なリクエストに 400 を返すべき', async () => {
@@ -44,6 +59,17 @@ describe('プレーヤー API', () => {
         body: JSON.stringify({ attackId: 'atk-1' }),
       });
       expect(res.status).toBe(400);
+    });
+
+    it('POST /attacks/execute で不正な JSON の場合 400 を返すべき', async () => {
+      const res = await participantRoutes.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
 
     it('GET /attacks/history で攻撃履歴を返すべき', async () => {
@@ -71,13 +97,26 @@ describe('プレーヤー API', () => {
       expect(res.status).toBe(400);
     });
 
-    it('POST /defense/hint でヒントを購入できるべき', async () => {
+    it('POST /defense/hint で有効なリクエストに 501 を返すべき', async () => {
       const res = await participantRoutes.request('/defense/hint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ attackId: 'atk-1' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
+    });
+
+    it('POST /defense/hint で不正な JSON の場合 400 を返すべき', async () => {
+      const res = await participantRoutes.request('/defense/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
 
     it('POST /defense/report-fix で不正なリクエストに 400 を返すべき', async () => {
@@ -89,13 +128,26 @@ describe('プレーヤー API', () => {
       expect(res.status).toBe(400);
     });
 
-    it('POST /defense/report-fix で修正を報告できるべき', async () => {
+    it('POST /defense/report-fix で有効なリクエストに 501 を返すべき', async () => {
       const res = await participantRoutes.request('/defense/report-fix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vulnerabilitySlug: 'sql-injection' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
+    });
+
+    it('POST /defense/report-fix で不正な JSON の場合 400 を返すべき', async () => {
+      const res = await participantRoutes.request('/defense/report-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
   });
 
@@ -116,37 +168,50 @@ describe('プレーヤー API', () => {
       expect(res.status).toBe(400);
     });
 
-    it('POST /alliances/request で同盟を申請できるべき', async () => {
+    it('POST /alliances/request で有効なリクエストに 501 を返すべき', async () => {
       const res = await participantRoutes.request('/alliances/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetTeamId: 'team-2' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
-    it('POST /alliances/:id/accept で同盟を承認できるべき', async () => {
+    it('POST /alliances/request で不正な JSON の場合 400 を返すべき', async () => {
+      const res = await participantRoutes.request('/alliances/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('POST /alliances/:id/accept で 501 を返すべき', async () => {
       const res = await participantRoutes.request(
         '/alliances/alliance-1/accept',
         {
           method: 'POST',
         }
       );
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
       const body = await res.json();
-      expect(body.allianceId).toBe('alliance-1');
+      expect(body.error).toBe('未実装です');
     });
 
-    it('POST /alliances/:id/break で同盟を破棄できるべき', async () => {
+    it('POST /alliances/:id/break で 501 を返すべき', async () => {
       const res = await participantRoutes.request(
         '/alliances/alliance-1/break',
         {
           method: 'POST',
         }
       );
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
       const body = await res.json();
-      expect(body.allianceId).toBe('alliance-1');
+      expect(body.error).toBe('未実装です');
     });
   });
 
@@ -169,13 +234,26 @@ describe('プレーヤー API', () => {
       expect(res.status).toBe(400);
     });
 
-    it('POST /voting/vote で投票できるべき', async () => {
+    it('POST /voting/vote で有効なリクエストに 501 を返すべき', async () => {
       const res = await participantRoutes.request('/voting/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teamId: 'team-2' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
+    });
+
+    it('POST /voting/vote で不正な JSON の場合 400 を返すべき', async () => {
+      const res = await participantRoutes.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
 
     it('GET /voting/results で投票結果を返すべき', async () => {

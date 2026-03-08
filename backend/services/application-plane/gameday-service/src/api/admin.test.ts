@@ -3,15 +3,15 @@ import { adminRoutes } from './admin';
 
 describe('管理者 API', () => {
   describe('POST /game/start', () => {
-    it('有効なリクエストでゲームを開始できるべき', async () => {
+    it('有効なリクエストで 501 を返すべき', async () => {
       const res = await adminRoutes.request('/game/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
       const body = await res.json();
-      expect(body.eventId).toBe('event-1');
+      expect(body.error).toBe('未実装です');
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -22,16 +22,29 @@ describe('管理者 API', () => {
       });
       expect(res.status).toBe(400);
     });
+
+    it('不正な JSON の場合 400 を返すべき', async () => {
+      const res = await adminRoutes.request('/game/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
   });
 
   describe('POST /game/stop', () => {
-    it('有効なリクエストでゲームを停止できるべき', async () => {
+    it('有効なリクエストで 501 を返すべき', async () => {
       const res = await adminRoutes.request('/game/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -41,6 +54,17 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: '' }),
       });
       expect(res.status).toBe(400);
+    });
+
+    it('不正な JSON の場合 400 を返すべき', async () => {
+      const res = await adminRoutes.request('/game/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
   });
 
@@ -60,13 +84,15 @@ describe('管理者 API', () => {
   });
 
   describe('POST /score-weight/toggle', () => {
-    it('スコア重みを切り替えられるべき', async () => {
+    it('有効なリクエストで 501 を返すべき', async () => {
       const res = await adminRoutes.request('/score-weight/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -76,17 +102,30 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: '' }),
       });
       expect(res.status).toBe(400);
+    });
+
+    it('不正な JSON の場合 400 を返すべき', async () => {
+      const res = await adminRoutes.request('/score-weight/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
   });
 
   describe('POST /blackout/toggle', () => {
-    it('ブラックアウトを切り替えられるべき', async () => {
+    it('有効なリクエストで 501 を返すべき', async () => {
       const res = await adminRoutes.request('/blackout/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -97,10 +136,21 @@ describe('管理者 API', () => {
       });
       expect(res.status).toBe(400);
     });
+
+    it('不正な JSON の場合 400 を返すべき', async () => {
+      const res = await adminRoutes.request('/blackout/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
   });
 
   describe('POST /fault-injection/execute', () => {
-    it('障害を注入できるべき', async () => {
+    it('有効なリクエストで 501 を返すべき', async () => {
       const res = await adminRoutes.request('/fault-injection/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -110,7 +160,9 @@ describe('管理者 API', () => {
           attackSlug: 'sql-injection',
         }),
       });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
+      const body = await res.json();
+      expect(body.error).toBe('未実装です');
     });
 
     it('不正なリクエストで 400 を返すべき', async () => {
@@ -120,6 +172,17 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
       expect(res.status).toBe(400);
+    });
+
+    it('不正な JSON の場合 400 を返すべき', async () => {
+      const res = await adminRoutes.request('/fault-injection/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
   });
 

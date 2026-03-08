@@ -39,9 +39,17 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 
   try {
     const jwksSet = await getJWKS();
-    const { payload } = await jose.jwtVerify(token, jwksSet, {
+    const verifyOptions: jose.JWTVerifyOptions = {
       issuer: ISSUER,
-    });
+    };
+    if (process.env.JWT_AUDIENCE) {
+      verifyOptions.audience = process.env.JWT_AUDIENCE;
+    }
+    const { payload } = await jose.jwtVerify(token, jwksSet, verifyOptions);
+
+    if (!payload.sub) {
+      return c.json({ error: 'トークンに sub がありません' }, 401);
+    }
 
     const tenantId = (payload as Record<string, unknown>)['tenant_id'] as
       | string
@@ -51,7 +59,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     }
 
     c.set('auth', {
-      userId: payload.sub ?? '',
+      userId: payload.sub,
       tenantId,
       roles:
         (
@@ -71,4 +79,12 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     }
     return c.json({ error: '認証に失敗しました' }, 401);
   }
+});
+
+export const requireAdmin = createMiddleware(async (c, next) => {
+  const auth = c.get('auth');
+  if (!auth.roles.includes('admin')) {
+    return c.json({ error: '管理者権限が必要です' }, 403);
+  }
+  await next();
 });

@@ -10,7 +10,10 @@ export const adminRoutes = new Hono();
 
 // ゲーム開始
 adminRoutes.post('/game/start', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = startGameSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -19,15 +22,15 @@ adminRoutes.post('/game/start', async (c) => {
     );
   }
   // TODO: ゲーム開始ロジック実装
-  return c.json(
-    { message: 'ゲームを開始しました', eventId: parsed.data.eventId },
-    200
-  );
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // ゲーム停止
 adminRoutes.post('/game/stop', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = toggleScoreWeightSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -36,7 +39,7 @@ adminRoutes.post('/game/stop', async (c) => {
     );
   }
   // TODO: ゲーム停止ロジック実装
-  return c.json({ message: 'ゲームを停止しました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // ゲーム状態取得
@@ -61,7 +64,10 @@ adminRoutes.get('/game/status', async (c) => {
 
 // スコア重み切替
 adminRoutes.post('/score-weight/toggle', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = toggleScoreWeightSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -70,12 +76,15 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
     );
   }
   // TODO: スコア重み切替ロジック実装
-  return c.json({ message: 'スコア重みを切り替えました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // ブラックアウト切替
 adminRoutes.post('/blackout/toggle', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = toggleBlackoutSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -84,12 +93,15 @@ adminRoutes.post('/blackout/toggle', async (c) => {
     );
   }
   // TODO: ブラックアウト切替ロジック実装
-  return c.json({ message: 'ブラックアウトを切り替えました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 障害注入
 adminRoutes.post('/fault-injection/execute', async (c) => {
-  const body = await c.req.json();
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+  }
   const parsed = faultInjectionSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -98,7 +110,7 @@ adminRoutes.post('/fault-injection/execute', async (c) => {
     );
   }
   // TODO: 障害注入ロジック実装
-  return c.json({ message: '障害を注入しました' }, 200);
+  return c.json({ error: '未実装です' }, 501);
 });
 
 // 全チーム状態一覧
