@@ -14,6 +14,7 @@ services:
       - scoring-service
       - leaderboard-service
       - problem-service
+      - gameday-service
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
       interval: 10s
@@ -162,6 +163,29 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tenkacloud
+
+  gameday-service:
+    build:
+      context: .
+      dockerfile: backend/services/application-plane/gameday-service/Dockerfile
+    expose:
+      - "3020"
+    environment:
+      - PORT=3020
+      - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - AWS_REGION=ap-northeast-1
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3020/health"]
       interval: 10s
       timeout: 5s
       retries: 5
