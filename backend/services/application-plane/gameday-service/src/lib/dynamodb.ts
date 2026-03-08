@@ -1,4 +1,5 @@
 import { initDynamoDB } from '@tenkacloud/dynamodb';
+import { GamedayRepository } from '../repositories/gameday-repository';
 
 const tableName = process.env.DYNAMODB_TABLE;
 if (!tableName) {
@@ -16,3 +17,6 @@ initDynamoDB({
   region,
   endpoint: process.env.DYNAMODB_ENDPOINT,
 });
+
+// リポジトリインスタンス
+export const gamedayRepository = new GamedayRepository();

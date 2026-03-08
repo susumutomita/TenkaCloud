@@ -5,6 +5,16 @@ import {
   toggleBlackoutSchema,
   faultInjectionSchema,
 } from '../schemas';
+import {
+  startGame,
+  stopGame,
+  getGameStatus,
+  toggleScoreWeight,
+  toggleBlackout,
+  executeFaultInjection,
+  listTeams,
+  listAttackLogs,
+} from '../services/game-controller';
 
 export const adminRoutes = new Hono();
 
@@ -21,8 +31,14 @@ adminRoutes.post('/game/start', async (c) => {
       400
     );
   }
-  // TODO: ゲーム開始ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const auth = c.get('auth' as never) as { tenantId: string } | undefined;
+  const tenantId = auth?.tenantId ?? '';
+  const result = await startGame(
+    parsed.data.eventId,
+    tenantId,
+    parsed.data.durationMinutes
+  );
+  return c.json(result, 201);
 });
 
 // ゲーム停止
@@ -38,8 +54,8 @@ adminRoutes.post('/game/stop', async (c) => {
       400
     );
   }
-  // TODO: ゲーム停止ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const result = await stopGame(parsed.data.eventId);
+  return c.json(result, 200);
 });
 
 // ゲーム状態取得
@@ -48,18 +64,11 @@ adminRoutes.get('/game/status', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, 400);
   }
-  // TODO: ゲーム状態取得ロジック実装
-  return c.json(
-    {
-      eventId,
-      isRunning: false,
-      startedAt: null,
-      scoreWeight: 'normal',
-      blackout: false,
-      durationMinutes: 240,
-    },
-    200
-  );
+  const result = await getGameStatus(eventId);
+  if (!result) {
+    return c.json({ error: 'ゲームが見つかりません' }, 404);
+  }
+  return c.json(result, 200);
 });
 
 // スコア重み切替
@@ -75,8 +84,8 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
       400
     );
   }
-  // TODO: スコア重み切替ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const result = await toggleScoreWeight(parsed.data.eventId);
+  return c.json(result, 200);
 });
 
 // ブラックアウト切替
@@ -92,8 +101,8 @@ adminRoutes.post('/blackout/toggle', async (c) => {
       400
     );
   }
-  // TODO: ブラックアウト切替ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const result = await toggleBlackout(parsed.data.eventId);
+  return c.json(result, 200);
 });
 
 // 障害注入
@@ -109,8 +118,12 @@ adminRoutes.post('/fault-injection/execute', async (c) => {
       400
     );
   }
-  // TODO: 障害注入ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const result = await executeFaultInjection(
+    parsed.data.eventId,
+    parsed.data.teamId,
+    parsed.data.attackSlug
+  );
+  return c.json(result, 201);
 });
 
 // 全チーム状態一覧
@@ -119,8 +132,8 @@ adminRoutes.get('/teams', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, 400);
   }
-  // TODO: チーム一覧取得ロジック実装
-  return c.json({ teams: [] }, 200);
+  const teams = await listTeams(eventId);
+  return c.json({ teams }, 200);
 });
 
 // 全攻撃履歴
@@ -129,6 +142,6 @@ adminRoutes.get('/attack-logs', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, 400);
   }
-  // TODO: 攻撃履歴取得ロジック実装
-  return c.json({ logs: [] }, 200);
+  const logs = await listAttackLogs(eventId);
+  return c.json({ logs }, 200);
 });

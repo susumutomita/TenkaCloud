@@ -1,21 +1,101 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Hono } from 'hono';
+
+const mockGameController = vi.hoisted(() => ({
+  startGame: vi.fn(),
+  stopGame: vi.fn(),
+  getGameStatus: vi.fn(),
+  toggleScoreWeight: vi.fn(),
+  toggleBlackout: vi.fn(),
+  executeFaultInjection: vi.fn(),
+  listTeams: vi.fn(),
+  listAttackLogs: vi.fn(),
+}));
+
+vi.mock('../services/game-controller', () => mockGameController);
+
 import { adminRoutes } from './admin';
 
+const mockAuth = {
+  userId: 'admin-1',
+  tenantId: 'tenant-1',
+  roles: ['admin'],
+};
+
 describe('管理者 API', () => {
+  let app: Hono;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = new Hono();
+    app.use('/*', async (c, next) => {
+      c.set('auth' as never, mockAuth);
+      await next();
+    });
+    app.route('/', adminRoutes);
+  });
+
   describe('POST /game/start', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/start', {
+    it('ゲームを開始できるべき', async () => {
+      const gameState = {
+        eventId: 'event-1',
+        tenantId: 'tenant-1',
+        isRunning: true,
+        startedAt: '2026-03-09T00:00:00.000Z',
+        scoreWeight: 'normal',
+        blackout: false,
+        durationMinutes: 240,
+      };
+      mockGameController.startGame.mockResolvedValue(gameState);
+
+      const res = await app.request('/game/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
       });
-      expect(res.status).toBe(501);
+
+      expect(res.status).toBe(201);
       const body = await res.json();
-      expect(body.error).toBe('未実装です');
+      expect(body.eventId).toBe('event-1');
+      expect(body.isRunning).toBe(true);
+      expect(mockGameController.startGame).toHaveBeenCalledWith(
+        'event-1',
+        'tenant-1',
+        240
+      );
+    });
+
+    it('auth コンテキストがない場合でもゲームを開始できるべき', async () => {
+      const noAuthApp = new Hono();
+      noAuthApp.route('/', adminRoutes);
+
+      const gameState = {
+        eventId: 'event-1',
+        tenantId: '',
+        isRunning: true,
+        startedAt: '2026-03-09T00:00:00.000Z',
+        scoreWeight: 'normal',
+        blackout: false,
+        durationMinutes: 240,
+      };
+      mockGameController.startGame.mockResolvedValue(gameState);
+
+      const res = await noAuthApp.request('/game/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockGameController.startGame).toHaveBeenCalledWith(
+        'event-1',
+        '',
+        240
+      );
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/start', {
+      const res = await app.request('/game/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
@@ -24,7 +104,7 @@ describe('管理者 API', () => {
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/start', {
+      const res = await app.request('/game/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
@@ -36,19 +116,31 @@ describe('管理者 API', () => {
   });
 
   describe('POST /game/stop', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/stop', {
+    it('ゲームを停止できるべき', async () => {
+      const gameState = {
+        eventId: 'event-1',
+        tenantId: 'tenant-1',
+        isRunning: false,
+        startedAt: '2026-03-09T00:00:00.000Z',
+        scoreWeight: 'normal',
+        blackout: false,
+        durationMinutes: 240,
+      };
+      mockGameController.stopGame.mockResolvedValue(gameState);
+
+      const res = await app.request('/game/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(501);
+
+      expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.error).toBe('未実装です');
+      expect(body.isRunning).toBe(false);
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/stop', {
+      const res = await app.request('/game/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
@@ -57,7 +149,7 @@ describe('管理者 API', () => {
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/stop', {
+      const res = await app.request('/game/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
@@ -69,34 +161,67 @@ describe('管理者 API', () => {
   });
 
   describe('GET /game/status', () => {
-    it('eventId 付きでゲーム状態を返すべき', async () => {
-      const res = await adminRoutes.request('/game/status?eventId=event-1');
+    it('ゲーム状態を取得できるべき', async () => {
+      const gameState = {
+        eventId: 'event-1',
+        tenantId: 'tenant-1',
+        isRunning: true,
+        startedAt: '2026-03-09T00:00:00.000Z',
+        scoreWeight: 'normal',
+        blackout: false,
+        durationMinutes: 240,
+      };
+      mockGameController.getGameStatus.mockResolvedValue(gameState);
+
+      const res = await app.request('/game/status?eventId=event-1');
+
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.eventId).toBe('event-1');
-      expect(body.scoreWeight).toBe('normal');
+    });
+
+    it('ゲームが見つからない場合 404 を返すべき', async () => {
+      mockGameController.getGameStatus.mockResolvedValue(null);
+
+      const res = await app.request('/game/status?eventId=nonexistent');
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('ゲームが見つかりません');
     });
 
     it('eventId がない場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/status');
+      const res = await app.request('/game/status');
       expect(res.status).toBe(400);
     });
   });
 
   describe('POST /score-weight/toggle', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/score-weight/toggle', {
+    it('スコア重みを切替できるべき', async () => {
+      const gameState = {
+        eventId: 'event-1',
+        tenantId: 'tenant-1',
+        isRunning: true,
+        startedAt: '2026-03-09T00:00:00.000Z',
+        scoreWeight: 'high',
+        blackout: false,
+        durationMinutes: 240,
+      };
+      mockGameController.toggleScoreWeight.mockResolvedValue(gameState);
+
+      const res = await app.request('/score-weight/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(501);
+
+      expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.error).toBe('未実装です');
+      expect(body.scoreWeight).toBe('high');
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/score-weight/toggle', {
+      const res = await app.request('/score-weight/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
@@ -105,7 +230,7 @@ describe('管理者 API', () => {
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/score-weight/toggle', {
+      const res = await app.request('/score-weight/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
@@ -117,19 +242,31 @@ describe('管理者 API', () => {
   });
 
   describe('POST /blackout/toggle', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/blackout/toggle', {
+    it('ブラックアウトを切替できるべき', async () => {
+      const gameState = {
+        eventId: 'event-1',
+        tenantId: 'tenant-1',
+        isRunning: true,
+        startedAt: '2026-03-09T00:00:00.000Z',
+        scoreWeight: 'normal',
+        blackout: true,
+        durationMinutes: 240,
+      };
+      mockGameController.toggleBlackout.mockResolvedValue(gameState);
+
+      const res = await app.request('/blackout/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(501);
+
+      expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.error).toBe('未実装です');
+      expect(body.blackout).toBe(true);
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/blackout/toggle', {
+      const res = await app.request('/blackout/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
@@ -138,7 +275,7 @@ describe('管理者 API', () => {
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/blackout/toggle', {
+      const res = await app.request('/blackout/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
@@ -150,8 +287,23 @@ describe('管理者 API', () => {
   });
 
   describe('POST /fault-injection/execute', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/fault-injection/execute', {
+    it('障害注入を実行できるべき', async () => {
+      const attackLog = {
+        id: 'log-1',
+        eventId: 'event-1',
+        attackerTeamId: 'ADMIN',
+        defenderTeamId: 'team-1',
+        attackId: 'sql-injection',
+        success: true,
+        neutralized: false,
+        damage: 0,
+        reward: 0,
+        details: '管理者による障害注入: sql-injection',
+        createdAt: '2026-03-09T00:00:00.000Z',
+      };
+      mockGameController.executeFaultInjection.mockResolvedValue(attackLog);
+
+      const res = await app.request('/fault-injection/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -160,13 +312,14 @@ describe('管理者 API', () => {
           attackSlug: 'sql-injection',
         }),
       });
-      expect(res.status).toBe(501);
+
+      expect(res.status).toBe(201);
       const body = await res.json();
-      expect(body.error).toBe('未実装です');
+      expect(body.attackerTeamId).toBe('ADMIN');
     });
 
     it('不正なリクエストで 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/fault-injection/execute', {
+      const res = await app.request('/fault-injection/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
@@ -175,7 +328,7 @@ describe('管理者 API', () => {
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/fault-injection/execute', {
+      const res = await app.request('/fault-injection/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
@@ -187,29 +340,60 @@ describe('管理者 API', () => {
   });
 
   describe('GET /teams', () => {
-    it('eventId 付きでチーム一覧を返すべき', async () => {
-      const res = await adminRoutes.request('/teams?eventId=event-1');
+    it('チーム一覧を取得できるべき', async () => {
+      const teams = [
+        {
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'チームA',
+          score: 5000,
+          isHealthy: true,
+        },
+      ];
+      mockGameController.listTeams.mockResolvedValue(teams);
+
+      const res = await app.request('/teams?eventId=event-1');
+
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.teams).toEqual([]);
+      expect(body.teams).toHaveLength(1);
+      expect(body.teams[0].teamName).toBe('チームA');
     });
 
     it('eventId がない場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/teams');
+      const res = await app.request('/teams');
       expect(res.status).toBe(400);
     });
   });
 
   describe('GET /attack-logs', () => {
-    it('eventId 付きで攻撃履歴を返すべき', async () => {
-      const res = await adminRoutes.request('/attack-logs?eventId=event-1');
+    it('攻撃履歴を取得できるべき', async () => {
+      const logs = [
+        {
+          id: 'log-1',
+          eventId: 'event-1',
+          attackerTeamId: 'team-1',
+          defenderTeamId: 'team-2',
+          attackId: 'atk-1',
+          success: true,
+          neutralized: false,
+          damage: 1000,
+          reward: 1000,
+          details: '',
+          createdAt: '2026-03-09T00:00:00.000Z',
+        },
+      ];
+      mockGameController.listAttackLogs.mockResolvedValue(logs);
+
+      const res = await app.request('/attack-logs?eventId=event-1');
+
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.logs).toEqual([]);
+      expect(body.logs).toHaveLength(1);
     });
 
     it('eventId がない場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/attack-logs');
+      const res = await app.request('/attack-logs');
       expect(res.status).toBe(400);
     });
   });

@@ -17,6 +17,7 @@ export default defineConfig({
         'src/lib/logger.ts',
         'src/lib/dynamodb.ts',
         'src/middleware/auth.ts',
+        'src/repositories/**',
         'src/types/index.ts',
         'src/index.ts',
       ],
