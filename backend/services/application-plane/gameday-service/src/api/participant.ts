@@ -9,6 +9,7 @@ import {
   requestAllianceSchema,
   allianceActionSchema,
   voteSchema,
+  updateTeamUrlSchema,
 } from '../schemas';
 import {
   getAttackCatalog,
@@ -38,6 +39,14 @@ import {
   AttackAlreadyPurchasedError,
   VoteAlreadyExistsError,
 } from '../services/participant-service';
+import {
+  updateTeamUrl,
+  getLeaderboard,
+  getAttackStatistics,
+  getTeamDashboard,
+  BlackoutActiveError,
+  TeamNotFoundError as DashboardTeamNotFoundError,
+} from '../services/dashboard-service';
 
 export const participantRoutes = new Hono();
 
@@ -432,4 +441,79 @@ participantRoutes.get('/voting/results', async (c) => {
   }
   const results = await getVotingResults(eventId);
   return c.json({ results }, StatusCodes.OK);
+});
+
+// === ダッシュボード ===
+
+// リーダーボード
+participantRoutes.get('/dashboard/leaderboard', async (c) => {
+  const eventId = c.req.query('eventId');
+  if (!eventId) {
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
+  }
+  try {
+    const leaderboard = await getLeaderboard(eventId);
+    return c.json({ leaderboard }, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof BlackoutActiveError) {
+      return c.json({ error: error.message }, StatusCodes.FORBIDDEN);
+    }
+    throw error;
+  }
+});
+
+// 攻撃統計
+participantRoutes.get('/dashboard/attack-stats', async (c) => {
+  const eventId = c.req.query('eventId');
+  if (!eventId) {
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
+  }
+  const stats = await getAttackStatistics(eventId);
+  return c.json({ stats }, StatusCodes.OK);
+});
+
+// チーム詳細ダッシュボード
+participantRoutes.get('/dashboard/team', async (c) => {
+  const eventId = c.req.query('eventId');
+  const teamId = c.req.query('teamId');
+  if (!eventId || !teamId) {
+    return c.json(
+      { error: 'eventId と teamId は必須です' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const dashboard = await getTeamDashboard(eventId, teamId);
+  if (!dashboard) {
+    return c.json({ error: 'チームが見つかりません' }, StatusCodes.NOT_FOUND);
+  }
+  return c.json(dashboard, StatusCodes.OK);
+});
+
+// === チーム URL 更新 ===
+
+participantRoutes.post('/teams/update-url', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const parsed = updateTeamUrlSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: '無効なリクエスト', details: parsed.error.issues },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const { eventId, teamId, websiteUrl, apiUrl } = parsed.data;
+  try {
+    await updateTeamUrl(eventId, teamId, { websiteUrl, apiUrl });
+    return c.json({ success: true }, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof DashboardTeamNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    throw error;
+  }
 });

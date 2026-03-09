@@ -5,6 +5,7 @@ import {
   startGameSchema,
   faultInjectionSchema,
   seedAttacksSchema,
+  registerTeamSchema,
 } from '../schemas';
 import {
   startGame,
@@ -19,6 +20,10 @@ import {
   GameNotFoundError,
   ConcurrentModificationError,
 } from '../services/game-controller';
+import {
+  registerTeam,
+  TeamAlreadyExistsError,
+} from '../services/dashboard-service';
 
 export const adminRoutes = new Hono();
 
@@ -189,6 +194,33 @@ adminRoutes.get('/attack-logs', async (c) => {
   }
   const logs = await listAttackLogs(eventId);
   return c.json({ logs }, StatusCodes.OK);
+});
+
+// チーム登録
+adminRoutes.post('/teams/register', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const parsed = registerTeamSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: '無効なリクエスト', details: parsed.error.issues },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  try {
+    const result = await registerTeam(parsed.data);
+    return c.json(result, StatusCodes.CREATED);
+  } catch (error) {
+    if (error instanceof TeamAlreadyExistsError) {
+      return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
+    throw error;
+  }
 });
 
 // 攻撃カタログシード
