@@ -325,6 +325,42 @@ export class GamedayRepository {
     }
   }
 
+  async enableBlackout(eventId: string): Promise<GameState | null> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    try {
+      const result = await client.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: {
+            PK: buildGamedayPK(eventId),
+            SK: buildMetadataSK(),
+          },
+          UpdateExpression: 'SET blackout = :true, UpdatedAt = :now',
+          ExpressionAttributeValues: {
+            ':true': true,
+            ':now': now,
+            ':false': false,
+          },
+          // 冪等: blackout が false の場合のみ更新
+          ConditionExpression: 'attribute_exists(PK) AND blackout = :false',
+          ReturnValues: 'ALL_NEW',
+        })
+      );
+
+      if (!result.Attributes) return null;
+      return toGameState(result.Attributes as GameStateItem);
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        // 既に blackout=true → 何もせず現状を返す
+        return this.getGameState(eventId);
+      }
+      throw error;
+    }
+  }
+
   async toggleBlackout(eventId: string): Promise<GameState | null> {
     const current = await this.getGameState(eventId);
     if (!current) {

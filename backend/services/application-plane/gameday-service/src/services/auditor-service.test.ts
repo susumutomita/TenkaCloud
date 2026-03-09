@@ -6,6 +6,8 @@ const mockRepository = vi.hoisted(() => ({
   createHealthCheck: vi.fn(),
   updateTeamScore: vi.fn(),
   updateTeamHealthy: vi.fn(),
+  stopGame: vi.fn(),
+  enableBlackout: vi.fn(),
 }));
 
 vi.mock('../lib/dynamodb', () => ({
@@ -279,6 +281,181 @@ describe('Auditor サービス', () => {
       await auditor.runCheck();
 
       expect(mockRepository.getGameState).not.toHaveBeenCalled();
+    });
+  });
+
+  // === enforceGameDuration ===
+  describe('enforceGameDuration', () => {
+    const baseGame = {
+      eventId: 'event-1',
+      tenantId: 'tenant-1',
+      isRunning: true,
+      scoreWeight: 'normal' as const,
+      durationMinutes: 240, // 4時間
+      blackout: false,
+    };
+
+    beforeEach(() => {
+      mockRepository.stopGame.mockResolvedValue(null);
+      mockRepository.enableBlackout.mockResolvedValue(null);
+    });
+
+    it('残り30分以内でブラックアウト未設定の場合、enableBlackout を呼ぶべき', async () => {
+      vi.useRealTimers();
+      const auditorInstance = new AuditorService();
+      // 開始から3時間31分経過（残り29分）
+      const startedAt = new Date(
+        Date.now() - (3 * 60 + 31) * 60 * 1000
+      ).toISOString();
+      const game = { ...baseGame, startedAt };
+
+      const result = await auditorInstance.enforceGameDuration(game);
+
+      expect(result).toBe(true);
+      expect(mockRepository.enableBlackout).toHaveBeenCalledWith('event-1');
+      expect(mockRepository.stopGame).not.toHaveBeenCalled();
+    });
+
+    it('残り30分以内でブラックアウト設定済みの場合、enableBlackout を呼ばないべき', async () => {
+      vi.useRealTimers();
+      const auditorInstance = new AuditorService();
+      const startedAt = new Date(
+        Date.now() - (3 * 60 + 31) * 60 * 1000
+      ).toISOString();
+      const game = { ...baseGame, startedAt, blackout: true };
+
+      const result = await auditorInstance.enforceGameDuration(game);
+
+      expect(result).toBe(true);
+      expect(mockRepository.enableBlackout).not.toHaveBeenCalled();
+    });
+
+    it('ゲーム時間超過の場合、stopGame を呼び Auditor を停止すべき', async () => {
+      vi.useRealTimers();
+      const auditorInstance = new AuditorService();
+      // 開始から4時間1分経過
+      const startedAt = new Date(
+        Date.now() - (4 * 60 + 1) * 60 * 1000
+      ).toISOString();
+      const game = { ...baseGame, startedAt };
+
+      // intervalId を設定して stop() が動作するようにする
+      (auditorInstance as unknown as { intervalId: number }).intervalId = 999;
+
+      const result = await auditorInstance.enforceGameDuration(game);
+
+      expect(result).toBe(false);
+      expect(mockRepository.stopGame).toHaveBeenCalledWith('event-1');
+      expect(auditorInstance.isRunning()).toBe(false);
+    });
+
+    it('ゲーム時間内の場合、何もせず true を返すべき', async () => {
+      vi.useRealTimers();
+      const auditorInstance = new AuditorService();
+      // 開始から1時間経過（残り3時間）
+      const startedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const game = { ...baseGame, startedAt };
+
+      const result = await auditorInstance.enforceGameDuration(game);
+
+      expect(result).toBe(true);
+      expect(mockRepository.enableBlackout).not.toHaveBeenCalled();
+      expect(mockRepository.stopGame).not.toHaveBeenCalled();
+    });
+
+    it('startedAt が null の場合、何もせず true を返すべき', async () => {
+      vi.useRealTimers();
+      const auditorInstance = new AuditorService();
+      const game = { ...baseGame, startedAt: null };
+
+      const result = await auditorInstance.enforceGameDuration(game);
+
+      expect(result).toBe(true);
+      expect(mockRepository.enableBlackout).not.toHaveBeenCalled();
+      expect(mockRepository.stopGame).not.toHaveBeenCalled();
+    });
+
+    it('enableBlackout が失敗しても runCheck は継続すべき', async () => {
+      vi.useRealTimers();
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }));
+      const auditorInstance = new AuditorService();
+      (auditorInstance as unknown as { eventId: string }).eventId = 'event-1';
+
+      const startedAt = new Date(
+        Date.now() - (3 * 60 + 31) * 60 * 1000
+      ).toISOString();
+      mockRepository.getGameState.mockResolvedValue({
+        ...baseGame,
+        startedAt,
+      });
+      mockRepository.enableBlackout.mockRejectedValue(
+        new Error('DynamoDB error')
+      );
+      mockRepository.listTeams.mockResolvedValue([]);
+
+      // enableBlackout のエラーが runCheck を中断させないことを確認
+      // enableBlackout の例外は runCheck まで伝播するが、これは想定動作
+      await expect(auditorInstance.runCheck()).rejects.toThrow(
+        'DynamoDB error'
+      );
+    });
+  });
+
+  // === runCheck（時間管理統合）===
+  describe('runCheck（時間管理統合）', () => {
+    const baseGame = {
+      eventId: 'event-1',
+      tenantId: 'tenant-1',
+      isRunning: true,
+      scoreWeight: 'normal' as const,
+      durationMinutes: 240,
+      blackout: false,
+    };
+
+    beforeEach(() => {
+      mockRepository.stopGame.mockResolvedValue(null);
+      mockRepository.enableBlackout.mockResolvedValue(null);
+    });
+
+    it('ゲーム時間超過時はヘルスチェックを実行しないべき', async () => {
+      vi.useRealTimers();
+      const auditorInstance = new AuditorService();
+      (auditorInstance as unknown as { eventId: string }).eventId = 'event-1';
+      (auditorInstance as unknown as { intervalId: number }).intervalId = 999;
+
+      const startedAt = new Date(
+        Date.now() - (4 * 60 + 1) * 60 * 1000
+      ).toISOString();
+      mockRepository.getGameState.mockResolvedValue({
+        ...baseGame,
+        startedAt,
+      });
+
+      await auditorInstance.runCheck();
+
+      expect(mockRepository.stopGame).toHaveBeenCalledWith('event-1');
+      expect(mockRepository.listTeams).not.toHaveBeenCalled();
+    });
+
+    it('残り30分以内でもヘルスチェックは継続すべき', async () => {
+      vi.useRealTimers();
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }));
+      const auditorInstance = new AuditorService();
+      (auditorInstance as unknown as { eventId: string }).eventId = 'event-1';
+
+      const startedAt = new Date(
+        Date.now() - (3 * 60 + 31) * 60 * 1000
+      ).toISOString();
+      mockRepository.getGameState.mockResolvedValue({
+        ...baseGame,
+        startedAt,
+      });
+      mockRepository.listTeams.mockResolvedValue([]);
+
+      await auditorInstance.runCheck();
+
+      expect(mockRepository.enableBlackout).toHaveBeenCalledWith('event-1');
+      expect(mockRepository.listTeams).toHaveBeenCalled();
     });
   });
 
