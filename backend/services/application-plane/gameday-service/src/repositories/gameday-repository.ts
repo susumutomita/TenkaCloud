@@ -5,6 +5,7 @@ import {
   QueryCommand,
   BatchWriteCommand,
   DeleteCommand,
+  TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { ulid } from 'ulid';
@@ -512,6 +513,36 @@ export class GamedayRepository {
     );
   }
 
+  async updateMultipleTeamScores(
+    eventId: string,
+    updates: Array<{ teamId: string; delta: number }>
+  ): Promise<void> {
+    if (updates.length === 0) return;
+
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    await client.send(
+      new TransactWriteCommand({
+        TransactItems: updates.map(({ teamId, delta }) => ({
+          Update: {
+            TableName: tableName,
+            Key: {
+              PK: buildGamedayPK(eventId),
+              SK: buildTeamSK(teamId),
+            },
+            UpdateExpression: 'ADD score :delta SET UpdatedAt = :now',
+            ExpressionAttributeValues: {
+              ':delta': delta,
+              ':now': now,
+            },
+          },
+        })),
+      })
+    );
+  }
+
   // === 攻撃カタログ ===
 
   async listAttackCatalog(eventId: string): Promise<Attack[]> {
@@ -763,6 +794,48 @@ export class GamedayRepository {
           ExpressionAttributeValues: {
             ':pk': buildGamedayPK(eventId),
             ':skPrefix': 'ALLIANCE#',
+          },
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
+
+      for (const item of result.Items ?? []) {
+        allItems.push(item as unknown as Alliance);
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
+  }
+
+  async listTeamActiveAlliances(
+    eventId: string,
+    teamId: string
+  ): Promise<Alliance[]> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const allItems: Alliance[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          FilterExpression:
+            '#status = :active AND (#requester = :teamId OR #target = :teamId)',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#requester': 'requesterTeamId',
+            '#target': 'targetTeamId',
+          },
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': 'ALLIANCE#',
+            ':active': 'ACTIVE',
+            ':teamId': teamId,
           },
           ExclusiveStartKey: exclusiveStartKey,
         })

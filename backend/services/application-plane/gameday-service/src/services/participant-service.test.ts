@@ -11,11 +11,13 @@ const { mockGamedayRepository } = vi.hoisted(() => ({
     createAttackPurchase: vi.fn(),
     updatePurchaseLastUsedAt: vi.fn(),
     updateTeamScore: vi.fn(),
+    updateMultipleTeamScores: vi.fn(),
     getTeamVulnerability: vi.fn(),
     upsertTeamVulnerability: vi.fn(),
     listAttackLogs: vi.fn(),
     addAttackLog: vi.fn(),
     listAlliances: vi.fn(),
+    listTeamActiveAlliances: vi.fn(),
     getAlliance: vi.fn(),
     createAlliance: vi.fn(),
     updateAllianceStatus: vi.fn(),
@@ -78,6 +80,7 @@ import {
   AllianceNotFoundError,
   AllianceUnauthorizedError,
   SelfVoteError,
+  VOTE_BONUS_POINTS,
 } from './participant-service';
 
 const runningGame = {
@@ -220,7 +223,7 @@ describe('プレーヤーサービス', () => {
   // === 攻撃実行 ===
   describe('executeAttack', () => {
     describe('正常系（攻撃成功）', () => {
-      it('ダメージと報酬を適用すべき', async () => {
+      it('ダメージと報酬を原子的に適用すべき', async () => {
         mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
         mockGamedayRepository.getAttack.mockResolvedValue(sampleAttack);
         mockGamedayRepository.getAttackPurchase.mockResolvedValue({
@@ -235,8 +238,10 @@ describe('プレーヤーサービス', () => {
         mockGamedayRepository.updatePurchaseLastUsedAt.mockResolvedValue(
           undefined
         );
-        mockGamedayRepository.updateTeamScore.mockResolvedValue(undefined);
-        mockGamedayRepository.listAlliances.mockResolvedValue([]);
+        mockGamedayRepository.updateMultipleTeamScores.mockResolvedValue(
+          undefined
+        );
+        mockGamedayRepository.listTeamActiveAlliances.mockResolvedValue([]);
         const attackLog = {
           id: 'log-1',
           success: true,
@@ -253,21 +258,17 @@ describe('プレーヤーサービス', () => {
         );
 
         expect(result).toEqual(attackLog);
-        expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
-          'event-1',
-          'team-2',
-          -1000
-        );
-        expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
-          'event-1',
-          'team-1',
-          1000
-        );
+        expect(
+          mockGamedayRepository.updateMultipleTeamScores
+        ).toHaveBeenCalledWith('event-1', [
+          { teamId: 'team-2', delta: -1000 },
+          { teamId: 'team-1', delta: 1000 },
+        ]);
       });
     });
 
     describe('攻撃成功時に同盟がある場合（攻撃者がリクエスター）', () => {
-      it('報酬を同盟メンバーと分配すべき', async () => {
+      it('報酬を同盟メンバーと原子的に分配すべき', async () => {
         mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
         mockGamedayRepository.getAttack.mockResolvedValue(sampleAttack);
         mockGamedayRepository.getAttackPurchase.mockResolvedValue({
@@ -282,8 +283,10 @@ describe('プレーヤーサービス', () => {
         mockGamedayRepository.updatePurchaseLastUsedAt.mockResolvedValue(
           undefined
         );
-        mockGamedayRepository.updateTeamScore.mockResolvedValue(undefined);
-        mockGamedayRepository.listAlliances.mockResolvedValue([
+        mockGamedayRepository.updateMultipleTeamScores.mockResolvedValue(
+          undefined
+        );
+        mockGamedayRepository.listTeamActiveAlliances.mockResolvedValue([
           {
             id: 'a-1',
             eventId: 'event-1',
@@ -299,22 +302,19 @@ describe('プレーヤーサービス', () => {
 
         await executeAttack('event-1', 'team-1', 'team-2', 'sql-injection');
 
-        // 1000 / 2 = 500 per member
-        expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
-          'event-1',
-          'team-1',
-          500
-        );
-        expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
-          'event-1',
-          'team-3',
-          500
-        );
+        // 1000 / 2 = 500 per member, remainder 0
+        expect(
+          mockGamedayRepository.updateMultipleTeamScores
+        ).toHaveBeenCalledWith('event-1', [
+          { teamId: 'team-2', delta: -1000 },
+          { teamId: 'team-1', delta: 500 },
+          { teamId: 'team-3', delta: 500 },
+        ]);
       });
     });
 
     describe('攻撃成功時に同盟がある場合（攻撃者がターゲット）', () => {
-      it('報酬を同盟メンバーと分配すべき', async () => {
+      it('報酬を同盟メンバーと原子的に分配すべき', async () => {
         mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
         mockGamedayRepository.getAttack.mockResolvedValue(sampleAttack);
         mockGamedayRepository.getAttackPurchase.mockResolvedValue({
@@ -329,8 +329,10 @@ describe('プレーヤーサービス', () => {
         mockGamedayRepository.updatePurchaseLastUsedAt.mockResolvedValue(
           undefined
         );
-        mockGamedayRepository.updateTeamScore.mockResolvedValue(undefined);
-        mockGamedayRepository.listAlliances.mockResolvedValue([
+        mockGamedayRepository.updateMultipleTeamScores.mockResolvedValue(
+          undefined
+        );
+        mockGamedayRepository.listTeamActiveAlliances.mockResolvedValue([
           {
             id: 'a-1',
             eventId: 'event-1',
@@ -346,17 +348,68 @@ describe('プレーヤーサービス', () => {
 
         await executeAttack('event-1', 'team-1', 'team-2', 'sql-injection');
 
-        // 1000 / 2 = 500 per member
-        expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
-          'event-1',
-          'team-1',
-          500
+        // 1000 / 2 = 500 per member, remainder 0
+        expect(
+          mockGamedayRepository.updateMultipleTeamScores
+        ).toHaveBeenCalledWith('event-1', [
+          { teamId: 'team-2', delta: -1000 },
+          { teamId: 'team-1', delta: 500 },
+          { teamId: 'team-3', delta: 500 },
+        ]);
+      });
+    });
+
+    describe('攻撃成功時に同盟が2つある場合（端数処理）', () => {
+      it('端数を攻撃者に付与すべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
+        mockGamedayRepository.getAttack.mockResolvedValue(sampleAttack);
+        mockGamedayRepository.getAttackPurchase.mockResolvedValue({
+          id: 'p-1',
+          lastUsedAt: null,
+        });
+        mockGamedayRepository.getTeamState.mockResolvedValue({
+          ...sampleTeam,
+          teamId: 'team-2',
+        });
+        mockGamedayRepository.getTeamVulnerability.mockResolvedValue(null);
+        mockGamedayRepository.updatePurchaseLastUsedAt.mockResolvedValue(
+          undefined
         );
-        expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
-          'event-1',
-          'team-3',
-          500
+        mockGamedayRepository.updateMultipleTeamScores.mockResolvedValue(
+          undefined
         );
+        mockGamedayRepository.listTeamActiveAlliances.mockResolvedValue([
+          {
+            id: 'a-1',
+            eventId: 'event-1',
+            requesterTeamId: 'team-1',
+            targetTeamId: 'team-3',
+            status: 'ACTIVE',
+          },
+          {
+            id: 'a-2',
+            eventId: 'event-1',
+            requesterTeamId: 'team-4',
+            targetTeamId: 'team-1',
+            status: 'ACTIVE',
+          },
+        ]);
+        mockGamedayRepository.addAttackLog.mockResolvedValue({
+          id: 'log-1',
+          success: true,
+        });
+
+        await executeAttack('event-1', 'team-1', 'team-2', 'sql-injection');
+
+        // 1000 / 3 = 333, remainder = 1 → 攻撃者に付与
+        expect(
+          mockGamedayRepository.updateMultipleTeamScores
+        ).toHaveBeenCalledWith('event-1', [
+          { teamId: 'team-2', delta: -1000 },
+          { teamId: 'team-1', delta: 334 },
+          { teamId: 'team-3', delta: 333 },
+          { teamId: 'team-4', delta: 333 },
+        ]);
       });
     });
 
@@ -729,7 +782,7 @@ describe('プレーヤーサービス', () => {
   // === 投票 ===
   describe('castVote', () => {
     describe('正常系', () => {
-      it('投票して投票先に5000pt付与すべき', async () => {
+      it('投票して投票先にVOTE_BONUS_POINTS付与すべき', async () => {
         const vote = {
           id: 'v-1',
           eventId: 'event-1',
@@ -745,7 +798,7 @@ describe('プレーヤーサービス', () => {
         expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
           'event-1',
           'team-2',
-          5000
+          VOTE_BONUS_POINTS
         );
       });
     });

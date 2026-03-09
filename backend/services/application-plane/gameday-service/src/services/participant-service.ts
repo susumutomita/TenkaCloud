@@ -15,6 +15,9 @@ import type {
 
 export { AttackAlreadyPurchasedError, VoteAlreadyExistsError };
 
+// === 定数 ===
+export const VOTE_BONUS_POINTS = 5000;
+
 export class GameNotRunningError extends Error {
   constructor() {
     super('ゲームが開始されていません');
@@ -205,43 +208,28 @@ export async function executeAttack(
   );
 
   if (success) {
-    // 被害者: -damage
-    await gamedayRepository.updateTeamScore(
-      eventId,
-      defenderTeamId,
-      -attack.damage
-    );
-
     // 同盟報酬分配
-    const alliances = await gamedayRepository.listAlliances(eventId);
-    const activeAllyTeamIds = alliances
-      .filter(
-        (a) =>
-          a.status === 'ACTIVE' &&
-          (a.requesterTeamId === attackerTeamId ||
-            a.targetTeamId === attackerTeamId)
-      )
-      .map((a) =>
-        a.requesterTeamId === attackerTeamId
-          ? a.targetTeamId
-          : a.requesterTeamId
-      );
+    const alliances = await gamedayRepository.listTeamActiveAlliances(
+      eventId,
+      attackerTeamId
+    );
+    const activeAllyTeamIds = alliances.map((a) =>
+      a.requesterTeamId === attackerTeamId ? a.targetTeamId : a.requesterTeamId
+    );
 
     const totalMembers = 1 + activeAllyTeamIds.length;
     const sharePerMember = Math.floor(attack.reward / totalMembers);
+    const remainder = attack.reward - sharePerMember * totalMembers;
 
-    await gamedayRepository.updateTeamScore(
-      eventId,
-      attackerTeamId,
-      sharePerMember
-    );
+    // 全スコア変更を原子的に実行
+    const scoreUpdates: Array<{ teamId: string; delta: number }> = [
+      { teamId: defenderTeamId, delta: -attack.damage },
+      { teamId: attackerTeamId, delta: sharePerMember + remainder },
+    ];
     for (const allyTeamId of activeAllyTeamIds) {
-      await gamedayRepository.updateTeamScore(
-        eventId,
-        allyTeamId,
-        sharePerMember
-      );
+      scoreUpdates.push({ teamId: allyTeamId, delta: sharePerMember });
     }
+    await gamedayRepository.updateMultipleTeamScores(eventId, scoreUpdates);
 
     return gamedayRepository.addAttackLog({
       eventId,
@@ -251,7 +239,7 @@ export async function executeAttack(
       attackSlug: attack.slug,
       success: true,
       damage: attack.damage,
-      reward: sharePerMember,
+      reward: sharePerMember + remainder,
       details: `${attack.name} 攻撃成功`,
     });
   } else {
@@ -429,8 +417,12 @@ export async function castVote(
     votedForTeamId,
   });
 
-  // 投票ボーナス: +5,000pt
-  await gamedayRepository.updateTeamScore(eventId, votedForTeamId, 5000);
+  // 投票ボーナス
+  await gamedayRepository.updateTeamScore(
+    eventId,
+    votedForTeamId,
+    VOTE_BONUS_POINTS
+  );
 
   return vote;
 }
