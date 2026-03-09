@@ -1,6 +1,7 @@
 import { gamedayRepository } from '../lib/dynamodb';
 import { createLogger } from '../lib/logger';
 import type { TeamState } from '../repositories/gameday-repository';
+import type { GameState } from '../types';
 
 const logger = createLogger('auditor');
 
@@ -62,6 +63,10 @@ export class AuditorService {
       logger.info('ゲームが開始されていないためチェックをスキップします');
       return;
     }
+
+    // ゲーム時間管理
+    const shouldContinue = await this.enforceGameDuration(game);
+    if (!shouldContinue) return;
 
     const teams = await gamedayRepository.listTeams(this.eventId);
 
@@ -143,6 +148,34 @@ export class AuditorService {
       },
       'ヘルスチェック完了'
     );
+  }
+
+  async enforceGameDuration(game: GameState): Promise<boolean> {
+    if (!game.startedAt) return true;
+
+    const elapsedMs = Date.now() - new Date(game.startedAt).getTime();
+    const durationMs = game.durationMinutes * 60 * 1000;
+    const remainingMs = durationMs - elapsedMs;
+
+    // ゲーム終了
+    if (remainingMs <= 0) {
+      logger.info({ eventId: game.eventId }, 'ゲーム時間超過 — 自動停止します');
+      await gamedayRepository.stopGame(game.eventId);
+      this.stop();
+      return false;
+    }
+
+    // 残り 30 分以内 → 自動ブラックアウト
+    const BLACKOUT_THRESHOLD_MS = 30 * 60 * 1000;
+    if (remainingMs <= BLACKOUT_THRESHOLD_MS && !game.blackout) {
+      logger.info(
+        { eventId: game.eventId, remainingMs },
+        '残り30分 — 自動ブラックアウトを開始します'
+      );
+      await gamedayRepository.enableBlackout(game.eventId);
+    }
+
+    return true;
   }
 
   async httpCheck(url: string): Promise<HttpCheckResult> {
