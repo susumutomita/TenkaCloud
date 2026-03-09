@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Route 53 ホストゾーン + DNS レコード管理（正解テンプレート）
+  パブリックホストゾーン、Alias レコード、CNAME、ヘルスチェックを含む DNS 構成。
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: example.tenkacloud.com
+    Description: 管理対象ドメイン名
+  ALBDnsName:
+    Type: String
+    Default: my-alb-123456789.ap-northeast-1.elb.amazonaws.com
+    Description: ALB の DNS 名
+  ALBHostedZoneId:
+    Type: String
+    Default: Z14GRHDCWA56QT
+    Description: ALB の Route 53 HostedZone ID（ap-northeast-1）
+
+Resources:
+  # --- パブリックホストゾーン ---
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Sub "${DomainName}."
+      HostedZoneConfig:
+        Comment: !Sub "Hosted zone for ${DomainName}"
+
+  # --- ヘルスチェック ---
+  WebHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: HTTP
+        FullyQualifiedDomainName: !Ref ALBDnsName
+        Port: 80
+        ResourcePath: /health
+        RequestInterval: 30
+        FailureThreshold: 3
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${DomainName}-health-check"
+
+  # --- A レコード（ALB Alias）---
+  WebAliasRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "${DomainName}."
+      Type: A
+      AliasTarget:
+        DNSName: !Ref ALBDnsName
+        HostedZoneId: !Ref ALBHostedZoneId
+        EvaluateTargetHealth: true
+      SetIdentifier: primary
+      Failover: PRIMARY
+      HealthCheckId: !Ref WebHealthCheck
+
+  # --- CNAME レコード（API サブドメイン）---
+  ApiCnameRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "api.${DomainName}."
+      Type: CNAME
+      TTL: "300"
+      ResourceRecords:
+        - !Ref ALBDnsName
+
+Outputs:
+  HostedZoneId:
+    Description: ホストゾーン ID
+    Value: !Ref HostedZone
+
+  HealthCheckId:
+    Description: ヘルスチェック ID
+    Value: !Ref WebHealthCheck
+
+  WebRecordName:
+    Description: Web Alias レコード名
+    Value: !Ref WebAliasRecord
+
+  ApiRecordName:
+    Description: API CNAME レコード名
+    Value: !Ref ApiCnameRecord

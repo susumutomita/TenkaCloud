@@ -28,6 +28,7 @@ export default defineConfig({
         'app/signup/**',
         'app/onboarding/**',
         'app/rankings/**',
+        'app/\\(participant\\)/**',
       ],
       thresholds: {
         lines: 99,

@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: ElastiCache レプリケーショングループによる高可用性キャッシュ（正解テンプレート）
+  マルチ AZ レプリケーション、自動フェイルオーバー、暗号化を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-cache
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-vpc"
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private-a"
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-private-c"
+
+  # 要件4: キャッシュサブネットグループ
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      CacheSubnetGroupName: !Sub "${EnvironmentPrefix}-subnet-group"
+      Description: Multi-AZ cache subnet group
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
+
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ElastiCache
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-cache-sg"
+
+  # 要件1-3: レプリケーショングループ
+  RedisReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: !Sub "${EnvironmentPrefix} Redis replication group"
+      Engine: redis
+      EngineVersion: "7.1"
+      CacheNodeType: cache.t3.micro
+      NumCacheClusters: 2
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      TransitEncryptionEnabled: true
+      AtRestEncryptionEnabled: true
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      SecurityGroupIds:
+        - !GetAtt CacheSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentPrefix}-redis"
+
+Outputs:
+  ReplicationGroupId:
+    Description: レプリケーショングループ ID
+    Value: !Ref RedisReplicationGroup
+
+  PrimaryEndpoint:
+    Description: プライマリエンドポイント
+    Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+
+  CacheSubnetGroupName:
+    Description: キャッシュサブネットグループ名
+    Value: !Ref CacheSubnetGroup

@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Kinesis Enhanced Fan-Out による低レイテンシストリーム処理（正解テンプレート）
+  EFO コンシューマー、暗号化、保持期間を構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-kinesis-perf
+    Description: プロジェクト名のプレフィックス
+
+Resources:
+  # 要件1, 3, 4: Kinesis Data Stream
+  DataStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      Name: !Sub "${ProjectName}-stream"
+      # 要件1: 4 シャード
+      ShardCount: 4
+      # 要件3: KMS 暗号化
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: alias/aws/kinesis
+      # 要件4: 保持期間 168 時間（7 日）
+      RetentionPeriodHours: 168
+
+  # 要件2: Enhanced Fan-Out コンシューマー 1
+  AnalyticsConsumer:
+    Type: AWS::Kinesis::StreamConsumer
+    Properties:
+      StreamARN: !GetAtt DataStream.Arn
+      ConsumerName: !Sub "${ProjectName}-analytics"
+
+  # 要件2: Enhanced Fan-Out コンシューマー 2
+  AlertingConsumer:
+    Type: AWS::Kinesis::StreamConsumer
+    Properties:
+      StreamARN: !GetAtt DataStream.Arn
+      ConsumerName: !Sub "${ProjectName}-alerting"
+
+Outputs:
+  StreamName:
+    Description: Kinesis Data Stream 名
+    Value: !Ref DataStream
+
+  StreamArn:
+    Description: Kinesis Data Stream ARN
+    Value: !GetAtt DataStream.Arn
+
+  AnalyticsConsumerArn:
+    Description: Analytics EFO コンシューマー ARN
+    Value: !Ref AnalyticsConsumer
+
+  AlertingConsumerArn:
+    Description: Alerting EFO コンシューマー ARN
+    Value: !Ref AlertingConsumer

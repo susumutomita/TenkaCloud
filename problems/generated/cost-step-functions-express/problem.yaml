@@ -1,0 +1,112 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: cost-step-functions-express
+# タイプ: GAMEDAY（構築型）
+
+id: cost-step-functions-express
+title: Step Functions Express Workflows でコスト削減
+type: gameday
+category: cost
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - step-functions
+    - cost
+    - express-workflow
+    - serverless
+    - lambda
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはサーバーレスアーキテクトとして、注文処理パイプラインのコスト最適化を担当しています。
+    Standard Workflow で実装された Step Functions が、短時間で完了する大量のリクエストを処理しており、
+    状態遷移あたりの課金で高コストになっています。
+
+    ## 背景
+    コスト分析の結果から以下が判明しました。
+    - Step Functions Standard Workflow が毎日 500 万回実行されている
+    - 各実行は 5 秒以内に完了する短い処理
+    - 状態遷移は平均 4 回で、状態遷移課金が月額 $2,000 を超過
+    - Express Workflow に移行すれば実行時間課金で大幅にコスト削減可能
+
+    ## あなたのミッション
+    Step Functions Express Workflow で注文処理パイプラインを構築してください。
+
+    ### 要件
+    1. **Express Workflow**: StateMachine の Type を EXPRESS に設定する
+    2. **Lambda 統合**: 2 つの Lambda 関数（バリデーション、処理）をタスクとして統合する
+    3. **ログ設定**: CloudWatch Logs にログを出力し、ログレベルを ALL に設定する
+    4. **トレース設定**: X-Ray トレースを有効にする
+
+  objectives:
+    - Express Workflow タイプの Step Functions を作成する
+    - Lambda 関数をタスクステートとして統合する
+    - CloudWatch Logs へのログ出力を設定する
+    - X-Ray トレースを有効にする
+
+  hints:
+    - "StateMachine の Type プロパティで EXPRESS を指定します"
+    - "Express Workflow は実行時間ベースの課金で、短時間処理に最適です"
+    - "LoggingConfiguration でログレベルとログ出力先を設定します"
+    - "TracingConfiguration で X-Ray トレースを有効にします"
+
+  prerequisites:
+    - Step Functions の基本的な知識
+    - Lambda の基本的な知識
+    - CloudFormation の知識
+
+  estimatedTime: 35
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/cost-step-functions-express.yaml
+      parameters:
+        ProjectName: tenka-sfn-cost
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Express Workflow
+      description: StateMachine の Type が EXPRESS に設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: Lambda 統合
+      description: 2 つの Lambda 関数がタスクとして統合されている
+      weight: 25
+      maxPoints: 25
+
+    - name: ログ設定
+      description: CloudWatch Logs にログが出力されログレベルが ALL
+      weight: 25
+      maxPoints: 25
+
+    - name: X-Ray トレース
+      description: X-Ray トレースが有効になっている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: SQS キュー設計（正解テンプレート）
+  Standard キュー、DLQ、リドライブポリシー、アクセスポリシーを含む構成。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-sqs
+    Description: 環境名プレフィックス
+
+Resources:
+  # --- デッドレターキュー ---
+  OrderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentName}-order-dlq"
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-order-dlq"
+
+  # --- メインキュー ---
+  OrderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${EnvironmentName}-order-queue"
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrderDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-order-queue"
+
+  # --- キューポリシー ---
+  OrderQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref OrderQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSendMessage
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-order-sender"
+            Action: sqs:SendMessage
+            Resource: !GetAtt OrderQueue.Arn
+          - Sid: AllowReceiveMessage
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-order-processor"
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+            Resource: !GetAtt OrderQueue.Arn
+
+Outputs:
+  OrderQueueUrl:
+    Description: メインキュー URL
+    Value: !Ref OrderQueue
+
+  OrderQueueArn:
+    Description: メインキュー ARN
+    Value: !GetAtt OrderQueue.Arn
+
+  OrderDLQUrl:
+    Description: DLQ URL
+    Value: !Ref OrderDLQ
+
+  OrderDLQArn:
+    Description: DLQ ARN
+    Value: !GetAtt OrderDLQ.Arn

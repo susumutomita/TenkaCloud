@@ -1,0 +1,120 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: multi-tier-architecture
+# タイプ: GAMEDAY（構築型）
+
+id: multi-tier-architecture
+title: マルチ AZ マルチティア構成
+type: gameday
+category: architecture
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - vpc
+    - multi-az
+    - multi-tier
+    - alb
+    - rds
+    - security-group
+    - three-tier
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドアーキテクトとして、エンタープライズ向け Web アプリケーションの
+    本番環境ネットワークを設計・構築する任務を与えられました。
+
+    ## 背景
+    顧客のコンプライアンス要件により、Web 層・App 層・DB 層を明確に分離し、
+    各層間のトラフィックをセキュリティグループで厳密に制御する必要があります。
+    また、すべての層で高可用性（マルチ AZ）が求められています。
+
+    ## あなたのミッション
+    以下の要件を満たすマルチ AZ・3 層アーキテクチャを構築してください。
+
+    ### 要件
+    1. **VPC + マルチ AZ サブネット**: 2 AZ に Web（パブリック）・App（プライベート）・DB（分離）の 6 サブネットを作成する
+    2. **Web 層**: Internet-facing ALB をパブリックサブネットに配置し、HTTP/HTTPS を受け付ける
+    3. **App 層**: Internal ALB をプライベートサブネットに配置し、Web 層からのみトラフィックを受け付ける
+    4. **DB 層**: RDS Multi-AZ を分離サブネットに配置し、App 層からのみ接続を許可する
+    5. **セキュリティグループ連鎖**: Web → App → DB の順にセキュリティグループを連鎖させ、各層は前の層からのみアクセスを許可する
+
+  objectives:
+    - 2 AZ x 3 層の 6 サブネットを持つ VPC を作成する
+    - Internet-facing ALB を Web 層に配置する
+    - Internal ALB を App 層に配置する
+    - RDS Multi-AZ を DB 層に配置する
+    - セキュリティグループを連鎖させて層間アクセスを制御する
+
+  hints:
+    - "DB サブネットはインターネットへのルートを持たない分離サブネットにしてください"
+    - "セキュリティグループの SourceSecurityGroupId で前の層の SG を参照します"
+    - "RDS Multi-AZ には DBSubnetGroup が必要です"
+    - "Internal ALB は Scheme: internal で作成します"
+
+  prerequisites:
+    - VPC 設計の実務知識
+    - ALB と Auto Scaling の基本知識
+    - RDS の基本知識
+    - セキュリティグループの設計知識
+    - CloudFormation の中級知識
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/multi-tier-architecture.yaml
+      parameters:
+        EnvironmentName: tenka-multi-tier
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - name: VPC + マルチ AZ サブネット
+      description: 2 AZ に Web・App・DB 各層のサブネットが作成され、適切なルーティングが設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: Web 層（外部 ALB）
+      description: Internet-facing ALB がパブリックサブネットに配置され、HTTP を受け付けている
+      weight: 20
+      maxPoints: 20
+
+    - name: App 層（内部 ALB）
+      description: Internal ALB がプライベートサブネットに配置され、Web 層からのトラフィックのみ受け付けている
+      weight: 20
+      maxPoints: 20
+
+    - name: DB 層（RDS Multi-AZ）
+      description: RDS が分離サブネットに Multi-AZ で配置され、ストレージ暗号化が有効になっている
+      weight: 20
+      maxPoints: 20
+
+    - name: セキュリティグループ連鎖
+      description: Web → App → DB の順にセキュリティグループが連鎖し、各層は前の層からのみアクセスを許可している
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 15
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

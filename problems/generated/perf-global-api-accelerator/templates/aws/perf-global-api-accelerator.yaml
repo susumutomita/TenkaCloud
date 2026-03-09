@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Global Accelerator によるマルチリージョン API 高速化（正解テンプレート）
+  Global Accelerator、エンドポイントグループ、ALB エンドポイントを構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-ga-perf
+    Description: プロジェクト名のプレフィックス
+
+  ALBArn:
+    Type: String
+    Description: ALB の ARN
+
+Resources:
+  # 要件1: Global Accelerator
+  Accelerator:
+    Type: AWS::GlobalAccelerator::Accelerator
+    Properties:
+      Name: !Sub "${ProjectName}-accelerator"
+      Enabled: true
+      IpAddressType: IPV4
+
+  # 要件1: リスナー（ポート 443）
+  Listener:
+    Type: AWS::GlobalAccelerator::Listener
+    Properties:
+      AcceleratorArn: !Ref Accelerator
+      Protocol: TCP
+      PortRanges:
+        - FromPort: 443
+          ToPort: 443
+
+  # 要件2, 3, 4, 5: エンドポイントグループ（ap-northeast-1）
+  TokyoEndpointGroup:
+    Type: AWS::GlobalAccelerator::EndpointGroup
+    Properties:
+      ListenerArn: !Ref Listener
+      EndpointGroupRegion: ap-northeast-1
+      # 要件3: ヘルスチェック間隔 10 秒
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /health
+      HealthCheckPort: 443
+      HealthCheckProtocol: HTTPS
+      ThresholdCount: 3
+      # 要件4: トラフィックダイヤル 100
+      TrafficDialPercentage: 100
+      # 要件5: ALB エンドポイント
+      EndpointConfigurations:
+        - EndpointId: !Ref ALBArn
+          Weight: 100
+          ClientIPPreservationEnabled: true
+
+  # 要件2, 3, 4: エンドポイントグループ（us-east-1）
+  VirginiaEndpointGroup:
+    Type: AWS::GlobalAccelerator::EndpointGroup
+    Properties:
+      ListenerArn: !Ref Listener
+      EndpointGroupRegion: us-east-1
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /health
+      HealthCheckPort: 443
+      HealthCheckProtocol: HTTPS
+      ThresholdCount: 3
+      TrafficDialPercentage: 100
+
+Outputs:
+  AcceleratorDnsName:
+    Description: Global Accelerator DNS 名
+    Value: !GetAtt Accelerator.DnsName
+
+  AcceleratorArn:
+    Description: Global Accelerator ARN
+    Value: !Ref Accelerator

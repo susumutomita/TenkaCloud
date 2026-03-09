@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: EC2 インスタンスのコスト最適化（正解テンプレート）
+  適切なインスタンスタイプ、gp3 EBS、Auto Scaling、Savings Plans タグを設定。
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: EC2 インスタンスを起動する VPC ID
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Auto Scaling グループのサブネット ID リスト
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Amazon Linux 2023 の最新 AMI ID
+
+Resources:
+  # EC2 インスタンス用セキュリティグループ
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for cost-optimized EC2 instances
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
+
+  # 起動テンプレート
+  CostOptimizedLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub tenka-cost-optimized-${AWS::StackName}
+      LaunchTemplateData:
+        # 要件1: 適切なインスタンスタイプ（t3.medium）
+        InstanceType: t3.medium
+        ImageId: !Ref LatestAmiId
+        # Unlimited モードを無効にしてコスト予測可能性を確保
+        CreditSpecification:
+          CpuCredits: standard
+        SecurityGroupIds:
+          - !Ref InstanceSecurityGroup
+        # 要件2: EBS ボリューム最適化（gp3）
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 20
+              Iops: 3000
+              Throughput: 125
+              Encrypted: true
+              DeleteOnTermination: true
+        # 要件4: Savings Plans 識別タグ
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: SavingsPlanEligible
+                Value: "true"
+              - Key: Project
+                Value: TenkaCloud
+          - ResourceType: volume
+            Tags:
+              - Key: Project
+                Value: TenkaCloud
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+
+  # 要件3: Auto Scaling グループ
+  CostOptimizedASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub tenka-cost-optimized-asg-${AWS::StackName}
+      LaunchTemplate:
+        LaunchTemplateId: !Ref CostOptimizedLaunchTemplate
+        Version: !GetAtt CostOptimizedLaunchTemplate.LatestVersionNumber
+      MinSize: "1"
+      MaxSize: "3"
+      DesiredCapacity: "1"
+      VPCZoneIdentifier: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          Value: tenka-cost-optimized
+          PropagateAtLaunch: true
+
+Outputs:
+  LaunchTemplateId:
+    Description: 起動テンプレート ID
+    Value: !Ref CostOptimizedLaunchTemplate
+
+  AutoScalingGroupName:
+    Description: Auto Scaling グループ名
+    Value: !Ref CostOptimizedASG
+
+  SecurityGroupId:
+    Description: セキュリティグループ ID
+    Value: !Ref InstanceSecurityGroup

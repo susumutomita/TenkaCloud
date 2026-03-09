@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: RDS リードレプリカとコネクションプーリング（正解テンプレート）
+  Aurora MySQL クラスター、リードレプリカ、RDS Proxy、Performance Insights を設定。
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Aurora クラスターを配置する VPC ID
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: DB サブネットグループのサブネット ID リスト
+
+  DBMasterUsername:
+    Type: String
+    Default: tenkaadmin
+    Description: マスターユーザー名
+    AllowedPattern: "^[a-zA-Z][a-zA-Z0-9]*$"
+    ConstraintDescription: 英字で始まり英数字のみ使用可能
+
+Resources:
+  # DB サブネットグループ
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for Aurora cluster
+      SubnetIds: !Ref SubnetIds
+
+  # DB セキュリティグループ
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Aurora cluster
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref ProxySecurityGroup
+          Description: Allow MySQL from RDS Proxy
+
+  # RDS Proxy 用セキュリティグループ
+  ProxySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS Proxy
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/8
+          Description: Allow MySQL from VPC
+
+  # DB 認証情報（Secrets Manager）
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub tenka-rds-replica-${AWS::StackName}
+      Description: Aurora cluster master credentials
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DBMasterUsername}"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+
+  # 要件1: Aurora MySQL クラスター（暗号化有効）
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Sub tenka-perf-cluster-${AWS::StackName}
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.07.1"
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DBSecret}:SecretString:username}}"
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DBSecurityGroup
+      StorageEncrypted: true
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+
+  # ライターインスタンス（要件4: Performance Insights 有効）
+  WriterInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub tenka-perf-writer-${AWS::StackName}
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.r6g.large
+      Engine: aurora-mysql
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
+      MonitoringInterval: 60
+      MonitoringRoleArn: !GetAtt EnhancedMonitoringRole.Arn
+
+  # 要件2: リーダーインスタンス（Performance Insights 有効）
+  ReaderInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub tenka-perf-reader-${AWS::StackName}
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.r6g.large
+      Engine: aurora-mysql
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
+      MonitoringInterval: 60
+      MonitoringRoleArn: !GetAtt EnhancedMonitoringRole.Arn
+
+  # Enhanced Monitoring 用 IAM ロール
+  EnhancedMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub tenka-rds-monitoring-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+
+  # RDS Proxy 用 IAM ロール
+  ProxyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub tenka-rds-proxy-role-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DBSecret
+
+  # 要件3: RDS Proxy（コネクションプーリング）
+  RDSProxy:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      DBProxyName: !Sub tenka-perf-proxy-${AWS::StackName}
+      EngineFamily: MYSQL
+      RoleArn: !GetAtt ProxyRole.Arn
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !Ref DBSecret
+          IAMAuth: DISABLED
+      VpcSubnetIds: !Ref SubnetIds
+      VpcSecurityGroupIds:
+        - !Ref ProxySecurityGroup
+      RequireTLS: true
+
+  # RDS Proxy ターゲットグループ
+  ProxyTargetGroup:
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      DBProxyName: !Ref RDSProxy
+      TargetGroupName: default
+      DBClusterIdentifiers:
+        - !Ref AuroraCluster
+      ConnectionPoolConfigurationInfo:
+        MaxConnectionsPercent: 90
+        MaxIdleConnectionsPercent: 50
+
+Outputs:
+  ClusterEndpoint:
+    Description: Aurora クラスターライターエンドポイント
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+
+  ReaderEndpoint:
+    Description: Aurora クラスターリーダーエンドポイント
+    Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+
+  ProxyEndpoint:
+    Description: RDS Proxy エンドポイント
+    Value: !GetAtt RDSProxy.Endpoint
+
+  ClusterIdentifier:
+    Description: Aurora クラスター ID
+    Value: !Ref AuroraCluster

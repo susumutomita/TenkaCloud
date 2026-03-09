@@ -1,0 +1,115 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: cost-ecs-spot-optimization
+# タイプ: GAMEDAY（構築型）
+
+id: cost-ecs-spot-optimization
+title: ECS クラスターの Spot + オンデマンド混合戦略
+type: gameday
+category: cost
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - ecs
+    - cost
+    - spot
+    - capacity-provider
+    - auto-scaling
+    - mixed-instances
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはプラットフォームエンジニアとして、大規模なバッチ処理基盤のコスト最適化を担当しています。
+    現在はすべてのタスクが Fargate オンデマンドで実行されていますが、
+    中断耐性のあるワークロードを Spot で実行することで大幅なコスト削減が可能です。
+
+    ## 背景
+    ワークロード分析の結果から以下が判明しました。
+    - バッチ処理タスクは中断されてもリトライ可能（中断耐性あり）
+    - API サービスは可用性が必要（中断不可）
+    - Fargate Spot は最大 70% のコスト削減が可能
+    - キャパシティプロバイダー戦略で Spot とオンデマンドを混合できる
+
+    ## あなたのミッション
+    ECS クラスターに Spot とオンデマンドの混合戦略を構成し、2 つのサービスを配置してください。
+
+    ### 要件
+    1. **キャパシティプロバイダー**: FARGATE と FARGATE_SPOT の両方をクラスターに登録する
+    2. **API サービス（オンデマンド）**: FARGATE のみを使用する安定サービスを構成する
+    3. **バッチサービス（Spot 優先）**: FARGATE_SPOT:3, FARGATE:1 の比率で混合戦略を構成する
+    4. **サーキットブレーカー**: デプロイメントサーキットブレーカーを有効にする
+
+  objectives:
+    - ECS クラスターに FARGATE と FARGATE_SPOT のキャパシティプロバイダーを登録する
+    - 安定性が必要なサービスをオンデマンドで構成する
+    - 中断耐性のあるサービスを Spot 優先で構成する
+    - デプロイメントサーキットブレーカーを有効にする
+
+  hints:
+    - "CapacityProviders でクラスターに FARGATE と FARGATE_SPOT を登録します"
+    - "CapacityProviderStrategy の Weight で Spot とオンデマンドの比率を制御します"
+    - "Base パラメータで最低限のオンデマンドタスク数を保証できます"
+    - "DeploymentCircuitBreaker で失敗時のロールバックを自動化します"
+
+  prerequisites:
+    - ECS Fargate の運用経験
+    - キャパシティプロバイダーの理解
+    - CloudFormation の実務経験
+
+  estimatedTime: 50
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/cost-ecs-spot-optimization.yaml
+      parameters:
+        ProjectName: tenka-ecs-spot
+        VpcId: ""
+        SubnetIds: ""
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: キャパシティプロバイダー
+      description: FARGATE と FARGATE_SPOT の両方がクラスターに登録されている
+      weight: 25
+      maxPoints: 25
+
+    - name: API サービス（オンデマンド）
+      description: FARGATE のみのキャパシティプロバイダー戦略が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: バッチサービス（Spot 混合）
+      description: FARGATE_SPOT:3, FARGATE:1 の混合戦略が設定されている
+      weight: 30
+      maxPoints: 30
+
+    - name: サーキットブレーカー
+      description: デプロイメントサーキットブレーカーが有効になっている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

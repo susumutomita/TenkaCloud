@@ -1,0 +1,190 @@
+name: deploy
+
+# Supply Chain Security:
+# - All actions pinned to full SHA for immutable references
+# - Safe Chain runs before dependency installation
+# - Lifecycle scripts disabled during install
+# - OIDC for AWS authentication (no long-lived credentials)
+# - Minimal permissions following principle of least privilege
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+
+      # Supply Chain Security: Setup safe-chain before dependency installation
+      - name: Setup safe-chain
+        run: |
+          npm i -g @aikidosec/safe-chain
+          safe-chain setup-ci
+
+      # Supply Chain Security: Disable lifecycle scripts during install
+      - name: Install packages
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
+        run: make install_ci
+
+      - name: Run before-commit checks
+        run: make before-commit
+
+  cdk-diff:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+
+      - name: Configure AWS Credentials
+        # aws-actions/configure-aws-credentials v4.3.1
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+
+      - name: Install CDK dependencies
+        working-directory: infrastructure/cdk
+        run: bun install --frozen-lockfile
+
+      - name: CDK diff
+        working-directory: infrastructure/cdk
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+        run: bunx cdk diff --all
+
+  deploy-staging:
+    needs: cdk-diff
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+
+      - name: Configure AWS Credentials
+        # aws-actions/configure-aws-credentials v4.3.1
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+
+      - name: Install CDK dependencies
+        working-directory: infrastructure/cdk
+        run: bun install --frozen-lockfile
+
+      - name: CDK bootstrap
+        working-directory: infrastructure/cdk
+        run: bunx cdk bootstrap
+
+      - name: Deploy ControlPlane stack
+        working-directory: infrastructure/cdk
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+        run: bunx cdk deploy TenkaCloudControlPlane --require-approval=never
+
+      - name: Deploy AppPlane stack
+        working-directory: infrastructure/cdk
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+        run: bunx cdk deploy TenkaCloudAppPlane --require-approval=never
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+
+      - name: Configure AWS Credentials
+        # aws-actions/configure-aws-credentials v4.3.1
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-1
+
+      - name: Install CDK dependencies
+        working-directory: infrastructure/cdk
+        run: bun install --frozen-lockfile
+
+      - name: CDK bootstrap
+        working-directory: infrastructure/cdk
+        run: bunx cdk bootstrap
+
+      - name: Deploy ControlPlane stack
+        working-directory: infrastructure/cdk
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+        run: bunx cdk deploy TenkaCloudControlPlane --require-approval=never
+
+      - name: Deploy AppPlane stack
+        working-directory: infrastructure/cdk
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
+        run: bunx cdk deploy TenkaCloudAppPlane --require-approval=never

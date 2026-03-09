@@ -1,0 +1,373 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: インシデント自動対応基盤（正解テンプレート）
+  EventBridge、Step Functions、Lambda（隔離/フォレンジック/IAM）、SNS、SSM OpsItem。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-incident-response
+    Description: 環境名プレフィックス
+
+Resources:
+  # ============================================================
+  # Lambda ロール
+  # ============================================================
+  IncidentResponseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-ir-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: IncidentResponsePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: EC2Operations
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeSecurityGroups
+                  - ec2:ModifyInstanceAttribute
+                  - ec2:CreateSnapshot
+                  - ec2:CreateTags
+                  - ec2:DescribeVolumes
+                Resource: "*"
+              - Sid: IAMOperations
+                Effect: Allow
+                Action:
+                  - iam:ListAccessKeys
+                  - iam:UpdateAccessKey
+                  - iam:GetUser
+                  - iam:CreateServiceLinkedRole
+                Resource: "*"
+              - Sid: SSMOperations
+                Effect: Allow
+                Action:
+                  - ssm:CreateOpsItem
+                Resource: "*"
+              - Sid: SNSPublish
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref IncidentTopic
+
+  # ============================================================
+  # Lambda: EC2 隔離
+  # ============================================================
+  IsolateEC2Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentName}-isolate-ec2"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt IncidentResponseRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          ISOLATION_SG_ID: !GetAtt IsolationSG.GroupId
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          def handler(event, context):
+              instance_id = event.get('instanceId')
+              if not instance_id:
+                  return {'statusCode': 400, 'error': 'No instanceId'}
+              ec2 = boto3.client('ec2')
+              ec2.modify_instance_attribute(
+                  InstanceId=instance_id,
+                  Groups=[os.environ['ISOLATION_SG_ID']]
+              )
+              ec2.create_tags(
+                  Resources=[instance_id],
+                  Tags=[
+                      {'Key': 'SecurityStatus', 'Value': 'Isolated'},
+                      {'Key': 'IsolatedAt', 'Value': context.function_name}
+                  ]
+              )
+              return {'statusCode': 200, 'instanceId': instance_id, 'action': 'isolated'}
+
+  IsolationSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Incident Response - Complete Isolation
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-isolation-sg"
+
+  # ============================================================
+  # Lambda: EBS スナップショット（フォレンジック）
+  # ============================================================
+  ForensicSnapshotFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentName}-forensic-snapshot"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt IncidentResponseRole.Arn
+      Timeout: 120
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          from datetime import datetime
+          def handler(event, context):
+              instance_id = event.get('instanceId')
+              ec2 = boto3.client('ec2')
+              volumes = ec2.describe_instances(InstanceIds=[instance_id])
+              snapshot_ids = []
+              for reservation in volumes['Reservations']:
+                  for instance in reservation['Instances']:
+                      for bdm in instance.get('BlockDeviceMappings', []):
+                          vol_id = bdm['Ebs']['VolumeId']
+                          snap = ec2.create_snapshot(
+                              VolumeId=vol_id,
+                              Description=f'Forensic snapshot for {instance_id}',
+                              TagSpecifications=[{
+                                  'ResourceType': 'snapshot',
+                                  'Tags': [
+                                      {'Key': 'Purpose', 'Value': 'Forensic'},
+                                      {'Key': 'SourceInstance', 'Value': instance_id},
+                                      {'Key': 'CreatedAt', 'Value': datetime.utcnow().isoformat()}
+                                  ]
+                              }]
+                          )
+                          snapshot_ids.append(snap['SnapshotId'])
+              return {'statusCode': 200, 'instanceId': instance_id, 'snapshotIds': snapshot_ids}
+
+  # ============================================================
+  # Lambda: IAM アクセスキー無効化
+  # ============================================================
+  DisableAccessKeyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${EnvironmentName}-disable-access-key"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt IncidentResponseRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          def handler(event, context):
+              username = event.get('userName')
+              access_key_id = event.get('accessKeyId')
+              iam = boto3.client('iam')
+              if access_key_id:
+                  iam.update_access_key(UserName=username, AccessKeyId=access_key_id, Status='Inactive')
+                  return {'statusCode': 200, 'action': 'key_disabled', 'accessKeyId': access_key_id}
+              keys = iam.list_access_keys(UserName=username)
+              disabled = []
+              for key in keys['AccessKeyMetadata']:
+                  if key['Status'] == 'Active':
+                      iam.update_access_key(UserName=username, AccessKeyId=key['AccessKeyId'], Status='Inactive')
+                      disabled.append(key['AccessKeyId'])
+              return {'statusCode': 200, 'action': 'all_keys_disabled', 'disabledKeys': disabled}
+
+  # ============================================================
+  # SNS + SSM
+  # ============================================================
+  IncidentTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentName}-incidents"
+
+  # ============================================================
+  # Step Functions
+  # ============================================================
+  StateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-sfn-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt IsolateEC2Function.Arn
+                  - !GetAtt ForensicSnapshotFunction.Arn
+                  - !GetAtt DisableAccessKeyFunction.Arn
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref IncidentTopic
+              - Effect: Allow
+                Action: ssm:CreateOpsItem
+                Resource: "*"
+
+  IncidentResponseStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub "${EnvironmentName}-workflow"
+      RoleArn: !GetAtt StateMachineRole.Arn
+      DefinitionString: !Sub |
+        {
+          "Comment": "Incident Response Workflow",
+          "StartAt": "DetermineIncidentType",
+          "States": {
+            "DetermineIncidentType": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.detail.type",
+                  "StringMatches": "UnauthorizedAccess:EC2*",
+                  "Next": "EC2IncidentResponse"
+                },
+                {
+                  "Variable": "$.detail.type",
+                  "StringMatches": "UnauthorizedAccess:IAMUser*",
+                  "Next": "IAMIncidentResponse"
+                }
+              ],
+              "Default": "NotifyAndCreateTicket"
+            },
+            "EC2IncidentResponse": {
+              "Type": "Parallel",
+              "Branches": [
+                {
+                  "StartAt": "IsolateEC2",
+                  "States": {
+                    "IsolateEC2": {
+                      "Type": "Task",
+                      "Resource": "${IsolateEC2Function.Arn}",
+                      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 5, "MaxAttempts": 2, "BackoffRate": 2.0}],
+                      "End": true
+                    }
+                  }
+                },
+                {
+                  "StartAt": "TakeForensicSnapshot",
+                  "States": {
+                    "TakeForensicSnapshot": {
+                      "Type": "Task",
+                      "Resource": "${ForensicSnapshotFunction.Arn}",
+                      "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 5, "MaxAttempts": 2, "BackoffRate": 2.0}],
+                      "End": true
+                    }
+                  }
+                }
+              ],
+              "Next": "NotifyAndCreateTicket"
+            },
+            "IAMIncidentResponse": {
+              "Type": "Task",
+              "Resource": "${DisableAccessKeyFunction.Arn}",
+              "Retry": [{"ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 5, "MaxAttempts": 2, "BackoffRate": 2.0}],
+              "Next": "NotifyAndCreateTicket"
+            },
+            "NotifyAndCreateTicket": {
+              "Type": "Parallel",
+              "Branches": [
+                {
+                  "StartAt": "SendNotification",
+                  "States": {
+                    "SendNotification": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:states:::sns:publish",
+                      "Parameters": {
+                        "TopicArn": "${IncidentTopic}",
+                        "Subject": "Security Incident Detected",
+                        "Message.$": "States.JsonToString($)"
+                      },
+                      "End": true
+                    }
+                  }
+                },
+                {
+                  "StartAt": "CreateOpsItem",
+                  "States": {
+                    "CreateOpsItem": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:states:::aws-sdk:ssm:createOpsItem",
+                      "Parameters": {
+                        "Title": "Security Incident - Auto Response",
+                        "Description.$": "States.JsonToString($)",
+                        "Source": "TenkaCloud-IR",
+                        "Severity": "1"
+                      },
+                      "End": true
+                    }
+                  }
+                }
+              ],
+              "End": true
+            }
+          }
+        }
+
+  # ============================================================
+  # EventBridge ルール
+  # ============================================================
+  EventBridgeSFNRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-eb-sfn-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StartSFN
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref IncidentResponseStateMachine
+
+  SecurityFindingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${EnvironmentName}-security-findings"
+      EventPattern:
+        source:
+          - aws.guardduty
+          - aws.securityhub
+        detail-type:
+          - "GuardDuty Finding"
+          - "Security Hub Findings - Imported"
+        detail:
+          severity:
+            - numeric:
+                - ">="
+                - 7
+      Targets:
+        - Arn: !Ref IncidentResponseStateMachine
+          Id: StepFunctionsTarget
+          RoleArn: !GetAtt EventBridgeSFNRole.Arn
+
+Outputs:
+  StateMachineArn:
+    Description: インシデント対応ステートマシン ARN
+    Value: !Ref IncidentResponseStateMachine
+
+  IncidentTopicArn:
+    Description: インシデント通知トピック ARN
+    Value: !Ref IncidentTopic
+
+  IsolationSGId:
+    Description: 隔離用 SG ID
+    Value: !GetAtt IsolationSG.GroupId

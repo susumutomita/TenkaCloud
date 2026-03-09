@@ -33,7 +33,9 @@ describe('バトル API', () => {
         page: 1,
         limit: 20,
       };
-      vi.mocked(battleService.listBattles).mockResolvedValue(mockResult);
+      vi.mocked(battleService.listBattles).mockResolvedValue(
+        mockResult as never
+      );
 
       const res = await app.request('/battles');
 
@@ -50,12 +52,20 @@ describe('バトル API', () => {
         limit: 20,
       });
 
-      await app.request('/battles?status=IN_PROGRESS');
+      await app.request('/battles?status=RUNNING');
 
       expect(battleService.listBattles).toHaveBeenCalledWith(
         'tenant-456',
-        expect.objectContaining({ status: BattleStatus.IN_PROGRESS })
+        expect.objectContaining({ status: BattleStatus.RUNNING })
       );
+    });
+
+    it('無効なステータスで400を返すべき', async () => {
+      const res = await app.request('/battles?status=INVALID');
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('パラメータが不正です');
     });
   });
 
@@ -68,7 +78,7 @@ describe('バトル API', () => {
         mode: BattleMode.INDIVIDUAL,
         maxParticipants: 10,
         timeLimit: 3600,
-        status: BattleStatus.WAITING,
+        status: BattleStatus.DRAFT,
       };
       vi.mocked(battleService.createBattle).mockResolvedValue(
         newBattle as never
@@ -107,7 +117,7 @@ describe('バトル API', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: '', // 空文字は不可
+          title: '',
           mode: 'INDIVIDUAL',
         }),
       });
@@ -125,7 +135,6 @@ describe('バトル API', () => {
         tenantId: 'tenant-456',
         title: 'テストバトル',
         participants: [],
-        teams: [],
       };
       vi.mocked(battleService.getBattle).mockResolvedValue(battle as never);
 
@@ -169,9 +178,9 @@ describe('バトル API', () => {
       expect(body.title).toBe('更新されたタイトル');
     });
 
-    it('進行中バトルの更新で400を返すべき', async () => {
+    it('実行中バトルの更新で400を返すべき', async () => {
       vi.mocked(battleService.updateBattle).mockRejectedValue(
-        new Error('進行中のバトルは更新できません')
+        new Error('実行中・終了済み・アーカイブ済みのバトルは更新できません')
       );
 
       const res = await app.request('/battles/battle-1', {
@@ -182,7 +191,59 @@ describe('バトル API', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('進行中のバトルは更新できません');
+      expect(body.error).toBe(
+        '実行中・終了済み・アーカイブ済みのバトルは更新できません'
+      );
+    });
+
+    it('バトルが見つからない場合404を返すべき', async () => {
+      vi.mocked(battleService.updateBattle).mockResolvedValue(null);
+
+      const res = await app.request('/battles/non-existent', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '新タイトル' }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('バトルが見つかりません');
+    });
+
+    it('不正なJSONで400を返すべき', async () => {
+      const res = await app.request('/battles/battle-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid json',
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('リクエストボディが不正です');
+    });
+
+    it('バリデーションエラーで400を返すべき', async () => {
+      const res = await app.request('/battles/battle-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('バリデーションエラー');
+    });
+
+    it('非Errorがスローされた場合は再スローするべき', async () => {
+      vi.mocked(battleService.updateBattle).mockRejectedValue('string error');
+
+      await expect(
+        app.request('/battles/battle-1', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: '新タイトル' }),
+        })
+      ).rejects.toThrow();
     });
   });
 
@@ -197,9 +258,9 @@ describe('バトル API', () => {
       expect(res.status).toBe(204);
     });
 
-    it('進行中バトルの削除で400を返すべき', async () => {
+    it('下書き以外の削除で400を返すべき', async () => {
       vi.mocked(battleService.deleteBattle).mockRejectedValue(
-        new Error('進行中のバトルは削除できません')
+        new Error('下書き状態のバトルのみ削除できます')
       );
 
       const res = await app.request('/battles/battle-1', {
@@ -208,61 +269,109 @@ describe('バトル API', () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error).toBe('進行中のバトルは削除できません');
+      expect(body.error).toBe('下書き状態のバトルのみ削除できます');
+    });
+
+    it('非Errorがスローされた場合は再スローするべき', async () => {
+      vi.mocked(battleService.deleteBattle).mockRejectedValue('string error');
+
+      await expect(
+        app.request('/battles/battle-1', { method: 'DELETE' })
+      ).rejects.toThrow();
     });
   });
 
-  describe('POST /battles/:id/start', () => {
-    it('バトルを開始できるべき', async () => {
+  describe('POST /battles/:id/transition', () => {
+    it('バトルの状態を遷移できるべき', async () => {
       const battle = {
         id: 'battle-1',
-        status: BattleStatus.IN_PROGRESS,
-        startedAt: new Date(),
+        status: BattleStatus.OPEN,
       };
-      vi.mocked(battleService.startBattle).mockResolvedValue(battle as never);
+      vi.mocked(battleService.transitionBattle).mockResolvedValue(
+        battle as never
+      );
 
-      const res = await app.request('/battles/battle-1/start', {
+      const res = await app.request('/battles/battle-1/transition', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'OPEN' }),
       });
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.status).toBe('IN_PROGRESS');
+      expect(body.status).toBe('OPEN');
     });
 
-    it('参加者なしで400を返すべき', async () => {
-      vi.mocked(battleService.startBattle).mockRejectedValue(
-        new Error('参加者がいないためバトルを開始できません')
+    it('バトルが見つからない場合404を返すべき', async () => {
+      vi.mocked(battleService.transitionBattle).mockResolvedValue(null);
+
+      const res = await app.request('/battles/non-existent/transition', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'OPEN' }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('バトルが見つかりません');
+    });
+
+    it('無効な遷移で400を返すべき', async () => {
+      vi.mocked(battleService.transitionBattle).mockRejectedValue(
+        new Error('DRAFT から RUNNING への遷移はできません')
       );
 
-      const res = await app.request('/battles/battle-1/start', {
+      const res = await app.request('/battles/battle-1/transition', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'RUNNING' }),
       });
 
       expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('DRAFT から RUNNING への遷移はできません');
     });
-  });
 
-  describe('POST /battles/:id/end', () => {
-    it('バトルを終了できるべき', async () => {
-      const battle = {
-        id: 'battle-1',
-        status: BattleStatus.FINISHED,
-        endedAt: new Date(),
-      };
-      vi.mocked(battleService.endBattle).mockResolvedValue(battle as never);
-
-      const res = await app.request('/battles/battle-1/end', {
+    it('不正なJSONで400を返すべき', async () => {
+      const res = await app.request('/battles/battle-1/transition', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid json',
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.status).toBe('FINISHED');
+      expect(body.error).toBe('リクエストボディが不正です');
+    });
+
+    it('バリデーションエラーで400を返すべき', async () => {
+      const res = await app.request('/battles/battle-1/transition', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'INVALID' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('バリデーションエラー');
+    });
+
+    it('非Errorがスローされた場合は再スローするべき', async () => {
+      vi.mocked(battleService.transitionBattle).mockRejectedValue(
+        'string error'
+      );
+
+      await expect(
+        app.request('/battles/battle-1/transition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'OPEN' }),
+        })
+      ).rejects.toThrow();
     });
   });
 
-  describe('POST /battles/:id/join', () => {
+  describe('POST /battles/:id/participants', () => {
     it('バトルに参加できるべき', async () => {
       const participant = {
         id: 'participant-1',
@@ -274,7 +383,7 @@ describe('バトル API', () => {
         participant as never
       );
 
-      const res = await app.request('/battles/battle-1/join', {
+      const res = await app.request('/battles/battle-1/participants', {
         method: 'POST',
       });
 
@@ -288,11 +397,19 @@ describe('バトル API', () => {
         new Error('バトルの定員に達しています')
       );
 
-      const res = await app.request('/battles/battle-1/join', {
+      const res = await app.request('/battles/battle-1/participants', {
         method: 'POST',
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it('非Errorがスローされた場合は再スローするべき', async () => {
+      vi.mocked(battleService.joinBattle).mockRejectedValue('string error');
+
+      await expect(
+        app.request('/battles/battle-1/participants', { method: 'POST' })
+      ).rejects.toThrow();
     });
   });
 
@@ -305,6 +422,28 @@ describe('バトル API', () => {
       });
 
       expect(res.status).toBe(204);
+    });
+
+    it('サービスエラーで400を返すべき', async () => {
+      vi.mocked(battleService.leaveBattle).mockRejectedValue(
+        new Error('バトルが見つかりません')
+      );
+
+      const res = await app.request('/battles/battle-1/leave', {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('バトルが見つかりません');
+    });
+
+    it('非Errorがスローされた場合は再スローするべき', async () => {
+      vi.mocked(battleService.leaveBattle).mockRejectedValue('string error');
+
+      await expect(
+        app.request('/battles/battle-1/leave', { method: 'POST' })
+      ).rejects.toThrow();
     });
   });
 
@@ -366,135 +505,7 @@ describe('バトル API', () => {
       const body = await res.json();
       expect(body.error).toBe('バトルが見つかりません');
     });
-  });
 
-  describe('GET /battles - 追加ケース', () => {
-    it('無効なステータスで400を返すべき', async () => {
-      const res = await app.request('/battles?status=INVALID');
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('パラメータが不正です');
-    });
-  });
-
-  describe('PATCH /battles/:id - 追加ケース', () => {
-    it('バトルが見つからない場合404を返すべき', async () => {
-      vi.mocked(battleService.updateBattle).mockResolvedValue(null);
-
-      const res = await app.request('/battles/non-existent', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: '新タイトル' }),
-      });
-
-      expect(res.status).toBe(404);
-      const body = await res.json();
-      expect(body.error).toBe('バトルが見つかりません');
-    });
-
-    it('不正なJSONで400を返すべき', async () => {
-      const res = await app.request('/battles/battle-1', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: 'invalid json',
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('リクエストボディが不正です');
-    });
-
-    it('バリデーションエラーで400を返すべき', async () => {
-      const res = await app.request('/battles/battle-1', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: '' }), // 空文字は不可
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('バリデーションエラー');
-    });
-  });
-
-  describe('POST /battles/:id/start - 追加ケース', () => {
-    it('バトルが見つからない場合404を返すべき', async () => {
-      vi.mocked(battleService.startBattle).mockResolvedValue(null);
-
-      const res = await app.request('/battles/non-existent/start', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(404);
-      const body = await res.json();
-      expect(body.error).toBe('バトルが見つかりません');
-    });
-  });
-
-  describe('POST /battles/:id/end - 追加ケース', () => {
-    it('バトルが見つからない場合404を返すべき', async () => {
-      vi.mocked(battleService.endBattle).mockResolvedValue(null);
-
-      const res = await app.request('/battles/non-existent/end', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(404);
-      const body = await res.json();
-      expect(body.error).toBe('バトルが見つかりません');
-    });
-
-    it('サービスエラーで400を返すべき', async () => {
-      vi.mocked(battleService.endBattle).mockRejectedValue(
-        new Error('進行中でないバトルは終了できません')
-      );
-
-      const res = await app.request('/battles/battle-1/end', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('進行中でないバトルは終了できません');
-    });
-  });
-
-  describe('POST /battles/:id/leave - 追加ケース', () => {
-    it('サービスエラーで400を返すべき', async () => {
-      vi.mocked(battleService.leaveBattle).mockRejectedValue(
-        new Error('バトルが見つかりません')
-      );
-
-      const res = await app.request('/battles/battle-1/leave', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('バトルが見つかりません');
-    });
-
-    it('非Errorがスローされた場合は再スローするべき', async () => {
-      vi.mocked(battleService.leaveBattle).mockRejectedValue('string error');
-
-      await expect(
-        app.request('/battles/battle-1/leave', { method: 'POST' })
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('POST /battles/:id/join - 非Errorケース', () => {
-    it('非Errorがスローされた場合は再スローするべき', async () => {
-      vi.mocked(battleService.joinBattle).mockRejectedValue('string error');
-
-      await expect(
-        app.request('/battles/battle-1/join', { method: 'POST' })
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('POST /battles/:id/score - 非Errorケース', () => {
     it('非Errorがスローされた場合は再スローするべき', async () => {
       vi.mocked(battleService.updateScore).mockRejectedValue('string error');
 
@@ -508,46 +519,72 @@ describe('バトル API', () => {
     });
   });
 
-  describe('POST /battles/:id/start - 非Errorケース', () => {
-    it('非Errorがスローされた場合は再スローするべき', async () => {
-      vi.mocked(battleService.startBattle).mockRejectedValue('string error');
+  describe('POST /battles/:id/problems', () => {
+    it('バトルに問題を追加できるべき', async () => {
+      vi.mocked(battleService.addProblem).mockResolvedValue(undefined);
 
-      await expect(
-        app.request('/battles/battle-1/start', { method: 'POST' })
-      ).rejects.toThrow();
+      const res = await app.request('/battles/battle-1/problems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problemId: 'problem-1' }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.success).toBe(true);
     });
-  });
 
-  describe('POST /battles/:id/end - 非Errorケース', () => {
-    it('非Errorがスローされた場合は再スローするべき', async () => {
-      vi.mocked(battleService.endBattle).mockRejectedValue('string error');
+    it('不正なJSONで400を返すべき', async () => {
+      const res = await app.request('/battles/battle-1/problems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid json',
+      });
 
-      await expect(
-        app.request('/battles/battle-1/end', { method: 'POST' })
-      ).rejects.toThrow();
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('リクエストボディが不正です');
     });
-  });
 
-  describe('PATCH /battles/:id - 非Errorケース', () => {
+    it('バリデーションエラーで400を返すべき', async () => {
+      const res = await app.request('/battles/battle-1/problems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problemId: '' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('バリデーションエラー');
+    });
+
+    it('サービスエラーで400を返すべき', async () => {
+      vi.mocked(battleService.addProblem).mockRejectedValue(
+        new Error('下書きまたは募集中のバトルにのみ問題を追加できます')
+      );
+
+      const res = await app.request('/battles/battle-1/problems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problemId: 'problem-1' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe(
+        '下書きまたは募集中のバトルにのみ問題を追加できます'
+      );
+    });
+
     it('非Errorがスローされた場合は再スローするべき', async () => {
-      vi.mocked(battleService.updateBattle).mockRejectedValue('string error');
+      vi.mocked(battleService.addProblem).mockRejectedValue('string error');
 
       await expect(
-        app.request('/battles/battle-1', {
-          method: 'PATCH',
+        app.request('/battles/battle-1/problems', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: '新タイトル' }),
+          body: JSON.stringify({ problemId: 'problem-1' }),
         })
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('DELETE /battles/:id - 非Errorケース', () => {
-    it('非Errorがスローされた場合は再スローするべき', async () => {
-      vi.mocked(battleService.deleteBattle).mockRejectedValue('string error');
-
-      await expect(
-        app.request('/battles/battle-1', { method: 'DELETE' })
       ).rejects.toThrow();
     });
   });

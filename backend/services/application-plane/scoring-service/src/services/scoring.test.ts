@@ -774,6 +774,21 @@ describe('フィードバック取得', () => {
 
       expect(result).toBeNull();
     });
+
+    it('feedbacksがundefinedの場合は空配列を返すべき', async () => {
+      const mockSession = {
+        id: 'session-1',
+        tenantId: 'tenant-123',
+      };
+
+      mockScoringSessionRepository.findByIdAndTenant.mockResolvedValue(
+        mockSession
+      );
+
+      const result = await getSessionFeedback('session-1', 'tenant-123');
+
+      expect(result).toEqual([]);
+    });
   });
 });
 
@@ -1287,6 +1302,21 @@ describe('Terraform State 評価ヘルパー関数', () => {
       };
       const result = evaluateCriterion(state, criterion);
       expect(result.feedbacks[0].message).toBe('カスタムメッセージ');
+    });
+
+    it('criteriaDetailsがundefinedの場合はスコア0を返すべき', () => {
+      const state = { version: 4, resources: [] };
+      const criterion = {
+        id: 'criteria-1',
+        name: 'VPC構成',
+        category: EvaluationCategory.INFRASTRUCTURE,
+        maxScore: 100,
+        weight: 1,
+        criteriaDetails: undefined,
+      };
+      const result = evaluateCriterion(state, criterion as never);
+      expect(result.item.score).toBe(0);
+      expect(result.feedbacks).toHaveLength(0);
     });
 
     it('actualValueがundefinedの場合は「なし」を使用するべき', () => {

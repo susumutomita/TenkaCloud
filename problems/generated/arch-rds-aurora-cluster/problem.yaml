@@ -1,0 +1,111 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: arch-rds-aurora-cluster
+# タイプ: GAMEDAY（構築型）
+
+id: arch-rds-aurora-cluster
+title: Aurora MySQL クラスター + リードレプリカ構成
+type: gameday
+category: architecture
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - aurora
+    - rds
+    - mysql
+    - read-replica
+    - parameter-group
+    - subnet-group
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、高可用性なデータベース基盤を
+    Aurora MySQL で構築する任務を与えられました。
+
+    ## 背景
+    既存の RDS MySQL を Aurora MySQL に移行するプロジェクトです。
+    読み取り負荷が高いため、リードレプリカによる読み取りスケーリングと、
+    パラメータグループによるチューニングが求められています。
+
+    ## あなたのミッション
+    以下の要件を満たす Aurora MySQL クラスター構成を構築してください。
+
+    ### 要件
+    1. **DB サブネットグループ**: プライベートサブネット 2 AZ で DB サブネットグループを作成する
+    2. **Aurora クラスター**: Aurora MySQL クラスターを作成し、暗号化を有効にする
+    3. **リードレプリカ**: ライターインスタンス 1 台 + リーダーインスタンス 1 台を作成する
+    4. **パラメータグループ**: クラスターパラメータグループを作成し、文字コードを utf8mb4 に設定する
+
+  objectives:
+    - 2 AZ のプライベートサブネットで DB サブネットグループを作成する
+    - Aurora MySQL クラスターを作成し、ストレージ暗号化を有効にする
+    - ライター + リーダーの 2 インスタンスを作成する
+    - パラメータグループで文字コードを設定する
+
+  hints:
+    - "Aurora クラスターは AWS::RDS::DBCluster で作成します"
+    - "インスタンスは AWS::RDS::DBInstance で Engine: aurora-mysql を指定します"
+    - "StorageEncrypted: true でストレージ暗号化が有効になります"
+    - "DBClusterParameterGroup で character_set_server を utf8mb4 に設定します"
+
+  prerequisites:
+    - RDS と Aurora の基本概念
+    - MySQL の基本知識
+    - VPC のサブネット設計の基本知識
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/arch-rds-aurora-cluster.yaml
+      parameters:
+        EnvironmentName: tenka-aurora
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - name: DB サブネットグループ
+      description: 2 AZ のプライベートサブネットで DB サブネットグループが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: Aurora クラスター + 暗号化
+      description: Aurora MySQL クラスターが作成され、ストレージ暗号化が有効になっている
+      weight: 30
+      maxPoints: 30
+
+    - name: ライター + リーダーインスタンス
+      description: ライター 1 台 + リーダー 1 台の計 2 インスタンスが作成されている
+      weight: 30
+      maxPoints: 30
+
+    - name: パラメータグループ
+      description: クラスターパラメータグループで文字コードが utf8mb4 に設定されている
+      weight: 20
+      maxPoints: 20
+
+  timeoutMinutes: 15
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

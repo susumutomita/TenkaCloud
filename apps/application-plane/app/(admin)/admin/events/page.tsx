@@ -25,6 +25,7 @@ import {
 import { EventStatusBadge, ProblemTypeBadge, Skeleton } from '@/components/ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { del } from '@/lib/api/client';
 import type { AdminEvent, EventStatus } from '@/lib/api/admin-types';
 import { formatDateTime } from '@/lib/utils';
 
@@ -57,7 +58,6 @@ export default function AdminEventsPage() {
         const data = await response.json();
         setEvents(data.events || []);
       } catch (err) {
-        console.error('Failed to fetch events:', err);
         setError(
           err instanceof Error ? err.message : 'イベントの取得に失敗しました'
         );
@@ -159,7 +159,11 @@ export default function AdminEventsPage() {
       ) : !error ? (
         <div className="space-y-4">
           {filteredEvents.map((event) => (
-            <EventCard key={event.id} event={event} />
+            <EventCard
+              key={event.id}
+              event={event}
+              onDelete={() => setFilter({ ...filter })}
+            />
           ))}
         </div>
       ) : null}
@@ -191,9 +195,29 @@ function EventsLoadingSkeleton() {
 
 interface EventCardProps {
   event: AdminEvent;
+  onDelete: () => void;
 }
 
-function EventCard({ event }: EventCardProps) {
+function EventCard({ event, onDelete }: EventCardProps) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    const confirmed = window.confirm(
+      `「${event.name}」を削除しますか？この操作は取り消せません。`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeleting(true);
+      await del(`/admin/events/${event.id}`);
+      onDelete();
+    } catch {
+      window.alert('イベントの削除に失敗しました。再試行してください。');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Card className="group hover:border-hn-accent/50 transition-all duration-[var(--animation-duration-fast)]">
       <CardContent className="p-6">
@@ -235,9 +259,8 @@ function EventCard({ event }: EventCardProps) {
               variant="ghost"
               size="sm"
               className="text-hn-error hover:text-hn-error hover:bg-hn-error/10"
-              onClick={() => {
-                // TODO: Implement delete
-              }}
+              onClick={handleDelete}
+              disabled={deleting}
             >
               <Trash2 className="w-4 h-4" />
             </Button>

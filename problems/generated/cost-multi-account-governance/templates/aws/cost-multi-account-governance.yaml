@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: マルチアカウントコストガバナンスと異常検出（正解テンプレート）
+  AWS Budgets、Cost Anomaly Detection、SNS + Lambda 通知を構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-cost-gov
+    Description: プロジェクト名のプレフィックス
+
+  NotificationEmail:
+    Type: String
+    Default: team@example.com
+    Description: 通知先メールアドレス
+
+Resources:
+  # 要件3: SNS トピック（暗号化付き）
+  CostAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-cost-alerts"
+      KmsMasterKeyId: alias/aws/sns
+      Tags:
+        - Key: CostCenter
+          Value: platform
+        - Key: Environment
+          Value: production
+
+  CostAlertTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref CostAlertTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - budgets.amazonaws.com
+                - costalerts.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref CostAlertTopic
+
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref CostAlertTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  # 要件1: AWS Budget
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${ProjectName}-monthly-budget"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: 1000
+          Unit: USD
+      NotificationsWithSubscribers:
+        # 実績 80% アラート
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: SNS
+              Address: !Ref CostAlertTopic
+        # 予測 100% アラート
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: SNS
+              Address: !Ref CostAlertTopic
+
+  # 要件2: Cost Anomaly Detection
+  AnomalyMonitor:
+    Type: AWS::CE::AnomalyMonitor
+    Properties:
+      MonitorName: !Sub "${ProjectName}-service-monitor"
+      MonitorType: DIMENSIONAL
+      MonitorDimension: SERVICE
+
+  AnomalySubscription:
+    Type: AWS::CE::AnomalySubscription
+    Properties:
+      SubscriptionName: !Sub "${ProjectName}-anomaly-alerts"
+      MonitorArnList:
+        - !Ref AnomalyMonitor
+      Frequency: DAILY
+      ThresholdExpression:
+        Dimensions:
+          Key: ANOMALY_TOTAL_IMPACT_ABSOLUTE
+          MatchOptions:
+            - GREATER_THAN_OR_EQUAL
+          Values:
+            - "100"
+      Subscribers:
+        - Type: SNS
+          Address: !Ref CostAlertTopic
+
+  # 要件4: Lambda 通知関数
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  CostNotificationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-notifier"
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 30
+      Architectures:
+        - arm64
+      Role: !GetAtt LambdaExecutionRole.Arn
+      # 要件5: コストタグ
+      Tags:
+        - Key: CostCenter
+          Value: platform
+        - Key: Environment
+          Value: production
+        - Key: Service
+          Value: cost-governance
+      Code:
+        ZipFile: |
+          import json
+          def handler(event, context):
+              for record in event.get("Records", []):
+                  message = record.get("Sns", {}).get("Message", "")
+                  print(f"Cost Alert: {message}")
+              return {"statusCode": 200}
+
+  LambdaSNSPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CostNotificationFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref CostAlertTopic
+
+  LambdaSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref CostAlertTopic
+      Protocol: lambda
+      Endpoint: !GetAtt CostNotificationFunction.Arn
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ProjectName}-notifier"
+      RetentionInDays: 14
+
+Outputs:
+  BudgetName:
+    Description: AWS Budget 名
+    Value: !Sub "${ProjectName}-monthly-budget"
+
+  AnomalyMonitorArn:
+    Description: Cost Anomaly Detection モニター ARN
+    Value: !Ref AnomalyMonitor
+
+  SNSTopicArn:
+    Description: コストアラート SNS トピック ARN
+    Value: !Ref CostAlertTopic
+
+  NotificationFunctionArn:
+    Description: 通知 Lambda 関数 ARN
+    Value: !GetAtt CostNotificationFunction.Arn

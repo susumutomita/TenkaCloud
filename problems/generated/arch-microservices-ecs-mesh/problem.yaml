@@ -1,0 +1,128 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: arch-microservices-ecs-mesh
+# タイプ: GAMEDAY（構築型）
+
+id: arch-microservices-ecs-mesh
+title: ECS マイクロサービス + Service Connect 構成
+type: gameday
+category: architecture
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - ecs
+    - microservices
+    - service-connect
+    - cloud-map
+    - fargate
+    - service-discovery
+    - api-gateway
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはプラットフォームアーキテクトとして、マイクロサービスアーキテクチャの
+    基盤を ECS + Service Connect で構築する任務を与えられました。
+
+    ## 背景
+    モノリスからマイクロサービスへの移行が進行中です。
+    3 つのサービス（API Gateway、ユーザーサービス、注文サービス）を
+    ECS Fargate で実行し、Service Connect によるサービス間通信と
+    Cloud Map によるサービスディスカバリを実装する必要があります。
+
+    ## あなたのミッション
+    以下の要件を満たすマイクロサービス基盤を構築してください。
+
+    ### 要件
+    1. **ECS クラスター**: Fargate クラスターを作成し、Container Insights を有効にする
+    2. **3 サービス構成**: API Gateway、ユーザー、注文の 3 サービスを ECS Fargate で構成する
+    3. **Service Connect**: Cloud Map 名前空間と Service Connect を使ったサービス間通信を設定する
+    4. **外部 ALB**: API Gateway サービスのみを ALB 経由で外部公開する
+    5. **セキュリティグループ連鎖**: 外部 → API GW → 内部サービスの順にアクセスを制限する
+    6. **ログ + モニタリング**: 全サービスのログを CloudWatch に出力し、Container Insights を有効にする
+
+  objectives:
+    - ECS Fargate クラスターを作成する
+    - 3 つのタスク定義とサービスを作成する
+    - Cloud Map 名前空間と Service Connect を設定する
+    - ALB で API Gateway サービスのみ公開する
+    - セキュリティグループ連鎖を実装する
+    - ログと Container Insights を設定する
+
+  hints:
+    - "Service Connect は ECS サービスの ServiceConnectConfiguration で設定します"
+    - "Cloud Map の HTTP 名前空間を ServiceConnectDefaults で指定します"
+    - "セキュリティグループの SourceSecurityGroupId で前段の SG を参照します"
+    - "Container Insights は ClusterSettings で containerInsights を enabled にします"
+
+  prerequisites:
+    - マイクロサービスアーキテクチャの理解
+    - ECS Fargate の実務経験
+    - Service Connect / Cloud Map の知識
+    - ネットワーク設計の深い理解
+    - CloudFormation の上級知識
+
+  estimatedTime: 120
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/arch-microservices-ecs-mesh.yaml
+      parameters:
+        EnvironmentName: tenka-microservices
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 45
+
+scoring:
+  type: api
+  criteria:
+    - name: ECS クラスター + Container Insights
+      description: Fargate クラスターが作成され、Container Insights が有効になっている
+      weight: 10
+      maxPoints: 10
+
+    - name: 3 サービス構成
+      description: API GW、ユーザー、注文の 3 タスク定義と 3 サービスが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Service Connect + Cloud Map
+      description: Cloud Map 名前空間が作成され、Service Connect でサービス間通信が設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: ALB 外部公開
+      description: API Gateway サービスのみが ALB 経由で外部公開されている
+      weight: 15
+      maxPoints: 15
+
+    - name: セキュリティグループ連鎖
+      description: 外部 → API GW → 内部サービスの順にアクセスが制限されている
+      weight: 15
+      maxPoints: 15
+
+    - name: ログ設定
+      description: 全サービスのログが CloudWatch Logs に出力されている
+      weight: 10
+      maxPoints: 10
+
+  timeoutMinutes: 20
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

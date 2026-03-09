@@ -1,0 +1,119 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: ops-sns-multi-channel
+# タイプ: GAMEDAY（構築型）
+
+id: ops-sns-multi-channel
+title: SNS マルチチャネル通知とフィルタリング
+type: gameday
+category: operations
+difficulty: easy
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - sns
+    - notification
+    - filter-policy
+    - lambda
+    - sqs
+    - multi-channel
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはクラウドエンジニアとして、運用イベントを複数チャネルに
+    振り分けて通知する仕組みを構築する任務を与えられました。
+
+    ## 背景
+    障害レベルに応じて通知先を変えたい要件があります。
+    CRITICAL はメール + Lambda（PagerDuty 連携）、WARNING はメールのみ、
+    INFO は SQS キューにアーカイブする構成が必要です。
+
+    ## あなたのミッション
+    SNS マルチチャネル通知を構成し、以下の要件をすべて満たしてください。
+
+    ### 要件
+    1. **SNS トピック**: 運用イベント通知用の SNS トピックを作成する
+    2. **メールサブスクリプション**: 全レベルのイベントをメール通知するサブスクリプションを作成する
+    3. **Lambda サブスクリプション**: CRITICAL イベントのみを処理する Lambda + フィルタポリシーを設定する
+    4. **SQS サブスクリプション**: INFO イベントをアーカイブする SQS + フィルタポリシーを設定する
+
+  objectives:
+    - 運用イベント通知用 SNS トピックを作成する
+    - メールサブスクリプションを作成する
+    - CRITICAL フィルタ付き Lambda サブスクリプションを構成する
+    - INFO フィルタ付き SQS サブスクリプションを構成する
+
+  hints:
+    - "AWS::SNS::Subscription の FilterPolicy で属性フィルタリングできます"
+    - "FilterPolicy の severity 属性でメッセージを振り分けます"
+    - "SQS サブスクリプションには SQS ポリシーで SNS からの送信を許可する必要があります"
+    - "Lambda サブスクリプションには Lambda Permission が必要です"
+
+  prerequisites:
+    - SNS の基本的な知識
+    - Lambda の基本的な知識
+    - SQS の基本的な知識
+
+  estimatedTime: 30
+
+deployment:
+  providers:
+    - aws
+    - local
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/ops-sns-multi-channel.yaml
+      parameters:
+        EnvironmentPrefix: tenka-notify
+        NotificationEmail: admin@example.com
+
+    local:
+      type: cloudformation
+      path: ./templates/aws/ops-sns-multi-channel.yaml
+      parameters:
+        EnvironmentPrefix: tenka-notify-local
+        NotificationEmail: admin@example.com
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: SNS トピック
+      description: 運用イベント通知用の SNS トピックが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: メールサブスクリプション
+      description: メール通知サブスクリプションが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Lambda サブスクリプション
+      description: CRITICAL フィルタ付き Lambda サブスクリプションが構成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: SQS サブスクリプション
+      description: INFO フィルタ付き SQS サブスクリプションが構成されている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 5
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

@@ -448,10 +448,10 @@ export function checkS3Encryption(
   }
 
   // 簡易チェック: aws_s3_bucket_server_side_encryption_configuration の存在確認
-  const encryptionConfigs =
-    state.resources?.filter(
-      (r) => r.type === 'aws_s3_bucket_server_side_encryption_configuration'
-    ) ?? [];
+  // s3Buckets.length > 0 のため state.resources は必ず存在する
+  const encryptionConfigs = state.resources!.filter(
+    (r) => r.type === 'aws_s3_bucket_server_side_encryption_configuration'
+  );
 
   const allEncrypted = s3Buckets.length <= encryptionConfigs.length;
   return {

@@ -1,0 +1,117 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: elasticache-edge-optimization
+# タイプ: GAMEDAY（構築型）
+
+id: elasticache-edge-optimization
+title: ElastiCache と Lambda@Edge によるパフォーマンス最適化
+type: gameday
+category: performance
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - elasticache
+    - redis
+    - lambda-edge
+    - cloudfront
+    - performance
+    - caching
+    - edge-computing
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはシニアクラウドアーキテクトとして、グローバルに展開する
+    高トラフィック API のパフォーマンス改善プロジェクトをリードしています。
+    API のレスポンスタイムを P99 で 100ms 以下にする目標が設定されています。
+
+    ## 背景
+    パフォーマンス分析の結果、以下のボトルネックが特定されました。
+    - DynamoDB への同一キーの読み取りが毎秒 10,000 回以上発生（キャッシュなし）
+    - API Gateway のレスポンスが海外リージョンから 500ms 以上かかる
+    - Lambda 関数のコールドスタートが P99 レイテンシを悪化させている
+
+    ## あなたのミッション
+    ElastiCache（Redis）クラスターと CloudFront + Lambda@Edge を構成し、
+    多層キャッシュアーキテクチャを構築してください。
+
+    ### 要件
+    1. **ElastiCache Redis クラスター**: レプリケーショングループ（1 プライマリ + 1 レプリカ）を構成し、暗号化を有効にする
+    2. **Redis パフォーマンス設定**: maxmemory-policy を allkeys-lru に設定し、自動フェイルオーバーを有効にする
+    3. **Lambda@Edge 関数**: viewer-request イベントで動作するエッジ関数を作成する
+    4. **CloudFront + Lambda@Edge 連携**: CloudFront ディストリビューションに Lambda@Edge を関連付ける
+
+  objectives:
+    - ElastiCache Redis レプリケーショングループを暗号化付きで構成する
+    - Redis の maxmemory-policy とフェイルオーバー設定を最適化する
+    - Lambda@Edge 関数を us-east-1 にデプロイする
+    - CloudFront ディストリビューションに Lambda@Edge を統合する
+
+  hints:
+    - "ElastiCache レプリケーショングループで Multi-AZ を構成できます"
+    - "CacheParameterGroup で maxmemory-policy を設定できます"
+    - "Lambda@Edge は us-east-1 リージョンにデプロイする必要があります"
+    - "CloudFront の LambdaFunctionAssociations で Lambda@Edge を関連付けます"
+
+  prerequisites:
+    - ElastiCache (Redis) の運用経験
+    - Lambda@Edge の制約と仕様の理解
+    - CloudFront の詳細設定の知識
+    - VPC ネットワーキングの知識
+    - CloudFormation の実務経験
+
+  estimatedTime: 60
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/elasticache-edge-optimization.yaml
+      parameters:
+        VpcId: ""
+        SubnetIds: ""
+        ProjectName: tenka-edge-perf
+
+  regions:
+    aws:
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: ElastiCache Redis クラスター
+      description: レプリケーショングループ（1+1 構成）が存在し暗号化が有効
+      weight: 30
+      maxPoints: 30
+
+    - name: Redis パフォーマンス設定
+      description: maxmemory-policy が allkeys-lru で自動フェイルオーバーが有効
+      weight: 20
+      maxPoints: 20
+
+    - name: Lambda@Edge 関数
+      description: us-east-1 に Lambda@Edge 関数がデプロイされている
+      weight: 25
+      maxPoints: 25
+
+    - name: CloudFront + Lambda@Edge 連携
+      description: CloudFront ディストリビューションに Lambda@Edge が関連付けられている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 15
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

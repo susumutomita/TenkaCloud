@@ -1,0 +1,114 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: perf-step-functions-parallel
+# タイプ: GAMEDAY（構築型）
+
+id: perf-step-functions-parallel
+title: Step Functions 並列実行と Map ステートによる高速処理
+type: gameday
+category: performance
+difficulty: hard
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - step-functions
+    - performance
+    - parallel
+    - map
+    - lambda
+    - concurrency
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはワークフローアーキテクトとして、データ処理パイプラインの
+    実行時間短縮を担当しています。現在のワークフローは逐次実行で、
+    独立した処理を直列に実行しているため全体の処理時間が長くなっています。
+
+    ## 背景
+    ワークフロー分析の結果から以下が判明しました。
+    - 3 つの独立した API 呼び出しが直列に実行されており、合計 15 秒かかっている
+    - 各呼び出しは独立しており並列実行すれば 5 秒に短縮可能
+    - 大量のアイテムに対する処理も逐次で、Map ステートで並列化すれば高速化可能
+    - エラーハンドリングが未設定で、1 つの失敗で全体が停止
+
+    ## あなたのミッション
+    Step Functions で Parallel ステートと Map ステートを使用した高速ワークフローを構築してください。
+
+    ### 要件
+    1. **Parallel ステート**: 3 つの Lambda 関数を Parallel ステートで同時実行する
+    2. **Map ステート**: 分散モード（DISTRIBUTED）の Map ステートで並列処理する
+    3. **同時実行制御**: Map ステートの MaxConcurrency を 10 に設定する
+    4. **エラーハンドリング**: Catch と Retry でエラーハンドリングを実装する
+
+  objectives:
+    - Parallel ステートで複数の処理を同時実行する
+    - Map ステートで大量アイテムを並列処理する
+    - 同時実行数を制御する
+    - エラーハンドリングを実装する
+
+  hints:
+    - "Parallel ステートで独立した処理を同時実行できます"
+    - "Map ステートの ItemProcessor で MaxConcurrency を設定します"
+    - "Catch で ErrorEquals と Next を指定してエラーハンドリングします"
+    - "Retry で IntervalSeconds と MaxAttempts でリトライポリシーを定義します"
+
+  prerequisites:
+    - Step Functions の知識
+    - ASL（Amazon States Language）の理解
+    - Lambda の知識
+    - CloudFormation の実務経験
+
+  estimatedTime: 50
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/perf-step-functions-parallel.yaml
+      parameters:
+        ProjectName: tenka-sfn-perf
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: Parallel ステート
+      description: 3 つの Lambda 関数が Parallel ステートで同時実行される
+      weight: 30
+      maxPoints: 30
+
+    - name: Map ステート
+      description: Map ステートが定義されている
+      weight: 25
+      maxPoints: 25
+
+    - name: 同時実行制御
+      description: MaxConcurrency が 10 に設定されている
+      weight: 20
+      maxPoints: 20
+
+    - name: エラーハンドリング
+      description: Catch と Retry が実装されている
+      weight: 25
+      maxPoints: 25
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md

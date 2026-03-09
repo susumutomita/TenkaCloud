@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: AWS Config コンプライアンス監視（正解テンプレート）
+  Config レコーダー、マネージドルール、自動修復、通知を含む構成。
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: tenka-config
+    Description: 環境名プレフィックス
+
+Resources:
+  # --- Config 配信バケット ---
+  ConfigBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${EnvironmentName}-config-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  ConfigBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ConfigBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowConfigBucketAccess
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt ConfigBucket.Arn
+          - Sid: AllowConfigPutObject
+            Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${ConfigBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "s3:x-amz-acl": bucket-owner-full-control
+
+  # --- Config ロール ---
+  ConfigRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-config-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: config.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWS_ConfigRole
+      Policies:
+        - PolicyName: ConfigS3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "${ConfigBucket.Arn}/*"
+
+  # --- Config レコーダー ---
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      Name: !Sub "${EnvironmentName}-recorder"
+      RoleARN: !GetAtt ConfigRole.Arn
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+
+  # --- 配信チャネル ---
+  DeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    DependsOn: ConfigBucketPolicy
+    Properties:
+      Name: !Sub "${EnvironmentName}-delivery"
+      S3BucketName: !Ref ConfigBucket
+      ConfigSnapshotDeliveryProperties:
+        DeliveryFrequency: Six_Hours
+
+  # --- マネージドルール: S3 暗号化 ---
+  S3EncryptionRule:
+    Type: AWS::Config::ConfigRule
+    DependsOn: ConfigRecorder
+    Properties:
+      ConfigRuleName: !Sub "${EnvironmentName}-s3-encryption"
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED
+
+  # --- マネージドルール: EBS 暗号化 ---
+  EBSEncryptionRule:
+    Type: AWS::Config::ConfigRule
+    DependsOn: ConfigRecorder
+    Properties:
+      ConfigRuleName: !Sub "${EnvironmentName}-ebs-encryption"
+      Source:
+        Owner: AWS
+        SourceIdentifier: ENCRYPTED_VOLUMES
+
+  # --- マネージドルール: RDS 暗号化 ---
+  RDSEncryptionRule:
+    Type: AWS::Config::ConfigRule
+    DependsOn: ConfigRecorder
+    Properties:
+      ConfigRuleName: !Sub "${EnvironmentName}-rds-encryption"
+      Source:
+        Owner: AWS
+        SourceIdentifier: RDS_STORAGE_ENCRYPTED
+
+  # --- 自動修復ロール ---
+  RemediationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-remediation-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3EncryptionRemediation
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutEncryptionConfiguration
+                  - s3:GetEncryptionConfiguration
+                Resource: "*"
+
+  # --- S3 暗号化自動修復 ---
+  S3EncryptionRemediation:
+    Type: AWS::Config::RemediationConfiguration
+    Properties:
+      ConfigRuleName: !Ref S3EncryptionRule
+      TargetType: SSM_DOCUMENT
+      TargetId: AWS-EnableS3BucketEncryption
+      Automatic: true
+      MaximumAutomaticAttempts: 3
+      RetryAttemptSeconds: 60
+      Parameters:
+        BucketName:
+          ResourceValue:
+            Value: RESOURCE_ID
+        SSEAlgorithm:
+          StaticValue:
+            Values:
+              - AES256
+        AutomationAssumeRole:
+          StaticValue:
+            Values:
+              - !GetAtt RemediationRole.Arn
+
+  # --- SNS 通知 ---
+  ComplianceTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentName}-compliance-alerts"
+
+  # --- EventBridge ルール ---
+  ComplianceChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${EnvironmentName}-compliance-change"
+      EventPattern:
+        source:
+          - aws.config
+        detail-type:
+          - "Config Rules Compliance Change"
+        detail:
+          newEvaluationResult:
+            complianceType:
+              - NON_COMPLIANT
+      Targets:
+        - Arn: !Ref ComplianceTopic
+          Id: SNSTarget
+
+  ComplianceTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ComplianceTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridge
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref ComplianceTopic
+
+Outputs:
+  ConfigRecorderName:
+    Description: Config レコーダー名
+    Value: !Ref ConfigRecorder
+
+  S3EncryptionRuleName:
+    Description: S3 暗号化ルール名
+    Value: !Ref S3EncryptionRule
+
+  ComplianceTopicArn:
+    Description: コンプライアンス通知トピック ARN
+    Value: !Ref ComplianceTopic

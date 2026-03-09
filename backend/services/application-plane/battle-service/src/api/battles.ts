@@ -7,11 +7,11 @@ import {
   listBattles,
   updateBattle,
   deleteBattle,
-  startBattle,
-  endBattle,
+  transitionBattle,
   joinBattle,
   leaveBattle,
   updateScore,
+  addProblem,
 } from '../services/battle';
 
 export const battlesRoutes = new Hono();
@@ -36,16 +36,30 @@ const listBattlesSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z
     .enum([
-      BattleStatus.WAITING,
-      BattleStatus.IN_PROGRESS,
+      BattleStatus.DRAFT,
+      BattleStatus.OPEN,
+      BattleStatus.RUNNING,
       BattleStatus.FINISHED,
-      BattleStatus.CANCELLED,
+      BattleStatus.ARCHIVED,
     ])
     .optional(),
 });
 
+const transitionSchema = z.object({
+  status: z.enum([
+    BattleStatus.OPEN,
+    BattleStatus.RUNNING,
+    BattleStatus.FINISHED,
+    BattleStatus.ARCHIVED,
+  ]),
+});
+
 const updateScoreSchema = z.object({
   score: z.number().int().min(0),
+});
+
+const addProblemSchema = z.object({
+  problemId: z.string().min(1),
 });
 
 // バトル一覧取得
@@ -155,32 +169,32 @@ battlesRoutes.delete('/battles/:id', async (c) => {
   }
 });
 
-// バトル開始
-battlesRoutes.post('/battles/:id/start', async (c) => {
+// バトル状態遷移
+battlesRoutes.post('/battles/:id/transition', async (c) => {
   const auth = c.get('auth');
   const battleId = c.req.param('id');
 
+  let body: unknown;
   try {
-    const battle = await startBattle(battleId, auth.tenantId);
-    if (!battle) {
-      return c.json({ error: 'バトルが見つかりません' }, 404);
-    }
-    return c.json(battle);
-  } catch (error) {
-    if (error instanceof Error) {
-      return c.json({ error: error.message }, 400);
-    }
-    throw error;
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'リクエストボディが不正です' }, 400);
   }
-});
 
-// バトル終了
-battlesRoutes.post('/battles/:id/end', async (c) => {
-  const auth = c.get('auth');
-  const battleId = c.req.param('id');
+  const parsed = transitionSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: 'バリデーションエラー', details: parsed.error.issues },
+      400
+    );
+  }
 
   try {
-    const battle = await endBattle(battleId, auth.tenantId);
+    const battle = await transitionBattle(
+      battleId,
+      auth.tenantId,
+      parsed.data.status
+    );
     if (!battle) {
       return c.json({ error: 'バトルが見つかりません' }, 404);
     }
@@ -194,7 +208,7 @@ battlesRoutes.post('/battles/:id/end', async (c) => {
 });
 
 // バトル参加
-battlesRoutes.post('/battles/:id/join', async (c) => {
+battlesRoutes.post('/battles/:id/participants', async (c) => {
   const auth = c.get('auth');
   const battleId = c.req.param('id');
 
@@ -253,6 +267,37 @@ battlesRoutes.post('/battles/:id/score', async (c) => {
       parsed.data.score
     );
     return c.json(participant);
+  } catch (error) {
+    if (error instanceof Error) {
+      return c.json({ error: error.message }, 400);
+    }
+    throw error;
+  }
+});
+
+// バトルに問題を追加
+battlesRoutes.post('/battles/:id/problems', async (c) => {
+  const auth = c.get('auth');
+  const battleId = c.req.param('id');
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'リクエストボディが不正です' }, 400);
+  }
+
+  const parsed = addProblemSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: 'バリデーションエラー', details: parsed.error.issues },
+      400
+    );
+  }
+
+  try {
+    await addProblem(battleId, auth.tenantId, parsed.data.problemId);
+    return c.json({ success: true }, 201);
   } catch (error) {
     if (error instanceof Error) {
       return c.json({ error: error.message }, 400);

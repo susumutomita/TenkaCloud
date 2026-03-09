@@ -1,0 +1,122 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: cost-multi-account-governance
+# タイプ: GAMEDAY（構築型）
+
+id: cost-multi-account-governance
+title: マルチアカウントコストガバナンスと異常検出
+type: gameday
+category: cost
+difficulty: expert
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - budgets
+    - sns
+    - lambda
+    - cost
+    - governance
+    - anomaly-detection
+    - cost-explorer
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたは FinOps エンジニアとして、マルチアカウント環境のコストガバナンス基盤を
+    構築するプロジェクトをリードしています。現在はコスト異常が発生しても事後的に
+    気づくことが多く、プロアクティブなコスト管理が求められています。
+
+    ## 背景
+    過去 6 か月のインシデント分析から以下が判明しました。
+    - 開発アカウントで意図しない大規模インスタンスが起動され、月額 $10,000 超過
+    - コスト予算のアラートが未設定で、月末の請求書で初めて気づいた
+    - コスト異常検出（Cost Anomaly Detection）が未有効化
+    - SNS によるリアルタイム通知がなく、対応が後手に回っていた
+
+    ## あなたのミッション
+    AWS Budgets、Cost Anomaly Detection、SNS、Lambda を使用したコストガバナンス基盤を構築してください。
+
+    ### 要件
+    1. **AWS Budget**: 月間予算 $1000 で、実績 80% と予測 100% のアラートを設定する
+    2. **Cost Anomaly Detection**: コスト異常検出モニターとサブスクリプションを作成する
+    3. **SNS トピック**: コストアラート用の SNS トピックを暗号化付きで作成する
+    4. **Lambda 通知**: SNS 経由で Lambda 関数を呼び出すコスト通知パイプラインを構成する
+    5. **コストタグ付け**: コスト配分タグの管理用テンプレートタグを設定する
+
+  objectives:
+    - AWS Budget で予算アラートを構成する
+    - Cost Anomaly Detection で異常検出を有効にする
+    - SNS + Lambda のコスト通知パイプラインを構築する
+    - コスト配分タグを標準化する
+
+  hints:
+    - "AWS::Budgets::Budget で予算とアラートを設定します"
+    - "AWS::CE::AnomalyMonitor と AWS::CE::AnomalySubscription でコスト異常検出を構成します"
+    - "BudgetLimit と NotificationsWithSubscribers でアラートしきい値を設定します"
+    - "SNS トピックの KmsMasterKeyId で暗号化を有効にします"
+    - "Cost Anomaly Detection は機械学習ベースで自動的に異常を検出します"
+
+  prerequisites:
+    - AWS Budgets の知識
+    - Cost Explorer の理解
+    - SNS と Lambda の連携経験
+    - CloudFormation の実務経験
+
+  estimatedTime: 120
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/cost-multi-account-governance.yaml
+      parameters:
+        ProjectName: tenka-cost-gov
+        NotificationEmail: team@example.com
+
+  regions:
+    aws:
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: AWS Budget
+      description: 月間 $1000 予算で 80% 実績と 100% 予測アラートが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: Cost Anomaly Detection
+      description: コスト異常検出モニターとサブスクリプションが作成されている
+      weight: 25
+      maxPoints: 25
+
+    - name: SNS トピック
+      description: 暗号化付きの SNS トピックが作成されている
+      weight: 20
+      maxPoints: 20
+
+    - name: Lambda 通知
+      description: SNS から Lambda を呼び出す通知パイプラインが構成されている
+      weight: 15
+      maxPoints: 15
+
+    - name: コストタグ
+      description: コスト配分タグが標準化されている
+      weight: 15
+      maxPoints: 15
+
+  timeoutMinutes: 15
+  intervalMinutes: 2
+
+resources:
+  documentation:
+    - path: ./docs/README.md

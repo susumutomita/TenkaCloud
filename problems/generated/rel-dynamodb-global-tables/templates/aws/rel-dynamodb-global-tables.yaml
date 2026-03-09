@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: DynamoDB グローバルテーブルによるマルチリージョン構成（正解テンプレート）
+  グローバルテーブル、オンデマンドキャパシティ、PITR を構成。
+
+Parameters:
+  EnvironmentPrefix:
+    Type: String
+    Default: tenka-ddb-global
+    Description: リソース名のプレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  # 要件1-4: DynamoDB グローバルテーブル
+  GlobalTable:
+    Type: AWS::DynamoDB::GlobalTable
+    Properties:
+      TableName: !Sub "${EnvironmentPrefix}-data"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Replicas:
+        - Region: ap-northeast-1
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          Tags:
+            - Key: Name
+              Value: !Sub "${EnvironmentPrefix}-tokyo"
+        - Region: us-east-1
+          PointInTimeRecoverySpecification:
+            PointInTimeRecoveryEnabled: true
+          Tags:
+            - Key: Name
+              Value: !Sub "${EnvironmentPrefix}-virginia"
+
+Outputs:
+  GlobalTableName:
+    Description: グローバルテーブル名
+    Value: !Ref GlobalTable
+
+  GlobalTableArn:
+    Description: グローバルテーブル ARN
+    Value: !GetAtt GlobalTable.Arn

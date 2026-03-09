@@ -9,11 +9,18 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EventStatusBadge, ProblemTypeBadge } from '@/components/ui';
+import {
+  ErrorState,
+  EventStatusBadge,
+  getErrorMessage,
+  getErrorType,
+  ProblemTypeBadge,
+  Skeleton,
+} from '@/components/ui';
+import { get } from '@/lib/api/client';
 import type { EventStatus } from '@/lib/api/admin-types';
 import type { ProblemType } from '@/lib/api/types';
 
@@ -42,52 +49,30 @@ export default function AdminEventDetailPage() {
   const eventId = params.eventId as string;
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [activeTab, setActiveTab] = useState<
     'overview' | 'problems' | 'participants'
   >('overview');
 
-  useEffect(() => {
-    // TODO: Replace with actual API call
-    const fetchEvent = async () => {
-      try {
-        setLoading(true);
-        // Mock data
-        setEvent({
-          id: eventId,
-          name: 'AWS GameDay 2024 Winter',
-          description:
-            'AWS のさまざまなサービスを活用して、実践的な課題に挑戦するイベントです。',
-          status: 'active',
-          type: 'gameday',
-          startTime: new Date().toISOString(),
-          endTime: new Date(Date.now() + 86400000).toISOString(),
-          participantCount: 45,
-          maxParticipants: 100,
-          cloudProvider: 'aws',
-          participantType: 'team',
-          problems: [
-            {
-              id: 'p1',
-              title: 'VPC セットアップ',
-              points: 100,
-              solvedCount: 38,
-            },
-            {
-              id: 'p2',
-              title: 'Lambda 関数のデプロイ',
-              points: 200,
-              solvedCount: 25,
-            },
-            { id: 'p3', title: 'RDS の設定', points: 300, solvedCount: 12 },
-          ],
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvent();
+  const fetchEvent = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await get<EventDetail>(`/admin/events/${eventId}`);
+      setEvent(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err : new Error('イベントの取得に失敗しました')
+      );
+      setEvent(null);
+    } finally {
+      setLoading(false);
+    }
   }, [eventId]);
+
+  useEffect(() => {
+    fetchEvent();
+  }, [fetchEvent]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -129,6 +114,28 @@ export default function AdminEventDetailPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center space-x-2 text-sm text-text-muted mb-2 font-mono">
+          <Link
+            href="/admin/events"
+            className="hover:text-hn-accent transition-colors"
+          >
+            イベント管理
+          </Link>
+          <span className="text-hn-accent">/</span>
+          <span className="text-text-secondary">{eventId}</span>
+        </div>
+        <ErrorState
+          message={getErrorMessage(error)}
+          type={getErrorType(error)}
+          onRetry={fetchEvent}
+        />
       </div>
     );
   }

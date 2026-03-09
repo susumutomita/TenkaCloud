@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: CloudFront CDN の最適構成（正解テンプレート）
+  キャッシュポリシー、圧縮、HTTPS、HTTP/2 を設定した CloudFront ディストリビューション。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-cdn
+    Description: プロジェクト名プレフィックス
+    AllowedPattern: "^[a-z0-9][a-z0-9-]*$"
+    ConstraintDescription: 小文字英数字とハイフンのみ使用可能
+
+Resources:
+  # オリジン用 S3 バケット
+  OriginBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${ProjectName}-origin-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  # CloudFront OAC
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${ProjectName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # 要件1: カスタムキャッシュポリシー（TTL 最適化）
+  # 要件2: 圧縮有効化（Gzip + Brotli）
+  PerformanceCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${ProjectName}-perf-cache-policy"
+        DefaultTTL: 86400
+        MaxTTL: 604800
+        MinTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+
+  # CloudFront ディストリビューション
+  CDNDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Comment: !Sub "${ProjectName} performance-optimized CDN"
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt OriginBucket.RegionalDomainName
+            OriginAccessControlId: !Ref OriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          # 要件3: HTTPS 強制
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: !Ref PerformanceCachePolicy
+          Compress: true
+        # 要件4: HTTP/2 有効化
+        HttpVersion: http2
+        PriceClass: PriceClass_All
+
+  # S3 バケットポリシー（CloudFront OAC 用）
+  OriginBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref OriginBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${OriginBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "AWS:SourceArn": !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CDNDistribution}"
+
+Outputs:
+  DistributionDomainName:
+    Description: CloudFront ディストリビューションドメイン名
+    Value: !GetAtt CDNDistribution.DomainName
+
+  DistributionId:
+    Description: CloudFront ディストリビューション ID
+    Value: !Ref CDNDistribution
+
+  OriginBucketName:
+    Description: オリジン S3 バケット名
+    Value: !Ref OriginBucket

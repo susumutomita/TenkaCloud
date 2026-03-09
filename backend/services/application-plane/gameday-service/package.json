@@ -1,0 +1,39 @@
+{
+  "name": "@tenkacloud/gameday-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "start": "bun run dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.954.0",
+    "@aws-sdk/lib-dynamodb": "3.954.0",
+    "@hono/node-server": "^1.13.7",
+    "@tenkacloud/dynamodb": "workspace:*",
+    "hono": "^4.6.12",
+    "http-status-codes": "^2.3.0",
+    "jose": "^6.0.10",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2",
+    "ulid": "^3.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "2.1.9",
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.0"
+  }
+}

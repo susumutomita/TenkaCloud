@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Problem: Lambda Provisioned Concurrency によるコールドスタート排除（正解テンプレート）
+  バージョン、エイリアス、Provisioned Concurrency、関数 URL を構成。
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: tenka-lambda-perf
+    Description: プロジェクト名のプレフィックス
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-api"
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 10
+      Architectures:
+        - arm64
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          def handler(event, context):
+              return {
+                  "statusCode": 200,
+                  "body": json.dumps({"message": "fast response"})
+              }
+
+  # 要件1: Lambda バージョン
+  ApiFunctionVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Description: Production version
+
+  # 要件2: Lambda エイリアス + 要件3: Provisioned Concurrency
+  ApiFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref ApiFunction
+      FunctionVersion: !GetAtt ApiFunctionVersion.Version
+      Name: prod
+      ProvisionedConcurrencyConfig:
+        ProvisionedConcurrentExecutions: 5
+
+  # 要件4: Lambda 関数 URL（IAM 認証）
+  FunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref ApiFunctionAlias
+      AuthType: AWS_IAM
+
+Outputs:
+  FunctionName:
+    Description: Lambda 関数名
+    Value: !Ref ApiFunction
+
+  AliasArn:
+    Description: Lambda エイリアス ARN
+    Value: !Ref ApiFunctionAlias
+
+  FunctionUrlEndpoint:
+    Description: Lambda 関数 URL エンドポイント
+    Value: !GetAtt FunctionUrl.FunctionUrl

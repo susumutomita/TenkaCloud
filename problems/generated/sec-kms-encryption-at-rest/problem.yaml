@@ -1,0 +1,111 @@
+# TenkaCloud 統一問題フォーマット
+# 問題ID: sec-kms-encryption-at-rest
+# タイプ: GAMEDAY（構築型）
+
+id: sec-kms-encryption-at-rest
+title: KMS カスタマーマネージドキー + 暗号化設計
+type: gameday
+category: security
+difficulty: medium
+
+metadata:
+  author: TenkaCloud Team
+  version: 1.0.0
+  createdAt: "2026-02-10"
+  updatedAt: "2026-02-10"
+  tags:
+    - kms
+    - encryption
+    - key-policy
+    - key-rotation
+    - alias
+    - cross-service
+  license: MIT
+
+description:
+  overview: |
+    ## シナリオ
+    あなたはセキュリティアーキテクトとして、組織全体の保存時暗号化を
+    KMS カスタマーマネージドキーで統一する任務を与えられました。
+
+    ## 背景
+    コンプライアンス要件により、すべてのデータストア（S3、EBS、RDS、DynamoDB）で
+    カスタマーマネージドキーによる暗号化が必須となりました。
+    キーポリシーで利用者を厳格に制限し、キーローテーションも有効にする必要があります。
+
+    ## あなたのミッション
+    以下の要件を満たす KMS 暗号化構成を構築してください。
+
+    ### 要件
+    1. **CMK 作成**: カスタマーマネージドキーを作成し、自動ローテーションを有効にする
+    2. **キーポリシー**: 管理者と利用者を分離したキーポリシーを設計する
+    3. **キーエイリアス**: 用途ごとのエイリアスを設定する
+    4. **クロスサービス暗号化**: S3、EBS、RDS、DynamoDB にカスタマーマネージドキーを適用する
+
+  objectives:
+    - CMK を作成し自動ローテーションを有効にする
+    - 管理者/利用者分離のキーポリシーを設計する
+    - キーエイリアスを設定する
+    - 4 つのサービスにカスタマーマネージドキーを適用する
+
+  hints:
+    - "EnableKeyRotation: true で年次の自動ローテーションが有効になります"
+    - "KeyPolicy で kms:Create*, kms:Describe* 等の管理操作と kms:Encrypt, kms:Decrypt 等の利用操作を分離します"
+    - "S3 は BucketEncryption の KMSMasterKeyID で CMK を指定します"
+    - "DynamoDB は SSESpecification の SSEType: KMS と KMSMasterKeyId で指定します"
+
+  prerequisites:
+    - KMS の基本概念（CMK、データキー、エンベロープ暗号化）
+    - キーポリシーの設計知識
+    - 各サービスの暗号化設定知識
+    - CloudFormation の基本的な知識
+
+  estimatedTime: 45
+
+deployment:
+  providers:
+    - aws
+
+  templates:
+    aws:
+      type: cloudformation
+      path: ./templates/aws/sec-kms-encryption-at-rest.yaml
+      parameters:
+        EnvironmentName: tenka-kms
+
+  regions:
+    aws:
+      - ap-northeast-1
+      - us-east-1
+
+  timeout: 30
+
+scoring:
+  type: api
+  criteria:
+    - name: CMK + 自動ローテーション
+      description: カスタマーマネージドキーが作成され、自動ローテーションが有効になっている
+      weight: 25
+      maxPoints: 25
+
+    - name: キーポリシー設計
+      description: 管理者と利用者が分離されたキーポリシーが設定されている
+      weight: 25
+      maxPoints: 25
+
+    - name: キーエイリアス
+      description: 用途ごとのキーエイリアスが設定されている
+      weight: 10
+      maxPoints: 10
+
+    - name: クロスサービス暗号化
+      description: S3、EBS、RDS、DynamoDB にカスタマーマネージドキーが適用されている
+      weight: 40
+      maxPoints: 40
+
+  timeoutMinutes: 10
+  intervalMinutes: 1
+
+resources:
+  documentation:
+    - path: ./docs/README.md
