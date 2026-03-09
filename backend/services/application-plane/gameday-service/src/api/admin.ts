@@ -4,6 +4,7 @@ import {
   eventIdSchema,
   startGameSchema,
   faultInjectionSchema,
+  seedAttacksSchema,
 } from '../schemas';
 import {
   startGame,
@@ -14,6 +15,7 @@ import {
   executeFaultInjection,
   listTeams,
   listAttackLogs,
+  seedAttackCatalog,
   GameNotFoundError,
   ConcurrentModificationError,
 } from '../services/game-controller';
@@ -187,4 +189,24 @@ adminRoutes.get('/attack-logs', async (c) => {
   }
   const logs = await listAttackLogs(eventId);
   return c.json({ logs }, StatusCodes.OK);
+});
+
+// 攻撃カタログシード
+adminRoutes.post('/attacks/seed', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const parsed = seedAttacksSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: '無効なリクエスト', details: parsed.error.issues },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const count = await seedAttackCatalog(parsed.data.eventId);
+  return c.json({ seeded: count }, StatusCodes.CREATED);
 });

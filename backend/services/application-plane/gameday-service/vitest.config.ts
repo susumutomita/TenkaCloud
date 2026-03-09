@@ -18,6 +18,7 @@ export default defineConfig({
         'src/lib/dynamodb.ts',
         'src/middleware/auth.ts',
         'src/repositories/**',
+        'src/data/**',
         'src/types/index.ts',
         'src/index.ts',
       ],

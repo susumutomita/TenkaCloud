@@ -3,17 +3,39 @@ import {
   GetCommand,
   UpdateCommand,
   QueryCommand,
+  BatchWriteCommand,
+  DeleteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { ulid } from 'ulid';
 import { getDocClient, getTableName } from '@tenkacloud/dynamodb';
-import type { GameState, AttackLog, ScoreWeight } from '../types';
+import type {
+  GameState,
+  AttackLog,
+  Attack,
+  AttackPurchase,
+  TeamVulnerability,
+  Alliance,
+  AllianceStatus,
+  HealthCheckResult,
+  Vote,
+  ScoreWeight,
+} from '../types';
 
 // Key builders
 const buildGamedayPK = (eventId: string) => `GAMEDAY#${eventId}`;
 const buildMetadataSK = () => 'METADATA';
 const buildAttackLogSK = (id: string) => `ATTACKLOG#${id}`;
 const buildTeamSK = (teamId: string) => `TEAM#${teamId}`;
+const buildAttackSK = (slug: string) => `ATTACK#${slug}`;
+const buildPurchaseSK = (teamId: string, attackSlug: string) =>
+  `PURCHASE#${teamId}#${attackSlug}`;
+const buildVulnerabilitySK = (teamId: string, vulnSlug: string) =>
+  `VULNERABILITY#${teamId}#${vulnSlug}`;
+const buildAllianceSK = (allianceId: string) => `ALLIANCE#${allianceId}`;
+const buildHealthCheckSK = (teamId: string, timestamp: string) =>
+  `HEALTHCHECK#${teamId}#${timestamp}`;
+const buildVoteSK = (voterId: string) => `VOTE#${voterId}`;
 const buildTenantGamedayGSI = (tenantId: string) =>
   `TENANT#${tenantId}#GAMEDAY`;
 
@@ -126,7 +148,23 @@ export class ConcurrentModificationError extends Error {
   }
 }
 
+export class AttackAlreadyPurchasedError extends Error {
+  constructor() {
+    super('この攻撃は既に購入済みです');
+    this.name = 'AttackAlreadyPurchasedError';
+  }
+}
+
+export class VoteAlreadyExistsError extends Error {
+  constructor() {
+    super('既に投票済みです');
+    this.name = 'VoteAlreadyExistsError';
+  }
+}
+
 export class GamedayRepository {
+  // === ゲーム状態 ===
+
   async createGameState(input: {
     eventId: string;
     tenantId: string;
@@ -316,6 +354,8 @@ export class GamedayRepository {
     }
   }
 
+  // === 攻撃ログ ===
+
   async addAttackLog(input: {
     eventId: string;
     attackerTeamId: string;
@@ -391,6 +431,8 @@ export class GamedayRepository {
     return allItems;
   }
 
+  // === チーム ===
+
   async getTeamState(
     eventId: string,
     teamId: string
@@ -436,6 +478,506 @@ export class GamedayRepository {
 
       for (const item of result.Items ?? []) {
         allItems.push(toTeamState(item as TeamStateItem));
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
+  }
+
+  async updateTeamScore(
+    eventId: string,
+    teamId: string,
+    delta: number
+  ): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    await client.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildTeamSK(teamId),
+        },
+        UpdateExpression: 'ADD score :delta SET UpdatedAt = :now',
+        ExpressionAttributeValues: {
+          ':delta': delta,
+          ':now': now,
+        },
+      })
+    );
+  }
+
+  // === 攻撃カタログ ===
+
+  async listAttackCatalog(eventId: string): Promise<Attack[]> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const allItems: Attack[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': 'ATTACK#',
+          },
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
+
+      for (const item of result.Items ?? []) {
+        allItems.push(item as unknown as Attack);
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
+  }
+
+  async getAttack(eventId: string, slug: string): Promise<Attack | null> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildAttackSK(slug),
+        },
+      })
+    );
+
+    if (!result.Item) {
+      return null;
+    }
+
+    return result.Item as unknown as Attack;
+  }
+
+  async seedAttackCatalog(eventId: string, attacks: Attack[]): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    // BatchWrite は最大25件ずつ
+    const chunks: Attack[][] = [];
+    for (let i = 0; i < attacks.length; i += 25) {
+      chunks.push(attacks.slice(i, i + 25));
+    }
+
+    for (const chunk of chunks) {
+      await client.send(
+        new BatchWriteCommand({
+          RequestItems: {
+            [tableName]: chunk.map((attack) => ({
+              PutRequest: {
+                Item: {
+                  PK: buildGamedayPK(eventId),
+                  SK: buildAttackSK(attack.slug),
+                  EntityType: 'ATTACK',
+                  ...attack,
+                },
+              },
+            })),
+          },
+        })
+      );
+    }
+  }
+
+  // === 攻撃購入 ===
+
+  async getAttackPurchase(
+    eventId: string,
+    teamId: string,
+    attackSlug: string
+  ): Promise<AttackPurchase | null> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildPurchaseSK(teamId, attackSlug),
+        },
+      })
+    );
+
+    if (!result.Item) {
+      return null;
+    }
+
+    return result.Item as unknown as AttackPurchase;
+  }
+
+  async createAttackPurchase(input: {
+    eventId: string;
+    teamId: string;
+    attackId: string;
+    attackSlug: string;
+  }): Promise<AttackPurchase> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const id = ulid();
+    const now = new Date().toISOString();
+
+    const item = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildPurchaseSK(input.teamId, input.attackSlug),
+      EntityType: 'PURCHASE',
+      id,
+      eventId: input.eventId,
+      teamId: input.teamId,
+      attackId: input.attackId,
+      attackSlug: input.attackSlug,
+      purchasedAt: now,
+      lastUsedAt: null,
+    };
+
+    try {
+      await client.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: item,
+          ConditionExpression:
+            'attribute_not_exists(PK) AND attribute_not_exists(SK)',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        throw new AttackAlreadyPurchasedError();
+      }
+      throw error;
+    }
+
+    return item as unknown as AttackPurchase;
+  }
+
+  async updatePurchaseLastUsedAt(
+    eventId: string,
+    teamId: string,
+    attackSlug: string,
+    timestamp: string
+  ): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    await client.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildPurchaseSK(teamId, attackSlug),
+        },
+        UpdateExpression: 'SET lastUsedAt = :ts',
+        ExpressionAttributeValues: {
+          ':ts': timestamp,
+        },
+      })
+    );
+  }
+
+  // === 脆弱性 ===
+
+  async getTeamVulnerability(
+    eventId: string,
+    teamId: string,
+    vulnSlug: string
+  ): Promise<TeamVulnerability | null> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildVulnerabilitySK(teamId, vulnSlug),
+        },
+      })
+    );
+
+    if (!result.Item) {
+      return null;
+    }
+
+    return result.Item as unknown as TeamVulnerability;
+  }
+
+  async upsertTeamVulnerability(input: {
+    eventId: string;
+    teamId: string;
+    vulnerabilitySlug: string;
+    isFixed: boolean;
+  }): Promise<TeamVulnerability> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const id = ulid();
+
+    const item = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildVulnerabilitySK(input.teamId, input.vulnerabilitySlug),
+      EntityType: 'VULNERABILITY',
+      id,
+      eventId: input.eventId,
+      teamId: input.teamId,
+      vulnerabilitySlug: input.vulnerabilitySlug,
+      isFixed: input.isFixed,
+    };
+
+    await client.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: item,
+      })
+    );
+
+    return item as unknown as TeamVulnerability;
+  }
+
+  // === 同盟 ===
+
+  async listAlliances(eventId: string): Promise<Alliance[]> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const allItems: Alliance[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': 'ALLIANCE#',
+          },
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
+
+      for (const item of result.Items ?? []) {
+        allItems.push(item as unknown as Alliance);
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
+  }
+
+  async getAlliance(
+    eventId: string,
+    allianceId: string
+  ): Promise<Alliance | null> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildAllianceSK(allianceId),
+        },
+      })
+    );
+
+    if (!result.Item) {
+      return null;
+    }
+
+    return result.Item as unknown as Alliance;
+  }
+
+  async createAlliance(input: {
+    eventId: string;
+    requesterTeamId: string;
+    targetTeamId: string;
+  }): Promise<Alliance> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const id = ulid();
+    const now = new Date().toISOString();
+
+    const item = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildAllianceSK(id),
+      EntityType: 'ALLIANCE',
+      id,
+      eventId: input.eventId,
+      requesterTeamId: input.requesterTeamId,
+      targetTeamId: input.targetTeamId,
+      status: 'PENDING' as AllianceStatus,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await client.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: item,
+      })
+    );
+
+    return item as unknown as Alliance;
+  }
+
+  async updateAllianceStatus(
+    eventId: string,
+    allianceId: string,
+    status: AllianceStatus
+  ): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    await client.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildAllianceSK(allianceId),
+        },
+        UpdateExpression: 'SET #status = :status, updatedAt = :now',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':status': status,
+          ':now': now,
+        },
+      })
+    );
+  }
+
+  async deleteAlliance(eventId: string, allianceId: string): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    await client.send(
+      new DeleteCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildAllianceSK(allianceId),
+        },
+      })
+    );
+  }
+
+  // === ヘルスチェック ===
+
+  async listHealthChecks(
+    eventId: string,
+    teamId: string
+  ): Promise<HealthCheckResult[]> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const allItems: HealthCheckResult[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': `HEALTHCHECK#${teamId}#`,
+          },
+          ScanIndexForward: false,
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
+
+      for (const item of result.Items ?? []) {
+        allItems.push(item as unknown as HealthCheckResult);
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
+  }
+
+  // === 投票 ===
+
+  async castVote(input: {
+    eventId: string;
+    voterTeamId: string;
+    votedForTeamId: string;
+  }): Promise<Vote> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const id = ulid();
+    const now = new Date().toISOString();
+
+    const item = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildVoteSK(input.voterTeamId),
+      EntityType: 'VOTE',
+      id,
+      eventId: input.eventId,
+      voterTeamId: input.voterTeamId,
+      votedForTeamId: input.votedForTeamId,
+      createdAt: now,
+    };
+
+    try {
+      await client.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: item,
+          ConditionExpression:
+            'attribute_not_exists(PK) AND attribute_not_exists(SK)',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        throw new VoteAlreadyExistsError();
+      }
+      throw error;
+    }
+
+    return item as unknown as Vote;
+  }
+
+  async listVotes(eventId: string): Promise<Vote[]> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const allItems: Vote[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': 'VOTE#',
+          },
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
+
+      for (const item of result.Items ?? []) {
+        allItems.push(item as unknown as Vote);
       }
       exclusiveStartKey = result.LastEvaluatedKey as
         | Record<string, unknown>
