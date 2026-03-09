@@ -24,6 +24,7 @@ import {
   registerTeam,
   TeamAlreadyExistsError,
 } from '../services/dashboard-service';
+import { auditorService } from '../services/auditor-service';
 
 export const adminRoutes = new Hono();
 
@@ -241,4 +242,47 @@ adminRoutes.post('/attacks/seed', async (c) => {
   }
   const count = await seedAttackCatalog(parsed.data.eventId);
   return c.json({ seeded: count }, StatusCodes.CREATED);
+});
+
+// === Auditor ===
+
+// Auditor 開始
+adminRoutes.post('/auditor/start', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const parsed = eventIdSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: '無効なリクエスト', details: parsed.error.issues },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  if (auditorService.isRunning()) {
+    return c.json(
+      { error: 'Auditor は既に起動しています' },
+      StatusCodes.CONFLICT
+    );
+  }
+  auditorService.start(parsed.data.eventId);
+  return c.json(
+    { status: 'started', eventId: parsed.data.eventId },
+    StatusCodes.OK
+  );
+});
+
+// Auditor 停止
+adminRoutes.post('/auditor/stop', async (c) => {
+  if (!auditorService.isRunning()) {
+    return c.json(
+      { error: 'Auditor は起動していません' },
+      StatusCodes.CONFLICT
+    );
+  }
+  auditorService.stop();
+  return c.json({ status: 'stopped' }, StatusCodes.OK);
 });

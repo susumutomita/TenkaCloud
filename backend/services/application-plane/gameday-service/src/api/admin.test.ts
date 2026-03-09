@@ -43,8 +43,17 @@ const mockDashboardService = vi.hoisted(() => {
   };
 });
 
+const mockAuditorService = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  isRunning: vi.fn().mockReturnValue(false),
+}));
+
 vi.mock('../services/game-controller', () => mockGameController);
 vi.mock('../services/dashboard-service', () => mockDashboardService);
+vi.mock('../services/auditor-service', () => ({
+  auditorService: mockAuditorService,
+}));
 
 import { adminRoutes } from './admin';
 
@@ -731,6 +740,98 @@ describe('管理者 API', () => {
         });
 
         expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+      });
+    });
+  });
+
+  // === Auditor ===
+  describe('POST /auditor/start', () => {
+    describe('正常な開始の場合', () => {
+      it('OK を返し started ステータスを含むべき', async () => {
+        mockAuditorService.isRunning.mockReturnValue(false);
+
+        const res = await app.request('/auditor/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.status).toBe('started');
+        expect(body.eventId).toBe('event-1');
+        expect(mockAuditorService.start).toHaveBeenCalledWith('event-1');
+      });
+    });
+
+    describe('既に起動中の場合', () => {
+      it('CONFLICT を返すべき', async () => {
+        mockAuditorService.isRunning.mockReturnValue(true);
+
+        const res = await app.request('/auditor/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CONFLICT);
+        const body = await res.json();
+        expect(body.error).toContain('既に起動');
+      });
+    });
+
+    describe('eventId が空の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/auditor/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: '' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/auditor/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
+      });
+    });
+  });
+
+  describe('POST /auditor/stop', () => {
+    describe('起動中の場合', () => {
+      it('OK を返し stopped ステータスを含むべき', async () => {
+        mockAuditorService.isRunning.mockReturnValue(true);
+
+        const res = await app.request('/auditor/stop', {
+          method: 'POST',
+        });
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.status).toBe('stopped');
+        expect(mockAuditorService.stop).toHaveBeenCalled();
+      });
+    });
+
+    describe('起動していない場合', () => {
+      it('CONFLICT を返すべき', async () => {
+        mockAuditorService.isRunning.mockReturnValue(false);
+
+        const res = await app.request('/auditor/stop', {
+          method: 'POST',
+        });
+
+        expect(res.status).toBe(StatusCodes.CONFLICT);
+        const body = await res.json();
+        expect(body.error).toContain('起動していません');
       });
     });
   });
