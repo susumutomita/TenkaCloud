@@ -30,7 +30,21 @@ const mockGameController = vi.hoisted(() => {
   };
 });
 
+const mockDashboardService = vi.hoisted(() => {
+  class TeamAlreadyExistsError extends Error {
+    constructor(teamId: string) {
+      super(`チームは既に登録済みです: ${teamId}`);
+      this.name = 'TeamAlreadyExistsError';
+    }
+  }
+  return {
+    registerTeam: vi.fn(),
+    TeamAlreadyExistsError,
+  };
+});
+
 vi.mock('../services/game-controller', () => mockGameController);
+vi.mock('../services/dashboard-service', () => mockDashboardService);
 
 import { adminRoutes } from './admin';
 
@@ -616,6 +630,107 @@ describe('管理者 API', () => {
         expect(res.status).toBe(StatusCodes.BAD_REQUEST);
         const body = await res.json();
         expect(body.error).toBe('JSON の解析に失敗しました');
+      });
+    });
+  });
+
+  // === チーム登録 ===
+  describe('POST /teams/register', () => {
+    describe('有効なリクエストの場合', () => {
+      it('CREATED を返しチーム情報を含むべき', async () => {
+        const team = {
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'チームA',
+          score: 0,
+          isHealthy: true,
+          websiteUrl: 'https://example.com',
+          apiUrl: 'https://api.example.com',
+        };
+        mockDashboardService.registerTeam.mockResolvedValue(team);
+
+        const res = await app.request('/teams/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: 'event-1',
+            teamId: 'team-1',
+            teamName: 'チームA',
+            websiteUrl: 'https://example.com',
+            apiUrl: 'https://api.example.com',
+          }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CREATED);
+        const body = await res.json();
+        expect(body.teamId).toBe('team-1');
+        expect(body.teamName).toBe('チームA');
+      });
+    });
+
+    describe('重複チーム登録の場合', () => {
+      it('CONFLICT を返すべき', async () => {
+        mockDashboardService.registerTeam.mockRejectedValue(
+          new mockDashboardService.TeamAlreadyExistsError('team-1')
+        );
+
+        const res = await app.request('/teams/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: 'event-1',
+            teamId: 'team-1',
+            teamName: 'チームA',
+          }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CONFLICT);
+        const body = await res.json();
+        expect(body.error).toContain('既に登録済み');
+      });
+    });
+
+    describe('必須フィールドが不足している場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/teams/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/teams/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
+      });
+    });
+
+    describe('予期しないエラーが発生した場合', () => {
+      it('INTERNAL_SERVER_ERROR を返すべき', async () => {
+        mockDashboardService.registerTeam.mockRejectedValue(
+          new Error('DB接続エラー')
+        );
+
+        const res = await app.request('/teams/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: 'event-1',
+            teamId: 'team-1',
+            teamName: 'チームA',
+          }),
+        });
+
+        expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
       });
     });
   });

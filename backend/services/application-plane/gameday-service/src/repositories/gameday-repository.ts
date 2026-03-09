@@ -84,6 +84,8 @@ interface TeamStateItem {
   teamName: string;
   score: number;
   isHealthy: boolean;
+  websiteUrl: string | null;
+  apiUrl: string | null;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -123,6 +125,8 @@ export interface TeamState {
   teamName: string;
   score: number;
   isHealthy: boolean;
+  websiteUrl: string | null;
+  apiUrl: string | null;
 }
 
 function toTeamState(item: TeamStateItem): TeamState {
@@ -132,6 +136,8 @@ function toTeamState(item: TeamStateItem): TeamState {
     teamName: item.teamName,
     score: item.score,
     isHealthy: item.isHealthy,
+    websiteUrl: item.websiteUrl ?? null,
+    apiUrl: item.apiUrl ?? null,
   };
 }
 
@@ -160,6 +166,13 @@ export class VoteAlreadyExistsError extends Error {
   constructor() {
     super('既に投票済みです');
     this.name = 'VoteAlreadyExistsError';
+  }
+}
+
+export class TeamAlreadyExistsError extends Error {
+  constructor(teamId: string) {
+    super(`チームは既に登録済みです: ${teamId}`);
+    this.name = 'TeamAlreadyExistsError';
   }
 }
 
@@ -353,6 +366,120 @@ export class GamedayRepository {
       }
       throw error;
     }
+  }
+
+  // === チーム登録 ===
+
+  async createTeam(input: {
+    eventId: string;
+    teamId: string;
+    teamName: string;
+    websiteUrl?: string;
+    apiUrl?: string;
+  }): Promise<TeamState> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    const item: TeamStateItem = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildTeamSK(input.teamId),
+      EntityType: 'TEAM',
+      eventId: input.eventId,
+      teamId: input.teamId,
+      teamName: input.teamName,
+      score: 0,
+      isHealthy: true,
+      websiteUrl: input.websiteUrl ?? null,
+      apiUrl: input.apiUrl ?? null,
+      CreatedAt: now,
+      UpdatedAt: now,
+    };
+
+    try {
+      await client.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: item,
+          ConditionExpression:
+            'attribute_not_exists(PK) AND attribute_not_exists(SK)',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        throw new TeamAlreadyExistsError(input.teamId);
+      }
+      throw error;
+    }
+
+    return toTeamState(item);
+  }
+
+  async updateTeamUrls(
+    eventId: string,
+    teamId: string,
+    urls: { websiteUrl?: string; apiUrl?: string }
+  ): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    const expressionParts: string[] = ['UpdatedAt = :now'];
+    const expressionValues: Record<string, unknown> = { ':now': now };
+
+    if (urls.websiteUrl !== undefined) {
+      expressionParts.push('websiteUrl = :wUrl');
+      expressionValues[':wUrl'] = urls.websiteUrl;
+    }
+    if (urls.apiUrl !== undefined) {
+      expressionParts.push('apiUrl = :aUrl');
+      expressionValues[':aUrl'] = urls.apiUrl;
+    }
+
+    try {
+      await client.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: {
+            PK: buildGamedayPK(eventId),
+            SK: buildTeamSK(teamId),
+          },
+          UpdateExpression: `SET ${expressionParts.join(', ')}`,
+          ExpressionAttributeValues: expressionValues,
+          ConditionExpression: 'attribute_exists(PK) AND attribute_exists(SK)',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async updateTeamHealthy(
+    eventId: string,
+    teamId: string,
+    isHealthy: boolean
+  ): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    await client.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildTeamSK(teamId),
+        },
+        UpdateExpression: 'SET isHealthy = :h, UpdatedAt = :now',
+        ExpressionAttributeValues: {
+          ':h': isHealthy,
+          ':now': now,
+        },
+      })
+    );
   }
 
   // === 攻撃ログ ===
@@ -986,6 +1113,43 @@ export class GamedayRepository {
     } while (exclusiveStartKey);
 
     return allItems;
+  }
+
+  async createHealthCheck(input: {
+    eventId: string;
+    teamId: string;
+    checkType: 'website' | 'api';
+    isHealthy: boolean;
+    statusCode: number | null;
+    responseTimeMs: number | null;
+  }): Promise<HealthCheckResult> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const id = ulid();
+    const now = new Date().toISOString();
+
+    const item = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildHealthCheckSK(input.teamId, now),
+      EntityType: 'HEALTHCHECK',
+      id,
+      eventId: input.eventId,
+      teamId: input.teamId,
+      checkType: input.checkType,
+      isHealthy: input.isHealthy,
+      statusCode: input.statusCode,
+      responseTimeMs: input.responseTimeMs,
+      createdAt: now,
+    };
+
+    await client.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: item,
+      })
+    );
+
+    return item as unknown as HealthCheckResult;
   }
 
   // === 投票 ===

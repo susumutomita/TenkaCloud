@@ -23,6 +23,23 @@ export const seedAttacksSchema = z.object({
   eventId: z.string().min(1),
 });
 
+// 管理者: チーム登録
+export const registerTeamSchema = z.object({
+  eventId: z.string().min(1),
+  teamId: z.string().min(1),
+  teamName: z.string().min(1),
+  websiteUrl: z.string().url().optional(),
+  apiUrl: z.string().url().optional(),
+});
+
+// プレーヤー: チーム URL 更新
+export const updateTeamUrlSchema = z.object({
+  eventId: z.string().min(1),
+  teamId: z.string().min(1),
+  websiteUrl: z.string().url().optional(),
+  apiUrl: z.string().url().optional(),
+});
+
 // プレーヤー: 攻撃購入
 export const purchaseAttackSchema = z.object({
   eventId: z.string().min(1),

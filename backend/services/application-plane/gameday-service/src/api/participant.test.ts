@@ -108,7 +108,31 @@ const mockParticipantService = vi.hoisted(() => {
   };
 });
 
+const mockDashboardService = vi.hoisted(() => {
+  class BlackoutActiveError extends Error {
+    constructor() {
+      super('ブラックアウト中はリーダーボードを閲覧できません');
+      this.name = 'BlackoutActiveError';
+    }
+  }
+  class TeamNotFoundError extends Error {
+    constructor(teamId: string) {
+      super(`チームが見つかりません: ${teamId}`);
+      this.name = 'TeamNotFoundError';
+    }
+  }
+  return {
+    updateTeamUrl: vi.fn(),
+    getLeaderboard: vi.fn(),
+    getAttackStatistics: vi.fn(),
+    getTeamDashboard: vi.fn(),
+    BlackoutActiveError,
+    TeamNotFoundError,
+  };
+});
+
 vi.mock('../services/participant-service', () => mockParticipantService);
+vi.mock('../services/dashboard-service', () => mockDashboardService);
 
 import { participantRoutes } from './participant';
 
@@ -943,6 +967,165 @@ describe('プレーヤー API', () => {
     it('eventId なしで BAD_REQUEST を返すべき', async () => {
       const res = await app.request('/voting/results');
       expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === ダッシュボード: リーダーボード ===
+  describe('GET /dashboard/leaderboard', () => {
+    it('正常系でスコア降順の一覧を返すべき', async () => {
+      mockDashboardService.getLeaderboard.mockResolvedValue([
+        { teamId: 'team-2', score: 5000 },
+        { teamId: 'team-1', score: 3000 },
+      ]);
+      const res = await app.request('/dashboard/leaderboard?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.leaderboard).toHaveLength(2);
+      expect(body.leaderboard[0].teamId).toBe('team-2');
+    });
+
+    it('eventId なしで BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/dashboard/leaderboard');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('ブラックアウト中で FORBIDDEN を返すべき', async () => {
+      mockDashboardService.getLeaderboard.mockRejectedValue(
+        new mockDashboardService.BlackoutActiveError()
+      );
+      const res = await app.request('/dashboard/leaderboard?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      const body = await res.json();
+      expect(body.error).toContain('ブラックアウト');
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockDashboardService.getLeaderboard.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/dashboard/leaderboard?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === ダッシュボード: 攻撃統計 ===
+  describe('GET /dashboard/attack-stats', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockDashboardService.getAttackStatistics.mockResolvedValue([
+        {
+          teamId: 'team-1',
+          attacksSent: 2,
+          attacksReceived: 1,
+          successRate: 0.5,
+        },
+      ]);
+      const res = await app.request('/dashboard/attack-stats?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.stats).toHaveLength(1);
+    });
+
+    it('eventId なしで BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/dashboard/attack-stats');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === ダッシュボード: チーム詳細 ===
+  describe('GET /dashboard/team', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockDashboardService.getTeamDashboard.mockResolvedValue({
+        team: { teamId: 'team-1', score: 5000 },
+        recentHealthChecks: [],
+        attackHistory: [],
+      });
+      const res = await app.request(
+        '/dashboard/team?eventId=event-1&teamId=team-1'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.team.teamId).toBe('team-1');
+    });
+
+    it('チームが存在しない場合 NOT_FOUND を返すべき', async () => {
+      mockDashboardService.getTeamDashboard.mockResolvedValue(null);
+      const res = await app.request(
+        '/dashboard/team?eventId=event-1&teamId=nonexistent'
+      );
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('パラメータ不足で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/dashboard/team');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === チーム URL 更新 ===
+  describe('POST /teams/update-url', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockDashboardService.updateTeamUrl.mockResolvedValue(undefined);
+      const res = await app.request('/teams/update-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          websiteUrl: 'https://new.example.com',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/update-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/update-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('不正な URL で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/update-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          websiteUrl: 'not-a-url',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('チームが存在しない場合 NOT_FOUND を返すべき', async () => {
+      mockDashboardService.updateTeamUrl.mockRejectedValue(
+        new mockDashboardService.TeamNotFoundError('team-1')
+      );
+      const res = await app.request('/teams/update-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          websiteUrl: 'https://example.com',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
     });
   });
 });
