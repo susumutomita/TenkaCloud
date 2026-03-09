@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
 import { Hono } from 'hono';
 
 const mockGameController = vi.hoisted(() => {
@@ -70,7 +71,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
       });
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(StatusCodes.CREATED);
       const body = await res.json();
       expect(body.eventId).toBe('event-1');
       expect(body.isRunning).toBe(true);
@@ -87,7 +88,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
@@ -96,7 +97,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       const body = await res.json();
       expect(body.error).toBe('JSON の解析に失敗しました');
     });
@@ -121,7 +122,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.isRunning).toBe(false);
     });
@@ -137,7 +138,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'nonexistent' }),
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
       const body = await res.json();
       expect(body.error).toBe('ゲームが見つかりません');
     });
@@ -151,7 +152,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -160,7 +161,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
@@ -169,7 +170,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       const body = await res.json();
       expect(body.error).toBe('JSON の解析に失敗しました');
     });
@@ -190,7 +191,7 @@ describe('管理者 API', () => {
 
       const res = await app.request('/game/status?eventId=event-1');
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.eventId).toBe('event-1');
     });
@@ -200,14 +201,14 @@ describe('管理者 API', () => {
 
       const res = await app.request('/game/status?eventId=nonexistent');
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
       const body = await res.json();
       expect(body.error).toBe('ゲームが見つかりません');
     });
 
     it('eventId がない場合 400 を返すべき', async () => {
       const res = await app.request('/game/status');
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
   });
 
@@ -230,7 +231,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.scoreWeight).toBe('high');
     });
@@ -246,7 +247,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'nonexistent' }),
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
       const body = await res.json();
       expect(body.error).toBe('ゲームが見つかりません');
     });
@@ -262,7 +263,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(StatusCodes.CONFLICT);
       const body = await res.json();
       expect(body.error).toBe(
         '同時変更が検出されました。もう一度お試しください'
@@ -280,7 +281,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -289,7 +290,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
@@ -298,7 +299,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       const body = await res.json();
       expect(body.error).toBe('JSON の解析に失敗しました');
     });
@@ -323,7 +324,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.blackout).toBe(true);
     });
@@ -339,7 +340,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'nonexistent' }),
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
       const body = await res.json();
       expect(body.error).toBe('ゲームが見つかりません');
     });
@@ -355,7 +356,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(StatusCodes.CONFLICT);
       const body = await res.json();
       expect(body.error).toBe(
         '同時変更が検出されました。もう一度お試しください'
@@ -373,7 +374,7 @@ describe('管理者 API', () => {
         body: JSON.stringify({ eventId: 'event-1' }),
       });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     });
 
     it('eventId が空の場合 400 を返すべき', async () => {
@@ -382,7 +383,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: '' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
@@ -391,7 +392,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       const body = await res.json();
       expect(body.error).toBe('JSON の解析に失敗しました');
     });
@@ -425,7 +426,7 @@ describe('管理者 API', () => {
         }),
       });
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(StatusCodes.CREATED);
       const body = await res.json();
       expect(body.attackerTeamId).toBe('ADMIN');
     });
@@ -436,7 +437,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eventId: 'event-1' }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
 
     it('不正な JSON の場合 400 を返すべき', async () => {
@@ -445,7 +446,7 @@ describe('管理者 API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: 'invalid-json',
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       const body = await res.json();
       expect(body.error).toBe('JSON の解析に失敗しました');
     });
@@ -466,7 +467,7 @@ describe('管理者 API', () => {
 
       const res = await app.request('/teams?eventId=event-1');
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.teams).toHaveLength(1);
       expect(body.teams[0].teamName).toBe('チームA');
@@ -474,7 +475,7 @@ describe('管理者 API', () => {
 
     it('eventId がない場合 400 を返すべき', async () => {
       const res = await app.request('/teams');
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
   });
 
@@ -500,14 +501,14 @@ describe('管理者 API', () => {
 
       const res = await app.request('/attack-logs?eventId=event-1');
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.logs).toHaveLength(1);
     });
 
     it('eventId がない場合 400 を返すべき', async () => {
       const res = await app.request('/attack-logs');
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
   });
 });
