@@ -1,330 +1,948 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
+import { Hono } from 'hono';
+
+const mockParticipantService = vi.hoisted(() => {
+  class GameNotRunningError extends Error {
+    constructor() {
+      super('ゲームが開始されていません');
+      this.name = 'GameNotRunningError';
+    }
+  }
+  class AttackNotFoundError extends Error {
+    constructor(id: string) {
+      super(`攻撃が見つかりません: ${id}`);
+      this.name = 'AttackNotFoundError';
+    }
+  }
+  class AttackNotPurchasedError extends Error {
+    constructor() {
+      super('この攻撃は購入されていません');
+      this.name = 'AttackNotPurchasedError';
+    }
+  }
+  class CooldownActiveError extends Error {
+    remainingSeconds: number;
+    constructor(seconds: number) {
+      super(`クールダウン中です（残り${seconds}秒）`);
+      this.name = 'CooldownActiveError';
+      this.remainingSeconds = seconds;
+    }
+  }
+  class SelfAttackError extends Error {
+    constructor() {
+      super('自チームへの攻撃はできません');
+      this.name = 'SelfAttackError';
+    }
+  }
+  class InsufficientScoreError extends Error {
+    constructor() {
+      super('スコアが不足しています');
+      this.name = 'InsufficientScoreError';
+    }
+  }
+  class TeamNotFoundError extends Error {
+    constructor(id: string) {
+      super(`チームが見つかりません: ${id}`);
+      this.name = 'TeamNotFoundError';
+    }
+  }
+  class AllianceNotFoundError extends Error {
+    constructor(id: string) {
+      super(`同盟が見つかりません: ${id}`);
+      this.name = 'AllianceNotFoundError';
+    }
+  }
+  class AllianceUnauthorizedError extends Error {
+    constructor() {
+      super('この同盟を操作する権限がありません');
+      this.name = 'AllianceUnauthorizedError';
+    }
+  }
+  class SelfVoteError extends Error {
+    constructor() {
+      super('自チームへの投票はできません');
+      this.name = 'SelfVoteError';
+    }
+  }
+  class AttackAlreadyPurchasedError extends Error {
+    constructor() {
+      super('この攻撃は既に購入済みです');
+      this.name = 'AttackAlreadyPurchasedError';
+    }
+  }
+  class VoteAlreadyExistsError extends Error {
+    constructor() {
+      super('既に投票済みです');
+      this.name = 'VoteAlreadyExistsError';
+    }
+  }
+
+  return {
+    getAttackCatalog: vi.fn(),
+    purchaseAttack: vi.fn(),
+    executeAttack: vi.fn(),
+    getAttackHistory: vi.fn(),
+    getActiveAttacks: vi.fn(),
+    purchaseHint: vi.fn(),
+    reportFix: vi.fn(),
+    listTeamAlliances: vi.fn(),
+    requestAlliance: vi.fn(),
+    acceptAlliance: vi.fn(),
+    breakAlliance: vi.fn(),
+    getMonitoringStatus: vi.fn(),
+    castVote: vi.fn(),
+    getVotingResults: vi.fn(),
+    GameNotRunningError,
+    AttackNotFoundError,
+    AttackNotPurchasedError,
+    CooldownActiveError,
+    SelfAttackError,
+    InsufficientScoreError,
+    TeamNotFoundError,
+    AllianceNotFoundError,
+    AllianceUnauthorizedError,
+    SelfVoteError,
+    AttackAlreadyPurchasedError,
+    VoteAlreadyExistsError,
+  };
+});
+
+vi.mock('../services/participant-service', () => mockParticipantService);
+
 import { participantRoutes } from './participant';
 
 describe('プレーヤー API', () => {
-  describe('攻撃', () => {
-    describe('GET /attacks/catalog', () => {
-      it('OK を返し攻撃カタログを含むべき', async () => {
-        const res = await participantRoutes.request('/attacks/catalog');
-        expect(res.status).toBe(StatusCodes.OK);
-        const body = await res.json();
-        expect(body.attacks).toEqual([]);
-      });
+  let app: Hono;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = new Hono();
+    app.route('/', participantRoutes);
+  });
+
+  // === 攻撃カタログ ===
+  describe('GET /attacks/catalog', () => {
+    it('eventId ありで OK を返すべき', async () => {
+      mockParticipantService.getAttackCatalog.mockResolvedValue([
+        { id: 'atk-1', name: 'SQL Injection' },
+      ]);
+      const res = await app.request('/attacks/catalog?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.attacks).toHaveLength(1);
     });
 
-    describe('POST /attacks/purchase', () => {
-      describe('有効なリクエストの場合', () => {
-        it('NOT_IMPLEMENTED を返すべき', async () => {
-          const res = await participantRoutes.request('/attacks/purchase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ attackId: 'atk-1' }),
-          });
-          expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-          const body = await res.json();
-          expect(body.error).toBe('未実装です');
-        });
-      });
-
-      describe('必須フィールドが不足している場合', () => {
-        it('BAD_REQUEST を返すべき', async () => {
-          const res = await participantRoutes.request('/attacks/purchase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-        });
-      });
-
-      describe('不正な JSON の場合', () => {
-        it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
-          const res = await participantRoutes.request('/attacks/purchase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: 'invalid-json',
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-          const body = await res.json();
-          expect(body.error).toBe('JSON の解析に失敗しました');
-        });
-      });
-    });
-
-    describe('POST /attacks/execute', () => {
-      describe('有効なリクエストの場合', () => {
-        it('NOT_IMPLEMENTED を返すべき', async () => {
-          const res = await participantRoutes.request('/attacks/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              attackId: 'atk-1',
-              targetTeamId: 'team-2',
-            }),
-          });
-          expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-          const body = await res.json();
-          expect(body.error).toBe('未実装です');
-        });
-      });
-
-      describe('必須フィールドが不足している場合', () => {
-        it('BAD_REQUEST を返すべき', async () => {
-          const res = await participantRoutes.request('/attacks/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ attackId: 'atk-1' }),
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-        });
-      });
-
-      describe('不正な JSON の場合', () => {
-        it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
-          const res = await participantRoutes.request('/attacks/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: 'invalid-json',
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-          const body = await res.json();
-          expect(body.error).toBe('JSON の解析に失敗しました');
-        });
-      });
-    });
-
-    describe('GET /attacks/history', () => {
-      it('OK を返し攻撃履歴を含むべき', async () => {
-        const res = await participantRoutes.request('/attacks/history');
-        expect(res.status).toBe(StatusCodes.OK);
-        const body = await res.json();
-        expect(body.history).toEqual([]);
-      });
+    it('eventId なしで BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/attacks/catalog');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
   });
 
-  describe('防御', () => {
-    describe('GET /defense/active', () => {
-      it('OK を返し受攻撃一覧を含むべき', async () => {
-        const res = await participantRoutes.request('/defense/active');
-        expect(res.status).toBe(StatusCodes.OK);
-        const body = await res.json();
-        expect(body.attacks).toEqual([]);
+  // === 攻撃購入 ===
+  describe('POST /attacks/purchase', () => {
+    it('正常系で CREATED を返すべき', async () => {
+      mockParticipantService.purchaseAttack.mockResolvedValue({
+        id: 'p-1',
+        attackId: 'atk-1',
       });
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CREATED);
     });
 
-    describe('POST /defense/hint', () => {
-      describe('有効なリクエストの場合', () => {
-        it('NOT_IMPLEMENTED を返すべき', async () => {
-          const res = await participantRoutes.request('/defense/hint', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ attackId: 'atk-1' }),
-          });
-          expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-          const body = await res.json();
-          expect(body.error).toBe('未実装です');
-        });
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
-
-      describe('必須フィールドが不足している場合', () => {
-        it('BAD_REQUEST を返すべき', async () => {
-          const res = await participantRoutes.request('/defense/hint', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-        });
-      });
-
-      describe('不正な JSON の場合', () => {
-        it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
-          const res = await participantRoutes.request('/defense/hint', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: 'invalid-json',
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-          const body = await res.json();
-          expect(body.error).toBe('JSON の解析に失敗しました');
-        });
-      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
 
-    describe('POST /defense/report-fix', () => {
-      describe('有効なリクエストの場合', () => {
-        it('NOT_IMPLEMENTED を返すべき', async () => {
-          const res = await participantRoutes.request('/defense/report-fix', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ vulnerabilitySlug: 'sql-injection' }),
-          });
-          expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-          const body = await res.json();
-          expect(body.error).toBe('未実装です');
-        });
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
       });
-
-      describe('必須フィールドが不足している場合', () => {
-        it('BAD_REQUEST を返すべき', async () => {
-          const res = await participantRoutes.request('/defense/report-fix', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-        });
-      });
-
-      describe('不正な JSON の場合', () => {
-        it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
-          const res = await participantRoutes.request('/defense/report-fix', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: 'invalid-json',
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-          const body = await res.json();
-          expect(body.error).toBe('JSON の解析に失敗しました');
-        });
-      });
-    });
-  });
-
-  describe('同盟', () => {
-    describe('GET /alliances', () => {
-      it('OK を返し同盟一覧を含むべき', async () => {
-        const res = await participantRoutes.request('/alliances');
-        expect(res.status).toBe(StatusCodes.OK);
-        const body = await res.json();
-        expect(body.alliances).toEqual([]);
-      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
     });
 
-    describe('POST /alliances/request', () => {
-      describe('有効なリクエストの場合', () => {
-        it('NOT_IMPLEMENTED を返すべき', async () => {
-          const res = await participantRoutes.request('/alliances/request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetTeamId: 'team-2' }),
-          });
-          expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-          const body = await res.json();
-          expect(body.error).toBe('未実装です');
-        });
+    it('GameNotRunningError で CONFLICT を返すべき', async () => {
+      mockParticipantService.purchaseAttack.mockRejectedValue(
+        new mockParticipantService.GameNotRunningError()
+      );
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
       });
-
-      describe('必須フィールドが不足している場合', () => {
-        it('BAD_REQUEST を返すべき', async () => {
-          const res = await participantRoutes.request('/alliances/request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-        });
-      });
-
-      describe('不正な JSON の場合', () => {
-        it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
-          const res = await participantRoutes.request('/alliances/request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: 'invalid-json',
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-          const body = await res.json();
-          expect(body.error).toBe('JSON の解析に失敗しました');
-        });
-      });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
     });
 
-    describe('POST /alliances/:id/accept', () => {
-      it('NOT_IMPLEMENTED を返すべき', async () => {
-        const res = await participantRoutes.request(
-          '/alliances/alliance-1/accept',
-          { method: 'POST' }
-        );
-        expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-        const body = await res.json();
-        expect(body.error).toBe('未実装です');
+    it('AttackAlreadyPurchasedError で CONFLICT を返すべき', async () => {
+      mockParticipantService.purchaseAttack.mockRejectedValue(
+        new mockParticipantService.AttackAlreadyPurchasedError()
+      );
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
       });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
     });
 
-    describe('POST /alliances/:id/break', () => {
-      it('NOT_IMPLEMENTED を返すべき', async () => {
-        const res = await participantRoutes.request(
-          '/alliances/alliance-1/break',
-          { method: 'POST' }
-        );
-        expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-        const body = await res.json();
-        expect(body.error).toBe('未実装です');
+    it('InsufficientScoreError で PAYMENT_REQUIRED を返すべき', async () => {
+      mockParticipantService.purchaseAttack.mockRejectedValue(
+        new mockParticipantService.InsufficientScoreError()
+      );
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
       });
+      expect(res.status).toBe(StatusCodes.PAYMENT_REQUIRED);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.purchaseAttack.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/attacks/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     });
   });
 
-  describe('モニタリング', () => {
-    describe('GET /monitoring/status', () => {
-      it('OK を返しヘルスチェック状態を含むべき', async () => {
-        const res = await participantRoutes.request('/monitoring/status');
-        expect(res.status).toBe(StatusCodes.OK);
-        const body = await res.json();
-        expect(body.checks).toEqual([]);
+  // === 攻撃実行 ===
+  describe('POST /attacks/execute', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.executeAttack.mockResolvedValue({
+        id: 'log-1',
+        success: true,
       });
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('SelfAttackError で BAD_REQUEST を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new mockParticipantService.SelfAttackError()
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('CooldownActiveError で TOO_MANY_REQUESTS を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new mockParticipantService.CooldownActiveError(120)
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.TOO_MANY_REQUESTS);
+      const body = await res.json();
+      expect(body.remainingSeconds).toBe(120);
+    });
+
+    it('AttackNotPurchasedError で PRECONDITION_FAILED を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new mockParticipantService.AttackNotPurchasedError()
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.PRECONDITION_FAILED);
+    });
+
+    it('TeamNotFoundError で NOT_FOUND を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new mockParticipantService.TeamNotFoundError('team-2')
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('AttackNotFoundError で NOT_FOUND を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new mockParticipantService.AttackNotFoundError('atk-1')
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('GameNotRunningError で CONFLICT を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new mockParticipantService.GameNotRunningError()
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.executeAttack.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/attacks/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     });
   });
 
-  describe('投票', () => {
-    describe('POST /voting/vote', () => {
-      describe('有効なリクエストの場合', () => {
-        it('NOT_IMPLEMENTED を返すべき', async () => {
-          const res = await participantRoutes.request('/voting/vote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teamId: 'team-2' }),
-          });
-          expect(res.status).toBe(StatusCodes.NOT_IMPLEMENTED);
-          const body = await res.json();
-          expect(body.error).toBe('未実装です');
-        });
-      });
-
-      describe('必須フィールドが不足している場合', () => {
-        it('BAD_REQUEST を返すべき', async () => {
-          const res = await participantRoutes.request('/voting/vote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-        });
-      });
-
-      describe('不正な JSON の場合', () => {
-        it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
-          const res = await participantRoutes.request('/voting/vote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: 'invalid-json',
-          });
-          expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-          const body = await res.json();
-          expect(body.error).toBe('JSON の解析に失敗しました');
-        });
-      });
+  // === 攻撃履歴 ===
+  describe('GET /attacks/history', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.getAttackHistory.mockResolvedValue([]);
+      const res = await app.request(
+        '/attacks/history?eventId=event-1&teamId=team-1'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.history).toEqual([]);
     });
 
-    describe('GET /voting/results', () => {
-      it('OK を返し投票結果を含むべき', async () => {
-        const res = await participantRoutes.request('/voting/results');
-        expect(res.status).toBe(StatusCodes.OK);
-        const body = await res.json();
-        expect(body.results).toEqual([]);
+    it('パラメータ不足で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/attacks/history');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === 防御: 受攻撃一覧 ===
+  describe('GET /defense/active', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.getActiveAttacks.mockResolvedValue([]);
+      const res = await app.request(
+        '/defense/active?eventId=event-1&teamId=team-1'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.attacks).toEqual([]);
+    });
+
+    it('パラメータ不足で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/defense/active');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === ヒント購入 ===
+  describe('POST /defense/hint', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.purchaseHint.mockResolvedValue({
+        hint: 'ヒント内容',
+        cost: 0,
       });
+      const res = await app.request('/defense/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/defense/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/defense/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('AttackNotFoundError で NOT_FOUND を返すべき', async () => {
+      mockParticipantService.purchaseHint.mockRejectedValue(
+        new mockParticipantService.AttackNotFoundError('atk-1')
+      );
+      const res = await app.request('/defense/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.purchaseHint.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/defense/hint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          attackId: 'atk-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === 脆弱性修正報告 ===
+  describe('POST /defense/report-fix', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.reportFix.mockResolvedValue({
+        id: 'v-1',
+        isFixed: true,
+      });
+      const res = await app.request('/defense/report-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          vulnerabilitySlug: 'sql-injection',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/defense/report-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/defense/report-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('GameNotRunningError で CONFLICT を返すべき', async () => {
+      mockParticipantService.reportFix.mockRejectedValue(
+        new mockParticipantService.GameNotRunningError()
+      );
+      const res = await app.request('/defense/report-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          vulnerabilitySlug: 'sql-injection',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.reportFix.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/defense/report-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          vulnerabilitySlug: 'sql-injection',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === 同盟一覧 ===
+  describe('GET /alliances', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.listTeamAlliances.mockResolvedValue([]);
+      const res = await app.request('/alliances?eventId=event-1&teamId=team-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.alliances).toEqual([]);
+    });
+
+    it('パラメータ不足で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === 同盟申請 ===
+  describe('POST /alliances/request', () => {
+    it('正常系で CREATED を返すべき', async () => {
+      mockParticipantService.requestAlliance.mockResolvedValue({
+        id: 'a-1',
+        status: 'PENDING',
+      });
+      const res = await app.request('/alliances/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CREATED);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('GameNotRunningError で CONFLICT を返すべき', async () => {
+      mockParticipantService.requestAlliance.mockRejectedValue(
+        new mockParticipantService.GameNotRunningError()
+      );
+      const res = await app.request('/alliances/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.requestAlliance.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/alliances/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          targetTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === 同盟承認 ===
+  describe('POST /alliances/:id/accept', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.acceptAlliance.mockResolvedValue({
+        id: 'a-1',
+        status: 'ACTIVE',
+      });
+      const res = await app.request('/alliances/a-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances/a-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('AllianceNotFoundError で NOT_FOUND を返すべき', async () => {
+      mockParticipantService.acceptAlliance.mockRejectedValue(
+        new mockParticipantService.AllianceNotFoundError('a-1')
+      );
+      const res = await app.request('/alliances/a-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('AllianceUnauthorizedError で FORBIDDEN を返すべき', async () => {
+      mockParticipantService.acceptAlliance.mockRejectedValue(
+        new mockParticipantService.AllianceUnauthorizedError()
+      );
+      const res = await app.request('/alliances/a-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.acceptAlliance.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/alliances/a-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances/a-1/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === 同盟破棄 ===
+  describe('POST /alliances/:id/break', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.breakAlliance.mockResolvedValue(undefined);
+      const res = await app.request('/alliances/a-1/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances/a-1/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/alliances/a-1/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('AllianceNotFoundError で NOT_FOUND を返すべき', async () => {
+      mockParticipantService.breakAlliance.mockRejectedValue(
+        new mockParticipantService.AllianceNotFoundError('a-1')
+      );
+      const res = await app.request('/alliances/a-1/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.breakAlliance.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/alliances/a-1/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === モニタリング ===
+  describe('GET /monitoring/status', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.getMonitoringStatus.mockResolvedValue([]);
+      const res = await app.request(
+        '/monitoring/status?eventId=event-1&teamId=team-1'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.checks).toEqual([]);
+    });
+
+    it('パラメータ不足で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/monitoring/status');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === 投票 ===
+  describe('POST /voting/vote', () => {
+    it('正常系で CREATED を返すべき', async () => {
+      mockParticipantService.castVote.mockResolvedValue({
+        id: 'v-1',
+        voterTeamId: 'team-1',
+        votedForTeamId: 'team-2',
+      });
+      const res = await app.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          votedForTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CREATED);
+    });
+
+    it('バリデーション失敗で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      const body = await res.json();
+      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    it('SelfVoteError で BAD_REQUEST を返すべき', async () => {
+      mockParticipantService.castVote.mockRejectedValue(
+        new mockParticipantService.SelfVoteError()
+      );
+      const res = await app.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          votedForTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('VoteAlreadyExistsError で CONFLICT を返すべき', async () => {
+      mockParticipantService.castVote.mockRejectedValue(
+        new mockParticipantService.VoteAlreadyExistsError()
+      );
+      const res = await app.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          votedForTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockParticipantService.castVote.mockRejectedValue(
+        new Error('DB接続エラー')
+      );
+      const res = await app.request('/voting/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          votedForTeamId: 'team-2',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === 投票結果 ===
+  describe('GET /voting/results', () => {
+    it('正常系で OK を返すべき', async () => {
+      mockParticipantService.getVotingResults.mockResolvedValue([
+        { teamId: 'team-2', votes: 3 },
+      ]);
+      const res = await app.request('/voting/results?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.results).toHaveLength(1);
+    });
+
+    it('eventId なしで BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/voting/results');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     });
   });
 });

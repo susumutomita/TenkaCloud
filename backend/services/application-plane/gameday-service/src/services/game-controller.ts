@@ -2,6 +2,8 @@ import { gamedayRepository } from '../lib/dynamodb';
 import { ConcurrentModificationError } from '../repositories/gameday-repository';
 import type { GameState, AttackLog } from '../types';
 import type { TeamState } from '../repositories/gameday-repository';
+import { DEFAULT_ATTACKS } from '../data/default-attacks';
+import { ulid } from 'ulid';
 
 export { ConcurrentModificationError };
 
@@ -78,4 +80,13 @@ export async function listTeams(eventId: string): Promise<TeamState[]> {
 
 export async function listAttackLogs(eventId: string): Promise<AttackLog[]> {
   return gamedayRepository.listAttackLogs(eventId);
+}
+
+export async function seedAttackCatalog(eventId: string): Promise<number> {
+  const attacks = DEFAULT_ATTACKS.map((a) => ({
+    ...a,
+    id: ulid(),
+  }));
+  await gamedayRepository.seedAttackCatalog(eventId, attacks);
+  return attacks.length;
 }

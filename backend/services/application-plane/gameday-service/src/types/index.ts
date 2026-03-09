@@ -37,10 +37,21 @@ export interface Attack {
 // 攻撃購入
 export interface AttackPurchase {
   id: string;
+  eventId: string;
   teamId: string;
   attackId: string;
+  attackSlug: string;
   purchasedAt: string;
   lastUsedAt: string | null;
+}
+
+// 投票
+export interface Vote {
+  id: string;
+  eventId: string;
+  voterTeamId: string;
+  votedForTeamId: string;
+  createdAt: string;
 }
 
 // 攻撃ログ

@@ -24,6 +24,7 @@ const mockGameController = vi.hoisted(() => {
     executeFaultInjection: vi.fn(),
     listTeams: vi.fn(),
     listAttackLogs: vi.fn(),
+    seedAttackCatalog: vi.fn(),
     GameNotFoundError,
     ConcurrentModificationError,
   };
@@ -570,6 +571,51 @@ describe('管理者 API', () => {
       it('BAD_REQUEST を返すべき', async () => {
         const res = await app.request('/attack-logs');
         expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+  });
+
+  describe('POST /attacks/seed', () => {
+    describe('有効なリクエストの場合', () => {
+      it('CREATED を返しシード数を含むべき', async () => {
+        mockGameController.seedAttackCatalog.mockResolvedValue(6);
+
+        const res = await app.request('/attacks/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CREATED);
+        const body = await res.json();
+        expect(body.seeded).toBe(6);
+        expect(mockGameController.seedAttackCatalog).toHaveBeenCalledWith(
+          'event-1'
+        );
+      });
+    });
+
+    describe('eventId が空の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/attacks/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: '' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/attacks/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
       });
     });
   });

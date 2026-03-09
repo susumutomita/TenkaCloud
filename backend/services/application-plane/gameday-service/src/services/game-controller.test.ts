@@ -12,6 +12,7 @@ const { mockGamedayRepository } = vi.hoisted(() => ({
     listAttackLogs: vi.fn(),
     listTeams: vi.fn(),
     getTeamState: vi.fn(),
+    seedAttackCatalog: vi.fn(),
   },
 }));
 
@@ -28,6 +29,7 @@ import {
   executeFaultInjection,
   listTeams,
   listAttackLogs,
+  seedAttackCatalog,
   GameNotFoundError,
 } from './game-controller';
 
@@ -282,6 +284,29 @@ describe('ゲームコントローラーサービス', () => {
         const result = await listAttackLogs('event-1');
 
         expect(result).toEqual(expected);
+      });
+    });
+  });
+
+  describe('seedAttackCatalog', () => {
+    describe('有効なパラメータの場合', () => {
+      it('デフォルト攻撃カタログをシードして件数を返すべき', async () => {
+        mockGamedayRepository.seedAttackCatalog.mockResolvedValue(undefined);
+
+        const result = await seedAttackCatalog('event-1');
+
+        expect(result).toBe(6);
+        expect(mockGamedayRepository.seedAttackCatalog).toHaveBeenCalledWith(
+          'event-1',
+          expect.arrayContaining([
+            expect.objectContaining({ slug: 'sql-injection' }),
+            expect.objectContaining({ slug: 'remote-code-execution' }),
+            expect.objectContaining({ slug: 'password-rotation' }),
+            expect.objectContaining({ slug: 'ssrf-attack' }),
+            expect.objectContaining({ slug: 'leaked-credentials' }),
+            expect.objectContaining({ slug: 'ha-resilience' }),
+          ])
+        );
       });
     });
   });
