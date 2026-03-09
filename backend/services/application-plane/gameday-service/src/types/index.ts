@@ -50,6 +50,7 @@ export interface AttackLog {
   attackerTeamId: string;
   defenderTeamId: string;
   attackId: string;
+  attackSlug: string;
   success: boolean;
   neutralized: boolean;
   damage: number;

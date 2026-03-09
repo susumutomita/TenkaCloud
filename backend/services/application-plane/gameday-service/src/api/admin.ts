@@ -1,10 +1,22 @@
 import { Hono } from 'hono';
+import { StatusCodes } from 'http-status-codes';
 import {
+  eventIdSchema,
   startGameSchema,
-  toggleScoreWeightSchema,
-  toggleBlackoutSchema,
   faultInjectionSchema,
 } from '../schemas';
+import {
+  startGame,
+  stopGame,
+  getGameStatus,
+  toggleScoreWeight,
+  toggleBlackout,
+  executeFaultInjection,
+  listTeams,
+  listAttackLogs,
+  GameNotFoundError,
+  ConcurrentModificationError,
+} from '../services/game-controller';
 
 export const adminRoutes = new Hono();
 
@@ -12,123 +24,167 @@ export const adminRoutes = new Hono();
 adminRoutes.post('/game/start', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = startGameSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
-  // TODO: ゲーム開始ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const tenantId = c.get('auth').tenantId;
+  const result = await startGame(
+    parsed.data.eventId,
+    tenantId,
+    parsed.data.durationMinutes
+  );
+  return c.json(result, StatusCodes.CREATED);
 });
 
 // ゲーム停止
 adminRoutes.post('/game/stop', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
-  const parsed = toggleScoreWeightSchema.safeParse(body);
+  const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
-  // TODO: ゲーム停止ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  try {
+    const result = await stopGame(parsed.data.eventId);
+    return c.json(result, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    throw error;
+  }
 });
 
 // ゲーム状態取得
 adminRoutes.get('/game/status', async (c) => {
   const eventId = c.req.query('eventId');
   if (!eventId) {
-    return c.json({ error: 'eventId は必須です' }, 400);
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  // TODO: ゲーム状態取得ロジック実装
-  return c.json(
-    {
-      eventId,
-      isRunning: false,
-      startedAt: null,
-      scoreWeight: 'normal',
-      blackout: false,
-      durationMinutes: 240,
-    },
-    200
-  );
+  const result = await getGameStatus(eventId);
+  if (!result) {
+    return c.json({ error: 'ゲームが見つかりません' }, StatusCodes.NOT_FOUND);
+  }
+  return c.json(result, StatusCodes.OK);
 });
 
 // スコア重み切替
 adminRoutes.post('/score-weight/toggle', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
-  const parsed = toggleScoreWeightSchema.safeParse(body);
+  const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
-  // TODO: スコア重み切替ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  try {
+    const result = await toggleScoreWeight(parsed.data.eventId);
+    return c.json(result, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof ConcurrentModificationError) {
+      return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
+    throw error;
+  }
 });
 
 // ブラックアウト切替
 adminRoutes.post('/blackout/toggle', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
-  const parsed = toggleBlackoutSchema.safeParse(body);
+  const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
-  // TODO: ブラックアウト切替ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  try {
+    const result = await toggleBlackout(parsed.data.eventId);
+    return c.json(result, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof ConcurrentModificationError) {
+      return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
+    throw error;
+  }
 });
 
 // 障害注入
 adminRoutes.post('/fault-injection/execute', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = faultInjectionSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
-  // TODO: 障害注入ロジック実装
-  return c.json({ error: '未実装です' }, 501);
+  const result = await executeFaultInjection(
+    parsed.data.eventId,
+    parsed.data.teamId,
+    parsed.data.attackSlug
+  );
+  return c.json(result, StatusCodes.CREATED);
 });
 
 // 全チーム状態一覧
 adminRoutes.get('/teams', async (c) => {
   const eventId = c.req.query('eventId');
   if (!eventId) {
-    return c.json({ error: 'eventId は必須です' }, 400);
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  // TODO: チーム一覧取得ロジック実装
-  return c.json({ teams: [] }, 200);
+  const teams = await listTeams(eventId);
+  return c.json({ teams }, StatusCodes.OK);
 });
 
 // 全攻撃履歴
 adminRoutes.get('/attack-logs', async (c) => {
   const eventId = c.req.query('eventId');
   if (!eventId) {
-    return c.json({ error: 'eventId は必須です' }, 400);
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  // TODO: 攻撃履歴取得ロジック実装
-  return c.json({ logs: [] }, 200);
+  const logs = await listAttackLogs(eventId);
+  return c.json({ logs }, StatusCodes.OK);
 });

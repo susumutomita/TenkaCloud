@@ -1,216 +1,576 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
+import { Hono } from 'hono';
+
+const mockGameController = vi.hoisted(() => {
+  class GameNotFoundError extends Error {
+    constructor() {
+      super('ゲームが見つかりません');
+      this.name = 'GameNotFoundError';
+    }
+  }
+  class ConcurrentModificationError extends Error {
+    constructor() {
+      super('同時変更が検出されました。もう一度お試しください');
+      this.name = 'ConcurrentModificationError';
+    }
+  }
+  return {
+    startGame: vi.fn(),
+    stopGame: vi.fn(),
+    getGameStatus: vi.fn(),
+    toggleScoreWeight: vi.fn(),
+    toggleBlackout: vi.fn(),
+    executeFaultInjection: vi.fn(),
+    listTeams: vi.fn(),
+    listAttackLogs: vi.fn(),
+    GameNotFoundError,
+    ConcurrentModificationError,
+  };
+});
+
+vi.mock('../services/game-controller', () => mockGameController);
+
 import { adminRoutes } from './admin';
 
+const mockAuth = {
+  userId: 'admin-1',
+  tenantId: 'tenant-1',
+  roles: ['admin'],
+};
+
 describe('管理者 API', () => {
+  let app: Hono;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = new Hono();
+    app.use('/*', async (c, next) => {
+      c.set('auth' as never, mockAuth);
+      await next();
+    });
+    app.route('/', adminRoutes);
+  });
+
   describe('POST /game/start', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
+    describe('有効なリクエストの場合', () => {
+      it('CREATED を返しゲーム状態を含むべき', async () => {
+        const gameState = {
+          eventId: 'event-1',
+          tenantId: 'tenant-1',
+          isRunning: true,
+          startedAt: '2026-03-09T00:00:00.000Z',
+          scoreWeight: 'normal',
+          blackout: false,
+          durationMinutes: 240,
+        };
+        mockGameController.startGame.mockResolvedValue(gameState);
+
+        const res = await app.request('/game/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CREATED);
+        const body = await res.json();
+        expect(body.eventId).toBe('event-1');
+        expect(body.isRunning).toBe(true);
+        expect(mockGameController.startGame).toHaveBeenCalledWith(
+          'event-1',
+          'tenant-1',
+          240
+        );
       });
-      expect(res.status).toBe(501);
-      const body = await res.json();
-      expect(body.error).toBe('未実装です');
     });
 
-    it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: '' }),
+    describe('eventId が空の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/game/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: '' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       });
-      expect(res.status).toBe(400);
     });
 
-    it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: 'invalid-json',
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/game/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
       });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('JSON の解析に失敗しました');
     });
   });
 
   describe('POST /game/stop', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: 'event-1' }),
+    describe('有効なリクエストの場合', () => {
+      it('OK を返しゲーム停止状態を含むべき', async () => {
+        const gameState = {
+          eventId: 'event-1',
+          tenantId: 'tenant-1',
+          isRunning: false,
+          startedAt: '2026-03-09T00:00:00.000Z',
+          scoreWeight: 'normal',
+          blackout: false,
+          durationMinutes: 240,
+        };
+        mockGameController.stopGame.mockResolvedValue(gameState);
+
+        const res = await app.request('/game/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.isRunning).toBe(false);
       });
-      expect(res.status).toBe(501);
-      const body = await res.json();
-      expect(body.error).toBe('未実装です');
     });
 
-    it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: '' }),
+    describe('ゲームが存在しない場合', () => {
+      it('NOT_FOUND を返すべき', async () => {
+        mockGameController.stopGame.mockRejectedValue(
+          new mockGameController.GameNotFoundError()
+        );
+
+        const res = await app.request('/game/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'nonexistent' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.NOT_FOUND);
+        const body = await res.json();
+        expect(body.error).toBe('ゲームが見つかりません');
       });
-      expect(res.status).toBe(400);
     });
 
-    it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: 'invalid-json',
+    describe('予期しないエラーが発生した場合', () => {
+      it('INTERNAL_SERVER_ERROR を返すべき', async () => {
+        mockGameController.stopGame.mockRejectedValue(
+          new Error('DB接続エラー')
+        );
+
+        const res = await app.request('/game/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
       });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    describe('eventId が空の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/game/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: '' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/game/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
+      });
     });
   });
 
   describe('GET /game/status', () => {
-    it('eventId 付きでゲーム状態を返すべき', async () => {
-      const res = await adminRoutes.request('/game/status?eventId=event-1');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.eventId).toBe('event-1');
-      expect(body.scoreWeight).toBe('normal');
+    describe('ゲームが存在する場合', () => {
+      it('OK を返しゲーム状態を含むべき', async () => {
+        const gameState = {
+          eventId: 'event-1',
+          tenantId: 'tenant-1',
+          isRunning: true,
+          startedAt: '2026-03-09T00:00:00.000Z',
+          scoreWeight: 'normal',
+          blackout: false,
+          durationMinutes: 240,
+        };
+        mockGameController.getGameStatus.mockResolvedValue(gameState);
+
+        const res = await app.request('/game/status?eventId=event-1');
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.eventId).toBe('event-1');
+      });
     });
 
-    it('eventId がない場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/game/status');
-      expect(res.status).toBe(400);
+    describe('ゲームが存在しない場合', () => {
+      it('NOT_FOUND を返すべき', async () => {
+        mockGameController.getGameStatus.mockResolvedValue(null);
+
+        const res = await app.request('/game/status?eventId=nonexistent');
+
+        expect(res.status).toBe(StatusCodes.NOT_FOUND);
+        const body = await res.json();
+        expect(body.error).toBe('ゲームが見つかりません');
+      });
+    });
+
+    describe('eventId が未指定の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/game/status');
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
     });
   });
 
   describe('POST /score-weight/toggle', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/score-weight/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: 'event-1' }),
+    describe('有効なリクエストの場合', () => {
+      it('OK を返し切替後のスコア重みを含むべき', async () => {
+        const gameState = {
+          eventId: 'event-1',
+          tenantId: 'tenant-1',
+          isRunning: true,
+          startedAt: '2026-03-09T00:00:00.000Z',
+          scoreWeight: 'high',
+          blackout: false,
+          durationMinutes: 240,
+        };
+        mockGameController.toggleScoreWeight.mockResolvedValue(gameState);
+
+        const res = await app.request('/score-weight/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.scoreWeight).toBe('high');
       });
-      expect(res.status).toBe(501);
-      const body = await res.json();
-      expect(body.error).toBe('未実装です');
     });
 
-    it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/score-weight/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: '' }),
+    describe('ゲームが存在しない場合', () => {
+      it('NOT_FOUND を返すべき', async () => {
+        mockGameController.toggleScoreWeight.mockRejectedValue(
+          new mockGameController.GameNotFoundError()
+        );
+
+        const res = await app.request('/score-weight/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'nonexistent' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.NOT_FOUND);
+        const body = await res.json();
+        expect(body.error).toBe('ゲームが見つかりません');
       });
-      expect(res.status).toBe(400);
     });
 
-    it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/score-weight/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: 'invalid-json',
+    describe('同時変更が発生した場合', () => {
+      it('CONFLICT を返すべき', async () => {
+        mockGameController.toggleScoreWeight.mockRejectedValue(
+          new mockGameController.ConcurrentModificationError()
+        );
+
+        const res = await app.request('/score-weight/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CONFLICT);
+        const body = await res.json();
+        expect(body.error).toBe(
+          '同時変更が検出されました。もう一度お試しください'
+        );
       });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    describe('予期しないエラーが発生した場合', () => {
+      it('INTERNAL_SERVER_ERROR を返すべき', async () => {
+        mockGameController.toggleScoreWeight.mockRejectedValue(
+          new Error('DB接続エラー')
+        );
+
+        const res = await app.request('/score-weight/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+      });
+    });
+
+    describe('eventId が空の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/score-weight/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: '' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/score-weight/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
+      });
     });
   });
 
   describe('POST /blackout/toggle', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/blackout/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: 'event-1' }),
+    describe('有効なリクエストの場合', () => {
+      it('OK を返し切替後のブラックアウト状態を含むべき', async () => {
+        const gameState = {
+          eventId: 'event-1',
+          tenantId: 'tenant-1',
+          isRunning: true,
+          startedAt: '2026-03-09T00:00:00.000Z',
+          scoreWeight: 'normal',
+          blackout: true,
+          durationMinutes: 240,
+        };
+        mockGameController.toggleBlackout.mockResolvedValue(gameState);
+
+        const res = await app.request('/blackout/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.blackout).toBe(true);
       });
-      expect(res.status).toBe(501);
-      const body = await res.json();
-      expect(body.error).toBe('未実装です');
     });
 
-    it('eventId が空の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/blackout/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: '' }),
+    describe('ゲームが存在しない場合', () => {
+      it('NOT_FOUND を返すべき', async () => {
+        mockGameController.toggleBlackout.mockRejectedValue(
+          new mockGameController.GameNotFoundError()
+        );
+
+        const res = await app.request('/blackout/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'nonexistent' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.NOT_FOUND);
+        const body = await res.json();
+        expect(body.error).toBe('ゲームが見つかりません');
       });
-      expect(res.status).toBe(400);
     });
 
-    it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/blackout/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: 'invalid-json',
+    describe('同時変更が発生した場合', () => {
+      it('CONFLICT を返すべき', async () => {
+        mockGameController.toggleBlackout.mockRejectedValue(
+          new mockGameController.ConcurrentModificationError()
+        );
+
+        const res = await app.request('/blackout/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CONFLICT);
+        const body = await res.json();
+        expect(body.error).toBe(
+          '同時変更が検出されました。もう一度お試しください'
+        );
       });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('JSON の解析に失敗しました');
+    });
+
+    describe('予期しないエラーが発生した場合', () => {
+      it('INTERNAL_SERVER_ERROR を返すべき', async () => {
+        mockGameController.toggleBlackout.mockRejectedValue(
+          new Error('DB接続エラー')
+        );
+
+        const res = await app.request('/blackout/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+
+        expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+      });
+    });
+
+    describe('eventId が空の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/blackout/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: '' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
+    });
+
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/blackout/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
+      });
     });
   });
 
   describe('POST /fault-injection/execute', () => {
-    it('有効なリクエストで 501 を返すべき', async () => {
-      const res = await adminRoutes.request('/fault-injection/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    describe('有効なリクエストの場合', () => {
+      it('CREATED を返し攻撃ログを含むべき', async () => {
+        const attackLog = {
+          id: 'log-1',
           eventId: 'event-1',
-          teamId: 'team-1',
+          attackerTeamId: 'ADMIN',
+          defenderTeamId: 'team-1',
+          attackId: 'sql-injection',
           attackSlug: 'sql-injection',
-        }),
+          success: true,
+          neutralized: false,
+          damage: 0,
+          reward: 0,
+          details: '管理者による障害注入: sql-injection',
+          createdAt: '2026-03-09T00:00:00.000Z',
+        };
+        mockGameController.executeFaultInjection.mockResolvedValue(attackLog);
+
+        const res = await app.request('/fault-injection/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventId: 'event-1',
+            teamId: 'team-1',
+            attackSlug: 'sql-injection',
+          }),
+        });
+
+        expect(res.status).toBe(StatusCodes.CREATED);
+        const body = await res.json();
+        expect(body.attackerTeamId).toBe('ADMIN');
       });
-      expect(res.status).toBe(501);
-      const body = await res.json();
-      expect(body.error).toBe('未実装です');
     });
 
-    it('不正なリクエストで 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/fault-injection/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: 'event-1' }),
+    describe('必須フィールドが不足している場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/fault-injection/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventId: 'event-1' }),
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
       });
-      expect(res.status).toBe(400);
     });
 
-    it('不正な JSON の場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/fault-injection/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: 'invalid-json',
+    describe('不正な JSON の場合', () => {
+      it('BAD_REQUEST を返しエラーメッセージを含むべき', async () => {
+        const res = await app.request('/fault-injection/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: 'invalid-json',
+        });
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+        const body = await res.json();
+        expect(body.error).toBe('JSON の解析に失敗しました');
       });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('JSON の解析に失敗しました');
     });
   });
 
   describe('GET /teams', () => {
-    it('eventId 付きでチーム一覧を返すべき', async () => {
-      const res = await adminRoutes.request('/teams?eventId=event-1');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.teams).toEqual([]);
+    describe('eventId が指定されている場合', () => {
+      it('OK を返しチーム一覧を含むべき', async () => {
+        const teams = [
+          {
+            eventId: 'event-1',
+            teamId: 'team-1',
+            teamName: 'チームA',
+            score: 5000,
+            isHealthy: true,
+          },
+        ];
+        mockGameController.listTeams.mockResolvedValue(teams);
+
+        const res = await app.request('/teams?eventId=event-1');
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.teams).toHaveLength(1);
+        expect(body.teams[0].teamName).toBe('チームA');
+      });
     });
 
-    it('eventId がない場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/teams');
-      expect(res.status).toBe(400);
+    describe('eventId が未指定の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/teams');
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
     });
   });
 
   describe('GET /attack-logs', () => {
-    it('eventId 付きで攻撃履歴を返すべき', async () => {
-      const res = await adminRoutes.request('/attack-logs?eventId=event-1');
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.logs).toEqual([]);
+    describe('eventId が指定されている場合', () => {
+      it('OK を返し攻撃履歴を含むべき', async () => {
+        const logs = [
+          {
+            id: 'log-1',
+            eventId: 'event-1',
+            attackerTeamId: 'team-1',
+            defenderTeamId: 'team-2',
+            attackId: 'atk-1',
+            attackSlug: 'atk-1',
+            success: true,
+            neutralized: false,
+            damage: 1000,
+            reward: 1000,
+            details: '',
+            createdAt: '2026-03-09T00:00:00.000Z',
+          },
+        ];
+        mockGameController.listAttackLogs.mockResolvedValue(logs);
+
+        const res = await app.request('/attack-logs?eventId=event-1');
+
+        expect(res.status).toBe(StatusCodes.OK);
+        const body = await res.json();
+        expect(body.logs).toHaveLength(1);
+      });
     });
 
-    it('eventId がない場合 400 を返すべき', async () => {
-      const res = await adminRoutes.request('/attack-logs');
-      expect(res.status).toBe(400);
+    describe('eventId が未指定の場合', () => {
+      it('BAD_REQUEST を返すべき', async () => {
+        const res = await app.request('/attack-logs');
+        expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      });
     });
   });
 });

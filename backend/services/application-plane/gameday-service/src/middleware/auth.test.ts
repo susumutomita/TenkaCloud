@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { StatusCodes } from 'http-status-codes';
 import { Hono } from 'hono';
 import { requireAdmin } from './auth';
 import type { AuthContext } from './auth';
 
 function createApp(roles: string[]) {
   const app = new Hono();
-  // authMiddleware の代わりに手動で auth をセット
   app.use('/*', async (c, next) => {
     c.set('auth', {
       userId: 'user-1',
@@ -20,27 +20,33 @@ function createApp(roles: string[]) {
 }
 
 describe('requireAdmin ミドルウェア', () => {
-  it('admin ロールを持つユーザーを許可すべき', async () => {
-    const app = createApp(['admin']);
-    const res = await app.request('/test');
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.ok).toBe(true);
+  describe('admin ロールを持つユーザーの場合', () => {
+    it('リクエストを許可しOK を返すべき', async () => {
+      const app = createApp(['admin']);
+      const res = await app.request('/test');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+    });
   });
 
-  it('admin ロールを持たないユーザーに 403 を返すべき', async () => {
-    const app = createApp(['user']);
-    const res = await app.request('/test');
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe('管理者権限が必要です');
+  describe('admin ロールを持たないユーザーの場合', () => {
+    it('FORBIDDEN を返すべき', async () => {
+      const app = createApp(['user']);
+      const res = await app.request('/test');
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      const body = await res.json();
+      expect(body.error).toBe('管理者権限が必要です');
+    });
   });
 
-  it('ロールが空のユーザーに 403 を返すべき', async () => {
-    const app = createApp([]);
-    const res = await app.request('/test');
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe('管理者権限が必要です');
+  describe('ロールが空の場合', () => {
+    it('FORBIDDEN を返すべき', async () => {
+      const app = createApp([]);
+      const res = await app.request('/test');
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      const body = await res.json();
+      expect(body.error).toBe('管理者権限が必要です');
+    });
   });
 });
