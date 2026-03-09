@@ -121,6 +121,7 @@
         "@hono/node-server": "^1.13.7",
         "@tenkacloud/dynamodb": "workspace:*",
         "hono": "^4.6.12",
+        "http-status-codes": "^2.3.0",
         "jose": "^6.0.10",
         "pino": "^10.1.0",
         "pino-pretty": "^13.1.2",

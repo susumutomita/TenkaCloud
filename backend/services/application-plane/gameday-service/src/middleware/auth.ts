@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory';
+import { StatusCodes } from 'http-status-codes';
 import * as jose from 'jose';
 
 export interface AuthContext {
@@ -32,7 +33,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
   const authHeader = c.req.header('Authorization');
 
   if (!authHeader?.startsWith('Bearer ')) {
-    return c.json({ error: '認証が必要です' }, 401);
+    return c.json({ error: '認証が必要です' }, StatusCodes.UNAUTHORIZED);
   }
 
   const token = authHeader.slice(7);
@@ -48,14 +49,20 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     const { payload } = await jose.jwtVerify(token, jwksSet, verifyOptions);
 
     if (!payload.sub) {
-      return c.json({ error: 'トークンに sub がありません' }, 401);
+      return c.json(
+        { error: 'トークンに sub がありません' },
+        StatusCodes.UNAUTHORIZED
+      );
     }
 
     const tenantId = (payload as Record<string, unknown>)['tenant_id'] as
       | string
       | undefined;
     if (!tenantId) {
-      return c.json({ error: 'テナント情報がありません' }, 403);
+      return c.json(
+        { error: 'テナント情報がありません' },
+        StatusCodes.FORBIDDEN
+      );
     }
 
     c.set('auth', {
@@ -72,19 +79,25 @@ export const authMiddleware = createMiddleware(async (c, next) => {
     await next();
   } catch (error) {
     if (error instanceof jose.errors.JWTExpired) {
-      return c.json({ error: 'トークンの有効期限が切れています' }, 401);
+      return c.json(
+        { error: 'トークンの有効期限が切れています' },
+        StatusCodes.UNAUTHORIZED
+      );
     }
     if (error instanceof jose.errors.JWTClaimValidationFailed) {
-      return c.json({ error: 'トークンの検証に失敗しました' }, 401);
+      return c.json(
+        { error: 'トークンの検証に失敗しました' },
+        StatusCodes.UNAUTHORIZED
+      );
     }
-    return c.json({ error: '認証に失敗しました' }, 401);
+    return c.json({ error: '認証に失敗しました' }, StatusCodes.UNAUTHORIZED);
   }
 });
 
 export const requireAdmin = createMiddleware(async (c, next) => {
   const auth = c.get('auth');
   if (!auth.roles.includes('admin')) {
-    return c.json({ error: '管理者権限が必要です' }, 403);
+    return c.json({ error: '管理者権限が必要です' }, StatusCodes.FORBIDDEN);
   }
   await next();
 });

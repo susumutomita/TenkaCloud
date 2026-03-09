@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { StatusCodes } from 'http-status-codes';
 import {
   eventIdSchema,
   startGameSchema,
@@ -22,13 +23,16 @@ export const adminRoutes = new Hono();
 adminRoutes.post('/game/start', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = startGameSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
   const auth = c.get('auth');
@@ -38,28 +42,31 @@ adminRoutes.post('/game/start', async (c) => {
     tenantId,
     parsed.data.durationMinutes
   );
-  return c.json(result, 201);
+  return c.json(result, StatusCodes.CREATED);
 });
 
 // ゲーム停止
 adminRoutes.post('/game/stop', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
   try {
     const result = await stopGame(parsed.data.eventId);
-    return c.json(result, 200);
+    return c.json(result, StatusCodes.OK);
   } catch (error) {
     if (error instanceof GameNotFoundError) {
-      return c.json({ error: error.message }, 404);
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
     }
     throw error;
   }
@@ -69,34 +76,37 @@ adminRoutes.post('/game/stop', async (c) => {
 adminRoutes.get('/game/status', async (c) => {
   const eventId = c.req.query('eventId');
   if (!eventId) {
-    return c.json({ error: 'eventId は必須です' }, 400);
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
   const result = await getGameStatus(eventId);
   if (!result) {
-    return c.json({ error: 'ゲームが見つかりません' }, 404);
+    return c.json({ error: 'ゲームが見つかりません' }, StatusCodes.NOT_FOUND);
   }
-  return c.json(result, 200);
+  return c.json(result, StatusCodes.OK);
 });
 
 // スコア重み切替
 adminRoutes.post('/score-weight/toggle', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
   try {
     const result = await toggleScoreWeight(parsed.data.eventId);
-    return c.json(result, 200);
+    return c.json(result, StatusCodes.OK);
   } catch (error) {
     if (error instanceof GameNotFoundError) {
-      return c.json({ error: error.message }, 404);
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
     }
     throw error;
   }
@@ -106,21 +116,24 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
 adminRoutes.post('/blackout/toggle', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = eventIdSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
   try {
     const result = await toggleBlackout(parsed.data.eventId);
-    return c.json(result, 200);
+    return c.json(result, StatusCodes.OK);
   } catch (error) {
     if (error instanceof GameNotFoundError) {
-      return c.json({ error: error.message }, 404);
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
     }
     throw error;
   }
@@ -130,13 +143,16 @@ adminRoutes.post('/blackout/toggle', async (c) => {
 adminRoutes.post('/fault-injection/execute', async (c) => {
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return c.json({ error: 'JSON の解析に失敗しました' }, 400);
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
   }
   const parsed = faultInjectionSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
       { error: '無効なリクエスト', details: parsed.error.issues },
-      400
+      StatusCodes.BAD_REQUEST
     );
   }
   const result = await executeFaultInjection(
@@ -144,25 +160,25 @@ adminRoutes.post('/fault-injection/execute', async (c) => {
     parsed.data.teamId,
     parsed.data.attackSlug
   );
-  return c.json(result, 201);
+  return c.json(result, StatusCodes.CREATED);
 });
 
 // 全チーム状態一覧
 adminRoutes.get('/teams', async (c) => {
   const eventId = c.req.query('eventId');
   if (!eventId) {
-    return c.json({ error: 'eventId は必須です' }, 400);
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
   const teams = await listTeams(eventId);
-  return c.json({ teams }, 200);
+  return c.json({ teams }, StatusCodes.OK);
 });
 
 // 全攻撃履歴
 adminRoutes.get('/attack-logs', async (c) => {
   const eventId = c.req.query('eventId');
   if (!eventId) {
-    return c.json({ error: 'eventId は必須です' }, 400);
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
   const logs = await listAttackLogs(eventId);
-  return c.json({ logs }, 200);
+  return c.json({ logs }, StatusCodes.OK);
 });
