@@ -84,6 +84,7 @@ function toAttackLog(item: AttackLogItem): AttackLog {
     attackerTeamId: item.attackerTeamId,
     defenderTeamId: item.defenderTeamId,
     attackId: item.attackId,
+    attackSlug: item.attackSlug,
     success: item.success,
     neutralized: item.neutralized,
     damage: item.damage,
@@ -115,6 +116,13 @@ export class GameAlreadyExistsError extends Error {
   constructor(eventId: string) {
     super(`ゲームは既に存在します: ${eventId}`);
     this.name = 'GameAlreadyExistsError';
+  }
+}
+
+export class ConcurrentModificationError extends Error {
+  constructor() {
+    super('同時変更が検出されました。もう一度お試しください');
+    this.name = 'ConcurrentModificationError';
   }
 }
 
@@ -259,7 +267,7 @@ export class GamedayRepository {
       return toGameState(result.Attributes as GameStateItem);
     } catch (error) {
       if (error instanceof ConditionalCheckFailedException) {
-        return null;
+        throw new ConcurrentModificationError();
       }
       throw error;
     }
@@ -302,7 +310,7 @@ export class GamedayRepository {
       return toGameState(result.Attributes as GameStateItem);
     } catch (error) {
       if (error instanceof ConditionalCheckFailedException) {
-        return null;
+        throw new ConcurrentModificationError();
       }
       throw error;
     }
@@ -355,22 +363,32 @@ export class GamedayRepository {
   async listAttackLogs(eventId: string): Promise<AttackLog[]> {
     const client = getDocClient();
     const tableName = getTableName();
+    const allItems: AttackLog[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
 
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': buildGamedayPK(eventId),
-          ':skPrefix': 'ATTACKLOG#',
-        },
-        ScanIndexForward: false,
-      })
-    );
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': 'ATTACKLOG#',
+          },
+          ScanIndexForward: false,
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
 
-    return (result.Items ?? []).map((item) =>
-      toAttackLog(item as AttackLogItem)
-    );
+      for (const item of result.Items ?? []) {
+        allItems.push(toAttackLog(item as AttackLogItem));
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
   }
 
   async getTeamState(
@@ -400,20 +418,30 @@ export class GamedayRepository {
   async listTeams(eventId: string): Promise<TeamState[]> {
     const client = getDocClient();
     const tableName = getTableName();
+    const allItems: TeamState[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
 
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-        ExpressionAttributeValues: {
-          ':pk': buildGamedayPK(eventId),
-          ':skPrefix': 'TEAM#',
-        },
-      })
-    );
+    do {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+          ExpressionAttributeValues: {
+            ':pk': buildGamedayPK(eventId),
+            ':skPrefix': 'TEAM#',
+          },
+          ExclusiveStartKey: exclusiveStartKey,
+        })
+      );
 
-    return (result.Items ?? []).map((item) =>
-      toTeamState(item as TeamStateItem)
-    );
+      for (const item of result.Items ?? []) {
+        allItems.push(toTeamState(item as TeamStateItem));
+      }
+      exclusiveStartKey = result.LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+
+    return allItems;
   }
 }

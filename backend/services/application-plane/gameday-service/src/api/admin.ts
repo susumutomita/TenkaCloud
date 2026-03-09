@@ -15,6 +15,7 @@ import {
   listTeams,
   listAttackLogs,
   GameNotFoundError,
+  ConcurrentModificationError,
 } from '../services/game-controller';
 
 export const adminRoutes = new Hono();
@@ -35,8 +36,7 @@ adminRoutes.post('/game/start', async (c) => {
       StatusCodes.BAD_REQUEST
     );
   }
-  const auth = c.get('auth');
-  const tenantId = auth?.tenantId ?? '';
+  const tenantId = c.get('auth').tenantId;
   const result = await startGame(
     parsed.data.eventId,
     tenantId,
@@ -108,6 +108,9 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
     if (error instanceof GameNotFoundError) {
       return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
     }
+    if (error instanceof ConcurrentModificationError) {
+      return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
     throw error;
   }
 });
@@ -134,6 +137,9 @@ adminRoutes.post('/blackout/toggle', async (c) => {
   } catch (error) {
     if (error instanceof GameNotFoundError) {
       return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof ConcurrentModificationError) {
+      return c.json({ error: error.message }, StatusCodes.CONFLICT);
     }
     throw error;
   }

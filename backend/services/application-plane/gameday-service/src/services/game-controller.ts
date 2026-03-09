@@ -1,6 +1,9 @@
 import { gamedayRepository } from '../lib/dynamodb';
+import { ConcurrentModificationError } from '../repositories/gameday-repository';
 import type { GameState, AttackLog } from '../types';
 import type { TeamState } from '../repositories/gameday-repository';
+
+export { ConcurrentModificationError };
 
 export class GameNotFoundError extends Error {
   constructor() {

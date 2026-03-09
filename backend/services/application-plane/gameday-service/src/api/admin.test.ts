@@ -8,6 +8,12 @@ const mockGameController = vi.hoisted(() => {
       this.name = 'GameNotFoundError';
     }
   }
+  class ConcurrentModificationError extends Error {
+    constructor() {
+      super('同時変更が検出されました。もう一度お試しください');
+      this.name = 'ConcurrentModificationError';
+    }
+  }
   return {
     startGame: vi.fn(),
     stopGame: vi.fn(),
@@ -18,6 +24,7 @@ const mockGameController = vi.hoisted(() => {
     listTeams: vi.fn(),
     listAttackLogs: vi.fn(),
     GameNotFoundError,
+    ConcurrentModificationError,
   };
 });
 
@@ -70,35 +77,6 @@ describe('管理者 API', () => {
       expect(mockGameController.startGame).toHaveBeenCalledWith(
         'event-1',
         'tenant-1',
-        240
-      );
-    });
-
-    it('auth コンテキストがない場合でもゲームを開始できるべき', async () => {
-      const noAuthApp = new Hono();
-      noAuthApp.route('/', adminRoutes);
-
-      const gameState = {
-        eventId: 'event-1',
-        tenantId: '',
-        isRunning: true,
-        startedAt: '2026-03-09T00:00:00.000Z',
-        scoreWeight: 'normal',
-        blackout: false,
-        durationMinutes: 240,
-      };
-      mockGameController.startGame.mockResolvedValue(gameState);
-
-      const res = await noAuthApp.request('/game/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: 'event-1', durationMinutes: 240 }),
-      });
-
-      expect(res.status).toBe(201);
-      expect(mockGameController.startGame).toHaveBeenCalledWith(
-        'event-1',
-        '',
         240
       );
     });
@@ -273,6 +251,24 @@ describe('管理者 API', () => {
       expect(body.error).toBe('ゲームが見つかりません');
     });
 
+    it('同時変更の場合 409 を返すべき', async () => {
+      mockGameController.toggleScoreWeight.mockRejectedValue(
+        new mockGameController.ConcurrentModificationError()
+      );
+
+      const res = await app.request('/score-weight/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe(
+        '同時変更が検出されました。もう一度お試しください'
+      );
+    });
+
     it('予期しないエラーの場合 500 を返すべき', async () => {
       mockGameController.toggleScoreWeight.mockRejectedValue(
         new Error('DB接続エラー')
@@ -348,6 +344,24 @@ describe('管理者 API', () => {
       expect(body.error).toBe('ゲームが見つかりません');
     });
 
+    it('同時変更の場合 409 を返すべき', async () => {
+      mockGameController.toggleBlackout.mockRejectedValue(
+        new mockGameController.ConcurrentModificationError()
+      );
+
+      const res = await app.request('/blackout/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe(
+        '同時変更が検出されました。もう一度お試しください'
+      );
+    });
+
     it('予期しないエラーの場合 500 を返すべき', async () => {
       mockGameController.toggleBlackout.mockRejectedValue(
         new Error('DB接続エラー')
@@ -391,6 +405,7 @@ describe('管理者 API', () => {
         attackerTeamId: 'ADMIN',
         defenderTeamId: 'team-1',
         attackId: 'sql-injection',
+        attackSlug: 'sql-injection',
         success: true,
         neutralized: false,
         damage: 0,
@@ -472,6 +487,7 @@ describe('管理者 API', () => {
           attackerTeamId: 'team-1',
           defenderTeamId: 'team-2',
           attackId: 'atk-1',
+          attackSlug: 'atk-1',
           success: true,
           neutralized: false,
           damage: 1000,
