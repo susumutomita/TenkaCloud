@@ -6,6 +6,7 @@ import { healthRoutes } from './api/health';
 import { adminRoutes } from './api/admin';
 import { participantRoutes } from './api/participant';
 import { authMiddleware, requireAdmin } from './middleware/auth';
+import { auditorService } from './services/auditor-service';
 
 const logger = createLogger('gameday-service');
 const app = new Hono();
@@ -59,6 +60,7 @@ const server = serve(
 // グレースフルシャットダウン
 const shutdown = () => {
   logger.info('シャットダウンを開始します');
+  auditorService.stop();
   server.close(() => {
     logger.info('サーバーを停止しました');
     process.exit(0);
