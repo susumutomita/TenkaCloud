@@ -19,9 +19,12 @@ import {
   getErrorMessage,
   getErrorType,
   Input,
+  Select,
   Skeleton,
 } from '@/components/ui';
+import { HealthIndicator } from '@/components/gameday';
 import {
+  executeFaultInjection,
   getAttackLogs,
   getGameStatus,
   getTeams,
@@ -34,9 +37,15 @@ import {
   toggleBlackout,
   toggleScoreWeight,
 } from '@/lib/api/gameday-admin';
-import type { AttackLog, GameState, Team } from '@/lib/api/gameday-types';
+import { getAttackCatalog } from '@/lib/api/gameday';
+import type {
+  Attack,
+  AttackLog,
+  GameState,
+  Team,
+} from '@/lib/api/gameday-types';
 
-type TabId = 'control' | 'teams' | 'logs' | 'audit';
+type TabId = 'control' | 'teams' | 'logs' | 'audit' | 'fault-injection';
 
 export default function AdminGamedayControlPage() {
   const params = useParams();
@@ -55,16 +64,31 @@ export default function AdminGamedayControlPage() {
   const [newTeamName, setNewTeamName] = useState('');
   const [registering, setRegistering] = useState(false);
 
+  // Auditor status
+  const [auditorRunning, setAuditorRunning] = useState(false);
+
+  // Fault injection
+  const [attacks, setAttacks] = useState<Attack[]>([]);
+  const [fiTeamId, setFiTeamId] = useState('');
+  const [fiAttackSlug, setFiAttackSlug] = useState('');
+  const [fiLoading, setFiLoading] = useState(false);
+  const [fiResult, setFiResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
   const fetchData = useCallback(async () => {
     try {
-      const [gsData, teamsData, logsData] = await Promise.all([
+      const [gsData, teamsData, logsData, catalogData] = await Promise.all([
         getGameStatus(eventId),
         getTeams(eventId),
         getAttackLogs(eventId),
+        getAttackCatalog(eventId).catch(() => ({ attacks: [] as Attack[] })),
       ]);
       setGameState(gsData);
       setTeamsState(teamsData.teams);
       setLogs(logsData.logs);
+      setAttacks(catalogData.attacks);
       setError(null);
     } catch (err) {
       setError(
@@ -108,6 +132,56 @@ export default function AdminGamedayControlPage() {
     }
   };
 
+  const handleStartAuditor = async () => {
+    setActionLoading(true);
+    try {
+      await startAuditor(eventId);
+      setAuditorRunning(true);
+      await fetchData();
+    } catch {
+      // ignore
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStopAuditor = async () => {
+    setActionLoading(true);
+    try {
+      await stopAuditor();
+      setAuditorRunning(false);
+      await fetchData();
+    } catch {
+      // ignore
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleFaultInjection = async () => {
+    if (!fiTeamId || !fiAttackSlug) return;
+    setFiLoading(true);
+    setFiResult(null);
+    try {
+      const result = await executeFaultInjection(
+        eventId,
+        fiTeamId,
+        fiAttackSlug
+      );
+      setFiResult({
+        success: result.success,
+        message: result.success ? '妨害注入成功' : '妨害注入失敗',
+      });
+    } catch (err) {
+      setFiResult({
+        success: false,
+        message: err instanceof Error ? err.message : '実行エラー',
+      });
+    } finally {
+      setFiLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -139,6 +213,7 @@ export default function AdminGamedayControlPage() {
     { id: 'teams', label: 'チーム管理' },
     { id: 'logs', label: '攻撃ログ' },
     { id: 'audit', label: '監査' },
+    { id: 'fault-injection', label: '妨害注入' },
   ];
 
   return (
@@ -466,21 +541,83 @@ export default function AdminGamedayControlPage() {
             <p className="text-text-secondary text-sm">
               ヘルスチェック監査プロセスを制御します。開始すると、全チームのWebサイト/APIの定期的な健全性チェックが実行されます。
             </p>
+            <div className="flex items-center gap-3 p-3 bg-surface-2 rounded-[var(--radius)]">
+              <HealthIndicator isHealthy={auditorRunning} />
+              <span className="text-sm font-medium text-text-primary">
+                {auditorRunning ? '監査稼働中' : '監査停止中'}
+              </span>
+            </div>
             <div className="flex gap-3">
               <Button
                 variant="success"
-                onClick={() => handleAction(() => startAuditor(eventId))}
+                onClick={handleStartAuditor}
                 loading={actionLoading}
               >
                 監査開始
               </Button>
               <Button
                 variant="danger"
-                onClick={() => handleAction(() => stopAuditor())}
+                onClick={handleStopAuditor}
                 loading={actionLoading}
               >
                 監査停止
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Fault Injection Tab */}
+      {activeTab === 'fault-injection' && (
+        <Card>
+          <CardHeader>
+            <span className="font-semibold text-text-primary">
+              妨害注入（Fault Injection）
+            </span>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-text-secondary text-sm">
+              管理者として指定チームに対して直接攻撃を実行します。
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select
+                label="対象チーム"
+                placeholder="チームを選択"
+                options={teams.map((t) => ({
+                  value: t.teamId,
+                  label: `${t.teamName} (${t.teamId})`,
+                }))}
+                value={fiTeamId}
+                onChange={(e) => setFiTeamId(e.target.value)}
+              />
+              <Select
+                label="攻撃"
+                placeholder="攻撃を選択"
+                options={attacks.map((a) => ({
+                  value: a.slug,
+                  label: `${a.name} (${a.slug})`,
+                }))}
+                value={fiAttackSlug}
+                onChange={(e) => setFiAttackSlug(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <Button
+                variant="danger"
+                onClick={handleFaultInjection}
+                loading={fiLoading}
+                disabled={!fiTeamId || !fiAttackSlug || fiLoading}
+              >
+                妨害実行
+              </Button>
+              {fiResult && (
+                <Badge
+                  variant={fiResult.success ? 'success' : 'danger'}
+                  badgeStyle="subtle"
+                >
+                  {fiResult.message}
+                </Badge>
+              )}
             </div>
           </CardContent>
         </Card>
