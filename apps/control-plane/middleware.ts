@@ -1,5 +1,6 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import type { NextAuthRequest } from 'next-auth';
 
 // next.config.ts の basePath と一致させる
 const BASE_PATH = '/control';
@@ -7,7 +8,7 @@ const BASE_PATH = '/control';
 /**
  * 認証ミドルウェアのコアロジック
  */
-function handleAuth(isLoggedIn: boolean, req: NextRequest): NextResponse {
+function handleAuth(isLoggedIn: boolean, req: NextAuthRequest): NextResponse {
   const isOnLoginPage = req.nextUrl.pathname.startsWith('/login');
   const isOnApiAuthRoute = req.nextUrl.pathname.startsWith('/api/auth');
 
