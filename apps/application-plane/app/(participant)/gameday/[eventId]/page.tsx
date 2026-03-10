@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { HealthIndicator } from '@/components/gameday';
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -104,12 +105,66 @@ export default function GamedayHQPage() {
       second: '2-digit',
     });
 
+  // Derive latest status per check type
+  const latestWebsite = healthChecks.find((c) => c.checkType === 'website');
+  const latestApi = healthChecks.find((c) => c.checkType === 'api');
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
         <span className="text-hn-accent font-mono">&gt;_</span>
         司令部
       </h1>
+
+      {/* Application Status */}
+      {healthChecks.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="flex items-center gap-4 py-5">
+              <HealthIndicator isHealthy={latestWebsite?.isHealthy ?? false} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-text-muted font-mono uppercase">
+                  Website
+                </div>
+                <div className="text-lg font-semibold text-text-primary">
+                  {latestWebsite
+                    ? latestWebsite.isHealthy
+                      ? '正常'
+                      : '異常'
+                    : '未チェック'}
+                </div>
+              </div>
+              {latestWebsite?.responseTimeMs != null && (
+                <Badge variant="default" badgeStyle="subtle">
+                  {latestWebsite.responseTimeMs}ms
+                </Badge>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="flex items-center gap-4 py-5">
+              <HealthIndicator isHealthy={latestApi?.isHealthy ?? false} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-text-muted font-mono uppercase">
+                  API
+                </div>
+                <div className="text-lg font-semibold text-text-primary">
+                  {latestApi
+                    ? latestApi.isHealthy
+                      ? '正常'
+                      : '異常'
+                    : '未チェック'}
+                </div>
+              </div>
+              {latestApi?.responseTimeMs != null && (
+                <Badge variant="default" badgeStyle="subtle">
+                  {latestApi.responseTimeMs}ms
+                </Badge>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Health Checks */}
