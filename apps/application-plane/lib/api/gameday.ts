@@ -2,7 +2,7 @@
  * GameDay Participant API Client
  */
 
-import { getSession } from 'next-auth/react';
+import { getAuthToken } from '@/lib/auth/get-auth-token';
 import type {
   Alliance,
   Attack,
@@ -21,11 +21,6 @@ const GAMEDAY_API_URL =
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
-}
-
-async function getAuthToken(): Promise<string | null> {
-  const session = await getSession();
-  return session?.accessToken ?? null;
 }
 
 export async function gamedayRequest<T>(
