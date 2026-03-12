@@ -14,6 +14,25 @@ declare module 'hono' {
   }
 }
 
+const authSkipEnabled = process.env.AUTH_SKIP === '1';
+
+/* v8 ignore start -- Development-only warning */
+if (authSkipEnabled && typeof console !== 'undefined') {
+  console.warn(
+    '\x1b[33m⚠️  AUTH_SKIP mode is enabled. JWT verification is bypassed.\x1b[0m'
+  );
+  console.warn(
+    '\x1b[33m   This should only be used for local development.\x1b[0m'
+  );
+}
+/* v8 ignore stop */
+
+const mockAuth: AuthContext = {
+  userId: 'dev-user',
+  tenantId: 'dev-tenant',
+  roles: ['admin', 'participant'],
+};
+
 const JWKS_URI =
   process.env.JWKS_URI ??
   'http://localhost:8080/realms/tenkacloud/protocol/openid-connect/certs';
@@ -30,6 +49,13 @@ async function getJWKS() {
 }
 
 export const authMiddleware = createMiddleware(async (c, next) => {
+  // AUTH_SKIP=1: 開発用にJWT検証をバイパス
+  if (authSkipEnabled) {
+    c.set('auth', mockAuth);
+    await next();
+    return;
+  }
+
   const authHeader = c.req.header('Authorization');
 
   if (!authHeader?.startsWith('Bearer ')) {

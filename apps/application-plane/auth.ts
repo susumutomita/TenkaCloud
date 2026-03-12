@@ -22,7 +22,7 @@ const mockSession: Session = {
   idToken: 'mock-id-token',
   roles: ['admin', 'participant'],
   tenantId: 'dev-tenant',
-  teamId: 'dev-team',
+  teamId: 'team-alpha',
 };
 
 // AUTH_SKIP モードの警告
@@ -122,3 +122,6 @@ export const { handlers, signIn, signOut } = nextAuth;
 
 // AUTH_SKIP=1 の場合はモックセッションを返す
 export const auth = authSkipEnabled ? async () => mockSession : nextAuth.auth;
+
+/** AUTH_SKIP モードのフラグとモックセッション（route handler で使用） */
+export { authSkipEnabled, mockSession };
