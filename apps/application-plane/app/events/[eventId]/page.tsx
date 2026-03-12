@@ -278,7 +278,7 @@ export default function EventDetailPage() {
                   )}
 
                   {canParticipate && (
-                    <Link href={`/events/${eventId}/play`}>
+                    <Link href={`/gameday/${eventId}`}>
                       <Button fullWidth size="lg">
                         バトルに参加 ⚔️
                       </Button>

@@ -53,7 +53,7 @@ describe('Auth0 認証設定', () => {
       expect(session?.user?.email).toBe('dev@example.com');
       expect(session?.roles).toEqual(['admin', 'participant']);
       expect(session?.tenantId).toBe('dev-tenant');
-      expect(session?.teamId).toBe('dev-team');
+      expect(session?.teamId).toBe('team-alpha');
       expect(session?.accessToken).toBe('mock-access-token');
       expect(session?.idToken).toBe('mock-id-token');
     });

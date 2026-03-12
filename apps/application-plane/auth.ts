@@ -1,9 +1,10 @@
 import NextAuth from 'next-auth';
 import type { Session } from 'next-auth';
 import Auth0 from 'next-auth/providers/auth0';
+import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
 
 const getEnv = (key: string) => process.env[key];
-const authSkipEnabled = getEnv('AUTH_SKIP') === '1';
+const authSkipEnabled = isAuthSkipEnabled();
 
 /**
  * モックセッション（AUTH_SKIP=1 の場合に使用）
@@ -22,7 +23,7 @@ const mockSession: Session = {
   idToken: 'mock-id-token',
   roles: ['admin', 'participant'],
   tenantId: 'dev-tenant',
-  teamId: 'dev-team',
+  teamId: 'team-alpha',
 };
 
 // AUTH_SKIP モードの警告
@@ -122,3 +123,6 @@ export const { handlers, signIn, signOut } = nextAuth;
 
 // AUTH_SKIP=1 の場合はモックセッションを返す
 export const auth = authSkipEnabled ? async () => mockSession : nextAuth.auth;
+
+/** AUTH_SKIP モードのフラグとモックセッション（route handler で使用） */
+export { authSkipEnabled, mockSession };

@@ -2,7 +2,7 @@
  * GameDay Admin API Client
  */
 
-import { getSession } from 'next-auth/react';
+import { getAuthToken } from '@/lib/auth/get-auth-token';
 import type { AttackLog, GameState, Team } from './gameday-types';
 
 const GAMEDAY_API_URL =
@@ -13,11 +13,6 @@ const ADMIN_URL = `${GAMEDAY_API_URL}/admin`;
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
-}
-
-async function getAuthToken(): Promise<string | null> {
-  const session = await getSession();
-  return session?.accessToken ?? null;
 }
 
 async function adminRequest<T>(

@@ -4,24 +4,13 @@
  * バックエンド API 呼び出しの共通設定（参加者向け）
  */
 
-import { getSession } from 'next-auth/react';
+import { getAuthToken } from '@/lib/auth/get-auth-token';
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100/api';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
-}
-
-/**
- * 認証トークンを取得
- *
- * NextAuth セッションからアクセストークンを取得
- * クライアントコンポーネントで使用
- */
-async function getAuthToken(): Promise<string | null> {
-  const session = await getSession();
-  return session?.accessToken ?? null;
 }
 
 /**
