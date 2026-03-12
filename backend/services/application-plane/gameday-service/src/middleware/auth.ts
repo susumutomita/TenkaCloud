@@ -14,7 +14,14 @@ declare module 'hono' {
   }
 }
 
-const authSkipEnabled = process.env.AUTH_SKIP === '1';
+/* v8 ignore start -- Production safety guard */
+if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
+  throw new Error('AUTH_SKIP cannot be enabled in production');
+}
+/* v8 ignore stop */
+
+const authSkipEnabled =
+  process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production';
 
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {

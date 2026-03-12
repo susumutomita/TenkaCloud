@@ -27,7 +27,10 @@ const MOCK_ACCESS_TOKEN = 'mock-access-token';
  * 通常モード: `getSession()` で NextAuth セッションからアクセストークンを取得
  */
 export async function getAuthToken(): Promise<string | null> {
-  if (process.env.NEXT_PUBLIC_AUTH_SKIP === '1') {
+  if (
+    process.env.NEXT_PUBLIC_AUTH_SKIP === '1' &&
+    process.env.NODE_ENV !== 'production'
+  ) {
     return MOCK_ACCESS_TOKEN;
   }
   const session = await getSession();
