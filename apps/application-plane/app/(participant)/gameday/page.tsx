@@ -23,6 +23,16 @@ export default function GamedayEntryPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
+      {/* Breadcrumb */}
+      <nav>
+        <Link
+          href="/events"
+          className="text-text-muted hover:text-hn-accent transition-colors text-sm"
+        >
+          ← イベント一覧
+        </Link>
+      </nav>
+
       <div>
         <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
           <span className="text-3xl">⚔️</span>
