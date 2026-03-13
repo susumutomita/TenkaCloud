@@ -1,5 +1,5 @@
 /**
- * Prisma Client シングルトン
+ * Prisma Client シングルトン（遅延初期化）
  *
  * アプリケーション全体で単一の Prisma インスタンスを共有
  *
@@ -42,5 +42,3 @@ export const prisma: unknown = global.__prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== 'production' && prisma) {
   global.__prisma = prisma;
 }
-
-export default prisma;
