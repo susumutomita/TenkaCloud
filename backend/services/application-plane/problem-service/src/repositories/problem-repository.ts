@@ -12,7 +12,7 @@ import type {
   CloudProvider as PrismaCloudProvider,
   MarketplaceListing,
 } from '@prisma/client';
-import { prisma } from './prisma-client';
+import { prisma as _prisma } from './prisma-client';
 import type {
   IProblemRepository,
   IMarketplaceRepository,
@@ -30,6 +30,16 @@ import type {
   MarketplaceSearchQuery,
   MarketplaceSearchResult,
 } from '../types';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getPrisma(): any {
+  if (!_prisma) {
+    throw new Error(
+      'Prisma client is not available. Run "bunx prisma generate" or use DynamoDB-based repositories.'
+    );
+  }
+  return _prisma;
+}
 
 /**
  * Prisma Problem を内部型に変換
@@ -168,7 +178,7 @@ function toPrismaCloudProvider(provider: CloudProvider): PrismaCloudProvider {
  */
 export class PrismaProblemRepository implements IProblemRepository {
   async create(problem: Problem): Promise<Problem> {
-    const created = await prisma.problem.create({
+    const created = await getPrisma().problem.create({
       data: {
         externalId: problem.id,
         title: problem.title,
@@ -231,7 +241,7 @@ export class PrismaProblemRepository implements IProblemRepository {
     if (updates.deployment?.timeout)
       data.deploymentTimeoutMinutes = updates.deployment.timeout;
 
-    const updated = await prisma.problem.update({
+    const updated = await getPrisma().problem.update({
       where: { id },
       data,
       include: {
@@ -245,13 +255,13 @@ export class PrismaProblemRepository implements IProblemRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await prisma.problem.delete({
+    await getPrisma().problem.delete({
       where: { id },
     });
   }
 
   async findById(id: string): Promise<Problem | null> {
-    const problem = await prisma.problem.findUnique({
+    const problem = await getPrisma().problem.findUnique({
       where: { id },
       include: {
         templates: true,
@@ -264,7 +274,7 @@ export class PrismaProblemRepository implements IProblemRepository {
   }
 
   async findByExternalId(externalId: string): Promise<Problem | null> {
-    const problem = await prisma.problem.findUnique({
+    const problem = await getPrisma().problem.findUnique({
       where: { externalId },
       include: {
         templates: true,
@@ -295,7 +305,7 @@ export class PrismaProblemRepository implements IProblemRepository {
       where.tags = { hasSome: options.tags };
     }
 
-    const problems = await prisma.problem.findMany({
+    const problems = await getPrisma().problem.findMany({
       where,
       include: {
         templates: true,
@@ -323,11 +333,11 @@ export class PrismaProblemRepository implements IProblemRepository {
       where.difficulty = toPrismaDifficulty(options.difficulty);
     }
 
-    return prisma.problem.count({ where });
+    return getPrisma().problem.count({ where });
   }
 
   async exists(id: string): Promise<boolean> {
-    const count = await prisma.problem.count({
+    const count = await getPrisma().problem.count({
       where: { id },
     });
     return count > 0;
@@ -339,7 +349,7 @@ export class PrismaProblemRepository implements IProblemRepository {
  */
 export class PrismaMarketplaceRepository implements IMarketplaceRepository {
   async publish(problemId: string): Promise<MarketplaceProblem> {
-    const problem = await prisma.problem.findUnique({
+    const problem = await getPrisma().problem.findUnique({
       where: { id: problemId },
       include: {
         templates: true,
@@ -352,7 +362,7 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
       throw new Error(`Problem with id '${problemId}' not found`);
     }
 
-    const listing = await prisma.marketplaceListing.upsert({
+    const listing = await getPrisma().marketplaceListing.upsert({
       where: { problemId },
       update: {},
       create: {
@@ -378,7 +388,7 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
   }
 
   async unpublish(marketplaceId: string): Promise<void> {
-    await prisma.marketplaceListing.delete({
+    await getPrisma().marketplaceListing.delete({
       where: { id: marketplaceId },
     });
   }
@@ -439,8 +449,9 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
+    const p = getPrisma();
     const [listings, total] = await Promise.all([
-      prisma.marketplaceListing.findMany({
+      p.marketplaceListing.findMany({
         where,
         include: {
           problem: {
@@ -456,7 +467,7 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
         skip,
         take: limit,
       }),
-      prisma.marketplaceListing.count({ where }),
+      p.marketplaceListing.count({ where }),
     ]);
 
     return {
@@ -469,7 +480,7 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
   }
 
   async findById(marketplaceId: string): Promise<MarketplaceProblem | null> {
-    const listing = await prisma.marketplaceListing.findUnique({
+    const listing = await getPrisma().marketplaceListing.findUnique({
       where: { id: marketplaceId },
       include: {
         problem: {
@@ -487,7 +498,7 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
   }
 
   async incrementDownloads(marketplaceId: string): Promise<void> {
-    await prisma.marketplaceListing.update({
+    await getPrisma().marketplaceListing.update({
       where: { id: marketplaceId },
       data: {
         downloadCount: { increment: 1 },
@@ -504,7 +515,7 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
       comment: string;
     }
   ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
+    await getPrisma().$transaction(async (tx) => {
       await tx.marketplaceReview.create({
         data: {
           listingId: marketplaceId,

@@ -21,7 +21,7 @@ import {
 import {
   PrismaEventRepository,
   getEventWithProblems,
-  prisma,
+  prisma as _prisma,
 } from '../repositories';
 import { getLeaderboard } from '../jam/dashboard';
 import type { EventStatus, EventType } from '../types';
@@ -638,6 +638,21 @@ participantRouter.post(
     const { answer, titleId } = c.req.valid('json');
 
     try {
+      // Prisma が利用不可の場合は 501 を返す
+      if (!_prisma) {
+        return c.json(
+          {
+            error: 'Answer submission not yet available',
+            message:
+              'Database migration in progress. This feature requires Prisma client.',
+          },
+          501
+        );
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prisma = _prisma as any;
+
       // イベントとチャレンジの存在確認
       const challenge = await prisma.challenge.findFirst({
         where: {
