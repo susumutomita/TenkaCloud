@@ -1,12 +1,36 @@
 /**
  * 認証・認可システム
  *
- * control-plane の Keycloak 認証を再利用
+ * control-plane の Keycloak 認証を再利用。
+ *
+ * AUTH_SKIP モードでは JWT 検証をバイパスし、
+ * モックユーザーを返す（ローカル開発用）。
  */
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-// Keycloak configuration
+// ── AUTH_SKIP ガード ─────────────────────────────────
+/* v8 ignore start -- Production safety guard */
+if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
+  throw new Error('AUTH_SKIP cannot be enabled in production');
+}
+/* v8 ignore stop */
+
+const authSkipEnabled =
+  process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production';
+
+/* v8 ignore start -- Development-only warning */
+if (authSkipEnabled && typeof console !== 'undefined') {
+  console.warn(
+    '\x1b[33m⚠️  AUTH_SKIP mode is enabled in problem-service. JWT verification is bypassed.\x1b[0m'
+  );
+  console.warn(
+    '\x1b[33m   This should only be used for local development.\x1b[0m'
+  );
+}
+/* v8 ignore stop */
+
+// ── Keycloak 設定 ────────────────────────────────────
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tenkacloud';
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
@@ -131,14 +155,35 @@ export interface AuthContext {
   error?: string;
 }
 
+/** AUTH_SKIP モードで使用するモックユーザー */
+const mockUser: AuthenticatedUser = {
+  id: 'dev-user',
+  email: 'dev@localhost',
+  username: 'dev-user',
+  roles: [UserRole.PLATFORM_ADMIN, UserRole.COMPETITOR],
+  tenantId: 'dev-tenant',
+};
+
 /**
  * ヘッダーからトークンを抽出して認証
+ *
+ * AUTH_SKIP モード: モックユーザーを即座に返す（JWT 検証なし）
+ * 通常モード: Keycloak の JWKS でトークンを検証
  */
 export async function authenticateRequest(headers: {
   authorization?: string;
   authorizationtoken?: string;
   [key: string]: string | undefined;
 }): Promise<AuthContext> {
+  // AUTH_SKIP=1: 開発用にJWT検証をバイパス
+  if (authSkipEnabled) {
+    return {
+      user: mockUser,
+      token: 'mock-access-token',
+      isValid: true,
+    };
+  }
+
   const authHeader = headers.authorization || headers.authorizationtoken;
 
   if (!authHeader) {

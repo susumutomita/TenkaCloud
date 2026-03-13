@@ -19,6 +19,7 @@ app.use(
   '*',
   cors({
     origin: [
+      'http://localhost:3000', // Nginx proxy (dev)
       'http://localhost:13000', // Admin App
       'http://localhost:13001', // Participant App
       'http://localhost:13002', // Landing Page
