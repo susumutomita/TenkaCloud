@@ -240,7 +240,11 @@ start-dev-servers:
 	@echo ""
 	@echo "💡 終了するには Ctrl+C を押してください"
 	@echo ""
-	@$(NR) dev
+	DYNAMODB_ENDPOINT=$(LOCALSTACK_ENDPOINT) \
+	DYNAMODB_TABLE=$(LOCAL_TABLE) \
+	AUTH_SKIP=1 \
+	NEXT_PUBLIC_AUTH_SKIP=1 \
+	$(NR) dev
 
 # make stop: LocalStack を停止
 stop: stop-local
