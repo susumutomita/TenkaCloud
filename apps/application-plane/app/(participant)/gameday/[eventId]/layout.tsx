@@ -74,6 +74,29 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
     <div className="min-h-screen bg-surface-0">
       <Header />
 
+      {/* Breadcrumb Navigation */}
+      <div className="bg-surface-1 border-b border-border">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+          <nav className="flex items-center gap-2 text-sm">
+            <Link
+              href="/events"
+              className="text-text-muted hover:text-hn-accent transition-colors"
+            >
+              イベント一覧
+            </Link>
+            <span className="text-text-muted">/</span>
+            <Link
+              href={`/events/${eventId}`}
+              className="text-text-muted hover:text-hn-accent transition-colors"
+            >
+              イベント詳細
+            </Link>
+            <span className="text-text-muted">/</span>
+            <span className="text-text-primary font-medium">GameDay</span>
+          </nav>
+        </div>
+      </div>
+
       {/* Status Bar */}
       <div className="bg-surface-1 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
