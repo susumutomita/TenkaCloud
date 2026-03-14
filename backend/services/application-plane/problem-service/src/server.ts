@@ -16,14 +16,14 @@ console.log(`
 ║  Server starting...                                          ║
 ║                                                              ║
 ║  Endpoints:                                                  ║
-║    - Admin API:  http://localhost:${port}/api/admin             ║
-║    - Player API: http://localhost:${port}/api/player            ║
-║    - Health:     http://localhost:${port}/health                ║
+║    - Admin API:       http://localhost:${port}/api/admin        ║
+║    - Player API:      http://localhost:${port}/api/player       ║
+║    - Participant API: http://localhost:${port}/api/participant  ║
+║    - Health:          http://localhost:${port}/health           ║
 ║                                                              ║
 ║  Environment:                                                ║
 ║    - NODE_ENV: ${process.env.NODE_ENV || 'development'}                             ║
-║    - KEYCLOAK_URL: ${process.env.KEYCLOAK_URL || 'http://localhost:8080'}        ║
-║    - KEYCLOAK_REALM: ${process.env.KEYCLOAK_REALM || 'tenkacloud'}                    ║
+║    - AUTH_SKIP: ${process.env.AUTH_SKIP || '0'}                                      ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
 
