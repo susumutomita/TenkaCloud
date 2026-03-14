@@ -156,8 +156,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
-      - KEYCLOAK_URL=http://keycloak:8080
-      - KEYCLOAK_REALM=tenkacloud
+      - AUTH_SKIP=1
     depends_on:
       localstack:
         condition: service_healthy
@@ -208,6 +207,8 @@ services:
       - AWS_ENDPOINT_URL=http://localstack:4566
       - AWS_REGION=${AWS_REGION:-ap-northeast-1}
       - NEXT_PUBLIC_API_URL=http://localhost:3000/api
+      - AUTH_SKIP=1
+      - NEXT_PUBLIC_AUTH_SKIP=1
     networks:
       - tenkacloud
 
