@@ -17,7 +17,8 @@ if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
 /* v8 ignore stop */
 
 const authSkipEnabled =
-  process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production';
+  process.env.AUTH_SKIP === '1' &&
+  (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test');
 
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
@@ -155,14 +156,16 @@ export interface AuthContext {
   error?: string;
 }
 
-/** AUTH_SKIP モードで使用するモックユーザー */
-const mockUser: AuthenticatedUser = {
-  id: 'dev-user',
-  email: 'dev@localhost',
-  username: 'dev-user',
-  roles: [UserRole.PLATFORM_ADMIN, UserRole.COMPETITOR],
-  tenantId: 'dev-tenant',
-};
+/** AUTH_SKIP モードで使用するモックユーザーを生成（リクエスト間の状態共有を防止） */
+function createMockUser(): AuthenticatedUser {
+  return {
+    id: 'dev-user',
+    email: 'dev@localhost',
+    username: 'dev-user',
+    roles: [UserRole.PLATFORM_ADMIN, UserRole.COMPETITOR],
+    tenantId: 'dev-tenant',
+  };
+}
 
 /**
  * ヘッダーからトークンを抽出して認証
@@ -178,7 +181,7 @@ export async function authenticateRequest(headers: {
   // AUTH_SKIP=1: 開発用にJWT検証をバイパス
   if (authSkipEnabled) {
     return {
-      user: mockUser,
+      user: createMockUser(),
       token: 'mock-access-token',
       isValid: true,
     };
