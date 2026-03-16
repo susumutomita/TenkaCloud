@@ -7,14 +7,17 @@
  * null を返し、サーバー起動をブロックしない。
  */
 
+import { createRequire } from 'node:module';
+
 declare global {
   var __prisma: unknown | undefined;
 }
 
+const esmRequire = createRequire(import.meta.url);
+
 function createPrismaClient(): unknown {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { PrismaClient } = require('@prisma/client') as {
+    const { PrismaClient } = esmRequire('@prisma/client') as {
       PrismaClient: new (opts: { log: string[] }) => unknown;
     };
     return new PrismaClient({
