@@ -106,6 +106,15 @@ participantRouter.get('/events', async (c) => {
 
     return c.json({ events: eventsWithRegistration, total });
   } catch (error) {
+    // DynamoDB 接続エラー時は空リストを返す（ローカル開発で LocalStack 未起動の場合）
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      (error as { code: string }).code === 'ECONNREFUSED'
+    ) {
+      console.warn('DynamoDB is not available. Returning empty events list.');
+      return c.json({ events: [], total: 0 });
+    }
     console.error('Failed to fetch events:', error);
     return c.json({ error: 'Failed to fetch events' }, 500);
   }
@@ -128,6 +137,14 @@ participantRouter.get('/events/me', async (c) => {
 
     return c.json({ events });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      (error as { code: string }).code === 'ECONNREFUSED'
+    ) {
+      console.warn('DynamoDB is not available. Returning empty events list.');
+      return c.json({ events: [] });
+    }
     console.error('Failed to fetch my events:', error);
     return c.json({ error: 'Failed to fetch events' }, 500);
   }

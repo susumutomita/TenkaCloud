@@ -6,8 +6,7 @@
 
 import { getAuthToken } from '@/lib/auth/get-auth-token';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3100/api';
+const API_BASE_URL = '/api';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
