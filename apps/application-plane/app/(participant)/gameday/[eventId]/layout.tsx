@@ -12,10 +12,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { GameStatusBar } from '@/components/gameday';
 import { Header } from '@/components/layout';
-import {
-  getParticipantGameStatus,
-  getTeamDashboard,
-} from '@/lib/api/gameday';
+import { getParticipantGameStatus, getTeamDashboard } from '@/lib/api/gameday';
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 
