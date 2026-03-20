@@ -12,13 +12,9 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { GameStatusBar } from '@/components/gameday';
 import { Header } from '@/components/layout';
-import { getTeamDashboard } from '@/lib/api/gameday';
+import { getParticipantGameStatus, getTeamDashboard } from '@/lib/api/gameday';
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
-
-const GAMEDAY_API_URL =
-  process.env.NEXT_PUBLIC_GAMEDAY_API_URL ||
-  'http://localhost:3020/api/gameday';
 
 const tabs = [
   { href: '', label: '司令部', icon: 'Home' },
@@ -45,9 +41,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
     if (!eventId || !teamId) return;
     try {
       const [statusRes, dashRes] = await Promise.all([
-        fetch(
-          `${GAMEDAY_API_URL}/admin/game/status?eventId=${encodeURIComponent(eventId)}`
-        ).then((r) => (r.ok ? r.json() : null)),
+        getParticipantGameStatus(eventId).catch(() => null),
         getTeamDashboard(eventId, teamId).catch(() => null),
       ]);
       if (statusRes) setGameState(statusRes);
