@@ -7,6 +7,7 @@ import { adminRoutes } from './api/admin';
 import { participantRoutes } from './api/participant';
 import { authMiddleware, requireAdmin } from './middleware/auth';
 import { auditorService } from './services/auditor-service';
+import { getAllowedOrigins } from './lib/cors';
 
 const logger = createLogger('gameday-service');
 const app = new Hono();
@@ -15,7 +16,7 @@ const app = new Hono();
 app.use(
   '/*',
   cors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:13000'],
+    origin: getAllowedOrigins(process.env.CORS_ORIGIN),
     credentials: true,
   })
 );

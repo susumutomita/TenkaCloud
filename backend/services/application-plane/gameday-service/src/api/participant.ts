@@ -11,6 +11,7 @@ import {
   voteSchema,
   updateTeamUrlSchema,
 } from '../schemas';
+import { getGameStatus } from '../services/game-controller';
 import {
   getAttackCatalog,
   purchaseAttack,
@@ -44,6 +45,7 @@ import {
   getLeaderboard,
   getAttackStatistics,
   getTeamDashboard,
+  listTeams,
   BlackoutActiveError,
   TeamNotFoundError as DashboardTeamNotFoundError,
 } from '../services/dashboard-service';
@@ -108,6 +110,32 @@ participantRoutes.get('/attacks/catalog', async (c) => {
   }
   const attacks = await getAttackCatalog(eventId);
   return c.json({ attacks }, StatusCodes.OK);
+});
+
+// チーム一覧
+participantRoutes.get('/teams', async (c) => {
+  const eventId = c.req.query('eventId');
+  if (!eventId) {
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
+  }
+
+  const teams = await listTeams(eventId);
+  return c.json({ teams }, StatusCodes.OK);
+});
+
+// ゲーム状態
+participantRoutes.get('/game/status', async (c) => {
+  const eventId = c.req.query('eventId');
+  if (!eventId) {
+    return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
+  }
+
+  const gameState = await getGameStatus(eventId);
+  if (!gameState) {
+    return c.json({ error: 'ゲームが見つかりません' }, StatusCodes.NOT_FOUND);
+  }
+
+  return c.json(gameState, StatusCodes.OK);
 });
 
 // 攻撃購入

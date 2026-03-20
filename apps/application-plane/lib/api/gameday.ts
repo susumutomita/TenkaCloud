@@ -9,8 +9,10 @@ import type {
   AttackLog,
   AttackPurchase,
   AttackStats,
+  GameState,
   HealthCheckResult,
   LeaderboardEntry,
+  Team,
   TeamDashboard,
   Vote,
 } from './gameday-types';
@@ -71,6 +73,18 @@ export async function gamedayRequest<T>(
 
 export function getAttackCatalog(eventId: string) {
   return gamedayRequest<{ attacks: Attack[] }>('/attacks/catalog', {
+    params: { eventId },
+  });
+}
+
+export function getParticipantTeams(eventId: string) {
+  return gamedayRequest<{ teams: Team[] }>('/teams', {
+    params: { eventId },
+  });
+}
+
+export function getParticipantGameStatus(eventId: string) {
+  return gamedayRequest<GameState>('/game/status', {
     params: { eventId },
   });
 }

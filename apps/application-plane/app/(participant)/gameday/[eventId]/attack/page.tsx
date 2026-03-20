@@ -22,6 +22,7 @@ import {
   executeAttack,
   getAttackCatalog,
   getAttackHistory,
+  getParticipantTeams,
   purchaseAttack,
 } from '@/lib/api/gameday';
 import type { Attack, AttackLog, CooldownError } from '@/lib/api/gameday-types';
@@ -62,19 +63,13 @@ export default function AttackPage() {
   // Fetch team list for target selection
   useEffect(() => {
     if (!eventId) return;
-    const GAMEDAY_API_URL =
-      process.env.NEXT_PUBLIC_GAMEDAY_API_URL ||
-      'http://localhost:3020/api/gameday';
-    fetch(
-      `${GAMEDAY_API_URL}/admin/teams?eventId=${encodeURIComponent(eventId)}`
-    )
-      .then((r) => (r.ok ? r.json() : { teams: [] }))
+    getParticipantTeams(eventId)
       .then((data) => {
-        const opts = (data.teams || [])
-          .filter((t: { teamId: string }) => t.teamId !== teamId)
-          .map((t: { teamId: string; teamName: string }) => ({
-            value: t.teamId,
-            label: t.teamName,
+        const opts = data.teams
+          .filter((team) => team.teamId !== teamId)
+          .map((team) => ({
+            value: team.teamId,
+            label: team.teamName,
           }));
         setTeams(opts);
       })
