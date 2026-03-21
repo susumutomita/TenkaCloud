@@ -123,6 +123,7 @@ const mockDashboardService = vi.hoisted(() => {
   }
   return {
     updateTeamUrl: vi.fn(),
+    listTeams: vi.fn(),
     getLeaderboard: vi.fn(),
     getAttackStatistics: vi.fn(),
     getTeamDashboard: vi.fn(),
@@ -131,8 +132,19 @@ const mockDashboardService = vi.hoisted(() => {
   };
 });
 
+const mockGameController = vi.hoisted(() => ({
+  getGameStatus: vi.fn(),
+}));
+
 vi.mock('../services/participant-service', () => mockParticipantService);
 vi.mock('../services/dashboard-service', () => mockDashboardService);
+vi.mock('../services/game-controller', async () => {
+  const actual = await vi.importActual('../services/game-controller');
+  return {
+    ...actual,
+    getGameStatus: mockGameController.getGameStatus,
+  };
+});
 
 import { participantRoutes } from './participant';
 
@@ -160,6 +172,73 @@ describe('プレーヤー API', () => {
     it('eventId なしで BAD_REQUEST を返すべき', async () => {
       const res = await app.request('/attacks/catalog');
       expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  describe('GET /teams', () => {
+    it('eventId ありで参加対象チーム一覧を返すべき', async () => {
+      mockDashboardService.listTeams.mockResolvedValue([
+        {
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'チームA',
+          score: 100,
+        },
+      ]);
+
+      const res = await app.request('/teams?eventId=event-1');
+
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.teams).toEqual([
+        {
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'チームA',
+          score: 100,
+        },
+      ]);
+    });
+
+    it('eventId なしで BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams');
+
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  describe('GET /game/status', () => {
+    it('eventId ありでゲーム状態を返すべき', async () => {
+      mockGameController.getGameStatus.mockResolvedValue({
+        eventId: 'event-1',
+        tenantId: 'tenant-1',
+        isRunning: true,
+        startedAt: '2026-03-20T00:00:00.000Z',
+        scoreWeight: 'normal',
+        blackout: false,
+        durationMinutes: 180,
+      });
+
+      const res = await app.request('/game/status?eventId=event-1');
+
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.eventId).toBe('event-1');
+      expect(body.isRunning).toBe(true);
+    });
+
+    it('eventId なしで BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/game/status');
+
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('ゲームが存在しない場合は NOT_FOUND を返すべき', async () => {
+      mockGameController.getGameStatus.mockResolvedValue(null);
+
+      const res = await app.request('/game/status?eventId=event-1');
+
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
     });
   });
 

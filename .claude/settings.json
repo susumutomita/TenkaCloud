@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -q 'git commit'; then make -C \"$(git rev-parse --show-toplevel)\" before-commit; fi",
+            "timeout": 300,
+            "statusMessage": "Running make before-commit..."
+          }
+        ]
+      }
+    ]
+  }
+}

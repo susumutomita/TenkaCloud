@@ -146,6 +146,7 @@ vite.config.ts.timestamp-*
 
 # Claude Code files
 .claude/*
+!.claude/settings.json
 !.claude/skills/
 
 .playwright-mcp
