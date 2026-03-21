@@ -45,6 +45,10 @@ export class TeamNotFoundError extends Error {
   }
 }
 
+export async function listTeams(eventId: string): Promise<TeamState[]> {
+  return gamedayRepository.listTeams(eventId);
+}
+
 // === リーダーボード ===
 
 export async function getLeaderboard(eventId: string): Promise<TeamState[]> {
