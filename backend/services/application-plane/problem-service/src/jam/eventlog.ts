@@ -4,6 +4,7 @@
  * minoru1/RestApp/LambdaFunction/Dashboard/dashboard.py のログ機能を TypeScript で再実装
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '../repositories';
 
 /**
@@ -53,7 +54,10 @@ export async function addEventLog(
         teamName,
         message,
         logType: logType ?? null,
-        metadata: metadata ?? null,
+        metadata:
+          metadata !== undefined
+            ? (metadata as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
         dateTimeUTC: BigInt(Date.now()),
       },
     });

@@ -8,19 +8,20 @@
  */
 
 import { createRequire } from 'node:module';
+import type { PrismaClient } from '@prisma/client';
 
 declare global {
-  var __prisma: unknown | undefined;
+  var __prisma: PrismaClient | undefined;
 }
 
 const esmRequire = createRequire(import.meta.url);
 
-function createPrismaClient(): unknown {
+function createPrismaClient(): PrismaClient | null {
   try {
-    const { PrismaClient } = esmRequire('@prisma/client') as {
-      PrismaClient: new (opts: { log: string[] }) => unknown;
+    const { PrismaClient: PC } = esmRequire('@prisma/client') as {
+      PrismaClient: new (opts: { log: string[] }) => PrismaClient;
     };
-    return new PrismaClient({
+    return new PC({
       log:
         process.env.NODE_ENV === 'development'
           ? ['query', 'info', 'warn', 'error']
@@ -37,8 +38,16 @@ function createPrismaClient(): unknown {
   }
 }
 
-export const prisma: unknown = global.__prisma ?? createPrismaClient();
+const _prisma = global.__prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production' && prisma) {
-  global.__prisma = prisma;
+if (process.env.NODE_ENV !== 'production' && _prisma) {
+  global.__prisma = _prisma;
 }
+
+/**
+ * Prisma Client インスタンス
+ *
+ * @prisma/client が利用不可の場合は null になる。
+ * 利用側で null チェックをスキップする場合は non-null assertion を使用する。
+ */
+export const prisma = _prisma as PrismaClient;

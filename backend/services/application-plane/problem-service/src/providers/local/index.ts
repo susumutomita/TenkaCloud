@@ -51,7 +51,7 @@ export class LocalCloudProvider implements ICloudProvider {
    */
   async deployStack(
     problem: Problem,
-    credentials: CloudCredentials,
+    _credentials: CloudCredentials,
     options: DeployStackOptions
   ): Promise<DeploymentResult> {
     const startedAt = new Date();

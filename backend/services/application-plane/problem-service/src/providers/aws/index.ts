@@ -434,7 +434,7 @@ export class AWSCloudProvider implements ICloudProvider {
   }
 
   private async callS3(
-    credentials: CloudCredentials,
+    _credentials: CloudCredentials,
     region: string,
     action: string,
     params: Record<string, unknown>
@@ -444,7 +444,7 @@ export class AWSCloudProvider implements ICloudProvider {
   }
 
   private async callIAM(
-    credentials: CloudCredentials,
+    _credentials: CloudCredentials,
     action: string
   ): Promise<Record<string, unknown>> {
     console.log(`[AWS IAM] ${action}`);
@@ -575,7 +575,7 @@ export class AWSCloudProvider implements ICloudProvider {
   }
 
   private async listManagedStacks(
-    credentials: CloudCredentials,
+    _credentials: CloudCredentials,
     tagFilter: Record<string, string>
   ): Promise<{ StackName: string; StackId: string }[]> {
     // 実際の実装ではタグでフィルタリングしたスタック一覧を返す
