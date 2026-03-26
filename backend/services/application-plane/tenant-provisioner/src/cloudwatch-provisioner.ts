@@ -19,10 +19,11 @@ import {
 // 環境変数
 const AWS_ENDPOINT_URL = process.env.AWS_ENDPOINT_URL;
 
-// LocalStack 判定
-const isLocalStack =
+// ローカルエミュレータ判定（LocalStack / Kumo / Floci）
+const isLocalEmulator =
   AWS_ENDPOINT_URL?.includes('localhost') ||
-  AWS_ENDPOINT_URL?.includes('localstack');
+  AWS_ENDPOINT_URL?.includes('localstack') ||
+  AWS_ENDPOINT_URL?.includes('cloud-emulator');
 
 // CloudWatch Logs クライアント
 const logsClient = new CloudWatchLogsClient({
@@ -74,7 +75,7 @@ export async function createTenantLogGroup(
       console.log('Log Group は既に存在します', { logGroupName });
 
       // 保持期間を更新（tier 変更時など）
-      if (!isLocalStack && existingGroup.retentionInDays !== retentionDays) {
+      if (!isLocalEmulator && existingGroup.retentionInDays !== retentionDays) {
         await logsClient.send(
           new PutRetentionPolicyCommand({
             logGroupName,
@@ -106,7 +107,7 @@ export async function createTenantLogGroup(
     console.log('Log Group を作成しました', { logGroupName });
 
     // 保持期間を設定（LocalStack ではスキップ）
-    if (!isLocalStack) {
+    if (!isLocalEmulator) {
       await logsClient.send(
         new PutRetentionPolicyCommand({
           logGroupName,
@@ -169,8 +170,8 @@ export async function updateLogGroupRetention(
   const logGroupName = `/tenkacloud/tenants/${tenantId}`;
   const retentionDays = RETENTION_DAYS[tier] ?? 30;
 
-  if (isLocalStack) {
-    console.log('LocalStack モード: 保持期間更新をスキップします', {
+  if (isLocalEmulator) {
+    console.log('ローカルエミュレータモード: 保持期間更新をスキップします', {
       logGroupName,
     });
     return;

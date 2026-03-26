@@ -22,11 +22,12 @@ export class Auth0Provisioner {
     this.logger = logger ?? defaultLogger;
     this.client = getAuth0Client(this.logger);
 
-    // LocalStack や開発環境では Auth0 をスキップ
-    const isLocalStack =
+    // ローカルエミュレータ環境では Auth0 をスキップ
+    const isLocalEmulator =
       process.env.AWS_ENDPOINT_URL?.includes('localhost') ||
-      process.env.AWS_ENDPOINT_URL?.includes('localstack');
-    this.skipAuth0 = options?.skipAuth0 ?? isLocalStack ?? false;
+      process.env.AWS_ENDPOINT_URL?.includes('localstack') ||
+      process.env.AWS_ENDPOINT_URL?.includes('cloud-emulator');
+    this.skipAuth0 = options?.skipAuth0 ?? isLocalEmulator ?? false;
 
     if (this.skipAuth0) {
       this.logger.info('Auth0 provisioning をスキップモードで初期化しました');

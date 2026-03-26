@@ -21,10 +21,11 @@ const AWS_ENDPOINT_URL = process.env.AWS_ENDPOINT_URL;
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN ?? 'dev-tenkacloud.auth0.com';
 const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID ?? '000000000000';
 
-// LocalStack 判定
-const isLocalStack =
+// ローカルエミュレータ判定（LocalStack / Kumo / Floci）
+const isLocalEmulator =
   AWS_ENDPOINT_URL?.includes('localhost') ||
-  AWS_ENDPOINT_URL?.includes('localstack');
+  AWS_ENDPOINT_URL?.includes('localstack') ||
+  AWS_ENDPOINT_URL?.includes('cloud-emulator');
 
 // IAM クライアント
 const iamClient = new IAMClient({
@@ -160,9 +161,9 @@ export async function createTenantRole(
 ): Promise<IamProvisionerResult> {
   const roleName = `tenkacloud-tenant-${tenantSlug}`;
 
-  // LocalStack モードではダミー ARN を返す
-  if (isLocalStack) {
-    console.log('LocalStack モード: IAM Role 作成をスキップします', {
+  // ローカルエミュレータモードではダミー ARN を返す
+  if (isLocalEmulator) {
+    console.log('ローカルエミュレータモード: IAM Role 作成をスキップします', {
       roleName,
       tenantId,
     });
@@ -237,8 +238,8 @@ export async function createTenantRole(
 export async function deleteTenantRole(tenantSlug: string): Promise<void> {
   const roleName = `tenkacloud-tenant-${tenantSlug}`;
 
-  if (isLocalStack) {
-    console.log('LocalStack モード: IAM Role 削除をスキップします', {
+  if (isLocalEmulator) {
+    console.log('ローカルエミュレータモード: IAM Role 削除をスキップします', {
       roleName,
     });
     return;

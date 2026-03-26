@@ -8,7 +8,7 @@ export default defineConfig({
       NODE_ENV: 'test',
     },
     coverage: {
-      provider: 'v8',
+      provider: 'istanbul',
       reporter: ['text', 'json', 'html'],
       reportsDirectory: './coverage',
       exclude: [

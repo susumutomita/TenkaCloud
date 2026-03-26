@@ -2,7 +2,7 @@
 .PHONY: start-compose stop-compose stop restart status
 .PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
-.PHONY: start-local stop-local logs-local test-lambda test-tenant
+.PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant
 .PHONY: auth0-check-tfvars auth0-init auth0-plan auth0-apply auth0-output auth0-setup
 
 # デフォルトターゲットはhelp
@@ -217,10 +217,10 @@ check-docker-hub:
 # make start: LocalStack + フロントエンド開発サーバーをすべて起動
 start: start-infrastructure-bg start-dev-servers
 
-# make start-infrastructure: LocalStack のみ起動（バックグラウンド）
+# make start-infrastructure: エミュレータのみ起動
 start-infrastructure: start-local
 
-# バックグラウンドで LocalStack を起動し、準備完了を待つ
+# バックグラウンドでエミュレータを起動し、準備完了を待つ
 start-infrastructure-bg: check-docker check-aws-cli check-terraform
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "🚀 TenkaCloud を起動します"
@@ -240,17 +240,17 @@ start-dev-servers:
 	@echo "  - Tenant API:         http://localhost:3000/api/tenants"
 	@echo "  - Problem API:        http://localhost:3100/api"
 	@echo "  - GameDay API:        http://localhost:3020/api/gameday"
-	@echo "  - LocalStack:         http://localhost:4566"
+	@echo "  - Cloud Emulator:     http://localhost:4566"
 	@echo ""
 	@echo "💡 終了するには Ctrl+C を押してください"
 	@echo ""
-	DYNAMODB_ENDPOINT=$(LOCALSTACK_ENDPOINT) \
+	DYNAMODB_ENDPOINT=$(EMULATOR_ENDPOINT) \
 	DYNAMODB_TABLE=$(LOCAL_TABLE) \
 	AUTH_SKIP=1 \
 	NEXT_PUBLIC_AUTH_SKIP=1 \
 	$(NR) dev
 
-# make stop: LocalStack を停止
+# make stop: エミュレータを停止
 stop: stop-local
 
 restart:
@@ -482,9 +482,12 @@ help:
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
-	@echo "🧪 ローカル開発（LocalStack）:"
-	@echo "  make start-local      LocalStack + Terraform でローカル環境を起動"
-	@echo "  make stop-local       LocalStack を停止"
+	@echo "🧪 ローカル開発（Kumo / LocalStack / Floci）:"
+	@echo "  make start-local      ローカル環境を起動（デフォルト: Kumo）"
+	@echo "  make start-kumo       Kumo で起動"
+	@echo "  make start-localstack LocalStack で起動"
+	@echo "  make start-floci      Floci で起動"
+	@echo "  make stop-local       エミュレータを停止"
 	@echo "  make logs-local       プロビジョニング Lambda のログを表示"
 	@echo "  make test-lambda      テナント作成をシミュレート"
 	@echo ""
@@ -500,14 +503,16 @@ help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # ========================================
-# 🧪 ローカル開発（LocalStack）
+# 🧪 ローカル開発（クラウドエミュレータ: Kumo / LocalStack / Floci）
 # ========================================
 
-LOCALSTACK_ENDPOINT := http://localhost:4566
+# エミュレータ選択: kumo（デフォルト）/ localstack / floci
+CLOUD_EMULATOR ?= kumo
+EMULATOR_ENDPOINT := http://localhost:4566
 LOCAL_TABLE := TenkaCloud-local
 LOCAL_LAMBDA := tenkacloud-local-provisioning
 
-# LocalStack 用ダミー認証情報
+# ダミー認証情報
 export AWS_ACCESS_KEY_ID := test
 export AWS_SECRET_ACCESS_KEY := test
 export AWS_DEFAULT_REGION := ap-northeast-1
@@ -522,18 +527,27 @@ check-terraform:
 
 start-local: check-docker check-aws-cli check-terraform
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "🚀 LocalStack でローカル環境を起動します"
+	@echo "🚀 $(CLOUD_EMULATOR) でローカル環境を起動します"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@./scripts/local-setup.sh
+	@CLOUD_EMULATOR=$(CLOUD_EMULATOR) ./scripts/local-setup.sh
 
 stop-local:
-	@echo "🛑 LocalStack を停止しています..."
-	@docker compose stop localstack
-	@echo "✅ LocalStack を停止しました"
+	@echo "🛑 クラウドエミュレータを停止しています..."
+	@docker compose --profile localstack --profile kumo --profile floci stop
+	@echo "✅ エミュレータを停止しました"
+
+start-kumo:
+	@$(MAKE) start-local CLOUD_EMULATOR=kumo
+
+start-localstack:
+	@$(MAKE) start-local CLOUD_EMULATOR=localstack
+
+start-floci:
+	@$(MAKE) start-local CLOUD_EMULATOR=floci
 
 logs-local: check-aws-cli
 	@echo "📋 プロビジョニング Lambda のログを表示しています..."
-	@aws --endpoint-url=$(LOCALSTACK_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow
+	@aws --endpoint-url=$(EMULATOR_ENDPOINT) logs tail /aws/lambda/$(LOCAL_LAMBDA) --follow
 
 # UUID generation with fallback for systems without uuidgen
 generate-uuid = $(shell uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36)
@@ -544,7 +558,7 @@ test-lambda: check-aws-cli
 	@echo "🧪 テナント作成をシミュレートしています..."
 	@TENANT_ID=$$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || od -x /dev/urandom | head -1 | awk '{print $$2$$3"-"$$4"-"$$5"-"$$6"-"$$7$$8$$9}' | head -c 36 | tr '[:upper:]' '[:lower:]' | head -c 8); \
 	TIMESTAMP=$$(date -u +%Y-%m-%dT%H:%M:%SZ); \
-	aws --endpoint-url=$(LOCALSTACK_ENDPOINT) dynamodb put-item \
+	aws --endpoint-url=$(EMULATOR_ENDPOINT) dynamodb put-item \
 		--table-name $(LOCAL_TABLE) \
 		--item "{\"PK\":{\"S\":\"TENANT#$$TENANT_ID\"},\"SK\":{\"S\":\"METADATA\"},\"id\":{\"S\":\"$$TENANT_ID\"},\"name\":{\"S\":\"Test Tenant $$TENANT_ID\"},\"slug\":{\"S\":\"test-$$TENANT_ID\"},\"tier\":{\"S\":\"FREE\"},\"status\":{\"S\":\"ACTIVE\"},\"provisioningStatus\":{\"S\":\"PENDING\"},\"EntityType\":{\"S\":\"TENANT\"},\"CreatedAt\":{\"S\":\"$$TIMESTAMP\"},\"UpdatedAt\":{\"S\":\"$$TIMESTAMP\"}}"
 	@echo "✅ テナントを作成しました"

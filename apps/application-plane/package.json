@@ -32,13 +32,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.1",
-    "@vitest/coverage-v8": "^4.0.13",
+    "@vitest/coverage-istanbul": "4.0.15",
     "baseline-browser-mapping": "^2.8.32",
     "jsdom": "^27.2.0",
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5",
     "vite": "^7.2.6",
-    "vitest": "^4.0.12"
+    "vitest": "4.0.15"
   }
 }
