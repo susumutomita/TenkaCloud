@@ -25,9 +25,10 @@ const buildEventPK = (id: string) => `EVENT#${id}`;
 const buildMetadataSK = () => 'METADATA';
 const buildProblemSK = (problemId: string) => `PROBLEM#${problemId}`;
 const buildTenantGSI = (tenantId: string) => `TENANT#${tenantId}`;
-const buildStatusGSI = (tenantId: string, status: EventStatus) =>
-  `TENANT#${tenantId}#STATUS#${status}`;
-const buildExternalIdGSI = (externalId: string) => `EXTERNAL#${externalId}`;
+// buildStatusGSI and buildExternalIdGSI will be used when GSI-based queries are implemented
+// const buildStatusGSI = (tenantId: string, status: EventStatus) =>
+//   `TENANT#${tenantId}#STATUS#${status}`;
+// const buildExternalIdGSI = (externalId: string) => `EXTERNAL#${externalId}`;
 
 // Convert DynamoDB item to domain object
 function toDomain(item: EventItem): Event {

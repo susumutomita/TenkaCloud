@@ -51,7 +51,7 @@ playerRouter.use('*', async (c, next) => {
   }
 
   c.set('user', authContext.user);
-  await next();
+  return next();
 });
 
 // チームアクセス検証ミドルウェア
@@ -66,7 +66,7 @@ const validateTeamAccess = async (
     return c.json({ error: 'Forbidden: Cannot access this team' }, 403);
   }
 
-  await next();
+  return next();
 };
 
 // ====================

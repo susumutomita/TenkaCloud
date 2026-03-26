@@ -20,16 +20,18 @@ import {
 } from '../auth';
 import {
   PrismaEventRepository,
+  PrismaProblemRepository,
   getEventWithProblems,
   prisma as _prisma,
 } from '../repositories';
 import { getLeaderboard } from '../jam/dashboard';
-import type { EventStatus, EventType } from '../types';
+import type { EventStatus, EventType, ScoringCriterion } from '../types';
 
 const participantRouter = new Hono();
 
 // リポジトリインスタンス
 const eventRepository = new PrismaEventRepository();
+const problemRepository = new PrismaProblemRepository();
 
 // 認証ミドルウェア
 participantRouter.use('*', async (c, next) => {
@@ -54,7 +56,7 @@ participantRouter.use('*', async (c, next) => {
   }
 
   c.set('user', authContext.user);
-  await next();
+  return next();
 });
 
 // ====================
@@ -158,58 +160,66 @@ participantRouter.get('/events/:eventId', async (c) => {
   const { eventId } = c.req.param();
 
   try {
-    const event = await getEventWithProblems(eventId);
+    const result = await getEventWithProblems(eventId);
 
-    if (!event) {
+    if (!result) {
       return c.json({ error: 'Event not found' }, 404);
     }
 
+    const { event: eventData, problems: eventProblems } = result;
+
     // テナントチェック
-    if (event.tenantId !== user.tenantId) {
+    if (eventData.tenantId !== user.tenantId) {
       return c.json({ error: 'Event not found' }, 404);
     }
 
     // 問題情報を参加者向けに変換（解答は含めない）
-    const problems = event.problems.map((ep) => {
-      // ScoringCriterion の maxPoints を合計して maxScore を計算
-      const maxScore =
-        ep.problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
+    const problems = await Promise.all(
+      eventProblems.map(async (ep) => {
+        const problem = await problemRepository.findById(ep.problemId);
+        // ScoringCriterion の maxPoints を合計して maxScore を計算
+        const maxScore =
+          problem?.scoring.criteria?.reduce(
+            (sum: number, c: ScoringCriterion) => sum + c.maxPoints,
+            0
+          ) || 0;
 
-      return {
-        id: ep.problem.id,
-        title: ep.problem.title,
-        type: ep.problem.type.toLowerCase(),
-        category: ep.problem.category.toLowerCase(),
-        difficulty: ep.problem.difficulty.toLowerCase(),
-        overview: ep.problem.overview,
-        objectives: ep.problem.objectives,
-        order: ep.order,
-        unlockTime: ep.unlockTime?.toISOString(),
-        isUnlocked: !ep.unlockTime || new Date() >= ep.unlockTime,
-        pointMultiplier: ep.pointMultiplier,
-        maxScore,
-        myScore: undefined, // TODO: 実際のスコアを取得
-        isCompleted: false, // TODO: 実際の完了状態を取得
-        estimatedTimeMinutes: ep.problem.estimatedTimeMinutes,
-      };
-    });
+        return {
+          id: ep.problemId,
+          title: problem?.title || 'Unknown',
+          type: problem?.type || 'gameday',
+          category: problem?.category || 'architecture',
+          difficulty: problem?.difficulty || 'medium',
+          overview: problem?.description.overview || '',
+          objectives: problem?.description.objectives || [],
+          order: ep.order,
+          unlockTime: ep.unlockTime?.toISOString(),
+          isUnlocked: !ep.unlockTime || new Date() >= ep.unlockTime,
+          pointMultiplier: ep.pointMultiplier,
+          maxScore,
+          myScore: undefined, // TODO: 実際のスコアを取得
+          isCompleted: false, // TODO: 実際の完了状態を取得
+          estimatedTimeMinutes: problem?.description.estimatedTime,
+        };
+      })
+    );
 
     // participantCount を取得（TODO: 実際の参加者数）
     const participantCount = 0;
 
     return c.json({
-      id: event.id,
-      name: event.name,
-      type: event.type.toLowerCase(),
-      status: event.status.toLowerCase(),
-      startTime: event.startTime.toISOString(),
-      endTime: event.endTime.toISOString(),
-      timezone: event.timezone,
-      participantType: event.participantType.toLowerCase(),
-      cloudProvider: event.cloudProvider.toLowerCase(),
-      regions: event.regions,
-      scoringType: event.scoringType.toLowerCase(),
-      leaderboardVisible: event.leaderboardVisible,
+      id: eventData.id,
+      name: eventData.name,
+      type: eventData.type.toLowerCase(),
+      status: eventData.status.toLowerCase(),
+      startTime: eventData.startTime.toISOString(),
+      endTime: eventData.endTime.toISOString(),
+      timezone: eventData.timezone,
+      participantType: eventData.participantType.toLowerCase(),
+      cloudProvider: eventData.cloudProvider.toLowerCase(),
+      regions: eventData.regions,
+      scoringType: eventData.scoringType.toLowerCase(),
+      leaderboardVisible: eventData.leaderboardVisible,
       problemCount: problems.length,
       participantCount,
       isRegistered: false, // TODO: 実際の登録状況を確認
@@ -373,66 +383,75 @@ participantRouter.get('/events/:eventId/challenges/:challengeId', async (c) => {
   const { eventId, challengeId } = c.req.param();
 
   try {
-    const event = await getEventWithProblems(eventId);
+    const result = await getEventWithProblems(eventId);
 
-    if (!event || event.tenantId !== user.tenantId) {
+    if (!result || result.event.tenantId !== user.tenantId) {
       return c.json({ error: 'Event not found' }, 404);
     }
 
-    const eventProblem = event.problems.find(
+    const { event: eventData, problems: eventProblems } = result;
+
+    const eventProblem = eventProblems.find(
       (ep) => ep.problemId === challengeId
     );
     if (!eventProblem) {
       return c.json({ error: 'Challenge not found' }, 404);
     }
 
-    const problem = eventProblem.problem;
+    const problem = await problemRepository.findById(eventProblem.problemId);
 
     // ロック状態チェック
     if (eventProblem.unlockTime && new Date() < eventProblem.unlockTime) {
       return c.json({ error: 'Challenge is locked' }, 403);
     }
 
-    // イベントがアクティブかチェック（Prisma の enum は大文字）
-    if (event.status !== 'ACTIVE') {
+    // イベントがアクティブかチェック（DynamoDB の enum は大文字）
+    if (eventData.status !== 'ACTIVE') {
       return c.json({ error: 'Event is not active' }, 403);
     }
 
     // maxScore を criteria から計算
     const maxScore =
-      problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
+      problem?.scoring.criteria?.reduce(
+        (sum: number, sc: ScoringCriterion) => sum + sc.maxPoints,
+        0
+      ) || 0;
 
     return c.json({
-      id: problem.id,
-      title: problem.title,
-      type: problem.type.toLowerCase(),
-      category: problem.category.toLowerCase(),
-      difficulty: problem.difficulty.toLowerCase(),
-      overview: problem.overview,
-      objectives: problem.objectives,
+      id: problem?.id || eventProblem.problemId,
+      title: problem?.title || 'Unknown',
+      type: problem?.type || 'gameday',
+      category: problem?.category || 'architecture',
+      difficulty: problem?.difficulty || 'medium',
+      overview: problem?.description.overview || '',
+      objectives: problem?.description.objectives || [],
       order: eventProblem.order,
       pointMultiplier: eventProblem.pointMultiplier,
       maxScore,
       isUnlocked: true,
       isCompleted: false, // TODO: 実際の完了状態
       myScore: undefined, // TODO: 実際のスコア
-      estimatedTimeMinutes: problem.estimatedTimeMinutes,
-      description: problem.overview, // Prisma の Problem には description がないので overview を使用
-      instructions: problem.objectives || [],
-      hints: (problem.hints || []).map((hint, index) => ({
-        id: `hint-${index}`,
-        content: '', // 公開されていない場合は空
-        costPoints: 10, // デフォルト値
-        isRevealed: false, // TODO: 実際の公開状態
-      })),
+      estimatedTimeMinutes: problem?.description.estimatedTime,
+      description: problem?.description.overview || '',
+      instructions: problem?.description.objectives || [],
+      hints: (problem?.description.hints || []).map(
+        (_hint: string, index: number) => ({
+          id: `hint-${index}`,
+          content: '', // 公開されていない場合は空
+          costPoints: 10, // デフォルト値
+          isRevealed: false, // TODO: 実際の公開状態
+        })
+      ),
       resources: [], // TODO: 静的ファイルから取得
-      scoringCriteria: (problem.criteria || []).map((sc) => ({
-        name: sc.name,
-        description: sc.description || '',
-        maxPoints: sc.maxPoints,
-        currentPoints: undefined, // TODO: 実際のスコア
-        isPassed: undefined,
-      })),
+      scoringCriteria: (problem?.scoring.criteria || []).map(
+        (sc: ScoringCriterion) => ({
+          name: sc.name,
+          description: sc.description || '',
+          maxPoints: sc.maxPoints,
+          currentPoints: undefined, // TODO: 実際のスコア
+          isPassed: undefined,
+        })
+      ),
       awsAccountId: undefined, // TODO: 割り当てられたアカウントID
       awsConsoleUrl: undefined, // TODO: コンソールURL生成
     });
@@ -452,36 +471,41 @@ participantRouter.get(
     const { eventId, challengeId } = c.req.param();
 
     try {
-      const event = await getEventWithProblems(eventId);
+      const result = await getEventWithProblems(eventId);
 
-      if (!event || event.tenantId !== user.tenantId) {
+      if (!result || result.event.tenantId !== user.tenantId) {
         return c.json({ error: 'Event not found' }, 404);
       }
 
-      // Prisma の enum は大文字
-      if (event.type !== 'JAM') {
+      const { event: eventData, problems: eventProblems } = result;
+
+      // DynamoDB の enum は大文字
+      if (eventData.type !== 'JAM') {
         return c.json({ error: 'Not a JAM event' }, 400);
       }
 
-      const eventProblem = event.problems.find(
+      const eventProblem = eventProblems.find(
         (ep) => ep.problemId === challengeId
       );
       if (!eventProblem) {
         return c.json({ error: 'Challenge not found' }, 404);
       }
 
-      const problem = eventProblem.problem;
+      const problem = await problemRepository.findById(eventProblem.problemId);
       const maxScore =
-        problem.criteria?.reduce((sum, c) => sum + c.maxPoints, 0) || 0;
+        problem?.scoring.criteria?.reduce(
+          (sum: number, sc: ScoringCriterion) => sum + sc.maxPoints,
+          0
+        ) || 0;
 
       return c.json({
-        id: problem.id,
-        title: problem.title,
-        type: problem.type.toLowerCase(),
-        category: problem.category.toLowerCase(),
-        difficulty: problem.difficulty.toLowerCase(),
-        overview: problem.overview,
-        objectives: problem.objectives,
+        id: problem?.id || eventProblem.problemId,
+        title: problem?.title || 'Unknown',
+        type: problem?.type || 'jam',
+        category: problem?.category || 'architecture',
+        difficulty: problem?.difficulty || 'medium',
+        overview: problem?.description.overview || '',
+        objectives: problem?.description.objectives || [],
         order: eventProblem.order,
         pointMultiplier: eventProblem.pointMultiplier,
         maxScore,
@@ -489,11 +513,11 @@ participantRouter.get(
           !eventProblem.unlockTime || new Date() >= eventProblem.unlockTime,
         isCompleted: false, // TODO: 実際の完了状態
         myScore: undefined, // TODO: 実際のスコア
-        description: problem.overview,
-        instructions: problem.objectives || [],
+        description: problem?.description.overview || '',
+        instructions: problem?.description.objectives || [],
         clues: [], // TODO: Challenge モデルから取得
         resources: [],
-        scoringCriteria: problem.criteria || [],
+        scoringCriteria: problem?.scoring.criteria || [],
         answerFormat: 'text',
         answerValidation: undefined,
       });
@@ -515,12 +539,12 @@ participantRouter.get(
 
     try {
       // イベントとチャレンジの存在確認
-      const event = await getEventWithProblems(eventId);
-      if (!event || event.tenantId !== user.tenantId) {
+      const result = await getEventWithProblems(eventId);
+      if (!result || result.event.tenantId !== user.tenantId) {
         return c.json({ error: 'Event not found' }, 404);
       }
 
-      const eventProblem = event.problems.find(
+      const eventProblem = result.problems.find(
         (ep) => ep.problemId === challengeId
       );
       if (!eventProblem) {
@@ -554,7 +578,6 @@ participantRouter.get(
 participantRouter.post(
   '/events/:eventId/challenges/:challengeId/hints/:hintId/reveal',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const {
       eventId: _eventId,
       challengeId: _challengeId,
@@ -585,7 +608,6 @@ participantRouter.post(
 participantRouter.post(
   '/events/:eventId/challenges/:challengeId/clues/:clueId/reveal',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const {
       eventId: _eventId,
       challengeId: _challengeId,
@@ -617,7 +639,6 @@ participantRouter.post(
 participantRouter.post(
   '/events/:eventId/challenges/:challengeId/score',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
     try {
@@ -742,7 +763,6 @@ participantRouter.post(
 participantRouter.get(
   '/events/:eventId/challenges/:challengeId/submissions',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
     try {
@@ -762,7 +782,6 @@ participantRouter.get(
 participantRouter.get(
   '/events/:eventId/challenges/:challengeId/submissions/latest',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
     try {
@@ -784,7 +803,6 @@ participantRouter.get(
  * 自分のチーム情報を取得
  */
 participantRouter.get('/events/:eventId/team', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { eventId: _eventId } = c.req.param();
 
   try {
@@ -850,7 +868,6 @@ participantRouter.post(
   '/events/:eventId/team/join',
   zValidator('json', joinTeamSchema),
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const { eventId: _eventId } = c.req.param();
     const { inviteCode: _inviteCode } = c.req.valid('json');
 
@@ -874,7 +891,6 @@ participantRouter.post(
  * チームから離脱
  */
 participantRouter.post('/events/:eventId/team/leave', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { eventId: _eventId } = c.req.param();
 
   try {
@@ -891,7 +907,6 @@ participantRouter.post('/events/:eventId/team/leave', async (c) => {
  * 招待コードを再生成
  */
 participantRouter.post('/events/:eventId/team/invite-code', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { eventId: _eventId } = c.req.param();
 
   try {
@@ -917,7 +932,6 @@ participantRouter.post(
   '/events/:eventId/team/transfer-captain',
   zValidator('json', transferCaptainSchema),
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const { eventId: _eventId } = c.req.param();
     const { newCaptainId } = c.req.valid('json');
 
@@ -941,7 +955,6 @@ participantRouter.post(
  * チームメンバー一覧を取得
  */
 participantRouter.get('/events/:eventId/team/members', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { eventId: _eventId } = c.req.param();
 
   try {
@@ -960,7 +973,6 @@ participantRouter.get('/events/:eventId/team/members', async (c) => {
 participantRouter.delete(
   '/events/:eventId/team/members/:memberId',
   async (c) => {
-    const _user = c.get('user') as AuthenticatedUser;
     const { eventId: _eventId, memberId: _memberId } = c.req.param();
 
     try {
@@ -978,7 +990,6 @@ participantRouter.delete(
  * チームを解散
  */
 participantRouter.delete('/events/:eventId/team', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { eventId: _eventId } = c.req.param();
 
   try {
@@ -1061,8 +1072,6 @@ participantRouter.put(
  * バッジ一覧を取得
  */
 participantRouter.get('/profile/badges', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
-
   try {
     // TODO: 実際のバッジ一覧を取得
 
@@ -1077,7 +1086,6 @@ participantRouter.get('/profile/badges', async (c) => {
  * 参加イベント履歴を取得
  */
 participantRouter.get('/profile/history', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { limit: _limit = '20', offset: _offset = '0' } = c.req.query();
 
   try {
@@ -1097,7 +1105,6 @@ participantRouter.get('/profile/history', async (c) => {
  * グローバルランキングを取得
  */
 participantRouter.get('/rankings', async (c) => {
-  const _user = c.get('user') as AuthenticatedUser;
   const { limit: _limit = '50', offset: _offset = '0' } = c.req.query();
 
   try {
