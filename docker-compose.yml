@@ -37,7 +37,7 @@ services:
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3000/control
       - NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:3000/api
-      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ENDPOINT_URL=http://cloud-emulator:4566
     depends_on:
       tenant-management:
         condition: service_healthy
@@ -52,13 +52,10 @@ services:
       - "13004"
     environment:
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-    depends_on:
-      localstack:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:13004/health"]
       interval: 10s
@@ -76,14 +73,11 @@ services:
     environment:
       - PORT=3010
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
-    depends_on:
-      localstack:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
       interval: 10s
@@ -101,14 +95,11 @@ services:
     environment:
       - PORT=3011
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
-    depends_on:
-      localstack:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
       interval: 10s
@@ -126,14 +117,11 @@ services:
     environment:
       - PORT=3012
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
-    depends_on:
-      localstack:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3012/health"]
       interval: 10s
@@ -151,15 +139,12 @@ services:
     environment:
       - PORT=3100
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
       - AUTH_SKIP=1
-    depends_on:
-      localstack:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
       interval: 10s
@@ -177,12 +162,9 @@ services:
     environment:
       - PORT=3020
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
-    depends_on:
-      localstack:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3020/health"]
       interval: 10s
@@ -204,7 +186,7 @@ services:
       - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       - AUTH0_ISSUER=${AUTH0_ISSUER}
       - NEXTAUTH_URL=http://localhost:3000
-      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ENDPOINT_URL=http://cloud-emulator:4566
       - AWS_REGION=${AWS_REGION:-ap-northeast-1}
       - NEXT_PUBLIC_API_URL=http://localhost:3000/api
       - AUTH_SKIP=1
@@ -212,13 +194,20 @@ services:
     networks:
       - tenkacloud
 
-  # LocalStack - AWS サービスのローカルエミュレーション
-  # DynamoDB, Cognito, S3, Lambda, EventBridge, IAM をサポート
+  # ========================================
+  # クラウドエミュレータ（LocalStack / Kumo / Floci）
+  # COMPOSE_PROFILES で切り替え（デフォルト: kumo）
+  # 全エミュレータが cloud-emulator エイリアスを共有し、
+  # バックエンドサービスは http://cloud-emulator:4566 で統一アクセス
+  # ========================================
+
+  # LocalStack - 成熟した AWS エミュレータ（Python ベース）
   localstack:
     image: localstack/localstack:latest
+    profiles: ["localstack"]
     ports:
-      - "4566:4566"           # LocalStack Gateway
-      - "4510-4559:4510-4559" # External services port range
+      - "4566:4566"
+      - "4510-4559:4510-4559"
     environment:
       - SERVICES=dynamodb,cognito-idp,s3,lambda,events,iam,logs,sts,sqs
       - DEBUG=1
@@ -236,7 +225,46 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - tenkacloud
+      tenkacloud:
+        aliases:
+          - cloud-emulator
+
+  # Kumo - 71 AWS サービス対応の軽量エミュレータ（Go ベース）
+  # https://github.com/sivchari/kumo
+  kumo:
+    image: ghcr.io/sivchari/kumo:latest
+    profiles: ["kumo"]
+    ports:
+      - "4566:4566"
+    environment:
+      - KUMO_HOST=0.0.0.0
+      - KUMO_PORT=4566
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      tenkacloud:
+        aliases:
+          - cloud-emulator
+
+  # Floci - 安定性の高い AWS エミュレータ（JVM ベース、21 サービス）
+  # https://github.com/hectorvent/floci
+  floci:
+    image: hectorvent/floci:latest
+    profiles: ["floci"]
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      tenkacloud:
+        aliases:
+          - cloud-emulator
 
 networks:
   tenkacloud:
