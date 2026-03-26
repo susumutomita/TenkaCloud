@@ -26,8 +26,8 @@ const buildHistorySK = (timestamp: string, id: string) =>
   `HISTORY#${timestamp}#${id}`;
 const buildTenantDeploymentGSI = (tenantId: string) =>
   `TENANT#${tenantId}#DEPLOYMENT`;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const buildStatusGSI = (status: DeploymentStatus) => `DEPLOYMENT#${status}`;
+// buildStatusGSI will be used when GSI-based status queries are implemented
+// const buildStatusGSI = (status: DeploymentStatus) => `DEPLOYMENT#${status}`;
 
 // Convert DynamoDB history item to domain object
 function historyToDomain(item: DeploymentHistoryItem): DeploymentHistory {

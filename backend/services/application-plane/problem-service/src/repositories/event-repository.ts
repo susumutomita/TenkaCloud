@@ -16,7 +16,6 @@ import {
   type ParticipantType as DynamoParticipantType,
   type ScoringType as DynamoScoringType,
   type CloudProvider as DynamoCloudProvider,
-  type EventProblem as DynamoEventProblem,
   type EventFilterOptions as DynamoEventFilterOptions,
 } from '@tenkacloud/dynamodb';
 import { eventRepository } from '../lib/dynamodb';

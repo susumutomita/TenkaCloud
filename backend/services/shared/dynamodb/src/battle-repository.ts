@@ -3,7 +3,6 @@ import {
   GetCommand,
   UpdateCommand,
   QueryCommand,
-  DeleteCommand,
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';

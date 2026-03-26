@@ -515,7 +515,8 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
       comment: string;
     }
   ): Promise<void> {
-    await getPrisma().$transaction(async (tx) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await getPrisma().$transaction(async (tx: any) => {
       await tx.marketplaceReview.create({
         data: {
           listingId: marketplaceId,
@@ -531,7 +532,10 @@ export class PrismaMarketplaceRepository implements IMarketplaceRepository {
       });
 
       const avgRating =
-        reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+        reviews.reduce(
+          (sum: number, r: { rating: number }) => sum + r.rating,
+          0
+        ) / reviews.length;
 
       await tx.marketplaceListing.update({
         where: { id: marketplaceId },

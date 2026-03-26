@@ -501,7 +501,8 @@ export class AWSGameDayScoringProvider implements IScoringExecutor {
         const config = (criterion.validationConfig ||
           {}) as SecurityGroupValidationConfig;
         const prohibitedPorts = config.prohibitedPorts ?? [22, 3389]; // SSH, RDP
-        const _requirePrivate = config.requirePrivate ?? true;
+        // requirePrivate will be used for private subnet validation
+        // const requirePrivate = config.requirePrivate ?? true;
 
         let score = criterion.maxPoints;
         const checks: string[] = [];
@@ -544,7 +545,8 @@ export class AWSGameDayScoringProvider implements IScoringExecutor {
         const config = (criterion.validationConfig ||
           {}) as IAMValidationConfig;
         const requiredRoleName = config.roleName;
-        const _prohibitedActions = config.prohibitedActions ?? ['*'];
+        // prohibitedActions will be used for IAM policy validation
+        // const prohibitedActions = config.prohibitedActions ?? ['*'];
 
         let score = criterion.maxPoints;
         const checks: string[] = [];
