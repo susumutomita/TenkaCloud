@@ -198,6 +198,25 @@ describe('Admin ダッシュボードページ', () => {
   });
 
   it('数分前のタイムスタンプを「N分前」と表示すべき', async () => {
+    const now = new Date('2026-01-15T12:00:00Z');
+    const fiveMinAgo = new Date(now.getTime() - 300000).toISOString();
+    const originalDate = globalThis.Date;
+    const MockDate = class extends originalDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(now.getTime());
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          super(...(args as [any]));
+        }
+      }
+
+      static override now() {
+        return now.getTime();
+      }
+    } as DateConstructor;
+    globalThis.Date = MockDate;
+
     mockGetDashboardStats.mockResolvedValue(statsData);
     mockGetRecentActivities.mockResolvedValue({
       activities: [
@@ -205,7 +224,7 @@ describe('Admin ダッシュボードページ', () => {
           id: 'act-1',
           type: 'event_started',
           message: '最近のアクティビティ',
-          timestamp: new Date(Date.now() - 300000).toISOString(),
+          timestamp: fiveMinAgo,
         },
       ],
     });
@@ -215,6 +234,7 @@ describe('Admin ダッシュボードページ', () => {
       expect(screen.getByText('最近のアクティビティ')).toBeInTheDocument();
     });
     expect(screen.getByText('5分前')).toBeInTheDocument();
+    globalThis.Date = originalDate;
   });
 
   it('直前のタイムスタンプを「たった今」と表示すべき', async () => {
