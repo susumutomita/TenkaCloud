@@ -198,6 +198,8 @@ describe('Admin ダッシュボードページ', () => {
   });
 
   it('数分前のタイムスタンプを「N分前」と表示すべき', async () => {
+    const now = new Date('2026-01-15T12:00:00Z');
+    vi.setSystemTime(now);
     mockGetDashboardStats.mockResolvedValue(statsData);
     mockGetRecentActivities.mockResolvedValue({
       activities: [
@@ -205,7 +207,7 @@ describe('Admin ダッシュボードページ', () => {
           id: 'act-1',
           type: 'event_started',
           message: '最近のアクティビティ',
-          timestamp: new Date(Date.now() - 300000).toISOString(),
+          timestamp: new Date(now.getTime() - 300000).toISOString(),
         },
       ],
     });
@@ -215,6 +217,7 @@ describe('Admin ダッシュボードページ', () => {
       expect(screen.getByText('最近のアクティビティ')).toBeInTheDocument();
     });
     expect(screen.getByText('5分前')).toBeInTheDocument();
+    vi.restoreAllMocks();
   });
 
   it('直前のタイムスタンプを「たった今」と表示すべき', async () => {
