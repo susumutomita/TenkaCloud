@@ -235,9 +235,9 @@ start-dev-servers:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "📋 アクセス先:"
-	@echo "  - Application Plane:  http://localhost:3000/"
-	@echo "  - Control Plane:      http://localhost:3000/control"
-	@echo "  - Tenant API:         http://localhost:3000/api/tenants"
+	@echo "  - Control Plane:      http://localhost:13000/control"
+	@echo "  - Application Plane:  http://localhost:13001/"
+	@echo "  - Tenant API:         http://localhost:13004/api/tenants"
 	@echo "  - Problem API:        http://localhost:3100/api"
 	@echo "  - GameDay API:        http://localhost:3020/api/gameday"
 	@echo "  - Cloud Emulator:     http://localhost:4566"
@@ -246,8 +246,14 @@ start-dev-servers:
 	@echo ""
 	DYNAMODB_ENDPOINT=$(EMULATOR_ENDPOINT) \
 	DYNAMODB_TABLE=$(LOCAL_TABLE) \
+	AWS_REGION=ap-northeast-1 \
+	AWS_ACCESS_KEY_ID=test \
+	AWS_SECRET_ACCESS_KEY=test \
+	TENANT_API_BASE_URL=http://localhost:13004/api \
+	AUTH_SECRET=local-dev-secret-do-not-use-in-production \
 	AUTH_SKIP=1 \
 	NEXT_PUBLIC_AUTH_SKIP=1 \
+	NEXT_PUBLIC_APPLICATION_PLANE_URL=http://localhost:13001 \
 	$(NR) dev
 
 # make stop: エミュレータを停止
