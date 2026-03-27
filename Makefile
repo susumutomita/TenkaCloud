@@ -256,6 +256,9 @@ start-dev-servers:
 	NEXT_PUBLIC_APPLICATION_PLANE_URL=http://localhost:13001 \
 	$(NR) dev
 
+# make dev: 開発サーバーのみ起動（インフラは既に起動済みの前提）
+dev: start-dev-servers
+
 # make stop: エミュレータを停止
 stop: stop-local
 
