@@ -110,7 +110,7 @@ export function getTenantSlugFromUrl(req: NextRequest): string | null {
 export function buildApplicationPlaneUrl(
   tenantSlug: string,
   path = '/',
-  isProduction = process.env.NODE_ENV === 'production'
+  isProduction = process.env.NODE_ENV === 'production',
 ): string {
   if (isProduction) {
     // 本番: サブドメイン形式

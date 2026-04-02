@@ -10,10 +10,8 @@ import { forwardRef, useId, type InputHTMLAttributes } from 'react';
 type InputVariant = 'default' | 'error';
 type InputSize = 'sm' | 'md' | 'lg';
 
-interface InputProps extends Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  'size'
-> {
+interface InputProps
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   variant?: InputVariant;
   inputSize?: InputSize;
   label?: string;
@@ -54,7 +52,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       disabled,
       ...props
     },
-    ref
+    ref,
   ) => {
     const generatedId = useId();
     const inputId = id || generatedId;
@@ -115,7 +113,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = 'Input';

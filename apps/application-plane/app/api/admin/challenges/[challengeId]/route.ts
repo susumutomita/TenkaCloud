@@ -49,7 +49,7 @@ interface UpdateChallengeRequest {
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ challengeId: string }> }
+  { params }: { params: Promise<{ challengeId: string }> },
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -63,13 +63,13 @@ export async function GET(
 
   try {
     const data = await serverApiRequest<ChallengeDetails>(
-      `/admin/challenges/${challengeId}`
+      `/admin/challenges/${challengeId}`,
     );
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch challenge:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch challenge'
+      error instanceof Error ? error.message : 'Failed to fetch challenge',
     );
   }
 }
@@ -81,7 +81,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ challengeId: string }> }
+  { params }: { params: Promise<{ challengeId: string }> },
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -101,14 +101,14 @@ export async function PUT(
       {
         method: 'PUT',
         body: JSON.stringify(body),
-      }
+      },
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to update challenge:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to update challenge'
+      error instanceof Error ? error.message : 'Failed to update challenge',
     );
   }
 }
@@ -120,7 +120,7 @@ export async function PUT(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ challengeId: string }> }
+  { params }: { params: Promise<{ challengeId: string }> },
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -141,7 +141,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Failed to delete challenge:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to delete challenge'
+      error instanceof Error ? error.message : 'Failed to delete challenge',
     );
   }
 }

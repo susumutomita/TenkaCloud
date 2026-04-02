@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 /**
  * HybridNext Design System for TenkaCloud
@@ -9,8 +9,8 @@
 
 /* AXIS Std Font */
 @font-face {
-  font-family: 'AXIS Std';
-  src: url('/fonts/axis-std.otf') format('opentype');
+  font-family: "AXIS Std";
+  src: url("/fonts/axis-std.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -67,9 +67,9 @@
 
     /* Typography */
     --font-sans:
-      'AXIS Std', 'Helvetica Neue', Helvetica, Arial,
-      'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      "AXIS Std", "Helvetica Neue", Helvetica, Arial,
+      "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", monospace;
 
     /* Shadows */
     --shadow-brutal: 2px 2px 0 var(--hn-accent);
@@ -123,8 +123,8 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-feature-settings:
-      'rlig' 1,
-      'calt' 1;
+      "rlig" 1,
+      "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

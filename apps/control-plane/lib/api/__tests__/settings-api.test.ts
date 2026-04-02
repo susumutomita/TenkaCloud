@@ -24,7 +24,7 @@ describe('Settings API', () => {
 
         expect(global.fetch).toHaveBeenCalledWith(
           'http://tenant-management:13004/api/settings',
-          { cache: 'no-store' }
+          { cache: 'no-store' },
         );
 
         vi.unstubAllGlobals();
@@ -66,7 +66,7 @@ describe('Settings API', () => {
         expect(result).toEqual(mockSettings);
         expect(global.fetch).toHaveBeenCalledWith(
           expect.stringContaining('/settings'),
-          { cache: 'no-store' }
+          { cache: 'no-store' },
         );
 
         vi.unstubAllGlobals();
@@ -83,7 +83,7 @@ describe('Settings API', () => {
         });
 
         await expect(fetchSettings()).rejects.toThrow(
-          'Failed to fetch settings: 500'
+          'Failed to fetch settings: 500',
         );
 
         vi.unstubAllGlobals();
@@ -104,7 +104,7 @@ describe('Settings API', () => {
 
         expect(global.fetch).toHaveBeenCalledWith(
           'http://custom-api:8080/api/settings',
-          { cache: 'no-store' }
+          { cache: 'no-store' },
         );
 
         vi.unstubAllGlobals();
@@ -209,7 +209,7 @@ describe('Settings API', () => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(settings),
-          }
+          },
         );
 
         vi.unstubAllGlobals();
@@ -226,7 +226,7 @@ describe('Settings API', () => {
         });
 
         await expect(saveSettings(DEFAULT_SETTINGS)).rejects.toThrow(
-          'Failed to save settings: 400'
+          'Failed to save settings: 400',
         );
 
         vi.unstubAllGlobals();
@@ -239,7 +239,7 @@ describe('Settings API', () => {
       vi.stubGlobal('window', {});
       vi.stubEnv(
         'NEXT_PUBLIC_TENANT_API_BASE_URL',
-        'http://client-api:9000/api'
+        'http://client-api:9000/api',
       );
 
       const { fetchSettings } = await import('../settings-api');
@@ -253,7 +253,7 @@ describe('Settings API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://client-api:9000/api/settings',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -274,7 +274,7 @@ describe('Settings API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:13004/api/settings',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();

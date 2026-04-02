@@ -21,7 +21,7 @@ export async function submitTenantUpdate(
   id: string | null,
   formData: TenantFormData,
   onSuccess: () => void,
-  onError: () => void
+  onError: () => void,
 ): Promise<boolean> {
   if (!id) {
     return false;

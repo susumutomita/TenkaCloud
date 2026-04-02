@@ -71,27 +71,27 @@ describe('PlanCard コンポーネント', () => {
     it('FREE プランで他のプランへのアップグレードボタンを表示すべき', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
       expect(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: 'Enterprise にアップグレード' })
+        screen.getByRole('button', { name: 'Enterprise にアップグレード' }),
       ).toBeInTheDocument();
     });
 
     it('PRO プランで FREE へのダウングレードボタンを表示すべき', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'PRO' })} />);
       expect(
-        screen.getByRole('button', { name: 'Free にダウングレード' })
+        screen.getByRole('button', { name: 'Free にダウングレード' }),
       ).toBeInTheDocument();
     });
 
     it('ENTERPRISE プランで他のプランへのダウングレードボタンを表示すべき', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'ENTERPRISE' })} />);
       expect(
-        screen.getByRole('button', { name: 'Free にダウングレード' })
+        screen.getByRole('button', { name: 'Free にダウングレード' }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: 'Pro にダウングレード' })
+        screen.getByRole('button', { name: 'Pro にダウングレード' }),
       ).toBeInTheDocument();
     });
 
@@ -108,7 +108,7 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       );
 
       expect(screen.getByText('プランを変更しますか？')).toBeInTheDocument();
@@ -123,14 +123,14 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       );
       await user.click(screen.getByRole('button', { name: '変更を確定' }));
 
       await waitFor(() => {
         expect(tenantApi.updateTenant).toHaveBeenCalledWith(
           '01HJXK5K3VDXK5YPNZBKRT5ABC',
-          { tier: 'PRO' }
+          { tier: 'PRO' },
         );
         expect(mockRefresh).toHaveBeenCalled();
       });
@@ -141,12 +141,12 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       );
       await user.click(screen.getByRole('button', { name: 'キャンセル' }));
 
       expect(
-        screen.queryByText('プランを変更しますか？')
+        screen.queryByText('プランを変更しますか？'),
       ).not.toBeInTheDocument();
       expect(tenantApi.updateTenant).not.toHaveBeenCalled();
     });
@@ -156,7 +156,7 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'PRO' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Enterprise にアップグレード' })
+        screen.getByRole('button', { name: 'Enterprise にアップグレード' }),
       );
 
       expect(screen.getByText(/再プロビジョニングが必要/)).toBeInTheDocument();
@@ -174,7 +174,7 @@ describe('PlanCard コンポーネント', () => {
 
       // ダイアログが表示されていないことを確認
       expect(
-        screen.queryByText('プランを変更しますか？')
+        screen.queryByText('プランを変更しますか？'),
       ).not.toBeInTheDocument();
     });
 
@@ -183,11 +183,11 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'PRO' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Free にダウングレード' })
+        screen.getByRole('button', { name: 'Free にダウングレード' }),
       );
 
       expect(
-        screen.getByText(/Pro → Free にダウングレード/)
+        screen.getByText(/Pro → Free にダウングレード/),
       ).toBeInTheDocument();
     });
 
@@ -196,11 +196,11 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       );
 
       expect(
-        screen.getByText(/Free → Pro にアップグレード/)
+        screen.getByText(/Free → Pro にアップグレード/),
       ).toBeInTheDocument();
     });
   });
@@ -209,13 +209,13 @@ describe('PlanCard コンポーネント', () => {
     it('プラン変更エラー時にエラーメッセージを表示すべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.updateTenant).mockRejectedValue(
-        new Error('Update failed')
+        new Error('Update failed'),
       );
 
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       );
       await user.click(screen.getByRole('button', { name: '変更を確定' }));
 
@@ -231,13 +231,13 @@ describe('PlanCard コンポーネント', () => {
       render(<PlanCard tenant={createMockTenant({ tier: 'FREE' })} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'Pro にアップグレード' })
+        screen.getByRole('button', { name: 'Pro にアップグレード' }),
       );
       await user.click(screen.getByRole('button', { name: '変更を確定' }));
 
       await waitFor(() => {
         expect(
-          screen.getByText('プランの変更に失敗しました')
+          screen.getByText('プランの変更に失敗しました'),
         ).toBeInTheDocument();
       });
     });

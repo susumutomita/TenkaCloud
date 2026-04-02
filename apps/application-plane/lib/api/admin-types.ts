@@ -112,9 +112,8 @@ export interface CreateTeamRequest {
 /**
  * チーム更新リクエスト型
  */
-export interface UpdateTeamRequest extends Partial<
-  Omit<CreateTeamRequest, 'eventId'>
-> {
+export interface UpdateTeamRequest
+  extends Partial<Omit<CreateTeamRequest, 'eventId'>> {
   id: string;
 }
 

@@ -10,7 +10,8 @@
     "format": "biome format --write",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "format_check": "biome format --diagnostic-level=error"
   },
   "peerDependencies": {
     "react": "^19",

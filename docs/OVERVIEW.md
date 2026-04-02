@@ -1,180 +1,92 @@
-# TenkaCloud プロジェクト概要
+# TenkaCloud 概要
 
-> 初めてこのリポジトリを見る方のための入門ガイド
+この文書は、TenkaCloud の責務分割と文書の入口を短く把握するための概要です。詳細な手順は [QUICKSTART.md](./QUICKSTART.md)、設計判断は [architecture/architecture.md](./architecture/architecture.md) を参照してください。
 
-## TenkaCloud とは
+## 何を作っているか
 
-TenkaCloud は、クラウド技術者のための **常設・オープンソースの競技プラットフォーム** です。
+TenkaCloud は、クラウド競技イベントを常設化するための OSS プラットフォームです。単発のイベント運営だけでなく、継続的なテナント運用、問題管理、スコアリング、ランキングを 1 つのプロダクトで扱います。
 
-AWS GameDay のような「クラウドインフラ構築の競技イベント」を、いつでも・どこでも・誰でも開催・参加できるようにした OSS プラットフォームです。
+## システム境界
 
-### なぜ作ったのか
+### 1. Control Plane
 
-- **AWS GameDay は素晴らしいが、開催機会が限られている**
-- 企業や教育機関が独自に競技イベントを開催したい需要がある
-- クラウド学習の実践的な場が不足している
-- 既存ソリューションは OSS ではないか、機能が限定的
+プラットフォーム運営者向けの共通領域です。
 
-### 何ができるか
+- テナント管理
+- 設定管理
+- 共有 API への導線
+- 今後の監査、プロビジョニング、全体運用
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    TenkaCloud でできること                    │
-├─────────────────────────────────────────────────────────────┤
-│  1. 問題を作る    → AI 支援で自動生成、手動作成も可能         │
-│  2. 競技を開催    → チーム対戦、個人戦、時間制限付きバトル     │
-│  3. 自動採点      → インフラ構築を自動検証、スコアリング       │
-│  4. 学習・分析    → リーダーボード、詳細フィードバック         │
-└─────────────────────────────────────────────────────────────┘
-```
+実体は以下のとおりです。
 
-## アーキテクチャ概要
+- UI: `apps/control-plane`
+- サービス群: `backend/services/control-plane/*`
 
-TenkaCloud は **マルチテナント SaaS** として設計されています。
+### 2. Application Plane
 
-```
-                              TenkaCloud Platform
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│   ┌─────────────────────────────────────────────────────────────┐   │
-│   │                     Control Plane                            │   │
-│   │   ─────────────────────────────────────────────────────────   │   │
-│   │   テナント登録 │ ユーザー管理 │ プロビジョニング │ 課金      │   │
-│   │   （すべてのテナントで共有されるプラットフォーム機能）        │   │
-│   └─────────────────────────────────────────────────────────────┘   │
-│                              │                                      │
-│              ┌───────────────┼───────────────┐                      │
-│              ▼               ▼               ▼                      │
-│   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐               │
-│   │  Tenant A    │ │  Tenant B    │ │  Tenant C    │  ...          │
-│   │  ──────────  │ │  ──────────  │ │  ──────────  │               │
-│   │  バトル管理  │ │  バトル管理  │ │  バトル管理  │               │
-│   │  問題管理    │ │  問題管理    │ │  問題管理    │               │
-│   │  採点        │ │  採点        │ │  採点        │               │
-│   │  リーダー    │ │  リーダー    │ │  リーダー    │               │
-│   │  ボード      │ │  ボード      │ │  ボード      │               │
-│   └──────────────┘ └──────────────┘ └──────────────┘               │
-│       Application Plane（テナントごとに分離）                       │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+各テナントや参加者が触る競技領域です。
+
+- GameDay イベント
+- Battle セッション
+- 問題閲覧と挑戦
+- ランキング、プロフィール
+
+実体は以下のとおりです。
+
+- UI: `apps/application-plane`
+- サービス群: `backend/services/application-plane/*`
+
+## 現在のリポジトリ構成
+
+```text
+TenkaCloud/
+├── apps/
+│   ├── control-plane/
+│   └── application-plane/
+├── backend/services/
+│   ├── control-plane/
+│   ├── application-plane/
+│   └── shared/
+├── packages/
+├── problems/
+├── docs/
+├── docs-site/
+├── infrastructure/
+└── Makefile
 ```
 
-### Control Plane と Application Plane
+## ローカル開発の前提
 
-| 層 | 役割 | 例 |
-|----|------|-----|
-| **Control Plane** | プラットフォーム全体の管理 | テナント登録、認証、課金 |
-| **Application Plane** | テナント固有のビジネスロジック | バトル開催、問題管理、採点 |
+- `make install`: 依存関係インストール
+- `make start`: Local emulator と各開発サーバーを起動
+- `make before-commit`: 文書更新を含む最終検証
 
-この分離により、各テナント（企業・教育機関など）のデータとリソースが安全に分離されます。
+主要ポートは以下のとおりです。
 
-### フロントエンド構成
+| コンポーネント | URL |
+|---|---|
+| Control Plane | `http://localhost:13000/control` |
+| Application Plane | `http://localhost:13001/` |
+| Tenant API | `http://localhost:13004/api/tenants` |
+| Problem API | `http://localhost:3100/api` |
+| GameDay API | `http://localhost:3020/api/gameday` |
+| Local emulator | `http://localhost:4566` |
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                      2 つの UI                              │
-├────────────────────────────────────────────────────────────┤
-│                                                            │
-│  Control Plane UI (localhost:13000)                        │
-│  ─────────────────────────────────                         │
-│  ・プラットフォーム管理者向け                               │
-│  ・テナント一覧・管理                                       │
-│  ・システム設定                                             │
-│                                                            │
-│  Application Plane UI (localhost:13001)                    │
-│  ─────────────────────────────────────                     │
-│  ・テナント管理者・競技者向け                               │
-│  ・バトル参加・問題への挑戦                                 │
-│  ・リーダーボード閲覧                                       │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
-```
+## 認証方針
 
-### バックエンド構成
+- 本番相当では Auth0 を使う
+- ローカル確認では `AUTH_SKIP=1` を使える
 
-マイクロサービスアーキテクチャを採用しています。
+古い文書にある `Keycloak`、`Cognito`、`frontend/` ディレクトリ前提は現行リポジトリの正本ではありません。
 
-```
-backend/services/
-├── control-plane/           # 共有サービス
-│   ├── tenant-management    → テナント CRUD
-│   ├── registration         → 新規テナント登録フロー
-│   ├── provisioning         → AWS リソース自動作成
-│   └── user-management      → ユーザー管理
-│
-├── application-plane/       # テナント固有サービス
-│   ├── problem-service      → 問題の作成・編集・AI 生成
-│   ├── battle-service       → バトルセッション管理
-│   ├── scoring-service      → 自動採点
-│   └── leaderboard-service  → ランキング・統計
-│
-└── shared/                  # 共有ライブラリ
-    ├── dynamodb             → DynamoDB リポジトリ層
-    └── cloud-abstraction    → マルチクラウド対応の抽象化
-```
+## 仕様の読み方
 
-## 用語集（Ubiquitous Language）
+- UI の仕様は `apps/*/app` とそのテストを優先して確認する
+- API の仕様は `backend/services/**/src` を優先して確認する
+- 歴史的な計画や草案は `Plan.md` や `docs/plans/` に残るが、仕様の正本ではない
 
-プロジェクト全体で統一して使用する用語です。
+## 次に読む文書
 
-| 用語 | 説明 |
-|------|------|
-| **Tenant** | TenkaCloud を利用する組織・企業単位。1 つのテナントに複数のユーザーが所属 |
-| **Control Plane** | テナント管理・認証を担う共有プラットフォーム |
-| **Application Plane** | テナント固有のビジネスロジックを実行するサービス群 |
-| **Battle** | クラウド構築の競技セッション。時間制限あり |
-| **Participant** | バトルに参加する競技者 |
-| **Problem** | クラウドインフラ構築の課題。難易度・制限時間・採点基準を持つ |
-| **Scoring** | 構築されたインフラを自動検証してスコアを算出 |
-
-## 技術スタック
-
-| カテゴリ | 技術 |
-|----------|------|
-| フロントエンド | Next.js 16 (App Router), TypeScript, Tailwind CSS |
-| バックエンド | Bun, Hono, TypeScript |
-| データベース | DynamoDB (Single-Table Design) |
-| 認証 | Auth0, NextAuth.js |
-| インフラ | Docker, LocalStack, Terraform |
-| テスト | Vitest, Playwright |
-| AI | Claude API (MCP 統合) |
-
-## ローカル環境で試す
-
-```bash
-# 1. クローン
-git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-
-# 2. 依存関係インストール
-bun install
-
-# 3. 起動（Docker Desktop が必要）
-make start
-```
-
-起動後、以下の URL にアクセスできます。
-
-- Control Plane: http://localhost:13000
-- Application Plane: http://localhost:13001
-
-詳細は [クイックスタートガイド](./QUICKSTART.md) を参照。
-
-## 次に読むドキュメント
-
-| 目的 | ドキュメント |
-|------|-------------|
-| 環境構築したい | [QUICKSTART.md](./QUICKSTART.md) |
-| 詳細な設計を知りたい | [architecture/architecture.md](./architecture/architecture.md) |
-| 開発に参加したい | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| AI エージェントで開発 | [CLAUDE.md](../CLAUDE.md) |
-
-## プロジェクトの現状
-
-TenkaCloud は積極的に開発中です。現在の状況は以下の通りです。
-
-- **動作するもの**: テナント管理、問題管理 (CRUD + AI 生成)、ローカル開発環境
-- **開発中**: バトルセッション、採点システム、リーダーボード
-- **今後**: 本番環境デプロイ、マルチクラウド対応、観戦モード
-
-コントリビューションを歓迎します。
+- まず起動したい: [QUICKSTART.md](./QUICKSTART.md)
+- 全体設計を把握したい: [architecture/architecture.md](./architecture/architecture.md)
+- ADR を追いたい: [decisions](./decisions/)

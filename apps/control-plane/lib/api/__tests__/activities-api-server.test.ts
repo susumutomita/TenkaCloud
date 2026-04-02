@@ -33,7 +33,7 @@ describe('activities-api サーバーサイドテスト', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://custom-server-api:13004/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     } finally {
       if (originalEnv === undefined) {
@@ -66,7 +66,7 @@ describe('activities-api サーバーサイドテスト', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://tenant-management:13004/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     } finally {
       if (originalEnv !== undefined) {

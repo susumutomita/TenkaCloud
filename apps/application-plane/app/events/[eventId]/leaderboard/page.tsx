@@ -48,7 +48,7 @@ export default function LeaderboardPage() {
         setLeaderboard(leaderboardData);
       } catch (err) {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました')
+          err instanceof Error ? err : new Error('読み込みに失敗しました'),
         );
       } finally {
         setLoading(false);

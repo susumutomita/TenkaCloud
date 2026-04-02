@@ -90,12 +90,12 @@ describe('STSFederation', () => {
 
       const credentials = await federation.assumeRole(
         'arn:aws:iam::123456789012:role/TestRole',
-        'test-session'
+        'test-session',
       );
 
       expect(credentials.accessKeyId).toBe('AKIAIOSFODNN7EXAMPLE');
       expect(credentials.secretAccessKey).toBe(
-        'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+        'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
       );
       expect(credentials.sessionToken).toBe('FwoGZXIvYXdzEBYaDExample');
       expect(credentials.expiration).toEqual(expiration);
@@ -114,7 +114,7 @@ describe('STSFederation', () => {
       await federation.assumeRole(
         'arn:aws:iam::123456789012:role/TestRole',
         'test-session',
-        7200
+        7200,
       );
 
       const params = getLastCommandParams();
@@ -131,8 +131,8 @@ describe('STSFederation', () => {
       await expect(
         federation.assumeRole(
           'arn:aws:iam::123456789012:role/TestRole',
-          'test-session'
-        )
+          'test-session',
+        ),
       ).rejects.toThrow('STS AssumeRole failed: No credentials returned');
     });
 
@@ -148,8 +148,8 @@ describe('STSFederation', () => {
       await expect(
         federation.assumeRole(
           'arn:aws:iam::123456789012:role/TestRole',
-          'test-session'
-        )
+          'test-session',
+        ),
       ).rejects.toThrow('STS AssumeRole failed: No credentials returned');
     });
 
@@ -165,8 +165,8 @@ describe('STSFederation', () => {
       await expect(
         federation.assumeRole(
           'arn:aws:iam::123456789012:role/TestRole',
-          'test-session'
-        )
+          'test-session',
+        ),
       ).rejects.toThrow('STS AssumeRole failed: No credentials returned');
     });
 
@@ -182,8 +182,8 @@ describe('STSFederation', () => {
       await expect(
         federation.assumeRole(
           'arn:aws:iam::123456789012:role/TestRole',
-          'test-session'
-        )
+          'test-session',
+        ),
       ).rejects.toThrow('STS AssumeRole failed: No credentials returned');
     });
 
@@ -199,8 +199,8 @@ describe('STSFederation', () => {
       await expect(
         federation.assumeRole(
           'arn:aws:iam::123456789012:role/TestRole',
-          'test-session'
-        )
+          'test-session',
+        ),
       ).rejects.toThrow('STS AssumeRole failed: No credentials returned');
     });
   });
@@ -226,7 +226,7 @@ describe('STSFederation', () => {
       expect(result.url).toContain('Issuer=TenkaCloud');
       expect(result.url).toContain('SigninToken=test-signin-token');
       expect(result.url).toContain(
-        'Destination=' + encodeURIComponent('https://console.aws.amazon.com/')
+        'Destination=' + encodeURIComponent('https://console.aws.amazon.com/'),
       );
       expect(result.expiresAt).toEqual(mockCredentials.expiration);
     });
@@ -241,11 +241,11 @@ describe('STSFederation', () => {
         'https://console.aws.amazon.com/s3/home?region=ap-northeast-1';
       const result = await federation.generateConsoleLoginUrl(
         mockCredentials,
-        customDestination
+        customDestination,
       );
 
       expect(result.url).toContain(
-        'Destination=' + encodeURIComponent(customDestination)
+        'Destination=' + encodeURIComponent(customDestination),
       );
     });
 
@@ -271,7 +271,7 @@ describe('STSFederation', () => {
       });
 
       await expect(
-        federation.generateConsoleLoginUrl(mockCredentials)
+        federation.generateConsoleLoginUrl(mockCredentials),
       ).rejects.toThrow('Failed to get signin token: Unauthorized');
     });
   });
@@ -298,7 +298,7 @@ describe('STSFederation', () => {
         'tenant-123',
         'user-456',
         'battle-789',
-        'arn:aws:iam::123456789012:role/ParticipantRole'
+        'arn:aws:iam::123456789012:role/ParticipantRole',
       );
 
       expect(result.url).toContain('https://signin.aws.amazon.com/federation');
@@ -310,7 +310,7 @@ describe('STSFederation', () => {
         'tenant-123',
         'user-456',
         'battle-789',
-        'arn:aws:iam::123456789012:role/ParticipantRole'
+        'arn:aws:iam::123456789012:role/ParticipantRole',
       );
 
       const params = getLastCommandParams();
@@ -326,7 +326,7 @@ describe('STSFederation', () => {
         longTenantId,
         longParticipantId,
         longBattleId,
-        'arn:aws:iam::123456789012:role/ParticipantRole'
+        'arn:aws:iam::123456789012:role/ParticipantRole',
       );
 
       const params = getLastCommandParams();
@@ -340,7 +340,7 @@ describe('STSFederation', () => {
         'user-456',
         'battle-789',
         'arn:aws:iam::123456789012:role/ParticipantRole',
-        7200
+        7200,
       );
 
       const params = getLastCommandParams();

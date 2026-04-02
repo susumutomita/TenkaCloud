@@ -43,7 +43,7 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
       router.refresh();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'プロビジョニングに失敗しました'
+        err instanceof Error ? err.message : 'プロビジョニングに失敗しました',
       );
     } finally {
       setIsLoading(false);

@@ -73,7 +73,7 @@ export const API_BASE_URL =
  */
 export async function serverApiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const session = await auth();
   const token = session?.accessToken;

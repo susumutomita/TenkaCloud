@@ -75,7 +75,7 @@ describe('TenantsPage コンポーネント', () => {
       const Component = await TenantsPage();
       render(Component);
       expect(
-        screen.getByText('テナントの作成・管理を行います。')
+        screen.getByText('テナントの作成・管理を行います。'),
       ).toBeInTheDocument();
     });
 
@@ -84,7 +84,7 @@ describe('TenantsPage コンポーネント', () => {
       const Component = await TenantsPage();
       render(Component);
       expect(
-        screen.getByRole('link', { name: '新規テナントを作成' })
+        screen.getByRole('link', { name: '新規テナントを作成' }),
       ).toHaveAttribute('href', '/dashboard/tenants/new');
     });
   });
@@ -100,7 +100,7 @@ describe('TenantsPage コンポーネント', () => {
       expect(screen.getByText('一時停止')).toBeInTheDocument();
       // Enterprise は統計カードとテナントテーブルの両方に存在するため getAllByText を使用
       expect(screen.getAllByText('Enterprise').length).toBeGreaterThanOrEqual(
-        1
+        1,
       );
     });
   });
@@ -111,7 +111,7 @@ describe('TenantsPage コンポーネント', () => {
       const Component = await TenantsPage();
       render(Component);
       expect(
-        screen.getByText('テナントがまだ登録されていません')
+        screen.getByText('テナントがまだ登録されていません'),
       ).toBeInTheDocument();
     });
 
@@ -120,7 +120,7 @@ describe('TenantsPage コンポーネント', () => {
       const Component = await TenantsPage();
       render(Component);
       expect(
-        screen.getByRole('link', { name: '最初のテナントを作成' })
+        screen.getByRole('link', { name: '最初のテナントを作成' }),
       ).toBeInTheDocument();
     });
   });

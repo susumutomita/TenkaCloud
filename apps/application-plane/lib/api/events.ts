@@ -45,7 +45,7 @@ export async function getAvailableEvents(options?: {
 
   return get<{ events: ParticipantEvent[]; total: number }>(
     '/participant/events',
-    params
+    params,
   );
 }
 
@@ -60,7 +60,7 @@ export async function getMyEvents(): Promise<{ events: ParticipantEvent[] }> {
  * イベント詳細を取得
  */
 export async function getEventDetails(
-  eventId: string
+  eventId: string,
 ): Promise<EventDetails | null> {
   try {
     return await get<EventDetails>(`/participant/events/${eventId}`);
@@ -76,10 +76,10 @@ export async function getEventDetails(
  * イベントに登録
  */
 export async function registerForEvent(
-  eventId: string
+  eventId: string,
 ): Promise<{ success: boolean; message: string }> {
   return post<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/register`
+    `/participant/events/${eventId}/register`,
   );
 }
 
@@ -87,10 +87,10 @@ export async function registerForEvent(
  * イベント登録をキャンセル
  */
 export async function unregisterFromEvent(
-  eventId: string
+  eventId: string,
 ): Promise<{ success: boolean; message: string }> {
   return post<{ success: boolean; message: string }>(
-    `/participant/events/${eventId}/unregister`
+    `/participant/events/${eventId}/unregister`,
   );
 }
 
@@ -98,7 +98,7 @@ export async function unregisterFromEvent(
  * リーダーボードを取得
  */
 export async function getLeaderboard(
-  eventId: string
+  eventId: string,
 ): Promise<Leaderboard | null> {
   try {
     return await get<Leaderboard>(`/participant/events/${eventId}/leaderboard`);

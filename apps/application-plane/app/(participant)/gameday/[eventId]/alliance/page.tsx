@@ -33,7 +33,7 @@ export default function AlliancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>(
-    {}
+    {},
   );
   const [teams, setTeams] = useState<{ value: string; label: string }[]>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -47,7 +47,7 @@ export default function AlliancePage() {
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました')
+        err instanceof Error ? err : new Error('読み込みに失敗しました'),
       );
     } finally {
       setLoading(false);
@@ -61,7 +61,7 @@ export default function AlliancePage() {
       process.env.NEXT_PUBLIC_GAMEDAY_API_URL ||
       'http://localhost:3020/api/gameday';
     fetch(
-      `${GAMEDAY_API_URL}/admin/teams?eventId=${encodeURIComponent(eventId)}`
+      `${GAMEDAY_API_URL}/admin/teams?eventId=${encodeURIComponent(eventId)}`,
     )
       .then((r) => (r.ok ? r.json() : { teams: [] }))
       .then((data) => {
@@ -140,10 +140,10 @@ export default function AlliancePage() {
 
   const active = alliances.filter((a) => a.status === 'ACTIVE');
   const pendingIncoming = alliances.filter(
-    (a) => a.status === 'PENDING' && a.targetTeamId === teamId
+    (a) => a.status === 'PENDING' && a.targetTeamId === teamId,
   );
   const pendingOutgoing = alliances.filter(
-    (a) => a.status === 'PENDING' && a.requesterTeamId === teamId
+    (a) => a.status === 'PENDING' && a.requesterTeamId === teamId,
   );
 
   return (

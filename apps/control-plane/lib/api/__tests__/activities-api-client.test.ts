@@ -34,7 +34,7 @@ describe('activities-api クライアントサイドテスト', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://custom-client-api:13004/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     } finally {
       if (originalEnv === undefined) {
@@ -67,7 +67,7 @@ describe('activities-api クライアントサイドテスト', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:13004/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     } finally {
       if (originalEnv !== undefined) {

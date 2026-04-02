@@ -29,10 +29,10 @@ const mockSession: Session = {
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
   console.warn(
-    '\x1b[33m⚠️  AUTH_SKIP mode is enabled. Authentication is bypassed with a mock session.\x1b[0m'
+    '\x1b[33m⚠️  AUTH_SKIP mode is enabled. Authentication is bypassed with a mock session.\x1b[0m',
   );
   console.warn(
-    '\x1b[33m   This should only be used for local development.\x1b[0m'
+    '\x1b[33m   This should only be used for local development.\x1b[0m',
   );
 }
 /* v8 ignore stop */
@@ -58,7 +58,7 @@ if (
   (!auth0Config.clientId || !auth0Config.clientSecret || !auth0Config.issuer)
 ) {
   throw new Error(
-    'Missing required Auth0 environment variables: AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_ISSUER'
+    'Missing required Auth0 environment variables: AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_ISSUER',
   );
 }
 

@@ -9,7 +9,7 @@ describe('Button コンポーネント', () => {
     it('children を正しくレンダリングすべき', () => {
       render(<Button>クリック</Button>);
       expect(
-        screen.getByRole('button', { name: 'クリック' })
+        screen.getByRole('button', { name: 'クリック' }),
       ).toBeInTheDocument();
     });
 
@@ -105,7 +105,7 @@ describe('Button コンポーネント', () => {
       render(
         <Button onClick={handleClick} disabled>
           無効
-        </Button>
+        </Button>,
       );
 
       await user.click(screen.getByRole('button'));

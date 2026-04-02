@@ -1,326 +1,155 @@
 /**
  * Scoreboard (スコアボード)
  *
- * AWS GameDay 風 — 3タブ構成:
- *   Attack Statistics: チーム×攻撃のテーブル（フィルタ付き）
- *   Application Status: チーム×コンポーネントのヘルスチェックテーブル
- *   Attack History: 攻撃履歴テーブル
- *
- * リーダーボード、ブラックアウト時はロック画面表示。
- * 30秒ごとに自動リフレッシュ。
+ * リーダーボード、攻撃統計。ブラックアウト時はロック画面表示。
  */
 
 'use client';
 
-import Box from '@cloudscape-design/components/box';
-import Button from '@cloudscape-design/components/button';
+import type { BoardProps } from '@cloudscape-design/board-components';
+import Board from '@cloudscape-design/board-components/board';
+import BoardItem from '@cloudscape-design/board-components/board-item';
 import Header from '@cloudscape-design/components/header';
-import Input from '@cloudscape-design/components/input';
-import Select from '@cloudscape-design/components/select';
-import type { SelectProps } from '@cloudscape-design/components/select';
 import SpaceBetween from '@cloudscape-design/components/space-between';
-import Spinner from '@cloudscape-design/components/spinner';
-import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
-import Tabs from '@cloudscape-design/components/tabs';
 import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getAttackStats,
-  getLeaderboard,
-  getParticipantTeams,
-} from '@/lib/api/gameday';
-import type {
-  AttackStats,
-  LeaderboardEntry,
-  Team,
-} from '@/lib/api/gameday-types';
+  Badge,
+  ErrorState,
+  getErrorMessage,
+  getErrorType,
+} from '@/components/ui';
+import { getAttackStats, getLeaderboard } from '@/lib/api/gameday';
+import type { AttackStats, LeaderboardEntry } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 
-// --- Attack Statistics Tab ---
-function AttackStatisticsTab({
-  teams,
-  stats,
-  loading,
+interface BoardItemData {
+  title: string;
+  content: React.ReactNode;
+}
+
+type BoardLayoutItem = BoardProps.Item<BoardItemData>;
+
+function LeaderboardTable({
+  entries,
+  teamId,
 }: {
-  teams: Team[];
-  stats: AttackStats[];
-  loading: boolean;
+  entries: LeaderboardEntry[];
+  teamId: string | null;
 }) {
-  const [teamFilter, setTeamFilter] = useState('');
-  const [attackFilter, setAttackFilter] = useState('');
-  const [vulnerableFilter, setVulnerableFilter] =
-    useState<SelectProps.Option | null>({
-      value: '',
-      label: 'Any Vulnerable Status',
-    });
-
-  // Build rows: team × attack combinations
-  const rows = teams.flatMap((team) =>
-    stats.map((stat) => ({
-      teamName: team.teamName,
-      teamId: team.teamId,
-      attackName: stat.attackName,
-      attackSlug: stat.attackSlug,
-      launched: stat.totalExecutions,
-      nextAvailable: 'Now',
-      received: 0,
-      vulnerable: stat.successRate > 0.5 ? 'Yes' : 'No',
-    }))
-  );
-
-  const filtered = rows.filter((r) => {
-    if (
-      teamFilter &&
-      !r.teamName.toLowerCase().includes(teamFilter.toLowerCase())
-    )
-      return false;
-    if (
-      attackFilter &&
-      !r.attackName.toLowerCase().includes(attackFilter.toLowerCase())
-    )
-      return false;
-    if (vulnerableFilter?.value === 'yes' && r.vulnerable !== 'Yes')
-      return false;
-    if (vulnerableFilter?.value === 'no' && r.vulnerable !== 'No') return false;
-    return true;
-  });
-
   return (
     <Table
       columnDefinitions={[
         {
+          id: 'rank',
+          header: '順位',
+          cell: (entry) => `#${entry.rank}`,
+          width: 70,
+        },
+        {
           id: 'teamName',
-          header: 'Team Name',
-          cell: (r) => r.teamName,
-          sortingField: 'teamName',
+          header: 'チーム',
+          cell: (entry) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <span>{entry.teamName}</span>
+              {entry.teamId === teamId && (
+                <Badge variant="primary" size="sm">
+                  自チーム
+                </Badge>
+              )}
+            </SpaceBetween>
+          ),
         },
         {
-          id: 'attackName',
-          header: 'Attack Name',
-          cell: (r) => <Box variant="code">{r.attackName}</Box>,
-          sortingField: 'attackName',
+          id: 'score',
+          header: 'スコア',
+          cell: (entry) => entry.score.toLocaleString(),
+          width: 100,
         },
         {
-          id: 'launched',
-          header: 'Launched',
-          cell: (r) => r.launched,
-          sortingField: 'launched',
+          id: 'attacksLaunched',
+          header: '攻撃',
+          cell: (entry) => entry.attacksLaunched,
+          width: 70,
         },
         {
-          id: 'nextAvailable',
-          header: 'Next Available',
-          cell: (r) => r.nextAvailable,
+          id: 'attacksReceived',
+          header: '被撃',
+          cell: (entry) => entry.attacksReceived,
+          width: 70,
         },
         {
-          id: 'received',
-          header: 'Received',
-          cell: (r) => r.received,
-        },
-        {
-          id: 'vulnerable',
-          header: 'Vulnerable?',
-          cell: (r) =>
-            r.vulnerable === 'Yes' ? (
-              <StatusIndicator type="success">Yes</StatusIndicator>
-            ) : r.vulnerable === 'Unknown' ? (
-              <StatusIndicator type="warning">Unknown</StatusIndicator>
-            ) : (
-              <StatusIndicator type="error">No</StatusIndicator>
-            ),
+          id: 'vulnerabilitiesFixed',
+          header: '修正',
+          cell: (entry) => entry.vulnerabilitiesFixed,
+          width: 70,
         },
       ]}
-      items={filtered}
-      loading={loading}
-      loadingText="Loading attack data..."
-      header={
-        <Header
-          description="Real-time data on attacks launched and received by teams"
-          counter={`(${filtered.length})`}
-        >
-          Attack Statistics
-        </Header>
-      }
-      filter={
-        <SpaceBetween direction="horizontal" size="s">
-          <Input
-            placeholder="Filter by team name"
-            value={teamFilter}
-            onChange={({ detail }) => setTeamFilter(detail.value)}
-          />
-          <Input
-            placeholder="Filter by attack name"
-            value={attackFilter}
-            onChange={({ detail }) => setAttackFilter(detail.value)}
-          />
-          <Select
-            selectedOption={vulnerableFilter}
-            onChange={({ detail }) =>
-              setVulnerableFilter(detail.selectedOption)
-            }
-            options={[
-              { value: '', label: 'Any Vulnerable Status' },
-              { value: 'yes', label: 'Vulnerable' },
-              { value: 'no', label: 'Not Vulnerable' },
-            ]}
-          />
-        </SpaceBetween>
-      }
-      empty="No attack data available"
-      sortingDisabled
+      items={entries}
+      loadingText="読み込み中"
+      empty="データなし"
+      variant="embedded"
     />
   );
 }
 
-// --- Application Status Tab ---
-function ApplicationStatusTab({
-  teams,
-  loading,
-}: {
-  teams: Team[];
-  loading: boolean;
-}) {
-  const [teamFilter, setTeamFilter] = useState('');
-
-  const filtered = teams.filter(
-    (t) =>
-      !teamFilter || t.teamName.toLowerCase().includes(teamFilter.toLowerCase())
-  );
-
-  // The actual health check data would come from monitoring API
-  // For now we show the team list with placeholder status
-  return (
-    <Table
-      columnDefinitions={[
-        {
-          id: 'teamName',
-          header: 'Team Name',
-          cell: (t) => t.teamName,
-          sortingField: 'teamName',
-        },
-        {
-          id: 'apis',
-          header: 'APIs',
-          cell: () => <StatusIndicator type="error">Down</StatusIndicator>,
-        },
-        {
-          id: 'dbReads',
-          header: 'DB Reads',
-          cell: () => <StatusIndicator type="error">Down</StatusIndicator>,
-        },
-        {
-          id: 'dbWrites',
-          header: 'DB Writes',
-          cell: () => <StatusIndicator type="error">Down</StatusIndicator>,
-        },
-        {
-          id: 'website',
-          header: 'Website',
-          cell: (t) =>
-            t.websiteUrl ? (
-              <StatusIndicator type="success">Up</StatusIndicator>
-            ) : (
-              <StatusIndicator type="error">Down</StatusIndicator>
-            ),
-        },
-      ]}
-      items={filtered}
-      loading={loading}
-      loadingText="Loading status data..."
-      header={
-        <Header description="Health monitoring of team application components">
-          Application Status
-        </Header>
-      }
-      filter={
-        <Input
-          placeholder="Filter by team name"
-          value={teamFilter}
-          onChange={({ detail }) => setTeamFilter(detail.value)}
-        />
-      }
-      empty="No teams found"
-      sortingDisabled
-      footer={
-        <Box textAlign="center" color="text-body-secondary" fontSize="body-s">
-          <em>Refreshes every 30 seconds</em>
-        </Box>
-      }
-    />
-  );
-}
-
-// --- Attack History Tab ---
-function AttackHistoryTab({
-  stats,
-  loading,
-}: {
-  stats: AttackStats[];
-  loading: boolean;
-}) {
+function AttackStatsTable({ stats }: { stats: AttackStats[] }) {
   return (
     <Table
       columnDefinitions={[
         {
           id: 'attackName',
-          header: 'Attack Name',
+          header: '攻撃名',
           cell: (s) => s.attackName,
-          sortingField: 'attackName',
         },
         {
           id: 'attackSlug',
-          header: 'Slug',
-          cell: (s) => <Box variant="code">{s.attackSlug}</Box>,
+          header: 'スラッグ',
+          cell: (s) => s.attackSlug,
+          width: 150,
         },
         {
           id: 'totalExecutions',
-          header: 'Total Executions',
+          header: '実行数',
           cell: (s) => s.totalExecutions,
-          sortingField: 'totalExecutions',
+          width: 100,
         },
         {
           id: 'successRate',
-          header: 'Success Rate',
+          header: '成功率',
           cell: (s) => `${Math.round(s.successRate * 100)}%`,
-          sortingField: 'successRate',
+          width: 100,
         },
       ]}
       items={stats}
-      loading={loading}
-      loadingText="Loading attack history..."
-      header={
-        <Header description="Aggregate attack execution statistics">
-          Attack History
-        </Header>
-      }
-      empty="No attack history available"
-      sortingDisabled
+      loadingText="読み込み中"
+      empty="データなし"
+      variant="embedded"
     />
   );
 }
 
-// --- Main Scoreboard Page ---
 export default function ScoreboardPage() {
   const { eventId, teamId } = useGamedaySession();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [attackStats, setAttackStats] = useState<AttackStats[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [blackout, setBlackout] = useState(false);
-  const [activeTab, setActiveTab] = useState('attack-stats');
+  const [boardItems, setBoardItems] = useState<ReadonlyArray<BoardLayoutItem>>(
+    [],
+  );
 
   const fetchData = useCallback(async () => {
     if (!eventId) return;
     try {
-      const [lbData, statsData, teamsData] = await Promise.all([
+      const [lbData, statsData] = await Promise.all([
         getLeaderboard(eventId),
         getAttackStats(eventId),
-        getParticipantTeams(eventId),
       ]);
       setLeaderboard(lbData.leaderboard);
       setAttackStats(statsData.stats);
-      setTeams(teamsData.teams);
       setBlackout(false);
       setError(null);
     } catch (err) {
@@ -330,7 +159,7 @@ export default function ScoreboardPage() {
         setError(null);
       } else {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました')
+          err instanceof Error ? err : new Error('読み込みに失敗しました'),
         );
       }
     } finally {
@@ -340,154 +169,113 @@ export default function ScoreboardPage() {
 
   useEffect(() => {
     fetchData();
-    const id = setInterval(fetchData, 30000);
+    const id = setInterval(fetchData, 10000);
     return () => clearInterval(id);
   }, [fetchData]);
 
+  useEffect(() => {
+    setBoardItems([
+      {
+        id: 'leaderboard',
+        rowSpan: 4,
+        columnSpan: 2,
+        data: {
+          title: 'リーダーボード',
+          content: (
+            <LeaderboardTable entries={leaderboard} teamId={teamId ?? null} />
+          ),
+        },
+      },
+      {
+        id: 'attack-stats',
+        rowSpan: 4,
+        columnSpan: 2,
+        data: {
+          title: '攻撃統計',
+          content: <AttackStatsTable stats={attackStats} />,
+        },
+      },
+    ]);
+  }, [leaderboard, attackStats, teamId]);
+
   if (loading) {
     return (
-      <Box textAlign="center" padding="xxl">
-        <Spinner size="large" />
-      </Box>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
+      </div>
     );
   }
 
   if (blackout) {
     return (
-      <Box textAlign="center" padding="xxl">
-        <SpaceBetween size="m" alignItems="center">
-          <Box fontSize="display-l">🔒</Box>
-          <Box
-            fontSize="heading-xl"
-            fontWeight="bold"
-            color="text-status-error"
-          >
-            BLACKOUT
-          </Box>
-          <Box color="text-body-secondary">
-            スコアボードは現在ブラックアウト中です。順位は非公開になっています。
-          </Box>
-        </SpaceBetween>
-      </Box>
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="text-6xl">🔒</div>
+        <h2 className="text-2xl font-bold text-hn-error">BLACKOUT</h2>
+        <p className="text-text-secondary">
+          スコアボードは現在ブラックアウト中です。順位は非公開になっています。
+        </p>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box textAlign="center" padding="xl">
-        <SpaceBetween size="m">
-          <StatusIndicator type="error">{error.message}</StatusIndicator>
-          <Button onClick={fetchData}>再試行</Button>
-        </SpaceBetween>
-      </Box>
+      <ErrorState
+        message={getErrorMessage(error)}
+        type={getErrorType(error)}
+        onRetry={fetchData}
+      />
     );
   }
 
   return (
-    <SpaceBetween size="l">
-      {/* Leaderboard Table */}
-      <Table
-        columnDefinitions={[
-          {
-            id: 'rank',
-            header: 'Rank',
-            cell: (entry) => (
-              <Box fontWeight="bold">
-                {entry.rank === 1 ? '🏆 ' : ''}
-                {entry.rank}
-              </Box>
-            ),
-            width: 80,
-            sortingField: 'rank',
-          },
-          {
-            id: 'teamName',
-            header: 'Team Name',
-            cell: (entry) => (
-              <SpaceBetween direction="horizontal" size="xs">
-                <Box fontWeight="bold">{entry.teamName}</Box>
-                {entry.teamId === teamId && (
-                  <StatusIndicator type="info">自チーム</StatusIndicator>
-                )}
-              </SpaceBetween>
-            ),
-            sortingField: 'teamName',
-          },
-          {
-            id: 'score',
-            header: 'Score',
-            cell: (entry) => (
-              <Box fontWeight="bold">{entry.score.toLocaleString()}</Box>
-            ),
-            width: 150,
-            sortingField: 'score',
-          },
-          {
-            id: 'attacksLaunched',
-            header: 'Attacks',
-            cell: (entry) => entry.attacksLaunched,
-            width: 100,
-          },
-          {
-            id: 'attacksReceived',
-            header: 'Received',
-            cell: (entry) => entry.attacksReceived,
-            width: 100,
-          },
-          {
-            id: 'vulnerabilitiesFixed',
-            header: 'Fixed',
-            cell: (entry) => entry.vulnerabilitiesFixed,
-            width: 100,
-          },
-        ]}
-        items={leaderboard}
-        loadingText="読み込み中"
-        header={
-          <Header
-            description="Security Battle Royale — TenkaCloud GameDay"
-            counter={`(${leaderboard.length} teams)`}
-          >
-            Leaderboard
-          </Header>
-        }
-        empty="No leaderboard data"
-        sortingDisabled
-        footer={
-          <Box textAlign="center" color="text-body-secondary" fontSize="body-s">
-            <em>Refreshes every 30 seconds</em>
-          </Box>
-        }
-      />
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
+        <span className="text-hn-accent font-mono">&gt;_</span>
+        スコアボード
+      </h1>
 
-      {/* Tabs: Attack Statistics / Application Status / Attack History */}
-      <Tabs
-        activeTabId={activeTab}
-        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
-        tabs={[
-          {
-            id: 'attack-stats',
-            label: 'Attack Statistics',
-            content: (
-              <AttackStatisticsTab
-                teams={teams}
-                stats={attackStats}
-                loading={loading}
-              />
-            ),
-          },
-          {
-            id: 'app-status',
-            label: 'Application Status',
-            content: <ApplicationStatusTab teams={teams} loading={loading} />,
-          },
-          {
-            id: 'attack-history',
-            label: 'Attack History',
-            content: <AttackHistoryTab stats={attackStats} loading={loading} />,
-          },
-        ]}
+      <Board
+        renderItem={(
+          item: BoardProps.Item<BoardItemData>,
+          _actions: BoardProps.ItemActions,
+        ) => (
+          <BoardItem
+            header={<Header>{item.data.title}</Header>}
+            i18nStrings={{
+              dragHandleAriaLabel: 'ドラッグハンドル',
+              dragHandleAriaDescription:
+                'スペースキーを押してドラッグを開始し、矢印キーで移動、スペースキーで確定、Escapeキーでキャンセル。',
+              resizeHandleAriaLabel: 'リサイズハンドル',
+              resizeHandleAriaDescription:
+                'スペースキーを押してリサイズを開始し、矢印キーで変更、スペースキーで確定、Escapeキーでキャンセル。',
+            }}
+          >
+            {item.data.content}
+          </BoardItem>
+        )}
+        items={boardItems}
+        onItemsChange={(event) => {
+          setBoardItems(event.detail.items as BoardLayoutItem[]);
+        }}
+        i18nStrings={{
+          liveAnnouncementDndStarted: (operationType) =>
+            operationType === 'resize' ? 'リサイズ開始' : '移動開始',
+          liveAnnouncementDndItemReordered: () => '順序変更',
+          liveAnnouncementDndItemResized: () => 'リサイズ変更',
+          liveAnnouncementDndItemInserted: () => '挿入',
+          liveAnnouncementDndCommitted: () => '変更を確定',
+          liveAnnouncementDndDiscarded: () => '変更を破棄',
+          liveAnnouncementItemRemoved: () => 'アイテムを削除',
+          navigationAriaLabel: 'ボードナビゲーション',
+          navigationAriaDescription:
+            'ボード内を移動するにはクリックしてください',
+          navigationItemAriaLabel: (
+            item: BoardProps.Item<BoardItemData> | null,
+          ) => item?.data.title ?? '',
+        }}
+        empty="データなし"
       />
-    </SpaceBetween>
+    </div>
   );
 }

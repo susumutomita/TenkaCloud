@@ -15,7 +15,7 @@ import {
 
 // テストヘルパー: 有効なフォームデータを作成
 const createValidFormData = (
-  overrides?: Partial<EventFormData>
+  overrides?: Partial<EventFormData>,
 ): EventFormData => ({
   name: 'テストイベント',
   slug: 'test-event',
@@ -31,7 +31,7 @@ const createValidFormData = (
 
 // テストヘルパー: デフォルトの props を作成
 const createDefaultProps = (
-  overrides?: Partial<EventFormProps>
+  overrides?: Partial<EventFormProps>,
 ): EventFormProps => ({
   mode: 'create',
   onSubmit: vi.fn(),
@@ -67,7 +67,7 @@ describe('EventForm', () => {
       // 作成ボタンが表示されていることを確認
       expect(screen.getByRole('button', { name: /作成/ })).toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: /キャンセル/ })
+        screen.getByRole('button', { name: /キャンセル/ }),
       ).toBeInTheDocument();
     });
 
@@ -76,13 +76,13 @@ describe('EventForm', () => {
 
       // ステータスのデフォルト値
       const statusSelect = screen.getByLabelText(
-        /ステータス/
+        /ステータス/,
       ) as HTMLSelectElement;
       expect(statusSelect.value).toBe('draft');
 
       // 公開フラグのデフォルト値
       const isPublicCheckbox = screen.getByLabelText(
-        /公開/
+        /公開/,
       ) as HTMLInputElement;
       expect(isPublicCheckbox.checked).toBe(true);
     });
@@ -103,7 +103,7 @@ describe('EventForm', () => {
             mode: 'edit',
             initialData,
           })}
-        />
+        />,
       );
 
       // 初期値が表示されていることを確認
@@ -111,12 +111,12 @@ describe('EventForm', () => {
       expect(screen.getByDisplayValue('existing-event')).toBeInTheDocument();
 
       const statusSelect = screen.getByLabelText(
-        /ステータス/
+        /ステータス/,
       ) as HTMLSelectElement;
       expect(statusSelect.value).toBe('active');
 
       const isPublicCheckbox = screen.getByLabelText(
-        /公開/
+        /公開/,
       ) as HTMLInputElement;
       expect(isPublicCheckbox.checked).toBe(false);
 
@@ -156,7 +156,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/イベント名は3文字以上100文字以下/)
+          screen.getByText(/イベント名は3文字以上100文字以下/),
         ).toBeInTheDocument();
       });
 
@@ -167,7 +167,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.queryByText(/イベント名は3文字以上100文字以下/)
+          screen.queryByText(/イベント名は3文字以上100文字以下/),
         ).not.toBeInTheDocument();
       });
 
@@ -186,7 +186,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/スラッグは英数字とハイフンのみ/)
+          screen.getByText(/スラッグは英数字とハイフンのみ/),
         ).toBeInTheDocument();
       });
 
@@ -197,7 +197,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/スラッグは英数字とハイフンのみ/)
+          screen.getByText(/スラッグは英数字とハイフンのみ/),
         ).toBeInTheDocument();
       });
 
@@ -208,7 +208,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/スラッグは英数字とハイフンのみ/)
+          screen.getByText(/スラッグは英数字とハイフンのみ/),
         ).toBeInTheDocument();
       });
 
@@ -219,7 +219,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.queryByText(/スラッグは英数字とハイフンのみ/)
+          screen.queryByText(/スラッグは英数字とハイフンのみ/),
         ).not.toBeInTheDocument();
       });
     });
@@ -237,7 +237,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/終了日時は開始日時より後/)
+          screen.getByText(/終了日時は開始日時より後/),
         ).toBeInTheDocument();
       });
 
@@ -248,7 +248,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.queryByText(/終了日時は開始日時より後/)
+          screen.queryByText(/終了日時は開始日時より後/),
         ).not.toBeInTheDocument();
       });
     });
@@ -264,7 +264,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/最大参加者数は1以上10000以下/)
+          screen.getByText(/最大参加者数は1以上10000以下/),
         ).toBeInTheDocument();
       });
 
@@ -275,7 +275,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/最大参加者数は1以上10000以下/)
+          screen.getByText(/最大参加者数は1以上10000以下/),
         ).toBeInTheDocument();
       });
     });
@@ -291,7 +291,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/チーム最大人数は1以上100以下/)
+          screen.getByText(/チーム最大人数は1以上100以下/),
         ).toBeInTheDocument();
       });
 
@@ -302,7 +302,7 @@ describe('EventForm', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/チーム最大人数は1以上100以下/)
+          screen.getByText(/チーム最大人数は1以上100以下/),
         ).toBeInTheDocument();
       });
     });
@@ -325,16 +325,16 @@ describe('EventForm', () => {
       // フォームを入力
       await userEvent.type(
         screen.getByLabelText(/イベント名/),
-        'テストイベント'
+        'テストイベント',
       );
       await userEvent.type(screen.getByLabelText(/スラッグ/), 'test-event');
       await userEvent.type(
         screen.getByLabelText(/開始日時/),
-        '2025-04-01T09:00'
+        '2025-04-01T09:00',
       );
       await userEvent.type(
         screen.getByLabelText(/終了日時/),
-        '2025-04-01T18:00'
+        '2025-04-01T18:00',
       );
       await userEvent.type(screen.getByLabelText(/最大参加者数/), '100');
       await userEvent.type(screen.getByLabelText(/チーム最大人数/), '5');
@@ -354,7 +354,7 @@ describe('EventForm', () => {
             maxTeamSize: 5,
             status: 'draft',
             isPublic: true,
-          })
+          }),
         );
       });
     });
@@ -363,7 +363,7 @@ describe('EventForm', () => {
       const onSubmit = vi
         .fn()
         .mockImplementation(
-          () => new Promise((resolve) => setTimeout(resolve, 100))
+          () => new Promise((resolve) => setTimeout(resolve, 100)),
         );
       render(
         <EventForm
@@ -371,7 +371,7 @@ describe('EventForm', () => {
             onSubmit,
             isSubmitting: true,
           })}
-        />
+        />,
       );
 
       const submitButton = screen.getByRole('button', { name: /作成/ });
@@ -384,11 +384,11 @@ describe('EventForm', () => {
           {...createDefaultProps({
             serverError: 'イベントの作成に失敗しました',
           })}
-        />
+        />,
       );
 
       expect(
-        screen.getByText('イベントの作成に失敗しました')
+        screen.getByText('イベントの作成に失敗しました'),
       ).toBeInTheDocument();
     });
   });

@@ -29,7 +29,7 @@ const PUBLIC_PATHS = [
  */
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
 }
 
@@ -48,7 +48,7 @@ async function handleAuth(
   roles: string[],
   sessionTenantId: string | null | undefined,
   urlTenantSlug: string | null,
-  req: NextRequest
+  req: NextRequest,
 ): Promise<NextResponse> {
   const { pathname, search } = req.nextUrl;
 
@@ -106,7 +106,7 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
     roles,
     sessionTenantId,
     urlTenantSlug,
-    req
+    req,
   );
 }
 

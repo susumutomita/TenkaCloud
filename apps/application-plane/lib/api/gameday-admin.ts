@@ -17,7 +17,7 @@ interface FetchOptions extends RequestInit {
 
 async function adminRequest<T>(
   endpoint: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
 
@@ -102,7 +102,7 @@ export function registerTeam(
   eventId: string,
   teamId: string,
   teamName: string,
-  urls?: { websiteUrl?: string; apiUrl?: string }
+  urls?: { websiteUrl?: string; apiUrl?: string },
 ) {
   return adminRequest<Team>('/teams/register', {
     method: 'POST',
@@ -136,7 +136,7 @@ export function getAttackLogs(eventId: string) {
 export function executeFaultInjection(
   eventId: string,
   teamId: string,
-  attackSlug: string
+  attackSlug: string,
 ) {
   return adminRequest<AttackLog>('/fault-injection/execute', {
     method: 'POST',

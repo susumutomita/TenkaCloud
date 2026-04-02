@@ -28,7 +28,7 @@ describe('Stats API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://tenant-management:13004/api/stats',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -57,7 +57,7 @@ describe('Stats API', () => {
       expect(result).toEqual(mockStats);
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/stats'),
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -74,7 +74,7 @@ describe('Stats API', () => {
       });
 
       await expect(fetchDashboardStats()).rejects.toThrow(
-        'Failed to fetch stats: 500'
+        'Failed to fetch stats: 500',
       );
 
       vi.unstubAllGlobals();
@@ -101,7 +101,7 @@ describe('Stats API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://custom-api:8080/api/stats',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -114,7 +114,7 @@ describe('Stats API', () => {
       vi.stubGlobal('window', {});
       vi.stubEnv(
         'NEXT_PUBLIC_TENANT_API_BASE_URL',
-        'http://client-api:9000/api'
+        'http://client-api:9000/api',
       );
 
       const { fetchDashboardStats } = await import('../stats-api');
@@ -134,7 +134,7 @@ describe('Stats API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://client-api:9000/api/stats',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -161,7 +161,7 @@ describe('Stats API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:13004/api/stats',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();

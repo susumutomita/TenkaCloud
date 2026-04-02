@@ -37,7 +37,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
  * 最近のアクティビティを取得
  */
 export async function getRecentActivities(
-  limit = 10
+  limit = 10,
 ): Promise<{ activities: ActivityEntry[] }> {
   return get<{ activities: ActivityEntry[] }>('/admin/activities', { limit });
 }

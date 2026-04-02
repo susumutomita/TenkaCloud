@@ -7,7 +7,7 @@ describe('RootLayout コンポーネント', () => {
     render(
       <RootLayout>
         <div>テストコンテンツ</div>
-      </RootLayout>
+      </RootLayout>,
     );
     expect(screen.getByText('テストコンテンツ')).toBeInTheDocument();
   });
@@ -16,7 +16,7 @@ describe('RootLayout コンポーネント', () => {
     const { container } = render(
       <RootLayout>
         <div>テスト</div>
-      </RootLayout>
+      </RootLayout>,
     );
     const html = container.closest('html');
     expect(html).toHaveAttribute('lang', 'ja');
@@ -26,7 +26,7 @@ describe('RootLayout コンポーネント', () => {
     render(
       <RootLayout>
         <div data-testid="child">子要素</div>
-      </RootLayout>
+      </RootLayout>,
     );
     const child = screen.getByTestId('child');
     expect(child.closest('body')).toBeInTheDocument();

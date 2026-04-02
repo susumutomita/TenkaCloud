@@ -99,7 +99,7 @@ describe('Auth0 認証設定', () => {
     process.env.AUTH0_ISSUER = '';
 
     await expect(import('../auth')).rejects.toThrow(
-      'Missing required Auth0 environment variables'
+      'Missing required Auth0 environment variables',
     );
   });
 

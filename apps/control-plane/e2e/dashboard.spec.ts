@@ -12,7 +12,7 @@ test.describe('ダッシュボード', () => {
 
     // ダッシュボードタイトルが表示されることを確認
     await expect(
-      page.getByRole('heading', { name: 'ダッシュボード' })
+      page.getByRole('heading', { name: 'ダッシュボード' }),
     ).toBeVisible();
   });
 
@@ -30,10 +30,10 @@ test.describe('ダッシュボード', () => {
     await expect(page.getByText('クイックアクション')).toBeVisible();
     // メインコンテンツ内のクイックアクションリンクを確認（サイドバーと区別）
     await expect(
-      page.getByRole('main').getByRole('link', { name: 'テナント管理' })
+      page.getByRole('main').getByRole('link', { name: 'テナント管理' }),
     ).toBeVisible();
     await expect(
-      page.getByRole('main').getByRole('link', { name: '新規テナント作成' })
+      page.getByRole('main').getByRole('link', { name: '新規テナント作成' }),
     ).toBeVisible();
   });
 

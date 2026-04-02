@@ -14,7 +14,7 @@ const apiBaseUrl = isServer
 export class TenantApiError extends Error {
   constructor(
     public readonly status: number,
-    public readonly userMessage: string
+    public readonly userMessage: string,
   ) {
     super(userMessage);
     this.name = 'TenantApiError';
@@ -78,7 +78,7 @@ export const tenantApi = {
 
   async updateTenant(
     id: string,
-    input: UpdateTenantInput
+    input: UpdateTenantInput,
   ): Promise<Tenant | null> {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
       method: 'PATCH',

@@ -91,7 +91,7 @@ export default function EventsPage() {
   const [selectedStatus, setSelectedStatus] =
     useState<SelectProps.Option | null>(statusOptions[0]);
   const [selectedType, setSelectedType] = useState<SelectProps.Option | null>(
-    typeOptions[0]
+    typeOptions[0],
   );
 
   useEffect(() => {
@@ -110,7 +110,7 @@ export default function EventsPage() {
         setError(null);
       } catch (err) {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました')
+          err instanceof Error ? err : new Error('読み込みに失敗しました'),
         );
       } finally {
         setLoading(false);

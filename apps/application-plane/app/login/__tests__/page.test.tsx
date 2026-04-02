@@ -30,7 +30,7 @@ describe('Application Plane ログインページ', () => {
   it('AWS Console アクセスの説明が表示されるべき', () => {
     render(<LoginPage />);
     const description = screen.getByText(
-      'ログイン後、バトルに参加して AWS Console にアクセスできます'
+      'ログイン後、バトルに参加して AWS Console にアクセスできます',
     );
     expect(description).toBeInTheDocument();
   });

@@ -37,7 +37,7 @@ export default function VotePage() {
         'http://localhost:3020/api/gameday';
       const [teamsRes, votesData] = await Promise.all([
         fetch(
-          `${GAMEDAY_API_URL}/admin/teams?eventId=${encodeURIComponent(eventId)}`
+          `${GAMEDAY_API_URL}/admin/teams?eventId=${encodeURIComponent(eventId)}`,
         ).then((r) => (r.ok ? r.json() : { teams: [] })),
         getVotingResults(eventId),
       ]);
@@ -50,7 +50,7 @@ export default function VotePage() {
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました')
+        err instanceof Error ? err : new Error('読み込みに失敗しました'),
       );
     } finally {
       setLoading(false);

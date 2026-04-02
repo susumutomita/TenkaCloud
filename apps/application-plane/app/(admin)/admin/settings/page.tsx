@@ -87,7 +87,7 @@ export default function AdminSettingsPage() {
       window.setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       setSaveError(
-        err instanceof Error ? err.message : '設定の保存に失敗しました'
+        err instanceof Error ? err.message : '設定の保存に失敗しました',
       );
     } finally {
       setSaving(false);
@@ -271,7 +271,7 @@ export default function AdminSettingsPage() {
                     ...settings,
                     maxParticipantsPerEvent: Number.parseInt(
                       e.target.value,
-                      10
+                      10,
                     ),
                   })
                 }

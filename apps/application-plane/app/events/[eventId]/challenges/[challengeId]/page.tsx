@@ -112,7 +112,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'ヒントの公開に失敗しました'
+        err instanceof Error ? err.message : 'ヒントの公開に失敗しました',
       );
     }
   };
@@ -126,12 +126,12 @@ export default function ChallengeDetailPage() {
       setChallenge({
         ...jamChallenge,
         clues: jamChallenge.clues.map((c) =>
-          c.id === clueId ? revealedClue : c
+          c.id === clueId ? revealedClue : c,
         ),
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'クルーの公開に失敗しました'
+        err instanceof Error ? err.message : 'クルーの公開に失敗しました',
       );
     }
   };
@@ -150,7 +150,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '採点リクエストに失敗しました'
+        err instanceof Error ? err.message : '採点リクエストに失敗しました',
       );
     } finally {
       setScoring(false);

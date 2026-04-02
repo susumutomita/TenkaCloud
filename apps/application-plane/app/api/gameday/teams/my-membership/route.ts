@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     process.env.GAMEDAY_API_URL || 'http://localhost:3020/api/gameday';
   const response = await fetch(
     `${GAMEDAY_API_URL}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
-    { headers: { 'Content-Type': 'application/json' } }
+    { headers: { 'Content-Type': 'application/json' } },
   );
   const data = await response.json();
   return Response.json(data, { status: response.status });

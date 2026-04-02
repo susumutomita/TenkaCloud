@@ -47,7 +47,7 @@ export default function AdminProblemDeployPage() {
   const [deployState, setDeployState] = useState<DeployState>('idle');
   const [deployMessage, setDeployMessage] = useState<string | null>(null);
   const [deployedStackName, setDeployedStackName] = useState<string | null>(
-    null
+    null,
   );
   const [deploymentStatus, setDeploymentStatus] =
     useState<DeploymentStatus | null>(null);
@@ -73,7 +73,7 @@ export default function AdminProblemDeployPage() {
         // デフォルトリージョンを設定
         if (regionsData.regions.length > 0) {
           const defaultRegion = regionsData.regions.find(
-            (r) => r.code === 'ap-northeast-1'
+            (r) => r.code === 'ap-northeast-1',
           );
           setSelectedRegion(defaultRegion?.code || regionsData.regions[0].code);
         }
@@ -114,7 +114,7 @@ export default function AdminProblemDeployPage() {
         const status = await getDeploymentStatus(
           problemId,
           result.stackName,
-          selectedRegion
+          selectedRegion,
         );
         setDeploymentStatus(status);
       }
@@ -122,7 +122,7 @@ export default function AdminProblemDeployPage() {
       console.error('Deploy failed:', err);
       setDeployState('error');
       setDeployMessage(
-        err instanceof Error ? err.message : 'デプロイに失敗しました'
+        err instanceof Error ? err.message : 'デプロイに失敗しました',
       );
     }
   };
@@ -134,7 +134,7 @@ export default function AdminProblemDeployPage() {
       const status = await getDeploymentStatus(
         problemId,
         deployedStackName,
-        selectedRegion
+        selectedRegion,
       );
       setDeploymentStatus(status);
     } catch (err) {
@@ -162,7 +162,7 @@ export default function AdminProblemDeployPage() {
   };
 
   const getStatusBadgeVariant = (
-    status: string
+    status: string,
   ): 'default' | 'success' | 'warning' | 'danger' => {
     if (status.includes('COMPLETE') && !status.includes('ROLLBACK')) {
       return 'success';
@@ -487,7 +487,7 @@ export default function AdminProblemDeployPage() {
                                     {value}
                                   </p>
                                 </div>
-                              )
+                              ),
                             )}
                           </div>
                         </div>

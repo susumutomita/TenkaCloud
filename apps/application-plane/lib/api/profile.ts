@@ -64,7 +64,7 @@ export async function getEventHistory(options?: {
 
   return get<{ events: ParticipantEventSummary[]; total: number }>(
     '/participant/profile/history',
-    params
+    params,
   );
 }
 
