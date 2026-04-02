@@ -1,6 +1,6 @@
 # TenkaCloud Quick Start
 
-この手順は、2026-04-03 時点の現行リポジトリ構成に合わせています。
+この手順は、ローカル開発を最短で始めるための正本です。
 
 ## 前提
 
@@ -44,7 +44,7 @@ make start
 - Control Plane: `http://localhost:13000/control`
 - Application Plane: `http://localhost:13001/`
 
-補助 URL:
+補助 URL は以下のとおりです。
 
 - Tenant API: `http://localhost:13004/api/tenants`
 - Problem API: `http://localhost:3100/api`
@@ -59,14 +59,14 @@ Auth0 を使って本番相当で試す場合は [AUTH0_SETUP.md](./AUTH0_SETUP.
 
 ## 個別起動
 
-全体起動ではなく一部だけ見たい場合:
+全体起動ではなく一部だけ見たい場合は以下のとおりです。
 
 ```bash
 make dev       # Control Plane のみ
 make dev-app   # Application Plane のみ
 ```
 
-バックエンドを個別に触る場合の例:
+バックエンドを個別に触る場合の例は以下のとおりです。
 
 ```bash
 cd backend/services/control-plane/tenant-management
@@ -86,7 +86,7 @@ bun run dev
 curl http://localhost:13004/health
 ```
 
-期待値:
+期待値は以下のとおりです。
 
 ```json
 {"status":"ok","service":"tenant-management"}
@@ -152,7 +152,7 @@ make start
 
 ### ポート競合
 
-使っているポート:
+使っているポートは以下のとおりです。
 
 - `13000`
 - `13001`
@@ -165,5 +165,6 @@ make start
 
 ## 補足
 
-- `Plan.md` や `docs/plans/` には履歴的な設計メモが含まれますが、セットアップ手順の正本ではありません
-- `docs-site/` は公開向けの要約で、内部向けの正本は `docs/` です
+- `Plan.md` や `docs/plans/` には履歴的な設計メモが含まれるが、セットアップ手順の正本ではない。
+- `docs-site/` は公開向けの要約であり、内部向けの正本は `docs/` である。
+- 一時的な切り分け手順や個人メモはこの文書に追加しない。

@@ -2,7 +2,7 @@
 
 TenkaCloud は、クラウド技術者向けの OSS 競技プラットフォームです。AWS GameDay をルーツにしつつ、常設運用できるマルチテナント SaaS として再構成しています。
 
-## 現在の実装スコープ
+## システム構成
 
 - `apps/control-plane`: プラットフォーム管理 UI。テナント管理、設定、運用導線を担当
 - `apps/application-plane`: テナント向け UI。GameDay / Battle / ランキング / プロフィールを担当
@@ -10,7 +10,7 @@ TenkaCloud は、クラウド技術者向けの OSS 競技プラットフォー�
 - `backend/services/application-plane/*`: problem / gameday / battle / scoring / leaderboard などの競技サービス
 - `problems/`: 問題データとドキュメント
 
-現時点では、ローカル開発は `Auth0` と `AUTH_SKIP=1` の両方を前提にできます。古い `Keycloak` / `Cognito` / `frontend/` 構成を前提にした記述は現行実装ではありません。
+ローカル開発は `Auth0` と `AUTH_SKIP=1` の両方を前提にできます。`Keycloak` / `Cognito` / `frontend/` 構成を前提にした記述は正本から外します。
 
 ## クイックスタート
 
@@ -33,7 +33,7 @@ make install
 make start
 ```
 
-起動後の主要 URL:
+起動後の主要 URL は以下のとおりです。
 
 - Control Plane: `http://localhost:13000/control`
 - Application Plane: `http://localhost:13001/`
@@ -78,4 +78,5 @@ make gameday-seed     # GameDay デモデータ投入
 - `README.md` は最短の入口
 - `docs/` を内部向け正本
 - `docs-site/` は公開向けの要約と導線
-- 仕様がコードと食い違う場合は、コードに合わせて `docs/` を先に更新する
+- 一時的な調査メモや運用メモは正本に昇格させない
+- 仕様がコードと食い違う場合は、責務と公開契約を `docs/` に反映する

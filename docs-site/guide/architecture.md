@@ -1,141 +1,44 @@
 # アーキテクチャ
 
-TenkaCloud は、AWS SaaS Factory の EKS Reference Architecture をベースにしたマルチテナント SaaS アーキテクチャを採用しています。
+TenkaCloud は、共有管理面を担う Control Plane と、競技体験を担う Application Plane を分離しています。
 
-## 全体構成
+## 構成
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Internet                                     │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Load Balancer                                   │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-            ┌───────────────────┼───────────────────┐
-            ▼                   ▼                   ▼
-┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
-│   Control Plane   │ │ Application Plane │ │   Landing Site    │
-│   :13000          │ │    :13001         │ │                   │
-│   (管理者)        │ │   (テナント)      │ │                   │
-└───────────────────┘ └───────────────────┘ └───────────────────┘
-            │                   │
-            └─────────┬─────────┘
-                      ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Backend Services                             │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │   Tenant    │  │   Problem   │  │   Battle    │  │   Scoring   │ │
-│  │ Management  │  │   Service   │  │   Service   │  │   Service   │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Data Layer                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │  DynamoDB   │  │     S3      │  │  Cognito    │  │ EventBridge │ │
-│  │(Single-Table)│  │   Buckets   │  │ User Pool  │  │   Events    │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
+```text
+TenkaCloud
+├── apps/control-plane
+├── apps/application-plane
+├── backend/services/control-plane/*
+├── backend/services/application-plane/*
+├── backend/services/shared/*
+└── packages/*
 ```
 
 ## Control Plane
 
-プラットフォーム全体の管理を担当します。
-
-### 責務
-
-- **テナント管理**: テナントの作成・更新・削除
-- **プロビジョニング**: 新規テナントの AWS リソース作成
-- **課金管理**: テナントのプラン・課金状態の管理
-- **システム監視**: 全体のヘルスチェック・メトリクス収集
-
-### 技術スタック
-
-| レイヤー | 技術 |
-|----------|------|
-| フロントエンド | Next.js 16, React, Tailwind CSS |
-| 認証 | NextAuth.js + Auth0 |
-| API | Next.js API Routes |
-| データベース | DynamoDB (Single-Table Design) |
+- テナント管理
+- 設定管理
+- 登録、プロビジョニング、ユーザー管理の導線
 
 ## Application Plane
 
-テナント固有のビジネスロジックを実行します。
+- GameDay
+- Battle
+- 問題管理
+- 採点
+- リーダーボード
 
-### 責務
+## 認証
 
-- **バトル管理**: クラウド構築競技の実行
-- **問題管理**: 問題の作成・編集・AI 生成
-- **採点**: リアルタイムスコアリング
-- **ユーザー管理**: テナント内ユーザーの管理
+- 本番相当: Auth0
+- ローカル確認: `AUTH_SKIP=1`
 
-### サービス構成
+## ローカル URL
 
-| サービス | 説明 | ポート |
-|----------|------|--------|
-| Problem Service | 問題の CRUD と AI 生成 | 13002 |
-| Battle Service | バトルセッション管理 | 13003 |
-| Scoring Service | スコア計算・リーダーボード | - |
+- Control Plane: `http://localhost:13000/control`
+- Application Plane: `http://localhost:13001/`
+- Tenant API: `http://localhost:13004/api/tenants`
+- Problem API: `http://localhost:3100/api`
+- GameDay API: `http://localhost:3020/api/gameday`
 
-## データモデル (Single-Table Design)
-
-DynamoDB の Single-Table Design を採用し、すべてのエンティティを 1 つのテーブルで管理します。
-
-### キー設計
-
-| エンティティ | PK | SK |
-|-------------|-----|-----|
-| Tenant | `TENANT#<id>` | `METADATA` |
-| Problem | `TENANT#<tenantId>` | `PROBLEM#<id>` |
-| Event | `TENANT#<tenantId>` | `EVENT#<id>` |
-| Participant | `TENANT#<tenantId>` | `PARTICIPANT#<id>` |
-
-### GSI (Global Secondary Index)
-
-| GSI | 用途 |
-|-----|------|
-| GSI1 | スラッグベースのクエリ |
-| GSI2 | EntityType 別クエリ |
-
-## イベント駆動アーキテクチャ
-
-テナントのライフサイクルイベントは EventBridge で管理されます。
-
-```
-┌─────────────┐     ┌───────────────┐     ┌─────────────────────┐
-│  DynamoDB   │────▶│  Provisioning │────▶│    EventBridge      │
-│   Stream    │     │    Lambda     │     │  (tenant.events)    │
-└─────────────┘     └───────────────┘     └─────────────────────┘
-                                                    │
-                    ┌───────────────────────────────┼───────────────┐
-                    ▼                               ▼               ▼
-          ┌─────────────────┐            ┌─────────────┐   ┌───────────┐
-          │ Tenant Provisioner│            │  Completion │   │   SNS     │
-          │     Lambda       │            │    Lambda   │   │ (通知)    │
-          └─────────────────┘            └─────────────┘   └───────────┘
-```
-
-## セキュリティ
-
-### 認証・認可
-
-- **Auth0**: OIDC/OAuth 2.0 ベースの認証
-- **JWT**: ステートレスなトークンベース認証
-- **RBAC**: ロールベースアクセス制御
-
-### テナント分離
-
-- **データ分離**: DynamoDB のパーティションキーによる論理分離
-- **コンピュート分離**: 将来的に Silo/Pool モデルの選択が可能
-- **ネットワーク分離**: VPC とセキュリティグループによる分離
-
-## 関連ドキュメント
-
-- [EKS Reference Architecture](https://github.com/aws-samples/aws-saas-factory-eks-reference-architecture)
-- [AWS SaaS Factory](https://aws.amazon.com/partners/saas-factory/)
+内部向けの詳細は `docs/architecture/architecture.md` を参照してください。

@@ -1,72 +1,58 @@
-# TenkaCloud Participant UI
+# TenkaCloud Application Plane
 
-競技者向け UI です。
+TenkaCloud のテナント向け UI です。管理者向け画面と参加者向け画面を同じ Next.js アプリにまとめています。
 
-## 概要
+## 役割
 
-Participant UI は、クラウド天下一武道会の競技者がバトルに参加し、問題を解くための Web アプリケーションです。
-
-## 機能
-
-- **バトル参加**: リアルタイムバトルセッションへの参加
-- **問題を解く**: クラウドインフラ構築問題への挑戦
-- **リーダーボード**: リアルタイムスコア表示
-- **進捗トラッキング**: 自分の解答状況と得点の確認
-- **観戦モード**: 他の参加者の進捗をリアルタイムで観戦（オプション）
+- GameDay イベント表示
+- Battle 参加と進行確認
+- 問題閲覧と挑戦
+- ランキング、スコア、プロフィール表示
 
 ## 技術スタック
 
-- Next.js 16 (App Router)
+- Next.js 16
+- React 19
 - TypeScript
-- Tailwind CSS
-- Biome (Linter/Formatter)
-- Vitest + React Testing Library (Testing)
+- Tailwind CSS v4
+- NextAuth.js v5
+- Biome
+- Vitest
 
 ## 開発
 
 ```bash
-# 依存関係のインストール
-npm install
-
-# 開発サーバー起動 (ポート 3002)
-npm run dev
-
-# ビルド
-npm run build
-
-# 型チェック
-npm run typecheck
-
-# Lint
-npm run lint
-
-# テスト
-npm run test
-
-# テストカバレッジ
-npm run test:coverage
+bun install
+bun run dev
 ```
 
-## ディレクトリ構造
+デフォルトポートは `13001` です。
 
-```
-participant-app/
-├── app/              # Next.js App Router
-│   ├── layout.tsx    # ルートレイアウト
-│   ├── page.tsx      # ホームページ
-│   └── globals.css   # グローバルスタイル
-├── components/       # React コンポーネント（今後追加）
-├── lib/              # ユーティリティ（今後追加）
-└── public/           # 静的ファイル（今後追加）
-```
+### 主なスクリプト
+
+- `bun run dev`
+- `bun run build`
+- `bun run start`
+- `bun run typecheck`
+- `bun run lint`
+- `bun run format`
+- `bun run test`
+- `bun run test:coverage`
 
 ## 認証
 
-Participant UI は Keycloak (OIDC) による認証を使用します。
-競技者としてログインしてください。
+- 本番相当: Auth0
+- ローカル確認: `AUTH_SKIP=1`
 
-## 関連ドキュメント
+環境変数の雛形は [`.env.example`](/Users/susumu/product/TenkaCloud/apps/application-plane/.env.example) を参照してください。
 
-- [TenkaCloud CLAUDE.md](/CLAUDE.md)
-- [Control Plane UI](/frontend/control-plane-app/README.md)
-- [Admin UI](/frontend/admin-app/README.md)
+## 関連 API
+
+- Problem API: `http://localhost:3100/api`
+- GameDay API: `http://localhost:3020/api/gameday`
+
+## 関連文書
+
+- [README.md](/Users/susumu/product/TenkaCloud/README.md)
+- [docs/QUICKSTART.md](/Users/susumu/product/TenkaCloud/docs/QUICKSTART.md)
+- [docs/architecture/architecture.md](/Users/susumu/product/TenkaCloud/docs/architecture/architecture.md)

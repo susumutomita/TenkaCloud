@@ -3,69 +3,38 @@ layout: home
 
 hero:
   name: TenkaCloud
-  text: クラウド天下一武道会
-  tagline: クラウド技術者のための OSS 競技プラットフォーム
+  text: クラウド競技プラットフォーム
+  tagline: Control Plane と Application Plane を分離した OSS 基盤
   actions:
     - theme: brand
-      text: クイックスタート
+      text: Quickstart
       link: /quickstart
     - theme: alt
-      text: GitHub
-      link: https://github.com/susumutomita/TenkaCloud
+      text: Architecture
+      link: /guide/architecture
 
 features:
-  - icon: 🌐
-    title: マルチクラウド対応
-    details: AWS / GCP / Azure / LocalStack / OCI に対応。クラウドを問わず技術力を競える。
   - icon: 🏢
-    title: マルチテナント SaaS
-    details: EKS Reference Architecture をベースに設計された、本格的なマルチテナントアーキテクチャ。
-  - icon: 🤖
-    title: AI 支援
-    details: MCP/Claude Code 統合による問題生成・自動採点・コーチング機能。
-  - icon: 🔓
-    title: 完全 OSS
-    details: 社内資産を含まず、ゼロから設計。誰でも自由に利用・貢献可能。
+    title: Control Plane
+    details: テナント管理、設定、運用導線を担う共有領域。
+  - icon: ⚔️
+    title: Application Plane
+    details: GameDay、Battle、問題、ランキングを担うテナント向け領域。
+  - icon: 🔐
+    title: Auth0 + Auth Skip
+    details: 本番相当の Auth0 と、ローカル確認用の認証スキップを両立。
+  - icon: 🧱
+    title: Monorepo
+    details: apps、backend/services、packages、problems を単一リポジトリで管理。
 ---
 
-## TenkaCloud とは
+## Overview
 
-TenkaCloud は、AWS GameDay 文化をルーツに、完全スクラッチで再構築された常設のクラウド競技プラットフォームです。
+TenkaCloud は、クラウド競技イベントを継続的に運営するための OSS プラットフォームです。
 
-### 主な機能
+- `apps/control-plane`: プラットフォーム管理 UI
+- `apps/application-plane`: テナント向け UI
+- `backend/services/control-plane/*`: 共有管理サービス
+- `backend/services/application-plane/*`: 競技サービス
 
-- **バトルモード**: リアルタイムでクラウドインフラ構築を競う
-- **問題管理**: AI による問題自動生成と難易度調整
-- **チーム戦**: 複数人でのコラボレーション対応
-- **リーダーボード**: リアルタイムスコアリング
-
-### アーキテクチャ
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Control Plane                           │
-│  (テナント管理・認証・課金)                                 │
-├─────────────────────────────────────────────────────────────┤
-│                    Application Plane                        │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
-│  │ Battle  │  │ Problem │  │ Scoring │  │  User   │        │
-│  │ Service │  │ Service │  │ Service │  │ Service │        │
-│  └─────────┘  └─────────┘  └─────────┘  └─────────┘        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## クイックスタート
-
-```bash
-# クローン
-git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-
-# 依存関係インストール
-bun install
-
-# 起動
-make start
-```
-
-詳細は [クイックスタートガイド](/quickstart) を参照してください。
+詳細な手順は [Quickstart](/quickstart)、設計の正本は [Architecture](/guide/architecture) を参照してください。

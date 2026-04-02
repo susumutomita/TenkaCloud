@@ -1,98 +1,45 @@
 # Application Plane Services
 
-アプリケーションプレーンは、テナント固有のビジネスロジックを実行するサービス群です。テナント毎にネームスペースで分離されます。
+Application Plane は、テナント体験と競技体験を担うサービス群です。
 
-## サービス一覧
+## 含まれるサービス
 
-### 1. Battle Service
-- ディレクトリ: `battle-service/`
-- 責務: クラウド対戦セッションの管理
-- 主な機能:
-  - バトルセッションの CRUD
-  - リアルタイムバトル進行管理
-  - チーム対戦モード
-  - 観戦モード（リアルタイム進捗配信）
-  - バトル履歴・リプレイ
+- `problem-service`: 問題、イベント、テンプレート管理
+- `gameday-service`: GameDay API
+- `battle-service`: Battle セッション管理
+- `scoring-service`: 採点処理
+- `leaderboard-service`: ランキング集計
+- `tenant-provisioner`: テナント環境側のプロビジョニング補助
 
-### 2. Problem Service
-- ディレクトリ: `problem-service/`
-- 責務: 競技問題の管理
-- 主な機能:
-  - 問題ライブラリ管理
-  - 問題作成・編集
-  - Cloud Contest 形式との互換性
-  - 問題テンプレート管理
-  - AI 支援による問題生成
+## 責務
 
-### 3. Scoring Service
-- ディレクトリ: `scoring-service/`
-- 責務: インフラ構築の自動評価
-- 主な機能:
-  - インフラ構築の自動検証
-  - コスト最適化スコアリング
-  - セキュリティベストプラクティス評価
-  - パフォーマンス評価
-  - 詳細フィードバック生成
+- 競技イベントの実行
+- 問題ライフサイクル管理
+- 採点とランキング
+- テナント参加者向け API の提供
 
-### 4. Leaderboard Service
-- ディレクトリ: `leaderboard-service/`
-- 責務: ランキング・統計管理
-- 主な機能:
-  - グローバルランキング
-  - カテゴリ別ランキング
-  - チームランキング
-  - 統計情報集計
-  - スコア履歴管理
+## 技術方針
 
-## アーキテクチャ
+- TypeScript
+- Hono ベースの API サービスを中心に構成
+- DynamoDB 系の共有実装を利用
+- UI からは `apps/application-plane` 経由で利用される
 
-### デプロイメント
-各テナント毎に専用の Kubernetes namespace を持ち、Application Plane サービスがデプロイされます。
+## ローカル開発
 
-```
-EKS Cluster
-├── Namespace: tenant-{tenant-id-1}
-│   ├── battle-service (Pod)
-│   ├── problem-service (Pod)
-│   ├── scoring-service (Pod)
-│   └── leaderboard-service (Pod)
-│
-└── Namespace: tenant-{tenant-id-2}
-    ├── battle-service (Pod)
-    ├── problem-service (Pod)
-    ├── scoring-service (Pod)
-    └── leaderboard-service (Pod)
+サービス単位で起動します。例は以下のとおりです。
+
+```bash
+cd backend/services/application-plane/problem-service
+bun run dev
 ```
 
-### テナント分離
-- Namespace 分離: テナント毎に独立した Kubernetes namespace
-- Network Policy: Namespace レベルでのネットワーク分離
-- データ分離: テナント ID によるデータパーティション
+```bash
+cd backend/services/application-plane/gameday-service
+bun run dev
+```
 
-### データストア
+## 関連文書
 
-#### Silo Model（テナント毎のデータベース）
-- Battle Service
-- Leaderboard Service
-
-厳格に分離された DynamoDB テーブルを各テナントに割り当てます。
-
-#### Pooled Model（共有データベース）
-- Problem Service
-- Scoring Service
-
-テナント ID でパーティションされた共有 DynamoDB テーブルを利用します。
-
-## 技術スタック
-
-- 言語: TypeScript (Node.js)
-- フレームワーク: Express / Fastify
-- データベース: DynamoDB
-- リアルタイム通信: WebSocket (Socket.IO)
-- 認証: JWT（Control Plane から発行）
-- コンテナ: Docker
-- オーケストレーション: Kubernetes (EKS)
-
-## 開発
-
-各サービスディレクトリ配下に個別の README.md があります。
+- [docs/architecture/architecture.md](/Users/susumu/product/TenkaCloud/docs/architecture/architecture.md)
+- [README.md](/Users/susumu/product/TenkaCloud/README.md)
