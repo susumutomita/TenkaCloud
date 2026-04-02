@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { auth, authSkipEnabled } from '@/auth';
 import { Providers } from '@/components/providers';
+import '@cloudscape-design/global-styles/index.css';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,8 +17,8 @@ export default async function RootLayout({
   const session = await auth();
 
   return (
-    <html lang="ja">
-      <body>
+    <html lang="ja" className="awsui-dark-mode">
+      <body className="awsui-dark-mode">
         <Providers session={session} authSkip={authSkipEnabled}>
           {children}
         </Providers>

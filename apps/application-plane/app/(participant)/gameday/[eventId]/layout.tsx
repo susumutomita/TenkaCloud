@@ -61,18 +61,12 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
       text: 'Event',
       items: [
         { type: 'link', text: 'Home', href: basePath },
-        { type: 'link', text: 'Score events', href: `${basePath}/scoreboard` },
-        {
-          type: 'link',
-          text: 'Scoreboard',
-          href: `${basePath}/scoreboard`,
-          external: true,
-        },
+        { type: 'link', text: 'Scoreboard', href: `${basePath}/scoreboard` },
       ],
     },
     {
       type: 'section',
-      text: 'Quests',
+      text: 'Battle',
       items: [
         { type: 'link', text: '防衛', href: `${basePath}/defense` },
         { type: 'link', text: '攻撃', href: `${basePath}/attack` },
