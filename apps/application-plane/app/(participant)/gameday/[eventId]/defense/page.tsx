@@ -1,14 +1,22 @@
 /**
  * Defense Trench (防衛塹壕)
  *
- * 受けている攻撃一覧、ヒント購入、脆弱性修正報告
+ * Cloudscape Design System — 受けている攻撃一覧、ヒント購入、脆弱性修正報告
  */
 
 'use client';
 
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
-import { DefenseItem } from '@/components/gameday';
-import { ErrorState, getErrorMessage, getErrorType } from '@/components/ui';
 import { getActiveDefense, purchaseHint, reportFix } from '@/lib/api/gameday';
 import type { AttackLog } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
@@ -71,67 +79,149 @@ export default function DefensePage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
-      </div>
+      <Box textAlign="center" padding="xxl">
+        <Spinner size="large" />
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <ErrorState
-        message={getErrorMessage(error)}
-        type={getErrorType(error)}
-        onRetry={fetchData}
-      />
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <SpaceBetween size="m">
+            <StatusIndicator type="error">{error.message}</StatusIndicator>
+            <Button onClick={fetchData}>再試行</Button>
+          </SpaceBetween>
+        </Box>
+      </Container>
     );
   }
 
   const active = attacks.filter((a) => !a.neutralized);
   const neutralized = attacks.filter((a) => a.neutralized);
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-        <span className="text-hn-accent font-mono">&gt;_</span>
-        防衛塹壕
-      </h1>
+  const formatTime = (ts: string) =>
+    new Date(ts).toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
 
-      {/* Active attacks */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-text-primary">
-          攻撃を受けている ({active.length})
-        </h2>
-        {active.length === 0 ? (
-          <p className="text-text-muted text-sm py-4">
-            現在攻撃を受けていません
-          </p>
-        ) : (
-          active.map((atk) => (
-            <DefenseItem
-              key={atk.id}
-              attack={atk}
-              hint={hints[atk.attackId]}
-              hintLoading={hintLoading[atk.attackId]}
-              fixLoading={fixLoading[atk.attackSlug]}
-              onPurchaseHint={() => handlePurchaseHint(atk.attackId)}
-              onReportFix={() => handleReportFix(atk.attackSlug)}
-            />
-          ))
-        )}
-      </div>
+  return (
+    <SpaceBetween size="l">
+      <Header variant="h1">防衛塹壕</Header>
+
+      {/* Active Attacks */}
+      <Table
+        header={
+          <Header
+            counter={`(${active.length})`}
+            description="現在受けている攻撃"
+          >
+            攻撃を受けている
+          </Header>
+        }
+        items={active}
+        columnDefinitions={[
+          {
+            id: 'attack',
+            header: '攻撃',
+            cell: (atk) => <Box variant="code">{atk.attackSlug}</Box>,
+          },
+          {
+            id: 'attacker',
+            header: '攻撃元',
+            cell: (atk) => atk.attackerTeamId,
+          },
+          {
+            id: 'damage',
+            header: 'ダメージ',
+            cell: (atk) => <Box color="text-status-error">{atk.damage}</Box>,
+            width: 100,
+          },
+          {
+            id: 'time',
+            header: '時間',
+            cell: (atk) => formatTime(atk.createdAt),
+            width: 120,
+          },
+          {
+            id: 'hint',
+            header: 'ヒント',
+            cell: (atk) =>
+              hints[atk.attackId] ? (
+                <StatusIndicator type="info">
+                  {hints[atk.attackId]}
+                </StatusIndicator>
+              ) : (
+                <Button
+                  variant="link"
+                  loading={hintLoading[atk.attackId]}
+                  onClick={() => handlePurchaseHint(atk.attackId)}
+                >
+                  ヒント購入
+                </Button>
+              ),
+          },
+          {
+            id: 'fix',
+            header: '修正',
+            cell: (atk) => (
+              <Button
+                variant="primary"
+                loading={fixLoading[atk.attackSlug]}
+                onClick={() => handleReportFix(atk.attackSlug)}
+              >
+                修正報告
+              </Button>
+            ),
+            width: 130,
+          },
+        ]}
+        empty="現在攻撃を受けていません"
+        sortingDisabled
+        footer={
+          <Box textAlign="center" color="text-body-secondary" fontSize="body-s">
+            <em>10秒ごとに自動更新</em>
+          </Box>
+        }
+      />
 
       {/* Neutralized */}
       {neutralized.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-text-secondary">
-            修正済み ({neutralized.length})
-          </h2>
-          {neutralized.map((atk) => (
-            <DefenseItem key={atk.id} attack={atk} />
-          ))}
-        </div>
+        <Table
+          header={<Header counter={`(${neutralized.length})`}>修正済み</Header>}
+          items={neutralized}
+          columnDefinitions={[
+            {
+              id: 'attack',
+              header: '攻撃',
+              cell: (atk) => <Box variant="code">{atk.attackSlug}</Box>,
+            },
+            {
+              id: 'attacker',
+              header: '攻撃元',
+              cell: (atk) => atk.attackerTeamId,
+            },
+            {
+              id: 'status',
+              header: 'ステータス',
+              cell: () => (
+                <StatusIndicator type="success">修正済み</StatusIndicator>
+              ),
+            },
+            {
+              id: 'time',
+              header: '時間',
+              cell: (atk) => formatTime(atk.createdAt),
+              width: 120,
+            },
+          ]}
+          empty=""
+          sortingDisabled
+        />
       )}
-    </div>
+    </SpaceBetween>
   );
 }
