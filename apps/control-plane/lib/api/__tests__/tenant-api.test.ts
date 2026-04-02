@@ -104,6 +104,19 @@ describe('tenantApi', () => {
       );
     });
 
+    it('JSON エラーレスポンスに error.message も message もない場合はデフォルトメッセージを使用すべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.BAD_REQUEST,
+        text: () => Promise.resolve(JSON.stringify({ code: 'UNKNOWN' })),
+      });
+
+      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
+      await expect(tenantApi.listTenants()).rejects.toThrow(
+        'APIリクエストに失敗しました'
+      );
+    });
+
     it('非 JSON エラーレスポンスでデフォルトメッセージを使用すべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,

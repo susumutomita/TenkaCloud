@@ -7,6 +7,31 @@ describe('Activities API', () => {
   });
 
   describe('サーバーサイド（window がない場合）', () => {
+    it('環境変数が未設定の場合はサーバーデフォルト URL を使用すべき', async () => {
+      vi.stubGlobal('window', undefined);
+      delete process.env.TENANT_API_BASE_URL;
+
+      const { fetchActivities } = await import('../activities-api');
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [],
+            pagination: { limit: 10, hasNextPage: false },
+          }),
+      });
+
+      await fetchActivities();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://tenant-management:13004/api/activities?limit=10',
+        { cache: 'no-store' }
+      );
+
+      vi.unstubAllGlobals();
+    });
+
     it('アクティビティを取得できるべき', async () => {
       vi.stubGlobal('window', undefined);
 

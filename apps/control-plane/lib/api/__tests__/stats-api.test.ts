@@ -7,6 +7,33 @@ describe('Stats API', () => {
   });
 
   describe('サーバーサイド（window がない場合）', () => {
+    it('環境変数が未設定の場合はサーバーデフォルト URL を使用すべき', async () => {
+      vi.stubGlobal('window', undefined);
+      delete process.env.TENANT_API_BASE_URL;
+
+      const { fetchDashboardStats } = await import('../stats-api');
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            activeTenants: 0,
+            totalTenants: 0,
+            systemStatus: 'healthy',
+            uptimePercentage: 100,
+          }),
+      });
+
+      await fetchDashboardStats();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://tenant-management:13004/api/stats',
+        { cache: 'no-store' }
+      );
+
+      vi.unstubAllGlobals();
+    });
+
     it('ダッシュボード統計を取得できるべき', async () => {
       // Remove window to simulate server-side
       vi.stubGlobal('window', undefined);
