@@ -33,6 +33,14 @@ import type {
   Leaderboard,
 } from '../../../lib/api/types';
 
+type RegistrationMode = 'solo' | 'create' | 'join';
+
+interface LocalGamedayData {
+  teamId: string;
+  teamName: string;
+  mode: 'solo' | 'team';
+}
+
 export default function EventDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -43,6 +51,13 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<RegistrationMode>('solo');
+  const [teamName, setTeamName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -76,19 +91,123 @@ export default function EventDetailPage() {
     fetchData();
   }, [eventId, router]);
 
-  const handleRegister = async () => {
-    if (!event) return;
+  const saveLocalGamedayData = (data: LocalGamedayData) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        `tenkacloud_gameday_${eventId}`,
+        JSON.stringify(data)
+      );
+    }
+  };
 
+  const refreshEvent = async () => {
+    const updatedEvent = await getEventDetails(eventId);
+    if (updatedEvent) setEvent(updatedEvent);
+  };
+
+  const handleRegisterClick = () => {
+    if (!event) return;
+    if (event.participantType === 'team') {
+      setModalError(null);
+      setTeamName('');
+      setInviteCode('');
+      setActiveTab('solo');
+      setShowModal(true);
+    } else {
+      void handleSoloRegister();
+    }
+  };
+
+  const handleSoloRegister = async () => {
     try {
       setRegistering(true);
       await registerForEvent(eventId);
-      // Refresh event data
-      const updatedEvent = await getEventDetails(eventId);
-      if (updatedEvent) {
-        setEvent(updatedEvent);
-      }
+      const soloId = `solo-dev-user`;
+      saveLocalGamedayData({ teamId: soloId, teamName: '', mode: 'solo' });
+      await refreshEvent();
+      setShowModal(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登録に失敗しました');
+      setModalError(err instanceof Error ? err.message : '登録に失敗しました');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const handleCreateTeam = async () => {
+    if (!teamName.trim()) {
+      setModalError('チーム名を入力してください');
+      return;
+    }
+    try {
+      setRegistering(true);
+      setModalError(null);
+      const newTeamId = crypto.randomUUID().replace(/-/g, '').toUpperCase();
+      const res = await fetch('/api/gameday/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId, teamId: newTeamId, teamName }),
+      });
+      const data = (await res.json()) as {
+        teamId?: string;
+        teamName?: string;
+        inviteCode?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setModalError(data.error ?? 'チーム作成に失敗しました');
+        return;
+      }
+      await registerForEvent(eventId);
+      saveLocalGamedayData({
+        teamId: data.teamId ?? newTeamId,
+        teamName: data.teamName ?? teamName,
+        mode: 'team',
+      });
+      await refreshEvent();
+      setShowModal(false);
+    } catch (err) {
+      setModalError(
+        err instanceof Error ? err.message : 'チーム作成に失敗しました'
+      );
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const handleJoinTeam = async () => {
+    if (!inviteCode.trim()) {
+      setModalError('招待コードを入力してください');
+      return;
+    }
+    try {
+      setRegistering(true);
+      setModalError(null);
+      const res = await fetch('/api/gameday/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId, inviteCode: inviteCode.toUpperCase() }),
+      });
+      const data = (await res.json()) as {
+        teamId?: string;
+        teamName?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setModalError(data.error ?? '招待コードが無効です');
+        return;
+      }
+      await registerForEvent(eventId);
+      saveLocalGamedayData({
+        teamId: data.teamId ?? '',
+        teamName: data.teamName ?? '',
+        mode: 'team',
+      });
+      await refreshEvent();
+      setShowModal(false);
+    } catch (err) {
+      setModalError(
+        err instanceof Error ? err.message : 'チーム参加に失敗しました'
+      );
     } finally {
       setRegistering(false);
     }
@@ -155,6 +274,130 @@ export default function EventDetailPage() {
       </div>
 
       <Header />
+
+      {/* Registration Modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="bg-surface-1 border border-border rounded-xl w-full max-w-md mx-4 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold text-text-primary mb-2">
+              参加登録
+            </h2>
+            <p className="text-text-muted text-sm mb-5">
+              参加方法を選択してください
+            </p>
+
+            {/* Tabs */}
+            <div className="flex gap-1 mb-5 bg-surface-0 rounded-lg p-1">
+              {(['solo', 'create', 'join'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab);
+                    setModalError(null);
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === tab
+                      ? 'bg-surface-2 text-text-primary'
+                      : 'text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  {tab === 'solo' && '一人で参加'}
+                  {tab === 'create' && 'チームを作成'}
+                  {tab === 'join' && '招待コードで参加'}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="space-y-4">
+              {activeTab === 'solo' && (
+                <div>
+                  <p className="text-text-secondary text-sm mb-4">
+                    個人として参加します。
+                  </p>
+                  <Button
+                    fullWidth
+                    onClick={() => void handleSoloRegister()}
+                    loading={registering}
+                  >
+                    一人で参加する
+                  </Button>
+                </div>
+              )}
+
+              {activeTab === 'create' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      チーム名
+                    </label>
+                    <input
+                      type="text"
+                      value={teamName}
+                      onChange={(e) => setTeamName(e.target.value)}
+                      placeholder="チーム名を入力"
+                      className="w-full px-3 py-2 bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-hn-accent"
+                    />
+                  </div>
+                  <Button
+                    fullWidth
+                    onClick={() => void handleCreateTeam()}
+                    loading={registering}
+                  >
+                    チームを作成して参加
+                  </Button>
+                </div>
+              )}
+
+              {activeTab === 'join' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text-secondary mb-1">
+                      招待コード
+                    </label>
+                    <input
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) =>
+                        setInviteCode(e.target.value.toUpperCase())
+                      }
+                      placeholder="6文字のコードを入力"
+                      maxLength={6}
+                      className="w-full px-3 py-2 bg-surface-0 border border-border rounded-lg text-text-primary placeholder:text-text-muted font-mono tracking-widest focus:outline-none focus:border-hn-accent"
+                    />
+                  </div>
+                  <Button
+                    fullWidth
+                    onClick={() => void handleJoinTeam()}
+                    loading={registering}
+                  >
+                    チームに参加
+                  </Button>
+                </div>
+              )}
+
+              {modalError && (
+                <p className="text-hn-error text-sm">{modalError}</p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="mt-5 w-full text-center text-text-muted hover:text-text-secondary text-sm"
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
@@ -283,7 +526,7 @@ export default function EventDetailPage() {
 
                   {!event.isRegistered && event.status !== 'completed' && (
                     <Button
-                      onClick={handleRegister}
+                      onClick={handleRegisterClick}
                       loading={registering}
                       fullWidth
                       size="lg"
