@@ -221,7 +221,7 @@ start: start-infrastructure-bg start-dev-servers
 start-infrastructure: start-local
 
 # バックグラウンドでエミュレータを起動し、準備完了を待つ
-start-infrastructure-bg: check-docker check-aws-cli check-terraform
+start-infrastructure-bg: check-docker check-aws-cli
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "🚀 TenkaCloud を起動します"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -531,7 +531,7 @@ check-terraform:
 	@command -v terraform >/dev/null 2>&1 || { echo "❌ Terraform がインストールされていません。"; echo "   brew install terraform でインストールしてください。"; exit 1; }
 	@echo "✅ Terraform がインストールされています"
 
-start-local: check-docker check-aws-cli check-terraform
+start-local: check-docker check-aws-cli
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "🚀 $(CLOUD_EMULATOR) でローカル環境を起動します"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
