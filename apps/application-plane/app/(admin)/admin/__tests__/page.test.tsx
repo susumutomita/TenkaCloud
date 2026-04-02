@@ -120,13 +120,13 @@ describe('Admin ダッシュボードページ', () => {
     expect(screen.queryByText('最近のアクティビティ')).not.toBeInTheDocument();
   });
 
-  it('ローディング中はスケルトンを表示すべき', () => {
+  it('ローディング中はスピナーを表示すべき', () => {
     mockGetDashboardStats.mockReturnValue(new Promise(() => {}));
     mockGetRecentActivities.mockReturnValue(new Promise(() => {}));
     render(<AdminDashboardPage />);
 
-    const skeletons = document.querySelectorAll('[class*="animate-pulse"]');
-    expect(skeletons.length).toBeGreaterThan(0);
+    const spinners = document.querySelectorAll('[class*="awsui_root"]');
+    expect(spinners.length).toBeGreaterThan(0);
   });
 
   it('アクティビティが空の場合はメッセージを表示すべき', async () => {

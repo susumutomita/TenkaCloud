@@ -1,41 +1,75 @@
 /**
  * Admin Events List Page
  *
- * HybridNext Design System - Terminal Command Center style
+ * Cloudscape Design System - Table-based event management
  * イベント管理一覧
  */
 
 'use client';
 
-import {
-  Calendar,
-  ClipboardList,
-  Pencil,
-  Plus,
-  Trash2,
-  Users,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useEffect, useId, useState } from 'react';
-import {
-  AdminPageFooter,
-  AdminPageHeader,
-  EmptyState,
-} from '@/components/admin';
-import { EventStatusBadge, ProblemTypeBadge, Skeleton } from '@/components/ui';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { del } from '@/lib/api/client';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Header from '@cloudscape-design/components/header';
+import Link from '@cloudscape-design/components/link';
+import type { SelectProps } from '@cloudscape-design/components/select';
+import Select from '@cloudscape-design/components/select';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import NextLink from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import '@cloudscape-design/global-styles/index.css';
+
 import type { AdminEvent, EventStatus } from '@/lib/api/admin-types';
+import { del } from '@/lib/api/client';
 import { formatDateTime } from '@/lib/utils';
 
+const STATUS_OPTIONS: SelectProps.Option[] = [
+  { label: 'すべて', value: '' },
+  { label: '下書き', value: 'draft' },
+  { label: '予定', value: 'scheduled' },
+  { label: '開催中', value: 'active' },
+  { label: '終了', value: 'completed' },
+];
+
+function getStatusIndicator(status: EventStatus) {
+  switch (status) {
+    case 'active':
+      return <StatusIndicator type="success">開催中</StatusIndicator>;
+    case 'scheduled':
+      return <StatusIndicator type="pending">予定</StatusIndicator>;
+    case 'completed':
+      return <StatusIndicator type="stopped">終了</StatusIndicator>;
+    case 'draft':
+      return <StatusIndicator type="info">下書き</StatusIndicator>;
+    default:
+      return <StatusIndicator type="info">{status}</StatusIndicator>;
+  }
+}
+
+function getTypeBadge(type: string) {
+  switch (type) {
+    case 'gameday':
+      return <Badge color="blue">GameDay</Badge>;
+    case 'jam':
+      return <Badge color="green">Jam</Badge>;
+    default:
+      return <Badge>{type}</Badge>;
+  }
+}
+
 export default function AdminEventsPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<{ status?: EventStatus }>({});
-  const statusFilterId = useId();
-
   const [error, setError] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  const [selectedStatusOption, setSelectedStatusOption] =
+    useState<SelectProps.Option>(STATUS_OPTIONS[0]);
 
   useEffect(() => {
     async function fetchEvents() {
@@ -74,199 +108,152 @@ export default function AdminEventsPage() {
     ? events.filter((e) => e.status === filter.status)
     : events;
 
-  return (
-    <div className="space-y-6">
-      <AdminPageHeader
-        title="イベント管理"
-        actions={
-          <Button asChild>
-            <Link href="/admin/events/new">
-              <Plus className="w-5 h-5 mr-2" />
-              新規イベント
-            </Link>
-          </Button>
-        }
-      />
-
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4 items-end">
-            <div>
-              <label
-                htmlFor={statusFilterId}
-                className="block text-sm font-medium text-text-muted mb-1"
-              >
-                ステータス
-              </label>
-              <select
-                id={statusFilterId}
-                className="bg-surface-1 border border-border rounded-[var(--radius)] px-3 py-2 text-text-primary focus:ring-hn-accent focus:border-hn-accent focus:outline-none"
-                value={filter.status || ''}
-                onChange={(e) =>
-                  setFilter({
-                    status: (e.target.value as EventStatus) || undefined,
-                  })
-                }
-              >
-                <option value="">すべて</option>
-                <option value="draft">下書き</option>
-                <option value="scheduled">予定</option>
-                <option value="active">開催中</option>
-                <option value="completed">終了</option>
-              </select>
-            </div>
-            <div className="text-sm text-text-muted font-mono">
-              {filteredEvents.length} 件のイベント
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Error State */}
-      {error && (
-        <Card className="border-hn-error/50 bg-hn-error/10">
-          <CardContent className="p-6 text-center">
-            <div className="text-4xl mb-4">⚠️</div>
-            <h2 className="text-xl font-semibold text-hn-error mb-2">
-              エラーが発生しました
-            </h2>
-            <p className="text-text-muted mb-4">{error}</p>
-            <Button
-              variant="secondary"
-              onClick={() => setFilter({ ...filter })}
-            >
-              再読み込み
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Events List */}
-      {!error && loading ? (
-        <EventsLoadingSkeleton />
-      ) : !error && filteredEvents.length === 0 ? (
-        <EmptyState
-          icon="📭"
-          title="イベントがありません"
-          description="新しいイベントを作成して始めましょう。"
-          action={
-            <Button asChild>
-              <Link href="/admin/events/new">新規イベント作成</Link>
-            </Button>
-          }
-        />
-      ) : !error ? (
-        <div className="space-y-4">
-          {filteredEvents.map((event) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              onDelete={() => setFilter({ ...filter })}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      <AdminPageFooter command="events" count={filteredEvents.length} />
-    </div>
-  );
-}
-
-function EventsLoadingSkeleton() {
-  return (
-    <div className="space-y-4">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Card key={i}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-64" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-              <Skeleton className="h-10 w-24" />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-interface EventCardProps {
-  event: AdminEvent;
-  onDelete: () => void;
-}
-
-function EventCard({ event, onDelete }: EventCardProps) {
-  const [deleting, setDeleting] = useState(false);
-
-  const handleDelete = async () => {
+  const handleDelete = async (event: AdminEvent) => {
     const confirmed = window.confirm(
       `「${event.name}」を削除しますか？この操作は取り消せません。`
     );
     if (!confirmed) return;
 
     try {
-      setDeleting(true);
+      setDeletingIds((prev) => new Set(prev).add(event.id));
       await del(`/admin/events/${event.id}`);
-      onDelete();
+      setFilter({ ...filter });
     } catch {
       window.alert('イベントの削除に失敗しました。再試行してください。');
     } finally {
-      setDeleting(false);
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(event.id);
+        return next;
+      });
     }
   };
 
+  const handleStatusFilterChange: SelectProps['onChange'] = ({ detail }) => {
+    setSelectedStatusOption(detail.selectedOption);
+    setFilter({
+      status: (detail.selectedOption.value as EventStatus) || undefined,
+    });
+  };
+
   return (
-    <Card className="group hover:border-hn-accent/50 transition-all duration-[var(--animation-duration-fast)]">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <Link
-                href={`/admin/events/${event.id}`}
-                className="text-lg font-semibold text-text-primary hover:text-hn-accent transition-colors"
+    <Table
+      variant="full-page"
+      loading={loading}
+      loadingText="イベントを読み込み中..."
+      items={error ? [] : filteredEvents}
+      empty={
+        error ? (
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="m">
+              <StatusIndicator type="error">{error}</StatusIndicator>
+              <Button onClick={() => setFilter({ ...filter })}>
+                再読み込み
+              </Button>
+            </SpaceBetween>
+          </Box>
+        ) : (
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="m">
+              <Box variant="p" color="text-body-secondary">
+                イベントがありません
+              </Box>
+              <Button
+                variant="primary"
+                onClick={() => router.push('/admin/events/new')}
               >
-                {event.name}
-              </Link>
-              <ProblemTypeBadge type={event.type} />
-              <EventStatusBadge status={event.status} />
-            </div>
-            <div className="flex items-center gap-6 text-sm text-text-muted">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                {formatDateTime(event.startTime)}
-              </span>
-              <span className="flex items-center gap-1">
-                <Users className="w-4 h-4" />
-                {event.participantCount} / {event.maxParticipants}
-              </span>
-              <span className="flex items-center gap-1">
-                <ClipboardList className="w-4 h-4" />
-                {event.problemCount} 問
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" asChild>
-              <Link href={`/admin/events/${event.id}`}>
-                <Pencil className="w-4 h-4 mr-1" />
-                編集
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-hn-error hover:text-hn-error hover:bg-hn-error/10"
-              onClick={handleDelete}
-              disabled={deleting}
+                新規イベント作成
+              </Button>
+            </SpaceBetween>
+          </Box>
+        )
+      }
+      header={
+        <Header
+          variant="awsui-h1-sticky"
+          counter={`(${filteredEvents.length})`}
+          actions={
+            <NextLink href="/admin/events/new">
+              <Button variant="primary">新規イベント</Button>
+            </NextLink>
+          }
+        >
+          イベント管理
+        </Header>
+      }
+      filter={
+        <Select
+          selectedOption={selectedStatusOption}
+          onChange={handleStatusFilterChange}
+          options={STATUS_OPTIONS}
+          placeholder="ステータスで絞り込み"
+        />
+      }
+      columnDefinitions={[
+        {
+          id: 'name',
+          header: 'イベント名',
+          cell: (item) => (
+            <Link
+              href={`/admin/events/${item.id}`}
+              onFollow={(e) => {
+                e.preventDefault();
+                router.push(`/admin/events/${item.id}`);
+              }}
             >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+              {item.name}
+            </Link>
+          ),
+          sortingField: 'name',
+        },
+        {
+          id: 'type',
+          header: 'タイプ',
+          cell: (item) => getTypeBadge(item.type),
+        },
+        {
+          id: 'status',
+          header: 'ステータス',
+          cell: (item) => getStatusIndicator(item.status),
+        },
+        {
+          id: 'startTime',
+          header: '開始日時',
+          cell: (item) => formatDateTime(item.startTime),
+          sortingField: 'startTime',
+        },
+        {
+          id: 'participants',
+          header: '参加者',
+          cell: (item) => `${item.participantCount} / ${item.maxParticipants}`,
+        },
+        {
+          id: 'problems',
+          header: '問題数',
+          cell: (item) => `${item.problemCount} 問`,
+        },
+        {
+          id: 'actions',
+          header: 'アクション',
+          cell: (item) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => router.push(`/admin/events/${item.id}`)}
+              >
+                編集
+              </Button>
+              <Button
+                variant="link"
+                loading={deletingIds.has(item.id)}
+                onClick={() => handleDelete(item)}
+              >
+                削除
+              </Button>
+            </SpaceBetween>
+          ),
+        },
+      ]}
+    />
   );
 }

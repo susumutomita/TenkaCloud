@@ -1,24 +1,26 @@
 /**
  * Admin Marketplace Page
  *
- * HybridNext Design System - Terminal Command Center style
- * 問題マーケットプレイス - 問題の検索と選択
+ * Cloudscape Design System - 問題マーケットプレイス
+ * 問題の検索と選択
  */
 
 'use client';
 
-import { useCallback, useEffect, useId, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import {
-  Badge,
-  ErrorState,
-  getErrorMessage,
-  getErrorType,
-  Input,
-  Select,
-  Skeleton,
-} from '@/components/ui';
+import { useCallback, useEffect, useState } from 'react';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Cards from '@cloudscape-design/components/cards';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import Select from '@cloudscape-design/components/select';
+import type { SelectProps } from '@cloudscape-design/components/select';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import '@cloudscape-design/global-styles/index.css';
 import { getProblems } from '@/lib/api/admin-problems';
 import type { AdminProblem } from '@/lib/api/admin-types';
 import type { DifficultyLevel, ProblemCategory } from '@/lib/api/types';
@@ -57,20 +59,113 @@ function toMarketplaceProblem(p: AdminProblem): MarketplaceProblem {
   };
 }
 
+const categoryOptions: SelectProps.Option[] = [
+  { value: '', label: 'すべて' },
+  { value: 'architecture', label: 'アーキテクチャ' },
+  { value: 'security', label: 'セキュリティ' },
+  { value: 'cost', label: 'コスト最適化' },
+  { value: 'performance', label: 'パフォーマンス' },
+  { value: 'reliability', label: '信頼性' },
+  { value: 'operations', label: '運用' },
+];
+
+const difficultyOptions: SelectProps.Option[] = [
+  { value: '', label: 'すべて' },
+  { value: 'easy', label: '初級' },
+  { value: 'medium', label: '中級' },
+  { value: 'hard', label: '上級' },
+  { value: 'expert', label: 'エキスパート' },
+];
+
+const cloudProviderOptions: SelectProps.Option[] = [
+  { value: '', label: 'すべて' },
+  { value: 'aws', label: 'AWS' },
+  { value: 'gcp', label: 'Google Cloud' },
+  { value: 'azure', label: 'Azure' },
+  { value: 'local', label: 'LocalStack' },
+];
+
+function getDifficultyBadgeColor(
+  difficulty: DifficultyLevel
+): 'green' | 'blue' | 'red' {
+  switch (difficulty) {
+    case 'easy':
+      return 'green';
+    case 'medium':
+      return 'blue';
+    case 'hard':
+      return 'red';
+    case 'expert':
+      return 'red';
+    default:
+      return 'blue';
+  }
+}
+
+function getDifficultyLabel(difficulty: DifficultyLevel): string {
+  switch (difficulty) {
+    case 'easy':
+      return '初級';
+    case 'medium':
+      return '中級';
+    case 'hard':
+      return '上級';
+    case 'expert':
+      return 'エキスパート';
+    default:
+      return difficulty;
+  }
+}
+
+function getCategoryLabel(category: ProblemCategory): string {
+  switch (category) {
+    case 'architecture':
+      return 'アーキテクチャ';
+    case 'security':
+      return 'セキュリティ';
+    case 'cost':
+      return 'コスト最適化';
+    case 'performance':
+      return 'パフォーマンス';
+    case 'reliability':
+      return '信頼性';
+    case 'operations':
+      return '運用';
+    default:
+      return category;
+  }
+}
+
+function getCategoryIcon(category: ProblemCategory): string {
+  switch (category) {
+    case 'architecture':
+      return '\u{1F3D7}\u{FE0F}';
+    case 'security':
+      return '\u{1F512}';
+    case 'cost':
+      return '\u{1F4B0}';
+    case 'performance':
+      return '\u26A1';
+    case 'reliability':
+      return '\u{1F6E1}\u{FE0F}';
+    case 'operations':
+      return '\u{1F527}';
+    default:
+      return '\u{1F4E6}';
+  }
+}
+
 export default function AdminMarketplacePage() {
   const [problems, setProblems] = useState<MarketplaceProblem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] =
+    useState<SelectProps.Option | null>(categoryOptions[0]);
+  const [selectedDifficulty, setSelectedDifficulty] =
+    useState<SelectProps.Option | null>(difficultyOptions[0]);
   const [selectedCloudProvider, setSelectedCloudProvider] =
-    useState<string>('');
-
-  const searchInputId = useId();
-  const categoryFilterId = useId();
-  const difficultyFilterId = useId();
-  const cloudProviderFilterId = useId();
+    useState<SelectProps.Option | null>(cloudProviderOptions[0]);
 
   const fetchProblems = useCallback(async () => {
     try {
@@ -92,76 +187,6 @@ export default function AdminMarketplacePage() {
     fetchProblems();
   }, [fetchProblems]);
 
-  const getDifficultyBadgeVariant = (
-    difficulty: DifficultyLevel
-  ): 'default' | 'success' | 'warning' | 'danger' | 'purple' => {
-    switch (difficulty) {
-      case 'easy':
-        return 'success';
-      case 'medium':
-        return 'warning';
-      case 'hard':
-        return 'danger';
-      case 'expert':
-        return 'purple';
-      default:
-        return 'default';
-    }
-  };
-
-  const getDifficultyLabel = (difficulty: DifficultyLevel): string => {
-    switch (difficulty) {
-      case 'easy':
-        return '初級';
-      case 'medium':
-        return '中級';
-      case 'hard':
-        return '上級';
-      case 'expert':
-        return 'エキスパート';
-      default:
-        return difficulty;
-    }
-  };
-
-  const getCategoryLabel = (category: ProblemCategory): string => {
-    switch (category) {
-      case 'architecture':
-        return 'アーキテクチャ';
-      case 'security':
-        return 'セキュリティ';
-      case 'cost':
-        return 'コスト最適化';
-      case 'performance':
-        return 'パフォーマンス';
-      case 'reliability':
-        return '信頼性';
-      case 'operations':
-        return '運用';
-      default:
-        return category;
-    }
-  };
-
-  const getCategoryIcon = (category: ProblemCategory): string => {
-    switch (category) {
-      case 'architecture':
-        return '🏗️';
-      case 'security':
-        return '🔒';
-      case 'cost':
-        return '💰';
-      case 'performance':
-        return '⚡';
-      case 'reliability':
-        return '🛡️';
-      case 'operations':
-        return '🔧';
-      default:
-        return '📦';
-    }
-  };
-
   const filteredProblems = problems.filter((p) => {
     const matchesSearch =
       searchQuery === '' ||
@@ -171,11 +196,12 @@ export default function AdminMarketplacePage() {
         tag.toLowerCase().includes(searchQuery.toLowerCase())
       );
     const matchesCategory =
-      selectedCategory === '' || p.category === selectedCategory;
+      !selectedCategory?.value || p.category === selectedCategory.value;
     const matchesDifficulty =
-      selectedDifficulty === '' || p.difficulty === selectedDifficulty;
+      !selectedDifficulty?.value || p.difficulty === selectedDifficulty.value;
     const matchesCloudProvider =
-      selectedCloudProvider === '' || p.cloudProvider === selectedCloudProvider;
+      !selectedCloudProvider?.value ||
+      p.cloudProvider === selectedCloudProvider.value;
 
     return (
       matchesSearch &&
@@ -194,306 +220,204 @@ export default function AdminMarketplacePage() {
       : '0.0';
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-          <span className="text-hn-accent font-mono">&gt;_</span>
-          問題マーケットプレイス
-        </h1>
-      </div>
+    <SpaceBetween size="l">
+      <Header
+        variant="h1"
+        counter={
+          !loading && !error ? `(${filteredProblems.length})` : undefined
+        }
+      >
+        問題マーケットプレイス
+      </Header>
 
-      {/* Search & Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-2">
-              <label htmlFor={searchInputId} className="sr-only">
-                検索
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg
-                    className="h-5 w-5 text-text-muted"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </div>
-                <Input
-                  id={searchInputId}
-                  type="text"
-                  placeholder="タイトル、説明、タグで検索..."
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor={categoryFilterId}
-                className="block text-xs font-medium text-text-muted mb-1"
-              >
-                カテゴリ
-              </label>
-              <Select
-                id={categoryFilterId}
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                options={[
-                  { value: '', label: 'すべて' },
-                  { value: 'architecture', label: 'アーキテクチャ' },
-                  { value: 'security', label: 'セキュリティ' },
-                  { value: 'cost', label: 'コスト最適化' },
-                  { value: 'performance', label: 'パフォーマンス' },
-                  { value: 'reliability', label: '信頼性' },
-                  { value: 'operations', label: '運用' },
-                ]}
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor={difficultyFilterId}
-                className="block text-xs font-medium text-text-muted mb-1"
-              >
-                難易度
-              </label>
-              <Select
-                id={difficultyFilterId}
-                value={selectedDifficulty}
-                onChange={(e) => setSelectedDifficulty(e.target.value)}
-                options={[
-                  { value: '', label: 'すべて' },
-                  { value: 'easy', label: '初級' },
-                  { value: 'medium', label: '中級' },
-                  { value: 'hard', label: '上級' },
-                  { value: 'expert', label: 'エキスパート' },
-                ]}
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor={cloudProviderFilterId}
-                className="block text-xs font-medium text-text-muted mb-1"
-              >
-                クラウド
-              </label>
-              <Select
-                id={cloudProviderFilterId}
-                value={selectedCloudProvider}
-                onChange={(e) => setSelectedCloudProvider(e.target.value)}
-                options={[
-                  { value: '', label: 'すべて' },
-                  { value: 'aws', label: 'AWS' },
-                  { value: 'gcp', label: 'Google Cloud' },
-                  { value: 'azure', label: 'Azure' },
-                  { value: 'local', label: 'LocalStack' },
-                ]}
-              />
-            </div>
+      {/* Filters */}
+      <Container>
+        <SpaceBetween direction="horizontal" size="l">
+          <div style={{ minWidth: 280 }}>
+            <Input
+              type="search"
+              placeholder="タイトル、説明、タグで検索..."
+              value={searchQuery}
+              onChange={({ detail }) => setSearchQuery(detail.value)}
+            />
           </div>
-        </CardContent>
-      </Card>
+          <Select
+            selectedOption={selectedCategory}
+            onChange={({ detail }) =>
+              setSelectedCategory(detail.selectedOption)
+            }
+            options={categoryOptions}
+            placeholder="カテゴリ"
+          />
+          <Select
+            selectedOption={selectedDifficulty}
+            onChange={({ detail }) =>
+              setSelectedDifficulty(detail.selectedOption)
+            }
+            options={difficultyOptions}
+            placeholder="難易度"
+          />
+          <Select
+            selectedOption={selectedCloudProvider}
+            onChange={({ detail }) =>
+              setSelectedCloudProvider(detail.selectedOption)
+            }
+            options={cloudProviderOptions}
+            placeholder="クラウド"
+          />
+        </SpaceBetween>
+      </Container>
 
       {/* Error State */}
       {error && (
-        <ErrorState
-          message={getErrorMessage(error)}
-          type={getErrorType(error)}
-          onRetry={fetchProblems}
+        <Container>
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="m">
+              <StatusIndicator type="error">{error.message}</StatusIndicator>
+              <Button onClick={fetchProblems}>再試行</Button>
+            </SpaceBetween>
+          </Box>
+        </Container>
+      )}
+
+      {/* Stats */}
+      {!error && (
+        <ColumnLayout columns={3}>
+          <Container>
+            <Box variant="awsui-key-label">公開問題数</Box>
+            <Box variant="awsui-value-large">
+              {loading ? '-' : totalProblems}
+            </Box>
+          </Container>
+          <Container>
+            <Box variant="awsui-key-label">平均評価</Box>
+            <Box variant="awsui-value-large">
+              {loading ? '-' : `★ ${avgRating}`}
+            </Box>
+          </Container>
+          <Container>
+            <Box variant="awsui-key-label">検索結果</Box>
+            <Box variant="awsui-value-large">
+              {loading ? '-' : filteredProblems.length}
+            </Box>
+          </Container>
+        </ColumnLayout>
+      )}
+
+      {/* Problems Grid */}
+      {!error && (
+        <Cards
+          cardDefinition={{
+            header: (problem) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <span>{getCategoryIcon(problem.category)}</span>
+                <Box fontSize="heading-m" fontWeight="bold">
+                  {problem.title}
+                </Box>
+              </SpaceBetween>
+            ),
+            sections: [
+              {
+                id: 'author',
+                header: '作成者',
+                content: (problem) => problem.authorName,
+              },
+              {
+                id: 'description',
+                header: '説明',
+                content: (problem) => (
+                  <Box variant="small" color="text-body-secondary">
+                    {problem.description}
+                  </Box>
+                ),
+              },
+              {
+                id: 'badges',
+                header: '分類',
+                content: (problem) => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Badge color={getDifficultyBadgeColor(problem.difficulty)}>
+                      {getDifficultyLabel(problem.difficulty)}
+                    </Badge>
+                    <Badge color="blue">
+                      {getCategoryLabel(problem.category)}
+                    </Badge>
+                    <Badge color="grey">
+                      {problem.cloudProvider.toUpperCase()}
+                    </Badge>
+                    {problem.type === 'gameday' ? (
+                      <Badge color="blue">GameDay</Badge>
+                    ) : (
+                      <Badge color="green">JAM</Badge>
+                    )}
+                  </SpaceBetween>
+                ),
+              },
+              {
+                id: 'meta',
+                header: '詳細情報',
+                content: (problem) => (
+                  <SpaceBetween direction="horizontal" size="l">
+                    <Box variant="small">
+                      推定時間: {problem.estimatedTimeMinutes}分
+                    </Box>
+                    <Box variant="small">
+                      評価: ★ {problem.rating.toFixed(1)}
+                    </Box>
+                    <Box variant="small">{problem.usageCount}回使用</Box>
+                  </SpaceBetween>
+                ),
+              },
+              {
+                id: 'tags',
+                header: 'タグ',
+                content: (problem) =>
+                  problem.tags.length > 0 ? (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      {problem.tags.slice(0, 3).map((tag) => (
+                        <Badge key={tag} color="grey">
+                          {tag}
+                        </Badge>
+                      ))}
+                      {problem.tags.length > 3 && (
+                        <Box variant="small" color="text-body-secondary">
+                          +{problem.tags.length - 3}
+                        </Box>
+                      )}
+                    </SpaceBetween>
+                  ) : null,
+              },
+              {
+                id: 'actions',
+                content: (problem) => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button disabled variant="normal">
+                      プレビュー
+                    </Button>
+                    <Button disabled variant="primary">
+                      イベントに追加
+                    </Button>
+                  </SpaceBetween>
+                ),
+              },
+            ],
+          }}
+          cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
+          items={filteredProblems}
+          loading={loading}
+          loadingText="問題を読み込み中..."
+          empty={
+            <Box textAlign="center" color="inherit" padding="l">
+              <SpaceBetween size="m">
+                <b>問題が見つかりません</b>
+                <Box variant="p" color="inherit">
+                  検索条件を変更してください。
+                </Box>
+              </SpaceBetween>
+            </Box>
+          }
         />
       )}
-
-      {/* Stats - hidden when error */}
-      {!error && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-text-muted">
-                公開問題数
-              </div>
-              <div className="text-3xl font-bold text-text-primary mt-1 font-mono">
-                {loading ? <Skeleton className="h-9 w-12" /> : totalProblems}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-text-muted">
-                平均評価
-              </div>
-              <div className="text-3xl font-bold text-hn-warning mt-1 font-mono flex items-center gap-2">
-                <span>★</span>
-                {loading ? <Skeleton className="h-9 w-12" /> : avgRating}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-sm font-medium text-text-muted">
-                検索結果
-              </div>
-              <div className="text-3xl font-bold text-hn-accent mt-1 font-mono">
-                {loading ? (
-                  <Skeleton className="h-9 w-12" />
-                ) : (
-                  filteredProblems.length
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Problems Grid - hidden when error */}
-      {!error && loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-6">
-                <Skeleton className="h-6 w-3/4 mb-4" />
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-2/3" />
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <Skeleton className="h-6 w-16" />
-                  <Skeleton className="h-6 w-16" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : !error && filteredProblems.length === 0 ? (
-        <Card className="text-center py-12">
-          <div className="text-4xl mb-4">🔍</div>
-          <h2 className="text-xl font-semibold text-text-primary mb-2">
-            問題が見つかりません
-          </h2>
-          <p className="text-text-muted">検索条件を変更してください。</p>
-        </Card>
-      ) : !error ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {filteredProblems.map((problem) => (
-            <Card
-              key={problem.id}
-              className="group hover:border-hn-accent/50 transition-all duration-[var(--animation-duration-fast)]"
-            >
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">
-                      {getCategoryIcon(problem.category)}
-                    </span>
-                    <div>
-                      <CardTitle className="text-lg group-hover:text-hn-accent transition-colors">
-                        {problem.title}
-                      </CardTitle>
-                      <p className="text-sm text-text-muted font-mono">
-                        {problem.authorName}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={problem.type === 'gameday' ? 'primary' : 'info'}
-                  >
-                    {problem.type === 'gameday' ? 'GameDay' : 'JAM'}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-text-secondary mb-4 line-clamp-2">
-                  {problem.description}
-                </p>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Badge
-                    variant={getDifficultyBadgeVariant(problem.difficulty)}
-                  >
-                    {getDifficultyLabel(problem.difficulty)}
-                  </Badge>
-                  <Badge variant="default">
-                    {getCategoryLabel(problem.category)}
-                  </Badge>
-                  <Badge variant="default" className="font-mono uppercase">
-                    {problem.cloudProvider}
-                  </Badge>
-                </div>
-
-                <div className="flex items-center justify-between text-sm text-text-muted mb-4">
-                  <span className="flex items-center gap-1">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    {problem.estimatedTimeMinutes} 分
-                  </span>
-                  <span className="flex items-center gap-1 text-hn-warning">
-                    ★ {problem.rating.toFixed(1)}
-                  </span>
-                  <span className="font-mono">{problem.usageCount} 回使用</span>
-                </div>
-
-                <div className="flex flex-wrap gap-1 mb-4">
-                  {problem.tags.slice(0, 3).map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs px-2 py-1 bg-surface-2 text-text-muted rounded-[var(--radius)] font-mono"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                  {problem.tags.length > 3 && (
-                    <span className="text-xs px-2 py-1 text-text-muted">
-                      +{problem.tags.length - 3}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="flex-1"
-                    disabled
-                  >
-                    プレビュー
-                  </Button>
-                  <Button size="sm" className="flex-1" disabled>
-                    イベントに追加
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : null}
-
-      {/* Terminal-style footer */}
-      <div className="text-center text-text-muted text-xs font-mono py-4">
-        <span className="text-hn-accent">$</span> marketplace --search --count=
-        {filteredProblems.length}
-      </div>
-    </div>
+    </SpaceBetween>
   );
 }

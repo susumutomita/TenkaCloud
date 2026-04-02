@@ -1,25 +1,25 @@
 /**
  * GameDay Headquarters (司令部)
  *
- * チーム状態、ヘルスチェック、最近の攻撃履歴、URL設定
+ * Cloudscape Design System — チーム状態、ヘルスチェック、最近の攻撃履歴、URL設定
  */
 
 'use client';
 
-import Link from 'next/link';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import Link from '@cloudscape-design/components/link';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
-import { HealthIndicator } from '@/components/gameday';
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  ErrorState,
-  getErrorMessage,
-  getErrorType,
-  Input,
-} from '@/components/ui';
 import {
   getMonitoringStatus,
   getTeamDashboard,
@@ -86,33 +86,35 @@ export default function GamedayHQPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
-      </div>
+      <Box textAlign="center" padding="xxl">
+        <Spinner size="large" />
+      </Box>
     );
   }
 
   if (!teamId) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
-        <p className="text-text-muted">チームを選択してください</p>
-        <Link
-          href={`/events/${eventId}`}
-          className="text-hn-accent hover:text-hn-accent-bright underline"
-        >
-          イベントページへ戻る
-        </Link>
-      </div>
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <SpaceBetween size="m">
+            <Box>チームを選択してください</Box>
+            <Link href={`/events/${eventId}`}>イベントページへ戻る</Link>
+          </SpaceBetween>
+        </Box>
+      </Container>
     );
   }
 
   if (error) {
     return (
-      <ErrorState
-        message={getErrorMessage(error)}
-        type={getErrorType(error)}
-        onRetry={fetchData}
-      />
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <SpaceBetween size="m">
+            <StatusIndicator type="error">{error.message}</StatusIndicator>
+            <Button onClick={fetchData}>再試行</Button>
+          </SpaceBetween>
+        </Box>
+      </Container>
     );
   }
 
@@ -123,170 +125,148 @@ export default function GamedayHQPage() {
       second: '2-digit',
     });
 
-  // Derive latest status per check type
   const latestWebsite = healthChecks.find((c) => c.checkType === 'website');
   const latestApi = healthChecks.find((c) => c.checkType === 'api');
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-        <span className="text-hn-accent font-mono">&gt;_</span>
-        司令部
-      </h1>
+    <SpaceBetween size="l">
+      <Header variant="h1">司令部</Header>
 
-      {/* Application Status */}
+      {/* Application Status Summary */}
       {healthChecks.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="flex items-center gap-4 py-5">
-              <HealthIndicator isHealthy={latestWebsite?.isHealthy ?? false} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-text-muted font-mono uppercase">
-                  Website
-                </div>
-                <div className="text-lg font-semibold text-text-primary">
-                  {latestWebsite
-                    ? latestWebsite.isHealthy
-                      ? '正常'
-                      : '異常'
-                    : '未チェック'}
-                </div>
-              </div>
+        <ColumnLayout columns={2}>
+          <Container header={<Header variant="h3">Website</Header>}>
+            <SpaceBetween size="s">
+              {latestWebsite ? (
+                <StatusIndicator
+                  type={latestWebsite.isHealthy ? 'success' : 'error'}
+                >
+                  {latestWebsite.isHealthy ? '正常' : '異常'}
+                </StatusIndicator>
+              ) : (
+                <StatusIndicator type="warning">未チェック</StatusIndicator>
+              )}
               {latestWebsite?.responseTimeMs != null && (
-                <Badge variant="default" badgeStyle="subtle">
-                  {latestWebsite.responseTimeMs}ms
-                </Badge>
+                <Box variant="small">{latestWebsite.responseTimeMs}ms</Box>
               )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="flex items-center gap-4 py-5">
-              <HealthIndicator isHealthy={latestApi?.isHealthy ?? false} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-text-muted font-mono uppercase">
-                  API
-                </div>
-                <div className="text-lg font-semibold text-text-primary">
-                  {latestApi
-                    ? latestApi.isHealthy
-                      ? '正常'
-                      : '異常'
-                    : '未チェック'}
-                </div>
-              </div>
+            </SpaceBetween>
+          </Container>
+          <Container header={<Header variant="h3">API</Header>}>
+            <SpaceBetween size="s">
+              {latestApi ? (
+                <StatusIndicator
+                  type={latestApi.isHealthy ? 'success' : 'error'}
+                >
+                  {latestApi.isHealthy ? '正常' : '異常'}
+                </StatusIndicator>
+              ) : (
+                <StatusIndicator type="warning">未チェック</StatusIndicator>
+              )}
               {latestApi?.responseTimeMs != null && (
-                <Badge variant="default" badgeStyle="subtle">
-                  {latestApi.responseTimeMs}ms
-                </Badge>
+                <Box variant="small">{latestApi.responseTimeMs}ms</Box>
               )}
-            </CardContent>
-          </Card>
-        </div>
+            </SpaceBetween>
+          </Container>
+        </ColumnLayout>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Health Checks */}
-        <Card>
-          <CardHeader>
-            <span className="font-semibold text-text-primary">
-              ヘルスチェック
-            </span>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {healthChecks.length === 0 ? (
-              <p className="text-text-muted text-sm">データなし</p>
-            ) : (
-              healthChecks.slice(0, 10).map((check) => (
-                <div
-                  key={check.id}
-                  className="flex items-center justify-between py-1"
-                >
-                  <div className="flex items-center gap-3">
-                    <HealthIndicator isHealthy={check.isHealthy} size="sm" />
-                    <span className="text-sm text-text-primary font-mono uppercase">
-                      {check.checkType}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-text-muted font-mono">
-                    {check.responseTimeMs !== null && (
-                      <span>{check.responseTimeMs}ms</span>
-                    )}
-                    <span>{formatTime(check.createdAt)}</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+      <ColumnLayout columns={2}>
+        {/* Health Checks Table */}
+        <Table
+          columnDefinitions={[
+            {
+              id: 'type',
+              header: 'Type',
+              cell: (c) => (
+                <Box variant="code">{c.checkType.toUpperCase()}</Box>
+              ),
+            },
+            {
+              id: 'status',
+              header: 'Status',
+              cell: (c) => (
+                <StatusIndicator type={c.isHealthy ? 'success' : 'error'}>
+                  {c.isHealthy ? 'Healthy' : 'Unhealthy'}
+                </StatusIndicator>
+              ),
+            },
+            {
+              id: 'responseTime',
+              header: 'Response',
+              cell: (c) =>
+                c.responseTimeMs !== null ? `${c.responseTimeMs}ms` : '-',
+            },
+            {
+              id: 'time',
+              header: 'Time',
+              cell: (c) => formatTime(c.createdAt),
+            },
+          ]}
+          items={healthChecks.slice(0, 10)}
+          loadingText="読み込み中"
+          header={<Header>ヘルスチェック</Header>}
+          empty="データなし"
+          sortingDisabled
+        />
 
         {/* Recent Attacks */}
-        <Card>
-          <CardHeader>
-            <span className="font-semibold text-text-primary">
-              最近の攻撃履歴
-            </span>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!dashboard?.recentAttacks?.length ? (
-              <p className="text-text-muted text-sm">攻撃履歴なし</p>
-            ) : (
-              dashboard.recentAttacks.slice(0, 8).map((atk: AttackLog) => (
-                <div
-                  key={atk.id}
-                  className="flex items-center justify-between py-1 text-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={
-                        atk.success ? 'text-hn-success' : 'text-hn-error'
-                      }
-                    >
-                      {atk.success ? '+' : '-'}
-                    </span>
-                    <span className="text-text-primary font-mono">
-                      {atk.attackSlug}
-                    </span>
-                  </div>
-                  <span className="text-text-muted font-mono text-xs">
-                    {formatTime(atk.createdAt)}
-                  </span>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        <Table
+          columnDefinitions={[
+            {
+              id: 'status',
+              header: '',
+              cell: (atk: AttackLog) => (
+                <StatusIndicator type={atk.success ? 'success' : 'error'}>
+                  {atk.success ? '成功' : '失敗'}
+                </StatusIndicator>
+              ),
+              width: 100,
+            },
+            {
+              id: 'attack',
+              header: 'Attack',
+              cell: (atk: AttackLog) => (
+                <Box variant="code">{atk.attackSlug}</Box>
+              ),
+            },
+            {
+              id: 'time',
+              header: 'Time',
+              cell: (atk: AttackLog) => formatTime(atk.createdAt),
+            },
+          ]}
+          items={dashboard?.recentAttacks?.slice(0, 8) ?? []}
+          loadingText="読み込み中"
+          header={<Header>最近の攻撃履歴</Header>}
+          empty="攻撃履歴なし"
+          sortingDisabled
+        />
+      </ColumnLayout>
 
       {/* URL Settings */}
-      <Card>
-        <CardHeader>
-          <span className="font-semibold text-text-primary">URL 設定</span>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Website URL"
-              value={websiteUrl}
-              onChange={(e) => setWebsiteUrl(e.target.value)}
-              placeholder="https://your-team-site.example.com"
-            />
-            <Input
-              label="API URL"
-              value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-              placeholder="https://your-team-api.example.com"
-            />
-          </div>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSaveUrls}
-            loading={saving}
-          >
+      <Container header={<Header>URL 設定</Header>}>
+        <SpaceBetween size="l">
+          <ColumnLayout columns={2}>
+            <FormField label="Website URL">
+              <Input
+                value={websiteUrl}
+                onChange={({ detail }) => setWebsiteUrl(detail.value)}
+                placeholder="https://your-team-site.example.com"
+              />
+            </FormField>
+            <FormField label="API URL">
+              <Input
+                value={apiUrl}
+                onChange={({ detail }) => setApiUrl(detail.value)}
+                placeholder="https://your-team-api.example.com"
+              />
+            </FormField>
+          </ColumnLayout>
+          <Button variant="primary" onClick={handleSaveUrls} loading={saving}>
             保存
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </SpaceBetween>
+      </Container>
+    </SpaceBetween>
   );
 }
