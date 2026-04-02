@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-sts": "^3.600.0",
+    "@aws-sdk/client-sts": "^3.810.0",
     "@cloudscape-design/board-components": "^3.0.162",
     "@cloudscape-design/components": "^3.0.1265",
     "@cloudscape-design/design-tokens": "^3.0.76",

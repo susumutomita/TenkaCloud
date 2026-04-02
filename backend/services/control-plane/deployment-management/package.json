@@ -13,10 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
+    "@hono/node-server": "^1.19.12",
     "@kubernetes/client-node": "^1.0.0",
     "@tenkacloud/dynamodb": "workspace:*",
-    "hono": "^4.6.12",
+    "hono": "^4.12.10",
     "jose": "^6.0.10",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2",
