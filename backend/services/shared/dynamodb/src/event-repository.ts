@@ -24,6 +24,7 @@ import { EntityType } from './types';
 const buildEventPK = (id: string) => `EVENT#${id}`;
 const buildMetadataSK = () => 'METADATA';
 const buildProblemSK = (problemId: string) => `PROBLEM#${problemId}`;
+const buildParticipantSK = (userId: string) => `PARTICIPANT#${userId}`;
 const buildTenantGSI = (tenantId: string) => `TENANT#${tenantId}`;
 // buildStatusGSI and buildExternalIdGSI will be used when GSI-based queries are implemented
 // const buildStatusGSI = (tenantId: string, status: EventStatus) =>
@@ -795,5 +796,49 @@ export class EventRepository {
     const problems = await this.getEventProblems(eventId);
 
     return { event, problems };
+  }
+
+  async registerParticipant(eventId: string, userId: string): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    await client.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: {
+          PK: buildEventPK(eventId),
+          SK: buildParticipantSK(userId),
+          EntityType: EntityType.BATTLE_PARTICIPANT,
+          eventId,
+          userId,
+          registeredAt: now,
+          CreatedAt: now,
+          UpdatedAt: now,
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+  }
+
+  async isParticipantRegistered(
+    eventId: string,
+    userId: string
+  ): Promise<boolean> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildEventPK(eventId),
+          SK: buildParticipantSK(userId),
+        },
+        ProjectionExpression: 'PK',
+      })
+    );
+
+    return result.Item !== undefined;
   }
 }

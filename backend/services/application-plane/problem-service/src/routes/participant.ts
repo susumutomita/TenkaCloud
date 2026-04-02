@@ -206,8 +206,9 @@ participantRouter.get('/events/:eventId', async (c) => {
       })
     );
 
-    // participantCount を取得（TODO: 実際の参加者数）
-    const participantCount = 0;
+    const [isRegistered] = await Promise.all([
+      eventRepository.isParticipantRegistered(eventId, user.id),
+    ]);
 
     return c.json({
       id: eventData.id,
@@ -223,8 +224,8 @@ participantRouter.get('/events/:eventId', async (c) => {
       scoringType: eventData.scoringType.toLowerCase(),
       leaderboardVisible: eventData.leaderboardVisible,
       problemCount: problems.length,
-      participantCount,
-      isRegistered: false, // TODO: 実際の登録状況を確認
+      participantCount: 0, // TODO: 実際の参加者数
+      isRegistered,
       problems,
       teamInfo: undefined, // TODO: チーム情報を取得
     });
@@ -257,7 +258,15 @@ participantRouter.post('/events/:eventId/register', async (c) => {
       return c.json({ error: 'Event is not open for registration' }, 400);
     }
 
-    // TODO: 実際の登録処理（Participantテーブルに追加）
+    const alreadyRegistered = await eventRepository.isParticipantRegistered(
+      eventId,
+      user.id
+    );
+    if (alreadyRegistered) {
+      return c.json({ success: true, message: 'Already registered' });
+    }
+
+    await eventRepository.registerParticipant(eventId, user.id);
 
     return c.json({
       success: true,
