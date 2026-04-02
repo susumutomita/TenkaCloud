@@ -48,10 +48,16 @@ export default function EventDetailPage() {
     async function fetchData() {
       try {
         setLoading(true);
-        const [eventData, leaderboardData] = await Promise.all([
+        const [eventResult, leaderboardResult] = await Promise.allSettled([
           getEventDetails(eventId),
           getLeaderboard(eventId),
         ]);
+        const eventData =
+          eventResult.status === 'fulfilled' ? eventResult.value : null;
+        const leaderboardData =
+          leaderboardResult.status === 'fulfilled'
+            ? leaderboardResult.value
+            : null;
 
         if (!eventData) {
           router.push('/events');

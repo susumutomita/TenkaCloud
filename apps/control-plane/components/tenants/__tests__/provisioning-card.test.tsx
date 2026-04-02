@@ -181,7 +181,7 @@ describe('ProvisioningCard コンポーネント', () => {
     it('プロビジョニング中はボタンテキストが変わるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.triggerProvisioning).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise(() => {}) // 解決しないPromiseでローディング状態を維持
       );
 
       render(
@@ -190,13 +190,13 @@ describe('ProvisioningCard コンポーネント', () => {
         />
       );
 
-      await user.click(
-        screen.getByRole('button', { name: 'プロビジョニング開始' })
-      );
+      user.click(screen.getByRole('button', { name: 'プロビジョニング開始' }));
 
-      expect(
-        screen.getByRole('button', { name: 'プロビジョニング中...' })
-      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: 'プロビジョニング中...' })
+        ).toBeInTheDocument();
+      });
     });
 
     it('エラー時にエラーメッセージを表示すべき', async () => {
