@@ -1,5 +1,5 @@
 .PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage test_e2e test_e2e_ui test_e2e_headed dev build
-.PHONY: start-compose stop-compose stop restart status
+.PHONY: start-compose stop-compose stop stop-dev-servers restart status
 .PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
 .PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant
@@ -228,8 +228,8 @@ start-infrastructure-bg: check-docker check-aws-cli
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@./scripts/local-setup.sh
 
-# フロントエンド開発サーバーを起動
-start-dev-servers:
+# フロントエンド開発サーバーを起動（Kumo が未起動なら先に起動する）
+start-dev-servers: start-local
 	@echo ""
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "🖥️  開発サーバーを起動します"
@@ -247,6 +247,7 @@ start-dev-servers:
 	@echo ""
 	DYNAMODB_ENDPOINT=$(EMULATOR_ENDPOINT) \
 	DYNAMODB_TABLE=$(LOCAL_TABLE) \
+	DYNAMODB_TABLE_NAME=$(LOCAL_TABLE) \
 	AWS_REGION=ap-northeast-1 \
 	AWS_ACCESS_KEY_ID=test \
 	AWS_SECRET_ACCESS_KEY=test \
@@ -259,6 +260,12 @@ start-dev-servers:
 
 # make stop: エミュレータを停止
 stop: stop-local
+
+# 開発サーバーのポートを解放（13000/13001/13004）
+stop-dev-servers:
+	@echo "🛑 開発サーバーを停止しています..."
+	@lsof -ti:13000,13001,13004 2>/dev/null | xargs kill -9 2>/dev/null || true
+	@echo "✅ ポート 13000/13001/13004 を解放しました"
 
 restart:
 	@echo "♻️  TenkaCloud を再起動します..."

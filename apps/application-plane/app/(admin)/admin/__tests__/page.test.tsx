@@ -223,7 +223,7 @@ describe('Admin ダッシュボードページ', () => {
         {
           id: 'act-1',
           type: 'event_started',
-          message: '最近のアクティビティ',
+          message: 'テストイベント開始',
           timestamp: fiveMinAgo,
         },
       ],
@@ -231,9 +231,9 @@ describe('Admin ダッシュボードページ', () => {
     render(<AdminDashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('最近のアクティビティ')).toBeInTheDocument();
+      expect(screen.getByText('テストイベント開始')).toBeInTheDocument();
+      expect(screen.getByText('5分前')).toBeInTheDocument();
     });
-    expect(screen.getByText('5分前')).toBeInTheDocument();
     globalThis.Date = originalDate;
   });
 
