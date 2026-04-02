@@ -54,7 +54,7 @@ export function PlanCard({ tenant }: PlanCardProps) {
       router.refresh();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'プランの変更に失敗しました'
+        err instanceof Error ? err.message : 'プランの変更に失敗しました',
       );
     } finally {
       setIsLoading(false);

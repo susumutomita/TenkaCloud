@@ -22,7 +22,7 @@ describe('Table コンポーネント', () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('テスト')).toBeInTheDocument();
     });
@@ -35,7 +35,7 @@ describe('Table コンポーネント', () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByRole('table')).toHaveClass('custom-table');
     });
@@ -49,7 +49,7 @@ describe('Table コンポーネント', () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableElement);
     });
@@ -62,7 +62,7 @@ describe('Table コンポーネント', () => {
               <TableCell>テスト</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByRole('table')).toHaveClass('w-full');
     });
@@ -77,7 +77,7 @@ describe('Table コンポーネント', () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('ヘッダー')).toBeInTheDocument();
     });
@@ -90,7 +90,7 @@ describe('Table コンポーネント', () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(screen.getByTestId('header')).toHaveClass('custom-header');
     });
@@ -104,7 +104,7 @@ describe('Table コンポーネント', () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableSectionElement);
     });
@@ -119,7 +119,7 @@ describe('Table コンポーネント', () => {
               <TableCell>ボディ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('ボディ')).toBeInTheDocument();
     });
@@ -132,7 +132,7 @@ describe('Table コンポーネント', () => {
               <TableCell>ボディ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByTestId('body')).toHaveClass('custom-body');
     });
@@ -146,7 +146,7 @@ describe('Table コンポーネント', () => {
               <TableCell>ボディ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableSectionElement);
     });
@@ -161,7 +161,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('フッター')).toBeInTheDocument();
     });
@@ -174,7 +174,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>
+        </Table>,
       );
       expect(screen.getByTestId('footer')).toHaveClass('custom-footer');
     });
@@ -188,7 +188,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableSectionElement);
     });
@@ -201,7 +201,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>
+        </Table>,
       );
       expect(screen.getByTestId('footer')).toHaveClass('border-t');
     });
@@ -216,7 +216,7 @@ describe('Table コンポーネント', () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('行データ')).toBeInTheDocument();
     });
@@ -229,7 +229,7 @@ describe('Table コンポーネント', () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByTestId('row')).toHaveClass('custom-row');
     });
@@ -243,7 +243,7 @@ describe('Table コンポーネント', () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableRowElement);
     });
@@ -256,7 +256,7 @@ describe('Table コンポーネント', () => {
               <TableCell>行データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByTestId('row')).toHaveClass('border-b');
     });
@@ -271,7 +271,7 @@ describe('Table コンポーネント', () => {
               <TableHead>見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('見出し')).toBeInTheDocument();
     });
@@ -284,7 +284,7 @@ describe('Table コンポーネント', () => {
               <TableHead className="custom-head">見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(screen.getByRole('columnheader')).toHaveClass('custom-head');
     });
@@ -298,7 +298,7 @@ describe('Table コンポーネント', () => {
               <TableHead ref={ref}>見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableCellElement);
     });
@@ -311,7 +311,7 @@ describe('Table コンポーネント', () => {
               <TableHead>見出し</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>
+        </Table>,
       );
       expect(screen.getByRole('columnheader')).toHaveClass('h-12');
       expect(screen.getByRole('columnheader')).toHaveClass('font-medium');
@@ -327,7 +327,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('セル')).toBeInTheDocument();
     });
@@ -340,7 +340,7 @@ describe('Table コンポーネント', () => {
               <TableCell className="custom-cell">セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByRole('cell')).toHaveClass('custom-cell');
     });
@@ -354,7 +354,7 @@ describe('Table コンポーネント', () => {
               <TableCell ref={ref}>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableCellElement);
     });
@@ -367,7 +367,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByRole('cell')).toHaveClass('p-4');
     });
@@ -383,7 +383,7 @@ describe('Table コンポーネント', () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('キャプション')).toBeInTheDocument();
     });
@@ -397,7 +397,7 @@ describe('Table コンポーネント', () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('キャプション')).toHaveClass('custom-caption');
     });
@@ -412,7 +412,7 @@ describe('Table コンポーネント', () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(ref.current).toBeInstanceOf(HTMLTableCaptionElement);
     });
@@ -426,7 +426,7 @@ describe('Table コンポーネント', () => {
               <TableCell>データ</TableCell>
             </TableRow>
           </TableBody>
-        </Table>
+        </Table>,
       );
       expect(screen.getByText('キャプション')).toHaveClass('mt-4');
       expect(screen.getByText('キャプション')).toHaveClass('text-sm');
@@ -460,7 +460,7 @@ describe('Table コンポーネント', () => {
               <TableCell>2名</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>
+        </Table>,
       );
 
       expect(screen.getByText('テーブルキャプション')).toBeInTheDocument();

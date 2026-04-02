@@ -27,7 +27,7 @@ export function TenantAccessCard({
   onCopyUrl = defaultCopyToClipboard,
 }: TenantAccessCardProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>(
-    'idle'
+    'idle',
   );
 
   const applicationPlaneUrl = getApplicationPlaneUrl(tenant.slug);

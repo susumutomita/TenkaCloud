@@ -83,7 +83,7 @@ describe('EditTenantPage', () => {
       await waitFor(() => {
         expect(screen.getByLabelText('テナント名')).toHaveValue('Test Tenant');
         expect(screen.getByLabelText('管理者 Email')).toHaveValue(
-          'admin@test.com'
+          'admin@test.com',
         );
         expect(screen.getByLabelText('Tier')).toHaveValue('PRO');
         expect(screen.getByLabelText('ステータス')).toHaveValue('ACTIVE');
@@ -109,7 +109,7 @@ describe('EditTenantPage', () => {
 
       await waitFor(() => {
         expect(mockAlert).toHaveBeenCalledWith(
-          'テナント情報の取得に失敗しました'
+          'テナント情報の取得に失敗しました',
         );
       });
     });
@@ -137,7 +137,7 @@ describe('EditTenantPage', () => {
       await waitFor(() => {
         expect(tenantApi.updateTenant).toHaveBeenCalledTimes(1);
         expect(mockPush).toHaveBeenCalledWith(
-          '/dashboard/tenants/test-tenant-id'
+          '/dashboard/tenants/test-tenant-id',
         );
         expect(mockRefresh).toHaveBeenCalled();
       });
@@ -248,7 +248,7 @@ describe('EditTenantPage', () => {
       const cancelLink = screen.getByRole('link', { name: 'キャンセル' });
       expect(cancelLink).toHaveAttribute(
         'href',
-        '/dashboard/tenants/test-tenant-id'
+        '/dashboard/tenants/test-tenant-id',
       );
     });
   });
@@ -317,7 +317,7 @@ describe('EditTenantPage', () => {
 
       await waitFor(() => {
         expect(mockAlert).toHaveBeenCalledWith(
-          'パラメータの取得に失敗しました'
+          'パラメータの取得に失敗しました',
         );
       });
     });
@@ -403,7 +403,7 @@ describe('submitTenantUpdate', () => {
       null,
       mockFormData,
       onSuccess,
-      onError
+      onError,
     );
 
     expect(result).toBe(false);
@@ -435,13 +435,13 @@ describe('submitTenantUpdate', () => {
       'test-id',
       mockFormData,
       onSuccess,
-      onError
+      onError,
     );
 
     expect(result).toBe(true);
     expect(tenantApi.updateTenant).toHaveBeenCalledWith(
       'test-id',
-      mockFormData
+      mockFormData,
     );
     expect(onSuccess).toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
@@ -449,7 +449,7 @@ describe('submitTenantUpdate', () => {
 
   it('更新失敗時は onError を呼んで false を返すべき', async () => {
     vi.mocked(tenantApi.updateTenant).mockRejectedValue(
-      new Error('Update failed')
+      new Error('Update failed'),
     );
 
     const onSuccess = vi.fn();
@@ -459,13 +459,13 @@ describe('submitTenantUpdate', () => {
       'test-id',
       mockFormData,
       onSuccess,
-      onError
+      onError,
     );
 
     expect(result).toBe(false);
     expect(tenantApi.updateTenant).toHaveBeenCalledWith(
       'test-id',
-      mockFormData
+      mockFormData,
     );
     expect(onSuccess).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalled();

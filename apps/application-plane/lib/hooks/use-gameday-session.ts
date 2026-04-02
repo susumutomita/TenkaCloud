@@ -41,7 +41,7 @@ export function useGamedaySession() {
 
     // DB からメンバーシップを取得して上書き
     fetch(
-      `/api/gameday/teams/my-membership?eventId=${encodeURIComponent(eventId)}`
+      `/api/gameday/teams/my-membership?eventId=${encodeURIComponent(eventId)}`,
     )
       .then((res) => res.json())
       .then(
@@ -58,11 +58,11 @@ export function useGamedaySession() {
                 JSON.stringify({
                   teamId: data.membership.teamId,
                   teamName: data.membership.teamName,
-                })
+                }),
               );
             }
           }
-        }
+        },
       )
       .catch(() => {
         // DB 取得失敗時はキャッシュをそのまま使用

@@ -11,7 +11,8 @@
     "format": "biome format --write",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "format_check": "biome format --diagnostic-level=error"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.600.0",

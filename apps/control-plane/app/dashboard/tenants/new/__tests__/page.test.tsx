@@ -40,7 +40,7 @@ describe('NewTenantPage コンポーネント', () => {
       render(<NewTenantPage />);
       expect(screen.getByText('テナント情報')).toBeInTheDocument();
       expect(
-        screen.getByText('新しいテナントを作成します。')
+        screen.getByText('新しいテナントを作成します。'),
       ).toBeInTheDocument();
     });
 
@@ -57,7 +57,7 @@ describe('NewTenantPage コンポーネント', () => {
     it('スラッグ入力フィールドを表示すべき', () => {
       render(<NewTenantPage />);
       expect(
-        screen.getByLabelText('スラッグ（URL識別子）')
+        screen.getByLabelText('スラッグ（URL識別子）'),
       ).toBeInTheDocument();
     });
 
@@ -75,7 +75,7 @@ describe('NewTenantPage コンポーネント', () => {
       render(<NewTenantPage />);
       expect(screen.getByRole('link', { name: 'キャンセル' })).toHaveAttribute(
         'href',
-        '/dashboard/tenants'
+        '/dashboard/tenants',
       );
     });
   });
@@ -149,7 +149,7 @@ describe('NewTenantPage コンポーネント', () => {
       expect(screen.getByRole('option', { name: 'Free' })).toBeInTheDocument();
       expect(screen.getByRole('option', { name: 'Pro' })).toBeInTheDocument();
       expect(
-        screen.getByRole('option', { name: 'Enterprise' })
+        screen.getByRole('option', { name: 'Enterprise' }),
       ).toBeInTheDocument();
     });
   });
@@ -220,7 +220,7 @@ describe('NewTenantPage コンポーネント', () => {
     it('作成中はボタンテキストが変わるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise((resolve) => setTimeout(resolve, 100)),
       );
 
       render(<NewTenantPage />);
@@ -228,20 +228,20 @@ describe('NewTenantPage コンポーネント', () => {
       await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
       await user.type(
         screen.getByLabelText('スラッグ（URL識別子）'),
-        'test-tenant'
+        'test-tenant',
       );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
       expect(
-        screen.getByRole('button', { name: '作成中...' })
+        screen.getByRole('button', { name: '作成中...' }),
       ).toBeInTheDocument();
     });
 
     it('作成中はボタンが無効になるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100))
+        () => new Promise((resolve) => setTimeout(resolve, 100)),
       );
 
       render(<NewTenantPage />);
@@ -249,7 +249,7 @@ describe('NewTenantPage コンポーネント', () => {
       await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
       await user.type(
         screen.getByLabelText('スラッグ（URL識別子）'),
-        'test-tenant'
+        'test-tenant',
       );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
@@ -260,7 +260,7 @@ describe('NewTenantPage コンポーネント', () => {
     it('作成失敗時にエラーメッセージを表示すべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockRejectedValue(
-        new Error('API Error')
+        new Error('API Error'),
       );
 
       render(<NewTenantPage />);
@@ -268,14 +268,14 @@ describe('NewTenantPage コンポーネント', () => {
       await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
       await user.type(
         screen.getByLabelText('スラッグ（URL識別子）'),
-        'test-tenant'
+        'test-tenant',
       );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
         expect(
-          screen.getByText('テナント作成に失敗しました')
+          screen.getByText('テナント作成に失敗しました'),
         ).toBeInTheDocument();
       });
     });
@@ -283,7 +283,7 @@ describe('NewTenantPage コンポーネント', () => {
     it('TenantApiError 発生時に API のエラーメッセージを表示すべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockRejectedValue(
-        new TenantApiError(409, 'このスラッグは既に使用されています')
+        new TenantApiError(409, 'このスラッグは既に使用されています'),
       );
 
       render(<NewTenantPage />);
@@ -291,14 +291,14 @@ describe('NewTenantPage コンポーネント', () => {
       await user.type(screen.getByLabelText('テナント名'), 'test-tenant');
       await user.type(
         screen.getByLabelText('スラッグ（URL識別子）'),
-        'test-tenant'
+        'test-tenant',
       );
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
       await waitFor(() => {
         expect(
-          screen.getByText('このスラッグは既に使用されています')
+          screen.getByText('このスラッグは既に使用されています'),
         ).toBeInTheDocument();
       });
     });

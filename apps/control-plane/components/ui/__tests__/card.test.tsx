@@ -162,7 +162,7 @@ describe('Card コンポーネント', () => {
           </CardHeader>
           <CardContent>カード本文</CardContent>
           <CardFooter>カードフッター</CardFooter>
-        </Card>
+        </Card>,
       );
 
       expect(screen.getByTestId('card')).toBeInTheDocument();

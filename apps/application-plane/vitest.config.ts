@@ -43,7 +43,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './'),
       '@tenkacloud/shared': path.resolve(
         __dirname,
-        '../../packages/shared/src'
+        '../../packages/shared/src',
       ),
     },
   },

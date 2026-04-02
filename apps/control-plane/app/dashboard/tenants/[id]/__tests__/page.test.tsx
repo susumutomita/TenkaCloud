@@ -59,7 +59,7 @@ describe('TenantDetailPage コンポーネント', () => {
       vi.mocked(tenantApi.getTenant).mockResolvedValue(null);
 
       await expect(
-        TenantDetailPage({ params: Promise.resolve({ id: 'not-found' }) })
+        TenantDetailPage({ params: Promise.resolve({ id: 'not-found' }) }),
       ).rejects.toThrow('NEXT_NOT_FOUND');
 
       expect(notFound).toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('TenantDetailPage コンポーネント', () => {
       render(Component);
       expect(screen.getByRole('link', { name: '戻る' })).toHaveAttribute(
         'href',
-        '/dashboard/tenants'
+        '/dashboard/tenants',
       );
     });
 
@@ -105,7 +105,7 @@ describe('TenantDetailPage コンポーネント', () => {
       render(Component);
       expect(screen.getByRole('link', { name: '編集' })).toHaveAttribute(
         'href',
-        '/dashboard/tenants/tenant-123/edit'
+        '/dashboard/tenants/tenant-123/edit',
       );
     });
 

@@ -17,7 +17,7 @@ interface FetchOptions extends RequestInit {
  */
 export async function apiRequest<T>(
   endpoint: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
 
@@ -63,7 +63,7 @@ export async function apiRequest<T>(
  */
 export async function get<T>(
   endpoint: string,
-  params?: Record<string, string | number | boolean | undefined>
+  params?: Record<string, string | number | boolean | undefined>,
 ): Promise<T> {
   return apiRequest<T>(endpoint, { method: 'GET', params });
 }

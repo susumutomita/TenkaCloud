@@ -20,14 +20,14 @@ function handleAuth(isLoggedIn: boolean, req: NextAuthRequest): NextResponse {
   // 未認証ユーザーがログインページ以外にアクセスした場合、ログインページにリダイレクト
   if (!isLoggedIn && !isOnLoginPage) {
     return NextResponse.redirect(
-      new URL(`${BASE_PATH}/login`, req.nextUrl.origin)
+      new URL(`${BASE_PATH}/login`, req.nextUrl.origin),
     );
   }
 
   // 認証済みユーザーがログインページにアクセスした場合、ダッシュボードにリダイレクト
   if (isLoggedIn && isOnLoginPage) {
     return NextResponse.redirect(
-      new URL(`${BASE_PATH}/dashboard`, req.nextUrl.origin)
+      new URL(`${BASE_PATH}/dashboard`, req.nextUrl.origin),
     );
   }
 

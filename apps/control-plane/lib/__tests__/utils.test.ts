@@ -12,7 +12,7 @@ describe('cn ユーティリティ関数', () => {
 
   it('条件付きクラス名を処理すべき', () => {
     expect(cn('base', true && 'active', false && 'inactive')).toBe(
-      'base active'
+      'base active',
     );
   });
 
@@ -23,7 +23,7 @@ describe('cn ユーティリティ関数', () => {
 
   it('配列形式のクラス名を処理すべき', () => {
     expect(cn(['text-red-500', 'bg-blue-500'])).toBe(
-      'text-red-500 bg-blue-500'
+      'text-red-500 bg-blue-500',
     );
   });
 
@@ -37,7 +37,7 @@ describe('cn ユーティリティ関数', () => {
 
   it('オブジェクト形式の条件付きクラスを処理すべき', () => {
     expect(cn({ 'text-red-500': true, 'bg-blue-500': false })).toBe(
-      'text-red-500'
+      'text-red-500',
     );
   });
 });

@@ -107,7 +107,7 @@ describe('DashboardPage コンポーネント', () => {
       const Component = await DashboardPage();
       render(Component);
       expect(
-        screen.getByText(/ようこそ、test@example.com さん/)
+        screen.getByText(/ようこそ、test@example.com さん/),
       ).toBeInTheDocument();
     });
 
@@ -144,7 +144,7 @@ describe('DashboardPage コンポーネント', () => {
       const Component = await DashboardPage();
       render(Component);
       expect(
-        screen.getByRole('link', { name: 'テナント管理' })
+        screen.getByRole('link', { name: 'テナント管理' }),
       ).toHaveAttribute('href', '/dashboard/tenants');
     });
 
@@ -152,7 +152,7 @@ describe('DashboardPage コンポーネント', () => {
       const Component = await DashboardPage();
       render(Component);
       expect(
-        screen.getByRole('link', { name: '新規テナント作成' })
+        screen.getByRole('link', { name: '新規テナント作成' }),
       ).toHaveAttribute('href', '/dashboard/tenants/new');
     });
 
@@ -162,7 +162,7 @@ describe('DashboardPage コンポーネント', () => {
       expect(screen.getByText('最近のアクティビティ')).toBeInTheDocument();
       expect(screen.getByText('直近のシステムイベント')).toBeInTheDocument();
       expect(
-        screen.getByText('アクティビティはありません')
+        screen.getByText('アクティビティはありません'),
       ).toBeInTheDocument();
     });
 
@@ -212,7 +212,7 @@ describe('DashboardPage コンポーネント', () => {
       const Component = await DashboardPage();
       render(Component);
       expect(
-        screen.getByText('アクティビティはありません')
+        screen.getByText('アクティビティはありません'),
       ).toBeInTheDocument();
     });
 
@@ -260,7 +260,7 @@ describe('DashboardPage コンポーネント', () => {
 
     it('アクティビティの相対時間を「N時間前」と表示すべき', async () => {
       const fiveHoursAgo = new Date(
-        Date.now() - 5 * 60 * 60 * 1000
+        Date.now() - 5 * 60 * 60 * 1000,
       ).toISOString();
       mockFetchActivities.mockResolvedValue({
         data: [
@@ -280,7 +280,7 @@ describe('DashboardPage コンポーネント', () => {
 
     it('アクティビティの相対時間を「N日前」と表示すべき', async () => {
       const threeDaysAgo = new Date(
-        Date.now() - 3 * 24 * 60 * 60 * 1000
+        Date.now() - 3 * 24 * 60 * 60 * 1000,
       ).toISOString();
       mockFetchActivities.mockResolvedValue({
         data: [
@@ -300,7 +300,7 @@ describe('DashboardPage コンポーネント', () => {
 
     it('7日以上前のアクティビティは日付形式で表示すべき', async () => {
       const tenDaysAgo = new Date(
-        Date.now() - 10 * 24 * 60 * 60 * 1000
+        Date.now() - 10 * 24 * 60 * 60 * 1000,
       ).toISOString();
       mockFetchActivities.mockResolvedValue({
         data: [
@@ -336,7 +336,7 @@ describe('DashboardPage コンポーネント', () => {
       render(Component);
       // フォールバック: 元の値がそのまま使用される
       expect(
-        screen.getByText('UNKNOWN_RESOURCEをUNKNOWN_ACTIONしました')
+        screen.getByText('UNKNOWN_RESOURCEをUNKNOWN_ACTIONしました'),
       ).toBeInTheDocument();
     });
   });

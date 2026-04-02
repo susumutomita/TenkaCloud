@@ -26,7 +26,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
       expect(screen.getByText('削除')).toBeInTheDocument();
     });
@@ -38,7 +38,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     });
@@ -51,7 +51,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('削除'));
@@ -67,7 +67,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
       expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     });
@@ -83,7 +83,7 @@ describe('AlertDialog コンポーネント', () => {
             <AlertDialogTitle>タイトル</AlertDialogTitle>
             <AlertDialogDescription>説明文</AlertDialogDescription>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -100,7 +100,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent className="custom-content" data-testid="content">
             <AlertDialogTitle>タイトル</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -121,7 +121,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogTitle>タイトル</AlertDialogTitle>
             </AlertDialogHeader>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -140,7 +140,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogTitle>タイトル</AlertDialogTitle>
             </AlertDialogHeader>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -159,7 +159,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>削除の確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -178,7 +178,7 @@ describe('AlertDialog コンポーネント', () => {
               タイトル
             </AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -200,13 +200,13 @@ describe('AlertDialog コンポーネント', () => {
               この操作は取り消せません。
             </AlertDialogDescription>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
       await waitFor(() => {
         expect(
-          screen.getByText('この操作は取り消せません。')
+          screen.getByText('この操作は取り消せません。'),
         ).toBeInTheDocument();
       });
     });
@@ -222,7 +222,7 @@ describe('AlertDialog コンポーネント', () => {
               説明
             </AlertDialogDescription>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -245,7 +245,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogAction>確認</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -265,7 +265,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogCancel>キャンセル</AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -287,7 +287,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogCancel>キャンセル</AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -307,7 +307,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogCancel>キャンセル</AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -334,7 +334,7 @@ describe('AlertDialog コンポーネント', () => {
               </AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -356,7 +356,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogAction>削除する</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -379,7 +379,7 @@ describe('AlertDialog コンポーネント', () => {
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -407,7 +407,7 @@ describe('AlertDialog コンポーネント', () => {
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -425,7 +425,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
       expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     });
@@ -442,7 +442,7 @@ describe('AlertDialog コンポーネント', () => {
               <AlertDialogCancel>キャンセル</AlertDialogCancel>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       await user.click(screen.getByText('開く'));
@@ -479,7 +479,7 @@ describe('AlertDialog コンポーネント', () => {
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       // トリガーをクリック
@@ -491,8 +491,8 @@ describe('AlertDialog コンポーネント', () => {
         expect(screen.getByText('本当に削除しますか？')).toBeInTheDocument();
         expect(
           screen.getByText(
-            'この操作は取り消すことができません。データは完全に削除されます。'
-          )
+            'この操作は取り消すことができません。データは完全に削除されます。',
+          ),
         ).toBeInTheDocument();
       });
 
@@ -517,7 +517,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
       expect(screen.getByTestId('trigger')).toHaveClass('custom-trigger');
     });
@@ -534,7 +534,7 @@ describe('AlertDialog コンポーネント', () => {
           <AlertDialogContent>
             <AlertDialogTitle>確認</AlertDialogTitle>
           </AlertDialogContent>
-        </AlertDialog>
+        </AlertDialog>,
       );
 
       expect(screen.getByText('カスタムトリガー')).toHaveClass('custom-button');

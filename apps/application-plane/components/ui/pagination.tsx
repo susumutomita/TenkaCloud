@@ -14,10 +14,8 @@ import { forwardRef, useMemo } from 'react';
 
 type PaginationSize = 'sm' | 'md' | 'lg';
 
-interface PaginationProps extends Omit<
-  HTMLAttributes<HTMLElement>,
-  'onChange'
-> {
+interface PaginationProps
+  extends Omit<HTMLAttributes<HTMLElement>, 'onChange'> {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -48,7 +46,7 @@ const buttonSizeClasses: Record<PaginationSize, string> = {
 
 function getPageNumbers(
   currentPage: number,
-  totalPages: number
+  totalPages: number,
 ): (number | 'ellipsis')[] {
   const pages: (number | 'ellipsis')[] = [];
 
@@ -109,19 +107,19 @@ const Pagination = forwardRef<HTMLElement, PaginationProps>(
       className = '',
       ...props
     },
-    ref
+    ref,
   ) => {
     // 正規化されたページ番号
     const normalizedCurrentPage = Math.max(
       1,
-      Math.min(currentPage, totalPages)
+      Math.min(currentPage, totalPages),
     );
     const normalizedTotalPages = Math.max(0, totalPages);
 
     // ページ番号の配列を計算
     const pageNumbers = useMemo(
       () => getPageNumbers(normalizedCurrentPage, normalizedTotalPages),
-      [normalizedCurrentPage, normalizedTotalPages]
+      [normalizedCurrentPage, normalizedTotalPages],
     );
 
     // 1ページ以下の場合は表示しない
@@ -226,7 +224,7 @@ const Pagination = forwardRef<HTMLElement, PaginationProps>(
         )}
       </nav>
     );
-  }
+  },
 );
 Pagination.displayName = 'Pagination';
 

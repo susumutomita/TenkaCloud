@@ -174,7 +174,7 @@ function validateForm(values: EventFormData): FormErrors {
 function validateField(
   field: keyof FormErrors,
   value: string | number,
-  allValues: EventFormData
+  allValues: EventFormData,
 ): string | undefined {
   const testValues = { ...allValues, [field]: value };
   const errors = validateForm(testValues);
@@ -190,9 +190,9 @@ interface UseEventFormReturn {
   errors: FormErrors;
   touched: FormTouched;
   handleChange: (
-    field: keyof EventFormData
+    field: keyof EventFormData,
   ) => (
-    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => void;
   handleBlur: (field: keyof FormTouched) => () => void;
   handleSubmit: (e: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -204,7 +204,7 @@ interface UseEventFormReturn {
  */
 export function useEventForm(
   initialData: Partial<EventFormData> | undefined,
-  onSubmit: (data: EventFormData) => Promise<void>
+  onSubmit: (data: EventFormData) => Promise<void>,
 ): UseEventFormReturn {
   const [values, setValues] = useState<EventFormData>({
     ...DEFAULT_VALUES,
@@ -218,7 +218,7 @@ export function useEventForm(
       (
         e: ChangeEvent<
           HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-        >
+        >,
       ) => {
         const target = e.target;
         let newValue: string | number | boolean;
@@ -244,7 +244,7 @@ export function useEventForm(
           const fieldError = validateField(
             field as keyof FormErrors,
             newValue as string | number,
-            { ...values, [field]: newValue }
+            { ...values, [field]: newValue },
           );
           setErrors((prev) => ({
             ...prev,
@@ -252,7 +252,7 @@ export function useEventForm(
           }));
         }
       },
-    [values, touched]
+    [values, touched],
   );
 
   const handleBlur = useCallback(
@@ -263,14 +263,14 @@ export function useEventForm(
       const fieldError = validateField(
         field as keyof FormErrors,
         values[field as keyof EventFormData] as string | number,
-        values
+        values,
       );
       setErrors((prev) => ({
         ...prev,
         [field]: fieldError,
       }));
     },
-    [values]
+    [values],
   );
 
   const handleSubmit = useCallback(
@@ -298,7 +298,7 @@ export function useEventForm(
         await onSubmit(values);
       }
     },
-    [values, onSubmit]
+    [values, onSubmit],
   );
 
   const isValid = Object.keys(validateForm(values)).length === 0;

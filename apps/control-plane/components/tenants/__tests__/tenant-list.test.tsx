@@ -67,7 +67,7 @@ describe('TenantList コンポーネント', () => {
     it('検索フィールドを表示すべき', () => {
       render(<TenantList tenants={mockTenants} />);
       expect(
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...')
+        screen.getByPlaceholderText('テナント名、メール、IDで検索...'),
       ).toBeInTheDocument();
     });
 
@@ -82,14 +82,14 @@ describe('TenantList コンポーネント', () => {
     it('空状態メッセージを表示すべき', () => {
       render(<TenantList tenants={[]} />);
       expect(
-        screen.getByText('テナントがまだ登録されていません')
+        screen.getByText('テナントがまだ登録されていません'),
       ).toBeInTheDocument();
     });
 
     it('最初のテナント作成リンクを表示すべき', () => {
       render(<TenantList tenants={[]} />);
       expect(
-        screen.getByRole('link', { name: '最初のテナントを作成' })
+        screen.getByRole('link', { name: '最初のテナントを作成' }),
       ).toHaveAttribute('href', '/dashboard/tenants/new');
     });
   });
@@ -99,8 +99,9 @@ describe('TenantList コンポーネント', () => {
       const user = userEvent.setup();
       render(<TenantList tenants={mockTenants} />);
 
-      const searchInput =
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...');
+      const searchInput = screen.getByPlaceholderText(
+        'テナント名、メール、IDで検索...',
+      );
       await user.type(searchInput, 'テナント1');
 
       expect(screen.getByText('テナント1')).toBeInTheDocument();
@@ -112,8 +113,9 @@ describe('TenantList コンポーネント', () => {
       const user = userEvent.setup();
       render(<TenantList tenants={mockTenants} />);
 
-      const searchInput =
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...');
+      const searchInput = screen.getByPlaceholderText(
+        'テナント名、メール、IDで検索...',
+      );
       await user.type(searchInput, 'admin2@');
 
       expect(screen.queryByText('テナント1')).not.toBeInTheDocument();
@@ -125,8 +127,9 @@ describe('TenantList コンポーネント', () => {
       const user = userEvent.setup();
       render(<TenantList tenants={mockTenants} />);
 
-      const searchInput =
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...');
+      const searchInput = screen.getByPlaceholderText(
+        'テナント名、メール、IDで検索...',
+      );
       await user.type(searchInput, '3');
 
       expect(screen.queryByText('テナント1')).not.toBeInTheDocument();
@@ -138,12 +141,13 @@ describe('TenantList コンポーネント', () => {
       const user = userEvent.setup();
       render(<TenantList tenants={mockTenants} />);
 
-      const searchInput =
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...');
+      const searchInput = screen.getByPlaceholderText(
+        'テナント名、メール、IDで検索...',
+      );
       await user.type(searchInput, '存在しないテナント');
 
       expect(
-        screen.getByText('検索条件に一致するテナントがありません')
+        screen.getByText('検索条件に一致するテナントがありません'),
       ).toBeInTheDocument();
     });
 
@@ -151,8 +155,9 @@ describe('TenantList コンポーネント', () => {
       const user = userEvent.setup();
       render(<TenantList tenants={mockTenants} />);
 
-      const searchInput =
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...');
+      const searchInput = screen.getByPlaceholderText(
+        'テナント名、メール、IDで検索...',
+      );
       await user.type(searchInput, 'テナント1');
 
       expect(screen.getByText('1 / 3 件を表示')).toBeInTheDocument();
@@ -217,8 +222,9 @@ describe('TenantList コンポーネント', () => {
       render(<TenantList tenants={mockTenants} />);
 
       // 検索を実行して結果がない状態にする
-      const searchInput =
-        screen.getByPlaceholderText('テナント名、メール、IDで検索...');
+      const searchInput = screen.getByPlaceholderText(
+        'テナント名、メール、IDで検索...',
+      );
       await user.type(searchInput, '存在しない');
 
       // フィルタークリアボタンをクリック

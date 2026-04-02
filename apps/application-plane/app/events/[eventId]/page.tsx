@@ -220,7 +220,7 @@ export default function EventDetailPage() {
       setShowModal(false);
     } catch (err) {
       setModalError(
-        err instanceof Error ? err.message : 'チーム作成に失敗しました'
+        err instanceof Error ? err.message : 'チーム作成に失敗しました',
       );
     } finally {
       setRegistering(false);
@@ -254,7 +254,7 @@ export default function EventDetailPage() {
       setShowModal(false);
     } catch (err) {
       setModalError(
-        err instanceof Error ? err.message : 'チーム参加に失敗しました'
+        err instanceof Error ? err.message : 'チーム参加に失敗しました',
       );
     } finally {
       setRegistering(false);
@@ -545,7 +545,7 @@ export default function EventDetailPage() {
                           if (canParticipate && problem.isUnlocked) {
                             e.preventDefault();
                             router.push(
-                              `/events/${eventId}/challenges/${problem.id}`
+                              `/events/${eventId}/challenges/${problem.id}`,
                             );
                           }
                         }}

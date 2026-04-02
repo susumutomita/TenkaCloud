@@ -30,7 +30,7 @@ describe('settings-api サーバーサイドテスト', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://custom-server-api:13004/api/settings',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     } finally {
       if (originalEnv === undefined) {
@@ -59,7 +59,7 @@ describe('settings-api サーバーサイドテスト', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://tenant-management:13004/api/settings',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     } finally {
       if (originalEnv !== undefined) {

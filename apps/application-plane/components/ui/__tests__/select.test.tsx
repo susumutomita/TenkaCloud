@@ -25,13 +25,13 @@ describe('Select コンポーネント', () => {
     it('オプションを正しくレンダリングすべき', () => {
       render(<Select options={options} />);
       expect(
-        screen.getByRole('option', { name: 'オプション1' })
+        screen.getByRole('option', { name: 'オプション1' }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole('option', { name: 'オプション2' })
+        screen.getByRole('option', { name: 'オプション2' }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole('option', { name: 'オプション3' })
+        screen.getByRole('option', { name: 'オプション3' }),
       ).toBeInTheDocument();
     });
 
@@ -54,7 +54,7 @@ describe('Select コンポーネント', () => {
   describe('variants', () => {
     it('default variant のスタイルを適用すべき', () => {
       render(
-        <Select options={options} variant="default" data-testid="select" />
+        <Select options={options} variant="default" data-testid="select" />,
       );
       const select = screen.getByTestId('select');
       expect(select).toHaveClass('border-border');
@@ -194,7 +194,7 @@ describe('Select コンポーネント', () => {
           options={options}
           className="custom-class"
           data-testid="select"
-        />
+        />,
       );
       const select = screen.getByTestId('select');
       expect(select).toHaveClass('custom-class');

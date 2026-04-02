@@ -19,7 +19,7 @@ describe('DashboardLayout コンポーネント', () => {
     render(
       <DashboardLayout>
         <div>ダッシュボードコンテンツ</div>
-      </DashboardLayout>
+      </DashboardLayout>,
     );
     expect(screen.getByText('ダッシュボードコンテンツ')).toBeInTheDocument();
   });
@@ -29,7 +29,7 @@ describe('DashboardLayout コンポーネント', () => {
     render(
       <DashboardLayout>
         <div>テスト</div>
-      </DashboardLayout>
+      </DashboardLayout>,
     );
     expect(screen.getByText('TenkaCloud')).toBeInTheDocument();
   });
@@ -39,7 +39,7 @@ describe('DashboardLayout コンポーネント', () => {
     render(
       <DashboardLayout>
         <div>テスト</div>
-      </DashboardLayout>
+      </DashboardLayout>,
     );
     expect(screen.getByText('ダッシュボード')).toBeInTheDocument();
     expect(screen.getByText('テナント管理')).toBeInTheDocument();
@@ -51,7 +51,7 @@ describe('DashboardLayout コンポーネント', () => {
     render(
       <DashboardLayout>
         <div data-testid="dashboard-content">コンテンツ</div>
-      </DashboardLayout>
+      </DashboardLayout>,
     );
     const content = screen.getByTestId('dashboard-content');
     expect(content.closest('main')).toBeInTheDocument();

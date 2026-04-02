@@ -50,7 +50,7 @@ describe('TenantContext', () => {
       render(
         <TenantProvider initialTenant={initialTenant}>
           <TestComponent />
-        </TenantProvider>
+        </TenantProvider>,
       );
 
       expect(screen.getByTestId('slug')).toHaveTextContent('test-tenant');
@@ -62,7 +62,7 @@ describe('TenantContext', () => {
       render(
         <TenantProvider>
           <TestComponent />
-        </TenantProvider>
+        </TenantProvider>,
       );
 
       expect(screen.getByTestId('slug')).toHaveTextContent('no-slug');
@@ -79,7 +79,7 @@ describe('TenantContext', () => {
       render(
         <TenantProvider initialTenant={initialTenant}>
           <TestComponent />
-        </TenantProvider>
+        </TenantProvider>,
       );
 
       expect(screen.getByTestId('role')).toHaveTextContent('admin');
@@ -106,7 +106,7 @@ describe('TenantContext', () => {
       render(<TestOptionalComponent />);
 
       expect(screen.getByTestId('optional-slug')).toHaveTextContent(
-        'no-context'
+        'no-context',
       );
       expect(screen.getByTestId('optional-loading')).toHaveTextContent('null');
     });
@@ -120,14 +120,14 @@ describe('TenantContext', () => {
       render(
         <TenantProvider initialTenant={initialTenant}>
           <TestOptionalComponent />
-        </TenantProvider>
+        </TenantProvider>,
       );
 
       expect(screen.getByTestId('optional-slug')).toHaveTextContent(
-        'optional-tenant'
+        'optional-tenant',
       );
       expect(screen.getByTestId('optional-loading')).toHaveTextContent(
-        'loaded'
+        'loaded',
       );
     });
   });

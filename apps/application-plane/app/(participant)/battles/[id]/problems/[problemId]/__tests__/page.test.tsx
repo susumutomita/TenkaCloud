@@ -87,7 +87,7 @@ describe('問題詳細ページ', () => {
     render(<ProblemDetailPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'S3 バケット構築' })
+        screen.getByRole('heading', { name: 'S3 バケット構築' }),
       ).toBeInTheDocument();
     });
   });
@@ -113,7 +113,7 @@ describe('問題詳細ページ', () => {
       expect(screen.getByText('目標')).toBeInTheDocument();
       expect(screen.getByText('バケットを作成する')).toBeInTheDocument();
       expect(
-        screen.getByText('バージョニングを有効化する')
+        screen.getByText('バージョニングを有効化する'),
       ).toBeInTheDocument();
     });
   });

@@ -157,7 +157,7 @@ describe('Server API Utilities', () => {
             'Content-Type': 'application/json',
             Authorization: 'Bearer test-access-token',
           }),
-        })
+        }),
       );
     });
 
@@ -178,7 +178,7 @@ describe('Server API Utilities', () => {
           headers: expect.not.objectContaining({
             Authorization: expect.any(String),
           }),
-        })
+        }),
       );
     });
 
@@ -194,7 +194,7 @@ describe('Server API Utilities', () => {
       const { serverApiRequest } = await import('../server');
 
       await expect(serverApiRequest('/test-endpoint')).rejects.toThrow(
-        'Internal server error'
+        'Internal server error',
       );
     });
 
@@ -210,7 +210,7 @@ describe('Server API Utilities', () => {
       const { serverApiRequest } = await import('../server');
 
       await expect(serverApiRequest('/test-endpoint')).rejects.toThrow(
-        'HTTP error! status: 404'
+        'HTTP error! status: 404',
       );
     });
 
@@ -233,7 +233,7 @@ describe('Server API Utilities', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ key: 'value' }),
-        })
+        }),
       );
     });
   });

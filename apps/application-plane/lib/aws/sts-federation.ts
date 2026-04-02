@@ -33,7 +33,7 @@ export class STSFederation {
   async assumeRole(
     roleArn: string,
     sessionName: string,
-    durationSeconds: number = 3600
+    durationSeconds: number = 3600,
   ): Promise<FederationCredentials> {
     const command = new AssumeRoleCommand({
       RoleArn: roleArn,
@@ -67,7 +67,7 @@ export class STSFederation {
    */
   async generateConsoleLoginUrl(
     credentials: FederationCredentials,
-    destination: string = 'https://console.aws.amazon.com/'
+    destination: string = 'https://console.aws.amazon.com/',
   ): Promise<ConsoleLoginUrl> {
     // Step 1: Create the session JSON
     const sessionJson = JSON.stringify({
@@ -78,19 +78,21 @@ export class STSFederation {
 
     // Step 2: Get sign-in token from federation endpoint
     const getSigninTokenUrl = new URL(
-      'https://signin.aws.amazon.com/federation'
+      'https://signin.aws.amazon.com/federation',
     );
     getSigninTokenUrl.searchParams.set('Action', 'getSigninToken');
     getSigninTokenUrl.searchParams.set(
       'SessionDuration',
-      String(Math.floor((credentials.expiration.getTime() - Date.now()) / 1000))
+      String(
+        Math.floor((credentials.expiration.getTime() - Date.now()) / 1000),
+      ),
     );
     getSigninTokenUrl.searchParams.set('Session', sessionJson);
 
     const signinTokenResponse = await fetch(getSigninTokenUrl.toString());
     if (!signinTokenResponse.ok) {
       throw new Error(
-        `Failed to get signin token: ${signinTokenResponse.statusText}`
+        `Failed to get signin token: ${signinTokenResponse.statusText}`,
       );
     }
 
@@ -122,17 +124,17 @@ export class STSFederation {
     participantId: string,
     battleId: string,
     roleArn: string,
-    durationSeconds: number = 3600
+    durationSeconds: number = 3600,
   ): Promise<ConsoleLoginUrl> {
     const sessionName = `tc-${tenantId}-${participantId}-${battleId}`.substring(
       0,
-      64
+      64,
     );
 
     const credentials = await this.assumeRole(
       roleArn,
       sessionName,
-      durationSeconds
+      durationSeconds,
     );
 
     return this.generateConsoleLoginUrl(credentials);
@@ -143,5 +145,5 @@ export class STSFederation {
  * デフォルトの STS Federation インスタンス
  */
 export const stsFederation = new STSFederation(
-  process.env.AWS_REGION || 'ap-northeast-1'
+  process.env.AWS_REGION || 'ap-northeast-1',
 );

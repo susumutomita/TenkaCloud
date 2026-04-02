@@ -27,7 +27,7 @@ const mockGetTenantSlugFromUrl = getTenantSlugFromUrl as Mock;
 // NextRequest のモックファクトリ
 function createMockRequest(
   url: string,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ): NextRequest {
   const request = new NextRequest(url, {
     headers: new Headers(headers),
@@ -56,7 +56,7 @@ describe('Middleware', () => {
       mockGetTenantSlugFromUrl.mockReturnValue(null);
 
       const req = createMockRequest(
-        'http://localhost:13001/api/auth/callback/auth0'
+        'http://localhost:13001/api/auth/callback/auth0',
       );
       const response = await middleware(req);
 
@@ -85,7 +85,7 @@ describe('Middleware', () => {
       expect(response.status).toBe(307);
       expect(response.headers.get('location')).toContain('/login');
       expect(response.headers.get('location')).toContain(
-        'callbackUrl=%2Fdashboard'
+        'callbackUrl=%2Fdashboard',
       );
     });
 

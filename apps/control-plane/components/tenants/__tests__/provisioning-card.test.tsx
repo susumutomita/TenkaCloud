@@ -49,7 +49,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ region: 'ap-northeast-1' })}
-        />
+        />,
       );
       expect(screen.getByText('リージョン')).toBeInTheDocument();
       expect(screen.getByText('ap-northeast-1')).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ isolationModel: 'SILO' })}
-        />
+        />,
       );
       expect(screen.getByText('分離モデル')).toBeInTheDocument();
       expect(screen.getByText('SILO')).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ computeType: 'SERVERLESS' })}
-        />
+        />,
       );
       expect(screen.getByText('コンピュートタイプ')).toBeInTheDocument();
       expect(screen.getByText('SERVERLESS')).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'PENDING' })}
-        />
+        />,
       );
       expect(screen.getByText('未プロビジョニング')).toBeInTheDocument();
     });
@@ -90,7 +90,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'IN_PROGRESS' })}
-        />
+        />,
       );
       expect(screen.getByText('プロビジョニング中')).toBeInTheDocument();
     });
@@ -99,7 +99,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'COMPLETED' })}
-        />
+        />,
       );
       expect(screen.getByText('プロビジョニング完了')).toBeInTheDocument();
     });
@@ -108,7 +108,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'FAILED' })}
-        />
+        />,
       );
       expect(screen.getByText('プロビジョニング失敗')).toBeInTheDocument();
     });
@@ -119,10 +119,10 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'PENDING' })}
-        />
+        />,
       );
       expect(
-        screen.getByRole('button', { name: 'プロビジョニング開始' })
+        screen.getByRole('button', { name: 'プロビジョニング開始' }),
       ).toBeInTheDocument();
     });
 
@@ -130,10 +130,10 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'FAILED' })}
-        />
+        />,
       );
       expect(
-        screen.getByRole('button', { name: '再試行' })
+        screen.getByRole('button', { name: '再試行' }),
       ).toBeInTheDocument();
     });
 
@@ -141,7 +141,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'IN_PROGRESS' })}
-        />
+        />,
       );
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
@@ -150,7 +150,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'COMPLETED' })}
-        />
+        />,
       );
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
@@ -169,7 +169,7 @@ describe('ProvisioningCard コンポーネント', () => {
       render(<ProvisioningCard tenant={tenant} />);
 
       await user.click(
-        screen.getByRole('button', { name: 'プロビジョニング開始' })
+        screen.getByRole('button', { name: 'プロビジョニング開始' }),
       );
 
       await waitFor(() => {
@@ -181,20 +181,20 @@ describe('ProvisioningCard コンポーネント', () => {
     it('プロビジョニング中はボタンテキストが変わるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.triggerProvisioning).mockImplementation(
-        () => new Promise(() => {}) // 解決しないPromiseでローディング状態を維持
+        () => new Promise(() => {}), // 解決しないPromiseでローディング状態を維持
       );
 
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'PENDING' })}
-        />
+        />,
       );
 
       user.click(screen.getByRole('button', { name: 'プロビジョニング開始' }));
 
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: 'プロビジョニング中...' })
+          screen.getByRole('button', { name: 'プロビジョニング中...' }),
         ).toBeInTheDocument();
       });
     });
@@ -202,17 +202,17 @@ describe('ProvisioningCard コンポーネント', () => {
     it('エラー時にエラーメッセージを表示すべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.triggerProvisioning).mockRejectedValue(
-        new Error('Network error')
+        new Error('Network error'),
       );
 
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'PENDING' })}
-        />
+        />,
       );
 
       await user.click(
-        screen.getByRole('button', { name: 'プロビジョニング開始' })
+        screen.getByRole('button', { name: 'プロビジョニング開始' }),
       );
 
       await waitFor(() => {
@@ -223,22 +223,22 @@ describe('ProvisioningCard コンポーネント', () => {
     it('非 Error オブジェクトの例外時はフォールバックメッセージを表示すべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.triggerProvisioning).mockRejectedValue(
-        'string error'
+        'string error',
       );
 
       render(
         <ProvisioningCard
           tenant={createMockTenant({ provisioningStatus: 'PENDING' })}
-        />
+        />,
       );
 
       await user.click(
-        screen.getByRole('button', { name: 'プロビジョニング開始' })
+        screen.getByRole('button', { name: 'プロビジョニング開始' }),
       );
 
       await waitFor(() => {
         expect(
-          screen.getByText('プロビジョニングに失敗しました')
+          screen.getByText('プロビジョニングに失敗しました'),
         ).toBeInTheDocument();
       });
     });

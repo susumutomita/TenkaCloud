@@ -51,7 +51,7 @@ describe('TenantAccessCard コンポーネント', () => {
     it('説明文を表示すべき', () => {
       render(<TenantAccessCard tenant={createMockTenant()} />);
       expect(
-        screen.getByText('このテナントの Application Plane にアクセスします')
+        screen.getByText('このテナントの Application Plane にアクセスします'),
       ).toBeInTheDocument();
     });
 
@@ -63,14 +63,14 @@ describe('TenantAccessCard コンポーネント', () => {
     it('管理画面を開くボタンを表示すべき', () => {
       render(<TenantAccessCard tenant={createMockTenant()} />);
       expect(
-        screen.getByRole('link', { name: '管理画面を開く' })
+        screen.getByRole('link', { name: '管理画面を開く' }),
       ).toBeInTheDocument();
     });
 
     it('URLをコピーボタンを表示すべき', () => {
       render(<TenantAccessCard tenant={createMockTenant()} />);
       expect(
-        screen.getByRole('button', { name: 'URLをコピー' })
+        screen.getByRole('button', { name: 'URLをコピー' }),
       ).toBeInTheDocument();
     });
   });
@@ -78,7 +78,7 @@ describe('TenantAccessCard コンポーネント', () => {
   describe('管理画面を開くリンク', () => {
     it('正しい URL への外部リンクを持つべき', () => {
       render(
-        <TenantAccessCard tenant={createMockTenant({ slug: 'my-tenant' })} />
+        <TenantAccessCard tenant={createMockTenant({ slug: 'my-tenant' })} />,
       );
       const link = screen.getByRole('link', { name: '管理画面を開く' });
       expect(link).toHaveAttribute('href', 'https://my-tenant.tenka.cloud');
@@ -95,7 +95,7 @@ describe('TenantAccessCard コンポーネント', () => {
   describe('ヘルパー関数', () => {
     it('getApplicationPlaneUrl が本番環境用の URL を生成すべき', () => {
       expect(getApplicationPlaneUrl('test-tenant')).toBe(
-        'https://test-tenant.tenka.cloud'
+        'https://test-tenant.tenka.cloud',
       );
       expect(getApplicationPlaneUrl('acme')).toBe('https://acme.tenka.cloud');
     });
@@ -103,7 +103,7 @@ describe('TenantAccessCard コンポーネント', () => {
     it('getApplicationPlaneUrl が環境変数設定時にローカル URL を返すべき', () => {
       process.env.NEXT_PUBLIC_APPLICATION_PLANE_URL = 'http://localhost:13001';
       expect(getApplicationPlaneUrl('test-tenant')).toBe(
-        'http://localhost:13001'
+        'http://localhost:13001',
       );
       expect(getApplicationPlaneUrl('acme')).toBe('http://localhost:13001');
     });
@@ -136,14 +136,16 @@ describe('TenantAccessCard コンポーネント', () => {
       });
 
       render(
-        <TenantAccessCard tenant={createMockTenant({ slug: 'default-copy' })} />
+        <TenantAccessCard
+          tenant={createMockTenant({ slug: 'default-copy' })}
+        />,
       );
 
       await user.click(screen.getByRole('button', { name: 'URLをコピー' }));
 
       await waitFor(() => {
         expect(mockWriteText).toHaveBeenCalledWith(
-          'https://default-copy.tenka.cloud'
+          'https://default-copy.tenka.cloud',
         );
       });
     });
@@ -156,14 +158,14 @@ describe('TenantAccessCard コンポーネント', () => {
         <TenantAccessCard
           tenant={createMockTenant({ slug: 'copy-test' })}
           onCopyUrl={mockCopyUrl}
-        />
+        />,
       );
 
       await user.click(screen.getByRole('button', { name: 'URLをコピー' }));
 
       await waitFor(() => {
         expect(mockCopyUrl).toHaveBeenCalledWith(
-          'https://copy-test.tenka.cloud'
+          'https://copy-test.tenka.cloud',
         );
       });
     });
@@ -173,7 +175,10 @@ describe('TenantAccessCard コンポーネント', () => {
       const mockCopyUrl = vi.fn().mockResolvedValue(undefined);
 
       render(
-        <TenantAccessCard tenant={createMockTenant()} onCopyUrl={mockCopyUrl} />
+        <TenantAccessCard
+          tenant={createMockTenant()}
+          onCopyUrl={mockCopyUrl}
+        />,
       );
 
       await user.click(screen.getByRole('button', { name: 'URLをコピー' }));
@@ -186,7 +191,10 @@ describe('TenantAccessCard コンポーネント', () => {
       const mockCopyUrl = vi.fn().mockResolvedValue(undefined);
 
       render(
-        <TenantAccessCard tenant={createMockTenant()} onCopyUrl={mockCopyUrl} />
+        <TenantAccessCard
+          tenant={createMockTenant()}
+          onCopyUrl={mockCopyUrl}
+        />,
       );
 
       await user.click(screen.getByRole('button', { name: 'URLをコピー' }));
@@ -198,7 +206,7 @@ describe('TenantAccessCard コンポーネント', () => {
         () => {
           expect(screen.getByText('URLをコピー')).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     }, 10000);
 
@@ -209,7 +217,10 @@ describe('TenantAccessCard コンポーネント', () => {
         .mockRejectedValue(new Error('Clipboard error'));
 
       render(
-        <TenantAccessCard tenant={createMockTenant()} onCopyUrl={mockCopyUrl} />
+        <TenantAccessCard
+          tenant={createMockTenant()}
+          onCopyUrl={mockCopyUrl}
+        />,
       );
 
       await user.click(screen.getByRole('button', { name: 'URLをコピー' }));
@@ -226,7 +237,10 @@ describe('TenantAccessCard コンポーネント', () => {
         .mockRejectedValue(new Error('Clipboard error'));
 
       render(
-        <TenantAccessCard tenant={createMockTenant()} onCopyUrl={mockCopyUrl} />
+        <TenantAccessCard
+          tenant={createMockTenant()}
+          onCopyUrl={mockCopyUrl}
+        />,
       );
 
       await user.click(screen.getByRole('button', { name: 'URLをコピー' }));
@@ -240,7 +254,7 @@ describe('TenantAccessCard コンポーネント', () => {
         () => {
           expect(screen.getByText('URLをコピー')).toBeInTheDocument();
         },
-        { timeout: 3000 }
+        { timeout: 3000 },
       );
     }, 10000);
   });
@@ -250,7 +264,7 @@ describe('TenantAccessCard コンポーネント', () => {
       render(
         <TenantAccessCard
           tenant={createMockTenant({ provisioningStatus: 'PENDING' })}
-        />
+        />,
       );
       const link = screen.getByRole('link', { name: '管理画面を開く' });
       expect(link).toHaveAttribute('aria-disabled', 'true');
@@ -260,7 +274,7 @@ describe('TenantAccessCard コンポーネント', () => {
       render(
         <TenantAccessCard
           tenant={createMockTenant({ provisioningStatus: 'IN_PROGRESS' })}
-        />
+        />,
       );
       const link = screen.getByRole('link', { name: '管理画面を開く' });
       expect(link).toHaveAttribute('aria-disabled', 'true');
@@ -270,7 +284,7 @@ describe('TenantAccessCard コンポーネント', () => {
       render(
         <TenantAccessCard
           tenant={createMockTenant({ provisioningStatus: 'FAILED' })}
-        />
+        />,
       );
       const link = screen.getByRole('link', { name: '管理画面を開く' });
       expect(link).toHaveAttribute('aria-disabled', 'true');
@@ -280,7 +294,7 @@ describe('TenantAccessCard コンポーネント', () => {
       render(
         <TenantAccessCard
           tenant={createMockTenant({ provisioningStatus: 'COMPLETED' })}
-        />
+        />,
       );
       const link = screen.getByRole('link', { name: '管理画面を開く' });
       expect(link).not.toHaveAttribute('aria-disabled', 'true');
@@ -290,7 +304,7 @@ describe('TenantAccessCard コンポーネント', () => {
       render(
         <TenantAccessCard
           tenant={createMockTenant({ provisioningStatus: 'IN_PROGRESS' })}
-        />
+        />,
       );
       expect(screen.getByText(/プロビジョニング中/)).toBeInTheDocument();
     });
@@ -299,7 +313,7 @@ describe('TenantAccessCard コンポーネント', () => {
       render(
         <TenantAccessCard
           tenant={createMockTenant({ provisioningStatus: 'FAILED' })}
-        />
+        />,
       );
       expect(screen.getByText(/プロビジョニング失敗/)).toBeInTheDocument();
     });

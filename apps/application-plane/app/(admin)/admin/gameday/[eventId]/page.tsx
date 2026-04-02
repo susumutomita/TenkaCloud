@@ -92,7 +92,7 @@ export default function AdminGamedayControlPage() {
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました')
+        err instanceof Error ? err : new Error('読み込みに失敗しました'),
       );
     } finally {
       setLoading(false);
@@ -166,7 +166,7 @@ export default function AdminGamedayControlPage() {
       const result = await executeFaultInjection(
         eventId,
         fiTeamId,
-        fiAttackSlug
+        fiAttackSlug,
       );
       setFiResult({
         success: result.success,

@@ -19,28 +19,28 @@ describe('SignupPage', () => {
   it('キャッチフレーズが表示されるべき', () => {
     render(<SignupPage />);
     expect(
-      screen.getByText('クラウド天下一武道会に参加しよう')
+      screen.getByText('クラウド天下一武道会に参加しよう'),
     ).toBeInTheDocument();
   });
 
   it('メールアドレスで登録ボタンが表示されるべき', () => {
     render(<SignupPage />);
     expect(
-      screen.getByRole('button', { name: /メールアドレスで登録/ })
+      screen.getByRole('button', { name: /メールアドレスで登録/ }),
     ).toBeInTheDocument();
   });
 
   it('Google ソーシャルログインボタンが表示されるべき', () => {
     render(<SignupPage />);
     expect(
-      screen.getByRole('button', { name: /Google で続ける/ })
+      screen.getByRole('button', { name: /Google で続ける/ }),
     ).toBeInTheDocument();
   });
 
   it('GitHub ソーシャルログインボタンが表示されるべき', () => {
     render(<SignupPage />);
     expect(
-      screen.getByRole('button', { name: /GitHub で続ける/ })
+      screen.getByRole('button', { name: /GitHub で続ける/ }),
     ).toBeInTheDocument();
   });
 

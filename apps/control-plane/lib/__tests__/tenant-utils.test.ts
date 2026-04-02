@@ -50,7 +50,7 @@ describe('tenant-utils', () => {
         null,
         mockFormData,
         onSuccess,
-        onError
+        onError,
       );
 
       expect(result).toBe(false);
@@ -82,13 +82,13 @@ describe('tenant-utils', () => {
         'test-id',
         mockFormData,
         onSuccess,
-        onError
+        onError,
       );
 
       expect(result).toBe(true);
       expect(tenantApi.updateTenant).toHaveBeenCalledWith(
         'test-id',
-        mockFormData
+        mockFormData,
       );
       expect(onSuccess).toHaveBeenCalled();
       expect(onError).not.toHaveBeenCalled();
@@ -96,7 +96,7 @@ describe('tenant-utils', () => {
 
     it('更新失敗時は onError を呼んで false を返すべき', async () => {
       vi.mocked(tenantApi.updateTenant).mockRejectedValue(
-        new Error('Update failed')
+        new Error('Update failed'),
       );
 
       const onSuccess = vi.fn();
@@ -106,13 +106,13 @@ describe('tenant-utils', () => {
         'test-id',
         mockFormData,
         onSuccess,
-        onError
+        onError,
       );
 
       expect(result).toBe(false);
       expect(tenantApi.updateTenant).toHaveBeenCalledWith(
         'test-id',
-        mockFormData
+        mockFormData,
       );
       expect(onSuccess).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalled();

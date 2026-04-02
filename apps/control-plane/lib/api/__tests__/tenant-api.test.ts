@@ -68,7 +68,7 @@ describe('tenantApi', () => {
       expect(tenants).toEqual([mockTenant]);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/tenants'),
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     });
 
@@ -80,13 +80,13 @@ describe('tenantApi', () => {
           Promise.resolve(
             JSON.stringify({
               error: { message: 'サーバーエラーが発生しました' },
-            })
+            }),
           ),
       });
 
       await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
       await expect(tenantApi.listTenants()).rejects.toThrow(
-        'サーバーエラーが発生しました'
+        'サーバーエラーが発生しました',
       );
     });
 
@@ -100,7 +100,7 @@ describe('tenantApi', () => {
 
       await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
       await expect(tenantApi.listTenants()).rejects.toThrow(
-        'バリデーションエラー'
+        'バリデーションエラー',
       );
     });
 
@@ -113,7 +113,7 @@ describe('tenantApi', () => {
 
       await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
       await expect(tenantApi.listTenants()).rejects.toThrow(
-        'APIリクエストに失敗しました'
+        'APIリクエストに失敗しました',
       );
     });
 
@@ -126,7 +126,7 @@ describe('tenantApi', () => {
 
       await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
       await expect(tenantApi.listTenants()).rejects.toThrow(
-        'APIリクエストに失敗しました'
+        'APIリクエストに失敗しました',
       );
     });
   });
@@ -144,7 +144,7 @@ describe('tenantApi', () => {
       expect(tenant).toEqual(mockTenant);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/tenants/1'),
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     });
 
@@ -168,13 +168,13 @@ describe('tenantApi', () => {
           Promise.resolve(
             JSON.stringify({
               error: { message: 'サーバーエラーが発生しました' },
-            })
+            }),
           ),
       });
 
       await expect(tenantApi.getTenant('1')).rejects.toThrow(TenantApiError);
       await expect(tenantApi.getTenant('1')).rejects.toThrow(
-        'サーバーエラーが発生しました'
+        'サーバーエラーが発生しました',
       );
     });
   });
@@ -202,7 +202,7 @@ describe('tenantApi', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(input),
-        }
+        },
       );
     });
 
@@ -212,7 +212,7 @@ describe('tenantApi', () => {
         status: StatusCodes.BAD_REQUEST,
         text: () =>
           Promise.resolve(
-            JSON.stringify({ error: { message: 'バリデーションエラーです' } })
+            JSON.stringify({ error: { message: 'バリデーションエラーです' } }),
           ),
       });
 
@@ -222,7 +222,7 @@ describe('tenantApi', () => {
           slug: '',
           adminEmail: 'invalid',
           tier: 'FREE',
-        })
+        }),
       ).rejects.toThrow(TenantApiError);
       await expect(
         tenantApi.createTenant({
@@ -230,7 +230,7 @@ describe('tenantApi', () => {
           slug: '',
           adminEmail: 'invalid',
           tier: 'FREE',
-        })
+        }),
       ).rejects.toThrow('バリデーションエラーです');
     });
   });
@@ -256,7 +256,7 @@ describe('tenantApi', () => {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(input),
-        }
+        },
       );
     });
 
@@ -282,15 +282,15 @@ describe('tenantApi', () => {
           Promise.resolve(
             JSON.stringify({
               error: { message: 'サーバーエラーが発生しました' },
-            })
+            }),
           ),
       });
 
       await expect(
-        tenantApi.updateTenant('1', { name: 'テスト' })
+        tenantApi.updateTenant('1', { name: 'テスト' }),
       ).rejects.toThrow(TenantApiError);
       await expect(
-        tenantApi.updateTenant('1', { name: 'テスト' })
+        tenantApi.updateTenant('1', { name: 'テスト' }),
       ).rejects.toThrow('サーバーエラーが発生しました');
     });
   });
@@ -308,7 +308,7 @@ describe('tenantApi', () => {
       expect(result).toBe(true);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/tenants/1'),
-        { method: 'DELETE' }
+        { method: 'DELETE' },
       );
     });
 
@@ -332,13 +332,13 @@ describe('tenantApi', () => {
           Promise.resolve(
             JSON.stringify({
               error: { message: 'サーバーエラーが発生しました' },
-            })
+            }),
           ),
       });
 
       await expect(tenantApi.deleteTenant('1')).rejects.toThrow(TenantApiError);
       await expect(tenantApi.deleteTenant('1')).rejects.toThrow(
-        'サーバーエラーが発生しました'
+        'サーバーエラーが発生しました',
       );
     });
   });
@@ -361,7 +361,7 @@ describe('tenantApi', () => {
       expect(result).toEqual(mockResponse);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/tenants/1/provision'),
-        { method: 'POST' }
+        { method: 'POST' },
       );
     });
 
@@ -373,15 +373,15 @@ describe('tenantApi', () => {
           Promise.resolve(
             JSON.stringify({
               error: { message: 'プロビジョニングは許可されていません' },
-            })
+            }),
           ),
       });
 
       await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
-        TenantApiError
+        TenantApiError,
       );
       await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
-        'プロビジョニングは許可されていません'
+        'プロビジョニングは許可されていません',
       );
     });
   });
@@ -404,7 +404,7 @@ describe('tenantApi', () => {
       expect(result).toEqual(mockResponse);
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/tenants/1/provision'),
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
     });
 
@@ -428,15 +428,15 @@ describe('tenantApi', () => {
           Promise.resolve(
             JSON.stringify({
               error: { message: 'サーバーエラーが発生しました' },
-            })
+            }),
           ),
       });
 
       await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
-        TenantApiError
+        TenantApiError,
       );
       await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
-        'サーバーエラーが発生しました'
+        'サーバーエラーが発生しました',
       );
     });
   });

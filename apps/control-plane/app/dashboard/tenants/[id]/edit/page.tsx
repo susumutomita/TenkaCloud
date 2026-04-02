@@ -91,7 +91,7 @@ export default function EditTenantPage({
       },
       () => {
         alert('テナント更新に失敗しました');
-      }
+      },
     );
 
     if (!success && id) {

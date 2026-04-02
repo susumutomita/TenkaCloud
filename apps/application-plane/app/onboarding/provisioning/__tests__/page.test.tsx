@@ -33,7 +33,7 @@ describe('ProvisioningPage', () => {
   it('進捗メッセージが表示されるべき', () => {
     render(<ProvisioningPage />);
     expect(
-      screen.getByText('あなたのテナント環境を準備しています')
+      screen.getByText('あなたのテナント環境を準備しています'),
     ).toBeInTheDocument();
   });
 

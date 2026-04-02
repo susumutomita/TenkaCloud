@@ -21,7 +21,7 @@ import { del, get, post, put } from './client';
  * 問題一覧を取得
  */
 export async function getProblems(
-  filters?: AdminProblemFilters & { limit?: number; offset?: number }
+  filters?: AdminProblemFilters & { limit?: number; offset?: number },
 ): Promise<AdminProblemListResponse> {
   return get<AdminProblemListResponse>('/admin/problems', {
     type: filters?.type,
@@ -43,7 +43,7 @@ export async function getProblem(problemId: string): Promise<AdminProblem> {
  * 問題を作成
  */
 export async function createProblem(
-  data: CreateProblemRequest
+  data: CreateProblemRequest,
 ): Promise<AdminProblem> {
   return post<AdminProblem>('/admin/problems', data);
 }
@@ -53,7 +53,7 @@ export async function createProblem(
  */
 export async function updateProblem(
   problemId: string,
-  data: UpdateProblemRequest
+  data: UpdateProblemRequest,
 ): Promise<AdminProblem> {
   return put<AdminProblem>(`/admin/problems/${problemId}`, data);
 }
@@ -62,7 +62,7 @@ export async function updateProblem(
  * 問題を削除
  */
 export async function deleteProblem(
-  problemId: string
+  problemId: string,
 ): Promise<{ success: boolean }> {
   return del<{ success: boolean }>(`/admin/problems/${problemId}`);
 }
@@ -72,11 +72,11 @@ export async function deleteProblem(
  */
 export async function deployProblem(
   problemId: string,
-  data: DeployProblemRequest
+  data: DeployProblemRequest,
 ): Promise<DeployProblemResponse> {
   return post<DeployProblemResponse>(
     `/admin/problems/${problemId}/deploy`,
-    data
+    data,
   );
 }
 
@@ -86,11 +86,11 @@ export async function deployProblem(
 export async function getDeploymentStatus(
   problemId: string,
   stackName: string,
-  region: string
+  region: string,
 ): Promise<DeploymentStatus> {
   return get<DeploymentStatus>(
     `/admin/problems/${problemId}/deployments/${stackName}/status`,
-    { region }
+    { region },
   );
 }
 
@@ -100,10 +100,10 @@ export async function getDeploymentStatus(
 export async function deleteDeployment(
   problemId: string,
   stackName: string,
-  region: string
+  region: string,
 ): Promise<{ message: string; stackName: string }> {
   return del<{ message: string; stackName: string }>(
-    `/admin/problems/${problemId}/deployments/${stackName}?region=${region}`
+    `/admin/problems/${problemId}/deployments/${stackName}?region=${region}`,
   );
 }
 

@@ -27,7 +27,7 @@ interface FetchOptions extends RequestInit {
 
 export async function gamedayRequest<T>(
   endpoint: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
 
@@ -92,7 +92,7 @@ export function getParticipantGameStatus(eventId: string) {
 export function purchaseAttack(
   eventId: string,
   teamId: string,
-  attackId: string
+  attackId: string,
 ) {
   return gamedayRequest<AttackPurchase>('/attacks/purchase', {
     method: 'POST',
@@ -104,7 +104,7 @@ export function executeAttack(
   eventId: string,
   teamId: string,
   attackId: string,
-  targetTeamId: string
+  targetTeamId: string,
 ) {
   return gamedayRequest<AttackLog>('/attacks/execute', {
     method: 'POST',
@@ -129,7 +129,7 @@ export function getActiveDefense(eventId: string, teamId: string) {
 export function purchaseHint(
   eventId: string,
   teamId: string,
-  attackId: string
+  attackId: string,
 ) {
   return gamedayRequest<{ hint: string; cost: number }>('/defense/hint', {
     method: 'POST',
@@ -140,14 +140,14 @@ export function purchaseHint(
 export function reportFix(
   eventId: string,
   teamId: string,
-  vulnerabilitySlug: string
+  vulnerabilitySlug: string,
 ) {
   return gamedayRequest<{ success: boolean; pointsAwarded: number }>(
     '/defense/report-fix',
     {
       method: 'POST',
       body: JSON.stringify({ eventId, teamId, vulnerabilitySlug }),
-    }
+    },
   );
 }
 
@@ -162,7 +162,7 @@ export function getAlliances(eventId: string, teamId: string) {
 export function requestAlliance(
   eventId: string,
   teamId: string,
-  targetTeamId: string
+  targetTeamId: string,
 ) {
   return gamedayRequest<Alliance>('/alliances/request', {
     method: 'POST',
@@ -173,7 +173,7 @@ export function requestAlliance(
 export function acceptAlliance(
   allianceId: string,
   eventId: string,
-  teamId: string
+  teamId: string,
 ) {
   return gamedayRequest<Alliance>(`/alliances/${allianceId}/accept`, {
     method: 'POST',
@@ -184,14 +184,14 @@ export function acceptAlliance(
 export function breakAlliance(
   allianceId: string,
   eventId: string,
-  teamId: string
+  teamId: string,
 ) {
   return gamedayRequest<{ success: boolean }>(
     `/alliances/${allianceId}/break`,
     {
       method: 'POST',
       body: JSON.stringify({ eventId, teamId }),
-    }
+    },
   );
 }
 
@@ -208,7 +208,7 @@ export function getMonitoringStatus(eventId: string, teamId: string) {
 export function submitVote(
   eventId: string,
   teamId: string,
-  votedForTeamId: string
+  votedForTeamId: string,
 ) {
   return gamedayRequest<Vote>('/voting/vote', {
     method: 'POST',
@@ -227,7 +227,7 @@ export function getVotingResults(eventId: string) {
 export function getLeaderboard(eventId: string) {
   return gamedayRequest<{ leaderboard: LeaderboardEntry[] }>(
     '/dashboard/leaderboard',
-    { params: { eventId } }
+    { params: { eventId } },
   );
 }
 
@@ -248,7 +248,7 @@ export function getTeamDashboard(eventId: string, teamId: string) {
 export function updateTeamUrl(
   eventId: string,
   teamId: string,
-  urls: { websiteUrl?: string; apiUrl?: string }
+  urls: { websiteUrl?: string; apiUrl?: string },
 ) {
   return gamedayRequest<{ success: boolean }>('/teams/update-url', {
     method: 'POST',

@@ -26,7 +26,7 @@ describe('SettingsPage コンポーネント', () => {
   it('説明文を表示すべき', () => {
     render(<SettingsPage />);
     expect(
-      screen.getByText('プラットフォームの設定を管理します')
+      screen.getByText('プラットフォームの設定を管理します'),
     ).toBeInTheDocument();
   });
 
@@ -35,7 +35,7 @@ describe('SettingsPage コンポーネント', () => {
       render(<SettingsPage />);
       expect(screen.getByText('プラットフォーム設定')).toBeInTheDocument();
       expect(
-        screen.getByText('基本的なプラットフォームの設定を行います')
+        screen.getByText('基本的なプラットフォームの設定を行います'),
       ).toBeInTheDocument();
     });
 
@@ -91,7 +91,7 @@ describe('SettingsPage コンポーネント', () => {
       render(<SettingsPage />);
       expect(screen.getByText('外観設定')).toBeInTheDocument();
       expect(
-        screen.getByText('アプリケーションの表示設定を行います')
+        screen.getByText('アプリケーションの表示設定を行います'),
       ).toBeInTheDocument();
     });
 
@@ -228,7 +228,7 @@ describe('SettingsPage コンポーネント', () => {
     it('保存ボタンを表示すべき', () => {
       render(<SettingsPage />);
       expect(
-        screen.getByRole('button', { name: '設定を保存' })
+        screen.getByRole('button', { name: '設定を保存' }),
       ).toBeInTheDocument();
     });
 
@@ -239,7 +239,7 @@ describe('SettingsPage コンポーネント', () => {
         () =>
           new Promise<void>((resolve) => {
             resolvePromise = resolve;
-          })
+          }),
       );
 
       const user = userEvent.setup();
@@ -269,7 +269,7 @@ describe('SettingsPage コンポーネント', () => {
         () => {
           expect(screen.getByText('設定を保存しました')).toBeInTheDocument();
         },
-        { timeout: 1000 }
+        { timeout: 1000 },
       );
     });
 
@@ -284,7 +284,7 @@ describe('SettingsPage コンポーネント', () => {
       // 保存処理失敗後にエラーメッセージが表示される
       await waitFor(() => {
         expect(
-          screen.getByText('設定の保存に失敗しました')
+          screen.getByText('設定の保存に失敗しました'),
         ).toBeInTheDocument();
       });
     });

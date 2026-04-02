@@ -11,10 +11,8 @@ type TextareaVariant = 'default' | 'error';
 type TextareaSize = 'sm' | 'md' | 'lg';
 type TextareaResize = 'none' | 'vertical' | 'horizontal' | 'both';
 
-interface TextareaProps extends Omit<
-  TextareaHTMLAttributes<HTMLTextAreaElement>,
-  'size'
-> {
+interface TextareaProps
+  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'> {
   variant?: TextareaVariant;
   textareaSize?: TextareaSize;
   resize?: TextareaResize;
@@ -71,7 +69,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       defaultValue,
       ...props
     },
-    ref
+    ref,
   ) => {
     const generatedId = useId();
     const textareaId = id || generatedId;
@@ -156,7 +154,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         </div>
       </div>
     );
-  }
+  },
 );
 
 Textarea.displayName = 'Textarea';

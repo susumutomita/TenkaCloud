@@ -27,7 +27,7 @@ describe('Participant App ホームページ', () => {
       (label) => {
         render(<Home />);
         expect(screen.getByText(label)).toBeInTheDocument();
-      }
+      },
     );
   });
 
@@ -59,7 +59,7 @@ describe('Participant App ホームページ', () => {
       (eventType) => {
         render(<Home />);
         expect(screen.getByText(eventType)).toBeInTheDocument();
-      }
+      },
     );
   });
 
@@ -71,7 +71,7 @@ describe('Participant App ホームページ', () => {
   it('フッターが表示されるべき', () => {
     render(<Home />);
     expect(
-      screen.getByText('TenkaCloud - The Open Cloud Battle Arena')
+      screen.getByText('TenkaCloud - The Open Cloud Battle Arena'),
     ).toBeInTheDocument();
   });
 });

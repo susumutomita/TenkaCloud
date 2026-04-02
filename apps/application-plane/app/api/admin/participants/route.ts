@@ -69,14 +69,14 @@ export async function GET(request: NextRequest) {
     if (search) queryParams.set('search', search);
 
     const data = await serverApiRequest<AdminParticipantListResponse>(
-      `/admin/participants?${queryParams.toString()}`
+      `/admin/participants?${queryParams.toString()}`,
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch participants:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch participants'
+      error instanceof Error ? error.message : 'Failed to fetch participants',
     );
   }
 }
@@ -109,14 +109,14 @@ export async function POST(request: NextRequest) {
       {
         method: 'POST',
         body: JSON.stringify(body),
-      }
+      },
     );
 
     return successResponse(data, 201);
   } catch (error) {
     console.error('Failed to add participant:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to add participant'
+      error instanceof Error ? error.message : 'Failed to add participant',
     );
   }
 }

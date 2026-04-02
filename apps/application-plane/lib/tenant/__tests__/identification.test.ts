@@ -15,7 +15,7 @@ import {
 // NextRequest のモックファクトリ
 function createMockRequest(
   url: string,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ): NextRequest {
   const parsedUrl = new URL(url);
   return {
@@ -34,7 +34,7 @@ describe('テナント識別ロジック', () => {
 
     it('複数サブドメインの場合は最初のセグメントを取得すべき', () => {
       const req = createMockRequest(
-        'https://acme.staging.tenka.cloud/dashboard'
+        'https://acme.staging.tenka.cloud/dashboard',
       );
       expect(getTenantSlugFromSubdomain(req)).toBe('acme');
     });
@@ -78,7 +78,7 @@ describe('テナント識別ロジック', () => {
   describe('getTenantSlugFromQueryParam', () => {
     it('クエリパラメータからテナントスラッグを取得すべき', () => {
       const req = createMockRequest(
-        'http://localhost:13001/dashboard?tenant=acme'
+        'http://localhost:13001/dashboard?tenant=acme',
       );
       expect(getTenantSlugFromQueryParam(req)).toBe('acme');
     });
@@ -97,14 +97,14 @@ describe('テナント識別ロジック', () => {
   describe('getTenantSlugFromUrl', () => {
     it('本番環境ではサブドメインを優先すべき', () => {
       const req = createMockRequest(
-        'https://acme.tenka.cloud/dashboard?tenant=other'
+        'https://acme.tenka.cloud/dashboard?tenant=other',
       );
       expect(getTenantSlugFromUrl(req)).toBe('acme');
     });
 
     it('開発環境ではクエリパラメータを使用すべき', () => {
       const req = createMockRequest(
-        'http://localhost:13001/dashboard?tenant=acme'
+        'http://localhost:13001/dashboard?tenant=acme',
       );
       expect(getTenantSlugFromUrl(req)).toBe('acme');
     });

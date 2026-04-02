@@ -21,7 +21,7 @@ const Table = forwardRef<HTMLTableElement, HTMLAttributes<HTMLTableElement>>(
         {...props}
       />
     </div>
-  )
+  ),
 );
 Table.displayName = 'Table';
 
@@ -111,7 +111,7 @@ const TableHead = forwardRef<HTMLTableCellElement, TableHeadProps>(
       children,
       ...props
     },
-    ref
+    ref,
   ) => {
     const sortableClasses = sortable
       ? 'cursor-pointer select-none hover:bg-surface-3 hover:text-text-primary'
@@ -159,7 +159,7 @@ const TableHead = forwardRef<HTMLTableCellElement, TableHeadProps>(
         </span>
       </th>
     );
-  }
+  },
 );
 TableHead.displayName = 'TableHead';
 
@@ -207,7 +207,7 @@ interface TableEmptyProps extends HTMLAttributes<HTMLTableRowElement> {
 const TableEmpty = forwardRef<HTMLTableRowElement, TableEmptyProps>(
   (
     { colSpan, message = 'データがありません', className = '', ...props },
-    ref
+    ref,
   ) => (
     <tr ref={ref} className={className} {...props}>
       <td colSpan={colSpan} className="h-32 text-center text-text-muted">
@@ -230,7 +230,7 @@ const TableEmpty = forwardRef<HTMLTableRowElement, TableEmptyProps>(
         </div>
       </td>
     </tr>
-  )
+  ),
 );
 TableEmpty.displayName = 'TableEmpty';
 

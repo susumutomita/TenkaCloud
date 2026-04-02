@@ -43,15 +43,15 @@ describe('Sidebar コンポーネント', () => {
       render(<Sidebar />);
       expect(screen.getByText('ダッシュボード').closest('a')).toHaveAttribute(
         'href',
-        '/dashboard'
+        '/dashboard',
       );
       expect(screen.getByText('テナント管理').closest('a')).toHaveAttribute(
         'href',
-        '/dashboard/tenants'
+        '/dashboard/tenants',
       );
       expect(screen.getByText('設定').closest('a')).toHaveAttribute(
         'href',
-        '/dashboard/settings'
+        '/dashboard/settings',
       );
     });
   });

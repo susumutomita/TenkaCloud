@@ -16,14 +16,14 @@ describe('LoginPage コンポーネント', () => {
   it('サブタイトルを表示すべき', () => {
     render(<LoginPage />);
     expect(
-      screen.getByText('プラットフォーム管理者向けコンソール')
+      screen.getByText('プラットフォーム管理者向けコンソール'),
     ).toBeInTheDocument();
   });
 
   it('ログインボタンを表示すべき', () => {
     render(<LoginPage />);
     expect(
-      screen.getByRole('button', { name: 'Auth0 でログイン' })
+      screen.getByRole('button', { name: 'Auth0 でログイン' }),
     ).toBeInTheDocument();
   });
 

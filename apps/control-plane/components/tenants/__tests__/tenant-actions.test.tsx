@@ -48,8 +48,8 @@ describe('TenantActions コンポーネント', () => {
       expect(screen.getByText('テナントを削除しますか？')).toBeInTheDocument();
       expect(
         screen.getByText(
-          'この操作は取り消せません。テナントに関連するすべてのデータが完全に削除されます。'
-        )
+          'この操作は取り消せません。テナントに関連するすべてのデータが完全に削除されます。',
+        ),
       ).toBeInTheDocument();
     });
 

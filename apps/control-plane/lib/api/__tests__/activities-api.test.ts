@@ -26,7 +26,7 @@ describe('Activities API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://tenant-management:13004/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -64,7 +64,7 @@ describe('Activities API', () => {
       expect(result).toEqual(mockActivities);
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/activities?limit=10'),
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -88,7 +88,7 @@ describe('Activities API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/activities?limit=5'),
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -105,7 +105,7 @@ describe('Activities API', () => {
       });
 
       await expect(fetchActivities()).rejects.toThrow(
-        'Failed to fetch activities: 500'
+        'Failed to fetch activities: 500',
       );
 
       vi.unstubAllGlobals();
@@ -130,7 +130,7 @@ describe('Activities API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://custom-api:8080/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -143,7 +143,7 @@ describe('Activities API', () => {
       vi.stubGlobal('window', {});
       vi.stubEnv(
         'NEXT_PUBLIC_TENANT_API_BASE_URL',
-        'http://client-api:9000/api'
+        'http://client-api:9000/api',
       );
 
       const { fetchActivities } = await import('../activities-api');
@@ -161,7 +161,7 @@ describe('Activities API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://client-api:9000/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
@@ -186,7 +186,7 @@ describe('Activities API', () => {
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:13004/api/activities?limit=10',
-        { cache: 'no-store' }
+        { cache: 'no-store' },
       );
 
       vi.unstubAllGlobals();
