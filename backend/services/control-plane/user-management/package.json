@@ -13,11 +13,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.817.0",
-    "@aws-sdk/lib-dynamodb": "^3.817.0",
-    "@hono/node-server": "^1.13.7",
+    "@aws-sdk/client-dynamodb": "^3.810.0",
+    "@aws-sdk/lib-dynamodb": "^3.810.0",
+    "@hono/node-server": "^1.19.12",
     "@tenkacloud/dynamodb": "workspace:*",
-    "hono": "^4.6.12",
+    "hono": "^4.12.10",
     "jose": "^6.1.2",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2",
