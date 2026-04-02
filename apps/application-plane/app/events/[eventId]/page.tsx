@@ -6,6 +6,10 @@
 
 'use client';
 
+import CloudscapeBadge from '@cloudscape-design/components/badge';
+import CloudscapeCards from '@cloudscape-design/components/cards';
+import CloudscapeLink from '@cloudscape-design/components/link';
+import '@cloudscape-design/global-styles/index.css';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -17,21 +21,15 @@ import {
   CardContent,
   CardFooter,
   CardHeader,
-  DifficultyBadge,
   EventStatusBadge,
   ProblemTypeBadge,
-  ScoreProgress,
 } from '../../../components/ui';
 import {
   getEventDetails,
   getLeaderboard,
   registerForEvent,
 } from '../../../lib/api/events';
-import type {
-  ChallengeProblem,
-  EventDetails,
-  Leaderboard,
-} from '../../../lib/api/types';
+import type { EventDetails, Leaderboard } from '../../../lib/api/types';
 
 type RegistrationMode = 'solo' | 'create' | 'join';
 
@@ -440,31 +438,80 @@ export default function EventDetailPage() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Problems List */}
-            <Card>
-              <CardHeader>
-                <h2 className="text-xl font-semibold text-text-primary">
-                  問題一覧 ({event.problemCount}問)
-                </h2>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {event.problems.length === 0 ? (
-                  <p className="text-text-muted text-center py-8">
-                    {isActive
-                      ? '問題の読み込み中...'
-                      : '問題はイベント開始時に公開されます'}
-                  </p>
-                ) : (
-                  event.problems.map((problem: ChallengeProblem) => (
-                    <ProblemCard
-                      key={problem.id}
-                      problem={problem}
-                      eventId={eventId}
-                      canAccess={canParticipate && problem.isUnlocked}
-                    />
-                  ))
-                )}
-              </CardContent>
-            </Card>
+            <CloudscapeCards
+              ariaLabels={{
+                itemSelectionLabel: (_e, n) => `select ${n.title}`,
+                selectionGroupLabel: '問題選択',
+              }}
+              cardDefinition={{
+                header: (problem) => (
+                  <CloudscapeLink
+                    href={
+                      canParticipate && problem.isUnlocked
+                        ? `/events/${eventId}/challenges/${problem.id}`
+                        : undefined
+                    }
+                    fontSize="heading-m"
+                  >
+                    {problem.title}
+                  </CloudscapeLink>
+                ),
+                sections: [
+                  {
+                    id: 'difficulty',
+                    header: '難易度',
+                    content: (problem) => (
+                      <CloudscapeBadge
+                        color={
+                          problem.difficulty === 'hard' ||
+                          problem.difficulty === 'expert'
+                            ? 'red'
+                            : problem.difficulty === 'medium'
+                              ? 'blue'
+                              : 'green'
+                        }
+                      >
+                        {problem.difficulty.toUpperCase()}
+                      </CloudscapeBadge>
+                    ),
+                  },
+                  {
+                    id: 'score',
+                    header: 'スコア',
+                    content: (problem) =>
+                      `${problem.maxScore * problem.pointMultiplier} pts`,
+                  },
+                  {
+                    id: 'status',
+                    header: 'ステータス',
+                    content: (problem) =>
+                      problem.isCompleted
+                        ? '✓ 完了'
+                        : problem.isUnlocked
+                          ? '進行中'
+                          : '🔒 ロック中',
+                  },
+                  {
+                    id: 'overview',
+                    header: '概要',
+                    content: (problem) => problem.overview,
+                  },
+                ],
+              }}
+              cardsPerRow={[{ cards: 1 }, { minWidth: 500, cards: 2 }]}
+              items={event.problems}
+              loadingText="問題を読み込み中"
+              empty={
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  {isActive
+                    ? '問題の読み込み中...'
+                    : '問題はイベント開始時に公開されます'}
+                </div>
+              }
+              header={
+                <h2 style={{ margin: 0 }}>問題一覧 ({event.problemCount}問)</h2>
+              }
+            />
 
             {/* Team Info (if team event) */}
             {event.participantType === 'team' && event.teamInfo && (
@@ -652,73 +699,6 @@ export default function EventDetailPage() {
           </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-// Problem Card Component
-function ProblemCard({
-  problem,
-  eventId,
-  canAccess,
-}: {
-  problem: ChallengeProblem;
-  eventId: string;
-  canAccess: boolean;
-}) {
-  return (
-    <div
-      className={`p-4 border rounded-lg transition-colors ${
-        canAccess
-          ? 'hover:border-hn-accent cursor-pointer border-border'
-          : 'opacity-75 border-border'
-      } ${problem.isCompleted ? 'bg-hn-success/10 border-hn-success/30' : 'bg-surface-2'}`}
-    >
-      <Link
-        href={canAccess ? `/events/${eventId}/challenges/${problem.id}` : '#'}
-        className={canAccess ? '' : 'pointer-events-none'}
-      >
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-text-muted font-medium">
-                #{problem.order}
-              </span>
-              <DifficultyBadge difficulty={problem.difficulty} />
-              {!problem.isUnlocked && (
-                <Badge variant="default" size="sm">
-                  🔒 ロック中
-                </Badge>
-              )}
-              {problem.isCompleted && (
-                <Badge variant="success" size="sm">
-                  ✓ 完了
-                </Badge>
-              )}
-            </div>
-            <h3 className="font-semibold text-text-primary">{problem.title}</h3>
-            <p className="text-sm text-text-secondary mt-1 line-clamp-2">
-              {problem.overview}
-            </p>
-          </div>
-          <div className="text-right ml-4">
-            <div className="text-lg font-bold text-hn-accent">
-              {problem.maxScore * problem.pointMultiplier}
-            </div>
-            <div className="text-xs text-text-muted">pts</div>
-          </div>
-        </div>
-
-        {problem.myScore !== undefined && problem.myScore > 0 && (
-          <div className="mt-3">
-            <ScoreProgress
-              score={problem.myScore}
-              maxScore={problem.maxScore * problem.pointMultiplier}
-              size="sm"
-            />
-          </div>
-        )}
-      </Link>
     </div>
   );
 }
