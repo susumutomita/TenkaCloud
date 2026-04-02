@@ -52,6 +52,9 @@ import {
   TeamNotFoundError as DashboardTeamNotFoundError,
   TeamAlreadyExistsError,
 } from '../services/dashboard-service';
+import { GamedayRepository } from '../repositories/gameday-repository';
+
+const gamedayRepo = new GamedayRepository();
 
 export const participantRoutes = new Hono();
 
@@ -575,10 +578,11 @@ participantRoutes.post('/teams/create', async (c) => {
       StatusCodes.BAD_REQUEST
     );
   }
-  const { eventId, teamId, teamName } = body as {
+  const { eventId, teamId, teamName, userId } = body as {
     eventId?: string;
     teamId?: string;
     teamName?: string;
+    userId?: string;
   };
   if (!eventId || !teamId || !teamName) {
     return c.json(
@@ -588,6 +592,15 @@ participantRoutes.post('/teams/create', async (c) => {
   }
   try {
     const team = await registerTeam({ eventId, teamId, teamName });
+    if (userId) {
+      await gamedayRepo.addMember({
+        eventId,
+        userId,
+        teamId: team.teamId,
+        teamName: team.teamName,
+        mode: 'team',
+      });
+    }
     return c.json(
       {
         teamId: team.teamId,
@@ -614,9 +627,10 @@ participantRoutes.post('/teams/join', async (c) => {
       StatusCodes.BAD_REQUEST
     );
   }
-  const { eventId, inviteCode } = body as {
+  const { eventId, inviteCode, userId } = body as {
     eventId?: string;
     inviteCode?: string;
+    userId?: string;
   };
   if (!eventId || !inviteCode) {
     return c.json(
@@ -628,8 +642,62 @@ participantRoutes.post('/teams/join', async (c) => {
   if (!team) {
     return c.json({ error: '招待コードが無効です' }, StatusCodes.NOT_FOUND);
   }
+  if (userId) {
+    await gamedayRepo.addMember({
+      eventId,
+      userId,
+      teamId: team.teamId,
+      teamName: team.teamName,
+      mode: 'team',
+    });
+  }
   return c.json(
     { teamId: team.teamId, teamName: team.teamName },
     StatusCodes.OK
   );
+});
+
+// === ソロ参加登録 ===
+
+participantRoutes.post('/teams/solo', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const { eventId, userId } = body as { eventId?: string; userId?: string };
+  if (!eventId || !userId) {
+    return c.json(
+      { error: 'eventId, userId は必須です' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  await gamedayRepo.addMember({
+    eventId,
+    userId,
+    teamId: `solo-${userId}`,
+    teamName: 'ソロ参加',
+    mode: 'solo',
+  });
+  return c.json({ mode: 'solo' }, StatusCodes.CREATED);
+});
+
+// === メンバーシップ取得 ===
+
+participantRoutes.get('/teams/my-membership', async (c) => {
+  const eventId = c.req.query('eventId');
+  const userId = c.req.query('userId');
+  if (!eventId || !userId) {
+    return c.json(
+      { error: 'eventId, userId は必須です' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const membership = await gamedayRepo.getMembership(eventId, userId);
+  if (!membership) {
+    return c.json({ membership: null }, StatusCodes.OK);
+  }
+  return c.json({ membership }, StatusCodes.OK);
 });

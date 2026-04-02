@@ -1,7 +1,7 @@
 /**
- * Gameday Team Create API Proxy
+ * Gameday Solo Registration Proxy
  *
- * チーム作成エンドポイント
+ * ソロ参加登録エンドポイント
  */
 
 import { auth } from '@/auth';
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
   const GAMEDAY_API_URL =
     process.env.GAMEDAY_API_URL || 'http://localhost:3020/api/gameday';
-  const response = await fetch(`${GAMEDAY_API_URL}/teams/create`, {
+  const response = await fetch(`${GAMEDAY_API_URL}/teams/solo`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, userId }),

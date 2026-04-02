@@ -120,8 +120,12 @@ export default function EventDetailPage() {
     try {
       setRegistering(true);
       await registerForEvent(eventId);
-      const soloId = `solo-dev-user`;
-      saveLocalGamedayData({ teamId: soloId, teamName: '', mode: 'solo' });
+      // DB にソロ参加を記録
+      await fetch('/api/gameday/teams/solo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      });
       await refreshEvent();
       setShowModal(false);
     } catch (err) {
@@ -156,11 +160,6 @@ export default function EventDetailPage() {
         return;
       }
       await registerForEvent(eventId);
-      saveLocalGamedayData({
-        teamId: data.teamId ?? newTeamId,
-        teamName: data.teamName ?? teamName,
-        mode: 'team',
-      });
       await refreshEvent();
       setShowModal(false);
     } catch (err) {
@@ -195,11 +194,6 @@ export default function EventDetailPage() {
         return;
       }
       await registerForEvent(eventId);
-      saveLocalGamedayData({
-        teamId: data.teamId ?? '',
-        teamName: data.teamName ?? '',
-        mode: 'team',
-      });
       await refreshEvent();
       setShowModal(false);
     } catch (err) {
