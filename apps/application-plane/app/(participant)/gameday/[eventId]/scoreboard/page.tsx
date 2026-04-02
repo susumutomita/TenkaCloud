@@ -6,12 +6,16 @@
 
 'use client';
 
+import type { BoardProps } from '@cloudscape-design/board-components';
+import Board from '@cloudscape-design/board-components/board';
+import BoardItem from '@cloudscape-design/board-components/board-item';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Table from '@cloudscape-design/components/table';
+import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Badge,
-  Card,
-  CardContent,
-  CardHeader,
   ErrorState,
   getErrorMessage,
   getErrorType,
@@ -20,26 +24,122 @@ import { getAttackStats, getLeaderboard } from '@/lib/api/gameday';
 import type { AttackStats, LeaderboardEntry } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 
-function getRankStyle(rank: number) {
-  switch (rank) {
-    case 1:
-      return 'bg-hn-warning/20 border-hn-warning';
-    case 2:
-      return 'bg-text-muted/20 border-text-muted';
-    case 3:
-      return 'bg-amber-500/20 border-amber-500';
-    default:
-      return 'bg-surface-1 border-border';
-  }
+interface BoardItemData {
+  title: string;
+  content: React.ReactNode;
+}
+
+type BoardLayoutItem = BoardProps.Item<BoardItemData>;
+
+function LeaderboardTable({
+  entries,
+  teamId,
+}: {
+  entries: LeaderboardEntry[];
+  teamId: string | null;
+}) {
+  return (
+    <Table
+      columnDefinitions={[
+        {
+          id: 'rank',
+          header: '順位',
+          cell: (entry) => `#${entry.rank}`,
+          width: 70,
+        },
+        {
+          id: 'teamName',
+          header: 'チーム',
+          cell: (entry) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <span>{entry.teamName}</span>
+              {entry.teamId === teamId && (
+                <Badge variant="primary" size="sm">
+                  自チーム
+                </Badge>
+              )}
+            </SpaceBetween>
+          ),
+        },
+        {
+          id: 'score',
+          header: 'スコア',
+          cell: (entry) => entry.score.toLocaleString(),
+          width: 100,
+        },
+        {
+          id: 'attacksLaunched',
+          header: '攻撃',
+          cell: (entry) => entry.attacksLaunched,
+          width: 70,
+        },
+        {
+          id: 'attacksReceived',
+          header: '被撃',
+          cell: (entry) => entry.attacksReceived,
+          width: 70,
+        },
+        {
+          id: 'vulnerabilitiesFixed',
+          header: '修正',
+          cell: (entry) => entry.vulnerabilitiesFixed,
+          width: 70,
+        },
+      ]}
+      items={entries}
+      loadingText="読み込み中"
+      empty="データなし"
+      variant="embedded"
+    />
+  );
+}
+
+function AttackStatsTable({ stats }: { stats: AttackStats[] }) {
+  return (
+    <Table
+      columnDefinitions={[
+        {
+          id: 'attackName',
+          header: '攻撃名',
+          cell: (s) => s.attackName,
+        },
+        {
+          id: 'attackSlug',
+          header: 'スラッグ',
+          cell: (s) => s.attackSlug,
+          width: 150,
+        },
+        {
+          id: 'totalExecutions',
+          header: '実行数',
+          cell: (s) => s.totalExecutions,
+          width: 100,
+        },
+        {
+          id: 'successRate',
+          header: '成功率',
+          cell: (s) => `${Math.round(s.successRate * 100)}%`,
+          width: 100,
+        },
+      ]}
+      items={stats}
+      loadingText="読み込み中"
+      empty="データなし"
+      variant="embedded"
+    />
+  );
 }
 
 export default function ScoreboardPage() {
   const { eventId, teamId } = useGamedaySession();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [stats, setStats] = useState<AttackStats[]>([]);
+  const [attackStats, setAttackStats] = useState<AttackStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [blackout, setBlackout] = useState(false);
+  const [boardItems, setBoardItems] = useState<ReadonlyArray<BoardLayoutItem>>(
+    []
+  );
 
   const fetchData = useCallback(async () => {
     if (!eventId) return;
@@ -49,7 +149,7 @@ export default function ScoreboardPage() {
         getAttackStats(eventId),
       ]);
       setLeaderboard(lbData.leaderboard);
-      setStats(statsData.stats);
+      setAttackStats(statsData.stats);
       setBlackout(false);
       setError(null);
     } catch (err) {
@@ -72,6 +172,31 @@ export default function ScoreboardPage() {
     const id = setInterval(fetchData, 10000);
     return () => clearInterval(id);
   }, [fetchData]);
+
+  useEffect(() => {
+    setBoardItems([
+      {
+        id: 'leaderboard',
+        rowSpan: 4,
+        columnSpan: 2,
+        data: {
+          title: 'リーダーボード',
+          content: (
+            <LeaderboardTable entries={leaderboard} teamId={teamId ?? null} />
+          ),
+        },
+      },
+      {
+        id: 'attack-stats',
+        rowSpan: 4,
+        columnSpan: 2,
+        data: {
+          title: '攻撃統計',
+          content: <AttackStatsTable stats={attackStats} />,
+        },
+      },
+    ]);
+  }, [leaderboard, attackStats, teamId]);
 
   if (loading) {
     return (
@@ -110,125 +235,47 @@ export default function ScoreboardPage() {
         スコアボード
       </h1>
 
-      {/* Leaderboard */}
-      <Card>
-        <CardHeader>
-          <span className="font-semibold text-text-primary">
-            リーダーボード
-          </span>
-        </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-surface-2 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  順位
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  チーム
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase">
-                  スコア
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase">
-                  攻撃
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase">
-                  被撃
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase">
-                  修正
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {leaderboard.map((entry) => {
-                const isMe = entry.teamId === teamId;
-                return (
-                  <tr
-                    key={entry.teamId}
-                    className={`${getRankStyle(entry.rank)} ${isMe ? 'ring-2 ring-hn-accent' : ''}`}
-                  >
-                    <td className="px-4 py-3">
-                      <span
-                        className={`font-bold ${entry.rank <= 3 ? 'text-xl' : 'text-text-primary'}`}
-                      >
-                        #{entry.rank}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-text-primary">
-                          {entry.teamName}
-                        </span>
-                        {isMe && (
-                          <Badge variant="primary" size="sm">
-                            自チーム
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-text-primary">
-                      {entry.score.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono text-text-secondary">
-                      {entry.attacksLaunched}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono text-text-secondary">
-                      {entry.attacksReceived}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono text-hn-success">
-                      {entry.vulnerabilitiesFixed}
-                    </td>
-                  </tr>
-                );
-              })}
-              {leaderboard.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-8 text-center text-text-muted text-sm"
-                  >
-                    データなし
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* Attack Stats */}
-      {stats.length > 0 && (
-        <Card>
-          <CardHeader>
-            <span className="font-semibold text-text-primary">攻撃統計</span>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {stats.map((s) => (
-                <div
-                  key={s.attackSlug}
-                  className="bg-surface-2 rounded-[var(--radius)] p-4 space-y-2"
-                >
-                  <div className="font-medium text-text-primary text-sm">
-                    {s.attackName}
-                  </div>
-                  <div className="flex justify-between text-xs text-text-muted">
-                    <span>実行数: {s.totalExecutions}</span>
-                    <span>
-                      成功率:{' '}
-                      <span className="text-hn-accent font-mono">
-                        {Math.round(s.successRate * 100)}%
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Board
+        renderItem={(
+          item: BoardProps.Item<BoardItemData>,
+          _actions: BoardProps.ItemActions
+        ) => (
+          <BoardItem
+            header={<Header>{item.data.title}</Header>}
+            i18nStrings={{
+              dragHandleAriaLabel: 'ドラッグハンドル',
+              dragHandleAriaDescription:
+                'スペースキーを押してドラッグを開始し、矢印キーで移動、スペースキーで確定、Escapeキーでキャンセル。',
+              resizeHandleAriaLabel: 'リサイズハンドル',
+              resizeHandleAriaDescription:
+                'スペースキーを押してリサイズを開始し、矢印キーで変更、スペースキーで確定、Escapeキーでキャンセル。',
+            }}
+          >
+            {item.data.content}
+          </BoardItem>
+        )}
+        items={boardItems}
+        onItemsChange={(event) => {
+          setBoardItems(event.detail.items as BoardLayoutItem[]);
+        }}
+        i18nStrings={{
+          liveAnnouncementDndStarted: (operationType) =>
+            operationType === 'resize' ? 'リサイズ開始' : '移動開始',
+          liveAnnouncementDndItemReordered: () => '順序変更',
+          liveAnnouncementDndItemResized: () => 'リサイズ変更',
+          liveAnnouncementDndItemInserted: () => '挿入',
+          liveAnnouncementDndCommitted: () => '変更を確定',
+          liveAnnouncementDndDiscarded: () => '変更を破棄',
+          liveAnnouncementItemRemoved: () => 'アイテムを削除',
+          navigationAriaLabel: 'ボードナビゲーション',
+          navigationAriaDescription:
+            'ボード内を移動するにはクリックしてください',
+          navigationItemAriaLabel: (
+            item: BoardProps.Item<BoardItemData> | null
+          ) => item?.data.title ?? '',
+        }}
+        empty="データなし"
+      />
     </div>
   );
 }
