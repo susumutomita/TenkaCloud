@@ -186,71 +186,56 @@ export class EventRepository {
     const client = getDocClient();
     const tableName = getTableName();
 
-    const filterParts: string[] = [];
-    const expressionValues: Record<string, unknown> = {
-      ':gsi1pk': buildTenantGSI(tenantId),
-    };
-    const expressionNames: Record<string, string> = {};
+    // NOTE: Kumo (local AWS emulator) has bugs with combined filter expressions
+    // and GSI hash key prefix matching. To work around these limitations,
+    // we query without DynamoDB-level filters and apply all filtering in application code.
+    const result = await client.send(
+      new QueryCommand({
+        TableName: tableName,
+        IndexName: 'GSI1',
+        KeyConditionExpression: 'GSI1PK = :gsi1pk',
+        ExpressionAttributeValues: { ':gsi1pk': buildTenantGSI(tenantId) },
+        Limit: 200,
+        ScanIndexForward: false,
+      })
+    );
+
+    // Filter in application code (handles Kumo emulator limitations)
+    const allItems = result.Items ?? [];
+    let events = allItems
+      .filter((item) => item.EntityType === EntityType.EVENT)
+      .map((item) => toDomain(item as EventItem));
 
     if (options?.type) {
-      filterParts.push('#type = :type');
-      expressionNames['#type'] = 'type';
-      expressionValues[':type'] = options.type;
+      events = events.filter((e) => e.type === options.type);
     }
 
     if (options?.status) {
       const statuses = Array.isArray(options.status)
         ? options.status
         : [options.status];
-      if (statuses.length === 1) {
-        filterParts.push('#status = :status');
-        expressionNames['#status'] = 'status';
-        expressionValues[':status'] = statuses[0];
-      } else {
-        const statusPlaceholders = statuses.map((_, i) => `:status${i}`);
-        filterParts.push(`#status IN (${statusPlaceholders.join(', ')})`);
-        expressionNames['#status'] = 'status';
-        statuses.forEach((s, i) => {
-          expressionValues[`:status${i}`] = s;
-        });
-      }
+      events = events.filter((e) => statuses.includes(e.status as EventStatus));
     }
 
     if (options?.startAfter) {
-      filterParts.push('startTime >= :startAfter');
-      expressionValues[':startAfter'] = options.startAfter.toISOString();
+      events = events.filter(
+        (e) => new Date(e.startTime) >= options.startAfter!
+      );
     }
 
     if (options?.startBefore) {
-      filterParts.push('startTime <= :startBefore');
-      expressionValues[':startBefore'] = options.startBefore.toISOString();
+      events = events.filter(
+        (e) => new Date(e.startTime) <= options.startBefore!
+      );
     }
 
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: 'GSI1',
-        KeyConditionExpression: 'GSI1PK = :gsi1pk',
-        FilterExpression:
-          filterParts.length > 0 ? filterParts.join(' AND ') : undefined,
-        ExpressionAttributeValues: expressionValues,
-        ExpressionAttributeNames:
-          Object.keys(expressionNames).length > 0 ? expressionNames : undefined,
-        Limit: options?.limit ?? 50,
-        ScanIndexForward: false,
-      })
-    );
+    const limit = options?.limit ?? 50;
 
-    let events = (result.Items ?? []).map((item) =>
-      toDomain(item as EventItem)
-    );
-
-    // Apply offset if provided
     if (options?.offset) {
       events = events.slice(options.offset);
     }
 
-    return events;
+    return events.slice(0, limit);
   }
 
   async list(options?: EventFilterOptions): Promise<{
@@ -668,9 +653,13 @@ export class EventRepository {
       })
     );
 
-    const problems = (result.Items ?? []).map((item) =>
-      toEventProblemDomain(item as EventProblemItem)
-    );
+    // Filter in application code to handle emulators (e.g. Kumo) that don't
+    // correctly implement begins_with and may return extra items
+    const problems = (result.Items ?? [])
+      .filter(
+        (item) => typeof item.SK === 'string' && item.SK.startsWith('PROBLEM#')
+      )
+      .map((item) => toEventProblemDomain(item as EventProblemItem));
 
     // Sort by order
     return problems.sort((a, b) => a.order - b.order);
