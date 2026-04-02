@@ -39,7 +39,7 @@ export default function AlliancePage() {
   );
   const [teamOptions, setTeamOptions] = useState<SelectProps.Option[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<SelectProps.Option | null>(
-    null
+    null,
   );
   const [requesting, setRequesting] = useState(false);
 
