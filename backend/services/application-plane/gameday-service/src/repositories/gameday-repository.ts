@@ -624,6 +624,9 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (!sk || !sk.startsWith('ATTACKLOG#')) continue;
         allItems.push(toAttackLog(item as AttackLogItem));
       }
       exclusiveStartKey = result.LastEvaluatedKey as
@@ -680,6 +683,9 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (!sk || !sk.startsWith('TEAM#')) continue;
         allItems.push(toTeamState(item as TeamStateItem));
       }
       exclusiveStartKey = result.LastEvaluatedKey as
@@ -775,6 +781,9 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (!sk || !sk.startsWith('ATTACK#')) continue;
         allItems.push(item as unknown as Attack);
       }
       exclusiveStartKey = result.LastEvaluatedKey as
@@ -1010,6 +1019,9 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (!sk || !sk.startsWith('ALLIANCE#')) continue;
         allItems.push(item as unknown as Alliance);
       }
       exclusiveStartKey = result.LastEvaluatedKey as
@@ -1052,6 +1064,17 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ (+ FilterExpression も無視されるため再チェック)
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        const allianceItem = item as Record<string, unknown>;
+        if (
+          !sk ||
+          !sk.startsWith('ALLIANCE#') ||
+          allianceItem.status !== 'ACTIVE' ||
+          (allianceItem.requesterTeamId !== teamId &&
+            allianceItem.targetTeamId !== teamId)
+        )
+          continue;
         allItems.push(item as unknown as Alliance);
       }
       exclusiveStartKey = result.LastEvaluatedKey as
@@ -1301,6 +1324,9 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (!sk || !sk.startsWith('VOTE#')) continue;
         allItems.push(item as unknown as Vote);
       }
       exclusiveStartKey = result.LastEvaluatedKey as
