@@ -264,6 +264,10 @@ export async function executeAttack(
   }
 }
 
+export async function getAllAttackLogs(eventId: string): Promise<AttackLog[]> {
+  return gamedayRepository.listAttackLogs(eventId);
+}
+
 export async function getAttackHistory(
   eventId: string,
   teamId: string

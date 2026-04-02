@@ -52,6 +52,10 @@ import {
   TeamNotFoundError as DashboardTeamNotFoundError,
   TeamAlreadyExistsError,
 } from '../services/dashboard-service';
+import {
+  getAllAttackLogs,
+  getAttackHistory,
+} from '../services/participant-service';
 import { GamedayRepository } from '../repositories/gameday-repository';
 
 const gamedayRepo = new GamedayRepository();
@@ -486,7 +490,33 @@ participantRoutes.get('/dashboard/leaderboard', async (c) => {
     return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
   try {
-    const leaderboard = await getLeaderboard(eventId);
+    const [teams, allLogs] = await Promise.all([
+      getLeaderboard(eventId),
+      getAllAttackLogs(eventId).catch(() => []),
+    ]);
+    // 全ログを使ってチームごとの攻撃統計を集計
+    const attacksSent = new Map<string, number>();
+    const attacksReceived = new Map<string, number>();
+    const vulnsFixed = new Map<string, number>();
+    for (const log of allLogs) {
+      attacksSent.set(
+        log.attackerTeamId,
+        (attacksSent.get(log.attackerTeamId) ?? 0) + 1
+      );
+      attacksReceived.set(
+        log.defenderTeamId,
+        (attacksReceived.get(log.defenderTeamId) ?? 0) + 1
+      );
+    }
+    const leaderboard = teams.map((team, index) => ({
+      teamId: team.teamId,
+      teamName: team.teamName,
+      score: team.score,
+      rank: index + 1,
+      attacksLaunched: attacksSent.get(team.teamId) ?? 0,
+      attacksReceived: attacksReceived.get(team.teamId) ?? 0,
+      vulnerabilitiesFixed: vulnsFixed.get(team.teamId) ?? 0,
+    }));
     return c.json({ leaderboard }, StatusCodes.OK);
   } catch (error) {
     if (error instanceof BlackoutActiveError) {
@@ -502,7 +532,29 @@ participantRoutes.get('/dashboard/attack-stats', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  const stats = await getAttackStatistics(eventId);
+  // 全ログから攻撃スラグごとに集計
+  const allLogs = await getAllAttackLogs(eventId).catch(() => []);
+  const statsMap = new Map<
+    string,
+    { attackName: string; total: number; successes: number }
+  >();
+  for (const log of allLogs) {
+    if (!log.attackSlug) continue;
+    const entry = statsMap.get(log.attackSlug) ?? {
+      attackName: log.attackSlug,
+      total: 0,
+      successes: 0,
+    };
+    entry.total++;
+    if (log.success) entry.successes++;
+    statsMap.set(log.attackSlug, entry);
+  }
+  const stats = Array.from(statsMap.entries()).map(([slug, s]) => ({
+    attackSlug: slug,
+    attackName: s.attackName,
+    totalExecutions: s.total,
+    successRate: s.total > 0 ? s.successes / s.total : 0,
+  }));
   return c.json({ stats }, StatusCodes.OK);
 });
 
