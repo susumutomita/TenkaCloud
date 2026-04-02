@@ -65,11 +65,13 @@ describe('ランキングページ', () => {
     expect(screen.getAllByText('9,500')).toHaveLength(2);
   });
 
-  it('ローディング中はスケルトンを表示すべき', () => {
+  it('ローディング中はスピナーを表示すべき', () => {
     mockGetGlobalRanking.mockReturnValue(new Promise(() => {}));
     render(<RankingsPage />);
-    const skeletons = document.querySelectorAll('[class*="animate-pulse"]');
-    expect(skeletons.length).toBeGreaterThan(0);
+    const spinners = document.querySelectorAll(
+      '[class*="spinner"], [class*="loading"]'
+    );
+    expect(spinners.length).toBeGreaterThan(0);
   });
 
   it('API エラー時はエラーメッセージを表示すべき', async () => {
@@ -114,20 +116,17 @@ describe('ランキングページ', () => {
         screen.getByText('ランキングデータがありません')
       ).toBeInTheDocument();
     });
-    // The top score stats card should show '-' when no rankings exist
-    const scoreLabel = screen.getByText('最高スコア');
-    const scoreCard = scoreLabel.closest('div')?.parentElement;
-    const scoreValue = scoreCard?.querySelector('.text-2xl');
-    expect(scoreValue?.textContent).toBe('-');
+    expect(screen.getByText('最高スコア')).toBeInTheDocument();
+    expect(screen.getByText('-')).toBeInTheDocument();
   });
 
   it('myRank が存在する場合はバナーを表示すべき', async () => {
     mockGetGlobalRanking.mockResolvedValue(rankingsData);
     render(<RankingsPage />);
     await waitFor(() => {
-      expect(screen.getByText('あなたの現在の順位:')).toBeInTheDocument();
+      expect(screen.getByText(/あなたの現在の順位/)).toBeInTheDocument();
       expect(screen.getByText('2位')).toBeInTheDocument();
-      expect(screen.getByText('/ 42人中')).toBeInTheDocument();
+      expect(screen.getByText(/42人中/)).toBeInTheDocument();
     });
   });
 

@@ -1,31 +1,21 @@
 /**
  * Admin Dashboard Page
  *
- * HybridNext Design System - Terminal Command Center style
- * Dark-themed admin dashboard with stats and activity feed
+ * Cloudscape Design System - Admin dashboard with stats and activity feed
  */
 
 'use client';
 
-import {
-  ChevronRight,
-  Clock,
-  Inbox,
-  Plus,
-  Settings,
-  UserPlus,
-  Zap,
-} from 'lucide-react';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  ErrorState,
-  getErrorMessage,
-  getErrorType,
-  Skeleton,
-} from '@/components/ui';
 import {
   getDashboardStats,
   getRecentActivities,
@@ -42,69 +32,6 @@ interface RecentActivity {
     | 'event_ended';
   message: string;
   timestamp: string;
-}
-
-interface StatCardProps {
-  title: string;
-  value: number | undefined;
-  icon: string;
-  href: string;
-  accentColor: 'success' | 'accent' | 'warning' | 'error';
-}
-
-function StatCard({ title, value, icon, href, accentColor }: StatCardProps) {
-  const accentClasses = {
-    success: 'bg-hn-success/10 text-hn-success border-hn-success/30',
-    accent: 'bg-hn-accent/10 text-hn-accent border-hn-accent/30',
-    warning: 'bg-hn-warning/10 text-hn-warning border-hn-warning/30',
-    error: 'bg-hn-error/10 text-hn-error border-hn-error/30',
-  };
-
-  return (
-    <Card className="group hover:border-hn-accent/50 transition-all duration-[var(--animation-duration-fast)]">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-text-muted uppercase tracking-wider">
-              {title}
-            </p>
-            <p className="text-4xl font-bold text-text-primary mt-2 font-mono">
-              {value !== undefined ? value.toLocaleString() : '-'}
-            </p>
-          </div>
-          <div
-            className={`w-14 h-14 rounded-[var(--radius)] flex items-center justify-center border ${accentClasses[accentColor]}`}
-          >
-            <span className="text-2xl">{icon}</span>
-          </div>
-        </div>
-        <Link
-          href={href}
-          className="text-sm text-hn-accent hover:text-hn-accent-bright mt-4 inline-flex items-center gap-1 group-hover:gap-2 transition-all"
-        >
-          詳細を見る
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatCardSkeleton() {
-  return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-10 w-16" />
-          </div>
-          <Skeleton className="w-14 h-14 rounded-[var(--radius)]" />
-        </div>
-        <Skeleton className="h-4 w-20 mt-4" />
-      </CardContent>
-    </Card>
-  );
 }
 
 export default function AdminDashboardPage() {
@@ -189,179 +116,136 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const statItems = [
+    {
+      title: '開催中のイベント',
+      value: stats?.activeEvents,
+      href: '/admin/events?status=active',
+    },
+    {
+      title: '総参加者数',
+      value: stats?.totalParticipants,
+      href: '/admin/participants',
+    },
+    {
+      title: '総チーム数',
+      value: stats?.totalTeams,
+      href: '/admin/teams',
+    },
+    {
+      title: '予定イベント',
+      value: stats?.upcomingEvents,
+      href: '/admin/events?status=scheduled',
+    },
+  ];
+
   return (
-    <div className="space-y-8">
+    <SpaceBetween size="l">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-            <span className="text-hn-accent font-mono">&gt;_</span>
-            ダッシュボード
-          </h1>
-          {tenant?.slug && (
-            <p className="text-text-muted mt-1 font-mono text-sm">
-              tenant: {tenant.slug}
-            </p>
-          )}
-        </div>
-        <div className="text-sm font-mono text-text-muted">
-          {new Date().toLocaleDateString('ja-JP', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            weekday: 'short',
-          })}
-        </div>
-      </div>
+      <Header
+        variant="h1"
+        description={
+          tenant?.slug ? <span>tenant: {tenant.slug}</span> : undefined
+        }
+      >
+        ダッシュボード
+      </Header>
 
       {/* Error State */}
       {error && (
-        <ErrorState
-          message={getErrorMessage(error)}
-          type={getErrorType(error)}
-          onRetry={fetchDashboardData}
-        />
+        <Container>
+          <SpaceBetween size="s" direction="vertical" alignItems="center">
+            <StatusIndicator type="error">{error.message}</StatusIndicator>
+            <Button onClick={fetchDashboardData}>再試行</Button>
+          </SpaceBetween>
+        </Container>
       )}
 
       {/* Stats Grid - hidden when error */}
-      {!error && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {loading ? (
-            <>
-              {Array.from({ length: 4 }).map((_, i) => (
-                <StatCardSkeleton key={i} />
-              ))}
-            </>
-          ) : (
-            <>
-              <StatCard
-                title="開催中のイベント"
-                value={stats?.activeEvents}
-                icon="🎮"
-                href="/admin/events?status=active"
-                accentColor="success"
-              />
-              <StatCard
-                title="総参加者数"
-                value={stats?.totalParticipants}
-                icon="👥"
-                href="/admin/participants"
-                accentColor="accent"
-              />
-              <StatCard
-                title="総チーム数"
-                value={stats?.totalTeams}
-                icon="🏆"
-                href="/admin/teams"
-                accentColor="warning"
-              />
-              <StatCard
-                title="予定イベント"
-                value={stats?.upcomingEvents}
-                icon="📅"
-                href="/admin/events?status=scheduled"
-                accentColor="error"
-              />
-            </>
-          )}
-        </div>
-      )}
+      {!error &&
+        (loading ? (
+          <Container>
+            <Box textAlign="center" padding="l">
+              <Spinner size="large" />
+            </Box>
+          </Container>
+        ) : (
+          <ColumnLayout columns={4} variant="text-grid">
+            {statItems.map((item) => (
+              <Container key={item.title}>
+                <SpaceBetween size="xs">
+                  <Box variant="awsui-key-label">{item.title}</Box>
+                  <Box variant="awsui-value-large">
+                    {item.value !== undefined
+                      ? item.value.toLocaleString()
+                      : '-'}
+                  </Box>
+                  <Link href={item.href}>詳細を見る</Link>
+                </SpaceBetween>
+              </Container>
+            ))}
+          </ColumnLayout>
+        ))}
 
       {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-hn-accent" />
-            クイックアクション
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <Button asChild>
-              <Link href="/admin/events/new">
-                <Plus className="w-5 h-5 mr-2" />
-                新規イベント作成
-              </Link>
+      <Container header={<Header variant="h2">クイックアクション</Header>}>
+        <SpaceBetween size="s" direction="horizontal">
+          <Link href="/admin/events/new">
+            <Button variant="primary" iconName="add-plus">
+              新規イベント作成
             </Button>
-            <Button variant="secondary" asChild>
-              <Link href="/admin/participants/invite">
-                <UserPlus className="w-5 h-5 mr-2" />
-                参加者を招待
-              </Link>
+          </Link>
+          <Link href="/admin/participants/invite">
+            <Button iconName="user-profile">参加者を招待</Button>
+          </Link>
+          <Link href="/admin/settings">
+            <Button variant="link" iconName="settings">
+              設定
             </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/admin/settings">
-                <Settings className="w-5 h-5 mr-2" />
-                設定
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </Link>
+        </SpaceBetween>
+      </Container>
 
       {/* Recent Activity - hidden when error */}
       {!error && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-hn-accent" />
-              最近のアクティビティ
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-start space-x-3">
-                    <Skeleton className="w-10 h-10 rounded-[var(--radius)]" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-3 w-20" />
-                    </div>
+        <Container header={<Header variant="h2">最近のアクティビティ</Header>}>
+          {loading ? (
+            <Box textAlign="center" padding="l">
+              <Spinner size="large" />
+            </Box>
+          ) : recentActivities.length === 0 ? (
+            <Box textAlign="center" padding="l">
+              <Box variant="p" color="text-status-inactive">
+                まだアクティビティはありません
+              </Box>
+            </Box>
+          ) : (
+            <SpaceBetween size="m">
+              {recentActivities.map((activity) => {
+                const { icon } = getActivityIcon(activity.type);
+                return (
+                  <div
+                    key={activity.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                    }}
+                  >
+                    <Box fontSize="heading-l">{icon}</Box>
+                    <SpaceBetween size="xxs">
+                      <Box variant="p">{activity.message}</Box>
+                      <Box variant="small" color="text-status-inactive">
+                        {formatTimestamp(activity.timestamp)}
+                      </Box>
+                    </SpaceBetween>
                   </div>
-                ))}
-              </div>
-            ) : recentActivities.length === 0 ? (
-              <div className="text-center py-8 text-text-muted">
-                <Inbox className="w-12 h-12 mx-auto mb-4 text-text-muted/50" />
-                <p className="font-mono">まだアクティビティはありません</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentActivities.map((activity) => {
-                  const { icon, color } = getActivityIcon(activity.type);
-                  return (
-                    <div
-                      key={activity.id}
-                      className="flex items-start space-x-3 pb-4 border-b border-border last:border-0 last:pb-0"
-                    >
-                      <div
-                        className={`w-10 h-10 rounded-[var(--radius)] bg-surface-2 flex items-center justify-center ${color}`}
-                      >
-                        <span className="text-xl">{icon}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-text-primary">
-                          {activity.message}
-                        </p>
-                        <p className="text-xs text-text-muted mt-1 font-mono">
-                          {formatTimestamp(activity.timestamp)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                );
+              })}
+            </SpaceBetween>
+          )}
+        </Container>
       )}
-
-      {/* Terminal-style footer */}
-      <div className="text-center text-text-muted text-xs font-mono py-4">
-        <span className="text-hn-accent">$</span> TenkaCloud Admin Console
-        v0.1.0
-      </div>
-    </div>
+    </SpaceBetween>
   );
 }

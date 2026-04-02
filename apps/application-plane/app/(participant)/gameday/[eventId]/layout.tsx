@@ -1,29 +1,25 @@
 /**
  * GameDay Layout
  *
- * タブナビゲーション（6タブ + タイマー + スコア）
+ * Cloudscape Design System — AWS GameDay 風 AppLayout + SideNavigation
+ * TopNavigation に Score/Rank/Team 表示
  */
 
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import AppLayout from '@cloudscape-design/components/app-layout';
+import Badge from '@cloudscape-design/components/badge';
+import SideNavigation from '@cloudscape-design/components/side-navigation';
+import type { SideNavigationProps } from '@cloudscape-design/components/side-navigation';
+import TopNavigation from '@cloudscape-design/components/top-navigation';
+import '@cloudscape-design/global-styles/index.css';
+import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import { GameStatusBar } from '@/components/gameday';
-import { Header } from '@/components/layout';
+import { GameTimer } from '@/components/gameday';
 import { getParticipantGameStatus, getTeamDashboard } from '@/lib/api/gameday';
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
-
-const tabs = [
-  { href: '', label: '司令部', icon: 'Home' },
-  { href: '/defense', label: '防衛', icon: 'Shield' },
-  { href: '/attack', label: '攻撃', icon: 'Swords' },
-  { href: '/alliance', label: '同盟', icon: 'Handshake' },
-  { href: '/scoreboard', label: 'スコア', icon: 'Trophy' },
-  { href: '/vote', label: '投票', icon: 'Vote' },
-] as const;
 
 interface GamedayLayoutProps {
   children: ReactNode;
@@ -31,9 +27,11 @@ interface GamedayLayoutProps {
 
 export default function GamedayLayout({ children }: GamedayLayoutProps) {
   const pathname = usePathname();
-  const { eventId, teamId } = useGamedaySession();
+  const router = useRouter();
+  const { eventId, teamId, teamName } = useGamedaySession();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [score, setScore] = useState<number | undefined>();
+  const [rank, setRank] = useState<number | undefined>();
 
   const basePath = `/gameday/${eventId}`;
 
@@ -57,75 +55,152 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
     return () => clearInterval(id);
   }, [fetchStatus]);
 
-  const isActive = (tabHref: string) => {
-    const full = `${basePath}${tabHref}`;
-    if (tabHref === '')
-      return pathname === basePath || pathname === `${basePath}/`;
-    return pathname.startsWith(full);
-  };
+  const navItems: SideNavigationProps.Item[] = [
+    {
+      type: 'section',
+      text: 'Event',
+      items: [
+        { type: 'link', text: 'Home', href: basePath },
+        { type: 'link', text: 'Score events', href: `${basePath}/scoreboard` },
+        {
+          type: 'link',
+          text: 'Scoreboard',
+          href: `${basePath}/scoreboard`,
+          external: true,
+        },
+      ],
+    },
+    {
+      type: 'section',
+      text: 'Quests',
+      items: [
+        { type: 'link', text: '防衛', href: `${basePath}/defense` },
+        { type: 'link', text: '攻撃', href: `${basePath}/attack` },
+        { type: 'link', text: '同盟', href: `${basePath}/alliance` },
+      ],
+    },
+    {
+      type: 'section',
+      text: 'Tools',
+      items: [
+        { type: 'link', text: '投票', href: `${basePath}/vote` },
+        {
+          type: 'link',
+          text: 'AWS Console',
+          href: 'https://console.aws.amazon.com',
+          external: true,
+        },
+      ],
+    },
+  ];
+
+  const activeHref = (() => {
+    if (pathname === basePath || pathname === `${basePath}/`) return basePath;
+    const suffixes = [
+      '/scoreboard',
+      '/defense',
+      '/attack',
+      '/alliance',
+      '/vote',
+    ];
+    for (const s of suffixes) {
+      if (pathname.startsWith(`${basePath}${s}`)) return `${basePath}${s}`;
+    }
+    return basePath;
+  })();
+
+  const scoreDisplay =
+    score !== undefined ? `Score: ${score.toLocaleString()}` : 'Score: --';
+  const rankDisplay = rank !== undefined ? `Rank: ${rank}` : 'Rank: --';
 
   return (
-    <div className="min-h-screen bg-surface-0">
-      <Header />
-
-      {/* Breadcrumb Navigation */}
-      <div className="bg-surface-1 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-          <nav className="flex items-center gap-2 text-sm">
-            <Link
-              href="/events"
-              className="text-text-muted hover:text-hn-accent transition-colors"
-            >
-              イベント一覧
-            </Link>
-            <span className="text-text-muted">/</span>
-            <Link
-              href={`/events/${eventId}`}
-              className="text-text-muted hover:text-hn-accent transition-colors"
-            >
-              イベント詳細
-            </Link>
-            <span className="text-text-muted">/</span>
-            <span className="text-text-primary font-medium">GameDay</span>
-          </nav>
-        </div>
+    <div className="awsui-dark-mode">
+      <div id="gameday-top-nav">
+        <TopNavigation
+          identity={{
+            href: basePath,
+            title: 'TenkaCloud GameDay',
+            onFollow: (e) => {
+              e.preventDefault();
+              router.push(basePath);
+            },
+          }}
+          utilities={[
+            ...(gameState
+              ? [
+                  {
+                    type: 'button' as const,
+                    text: gameState.isRunning ? 'LIVE' : 'STOPPED',
+                    disableUtilityCollapse: true,
+                  },
+                ]
+              : []),
+            ...(gameState?.scoreWeight === 'high'
+              ? [
+                  {
+                    type: 'button' as const,
+                    text: '2x SCORE',
+                    disableUtilityCollapse: true,
+                  },
+                ]
+              : []),
+            {
+              type: 'button' as const,
+              text: scoreDisplay,
+              disableUtilityCollapse: true,
+            },
+            {
+              type: 'button' as const,
+              text: rankDisplay,
+              disableUtilityCollapse: true,
+            },
+            {
+              type: 'menu-dropdown' as const,
+              text: teamName || teamId || 'Team',
+              iconName: 'user-profile' as const,
+              items: [
+                {
+                  id: 'events',
+                  text: 'イベント一覧',
+                  href: '/events',
+                },
+                {
+                  id: 'event-detail',
+                  text: 'イベント詳細',
+                  href: `/events/${eventId}`,
+                },
+              ],
+            },
+          ]}
+          i18nStrings={{
+            overflowMenuTriggerText: 'その他',
+            overflowMenuTitleText: 'すべて',
+          }}
+        />
       </div>
-
-      {/* Status Bar */}
-      <div className="bg-surface-1 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <GameStatusBar gameState={gameState} score={score} />
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="bg-surface-1 border-b border-border sticky top-16 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="-mb-px flex space-x-6 overflow-x-auto">
-            {tabs.map((tab) => {
-              const active = isActive(tab.href);
-              return (
-                <Link
-                  key={tab.href}
-                  href={`${basePath}${tab.href}`}
-                  className={`py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
-                    active
-                      ? 'border-hn-accent text-hn-accent'
-                      : 'border-transparent text-text-muted hover:text-text-primary hover:border-border'
-                  }`}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
-
-      {/* Page Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
+      <AppLayout
+        navigation={
+          <SideNavigation
+            header={{ text: 'GameDay', href: basePath }}
+            activeHref={activeHref}
+            items={navItems}
+            onFollow={(e) => {
+              if (!e.detail.external) {
+                e.preventDefault();
+                router.push(e.detail.href);
+              }
+            }}
+          />
+        }
+        toolsHide
+        content={children}
+        headerSelector="#gameday-top-nav"
+        ariaLabels={{
+          navigation: 'GameDay メニュー',
+          navigationClose: 'ナビゲーションを閉じる',
+          navigationToggle: 'ナビゲーションを開く',
+        }}
+      />
     </div>
   );
 }
