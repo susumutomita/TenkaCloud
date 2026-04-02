@@ -37,6 +37,7 @@ const buildAllianceSK = (allianceId: string) => `ALLIANCE#${allianceId}`;
 const buildHealthCheckSK = (teamId: string, timestamp: string) =>
   `HEALTHCHECK#${teamId}#${timestamp}`;
 const buildVoteSK = (voterId: string) => `VOTE#${voterId}`;
+const buildMemberSK = (userId: string) => `MEMBER#${userId}`;
 const buildTenantGamedayGSI = (tenantId: string) =>
   `TENANT#${tenantId}#GAMEDAY`;
 
@@ -141,6 +142,36 @@ function toTeamState(item: TeamStateItem): TeamState {
     websiteUrl: item.websiteUrl ?? null,
     apiUrl: item.apiUrl ?? null,
     inviteCode: item.inviteCode ?? '',
+  };
+}
+
+interface MemberItem {
+  PK: string;
+  SK: string;
+  EntityType: string;
+  eventId: string;
+  userId: string;
+  teamId: string;
+  teamName: string;
+  mode: 'solo' | 'team';
+  CreatedAt: string;
+}
+
+export interface MemberRecord {
+  eventId: string;
+  userId: string;
+  teamId: string;
+  teamName: string;
+  mode: 'solo' | 'team';
+}
+
+function toMemberRecord(item: MemberItem): MemberRecord {
+  return {
+    eventId: item.eventId,
+    userId: item.userId,
+    teamId: item.teamId,
+    teamName: item.teamName,
+    mode: item.mode,
   };
 }
 
@@ -1278,5 +1309,64 @@ export class GamedayRepository {
     } while (exclusiveStartKey);
 
     return allItems;
+  }
+
+  // === メンバーシップ ===
+
+  async addMember(input: {
+    eventId: string;
+    userId: string;
+    teamId: string;
+    teamName: string;
+    mode: 'solo' | 'team';
+  }): Promise<MemberRecord> {
+    const client = getDocClient();
+    const tableName = getTableName();
+    const now = new Date().toISOString();
+
+    const item: MemberItem = {
+      PK: buildGamedayPK(input.eventId),
+      SK: buildMemberSK(input.userId),
+      EntityType: 'MEMBER',
+      eventId: input.eventId,
+      userId: input.userId,
+      teamId: input.teamId,
+      teamName: input.teamName,
+      mode: input.mode,
+      CreatedAt: now,
+    };
+
+    await client.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: item,
+      })
+    );
+
+    return toMemberRecord(item);
+  }
+
+  async getMembership(
+    eventId: string,
+    userId: string
+  ): Promise<MemberRecord | null> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new GetCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildGamedayPK(eventId),
+          SK: buildMemberSK(userId),
+        },
+      })
+    );
+
+    if (!result.Item) {
+      return null;
+    }
+
+    return toMemberRecord(result.Item as MemberItem);
   }
 }
