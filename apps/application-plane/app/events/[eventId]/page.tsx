@@ -116,10 +116,10 @@ export default function EventDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-surface-0">
         <Header />
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
         </div>
       </div>
     );
@@ -127,11 +127,11 @@ export default function EventDetailPage() {
 
   if (error || !event) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-surface-0">
         <Header />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card className="p-8 text-center">
-            <p className="text-red-600 mb-4">
+            <p className="text-hn-error mb-4">
               {error || 'イベントが見つかりません'}
             </p>
             <Link href="/events">
@@ -147,13 +147,22 @@ export default function EventDetailPage() {
   const canParticipate = event.isRegistered && isActive;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface-0 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-hn-accent/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-hn-purple/10 rounded-full blur-[100px]" />
+      </div>
+
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="mb-6">
-          <Link href="/events" className="text-blue-600 hover:text-blue-700">
+          <Link
+            href="/events"
+            className="text-hn-accent hover:text-hn-accent-bright"
+          >
             ← イベント一覧
           </Link>
         </nav>
@@ -165,10 +174,10 @@ export default function EventDetailPage() {
             <EventStatusBadge status={event.status} />
             {event.isRegistered && <Badge variant="success">登録済み</Badge>}
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          <h1 className="text-3xl font-bold text-text-primary mb-4">
             {event.name}
           </h1>
-          <div className="flex flex-wrap gap-6 text-gray-600">
+          <div className="flex flex-wrap gap-6 text-text-secondary">
             <div>
               <span className="font-medium">開始:</span>{' '}
               {formatDate(event.startTime)}
@@ -190,13 +199,13 @@ export default function EventDetailPage() {
             {/* Problems List */}
             <Card>
               <CardHeader>
-                <h2 className="text-xl font-semibold">
+                <h2 className="text-xl font-semibold text-text-primary">
                   問題一覧 ({event.problemCount}問)
                 </h2>
               </CardHeader>
               <CardContent className="space-y-4">
                 {event.problems.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">
+                  <p className="text-text-muted text-center py-8">
                     {isActive
                       ? '問題の読み込み中...'
                       : '問題はイベント開始時に公開されます'}
@@ -218,15 +227,17 @@ export default function EventDetailPage() {
             {event.participantType === 'team' && event.teamInfo && (
               <Card>
                 <CardHeader>
-                  <h2 className="text-xl font-semibold">チーム情報</h2>
+                  <h2 className="text-xl font-semibold text-text-primary">
+                    チーム情報
+                  </h2>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div>
-                      <h3 className="font-medium text-gray-900">
+                      <h3 className="font-medium text-text-primary">
                         {event.teamInfo.name}
                       </h3>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-text-muted">
                         メンバー: {event.teamInfo.members.length}人
                       </p>
                     </div>
@@ -234,7 +245,7 @@ export default function EventDetailPage() {
                       {event.teamInfo.members.map((member) => (
                         <span
                           key={member.id}
-                          className="px-3 py-1 bg-gray-100 rounded-full text-sm"
+                          className="px-3 py-1 bg-surface-3 rounded-full text-sm text-text-secondary"
                         >
                           {member.name}
                           {member.role === 'captain' && ' 👑'}
@@ -242,9 +253,9 @@ export default function EventDetailPage() {
                       ))}
                     </div>
                     {event.teamInfo.inviteCode && (
-                      <div className="p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-600">招待コード</p>
-                        <code className="text-lg font-mono">
+                      <div className="p-3 bg-surface-0 rounded-lg border border-border">
+                        <p className="text-sm text-text-muted">招待コード</p>
+                        <code className="text-lg font-mono text-hn-accent">
                           {event.teamInfo.inviteCode}
                         </code>
                       </div>
@@ -263,10 +274,10 @@ export default function EventDetailPage() {
                 <div className="text-center">
                   {event.myRank && (
                     <div className="mb-4">
-                      <div className="text-4xl font-bold text-blue-600">
+                      <div className="text-4xl font-bold text-hn-accent">
                         #{event.myRank}
                       </div>
-                      <div className="text-gray-500">{event.myScore} pts</div>
+                      <div className="text-text-muted">{event.myScore} pts</div>
                     </div>
                   )}
 
@@ -292,34 +303,34 @@ export default function EventDetailPage() {
                   )}
 
                   {event.isRegistered && !isActive && (
-                    <p className="text-gray-600">
+                    <p className="text-text-muted">
                       イベント開始をお待ちください
                     </p>
                   )}
                 </div>
 
-                <div className="border-t pt-4 space-y-2 text-sm">
+                <div className="border-t border-border pt-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">参加者数</span>
-                    <span className="font-medium">
+                    <span className="text-text-muted">参加者数</span>
+                    <span className="font-medium text-text-primary">
                       {event.participantCount}人
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">参加形式</span>
-                    <span className="font-medium">
+                    <span className="text-text-muted">参加形式</span>
+                    <span className="font-medium text-text-primary">
                       {event.participantType === 'team' ? 'チーム' : '個人'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">クラウド</span>
-                    <span className="font-medium">
+                    <span className="text-text-muted">クラウド</span>
+                    <span className="font-medium text-text-primary">
                       {event.cloudProvider.toUpperCase()}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">採点方式</span>
-                    <span className="font-medium">
+                    <span className="text-text-muted">採点方式</span>
+                    <span className="font-medium text-text-primary">
                       {event.scoringType === 'realtime'
                         ? 'リアルタイム'
                         : 'バッチ'}
@@ -334,7 +345,9 @@ export default function EventDetailPage() {
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <h2 className="font-semibold">リーダーボード</h2>
+                    <h2 className="font-semibold text-text-primary">
+                      リーダーボード
+                    </h2>
                     {leaderboard.isFrozen && (
                       <Badge variant="warning" size="sm">
                         凍結中
@@ -348,29 +361,37 @@ export default function EventDetailPage() {
                       <div
                         key={entry.teamId || entry.participantId}
                         className={`flex items-center justify-between p-2 rounded ${
-                          entry.isMe ? 'bg-blue-50' : ''
+                          entry.isMe ? 'bg-hn-accent/10' : ''
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <span
                             className={`font-bold ${
                               entry.rank === 1
-                                ? 'text-yellow-500'
+                                ? 'text-hn-warning'
                                 : entry.rank === 2
-                                  ? 'text-gray-400'
+                                  ? 'text-text-secondary'
                                   : entry.rank === 3
-                                    ? 'text-amber-600'
-                                    : 'text-gray-500'
+                                    ? 'text-hn-warning/70'
+                                    : 'text-text-muted'
                             }`}
                           >
                             #{entry.rank}
                           </span>
-                          <span className={entry.isMe ? 'font-medium' : ''}>
+                          <span
+                            className={
+                              entry.isMe
+                                ? 'font-medium text-text-primary'
+                                : 'text-text-secondary'
+                            }
+                          >
                             {entry.name}
                             {entry.isMe && ' (自分)'}
                           </span>
                         </div>
-                        <span className="font-medium">{entry.totalScore}</span>
+                        <span className="font-medium text-text-primary">
+                          {entry.totalScore}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -378,7 +399,7 @@ export default function EventDetailPage() {
                 <CardFooter>
                   <Link
                     href={`/events/${eventId}/leaderboard`}
-                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    className="text-hn-accent hover:text-hn-accent-bright text-sm font-medium"
                   >
                     全ランキングを見る →
                   </Link>
@@ -404,9 +425,11 @@ function ProblemCard({
 }) {
   return (
     <div
-      className={`p-4 border rounded-lg ${
-        canAccess ? 'hover:border-blue-300 cursor-pointer' : 'opacity-75'
-      } ${problem.isCompleted ? 'bg-green-50 border-green-200' : 'bg-white'}`}
+      className={`p-4 border rounded-lg transition-colors ${
+        canAccess
+          ? 'hover:border-hn-accent cursor-pointer border-border'
+          : 'opacity-75 border-border'
+      } ${problem.isCompleted ? 'bg-hn-success/10 border-hn-success/30' : 'bg-surface-2'}`}
     >
       <Link
         href={canAccess ? `/events/${eventId}/challenges/${problem.id}` : '#'}
@@ -415,7 +438,7 @@ function ProblemCard({
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-gray-400 font-medium">
+              <span className="text-text-muted font-medium">
                 #{problem.order}
               </span>
               <DifficultyBadge difficulty={problem.difficulty} />
@@ -430,16 +453,16 @@ function ProblemCard({
                 </Badge>
               )}
             </div>
-            <h3 className="font-semibold text-gray-900">{problem.title}</h3>
-            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+            <h3 className="font-semibold text-text-primary">{problem.title}</h3>
+            <p className="text-sm text-text-secondary mt-1 line-clamp-2">
               {problem.overview}
             </p>
           </div>
           <div className="text-right ml-4">
-            <div className="text-lg font-bold text-blue-600">
+            <div className="text-lg font-bold text-hn-accent">
               {problem.maxScore * problem.pointMultiplier}
             </div>
-            <div className="text-xs text-gray-500">pts</div>
+            <div className="text-xs text-text-muted">pts</div>
           </div>
         </div>
 
