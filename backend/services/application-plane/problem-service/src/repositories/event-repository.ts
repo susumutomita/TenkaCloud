@@ -284,6 +284,17 @@ export class DynamoEventRepository implements IEventRepository {
   async updateStatus(id: string, status: EventStatus): Promise<void> {
     await this.repo.updateStatus(id, toDynamoEventStatus(status));
   }
+
+  async registerParticipant(eventId: string, userId: string): Promise<void> {
+    return this.repo.registerParticipant(eventId, userId);
+  }
+
+  async isParticipantRegistered(
+    eventId: string,
+    userId: string
+  ): Promise<boolean> {
+    return this.repo.isParticipantRegistered(eventId, userId);
+  }
 }
 
 /**

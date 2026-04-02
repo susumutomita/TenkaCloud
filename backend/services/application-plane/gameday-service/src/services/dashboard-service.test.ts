@@ -8,6 +8,7 @@ const mockRepository = vi.hoisted(() => ({
   listAttackLogs: vi.fn(),
   getTeamState: vi.fn(),
   listHealthChecks: vi.fn(),
+  findTeamByInviteCode: vi.fn(),
 }));
 
 vi.mock('../lib/dynamodb', () => ({
@@ -33,6 +34,7 @@ import {
   getLeaderboard,
   getAttackStatistics,
   getTeamDashboard,
+  joinTeamByInviteCode,
   BlackoutActiveError,
   TeamAlreadyExistsError,
 } from './dashboard-service';
@@ -296,6 +298,39 @@ describe('ダッシュボードサービス', () => {
       mockRepository.getTeamState.mockResolvedValue(null);
 
       const result = await getTeamDashboard('event-1', 'nonexistent');
+      expect(result).toBeNull();
+    });
+  });
+
+  // === 招待コードでチーム参加 ===
+  describe('joinTeamByInviteCode', () => {
+    it('有効な招待コードでチームを返すべき', async () => {
+      const team = {
+        eventId: 'event-1',
+        teamId: 'team-1',
+        teamName: 'チームA',
+        score: 0,
+        isHealthy: true,
+        websiteUrl: null,
+        apiUrl: null,
+        inviteCode: 'ABC123',
+      };
+      mockRepository.findTeamByInviteCode.mockResolvedValue(team);
+
+      const result = await joinTeamByInviteCode('event-1', 'ABC123');
+
+      expect(result).toEqual(team);
+      expect(mockRepository.findTeamByInviteCode).toHaveBeenCalledWith(
+        'event-1',
+        'ABC123'
+      );
+    });
+
+    it('無効な招待コードで null を返すべき', async () => {
+      mockRepository.findTeamByInviteCode.mockResolvedValue(null);
+
+      const result = await joinTeamByInviteCode('event-1', 'XXXXXX');
+
       expect(result).toBeNull();
     });
   });

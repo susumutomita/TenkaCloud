@@ -20,8 +20,16 @@ export async function registerTeam(input: {
   teamName: string;
   websiteUrl?: string;
   apiUrl?: string;
+  inviteCode?: string;
 }): Promise<TeamState> {
   return gamedayRepository.createTeam(input);
+}
+
+export async function joinTeamByInviteCode(
+  eventId: string,
+  inviteCode: string
+): Promise<TeamState | null> {
+  return gamedayRepository.findTeamByInviteCode(eventId, inviteCode);
 }
 
 // === チーム URL 更新 ===

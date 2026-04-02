@@ -121,14 +121,23 @@ const mockDashboardService = vi.hoisted(() => {
       this.name = 'TeamNotFoundError';
     }
   }
+  class TeamAlreadyExistsError extends Error {
+    constructor(teamId: string) {
+      super(`チームは既に登録済みです: ${teamId}`);
+      this.name = 'TeamAlreadyExistsError';
+    }
+  }
   return {
     updateTeamUrl: vi.fn(),
     listTeams: vi.fn(),
     getLeaderboard: vi.fn(),
     getAttackStatistics: vi.fn(),
     getTeamDashboard: vi.fn(),
+    registerTeam: vi.fn(),
+    joinTeamByInviteCode: vi.fn(),
     BlackoutActiveError,
     TeamNotFoundError,
+    TeamAlreadyExistsError,
   };
 });
 
@@ -1205,6 +1214,120 @@ describe('プレーヤー API', () => {
         }),
       });
       expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+  });
+
+  // === チーム作成 ===
+  describe('POST /teams/create', () => {
+    it('正常なリクエストでチームを作成して CREATED を返すべき', async () => {
+      mockDashboardService.registerTeam.mockResolvedValue({
+        eventId: 'event-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        score: 0,
+        isHealthy: true,
+        websiteUrl: null,
+        apiUrl: null,
+        inviteCode: 'ABC123',
+      });
+      const res = await app.request('/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'テストチーム',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CREATED);
+      const body = await res.json();
+      expect(body.teamId).toBe('team-1');
+      expect(body.teamName).toBe('テストチーム');
+      expect(body.inviteCode).toBe('ABC123');
+    });
+
+    it('必須フィールドが欠けている場合 BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('チームが既に存在する場合 CONFLICT を返すべき', async () => {
+      mockDashboardService.registerTeam.mockRejectedValue(
+        new mockDashboardService.TeamAlreadyExistsError('team-1')
+      );
+      const res = await app.request('/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'テストチーム',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CONFLICT);
+    });
+  });
+
+  // === 招待コードでチーム参加 ===
+  describe('POST /teams/join', () => {
+    it('有効な招待コードでチームを返すべき', async () => {
+      mockDashboardService.joinTeamByInviteCode.mockResolvedValue({
+        eventId: 'event-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        score: 0,
+        isHealthy: true,
+        websiteUrl: null,
+        apiUrl: null,
+        inviteCode: 'ABC123',
+      });
+      const res = await app.request('/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1', inviteCode: 'ABC123' }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.teamId).toBe('team-1');
+      expect(body.teamName).toBe('テストチーム');
+    });
+
+    it('無効な招待コードで NOT_FOUND を返すべき', async () => {
+      mockDashboardService.joinTeamByInviteCode.mockResolvedValue(null);
+      const res = await app.request('/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1', inviteCode: 'XXXXXX' }),
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    });
+
+    it('必須フィールドが欠けている場合 BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === チームダッシュボード (チームなし時の空状態) ===
+  describe('GET /dashboard/team チームなし時', () => {
+    it('チームが存在しない場合は空のダッシュボードを返すべき', async () => {
+      mockDashboardService.getTeamDashboard.mockResolvedValue(null);
+      const res = await app.request(
+        '/dashboard/team?eventId=event-1&teamId=unknown'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.team.teamId).toBe('unknown');
+      expect(body.score).toBe(0);
+      expect(body.recentAttacks).toEqual([]);
     });
   });
 });

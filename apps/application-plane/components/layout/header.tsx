@@ -48,12 +48,6 @@ export function Header() {
               イベント
             </Link>
             <Link
-              href="/gameday"
-              className="text-text-secondary hover:text-text-primary font-medium transition-colors"
-            >
-              GameDay
-            </Link>
-            <Link
               href="/rankings"
               className="text-text-secondary hover:text-text-primary font-medium transition-colors"
             >

@@ -46,8 +46,11 @@ import {
   getAttackStatistics,
   getTeamDashboard,
   listTeams,
+  registerTeam,
+  joinTeamByInviteCode,
   BlackoutActiveError,
   TeamNotFoundError as DashboardTeamNotFoundError,
+  TeamAlreadyExistsError,
 } from '../services/dashboard-service';
 
 export const participantRoutes = new Hono();
@@ -512,7 +515,23 @@ participantRoutes.get('/dashboard/team', async (c) => {
   }
   const dashboard = await getTeamDashboard(eventId, teamId);
   if (!dashboard) {
-    return c.json({ error: 'チームが見つかりません' }, StatusCodes.NOT_FOUND);
+    return c.json(
+      {
+        team: {
+          teamId,
+          teamName: '',
+          score: 0,
+          isHealthy: true,
+          websiteUrl: null,
+          apiUrl: null,
+        },
+        score: 0,
+        recentAttacks: [],
+        recentHealthChecks: [],
+        attackHistory: [],
+      },
+      StatusCodes.OK
+    );
   }
   return c.json(dashboard, StatusCodes.OK);
 });
@@ -544,4 +563,73 @@ participantRoutes.post('/teams/update-url', async (c) => {
     }
     throw error;
   }
+});
+
+// === チーム作成 ===
+
+participantRoutes.post('/teams/create', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const { eventId, teamId, teamName } = body as {
+    eventId?: string;
+    teamId?: string;
+    teamName?: string;
+  };
+  if (!eventId || !teamId || !teamName) {
+    return c.json(
+      { error: 'eventId, teamId, teamName は必須です' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  try {
+    const team = await registerTeam({ eventId, teamId, teamName });
+    return c.json(
+      {
+        teamId: team.teamId,
+        teamName: team.teamName,
+        inviteCode: team.inviteCode,
+      },
+      StatusCodes.CREATED
+    );
+  } catch (error) {
+    if (error instanceof TeamAlreadyExistsError) {
+      return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
+    throw error;
+  }
+});
+
+// === 招待コードでチーム参加 ===
+
+participantRoutes.post('/teams/join', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return c.json(
+      { error: 'JSON の解析に失敗しました' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const { eventId, inviteCode } = body as {
+    eventId?: string;
+    inviteCode?: string;
+  };
+  if (!eventId || !inviteCode) {
+    return c.json(
+      { error: 'eventId, inviteCode は必須です' },
+      StatusCodes.BAD_REQUEST
+    );
+  }
+  const team = await joinTeamByInviteCode(eventId, inviteCode);
+  if (!team) {
+    return c.json({ error: '招待コードが無効です' }, StatusCodes.NOT_FOUND);
+  }
+  return c.json(
+    { teamId: team.teamId, teamName: team.teamName },
+    StatusCodes.OK
+  );
 });

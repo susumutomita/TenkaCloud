@@ -86,6 +86,7 @@ interface TeamStateItem {
   isHealthy: boolean;
   websiteUrl: string | null;
   apiUrl: string | null;
+  inviteCode: string;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -127,6 +128,7 @@ export interface TeamState {
   isHealthy: boolean;
   websiteUrl: string | null;
   apiUrl: string | null;
+  inviteCode: string;
 }
 
 function toTeamState(item: TeamStateItem): TeamState {
@@ -138,6 +140,7 @@ function toTeamState(item: TeamStateItem): TeamState {
     isHealthy: item.isHealthy,
     websiteUrl: item.websiteUrl ?? null,
     apiUrl: item.apiUrl ?? null,
+    inviteCode: item.inviteCode ?? '',
   };
 }
 
@@ -412,10 +415,14 @@ export class GamedayRepository {
     teamName: string;
     websiteUrl?: string;
     apiUrl?: string;
+    inviteCode?: string;
   }): Promise<TeamState> {
     const client = getDocClient();
     const tableName = getTableName();
     const now = new Date().toISOString();
+    const inviteCode =
+      input.inviteCode ??
+      Math.random().toString(36).substring(2, 8).toUpperCase();
 
     const item: TeamStateItem = {
       PK: buildGamedayPK(input.eventId),
@@ -428,6 +435,7 @@ export class GamedayRepository {
       isHealthy: true,
       websiteUrl: input.websiteUrl ?? null,
       apiUrl: input.apiUrl ?? null,
+      inviteCode,
       CreatedAt: now,
       UpdatedAt: now,
     };
@@ -649,6 +657,14 @@ export class GamedayRepository {
     } while (exclusiveStartKey);
 
     return allItems;
+  }
+
+  async findTeamByInviteCode(
+    eventId: string,
+    inviteCode: string
+  ): Promise<TeamState | null> {
+    const teams = await this.listTeams(eventId);
+    return teams.find((t) => t.inviteCode === inviteCode) ?? null;
   }
 
   async updateTeamScore(
@@ -1141,7 +1157,11 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
-        allItems.push(item as unknown as HealthCheckResult);
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (sk && sk.startsWith(`HEALTHCHECK#${teamId}#`)) {
+          allItems.push(item as unknown as HealthCheckResult);
+        }
       }
       exclusiveStartKey = result.LastEvaluatedKey as
         | Record<string, unknown>

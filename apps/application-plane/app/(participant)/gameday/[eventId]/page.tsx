@@ -6,6 +6,7 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { HealthIndicator } from '@/components/gameday';
 import {
@@ -42,7 +43,10 @@ export default function GamedayHQPage() {
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!eventId || !teamId) return;
+    if (!eventId || !teamId) {
+      setLoading(false);
+      return;
+    }
     try {
       const [dashData, monData] = await Promise.all([
         getTeamDashboard(eventId, teamId),
@@ -84,6 +88,20 @@ export default function GamedayHQPage() {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
+      </div>
+    );
+  }
+
+  if (!teamId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
+        <p className="text-text-muted">チームを選択してください</p>
+        <Link
+          href={`/events/${eventId}`}
+          className="text-hn-accent hover:text-hn-accent-bright underline"
+        >
+          イベントページへ戻る
+        </Link>
       </div>
     );
   }
