@@ -143,6 +143,69 @@ aws_cmd dynamodb create-table \
   2>/dev/null || echo "  テーブル '$TABLE_NAME' は既に存在します"
 echo "✅ DynamoDB 完了"
 
+# --- シードデータ ---
+echo "🌱 シードデータを投入中..."
+SEED_EVENT_ID="01JQLOCAL0000000000000001"
+SEED_NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || python3 -c "from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+SEED_START="2026-04-01T09:00:00Z"
+SEED_END="2026-12-31T18:00:00Z"
+
+# Event シード（dev-tenant の GameDay イベント）
+aws_cmd dynamodb put-item \
+  --table-name "$TABLE_NAME" \
+  --item '{
+    "PK":              {"S": "EVENT#'"$SEED_EVENT_ID"'"},
+    "SK":              {"S": "METADATA"},
+    "GSI1PK":          {"S": "TENANT#dev-tenant"},
+    "GSI1SK":          {"S": "'"$SEED_START"'"},
+    "EntityType":      {"S": "EVENT"},
+    "CreatedAt":       {"S": "'"$SEED_NOW"'"},
+    "UpdatedAt":       {"S": "'"$SEED_NOW"'"},
+    "id":              {"S": "'"$SEED_EVENT_ID"'"},
+    "externalId":      {"S": "evt-local-001"},
+    "tenantId":        {"S": "dev-tenant"},
+    "name":            {"S": "TenkaCloud ローカル GameDay 2026"},
+    "type":            {"S": "GAMEDAY"},
+    "status":          {"S": "ACTIVE"},
+    "startTime":       {"S": "'"$SEED_START"'"},
+    "endTime":         {"S": "'"$SEED_END"'"},
+    "timezone":        {"S": "Asia/Tokyo"},
+    "participantType": {"S": "TEAM"},
+    "maxParticipants": {"N": "20"},
+    "minTeamSize":     {"N": "2"},
+    "maxTeamSize":     {"N": "4"},
+    "cloudProvider":   {"S": "AWS"},
+    "regions":         {"L": [{"S": "ap-northeast-1"}]},
+    "scoringType":     {"S": "REALTIME"},
+    "scoringIntervalMinutes": {"N": "5"},
+    "leaderboardVisible": {"BOOL": true},
+    "createdBy":       {"S": "local-seed"}
+  }' \
+  2>/dev/null && echo "  イベントシード完了" || echo "  イベントシードはスキップ（既存）"
+
+# GameDay 状態シード（gameday-service 用）
+aws_cmd dynamodb put-item \
+  --table-name "$TABLE_NAME" \
+  --item '{
+    "PK":             {"S": "GAMEDAY#'"$SEED_EVENT_ID"'"},
+    "SK":             {"S": "METADATA"},
+    "GSI1PK":         {"S": "TENANT#dev-tenant#GAMEDAY"},
+    "GSI1SK":         {"S": "'"$SEED_START"'"},
+    "EntityType":     {"S": "GAMEDAY"},
+    "CreatedAt":      {"S": "'"$SEED_NOW"'"},
+    "UpdatedAt":      {"S": "'"$SEED_NOW"'"},
+    "eventId":        {"S": "'"$SEED_EVENT_ID"'"},
+    "tenantId":       {"S": "dev-tenant"},
+    "isRunning":      {"BOOL": false},
+    "startedAt":      {"NULL": true},
+    "scoreWeight":    {"S": "normal"},
+    "blackout":       {"BOOL": false},
+    "durationMinutes": {"N": "120"}
+  }' \
+  2>/dev/null && echo "  GameDay シード完了" || echo "  GameDay シードはスキップ（既存）"
+
+echo "✅ シードデータ完了"
+
 # --- S3 ---
 echo "🪣 S3 バケットを作成中..."
 aws_cmd s3 mb s3://${NAME_PREFIX}-data 2>/dev/null || echo "  バケット '${NAME_PREFIX}-data' は既に存在します"
