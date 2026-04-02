@@ -1157,7 +1157,11 @@ export class GamedayRepository {
       );
 
       for (const item of result.Items ?? []) {
-        allItems.push(item as unknown as HealthCheckResult);
+        // Kumo の begins_with バグ回避: アプリ側でフィルタ
+        const sk = (item as Record<string, unknown>).SK as string | undefined;
+        if (sk && sk.startsWith(`HEALTHCHECK#${teamId}#`)) {
+          allItems.push(item as unknown as HealthCheckResult);
+        }
       }
       exclusiveStartKey = result.LastEvaluatedKey as
         | Record<string, unknown>
