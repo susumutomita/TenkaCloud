@@ -55,44 +55,8 @@ jobs:
       - name: Run before-commit checks
         run: make before-commit
 
-  cdk-diff:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Check out the code
-        # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: true
-
-      - name: Setup Bun
-        # oven-sh/setup-bun v2.0.2
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
-
-      - name: Configure AWS Credentials
-        # aws-actions/configure-aws-credentials v4.3.1
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-northeast-1
-
-      - name: Install CDK dependencies
-        working-directory: infrastructure/cdk
-        run: bun install --frozen-lockfile
-
-      - name: CDK diff
-        working-directory: infrastructure/cdk
-        env:
-          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
-          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
-          AUTH0_CLIENT_SECRET: ${{ secrets.AUTH0_CLIENT_SECRET }}
-        run: bunx cdk diff --all
-
   deploy-staging:
-    needs: cdk-diff
+    needs: test
     runs-on: ubuntu-latest
     environment: staging
     permissions:

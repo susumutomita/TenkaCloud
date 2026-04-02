@@ -11,6 +11,41 @@
             "statusMessage": "Running make before-commit..."
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/guard-config.sh",
+            "timeout": 5,
+            "statusMessage": "Checking config file protection..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post-format.sh",
+            "timeout": 30,
+            "statusMessage": "Auto-formatting..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -z \"$STOP_HOOK_ACTIVE\" ]; then export STOP_HOOK_ACTIVE=1; CHANGED=$(git diff --name-only HEAD 2>/dev/null | grep -E '\\.(ts|tsx)$' | head -1); if [ -n \"$CHANGED\" ]; then echo 'Code was edited but no dev server is running. If the change is observable in a browser preview (per <when_to_verify>), call preview_start and follow <verification_workflow>. If not, end your turn without mentioning this check — do not announce that you are skipping.'; fi; fi",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
