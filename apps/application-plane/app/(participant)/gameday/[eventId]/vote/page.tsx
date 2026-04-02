@@ -20,8 +20,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { getVotingResults, submitVote } from '@/lib/api/gameday';
 import type { Team, Vote } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
+import { useI18n } from '@/lib/i18n';
 
 export default function VotePage() {
+  const { t } = useI18n();
   const { eventId, teamId } = useGamedaySession();
   const [teams, setTeams] = useState<Team[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
@@ -33,18 +35,18 @@ export default function VotePage() {
   const fetchData = useCallback(async () => {
     if (!eventId) return;
     try {
-      const GAMEDAY_API_URL =
+      const gamedayApiUrl =
         process.env.NEXT_PUBLIC_GAMEDAY_API_URL ||
         'http://localhost:3020/api/gameday';
       const [teamsRes, votesData] = await Promise.all([
         fetch(
-          `${GAMEDAY_API_URL}/admin/teams?eventId=${encodeURIComponent(eventId)}`,
-        ).then((r) => (r.ok ? r.json() : { teams: [] })),
+          `${gamedayApiUrl}/admin/teams?eventId=${encodeURIComponent(eventId)}`,
+        ).then((response) => (response.ok ? response.json() : { teams: [] })),
         getVotingResults(eventId),
       ]);
       setTeams(teamsRes.teams || []);
       setVotes(votesData.results);
-      if (votesData.results.some((v: Vote) => v.voterTeamId === teamId)) {
+      if (votesData.results.some((vote: Vote) => vote.voterTeamId === teamId)) {
         setVoted(true);
       }
       setError(null);
@@ -89,7 +91,7 @@ export default function VotePage() {
         <Box textAlign="center" padding="xl">
           <SpaceBetween size="m">
             <StatusIndicator type="error">{error.message}</StatusIndicator>
-            <Button onClick={fetchData}>再試行</Button>
+            <Button onClick={fetchData}>{t('common.retry')}</Button>
           </SpaceBetween>
         </Box>
       </Container>
@@ -97,21 +99,24 @@ export default function VotePage() {
   }
 
   const voteCounts: Record<string, number> = {};
-  for (const v of votes) {
-    voteCounts[v.votedForTeamId] = (voteCounts[v.votedForTeamId] || 0) + 1;
+  for (const vote of votes) {
+    voteCounts[vote.votedForTeamId] =
+      (voteCounts[vote.votedForTeamId] || 0) + 1;
   }
 
-  const otherTeams = teams.filter((t) => t.teamId !== teamId);
+  const otherTeams = teams.filter((team) => team.teamId !== teamId);
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1">投票</Header>
+      <Header variant="h1" description={t('gameday.votingDescription')}>
+        {t('gameday.voting')}
+      </Header>
 
-      {voted && (
+      {voted ? (
         <StatusIndicator type="success">
-          投票済みです。ありがとうございます!
+          {t('gameday.votedMessage')}
         </StatusIndicator>
-      )}
+      ) : null}
 
       <Cards
         items={otherTeams}
@@ -125,7 +130,9 @@ export default function VotePage() {
             <SpaceBetween direction="horizontal" size="xs">
               <span>{team.teamName}</span>
               {voteCounts[team.teamId] ? (
-                <Badge color="blue">{voteCounts[team.teamId]} 票</Badge>
+                <Badge color="blue">
+                  {voteCounts[team.teamId]} {t('gameday.voteCount')}
+                </Badge>
               ) : null}
             </SpaceBetween>
           ),
@@ -140,11 +147,11 @@ export default function VotePage() {
                     loading={voting}
                     disabled={voting}
                   >
-                    投票する
+                    {t('gameday.voteAction')}
                   </Button>
                 ) : (
                   <Box textAlign="center" color="text-body-secondary">
-                    {voteCounts[team.teamId] || 0} 票獲得
+                    {voteCounts[team.teamId] || 0} {t('gameday.votesReceived')}
                   </Box>
                 ),
             },
@@ -152,7 +159,7 @@ export default function VotePage() {
         }}
         empty={
           <Box textAlign="center" padding="l" color="text-body-secondary">
-            他のチームがまだ登録されていません
+            {t('gameday.noOtherTeams')}
           </Box>
         }
       />

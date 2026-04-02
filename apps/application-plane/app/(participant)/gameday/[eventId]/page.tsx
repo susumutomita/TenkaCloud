@@ -20,6 +20,7 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 import {
   getMonitoringStatus,
   getTeamDashboard,
@@ -33,6 +34,7 @@ import type {
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 
 export default function GamedayHQPage() {
+  const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
   const [dashboard, setDashboard] = useState<TeamDashboard | null>(null);
   const [healthChecks, setHealthChecks] = useState<HealthCheckResult[]>([]);
@@ -97,8 +99,8 @@ export default function GamedayHQPage() {
       <Container>
         <Box textAlign="center" padding="xl">
           <SpaceBetween size="m">
-            <Box>チームを選択してください</Box>
-            <Link href={`/events/${eventId}`}>イベントページへ戻る</Link>
+            <Box>{t('gameday.selectTeam')}</Box>
+            <Link href={`/events/${eventId}`}>{t('gameday.backToEvent')}</Link>
           </SpaceBetween>
         </Box>
       </Container>
@@ -111,7 +113,7 @@ export default function GamedayHQPage() {
         <Box textAlign="center" padding="xl">
           <SpaceBetween size="m">
             <StatusIndicator type="error">{error.message}</StatusIndicator>
-            <Button onClick={fetchData}>再試行</Button>
+            <Button onClick={fetchData}>{t('common.retry')}</Button>
           </SpaceBetween>
         </Box>
       </Container>
@@ -119,7 +121,7 @@ export default function GamedayHQPage() {
   }
 
   const formatTime = (ts: string) =>
-    new Date(ts).toLocaleTimeString('ja-JP', {
+    new Date(ts).toLocaleTimeString(locale === 'ja' ? 'ja-JP' : 'en-US', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
@@ -130,48 +132,58 @@ export default function GamedayHQPage() {
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1">司令部</Header>
+      <Header variant="h1" description={t('gameday.headquartersDescription')}>
+        {t('gameday.headquarters')}
+      </Header>
 
-      {/* Application Status Summary */}
-      {healthChecks.length > 0 && (
+      {healthChecks.length > 0 ? (
         <ColumnLayout columns={2}>
-          <Container header={<Header variant="h3">Website</Header>}>
+          <Container
+            header={<Header variant="h3">{t('gameday.website')}</Header>}
+          >
             <SpaceBetween size="s">
               {latestWebsite ? (
                 <StatusIndicator
                   type={latestWebsite.isHealthy ? 'success' : 'error'}
                 >
-                  {latestWebsite.isHealthy ? '正常' : '異常'}
+                  {latestWebsite.isHealthy
+                    ? t('gameday.healthy')
+                    : t('gameday.unhealthy')}
                 </StatusIndicator>
               ) : (
-                <StatusIndicator type="warning">未チェック</StatusIndicator>
+                <StatusIndicator type="warning">
+                  {t('gameday.unchecked')}
+                </StatusIndicator>
               )}
-              {latestWebsite?.responseTimeMs != null && (
+              {latestWebsite?.responseTimeMs != null ? (
                 <Box variant="small">{latestWebsite.responseTimeMs}ms</Box>
-              )}
+              ) : null}
             </SpaceBetween>
           </Container>
-          <Container header={<Header variant="h3">API</Header>}>
+          <Container header={<Header variant="h3">{t('gameday.api')}</Header>}>
             <SpaceBetween size="s">
               {latestApi ? (
                 <StatusIndicator
                   type={latestApi.isHealthy ? 'success' : 'error'}
                 >
-                  {latestApi.isHealthy ? '正常' : '異常'}
+                  {latestApi.isHealthy
+                    ? t('gameday.healthy')
+                    : t('gameday.unhealthy')}
                 </StatusIndicator>
               ) : (
-                <StatusIndicator type="warning">未チェック</StatusIndicator>
+                <StatusIndicator type="warning">
+                  {t('gameday.unchecked')}
+                </StatusIndicator>
               )}
-              {latestApi?.responseTimeMs != null && (
+              {latestApi?.responseTimeMs != null ? (
                 <Box variant="small">{latestApi.responseTimeMs}ms</Box>
-              )}
+              ) : null}
             </SpaceBetween>
           </Container>
         </ColumnLayout>
-      )}
+      ) : null}
 
       <ColumnLayout columns={2}>
-        {/* Health Checks Table */}
         <Table
           columnDefinitions={[
             {
@@ -186,7 +198,7 @@ export default function GamedayHQPage() {
               header: 'Status',
               cell: (c) => (
                 <StatusIndicator type={c.isHealthy ? 'success' : 'error'}>
-                  {c.isHealthy ? 'Healthy' : 'Unhealthy'}
+                  {c.isHealthy ? t('gameday.healthy') : t('gameday.unhealthy')}
                 </StatusIndicator>
               ),
             },
@@ -198,18 +210,17 @@ export default function GamedayHQPage() {
             },
             {
               id: 'time',
-              header: 'Time',
+              header: t('gameday.time'),
               cell: (c) => formatTime(c.createdAt),
             },
           ]}
           items={healthChecks.slice(0, 10)}
-          loadingText="読み込み中"
-          header={<Header>ヘルスチェック</Header>}
-          empty="データなし"
+          loadingText={t('common.loading')}
+          header={<Header>{t('gameday.healthChecks')}</Header>}
+          empty={t('common.noData')}
           sortingDisabled
         />
 
-        {/* Recent Attacks */}
         <Table
           columnDefinitions={[
             {
@@ -217,44 +228,43 @@ export default function GamedayHQPage() {
               header: '',
               cell: (atk: AttackLog) => (
                 <StatusIndicator type={atk.success ? 'success' : 'error'}>
-                  {atk.success ? '成功' : '失敗'}
+                  {atk.success ? t('gameday.success') : t('gameday.failed')}
                 </StatusIndicator>
               ),
               width: 100,
             },
             {
               id: 'attack',
-              header: 'Attack',
+              header: t('gameday.attackName'),
               cell: (atk: AttackLog) => (
                 <Box variant="code">{atk.attackSlug}</Box>
               ),
             },
             {
               id: 'time',
-              header: 'Time',
+              header: t('gameday.time'),
               cell: (atk: AttackLog) => formatTime(atk.createdAt),
             },
           ]}
           items={dashboard?.recentAttacks?.slice(0, 8) ?? []}
-          loadingText="読み込み中"
-          header={<Header>最近の攻撃履歴</Header>}
-          empty="攻撃履歴なし"
+          loadingText={t('common.loading')}
+          header={<Header>{t('gameday.recentAttacks')}</Header>}
+          empty={t('gameday.noAttackHistory')}
           sortingDisabled
         />
       </ColumnLayout>
 
-      {/* URL Settings */}
-      <Container header={<Header>URL 設定</Header>}>
+      <Container header={<Header>{t('gameday.urlSettings')}</Header>}>
         <SpaceBetween size="l">
           <ColumnLayout columns={2}>
-            <FormField label="Website URL">
+            <FormField label={t('gameday.websiteUrl')}>
               <Input
                 value={websiteUrl}
                 onChange={({ detail }) => setWebsiteUrl(detail.value)}
                 placeholder="https://your-team-site.example.com"
               />
             </FormField>
-            <FormField label="API URL">
+            <FormField label={t('gameday.apiUrl')}>
               <Input
                 value={apiUrl}
                 onChange={({ detail }) => setApiUrl(detail.value)}
@@ -263,7 +273,7 @@ export default function GamedayHQPage() {
             </FormField>
           </ColumnLayout>
           <Button variant="primary" onClick={handleSaveUrls} loading={saving}>
-            保存
+            {t('common.save')}
           </Button>
         </SpaceBetween>
       </Container>

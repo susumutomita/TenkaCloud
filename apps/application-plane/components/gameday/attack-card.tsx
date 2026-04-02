@@ -6,8 +6,14 @@
 
 'use client';
 
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
 import { useEffect, useState } from 'react';
-import { Button, Card, CardContent } from '@/components/ui';
+import { useI18n } from '@/lib/i18n';
 import type { Attack } from '@/lib/api/gameday-types';
 import { AttackTypeBadge } from './attack-type-badge';
 
@@ -30,6 +36,7 @@ export function AttackCard({
   purchasing = false,
   executing = false,
 }: AttackCardProps) {
+  const { t } = useI18n();
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
   useEffect(() => {
@@ -54,66 +61,68 @@ export function AttackCard({
   const isCoolingDown = cooldownRemaining > 0;
 
   return (
-    <Card className="flex flex-col">
-      <CardContent className="flex-1 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-text-primary">{attack.name}</h3>
-          <AttackTypeBadge type={attack.attackType} />
-        </div>
+    <Container
+      header={
+        <Header
+          variant="h3"
+          actions={<AttackTypeBadge type={attack.attackType} />}
+        >
+          {attack.name}
+        </Header>
+      }
+    >
+      <SpaceBetween size="l">
+        <Box color="text-body-secondary">{attack.description}</Box>
 
-        <p className="text-sm text-text-secondary line-clamp-2">
-          {attack.description}
-        </p>
-
-        <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
-          <div className="bg-surface-2 rounded-[var(--radius-sm)] p-2">
-            <div className="text-text-muted">コスト</div>
-            <div className="text-hn-warning font-bold">
+        <ColumnLayout columns={3} variant="text-grid">
+          <div>
+            <Box variant="awsui-key-label">{t('gameday.cost')}</Box>
+            <Box fontSize="heading-s" color="text-status-warning">
               {attack.purchaseCost}
-            </div>
+            </Box>
           </div>
-          <div className="bg-surface-2 rounded-[var(--radius-sm)] p-2">
-            <div className="text-text-muted">ダメージ</div>
-            <div className="text-hn-error font-bold">{attack.damage}</div>
+          <div>
+            <Box variant="awsui-key-label">{t('gameday.damage')}</Box>
+            <Box fontSize="heading-s" color="text-status-error">
+              {attack.damage}
+            </Box>
           </div>
-          <div className="bg-surface-2 rounded-[var(--radius-sm)] p-2">
-            <div className="text-text-muted">報酬</div>
-            <div className="text-hn-success font-bold">{attack.reward}</div>
+          <div>
+            <Box variant="awsui-key-label">{t('gameday.reward')}</Box>
+            <Box fontSize="heading-s" color="text-status-success">
+              {attack.reward}
+            </Box>
           </div>
-        </div>
+        </ColumnLayout>
 
-        {isCoolingDown && (
-          <div className="text-center text-sm font-mono text-hn-warning">
-            クールダウン: {cooldownRemaining}s
-          </div>
-        )}
-      </CardContent>
+        {isCoolingDown ? (
+          <Box color="text-status-warning">
+            {t('gameday.cooldown')}: {cooldownRemaining}s
+          </Box>
+        ) : null}
 
-      <div className="px-6 pb-4">
         {!purchased ? (
           <Button
-            variant="outline"
-            size="sm"
+            variant="normal"
             fullWidth
             onClick={onPurchase}
             loading={purchasing}
             disabled={purchasing}
           >
-            購入 ({attack.purchaseCost} pts)
+            {t('gameday.purchase')} ({attack.purchaseCost} pts)
           </Button>
         ) : (
           <Button
             variant="primary"
-            size="sm"
             fullWidth
             onClick={onExecute}
             loading={executing}
             disabled={isCoolingDown || executing}
           >
-            {isCoolingDown ? `${cooldownRemaining}s` : '実行'}
+            {isCoolingDown ? `${cooldownRemaining}s` : t('gameday.execute')}
           </Button>
         )}
-      </div>
-    </Card>
+      </SpaceBetween>
+    </Container>
   );
 }

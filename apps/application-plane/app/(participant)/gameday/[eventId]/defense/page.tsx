@@ -6,7 +6,6 @@
 
 'use client';
 
-import Badge from '@cloudscape-design/components/badge';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Container from '@cloudscape-design/components/container';
@@ -20,8 +19,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { getActiveDefense, purchaseHint, reportFix } from '@/lib/api/gameday';
 import type { AttackLog } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
+import { useI18n } from '@/lib/i18n';
 
 export default function DefensePage() {
+  const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
   const [attacks, setAttacks] = useState<AttackLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,137 +92,152 @@ export default function DefensePage() {
         <Box textAlign="center" padding="xl">
           <SpaceBetween size="m">
             <StatusIndicator type="error">{error.message}</StatusIndicator>
-            <Button onClick={fetchData}>再試行</Button>
+            <Button onClick={fetchData}>{t('common.retry')}</Button>
           </SpaceBetween>
         </Box>
       </Container>
     );
   }
 
-  const active = attacks.filter((a) => !a.neutralized);
-  const neutralized = attacks.filter((a) => a.neutralized);
+  const active = attacks.filter((attack) => !attack.neutralized);
+  const neutralized = attacks.filter((attack) => attack.neutralized);
 
-  const formatTime = (ts: string) =>
-    new Date(ts).toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+  const formatTime = (timestamp: string) =>
+    new Date(timestamp).toLocaleTimeString(
+      locale === 'ja' ? 'ja-JP' : 'en-US',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      },
+    );
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1">防衛塹壕</Header>
+      <Header variant="h1" description={t('gameday.defenseDescription')}>
+        {t('gameday.defenseTrench')}
+      </Header>
 
-      {/* Active Attacks */}
       <Table
         header={
           <Header
             counter={`(${active.length})`}
-            description="現在受けている攻撃"
+            description={t('gameday.defenseDescription')}
           >
-            攻撃を受けている
+            {t('gameday.underAttack')}
           </Header>
         }
         items={active}
         columnDefinitions={[
           {
             id: 'attack',
-            header: '攻撃',
-            cell: (atk) => <Box variant="code">{atk.attackSlug}</Box>,
+            header: t('gameday.attackName'),
+            cell: (attack) => <Box variant="code">{attack.attackSlug}</Box>,
           },
           {
             id: 'attacker',
-            header: '攻撃元',
-            cell: (atk) => atk.attackerTeamId,
+            header: t('gameday.attacker'),
+            cell: (attack) => attack.attackerTeamId,
           },
           {
             id: 'damage',
-            header: 'ダメージ',
-            cell: (atk) => <Box color="text-status-error">{atk.damage}</Box>,
+            header: t('gameday.damage'),
+            cell: (attack) => (
+              <Box color="text-status-error">{attack.damage}</Box>
+            ),
             width: 100,
           },
           {
             id: 'time',
-            header: '時間',
-            cell: (atk) => formatTime(atk.createdAt),
+            header: t('gameday.time'),
+            cell: (attack) => formatTime(attack.createdAt),
             width: 120,
           },
           {
             id: 'hint',
-            header: 'ヒント',
-            cell: (atk) =>
-              hints[atk.attackId] ? (
+            header: t('gameday.hint'),
+            cell: (attack) =>
+              hints[attack.attackId] ? (
                 <StatusIndicator type="info">
-                  {hints[atk.attackId]}
+                  {hints[attack.attackId]}
                 </StatusIndicator>
               ) : (
                 <Button
                   variant="link"
-                  loading={hintLoading[atk.attackId]}
-                  onClick={() => handlePurchaseHint(atk.attackId)}
+                  loading={hintLoading[attack.attackId]}
+                  onClick={() => handlePurchaseHint(attack.attackId)}
                 >
-                  ヒント購入
+                  {t('gameday.hint')}
                 </Button>
               ),
           },
           {
             id: 'fix',
-            header: '修正',
-            cell: (atk) => (
+            header: t('gameday.reportFix'),
+            cell: (attack) => (
               <Button
                 variant="primary"
-                loading={fixLoading[atk.attackSlug]}
-                onClick={() => handleReportFix(atk.attackSlug)}
+                loading={fixLoading[attack.attackSlug]}
+                onClick={() => handleReportFix(attack.attackSlug)}
               >
-                修正報告
+                {t('gameday.reportFix')}
               </Button>
             ),
-            width: 130,
+            width: 160,
           },
         ]}
-        empty="現在攻撃を受けていません"
+        empty={t('gameday.noActiveAttacks')}
         sortingDisabled
         footer={
           <Box textAlign="center" color="text-body-secondary" fontSize="body-s">
-            <em>10秒ごとに自動更新</em>
+            <em>
+              {locale === 'ja'
+                ? '10秒ごとに自動更新'
+                : 'Refreshes every 10 seconds'}
+            </em>
           </Box>
         }
       />
 
-      {/* Neutralized */}
-      {neutralized.length > 0 && (
+      {neutralized.length > 0 ? (
         <Table
-          header={<Header counter={`(${neutralized.length})`}>修正済み</Header>}
+          header={
+            <Header counter={`(${neutralized.length})`}>
+              {t('gameday.fixed')}
+            </Header>
+          }
           items={neutralized}
           columnDefinitions={[
             {
               id: 'attack',
-              header: '攻撃',
-              cell: (atk) => <Box variant="code">{atk.attackSlug}</Box>,
+              header: t('gameday.attackName'),
+              cell: (attack) => <Box variant="code">{attack.attackSlug}</Box>,
             },
             {
               id: 'attacker',
-              header: '攻撃元',
-              cell: (atk) => atk.attackerTeamId,
+              header: t('gameday.attacker'),
+              cell: (attack) => attack.attackerTeamId,
             },
             {
               id: 'status',
-              header: 'ステータス',
+              header: t('gameday.result'),
               cell: () => (
-                <StatusIndicator type="success">修正済み</StatusIndicator>
+                <StatusIndicator type="success">
+                  {t('gameday.mitigated')}
+                </StatusIndicator>
               ),
             },
             {
               id: 'time',
-              header: '時間',
-              cell: (atk) => formatTime(atk.createdAt),
+              header: t('gameday.time'),
+              cell: (attack) => formatTime(attack.createdAt),
               width: 120,
             },
           ]}
           empty=""
           sortingDisabled
         />
-      )}
+      ) : null}
     </SpaceBetween>
   );
 }

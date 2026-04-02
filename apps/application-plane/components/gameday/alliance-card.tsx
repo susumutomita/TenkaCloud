@@ -6,7 +6,12 @@
 
 'use client';
 
-import { Button, Card, CardContent } from '@/components/ui';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import { useI18n } from '@/lib/i18n';
 import type { Alliance } from '@/lib/api/gameday-types';
 import { AllianceStatusBadge } from './alliance-status-badge';
 
@@ -25,6 +30,7 @@ export function AllianceCard({
   onBreak,
   loading = false,
 }: AllianceCardProps) {
+  const { t } = useI18n();
   const isIncoming = alliance.targetTeamId === myTeamId;
   const partnerTeamId = isIncoming
     ? alliance.requesterTeamId
@@ -38,44 +44,44 @@ export function AllianceCard({
   });
 
   return (
-    <Card>
-      <CardContent className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-text-primary">
-            {partnerTeamId}
-          </span>
-          <AllianceStatusBadge status={alliance.status} />
-        </div>
+    <Container
+      header={
+        <Header
+          variant="h3"
+          actions={<AllianceStatusBadge status={alliance.status} />}
+        >
+          {partnerTeamId}
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        <Box variant="awsui-key-label">
+          {isIncoming ? t('gameday.received') : t('gameday.sent')} - {time}
+        </Box>
 
-        <div className="text-xs text-text-muted font-mono">
-          {isIncoming ? '受信' : '送信'} - {time}
-        </div>
-
-        <div className="flex gap-2">
-          {alliance.status === 'PENDING' && isIncoming && (
+        <SpaceBetween direction="horizontal" size="xs">
+          {alliance.status === 'PENDING' && isIncoming ? (
             <Button
-              variant="success"
-              size="sm"
+              variant="primary"
               onClick={onAccept}
               loading={loading}
               disabled={loading}
             >
-              承認
+              {t('gameday.accept')}
             </Button>
-          )}
-          {alliance.status === 'ACTIVE' && (
+          ) : null}
+          {alliance.status === 'ACTIVE' ? (
             <Button
-              variant="danger"
-              size="sm"
+              variant="normal"
               onClick={onBreak}
               loading={loading}
               disabled={loading}
             >
-              破棄
+              {t('gameday.break')}
             </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+          ) : null}
+        </SpaceBetween>
+      </SpaceBetween>
+    </Container>
   );
 }

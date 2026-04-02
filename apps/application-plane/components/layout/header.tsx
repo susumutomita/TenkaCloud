@@ -9,12 +9,14 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { useI18n } from '@/lib/i18n';
 import { useTenantOptional } from '@/lib/tenant';
 
 export function Header() {
   const { data: session, status } = useSession();
   const tenant = useTenantOptional();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { locale, setLocale, t } = useI18n();
 
   const userName = session?.user?.name;
   const isLoading = status === 'loading';
@@ -39,24 +41,41 @@ export function Header() {
               href="/dashboard"
               className="text-text-secondary hover:text-text-primary font-medium transition-colors"
             >
-              ダッシュボード
+              {t('nav.dashboard')}
             </Link>
             <Link
               href="/events"
               className="text-text-secondary hover:text-text-primary font-medium transition-colors"
             >
-              イベント
+              {t('nav.events')}
             </Link>
             <Link
               href="/rankings"
               className="text-text-secondary hover:text-text-primary font-medium transition-colors"
             >
-              ランキング
+              {t('nav.rankings')}
             </Link>
           </nav>
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
+            <div className="hidden sm:flex items-center gap-2">
+              <button
+                type="button"
+                className={`text-sm ${locale === 'ja' ? 'text-text-primary' : 'text-text-muted'}`}
+                onClick={() => setLocale('ja')}
+              >
+                JA
+              </button>
+              <span className="text-text-muted">/</span>
+              <button
+                type="button"
+                className={`text-sm ${locale === 'en' ? 'text-text-primary' : 'text-text-muted'}`}
+                onClick={() => setLocale('en')}
+              >
+                EN
+              </button>
+            </div>
             {isLoading ? (
               <div className="w-8 h-8 bg-surface-2 rounded-full animate-pulse" />
             ) : session ? (
@@ -72,7 +91,7 @@ export function Header() {
                     {userName ? userName.charAt(0).toUpperCase() : 'U'}
                   </div>
                   <span className="hidden sm:block font-medium">
-                    {userName || 'ユーザー'}
+                    {userName || t('nav.user')}
                   </span>
                   <svg
                     className="w-4 h-4"
@@ -97,21 +116,21 @@ export function Header() {
                       className="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      プロフィール
+                      {t('nav.profile')}
                     </Link>
                     <Link
                       href="/profile/history"
                       className="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      参加履歴
+                      {t('nav.history')}
                     </Link>
                     <Link
                       href="/profile/badges"
                       className="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      バッジ
+                      {t('nav.badges')}
                     </Link>
                     <hr className="my-1 border-border" />
                     <button
@@ -122,7 +141,7 @@ export function Header() {
                         signOut({ callbackUrl: '/login' });
                       }}
                     >
-                      ログアウト
+                      {t('nav.logout')}
                     </button>
                   </div>
                 )}
@@ -132,7 +151,7 @@ export function Header() {
                 href="/login"
                 className="bg-hn-accent text-surface-0 px-4 py-2 rounded-lg font-medium hover:bg-hn-accent-bright transition-colors shadow-brutal-sm"
               >
-                ログイン
+                {t('nav.login')}
               </Link>
             )}
 
@@ -141,7 +160,7 @@ export function Header() {
               type="button"
               className="md:hidden p-2 text-text-secondary hover:text-text-primary transition-colors"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              aria-label="メニューを開く"
+              aria-label={t('nav.menu')}
             >
               <svg
                 className="w-6 h-6"
