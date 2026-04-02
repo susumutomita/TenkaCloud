@@ -101,6 +101,8 @@ participantRouter.get('/events', async (c) => {
     // 参加状況を追加
     const eventsWithRegistration = events.map((event) => ({
       ...event,
+      problemCount: 0,
+      participantCount: 0,
       isRegistered: false, // TODO: 実際の登録状況を確認
       myRank: undefined,
       myScore: undefined,
