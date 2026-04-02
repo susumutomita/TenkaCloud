@@ -1,23 +1,26 @@
 /**
  * Attack Station (攻撃ステーション)
  *
- * 攻撃カタロググリッド、購入、ターゲット選択 + 実行、攻撃履歴テーブル
+ * Cloudscape Design System — 攻撃カタログ、ターゲット選択、攻撃履歴テーブル
  */
 
 'use client';
 
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Cards from '@cloudscape-design/components/cards';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Select from '@cloudscape-design/components/select';
+import type { SelectProps } from '@cloudscape-design/components/select';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
-import { AttackCard } from '@/components/gameday';
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
-  ErrorState,
-  getErrorMessage,
-  getErrorType,
-  Select,
-} from '@/components/ui';
 import {
   executeAttack,
   getAttackCatalog,
@@ -38,8 +41,9 @@ export default function AttackPage() {
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
   const [purchasing, setPurchasing] = useState<Record<string, boolean>>({});
   const [executing, setExecuting] = useState<Record<string, boolean>>({});
-  const [selectedTarget, setSelectedTarget] = useState('');
-  const [teams, setTeams] = useState<{ value: string; label: string }[]>([]);
+  const [selectedTarget, setSelectedTarget] =
+    useState<SelectProps.Option | null>(null);
+  const [teamOptions, setTeamOptions] = useState<SelectProps.Option[]>([]);
 
   const fetchData = useCallback(async () => {
     if (!eventId || !teamId) return;
@@ -60,7 +64,6 @@ export default function AttackPage() {
     }
   }, [eventId, teamId]);
 
-  // Fetch team list for target selection
   useEffect(() => {
     if (!eventId) return;
     getParticipantTeams(eventId)
@@ -71,7 +74,7 @@ export default function AttackPage() {
             value: team.teamId,
             label: team.teamName,
           }));
-        setTeams(opts);
+        setTeamOptions(opts);
       })
       .catch(() => {});
   }, [eventId, teamId]);
@@ -94,10 +97,10 @@ export default function AttackPage() {
   };
 
   const handleExecute = async (attackId: string) => {
-    if (!eventId || !teamId || !selectedTarget) return;
+    if (!eventId || !teamId || !selectedTarget?.value) return;
     setExecuting((prev) => ({ ...prev, [attackId]: true }));
     try {
-      await executeAttack(eventId, teamId, attackId, selectedTarget);
+      await executeAttack(eventId, teamId, attackId, selectedTarget.value);
       await fetchData();
     } catch (err) {
       const e = err as Error & { status?: number; body?: CooldownError };
@@ -114,19 +117,22 @@ export default function AttackPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
-      </div>
+      <Box textAlign="center" padding="xxl">
+        <Spinner size="large" />
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <ErrorState
-        message={getErrorMessage(error)}
-        type={getErrorType(error)}
-        onRetry={fetchData}
-      />
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <SpaceBetween size="m">
+            <StatusIndicator type="error">{error.message}</StatusIndicator>
+            <Button onClick={fetchData}>再試行</Button>
+          </SpaceBetween>
+        </Box>
+      </Container>
     );
   }
 
@@ -137,111 +143,145 @@ export default function AttackPage() {
     });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-          <span className="text-hn-accent font-mono">&gt;_</span>
-          攻撃ステーション
-        </h1>
-      </div>
+    <SpaceBetween size="l">
+      <Header variant="h1">攻撃ステーション</Header>
 
       {/* Target Selection */}
-      <Card>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <Select
-              options={teams}
-              placeholder="ターゲットチームを選択"
-              value={selectedTarget}
-              onChange={(e) => setSelectedTarget(e.target.value)}
-              label="ターゲット"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Attack Catalog Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {catalog.map((attack) => (
-          <AttackCard
-            key={attack.id}
-            attack={attack}
-            purchased={purchasedIds.has(attack.id)}
-            cooldownUntil={cooldowns[attack.id]}
-            purchasing={purchasing[attack.id]}
-            executing={executing[attack.id]}
-            onPurchase={() => handlePurchase(attack.id)}
-            onExecute={() => handleExecute(attack.id)}
+      <Container>
+        <FormField label="ターゲットチーム">
+          <Select
+            selectedOption={selectedTarget}
+            onChange={({ detail }) => setSelectedTarget(detail.selectedOption)}
+            options={teamOptions}
+            placeholder="ターゲットチームを選択"
+            filteringType="auto"
           />
-        ))}
-      </div>
+        </FormField>
+      </Container>
+
+      {/* Attack Catalog */}
+      <Cards
+        header={<Header counter={`(${catalog.length})`}>攻撃カタログ</Header>}
+        items={catalog}
+        cardsPerRow={[
+          { cards: 1 },
+          { minWidth: 400, cards: 2 },
+          { minWidth: 700, cards: 3 },
+        ]}
+        cardDefinition={{
+          header: (attack) => attack.name,
+          sections: [
+            {
+              id: 'type',
+              content: (attack) => (
+                <Badge
+                  color={attack.attackType === 'vulnerability' ? 'red' : 'blue'}
+                >
+                  {attack.attackType}
+                </Badge>
+              ),
+            },
+            {
+              id: 'desc',
+              header: '説明',
+              content: (attack) => (
+                <Box color="text-body-secondary">{attack.description}</Box>
+              ),
+            },
+            {
+              id: 'stats',
+              content: (attack) => (
+                <SpaceBetween direction="horizontal" size="l">
+                  <Box variant="small">
+                    コスト: <b>{attack.purchaseCost}</b>
+                  </Box>
+                  <Box variant="small">
+                    ダメージ: <b>{attack.damage}</b>
+                  </Box>
+                  <Box variant="small">
+                    報酬: <b>{attack.reward}</b>
+                  </Box>
+                </SpaceBetween>
+              ),
+            },
+            {
+              id: 'action',
+              content: (attack) => {
+                const purchased = purchasedIds.has(attack.id);
+                const onCooldown =
+                  cooldowns[attack.id] && Date.now() < cooldowns[attack.id];
+                return purchased ? (
+                  <Button
+                    variant="primary"
+                    fullWidth
+                    onClick={() => handleExecute(attack.id)}
+                    loading={executing[attack.id]}
+                    disabled={!selectedTarget?.value || onCooldown || false}
+                  >
+                    {onCooldown ? 'クールダウン中...' : '攻撃実行'}
+                  </Button>
+                ) : (
+                  <Button
+                    fullWidth
+                    onClick={() => handlePurchase(attack.id)}
+                    loading={purchasing[attack.id]}
+                  >
+                    購入 ({attack.purchaseCost} pts)
+                  </Button>
+                );
+              },
+            },
+          ],
+        }}
+        empty="攻撃カタログが空です"
+      />
 
       {/* Attack History */}
-      <Card>
-        <CardHeader>
-          <span className="font-semibold text-text-primary">攻撃履歴</span>
-        </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-surface-2 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  時間
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  攻撃
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  対象
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase">
-                  結果
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase">
-                  報酬
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {history.map((log) => (
-                <tr key={log.id}>
-                  <td className="px-4 py-3 text-sm font-mono text-text-muted">
-                    {formatTime(log.createdAt)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-text-primary">
-                    {log.attackSlug}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-text-secondary">
-                    {log.defenderTeamId}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge
-                      variant={log.success ? 'success' : 'danger'}
-                      badgeStyle="subtle"
-                      size="sm"
-                    >
-                      {log.success ? '成功' : '失敗'}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right font-mono text-hn-success">
-                    {log.success ? `+${log.reward}` : '0'}
-                  </td>
-                </tr>
-              ))}
-              {history.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-text-muted text-sm"
-                  >
-                    攻撃履歴なし
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
+      <Table
+        header={<Header counter={`(${history.length})`}>攻撃履歴</Header>}
+        items={history}
+        columnDefinitions={[
+          {
+            id: 'time',
+            header: '時間',
+            cell: (log) => formatTime(log.createdAt),
+            width: 100,
+          },
+          {
+            id: 'attack',
+            header: '攻撃',
+            cell: (log) => <Box variant="code">{log.attackSlug}</Box>,
+          },
+          {
+            id: 'target',
+            header: '対象',
+            cell: (log) => log.defenderTeamId,
+          },
+          {
+            id: 'result',
+            header: '結果',
+            cell: (log) => (
+              <StatusIndicator type={log.success ? 'success' : 'error'}>
+                {log.success ? '成功' : '失敗'}
+              </StatusIndicator>
+            ),
+            width: 120,
+          },
+          {
+            id: 'reward',
+            header: '報酬',
+            cell: (log) =>
+              log.success ? (
+                <Box color="text-status-success">+{log.reward}</Box>
+              ) : (
+                '0'
+              ),
+            width: 100,
+          },
+        ]}
+        empty="攻撃履歴なし"
+        sortingDisabled
+      />
+    </SpaceBetween>
   );
 }
