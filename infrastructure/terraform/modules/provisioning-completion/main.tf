@@ -31,10 +31,23 @@ resource "aws_iam_role" "lambda_role" {
   tags = var.tags
 }
 
-# Lambda Basic Execution Policy
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+# Lambda Basic Execution Policy (inline: エミュレータは AWS managed policy 未対応)
+resource "aws_iam_role_policy" "lambda_basic" {
+  name = "${var.name_prefix}-provisioning-completion-basic-execution"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ]
+      Resource = "*"
+    }]
+  })
 }
 
 # DynamoDB Policy for updating tenant status
@@ -60,6 +73,10 @@ resource "aws_sqs_queue" "dlq" {
   message_retention_seconds = 1209600 # 14 days
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # SQS Policy for Lambda DLQ

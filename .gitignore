@@ -150,3 +150,5 @@ vite.config.ts.timestamp-*
 !.claude/skills/
 
 .playwright-mcp
+apps/*/test-results/
+apps/*/playwright-report/

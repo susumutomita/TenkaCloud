@@ -8,6 +8,10 @@
 resource "aws_cloudwatch_event_bus" "tenant_events" {
   name = "${var.name_prefix}-tenant-events"
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # Rule: Tenant Onboarding
@@ -22,6 +26,10 @@ resource "aws_cloudwatch_event_rule" "tenant_onboarding" {
   })
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # Rule: Tenant Offboarding
@@ -36,6 +44,10 @@ resource "aws_cloudwatch_event_rule" "tenant_offboarding" {
   })
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 # Rule: Tenant Updated
@@ -50,4 +62,8 @@ resource "aws_cloudwatch_event_rule" "tenant_updated" {
   })
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
