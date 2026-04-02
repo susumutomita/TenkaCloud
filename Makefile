@@ -4,6 +4,7 @@
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
 .PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant
 .PHONY: auth0-check-tfvars auth0-init auth0-plan auth0-apply auth0-output auth0-setup
+.PHONY: gameday-seed
 
 # デフォルトターゲットはhelp
 default: help
@@ -495,6 +496,9 @@ help:
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
+	@echo "🎮 GameDay:"
+	@echo "  make gameday-seed     デモデータを投入してすぐにプレイ可能にする"
+	@echo ""
 	@echo "🧪 ローカル開発（Kumo / LocalStack / Floci）:"
 	@echo "  make start-local      ローカル環境を起動（デフォルト: Kumo）"
 	@echo "  make start-kumo       Kumo で起動"
@@ -577,6 +581,10 @@ test-lambda: check-aws-cli
 	@echo "✅ テナントを作成しました"
 	@echo ""
 	@echo "💡 ログを確認: make logs-local"
+
+# GameDay シード: デモデータを投入してすぐにプレイ可能にする
+gameday-seed:
+	@./scripts/gameday-seed.sh
 
 # ========================================
 # 🔐 Auth0 セットアップ（Terraform）

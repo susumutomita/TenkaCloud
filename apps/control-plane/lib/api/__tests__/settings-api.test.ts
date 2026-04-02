@@ -9,6 +9,27 @@ describe('Settings API', () => {
 
   describe('サーバーサイド（window がない場合）', () => {
     describe('fetchSettings', () => {
+      it('環境変数が未設定の場合はサーバーデフォルト URL を使用すべき', async () => {
+        vi.stubGlobal('window', undefined);
+        delete process.env.TENANT_API_BASE_URL;
+
+        const { fetchSettings } = await import('../settings-api');
+
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(DEFAULT_SETTINGS),
+        });
+
+        await fetchSettings();
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://tenant-management:13004/api/settings',
+          { cache: 'no-store' }
+        );
+
+        vi.unstubAllGlobals();
+      });
+
       it('設定を取得できるべき', async () => {
         vi.stubGlobal('window', undefined);
 

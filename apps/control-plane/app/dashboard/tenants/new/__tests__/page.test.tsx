@@ -119,6 +119,22 @@ describe('NewTenantPage コンポーネント', () => {
       expect(slugInput).toHaveValue('test-company');
     });
 
+    it('スラッグを手動編集後にテナント名を変更してもスラッグが上書きされないべき', async () => {
+      const user = userEvent.setup();
+      render(<NewTenantPage />);
+
+      const nameInput = screen.getByLabelText('テナント名');
+      const slugInput = screen.getByLabelText('スラッグ（URL識別子）');
+
+      // まずスラッグを手動で編集
+      await user.type(slugInput, 'custom-slug');
+      expect(slugInput).toHaveValue('custom-slug');
+
+      // テナント名を入力しても、手動編集したスラッグは変わらない
+      await user.type(nameInput, 'New Company');
+      expect(slugInput).toHaveValue('custom-slug');
+    });
+
     it('Tier を選択できるべき', async () => {
       const user = userEvent.setup();
       render(<NewTenantPage />);
