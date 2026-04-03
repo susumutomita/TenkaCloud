@@ -4,23 +4,23 @@
  * Cloudscape Design System — グローバルランキングページ
  */
 
-"use client";
+'use client';
 
-import Badge from "@cloudscape-design/components/badge";
-import Box from "@cloudscape-design/components/box";
-import Button from "@cloudscape-design/components/button";
-import ColumnLayout from "@cloudscape-design/components/column-layout";
-import Container from "@cloudscape-design/components/container";
-import CloudscapeHeader from "@cloudscape-design/components/header";
-import SpaceBetween from "@cloudscape-design/components/space-between";
-import Spinner from "@cloudscape-design/components/spinner";
-import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import Table from "@cloudscape-design/components/table";
-import "@cloudscape-design/global-styles/index.css";
-import { useCallback, useEffect, useState } from "react";
-import { Header } from "../../components/layout";
-import { getErrorMessage } from "../../components/ui";
-import { getGlobalRanking } from "../../lib/api/profile";
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import CloudscapeHeader from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import '@cloudscape-design/global-styles/index.css';
+import { useCallback, useEffect, useState } from 'react';
+import { Header } from '../../components/layout';
+import { getErrorMessage } from '../../components/ui';
+import { getGlobalRanking } from '../../lib/api/profile';
 
 interface RankingEntry {
   rank: number;
@@ -59,7 +59,7 @@ export default function RankingsPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error("読み込みに失敗しました"),
+        err instanceof Error ? err : new Error('読み込みに失敗しました'),
       );
     } finally {
       setLoading(false);
@@ -131,9 +131,7 @@ export default function RankingsPage() {
                   </Box>
                   <SpaceBetween size="xxs">
                     <Box fontWeight="bold">あなたの現在の順位:</Box>
-                    <Box color="text-body-secondary">
-                      / {data.total}人中
-                    </Box>
+                    <Box color="text-body-secondary">/ {data.total}人中</Box>
                   </SpaceBetween>
                 </SpaceBetween>
               </Container>
@@ -144,9 +142,7 @@ export default function RankingsPage() {
               <ColumnLayout columns={2}>
                 <Container
                   header={
-                    <CloudscapeHeader variant="h3">
-                      総参加者数
-                    </CloudscapeHeader>
+                    <CloudscapeHeader variant="h3">総参加者数</CloudscapeHeader>
                   }
                 >
                   {loading ? (
@@ -162,9 +158,7 @@ export default function RankingsPage() {
 
                 <Container
                   header={
-                    <CloudscapeHeader variant="h3">
-                      最高スコア
-                    </CloudscapeHeader>
+                    <CloudscapeHeader variant="h3">最高スコア</CloudscapeHeader>
                   }
                 >
                   {loading ? (
@@ -173,9 +167,7 @@ export default function RankingsPage() {
                     </Box>
                   ) : (
                     <Box fontSize="display-l" fontWeight="heavy">
-                      {topScore !== undefined
-                        ? topScore.toLocaleString()
-                        : "-"}
+                      {topScore !== undefined ? topScore.toLocaleString() : '-'}
                     </Box>
                   )}
                 </Container>
@@ -206,9 +198,7 @@ export default function RankingsPage() {
                 header={
                   <CloudscapeHeader
                     variant="h1"
-                    counter={
-                      !loading ? `(${rankings.length})` : undefined
-                    }
+                    counter={!loading ? `(${rankings.length})` : undefined}
                     description="クラウドエンジニアの頂点を目指せ"
                     actions={<Badge color="blue">Top 50</Badge>}
                   >
@@ -236,14 +226,14 @@ export default function RankingsPage() {
                 }
                 columnDefinitions={[
                   {
-                    id: "rank",
-                    header: "順位",
+                    id: 'rank',
+                    header: '順位',
                     width: 120,
                     cell: (item) => getRankDisplay(item.rank),
                   },
                   {
-                    id: "name",
-                    header: "名前",
+                    id: 'name',
+                    header: '名前',
                     cell: (item) => (
                       <SpaceBetween
                         size="xs"
@@ -254,21 +244,21 @@ export default function RankingsPage() {
                           style={{
                             width: 36,
                             height: 36,
-                            borderRadius: "50%",
+                            borderRadius: '50%',
                             background:
                               item.rank === 1
-                                ? "linear-gradient(135deg, #f0c674, #e0a030)"
+                                ? 'linear-gradient(135deg, #f0c674, #e0a030)'
                                 : item.rank === 2
-                                  ? "linear-gradient(135deg, #c0c0c0, #a0a0a0)"
+                                  ? 'linear-gradient(135deg, #c0c0c0, #a0a0a0)'
                                   : item.rank === 3
-                                    ? "linear-gradient(135deg, #cd7f32, #b06820)"
-                                    : "var(--color-background-badge-icon, #414d5c)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
+                                    ? 'linear-gradient(135deg, #cd7f32, #b06820)'
+                                    : 'var(--color-background-badge-icon, #414d5c)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             fontWeight: 700,
-                            fontSize: "0.875rem",
-                            color: "#fff",
+                            fontSize: '0.875rem',
+                            color: '#fff',
                           }}
                         >
                           {item.name.charAt(0).toUpperCase()}
@@ -280,18 +270,16 @@ export default function RankingsPage() {
                     ),
                   },
                   {
-                    id: "eventsParticipated",
-                    header: "参加イベント",
+                    id: 'eventsParticipated',
+                    header: '参加イベント',
                     width: 150,
                     cell: (item) => (
-                      <Badge
-                        color="blue"
-                      >{`${item.eventsParticipated}`}</Badge>
+                      <Badge color="blue">{`${item.eventsParticipated}`}</Badge>
                     ),
                   },
                   {
-                    id: "totalScore",
-                    header: "合計スコア",
+                    id: 'totalScore',
+                    header: '合計スコア',
                     width: 200,
                     cell: (item) => (
                       <Box fontWeight="bold" fontSize="heading-m">
@@ -301,7 +289,7 @@ export default function RankingsPage() {
                           color="text-body-secondary"
                           fontSize="body-s"
                         >
-                          {" "}
+                          {' '}
                           pts
                         </Box>
                       </Box>
