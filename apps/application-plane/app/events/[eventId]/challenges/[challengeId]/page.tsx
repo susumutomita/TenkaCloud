@@ -9,6 +9,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { AwsConsoleButton } from '@/components/gameday';
 import { Header } from '../../../../../components/layout';
 import {
   Badge,
@@ -501,16 +502,12 @@ export default function ChallengeDetailPage() {
                       {new Date(credentials.expiresAt).toLocaleString('ja-JP')}
                     </code>
                   </div>
-                  <a
-                    href={challenge.awsConsoleUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <Button variant="outline" fullWidth>
-                      AWS コンソールを開く
-                    </Button>
-                  </a>
+                  <AwsConsoleButton
+                    eventId={eventId}
+                    label="AWS Console を開く"
+                    variant="primary"
+                    fullWidth
+                  />
                 </CardContent>
               </Card>
             )}
