@@ -3,6 +3,7 @@
  */
 
 export { AllianceCard } from './alliance-card';
+export { AwsConsoleButton } from './aws-console-button';
 export { AllianceStatusBadge } from './alliance-status-badge';
 export { AttackCard } from './attack-card';
 export { AttackTypeBadge } from './attack-type-badge';
