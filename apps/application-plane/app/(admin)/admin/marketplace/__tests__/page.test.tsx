@@ -201,12 +201,10 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
     it('\u30a4\u30d9\u30f3\u30c8\u53d6\u5f97\u30a8\u30e9\u30fc\u6642\u306f\u30a8\u30e9\u30fc\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
-      const mockFetch = vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: false,
-          json: async () => ({ error: 'Failed' }),
-        });
+      const mockFetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Failed' }),
+      });
       vi.stubGlobal('fetch', mockFetch);
       render(<AdminMarketplacePage />);
       await waitFor(() => {
