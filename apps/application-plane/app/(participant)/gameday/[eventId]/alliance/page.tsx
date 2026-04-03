@@ -18,7 +18,7 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import '@cloudscape-design/global-styles/index.css';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   acceptAlliance,
   breakAlliance,
@@ -28,10 +28,12 @@ import {
 import type { Alliance } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
+import { useNotifications } from '@/lib/notifications';
 
 export default function AlliancePage() {
   const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
+  const { addNotification } = useNotifications();
   const [alliances, setAlliances] = useState<Alliance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -43,11 +45,29 @@ export default function AlliancePage() {
     null,
   );
   const [requesting, setRequesting] = useState(false);
+  const previousPendingIdsRef = useRef<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     if (!eventId || !teamId) return;
     try {
       const data = await getAlliances(eventId, teamId);
+      const incomingPending = data.alliances.filter(
+        (a) => a.status === 'PENDING' && a.targetTeamId === teamId,
+      );
+      for (const alliance of incomingPending) {
+        if (
+          !previousPendingIdsRef.current.has(alliance.id) &&
+          previousPendingIdsRef.current.size > 0
+        ) {
+          addNotification({
+            type: 'alliance_request',
+            title: '同盟リクエスト',
+            message: `${alliance.requesterTeamId} から同盟リクエストが届きました`,
+            severity: 'info',
+          });
+        }
+      }
+      previousPendingIdsRef.current = new Set(incomingPending.map((a) => a.id));
       setAlliances(data.alliances);
       setError(null);
     } catch (err) {
@@ -57,7 +77,7 @@ export default function AlliancePage() {
     } finally {
       setLoading(false);
     }
-  }, [eventId, teamId]);
+  }, [eventId, teamId, addNotification]);
 
   useEffect(() => {
     if (!eventId) return;
@@ -89,7 +109,7 @@ export default function AlliancePage() {
       await acceptAlliance(allianceId, eventId, teamId);
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setActionLoading((prev) => ({ ...prev, [allianceId]: false }));
     }
@@ -102,7 +122,7 @@ export default function AlliancePage() {
       await breakAlliance(allianceId, eventId, teamId);
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setActionLoading((prev) => ({ ...prev, [allianceId]: false }));
     }
@@ -116,19 +136,18 @@ export default function AlliancePage() {
       setSelectedTeam(null);
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setRequesting(false);
     }
   };
 
-  if (loading) {
+  if (loading)
     return (
       <Box textAlign="center" padding="xxl">
         <Spinner size="large" />
       </Box>
     );
-  }
 
   if (error) {
     return (
@@ -152,21 +171,14 @@ export default function AlliancePage() {
     (alliance) =>
       alliance.status === 'PENDING' && alliance.requesterTeamId === teamId,
   );
-
   const getPartnerTeamId = (alliance: Alliance) =>
     alliance.requesterTeamId === teamId
       ? alliance.targetTeamId
       : alliance.requesterTeamId;
-
   const formatDate = (timestamp: string) =>
     new Date(timestamp).toLocaleDateString(
       locale === 'ja' ? 'ja-JP' : 'en-US',
-      {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      },
+      { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' },
     );
 
   return (
@@ -174,7 +186,6 @@ export default function AlliancePage() {
       <Header variant="h1" description={t('gameday.allianceDescription')}>
         {t('gameday.alliances')}
       </Header>
-
       <Container
         header={<Header variant="h2">{t('gameday.allianceRequest')}</Header>}
       >
@@ -198,7 +209,6 @@ export default function AlliancePage() {
           </Button>
         </SpaceBetween>
       </Container>
-
       <Cards
         header={
           <Header counter={`(${active.length})`}>
@@ -247,7 +257,6 @@ export default function AlliancePage() {
           </Box>
         }
       />
-
       {pendingIncoming.length > 0 ? (
         <Cards
           header={
@@ -295,7 +304,6 @@ export default function AlliancePage() {
           }}
         />
       ) : null}
-
       {pendingOutgoing.length > 0 ? (
         <Cards
           header={

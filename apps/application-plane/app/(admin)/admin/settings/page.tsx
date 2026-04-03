@@ -1,73 +1,65 @@
 /**
  * Admin Settings Page
  *
- * HybridNext Design System - Terminal Command Center style
- * テナント設定
+ * Cloudscape Design System
  */
 
 'use client';
 
-import { useCallback, useEffect, useId, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { get, put } from '@/lib/api/client';
-import { useTenantOptional } from '@/lib/tenant';
+import { useCallback, useEffect, useState } from 'react';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import Form from '@cloudscape-design/components/form';
+import FormField from '@cloudscape-design/components/form-field';
+import Input from '@cloudscape-design/components/input';
+import Button from '@cloudscape-design/components/button';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Tabs from '@cloudscape-design/components/tabs';
+import Modal from '@cloudscape-design/components/modal';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Box from '@cloudscape-design/components/box';
+import Alert from '@cloudscape-design/components/alert';
+import { get, put, post } from '@/lib/api/client';
 
-interface TenantSettings {
+interface SettingsData {
   tenantName: string;
-  contactEmail: string;
-  defaultCloudProvider: string;
-  maxParticipantsPerEvent: number;
-  maxTeamSize: number;
-  enableTeamRegistration: boolean;
-  enableIndividualRegistration: boolean;
-  requireEmailVerification: boolean;
+  slug: string;
+  apiKey: string;
 }
 
-const DEFAULT_SETTINGS: TenantSettings = {
-  tenantName: '',
-  contactEmail: '',
-  defaultCloudProvider: 'aws',
-  maxParticipantsPerEvent: 100,
-  maxTeamSize: 5,
-  enableTeamRegistration: true,
-  enableIndividualRegistration: true,
-  requireEmailVerification: true,
-};
+function maskApiKey(key: string): string {
+  if (!key || key.length < 8) return key || '';
+  return `${key.slice(0, 3)}****${key.slice(-4)}`;
+}
 
 export default function AdminSettingsPage() {
-  const tenant = useTenantOptional();
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  // Form field IDs
-  const tenantNameId = useId();
-  const contactEmailId = useId();
-  const defaultCloudProviderId = useId();
-  const maxParticipantsId = useId();
-  const maxTeamSizeId = useId();
-  const teamRegistrationId = useId();
-  const individualRegistrationId = useId();
-  const emailVerificationId = useId();
-
-  // Form state
-  const [settings, setSettings] = useState<TenantSettings>({
-    ...DEFAULT_SETTINGS,
-    tenantName: tenant?.slug || '',
-  });
-
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>(
+    'idle',
+  );
+  const [saveError, setSaveError] = useState('');
+  const [activeTabId, setActiveTabId] = useState('general');
+  const [tenantName, setTenantName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [regenerateModalVisible, setRegenerateModalVisible] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await get<Partial<TenantSettings>>('/admin/settings');
-      setSettings((prev) => ({ ...prev, ...data }));
+      const data = await get<SettingsData>('/admin/settings');
+      setTenantName(data.tenantName || '');
+      setSlug(data.slug || '');
+      setApiKey(data.apiKey || '');
     } catch {
-      // Settings endpoint may not exist yet; use defaults
+      // defaults
     } finally {
       setLoading(false);
     }
@@ -79,13 +71,19 @@ export default function AdminSettingsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setSaved(false);
-    setSaveError(null);
+    setSaveStatus('idle');
+    setSaveError('');
     try {
-      await put('/admin/settings', settings);
-      setSaved(true);
-      window.setTimeout(() => setSaved(false), 3000);
+      const data = await put<SettingsData>('/admin/settings', {
+        tenantName,
+        slug,
+      });
+      setTenantName(data.tenantName || tenantName);
+      setSlug(data.slug || slug);
+      setSaveStatus('success');
+      window.setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
+      setSaveStatus('error');
       setSaveError(
         err instanceof Error ? err.message : '設定の保存に失敗しました',
       );
@@ -94,345 +92,266 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const handleCopyApiKey = async () => {
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* noop */
+    }
+  };
+
+  const handleRegenerateApiKey = async () => {
+    setRegenerating(true);
+    try {
+      const data = await post<SettingsData>('/admin/settings', {
+        action: 'regenerate-api-key',
+      });
+      setApiKey(data.apiKey || '');
+      setRegenerateModalVisible(false);
+    } catch {
+      /* noop */
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const handleDeleteAllData = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await post('/admin/settings', {
+        action: 'delete-all-data',
+        confirmationToken: deleteConfirmation,
+      });
+      setDeleteModalVisible(false);
+      setDeleteConfirmation('');
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : 'データの削除に失敗しました',
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-          <span className="text-hn-accent font-mono">&gt;_</span>
-          設定
-        </h1>
-        <Button onClick={handleSave} disabled={saving || loading}>
-          {saving ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
-              保存中...
-            </>
-          ) : saved ? (
-            <>
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+    <SpaceBetween size="l">
+      <Header variant="h1">設定</Header>
+      <Tabs
+        activeTabId={activeTabId}
+        onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+        tabs={[
+          {
+            id: 'general',
+            label: '一般設定',
+            content: (
+              <Form
+                actions={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      variant="primary"
+                      onClick={handleSave}
+                      loading={saving}
+                      disabled={loading}
+                    >
+                      保存
+                    </Button>
+                  </SpaceBetween>
+                }
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              保存しました
-            </>
-          ) : (
-            '変更を保存'
-          )}
-        </Button>
-      </div>
-
-      {/* Save Error */}
-      {saveError && (
-        <Card className="border-hn-error/50 bg-hn-error/10">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-hn-error">{saveError}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* General Settings */}
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-hn-accent"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-            基本設定
-          </h2>
-          <div className="space-y-6">
-            <div>
-              <label
-                htmlFor={tenantNameId}
-                className="block text-sm font-medium text-text-secondary mb-1"
+                <Container header={<Header variant="h2">一般設定</Header>}>
+                  <SpaceBetween size="l">
+                    {saveStatus === 'success' && (
+                      <Alert
+                        type="success"
+                        dismissible
+                        onDismiss={() => setSaveStatus('idle')}
+                      >
+                        設定を保存しました
+                      </Alert>
+                    )}
+                    {saveStatus === 'error' && (
+                      <Alert
+                        type="error"
+                        dismissible
+                        onDismiss={() => setSaveStatus('idle')}
+                      >
+                        {saveError}
+                      </Alert>
+                    )}
+                    <FormField
+                      label="テナント名"
+                      description="組織の表示名を設定します"
+                    >
+                      <Input
+                        value={tenantName}
+                        onChange={({ detail }) => setTenantName(detail.value)}
+                        placeholder="テナント名を入力"
+                        disabled={loading}
+                      />
+                    </FormField>
+                    <FormField
+                      label="スラッグ"
+                      description="URL に使用される識別子です"
+                    >
+                      <Input
+                        value={slug}
+                        onChange={({ detail }) => setSlug(detail.value)}
+                        placeholder="tenant-slug"
+                        disabled={loading}
+                      />
+                    </FormField>
+                  </SpaceBetween>
+                </Container>
+              </Form>
+            ),
+          },
+          {
+            id: 'api-key',
+            label: 'API キー',
+            content: (
+              <Container header={<Header variant="h2">API キー</Header>}>
+                <SpaceBetween size="l">
+                  <FormField
+                    label="現在の API キー"
+                    description="外部連携に使用する API キーです"
+                  >
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Box variant="code" data-testid="masked-api-key">
+                        {loading ? '読み込み中...' : maskApiKey(apiKey)}
+                      </Box>
+                      <Button
+                        iconName="copy"
+                        variant="inline-icon"
+                        onClick={handleCopyApiKey}
+                        ariaLabel="API キーをコピー"
+                      />
+                    </SpaceBetween>
+                  </FormField>
+                  {copied && (
+                    <StatusIndicator type="success">
+                      コピーしました
+                    </StatusIndicator>
+                  )}
+                  <Button
+                    onClick={() => setRegenerateModalVisible(true)}
+                    variant="normal"
+                  >
+                    API キーを再生成
+                  </Button>
+                </SpaceBetween>
+              </Container>
+            ),
+          },
+          {
+            id: 'danger',
+            label: '危険ゾーン',
+            content: (
+              <Container
+                header={
+                  <Header variant="h2" description="この操作は取り消せません">
+                    危険ゾーン
+                  </Header>
+                }
               >
-                テナント名
-              </label>
-              <Input
-                id={tenantNameId}
-                type="text"
-                value={settings.tenantName}
-                onChange={(e) =>
-                  setSettings({ ...settings, tenantName: e.target.value })
-                }
-                className="max-w-md"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor={contactEmailId}
-                className="block text-sm font-medium text-text-secondary mb-1"
+                <SpaceBetween size="l">
+                  <Box>
+                    <SpaceBetween size="s">
+                      <Box variant="p">
+                        すべてのイベント、参加者、チームデータを完全に削除します。この操作は元に戻すことができません。
+                      </Box>
+                      <Button
+                        variant="link"
+                        onClick={() => setDeleteModalVisible(true)}
+                        data-testid="delete-all-data-button"
+                      >
+                        <Box color="text-status-error">全データを削除</Box>
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                </SpaceBetween>
+              </Container>
+            ),
+          },
+        ]}
+      />
+      <Modal
+        visible={regenerateModalVisible}
+        onDismiss={() => setRegenerateModalVisible(false)}
+        header="API キーの再生成"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => setRegenerateModalVisible(false)}
               >
-                連絡先メールアドレス
-              </label>
-              <Input
-                id={contactEmailId}
-                type="email"
-                value={settings.contactEmail}
-                onChange={(e) =>
-                  setSettings({ ...settings, contactEmail: e.target.value })
-                }
-                className="max-w-md"
-              />
-              <p className="mt-1 text-sm text-text-muted">
-                システム通知の送信先として使用されます。
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor={defaultCloudProviderId}
-                className="block text-sm font-medium text-text-secondary mb-1"
-              >
-                デフォルトクラウドプロバイダー
-              </label>
-              <Select
-                id={defaultCloudProviderId}
-                value={settings.defaultCloudProvider}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    defaultCloudProvider: e.target.value,
-                  })
-                }
-                options={[
-                  { value: 'aws', label: 'AWS' },
-                  { value: 'gcp', label: 'Google Cloud' },
-                  { value: 'azure', label: 'Microsoft Azure' },
-                ]}
-                className="max-w-md"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Event Settings */}
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-hn-purple"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            イベント設定
-          </h2>
-          <div className="space-y-6">
-            <div>
-              <label
-                htmlFor={maxParticipantsId}
-                className="block text-sm font-medium text-text-secondary mb-1"
-              >
-                イベントあたりの最大参加者数
-              </label>
-              <Input
-                id={maxParticipantsId}
-                type="number"
-                min={1}
-                max={1000}
-                value={settings.maxParticipantsPerEvent}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    maxParticipantsPerEvent: Number.parseInt(
-                      e.target.value,
-                      10,
-                    ),
-                  })
-                }
-                className="w-32"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor={maxTeamSizeId}
-                className="block text-sm font-medium text-text-secondary mb-1"
-              >
-                最大チームサイズ
-              </label>
-              <Input
-                id={maxTeamSizeId}
-                type="number"
-                min={1}
-                max={10}
-                value={settings.maxTeamSize}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    maxTeamSize: Number.parseInt(e.target.value, 10),
-                  })
-                }
-                className="w-32"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Registration Settings */}
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-6 flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-hn-success"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-              />
-            </svg>
-            登録設定
-          </h2>
-          <div className="space-y-4">
-            <label
-              htmlFor={teamRegistrationId}
-              className="flex items-center cursor-pointer group"
-            >
-              <input
-                id={teamRegistrationId}
-                type="checkbox"
-                checked={settings.enableTeamRegistration}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    enableTeamRegistration: e.target.checked,
-                  })
-                }
-                className="h-4 w-4 text-hn-accent bg-surface-1 border-border rounded focus:ring-hn-accent focus:ring-offset-surface-0"
-              />
-              <span className="ml-3 text-sm text-text-secondary group-hover:text-text-primary transition-colors">
-                チーム登録を許可する
-              </span>
-            </label>
-
-            <label
-              htmlFor={individualRegistrationId}
-              className="flex items-center cursor-pointer group"
-            >
-              <input
-                id={individualRegistrationId}
-                type="checkbox"
-                checked={settings.enableIndividualRegistration}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    enableIndividualRegistration: e.target.checked,
-                  })
-                }
-                className="h-4 w-4 text-hn-accent bg-surface-1 border-border rounded focus:ring-hn-accent focus:ring-offset-surface-0"
-              />
-              <span className="ml-3 text-sm text-text-secondary group-hover:text-text-primary transition-colors">
-                個人登録を許可する
-              </span>
-            </label>
-
-            <label
-              htmlFor={emailVerificationId}
-              className="flex items-center cursor-pointer group"
-            >
-              <input
-                id={emailVerificationId}
-                type="checkbox"
-                checked={settings.requireEmailVerification}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    requireEmailVerification: e.target.checked,
-                  })
-                }
-                className="h-4 w-4 text-hn-accent bg-surface-1 border-border rounded focus:ring-hn-accent focus:ring-offset-surface-0"
-              />
-              <span className="ml-3 text-sm text-text-secondary group-hover:text-text-primary transition-colors">
-                メール認証を必須にする
-              </span>
-            </label>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Danger Zone */}
-      <Card className="border-hn-error/30">
-        <CardContent className="p-6">
-          <h2 className="text-lg font-semibold text-hn-error mb-4 flex items-center gap-2">
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            危険な操作
-          </h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-hn-error/10 rounded-lg border border-hn-error/20">
-              <div>
-                <h3 className="text-sm font-medium text-text-primary">
-                  全データを削除
-                </h3>
-                <p className="text-sm text-text-muted">
-                  すべてのイベント、参加者、チームデータを削除します。この操作は取り消せません。
-                </p>
-              </div>
-              <Button variant="danger" size="sm" disabled>
-                削除
+                キャンセル
               </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Terminal-style footer */}
-      <div className="text-center text-text-muted text-xs font-mono py-4">
-        <span className="text-hn-accent">$</span> config --tenant=
-        {settings.tenantName || 'default'}
-      </div>
-    </div>
+              <Button
+                variant="primary"
+                onClick={handleRegenerateApiKey}
+                loading={regenerating}
+              >
+                再生成
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Box variant="p">
+          現在の API キーは無効になります。この操作を実行してもよろしいですか？
+        </Box>
+      </Modal>
+      <Modal
+        visible={deleteModalVisible}
+        onDismiss={() => {
+          setDeleteModalVisible(false);
+          setDeleteConfirmation('');
+          setDeleteError('');
+        }}
+        header="全データの削除"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => {
+                  setDeleteModalVisible(false);
+                  setDeleteConfirmation('');
+                  setDeleteError('');
+                }}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleDeleteAllData}
+                loading={deleting}
+                disabled={deleteConfirmation !== 'DELETE'}
+              >
+                削除を実行
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          {deleteError && <Alert type="error">{deleteError}</Alert>}
+          <Box variant="p">
+            この操作はすべてのデータを完全に削除します。元に戻すことはできません。
+          </Box>
+          <FormField label="確認のため「DELETE」と入力してください">
+            <Input
+              value={deleteConfirmation}
+              onChange={({ detail }) => setDeleteConfirmation(detail.value)}
+              placeholder="DELETE"
+            />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+    </SpaceBetween>
   );
 }
