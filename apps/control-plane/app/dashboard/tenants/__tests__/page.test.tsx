@@ -12,6 +12,66 @@ vi.mock('@/lib/api/tenant-api', () => ({
   },
 }));
 
+// Cloudscape コンポーネントのモック
+vi.mock('@cloudscape-design/components/box', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/button', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <button type="button">{children}</button>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/column-layout', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/container', () => ({
+  default: ({
+    children,
+    header,
+  }: {
+    children?: React.ReactNode;
+    header?: React.ReactNode;
+  }) => (
+    <div>
+      {header}
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/header', () => ({
+  default: ({
+    children,
+    description,
+    actions,
+  }: {
+    children?: React.ReactNode;
+    description?: React.ReactNode;
+    actions?: React.ReactNode;
+  }) => (
+    <div>
+      {children}
+      {description ? <p>{description}</p> : null}
+      {actions}
+    </div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/space-between', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/global-styles/index.css', () => ({}));
+
 const mockTenants: Tenant[] = [
   {
     id: '1',

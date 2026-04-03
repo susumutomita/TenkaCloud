@@ -18,6 +18,8 @@
     "format_check": "biome format --diagnostic-level=error"
   },
   "dependencies": {
+    "@cloudscape-design/components": "^3.0.1265",
+    "@cloudscape-design/global-styles": "^1.0.56",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
     "class-variance-authority": "^0.7.1",

@@ -15,26 +15,46 @@ import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getActiveDefense, purchaseHint, reportFix } from '@/lib/api/gameday';
 import type { AttackLog } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
+import { useNotifications } from '@/lib/notifications';
 
 export default function DefensePage() {
   const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
+  const { addNotification } = useNotifications();
   const [attacks, setAttacks] = useState<AttackLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [hints, setHints] = useState<Record<string, string>>({});
   const [hintLoading, setHintLoading] = useState<Record<string, boolean>>({});
   const [fixLoading, setFixLoading] = useState<Record<string, boolean>>({});
+  const previousAttackIdsRef = useRef<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     if (!eventId || !teamId) return;
     try {
       const data = await getActiveDefense(eventId, teamId);
+      const activeAttacks = data.attacks.filter((a) => !a.neutralized);
+      for (const attack of activeAttacks) {
+        if (
+          !previousAttackIdsRef.current.has(attack.attackId) &&
+          previousAttackIdsRef.current.size > 0
+        ) {
+          addNotification({
+            type: 'attack_received',
+            title: '攻撃を受けています',
+            message: `${attack.attackerTeamId} から ${attack.attackSlug} 攻撃を受けました`,
+            severity: 'error',
+          });
+        }
+      }
+      previousAttackIdsRef.current = new Set(
+        activeAttacks.map((a) => a.attackId),
+      );
       setAttacks(data.attacks);
       setError(null);
     } catch (err) {
@@ -44,7 +64,7 @@ export default function DefensePage() {
     } finally {
       setLoading(false);
     }
-  }, [eventId, teamId]);
+  }, [eventId, teamId, addNotification]);
 
   useEffect(() => {
     fetchData();
