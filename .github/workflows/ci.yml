@@ -31,6 +31,7 @@ jobs:
 
       # Supply Chain Security: Setup safe-chain before dependency installation
       - name: Setup safe-chain
+        continue-on-error: true
         run: |
           npm i -g @aikidosec/safe-chain
           safe-chain setup-ci

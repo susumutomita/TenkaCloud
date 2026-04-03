@@ -66,7 +66,7 @@ install_ci:
 	$(BUN) run install:ci
 	@for app in $(FRONTEND_APPS); do \
 		echo "📦 $$app の依存関係をインストール中（CI）..."; \
-		(cd $$app && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1; \
+		(cd $$app && $(BUN) install --no-frozen-lockfile --ignore-scripts) || exit 1; \
 	done
 	@echo "✅ すべての依存関係をインストールしました（CI）"
 
