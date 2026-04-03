@@ -37,6 +37,89 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
+// Cloudscape コンポーネントのモック
+vi.mock('@cloudscape-design/components/box', () => ({
+  default: ({
+    children,
+    ...props
+  }: {
+    children?: React.ReactNode;
+    variant?: string;
+    color?: string;
+    fontSize?: string;
+    textAlign?: string;
+  }) => <div data-variant={props.variant}>{children}</div>,
+}));
+
+vi.mock('@cloudscape-design/components/button', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <button type="button">{children}</button>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/column-layout', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/container', () => ({
+  default: ({
+    children,
+    header,
+  }: {
+    children?: React.ReactNode;
+    header?: React.ReactNode;
+  }) => (
+    <div>
+      {header}
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/header', () => ({
+  default: ({
+    children,
+    description,
+    info,
+  }: {
+    children?: React.ReactNode;
+    description?: React.ReactNode;
+    info?: React.ReactNode;
+  }) => (
+    <div>
+      {children}
+      {description ? <p>{description}</p> : null}
+      {info}
+    </div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/link', () => ({
+  default: ({
+    children,
+    href,
+  }: {
+    children?: React.ReactNode;
+    href?: string;
+  }) => <a href={href}>{children}</a>,
+}));
+
+vi.mock('@cloudscape-design/components/space-between', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/status-indicator', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+}));
+
+vi.mock('@cloudscape-design/global-styles/index.css', () => ({}));
+
 // getSession を正しい型でモック
 const mockedGetSession = getSession as unknown as Mock<
   () => Promise<Session | null>

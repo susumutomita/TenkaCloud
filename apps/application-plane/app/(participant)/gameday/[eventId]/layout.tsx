@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getParticipantGameStatus, getTeamDashboard } from '@/lib/api/gameday';
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
+import { NotificationPanel } from '@/components/notifications/notification-panel';
 import { useI18n } from '@/lib/i18n';
 
 interface GamedayLayoutProps {
@@ -127,7 +128,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
 
   return (
     <div className="awsui-dark-mode">
-      <div id="gameday-top-nav">
+      <div id="gameday-top-nav" style={{ position: 'relative' }}>
         <TopNavigation
           identity={{
             href: basePath,
@@ -197,6 +198,17 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
             overflowMenuTitleText: locale === 'ja' ? 'すべて' : 'All',
           }}
         />
+        <div
+          style={{
+            position: 'absolute',
+            right: '200px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            zIndex: 1000,
+          }}
+        >
+          <NotificationPanel />
+        </div>
       </div>
       <AppLayout
         navigation={

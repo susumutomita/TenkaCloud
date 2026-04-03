@@ -1,13 +1,18 @@
+/**
+ * Tenants Page
+ *
+ * Cloudscape Design System — Container + ColumnLayout + TenantList
+ */
+
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import '@cloudscape-design/global-styles/index.css';
 import Link from 'next/link';
 import { TenantList } from '@/components/tenants/tenant-list';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { tenantApi } from '@/lib/api/tenant-api';
 
 export const dynamic = 'force-dynamic';
@@ -22,67 +27,57 @@ export default async function TenantsPage() {
   const enterpriseCount = tenants.filter((t) => t.tier === 'ENTERPRISE').length;
 
   return (
-    <div className="space-y-8 p-8">
-      {/* Header Section */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              Control Plane
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight">テナント管理</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              テナントの作成・管理を行います。
-            </p>
-          </div>
-          <div className="flex gap-3">
+    <SpaceBetween size="l">
+      <Header
+        variant="h1"
+        description="テナントの作成・管理を行います。"
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
             <Link href="/dashboard/tenants/new">
-              <Button>新規テナントを作成</Button>
+              <Button variant="primary">新規テナントを作成</Button>
             </Link>
             <a
               href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/tenant-management-integration.md"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button variant="outline">設計ドキュメント</Button>
+              <Button>設計ドキュメント</Button>
             </a>
-          </div>
-        </div>
-      </div>
+          </SpaceBetween>
+        }
+      >
+        <Box variant="small" color="text-body-secondary">
+          Control Plane
+        </Box>
+        テナント管理
+      </Header>
 
-      {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <ColumnLayout columns={4} variant="text-grid">
         {[
           { label: '総テナント', value: total },
           { label: '稼働中', value: activeCount },
           { label: '一時停止', value: suspendedCount },
           { label: 'Enterprise', value: enterpriseCount },
         ].map((item) => (
-          <Card key={item.label}>
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs uppercase tracking-wide">
-                {item.label}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{item.value}</div>
-            </CardContent>
-          </Card>
+          <Container key={item.label}>
+            <Box variant="awsui-key-label">{item.label}</Box>
+            <Box variant="awsui-value-large">{item.value}</Box>
+          </Container>
         ))}
-      </div>
+      </ColumnLayout>
 
-      {/* Tenants Table with Search/Filter */}
-      <Card>
-        <CardHeader>
-          <CardTitle>テナント一覧</CardTitle>
-          <CardDescription>
-            テナントの検索・フィルタリングができます
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <TenantList tenants={tenants} />
-        </CardContent>
-      </Card>
-    </div>
+      <Container
+        header={
+          <Header
+            variant="h2"
+            description="テナントの検索・フィルタリングができます"
+          >
+            テナント一覧
+          </Header>
+        }
+      >
+        <TenantList tenants={tenants} />
+      </Container>
+    </SpaceBetween>
   );
 }

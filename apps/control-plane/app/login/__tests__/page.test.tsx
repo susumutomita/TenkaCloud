@@ -7,6 +7,51 @@ vi.mock('../actions', () => ({
   loginWithAuth0: vi.fn(),
 }));
 
+// Cloudscape コンポーネントのモック
+vi.mock('@cloudscape-design/components/box', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/container', () => ({
+  default: ({
+    children,
+    header,
+  }: {
+    children?: React.ReactNode;
+    header?: React.ReactNode;
+  }) => (
+    <div>
+      {header}
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/header', () => ({
+  default: ({
+    children,
+    description,
+  }: {
+    children?: React.ReactNode;
+    description?: React.ReactNode;
+  }) => (
+    <div>
+      <h1>{children}</h1>
+      {description ? <p>{description}</p> : null}
+    </div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/space-between', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/global-styles/index.css', () => ({}));
+
 describe('LoginPage コンポーネント', () => {
   it('タイトルを表示すべき', () => {
     render(<LoginPage />);

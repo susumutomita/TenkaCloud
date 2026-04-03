@@ -1,15 +1,21 @@
-import Link from 'next/link';
+/**
+ * Dashboard Page
+ *
+ * Cloudscape Design System — Container + ColumnLayout
+ */
+
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import Link from '@cloudscape-design/components/link';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import '@cloudscape-design/global-styles/index.css';
+import NextLink from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/auth';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { fetchActivities } from '@/lib/api/activities-api';
 import { fetchDashboardStats, type DashboardStats } from '@/lib/api/stats-api';
 import type { Activity } from '@/types/activity';
@@ -83,117 +89,99 @@ export default async function DashboardPage() {
   const [stats, activities] = await Promise.all([getStats(), getActivities()]);
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">ダッシュボード</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          ようこそ、{session.user.name || session.user.email} さん
-        </p>
-      </div>
+    <SpaceBetween size="l">
+      <Header
+        variant="h1"
+        description={`ようこそ、${session.user.name || session.user.email} さん`}
+      >
+        ダッシュボード
+      </Header>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              アクティブテナント
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats?.activeTenants ?? '-'}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              現在稼働中のテナント数
-            </p>
-          </CardContent>
-        </Card>
+      <ColumnLayout columns={3} variant="text-grid">
+        <Container header={<Header variant="h3">アクティブテナント</Header>}>
+          <Box variant="awsui-key-label">現在稼働中のテナント数</Box>
+          <Box variant="awsui-value-large">{stats?.activeTenants ?? '-'}</Box>
+        </Container>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              システムステータス
-            </CardTitle>
-            <Badge
-              variant={
-                stats?.systemStatus === 'healthy' ? 'success' : 'destructive'
+        <Container
+          header={
+            <Header
+              variant="h3"
+              info={
+                stats?.systemStatus === 'healthy' ? (
+                  <StatusIndicator type="success">正常</StatusIndicator>
+                ) : (
+                  <StatusIndicator type="error">異常</StatusIndicator>
+                )
               }
             >
-              {stats?.systemStatus === 'healthy' ? '正常' : '異常'}
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats?.uptimePercentage ?? '-'}%
-            </div>
-            <p className="text-xs text-muted-foreground">稼働率</p>
-          </CardContent>
-        </Card>
+              システムステータス
+            </Header>
+          }
+        >
+          <Box variant="awsui-key-label">稼働率</Box>
+          <Box variant="awsui-value-large">
+            {stats?.uptimePercentage ?? '-'}%
+          </Box>
+        </Container>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">総テナント数</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats?.totalTenants ?? '-'}
-            </div>
-            <p className="text-xs text-muted-foreground">登録済みテナント</p>
-          </CardContent>
-        </Card>
-      </div>
+        <Container header={<Header variant="h3">総テナント数</Header>}>
+          <Box variant="awsui-key-label">登録済みテナント</Box>
+          <Box variant="awsui-value-large">{stats?.totalTenants ?? '-'}</Box>
+        </Container>
+      </ColumnLayout>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>クイックアクション</CardTitle>
-          <CardDescription>よく使う操作</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <Link href="/dashboard/tenants">
-            <Button variant="outline" className="w-full">
-              テナント管理
-            </Button>
-          </Link>
-          <Link href="/dashboard/tenants/new">
-            <Button variant="outline" className="w-full">
-              新規テナント作成
-            </Button>
-          </Link>
-        </CardContent>
-      </Card>
+      <Container
+        header={
+          <Header variant="h2" description="よく使う操作">
+            クイックアクション
+          </Header>
+        }
+      >
+        <SpaceBetween direction="horizontal" size="l">
+          <NextLink href="/dashboard/tenants">
+            <Button>テナント管理</Button>
+          </NextLink>
+          <NextLink href="/dashboard/tenants/new">
+            <Button>新規テナント作成</Button>
+          </NextLink>
+        </SpaceBetween>
+      </Container>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>最近のアクティビティ</CardTitle>
-          <CardDescription>直近のシステムイベント</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activities.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              アクティビティはありません
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {activities.map((activity) => (
-                <li
-                  key={activity.id}
-                  className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0"
-                >
-                  <span className="text-sm">
-                    {formatActivityMessage(activity)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatRelativeTime(activity.timestamp)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <Container
+        header={
+          <Header variant="h2" description="直近のシステムイベント">
+            最近のアクティビティ
+          </Header>
+        }
+      >
+        {activities.length === 0 ? (
+          <Box textAlign="center" color="text-body-secondary">
+            アクティビティはありません
+          </Box>
+        ) : (
+          <SpaceBetween size="xs">
+            {activities.map((activity) => (
+              <div
+                key={activity.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '8px 0',
+                  borderBottom:
+                    '1px solid var(--color-border-divider-default, #e9ebed)',
+                }}
+              >
+                <Box>{formatActivityMessage(activity)}</Box>
+                <Box color="text-body-secondary" fontSize="body-s">
+                  {formatRelativeTime(activity.timestamp)}
+                </Box>
+              </div>
+            ))}
+          </SpaceBetween>
+        )}
+      </Container>
+    </SpaceBetween>
   );
 }

@@ -33,6 +33,7 @@ import { useMemo } from 'react';
 import { SessionProvider, SessionContext } from 'next-auth/react';
 import type { Session } from 'next-auth';
 import type { ReactNode } from 'react';
+import { NotificationProvider } from '@/lib/notifications';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -74,9 +75,15 @@ function AuthSkipProvider({
 export function Providers({ children, session, authSkip }: ProvidersProps) {
   if (authSkip) {
     return (
-      <AuthSkipProvider session={session ?? null}>{children}</AuthSkipProvider>
+      <AuthSkipProvider session={session ?? null}>
+        <NotificationProvider>{children}</NotificationProvider>
+      </AuthSkipProvider>
     );
   }
 
-  return <SessionProvider session={session}>{children}</SessionProvider>;
+  return (
+    <SessionProvider session={session}>
+      <NotificationProvider>{children}</NotificationProvider>
+    </SessionProvider>
+  );
 }
