@@ -322,6 +322,12 @@ interface I18nContextValue {
   t: (key: string) => string;
 }
 
+const defaultI18nContext: I18nContextValue = {
+  locale: 'en',
+  setLocale: () => {},
+  t: (key: string) => resolveMessage('en', key),
+};
+
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 function resolveMessage(locale: Locale, key: string): string {
@@ -392,8 +398,5 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
 export function useI18n() {
   const context = useContext(I18nContext);
-  if (!context) {
-    throw new Error('useI18n must be used within I18nProvider');
-  }
-  return context;
+  return context ?? defaultI18nContext;
 }
