@@ -17,10 +17,12 @@ import CloudscapeSpaceBetween from '@cloudscape-design/components/space-between'
 import CloudscapeSpinner from '@cloudscape-design/components/spinner';
 import { useEffect, useState } from 'react';
 import { Header } from '../../components/layout';
+import { useI18n } from '../../lib/i18n';
 import { getMyProfile } from '../../lib/api/profile';
 import type { ParticipantProfile } from '../../lib/api/types';
 
 export default function ProfilePage() {
+  const { t } = useI18n();
   const [profile, setProfile] = useState<ParticipantProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,9 @@ export default function ProfilePage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="awsui-dark-mode">
           <CloudscapeSpaceBetween size="l">
-            <CloudscapeHeader variant="h1">プロフィール</CloudscapeHeader>
+            <CloudscapeHeader variant="h1">
+              {t('profile.title')}
+            </CloudscapeHeader>
 
             {loading && (
               <CloudscapeBox textAlign="center" padding="xl">
@@ -66,17 +70,22 @@ export default function ProfilePage() {
                   <CloudscapeKeyValuePairs
                     columns={2}
                     items={[
-                      { label: 'メールアドレス', value: profile?.email ?? '-' },
                       {
-                        label: '現在の順位',
-                        value: profile?.rank ? `${profile.rank}位` : '-',
+                        label: t('profile.email'),
+                        value: profile?.email ?? '-',
                       },
                       {
-                        label: '参加イベント数',
+                        label: t('profile.rank'),
+                        value: profile?.rank
+                          ? `${profile.rank}${t('profile.rankSuffix')}`
+                          : '-',
+                      },
+                      {
+                        label: t('profile.eventsParticipated'),
                         value: String(profile?.totalEventsParticipated ?? 0),
                       },
                       {
-                        label: '合計スコア',
+                        label: t('profile.totalScore'),
                         value: `${(profile?.totalScore ?? 0).toLocaleString()} pts`,
                       },
                     ]}
@@ -85,7 +94,9 @@ export default function ProfilePage() {
 
                 <CloudscapeContainer
                   header={
-                    <CloudscapeHeader variant="h2">メニュー</CloudscapeHeader>
+                    <CloudscapeHeader variant="h2">
+                      {t('profile.menu')}
+                    </CloudscapeHeader>
                   }
                 >
                   <CloudscapeColumnLayout columns={2}>
@@ -93,10 +104,10 @@ export default function ProfilePage() {
                       href="/profile/history"
                       fontSize="heading-s"
                     >
-                      参加履歴
+                      {t('profile.history')}
                     </CloudscapeLink>
                     <CloudscapeLink href="/profile/badges" fontSize="heading-s">
-                      バッジ
+                      {t('profile.badges')}
                     </CloudscapeLink>
                   </CloudscapeColumnLayout>
                 </CloudscapeContainer>
