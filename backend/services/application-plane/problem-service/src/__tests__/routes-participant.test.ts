@@ -8,12 +8,20 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Hono } from 'hono';
 
 // vi.hoisted でモックを作成（ホイスティングされても参照可能）
-const { mockEventRepository, mockPrisma } = vi.hoisted(() => ({
+const {
+  mockEventRepository,
+  mockPrisma,
+  mockOpenClue,
+  mockValidateAnswer,
+  mockGetChallengeDetail,
+} = vi.hoisted(() => ({
   mockEventRepository: {
     findByTenant: vi.fn().mockResolvedValue([]),
     findAll: vi.fn().mockResolvedValue([]),
     findById: vi.fn().mockResolvedValue(null),
     count: vi.fn().mockResolvedValue(0),
+    isParticipantRegistered: vi.fn().mockResolvedValue(false),
+    registerParticipant: vi.fn().mockResolvedValue(undefined),
   },
   mockPrisma: {
     challenge: {
@@ -22,7 +30,23 @@ const { mockEventRepository, mockPrisma } = vi.hoisted(() => ({
     answer: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    teamChallengeAnswer: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
   },
+  mockOpenClue: vi.fn().mockResolvedValue({
+    success: true,
+    message: 'Clue opened successfully',
+  }),
+  mockValidateAnswer: vi.fn().mockResolvedValue({
+    success: true,
+    correct: true,
+    message: 'Answer correct!',
+  }),
+  mockGetChallengeDetail: vi.fn().mockResolvedValue({
+    success: false,
+    error: 'Not found',
+  }),
 }));
 
 // 依存関係をモック
@@ -38,18 +62,25 @@ vi.mock('../auth', () => ({
 }));
 
 vi.mock('../repositories', () => ({
-  PrismaEventRepository: class {
-    findByTenant = mockEventRepository.findByTenant;
-    findAll = mockEventRepository.findAll;
-    findById = mockEventRepository.findById;
-    count = mockEventRepository.count;
-  },
+  PrismaEventRepository: vi.fn().mockImplementation(() => mockEventRepository),
+  PrismaProblemRepository: vi.fn().mockImplementation(() => ({
+    findById: vi.fn().mockResolvedValue(null),
+  })),
   getEventWithProblems: vi.fn().mockResolvedValue(null),
   prisma: mockPrisma,
 }));
 
 vi.mock('../jam/dashboard', () => ({
   getLeaderboard: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../jam/challenge', () => ({
+  getChallengeDetail: (...args: unknown[]) => mockGetChallengeDetail(...args),
+}));
+
+vi.mock('../jam/scoring', () => ({
+  openClue: (...args: unknown[]) => mockOpenClue(...args),
+  validateAnswer: (...args: unknown[]) => mockValidateAnswer(...args),
 }));
 
 import { authenticateRequest, hasRole } from '../auth';
@@ -161,8 +192,7 @@ describe('Participant Routes', () => {
 
     it('テナントが異なる場合は 404 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'other-tenant',
+        event: { id: 'event-1', tenantId: 'other-tenant' },
         problems: [],
       });
 
@@ -172,38 +202,27 @@ describe('Participant Routes', () => {
 
     it('イベント詳細を取得できるべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        name: 'Test Event',
-        type: 'JAM',
-        status: 'ACTIVE',
-        startTime: new Date('2025-01-01'),
-        endTime: new Date('2025-01-02'),
-        timezone: 'Asia/Tokyo',
-        participantType: 'TEAM',
-        cloudProvider: 'AWS',
-        regions: ['ap-northeast-1'],
-        scoringType: 'REALTIME',
-        leaderboardVisible: true,
+        event: {
+          id: 'event-1',
+          tenantId: 'tenant-1',
+          name: 'Test Event',
+          type: 'JAM',
+          status: 'ACTIVE',
+          startTime: new Date('2025-01-01'),
+          endTime: new Date('2025-01-02'),
+          timezone: 'Asia/Tokyo',
+          participantType: 'TEAM',
+          cloudProvider: 'AWS',
+          regions: ['ap-northeast-1'],
+          scoringType: 'REALTIME',
+          leaderboardVisible: true,
+        },
         problems: [
           {
             problemId: 'problem-1',
             order: 1,
             unlockTime: null,
             pointMultiplier: 1,
-            problem: {
-              id: 'problem-1',
-              title: 'Test Problem',
-              type: 'JAM',
-              category: 'SECURITY',
-              difficulty: 'MEDIUM',
-              overview: 'Overview',
-              objectives: ['Objective 1'],
-              criteria: [
-                { name: 'Criteria', maxPoints: 100, description: 'Desc' },
-              ],
-              estimatedTimeMinutes: 60,
-            },
           },
         ],
       });
@@ -466,9 +485,7 @@ describe('Participant Routes', () => {
 
     it('チャレンジが見つからない場合は 404 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        status: 'ACTIVE',
+        event: { id: 'event-1', tenantId: 'tenant-1', status: 'ACTIVE' },
         problems: [],
       });
 
@@ -480,23 +497,11 @@ describe('Participant Routes', () => {
 
     it('ロック中のチャレンジは 403 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        status: 'ACTIVE',
+        event: { id: 'event-1', tenantId: 'tenant-1', status: 'ACTIVE' },
         problems: [
           {
             problemId: 'challenge-1',
             unlockTime: new Date(Date.now() + 86400000), // 明日
-            problem: {
-              id: 'challenge-1',
-              title: 'Test',
-              type: 'JAM',
-              category: 'SECURITY',
-              difficulty: 'MEDIUM',
-              overview: '',
-              objectives: [],
-              criteria: [],
-            },
           },
         ],
       });
@@ -509,23 +514,11 @@ describe('Participant Routes', () => {
 
     it('イベントがアクティブでない場合は 403 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        status: 'DRAFT',
+        event: { id: 'event-1', tenantId: 'tenant-1', status: 'DRAFT' },
         problems: [
           {
             problemId: 'challenge-1',
             unlockTime: null,
-            problem: {
-              id: 'challenge-1',
-              title: 'Test',
-              type: 'JAM',
-              category: 'SECURITY',
-              difficulty: 'MEDIUM',
-              overview: '',
-              objectives: [],
-              criteria: [],
-            },
           },
         ],
       });
@@ -538,33 +531,17 @@ describe('Participant Routes', () => {
 
     it('チャレンジ詳細を取得できるべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        status: 'ACTIVE',
+        event: {
+          id: 'event-1',
+          tenantId: 'tenant-1',
+          status: 'ACTIVE',
+        },
         problems: [
           {
             problemId: 'challenge-1',
             unlockTime: null,
             order: 1,
             pointMultiplier: 1.5,
-            problem: {
-              id: 'challenge-1',
-              title: 'Test Challenge',
-              type: 'JAM',
-              category: 'SECURITY',
-              difficulty: 'MEDIUM',
-              overview: 'Overview text',
-              objectives: ['Objective 1'],
-              criteria: [
-                {
-                  name: 'Criteria 1',
-                  maxPoints: 100,
-                  description: 'Description',
-                },
-              ],
-              hints: ['Hint 1'],
-              estimatedTimeMinutes: 30,
-            },
           },
         ],
       });
@@ -575,7 +552,6 @@ describe('Participant Routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.id).toBe('challenge-1');
-      expect(body.title).toBe('Test Challenge');
     });
   });
 
@@ -583,16 +559,23 @@ describe('Participant Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+        user: {
+          id: 'user-1',
+          tenantId: 'tenant-1',
+          teamId: 'team-1',
+          roles: ['competitor'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
 
     it('JAM イベントでない場合は 400 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        type: 'GAMEDAY',
+        event: {
+          id: 'event-1',
+          tenantId: 'tenant-1',
+          type: 'GAMEDAY',
+        },
         problems: [],
       });
 
@@ -602,27 +585,89 @@ describe('Participant Routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('JAM チャレンジ詳細を取得できるべき', async () => {
+    it('getChallengeDetail が成功した場合はJAMモジュールの結果を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        type: 'JAM',
+        event: {
+          id: 'event-1',
+          tenantId: 'tenant-1',
+          type: 'JAM',
+        },
         problems: [
           {
             problemId: 'challenge-1',
             unlockTime: null,
             order: 1,
             pointMultiplier: 1,
-            problem: {
-              id: 'challenge-1',
-              title: 'Test JAM Challenge',
-              type: 'JAM',
-              category: 'SECURITY',
-              difficulty: 'EASY',
-              overview: 'Overview',
-              objectives: [],
-              criteria: [],
+          },
+        ],
+      });
+      mockGetChallengeDetail.mockResolvedValue({
+        success: true,
+        challenge: {
+          title: 'JAM Challenge from DB',
+          category: 'SECURITY',
+          description: 'Detailed description',
+          region: 'ap-northeast-1',
+          sshKeyPairRequired: false,
+          taskScoring: 200,
+          completed: false,
+          score: 50,
+          tasks: [
+            {
+              taskId: 'task-1',
+              title: 'Task 1',
+              content: 'Do something',
+              taskNumber: 1,
+              locked: false,
+              completed: false,
+              usedClues: ['Clue hint 1'],
+              clues: [
+                { title: 'Clue 1', order: 0 },
+                { title: 'Clue 2', order: 1 },
+              ],
+              clue1PenaltyPoints: 10,
+              clue2PenaltyPoints: 20,
             },
+          ],
+        },
+      });
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/jam'
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.title).toBe('JAM Challenge from DB');
+      expect(body.maxScore).toBe(200);
+      expect(body.myScore).toBe(50);
+      expect(body.tasks).toHaveLength(1);
+      expect(body.clues).toHaveLength(2);
+      expect(body.clues[0].isRevealed).toBe(true);
+      expect(body.clues[1].isRevealed).toBe(false);
+      expect(mockGetChallengeDetail).toHaveBeenCalledWith(
+        'event-1',
+        'team-1',
+        'challenge-1'
+      );
+    });
+
+    it('getChallengeDetail が失敗した場合はフォールバックを返すべき', async () => {
+      mockGetChallengeDetail.mockResolvedValue({
+        success: false,
+        error: 'Not found',
+      });
+      vi.mocked(getEventWithProblems).mockResolvedValue({
+        event: {
+          id: 'event-1',
+          tenantId: 'tenant-1',
+          type: 'JAM',
+        },
+        problems: [
+          {
+            problemId: 'challenge-1',
+            unlockTime: null,
+            order: 1,
+            pointMultiplier: 1,
           },
         ],
       });
@@ -645,12 +690,10 @@ describe('Participant Routes', () => {
 
     it('未実装のため 501 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
+        event: { id: 'event-1', tenantId: 'tenant-1' },
         problems: [
           {
             problemId: 'challenge-1',
-            problem: { id: 'challenge-1' },
           },
         ],
       });
@@ -689,22 +732,87 @@ describe('Participant Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+        user: {
+          id: 'user-1',
+          tenantId: 'tenant-1',
+          teamId: 'team-1',
+          roles: ['competitor'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
 
     it('クルーを公開できるべき', async () => {
+      mockOpenClue.mockResolvedValue({
+        success: true,
+        message: 'Clue opened successfully',
+      });
+
       const res = await app.request(
-        '/api/participant/events/event-1/challenges/challenge-1/clues/clue-1/reveal',
+        '/api/participant/events/event-1/challenges/challenge-1/clues/task-1:0/reveal',
         {
           method: 'POST',
         }
       );
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.id).toBe('clue-1');
+      expect(body.id).toBe('task-1:0');
       expect(body.isRevealed).toBe(true);
+      expect(mockOpenClue).toHaveBeenCalledWith(
+        'event-1',
+        'team-1',
+        'challenge-1',
+        'task-1',
+        0
+      );
+    });
+
+    it('openClue が失敗した場合は 400 を返すべき', async () => {
+      mockOpenClue.mockResolvedValue({
+        success: false,
+        message: 'Clue already opened. Please reload.',
+      });
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/clues/task-1:0/reveal',
+        {
+          method: 'POST',
+        }
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('Clue already opened. Please reload.');
+    });
+
+    it('teamId がない場合は 400 を返すべき', async () => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+      });
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/clues/task-1:0/reveal',
+        {
+          method: 'POST',
+        }
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('Team membership required');
+    });
+
+    it('openClue がエラーをスローした場合は 500 を返すべき', async () => {
+      mockOpenClue.mockRejectedValue(new Error('Database error'));
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/clues/task-1:0/reveal',
+        {
+          method: 'POST',
+        }
+      );
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe('Failed to reveal clue');
     });
   });
 
@@ -734,13 +842,21 @@ describe('Participant Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+        user: {
+          id: 'user-1',
+          tenantId: 'tenant-1',
+          teamId: 'team-1',
+          roles: ['competitor'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
 
-    it('チャレンジが見つからない場合は 404 を返すべき', async () => {
-      mockPrisma.challenge.findFirst.mockResolvedValue(null);
+    it('teamId がない場合は 400 を返すべき', async () => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+      });
 
       const res = await app.request(
         '/api/participant/events/event-1/challenges/challenge-1/submit',
@@ -750,79 +866,48 @@ describe('Participant Routes', () => {
           body: JSON.stringify({ answer: 'test', titleId: 'task-1' }),
         }
       );
-      expect(res.status).toBe(404);
-    });
-
-    it('テナントが異なる場合は 404 を返すべき', async () => {
-      mockPrisma.challenge.findFirst.mockResolvedValue({
-        id: 'challenge-1',
-        event: { tenantId: 'other-tenant' },
-      } as any);
-
-      const res = await app.request(
-        '/api/participant/events/event-1/challenges/challenge-1/submit',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answer: 'test', titleId: 'task-1' }),
-        }
-      );
-      expect(res.status).toBe(404);
-    });
-
-    it('回答設定が見つからない場合は 404 を返すべき', async () => {
-      mockPrisma.challenge.findFirst.mockResolvedValue({
-        id: 'challenge-1',
-        event: { tenantId: 'tenant-1' },
-      } as any);
-      mockPrisma.answer.findUnique.mockResolvedValue(null);
-
-      const res = await app.request(
-        '/api/participant/events/event-1/challenges/challenge-1/submit',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answer: 'test', titleId: 'task-1' }),
-        }
-      );
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('Team membership required');
     });
 
     it('正しい回答を提出できるべき', async () => {
-      mockPrisma.challenge.findFirst.mockResolvedValue({
-        id: 'challenge-1',
-        event: { id: 'event-1', tenantId: 'tenant-1' },
-      } as any);
-      mockPrisma.answer.findUnique.mockResolvedValue({
-        challengeId: 'challenge-1',
-        titleId: 'task-1',
-        answerKey: 'correct answer',
-      } as any);
+      mockValidateAnswer.mockResolvedValue({
+        success: true,
+        correct: true,
+        message: 'Answer correct!',
+      });
 
       const res = await app.request(
         '/api/participant/events/event-1/challenges/challenge-1/submit',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answer: 'CORRECT ANSWER', titleId: 'task-1' }),
+          body: JSON.stringify({
+            answer: 'CORRECT ANSWER',
+            titleId: 'task-1',
+          }),
         }
       );
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.isCorrect).toBe(true);
       expect(body.score).toBe(100);
+      expect(mockValidateAnswer).toHaveBeenCalledWith(
+        'event-1',
+        'team-1',
+        'challenge-1',
+        'task-1',
+        'CORRECT ANSWER'
+      );
     });
 
     it('不正解を提出した場合はスコア 0 を返すべき', async () => {
-      mockPrisma.challenge.findFirst.mockResolvedValue({
-        id: 'challenge-1',
-        event: { id: 'event-1', tenantId: 'tenant-1' },
-      } as any);
-      mockPrisma.answer.findUnique.mockResolvedValue({
-        challengeId: 'challenge-1',
-        titleId: 'task-1',
-        answerKey: 'correct answer',
-      } as any);
+      mockValidateAnswer.mockResolvedValue({
+        success: true,
+        correct: false,
+        message: 'Incorrect answer',
+      });
 
       const res = await app.request(
         '/api/participant/events/event-1/challenges/challenge-1/submit',
@@ -836,6 +921,22 @@ describe('Participant Routes', () => {
       const body = await res.json();
       expect(body.isCorrect).toBe(false);
       expect(body.score).toBe(0);
+    });
+
+    it('validateAnswer がエラーをスローした場合は 500 を返すべき', async () => {
+      mockValidateAnswer.mockRejectedValue(new Error('Database error'));
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/submit',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answer: 'test', titleId: 'task-1' }),
+        }
+      );
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe('Failed to submit answer');
     });
   });
 
@@ -862,16 +963,77 @@ describe('Participant Routes', () => {
     beforeEach(() => {
       vi.mocked(authenticateRequest).mockResolvedValue({
         isValid: true,
-        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+        user: {
+          id: 'user-1',
+          tenantId: 'tenant-1',
+          teamId: 'team-1',
+          roles: ['competitor'],
+        },
       });
       vi.mocked(hasRole).mockReturnValue(true);
     });
 
     it('最新の提出がない場合は 404 を返すべき', async () => {
+      mockPrisma.challenge.findFirst.mockResolvedValue({ id: 'ch-1' });
+      mockPrisma.teamChallengeAnswer.findUnique.mockResolvedValue(null);
+
       const res = await app.request(
         '/api/participant/events/event-1/challenges/challenge-1/submissions/latest'
       );
       expect(res.status).toBe(404);
+    });
+
+    it('チャレンジが見つからない場合は 404 を返すべき', async () => {
+      mockPrisma.challenge.findFirst.mockResolvedValue(null);
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/submissions/latest'
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('最新の提出結果を取得できるべき', async () => {
+      mockPrisma.challenge.findFirst.mockResolvedValue({ id: 'ch-1' });
+      mockPrisma.teamChallengeAnswer.findUnique.mockResolvedValue({
+        teamId: 'team-1',
+        challengeId: 'ch-1',
+        completed: true,
+        score: 80,
+      });
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/submissions/latest'
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.score).toBe(80);
+      expect(body.isCorrect).toBe(true);
+      expect(body.status).toBe('completed');
+    });
+
+    it('teamId がない場合は 404 を返すべき', async () => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+      });
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/submissions/latest'
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('エラー時は 500 を返すべき', async () => {
+      mockPrisma.challenge.findFirst.mockRejectedValue(
+        new Error('Database error')
+      );
+
+      const res = await app.request(
+        '/api/participant/events/event-1/challenges/challenge-1/submissions/latest'
+      );
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe('Failed to fetch submission');
     });
   });
 
@@ -1191,9 +1353,7 @@ describe('Participant Routes', () => {
 
     it('GET /events/:eventId/challenges/:challengeId/jam - チャレンジが見つからない場合は 404 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
-        type: 'JAM',
+        event: { id: 'event-1', tenantId: 'tenant-1', type: 'JAM' },
         problems: [],
       });
 
@@ -1227,8 +1387,7 @@ describe('Participant Routes', () => {
 
     it('GET /events/:eventId/challenges/:challengeId/credentials - チャレンジが見つからない場合は 404 を返すべき', async () => {
       vi.mocked(getEventWithProblems).mockResolvedValue({
-        id: 'event-1',
-        tenantId: 'tenant-1',
+        event: { id: 'event-1', tenantId: 'tenant-1' },
         problems: [],
       });
 
@@ -1263,9 +1422,16 @@ describe('Participant Routes', () => {
     });
 
     it('POST /events/:eventId/challenges/:challengeId/submit - エラー時は 500 を返すべき', async () => {
-      mockPrisma.challenge.findFirst.mockRejectedValue(
-        new Error('Database error')
-      );
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: {
+          id: 'user-1',
+          tenantId: 'tenant-1',
+          teamId: 'team-1',
+          roles: ['competitor'],
+        },
+      });
+      mockValidateAnswer.mockRejectedValue(new Error('Database error'));
 
       const res = await app.request(
         '/api/participant/events/event-1/challenges/challenge-1/submit',
