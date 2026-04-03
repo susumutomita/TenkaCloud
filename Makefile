@@ -241,6 +241,7 @@ start-dev-servers: start-local
 	@echo "  - Tenant API:         http://localhost:13004/api/tenants"
 	@echo "  - Problem API:        http://localhost:3100/api"
 	@echo "  - GameDay API:        http://localhost:3020/api/gameday"
+	@echo "  - Realtime WS:        ws://localhost:3013/ws"
 	@echo "  - Cloud Emulator:     http://localhost:4566"
 	@echo ""
 	@echo "💡 終了するには Ctrl+C を押してください"
