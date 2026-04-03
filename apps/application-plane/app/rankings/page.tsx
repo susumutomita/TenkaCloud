@@ -1,7 +1,7 @@
 /**
  * Rankings Page
  *
- * グローバルランキングページ
+ * Cloudscape Design System — グローバルランキングページ
  */
 
 'use client';
@@ -74,16 +74,36 @@ export default function RankingsPage() {
   const totalParticipants = data?.total ?? 0;
   const topScore = rankings[0]?.totalScore;
 
-  const getRankIcon = (rank: number) => {
+  const getRankDisplay = (rank: number) => {
     switch (rank) {
       case 1:
-        return '🥇';
+        return (
+          <Box
+            fontSize="heading-l"
+            fontWeight="heavy"
+            color="text-status-warning"
+          >
+            🥇 1st
+          </Box>
+        );
       case 2:
-        return '🥈';
+        return (
+          <Box fontSize="heading-m" fontWeight="bold">
+            🥈 2nd
+          </Box>
+        );
       case 3:
-        return '🥉';
+        return (
+          <Box fontSize="heading-m" fontWeight="bold" color="text-status-info">
+            🥉 3rd
+          </Box>
+        );
       default:
-        return `#${rank}`;
+        return (
+          <Box fontWeight="bold" color="text-body-secondary">
+            #{rank}
+          </Box>
+        );
     }
   };
 
@@ -94,33 +114,28 @@ export default function RankingsPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="awsui-dark-mode">
           <SpaceBetween size="l">
-            {/* Page Header */}
-            <div>
-              <h1
-                style={{
-                  fontSize: '1.5rem',
-                  fontWeight: 700,
-                  margin: 0,
-                  color: 'var(--color-text-heading-default)',
-                }}
-              >
-                ランキング
-              </h1>
-              <Box variant="p" color="text-body-secondary">
-                クラウドエンジニアの頂点を目指せ
-              </Box>
-            </div>
-
             {/* My Rank Banner */}
             {data?.myRank && (
               <Container>
-                <StatusIndicator type="info">
-                  あなたの現在の順位:{' '}
-                  <Box variant="span" fontWeight="bold" fontSize="heading-m">
+                <SpaceBetween
+                  direction="horizontal"
+                  size="m"
+                  alignItems="center"
+                >
+                  <Box
+                    fontSize="display-l"
+                    fontWeight="heavy"
+                    color="text-status-info"
+                  >
                     {data.myRank}位
-                  </Box>{' '}
-                  / {data.total}人中
-                </StatusIndicator>
+                  </Box>
+                  <SpaceBetween size="xxs">
+                    <Box fontWeight="bold">あなたの現在の順位:</Box>
+                    <Box color="text-body-secondary">
+                      / {data.total}人中
+                    </Box>
+                  </SpaceBetween>
+                </SpaceBetween>
               </Container>
             )}
 
@@ -129,13 +144,17 @@ export default function RankingsPage() {
               <ColumnLayout columns={2}>
                 <Container
                   header={
-                    <CloudscapeHeader variant="h3">総参加者数</CloudscapeHeader>
+                    <CloudscapeHeader variant="h3">
+                      総参加者数
+                    </CloudscapeHeader>
                   }
                 >
                   {loading ? (
-                    <Spinner size="large" />
+                    <Box padding="s">
+                      <Spinner size="large" />
+                    </Box>
                   ) : (
-                    <Box variant="p" fontSize="heading-xl" fontWeight="bold">
+                    <Box fontSize="display-l" fontWeight="heavy">
                       {totalParticipants.toLocaleString()}
                     </Box>
                   )}
@@ -143,14 +162,20 @@ export default function RankingsPage() {
 
                 <Container
                   header={
-                    <CloudscapeHeader variant="h3">最高スコア</CloudscapeHeader>
+                    <CloudscapeHeader variant="h3">
+                      最高スコア
+                    </CloudscapeHeader>
                   }
                 >
                   {loading ? (
-                    <Spinner size="large" />
+                    <Box padding="s">
+                      <Spinner size="large" />
+                    </Box>
                   ) : (
-                    <Box variant="p" fontSize="heading-xl" fontWeight="bold">
-                      {topScore !== undefined ? topScore.toLocaleString() : '-'}
+                    <Box fontSize="display-l" fontWeight="heavy">
+                      {topScore !== undefined
+                        ? topScore.toLocaleString()
+                        : '-'}
                     </Box>
                   )}
                 </Container>
@@ -160,21 +185,31 @@ export default function RankingsPage() {
             {/* Error State */}
             {error && (
               <Container>
-                <SpaceBetween size="m" direction="vertical" alignItems="center">
-                  <StatusIndicator type="error">
-                    {getErrorMessage(error)}
-                  </StatusIndicator>
-                  <Button onClick={fetchRankings}>再試行</Button>
-                </SpaceBetween>
+                <Box textAlign="center" padding="xxl">
+                  <SpaceBetween size="l" alignItems="center">
+                    <Box fontSize="display-l">⚠️</Box>
+                    <StatusIndicator type="error">
+                      {getErrorMessage(error)}
+                    </StatusIndicator>
+                    <Button variant="primary" onClick={fetchRankings}>
+                      再試行
+                    </Button>
+                  </SpaceBetween>
+                </Box>
               </Container>
             )}
 
             {/* Rankings Table */}
             {!error && (
               <Table
+                variant="container"
                 header={
                   <CloudscapeHeader
-                    counter={`(${rankings.length})`}
+                    variant="h1"
+                    counter={
+                      !loading ? `(${rankings.length})` : undefined
+                    }
+                    description="クラウドエンジニアの頂点を目指せ"
                     actions={<Badge color="blue">Top 50</Badge>}
                   >
                     ランキング
@@ -184,14 +219,18 @@ export default function RankingsPage() {
                 loadingText="ランキングを読み込み中..."
                 items={rankings}
                 empty={
-                  <Box textAlign="center" padding="xl">
-                    <SpaceBetween size="s">
+                  <Box textAlign="center" padding="xxl">
+                    <SpaceBetween size="l" alignItems="center">
+                      <Box fontSize="display-l">🏆</Box>
                       <Box variant="h2" fontWeight="bold">
                         ランキングデータがありません
                       </Box>
                       <Box variant="p" color="text-body-secondary">
                         イベントに参加してランキングに載ろう！
                       </Box>
+                      <Button variant="primary" href="/events">
+                        イベントを探す
+                      </Button>
                     </SpaceBetween>
                   </Box>
                 }
@@ -199,15 +238,8 @@ export default function RankingsPage() {
                   {
                     id: 'rank',
                     header: '順位',
-                    width: 100,
-                    cell: (item) => (
-                      <Box
-                        fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
-                        fontWeight="bold"
-                      >
-                        {getRankIcon(item.rank)}
-                      </Box>
-                    ),
+                    width: 120,
+                    cell: (item) => getRankDisplay(item.rank),
                   },
                   {
                     id: 'name',
@@ -220,20 +252,30 @@ export default function RankingsPage() {
                       >
                         <div
                           style={{
-                            width: 32,
-                            height: 32,
+                            width: 36,
+                            height: 36,
                             borderRadius: '50%',
-                            background: 'var(--color-background-badge-icon)',
+                            background:
+                              item.rank === 1
+                                ? 'linear-gradient(135deg, #f0c674, #e0a030)'
+                                : item.rank === 2
+                                  ? 'linear-gradient(135deg, #c0c0c0, #a0a0a0)'
+                                  : item.rank === 3
+                                    ? 'linear-gradient(135deg, #cd7f32, #b06820)'
+                                    : 'var(--color-background-badge-icon, #414d5c)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 700,
                             fontSize: '0.875rem',
+                            color: '#fff',
                           }}
                         >
-                          {item.name.charAt(0)}
+                          {item.name.charAt(0).toUpperCase()}
                         </div>
-                        <Box fontWeight="bold">{item.name}</Box>
+                        <Box fontWeight="bold" fontSize="heading-s">
+                          {item.name}
+                        </Box>
                       </SpaceBetween>
                     ),
                   },
@@ -241,16 +283,24 @@ export default function RankingsPage() {
                     id: 'eventsParticipated',
                     header: '参加イベント',
                     width: 150,
-                    cell: (item) => item.eventsParticipated,
+                    cell: (item) => (
+                      <Badge
+                        color="blue"
+                      >{`${item.eventsParticipated}`}</Badge>
+                    ),
                   },
                   {
                     id: 'totalScore',
                     header: '合計スコア',
-                    width: 180,
+                    width: 200,
                     cell: (item) => (
-                      <Box fontWeight="bold" fontSize="heading-s">
+                      <Box fontWeight="bold" fontSize="heading-m">
                         {item.totalScore.toLocaleString()}
-                        <Box variant="span" color="text-body-secondary">
+                        <Box
+                          variant="span"
+                          color="text-body-secondary"
+                          fontSize="body-s"
+                        >
                           {' '}
                           pts
                         </Box>
