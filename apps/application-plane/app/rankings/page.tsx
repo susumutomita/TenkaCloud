@@ -12,6 +12,7 @@ import Button from '@cloudscape-design/components/button';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Container from '@cloudscape-design/components/container';
 import CloudscapeHeader from '@cloudscape-design/components/header';
+import Link from '@cloudscape-design/components/link';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
@@ -35,6 +36,45 @@ interface RankingData {
   total: number;
   myRank?: number;
 }
+
+const getRankIcon = (rank: number) => {
+  switch (rank) {
+    case 1:
+      return '\u{1F947}';
+    case 2:
+      return '\u{1F948}';
+    case 3:
+      return '\u{1F949}';
+    default:
+      return `#${rank}`;
+  }
+};
+
+const getRankColor = (rank: number) => {
+  switch (rank) {
+    case 1:
+      return 'linear-gradient(135deg, #FFD700, #FFA500)';
+    case 2:
+      return 'linear-gradient(135deg, #C0C0C0, #A0A0A0)';
+    case 3:
+      return 'linear-gradient(135deg, #CD7F32, #A0522D)';
+    default:
+      return 'linear-gradient(135deg, #6B7280, #4B5563)';
+  }
+};
+
+const getRankBoxColor = (rank: number) => {
+  switch (rank) {
+    case 1:
+      return '#FFF8E1';
+    case 2:
+      return '#F5F5F5';
+    case 3:
+      return '#FBE9E7';
+    default:
+      return undefined;
+  }
+};
 
 export default function RankingsPage() {
   const [loading, setLoading] = useState(true);
@@ -74,19 +114,6 @@ export default function RankingsPage() {
   const totalParticipants = data?.total ?? 0;
   const topScore = rankings[0]?.totalScore;
 
-  const getRankIcon = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return '🥇';
-      case 2:
-        return '🥈';
-      case 3:
-        return '🥉';
-      default:
-        return `#${rank}`;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-surface-0">
       <Header />
@@ -94,33 +121,28 @@ export default function RankingsPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="awsui-dark-mode">
           <SpaceBetween size="l">
-            {/* Page Header */}
-            <div>
-              <h1
-                style={{
-                  fontSize: '1.5rem',
-                  fontWeight: 700,
-                  margin: 0,
-                  color: 'var(--color-text-heading-default)',
-                }}
-              >
-                ランキング
-              </h1>
-              <Box variant="p" color="text-body-secondary">
-                クラウドエンジニアの頂点を目指せ
-              </Box>
-            </div>
-
             {/* My Rank Banner */}
             {data?.myRank && (
               <Container>
-                <StatusIndicator type="info">
-                  あなたの現在の順位:{' '}
-                  <Box variant="span" fontWeight="bold" fontSize="heading-m">
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                  }}
+                >
+                  <Box fontSize="display-l" fontWeight="heavy">
                     {data.myRank}位
-                  </Box>{' '}
-                  / {data.total}人中
-                </StatusIndicator>
+                  </Box>
+                  <div>
+                    <Box variant="p" color="text-body-secondary">
+                      あなたの現在の順位
+                    </Box>
+                    <Box variant="p" color="text-body-secondary">
+                      / {data.total}人中
+                    </Box>
+                  </div>
+                </div>
               </Container>
             )}
 
@@ -135,7 +157,7 @@ export default function RankingsPage() {
                   {loading ? (
                     <Spinner size="large" />
                   ) : (
-                    <Box variant="p" fontSize="heading-xl" fontWeight="bold">
+                    <Box variant="p" fontSize="display-l" fontWeight="heavy">
                       {totalParticipants.toLocaleString()}
                     </Box>
                   )}
@@ -149,7 +171,7 @@ export default function RankingsPage() {
                   {loading ? (
                     <Spinner size="large" />
                   ) : (
-                    <Box variant="p" fontSize="heading-xl" fontWeight="bold">
+                    <Box variant="p" fontSize="display-l" fontWeight="heavy">
                       {topScore !== undefined ? topScore.toLocaleString() : '-'}
                     </Box>
                   )}
@@ -174,6 +196,8 @@ export default function RankingsPage() {
               <Table
                 header={
                   <CloudscapeHeader
+                    variant="h1"
+                    description="クラウドエンジニアの頂点を目指せ"
                     counter={`(${rankings.length})`}
                     actions={<Badge color="blue">Top 50</Badge>}
                   >
@@ -186,12 +210,18 @@ export default function RankingsPage() {
                 empty={
                   <Box textAlign="center" padding="xl">
                     <SpaceBetween size="s">
+                      <Box variant="p" fontSize="heading-xl" fontWeight="bold">
+                        {'\u{1F3C6}'}
+                      </Box>
                       <Box variant="h2" fontWeight="bold">
                         ランキングデータがありません
                       </Box>
                       <Box variant="p" color="text-body-secondary">
                         イベントに参加してランキングに載ろう！
                       </Box>
+                      <Button variant="primary" href="/events">
+                        イベントを探す
+                      </Button>
                     </SpaceBetween>
                   </Box>
                 }
@@ -200,14 +230,30 @@ export default function RankingsPage() {
                     id: 'rank',
                     header: '順位',
                     width: 100,
-                    cell: (item) => (
-                      <Box
-                        fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
-                        fontWeight="bold"
-                      >
-                        {getRankIcon(item.rank)}
-                      </Box>
-                    ),
+                    cell: (item) => {
+                      const bgColor = getRankBoxColor(item.rank);
+                      return (
+                        <Box
+                          fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
+                          fontWeight="bold"
+                        >
+                          {bgColor ? (
+                            <span
+                              style={{
+                                background: bgColor,
+                                padding: '4px 12px',
+                                borderRadius: '8px',
+                                display: 'inline-block',
+                              }}
+                            >
+                              {getRankIcon(item.rank)}
+                            </span>
+                          ) : (
+                            getRankIcon(item.rank)
+                          )}
+                        </Box>
+                      );
+                    },
                   },
                   {
                     id: 'name',
@@ -220,15 +266,16 @@ export default function RankingsPage() {
                       >
                         <div
                           style={{
-                            width: 32,
-                            height: 32,
+                            width: 36,
+                            height: 36,
                             borderRadius: '50%',
-                            background: 'var(--color-background-badge-icon)',
+                            background: getRankColor(item.rank),
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 700,
                             fontSize: '0.875rem',
+                            color: '#FFFFFF',
                           }}
                         >
                           {item.name.charAt(0)}
@@ -241,7 +288,11 @@ export default function RankingsPage() {
                     id: 'eventsParticipated',
                     header: '参加イベント',
                     width: 150,
-                    cell: (item) => item.eventsParticipated,
+                    cell: (item) => (
+                      <Badge color="blue">
+                        {`${item.eventsParticipated}回`}
+                      </Badge>
+                    ),
                   },
                   {
                     id: 'totalScore',

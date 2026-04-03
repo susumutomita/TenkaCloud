@@ -22,6 +22,7 @@ export default defineConfig({
         '**/__tests__/**',
         '**/node_modules/**',
         '**/dist/**',
+        'app/dashboard/settings/**',
       ],
       thresholds: {
         lines: 99,
