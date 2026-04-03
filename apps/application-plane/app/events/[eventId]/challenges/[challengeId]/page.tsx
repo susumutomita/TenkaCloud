@@ -2,24 +2,30 @@
  * Challenge Detail Page
  *
  * チャレンジ（問題）詳細ページ - GameDay / JAM 共通
+ * Cloudscape Design System を使用したリッチな問題表示
  */
 
 'use client';
 
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import CloudscapeButton from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import ExpandableSection from '@cloudscape-design/components/expandable-section';
+import CloudscapeHeader from '@cloudscape-design/components/header';
+import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
+import CloudscapeLink from '@cloudscape-design/components/link';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import Textarea from '@cloudscape-design/components/textarea';
+import '@cloudscape-design/global-styles/index.css';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Header } from '../../../../../components/layout';
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  DifficultyBadge,
-  ProblemTypeBadge,
-  ScoreProgress,
-} from '../../../../../components/ui';
 import {
   getAWSCredentials,
   getChallengeDetails,
@@ -39,6 +45,51 @@ import type {
   JamSubmission,
   Submission,
 } from '../../../../../lib/api/types';
+
+function getDifficultyColor(
+  difficulty: string,
+): 'blue' | 'green' | 'red' | 'grey' {
+  switch (difficulty) {
+    case 'easy':
+      return 'green';
+    case 'medium':
+      return 'blue';
+    case 'hard':
+      return 'red';
+    case 'expert':
+      return 'red';
+    default:
+      return 'grey';
+  }
+}
+
+function getDifficultyLabel(difficulty: string): string {
+  switch (difficulty) {
+    case 'easy':
+      return '初級';
+    case 'medium':
+      return '中級';
+    case 'hard':
+      return '上級';
+    case 'expert':
+      return 'エキスパート';
+    default:
+      return difficulty;
+  }
+}
+
+function getResourceTypeLabel(type: string): string {
+  switch (type) {
+    case 'video':
+      return '動画';
+    case 'document':
+      return 'ドキュメント';
+    case 'link':
+      return 'リンク';
+    default:
+      return type;
+  }
+}
 
 export default function ChallengeDetailPage() {
   const params = useParams();
@@ -180,8 +231,15 @@ export default function ChallengeDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '256px',
+          }}
+        >
+          <Spinner size="large" />
         </div>
       </div>
     );
@@ -191,15 +249,19 @@ export default function ChallengeDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card className="p-8 text-center">
-            <p className="text-red-600 mb-4">
-              {error || 'チャレンジが見つかりません'}
-            </p>
-            <Link href={`/events/${eventId}`}>
-              <Button>イベントに戻る</Button>
-            </Link>
-          </Card>
+        <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px' }}>
+          <Container>
+            <Box textAlign="center" padding="xl">
+              <SpaceBetween size="m">
+                <StatusIndicator type="error">
+                  {error || 'チャレンジが見つかりません'}
+                </StatusIndicator>
+                <Link href={`/events/${eventId}`}>
+                  <CloudscapeButton>イベントに戻る</CloudscapeButton>
+                </Link>
+              </SpaceBetween>
+            </Box>
+          </Container>
         </main>
       </div>
     );
@@ -207,403 +269,540 @@ export default function ChallengeDetailPage() {
 
   const jamChallenge = isJam ? (challenge as JamChallenge) : null;
 
+  const submissionStatusType = latestSubmission
+    ? latestSubmission.status === 'completed'
+      ? 'success'
+      : latestSubmission.status === 'failed'
+        ? 'error'
+        : latestSubmission.status === 'scoring'
+          ? 'in-progress'
+          : 'pending'
+    : undefined;
+
+  const submissionStatusLabel = latestSubmission
+    ? latestSubmission.status === 'completed'
+      ? '完了'
+      : latestSubmission.status === 'failed'
+        ? '失敗'
+        : latestSubmission.status === 'scoring'
+          ? '採点中'
+          : '待機中'
+    : undefined;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Breadcrumb */}
-        <nav className="mb-6">
-          <Link
-            href={`/events/${eventId}`}
-            className="text-blue-600 hover:text-blue-700"
-          >
-            ← イベントに戻る
+      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px' }}>
+        <SpaceBetween size="l">
+          {/* Breadcrumb */}
+          <Link href={`/events/${eventId}`}>
+            <CloudscapeLink>&larr; イベントに戻る</CloudscapeLink>
           </Link>
-        </nav>
 
-        {/* Challenge Header */}
-        <div className="mb-8">
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <ProblemTypeBadge type={challenge.type} />
-            <DifficultyBadge difficulty={challenge.difficulty} />
-            {challenge.isCompleted && <Badge variant="success">✓ 完了</Badge>}
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          {/* Page Header with Badges */}
+          <CloudscapeHeader
+            variant="h1"
+            info={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Badge color={getDifficultyColor(challenge.difficulty)}>
+                  {getDifficultyLabel(challenge.difficulty)}
+                </Badge>
+                {challenge.estimatedTimeMinutes && (
+                  <Badge color="blue">{challenge.estimatedTimeMinutes}分</Badge>
+                )}
+                {challenge.isCompleted && <Badge color="green">完了</Badge>}
+              </SpaceBetween>
+            }
+            description={challenge.overview}
+          >
             {challenge.title}
-          </h1>
-          <p className="text-gray-600">{challenge.overview}</p>
-        </div>
+          </CloudscapeHeader>
 
-        <div className="grid gap-8 lg:grid-cols-3">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Description */}
-            <Card>
-              <CardHeader>
-                <h2 className="text-xl font-semibold">問題詳細</h2>
-              </CardHeader>
-              <CardContent>
-                <div className="prose max-w-none">
-                  <p>{challenge.description}</p>
-                </div>
+          <ColumnLayout columns={3} variant="default">
+            {/* Main Content — spans 2 columns */}
+            <div style={{ gridColumn: 'span 2' }}>
+              <SpaceBetween size="l">
+                {/* Metadata */}
+                <Container
+                  header={
+                    <CloudscapeHeader variant="h2">基本情報</CloudscapeHeader>
+                  }
+                >
+                  <KeyValuePairs
+                    columns={3}
+                    items={[
+                      {
+                        label: 'タイプ',
+                        value: challenge.type === 'gameday' ? 'GameDay' : 'JAM',
+                      },
+                      {
+                        label: 'カテゴリ',
+                        value: challenge.category,
+                      },
+                      {
+                        label: '難易度',
+                        value: (
+                          <Badge
+                            color={getDifficultyColor(challenge.difficulty)}
+                          >
+                            {getDifficultyLabel(challenge.difficulty)}
+                          </Badge>
+                        ),
+                      },
+                      {
+                        label: '最大スコア',
+                        value: `${challenge.maxScore} pts`,
+                      },
+                      {
+                        label: '現在のスコア',
+                        value: `${challenge.myScore ?? 0} pts`,
+                      },
+                      ...(challenge.estimatedTimeMinutes
+                        ? [
+                            {
+                              label: '推定所要時間',
+                              value: `${challenge.estimatedTimeMinutes}分`,
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </Container>
+
+                {/* Description */}
+                <Container
+                  header={
+                    <CloudscapeHeader variant="h2">概要</CloudscapeHeader>
+                  }
+                >
+                  <Box variant="p">{challenge.description}</Box>
+                </Container>
 
                 {/* Objectives */}
-                <div className="mt-6">
-                  <h3 className="font-semibold mb-3">目標</h3>
-                  <ul className="space-y-2">
+                <Container
+                  header={
+                    <CloudscapeHeader variant="h2">目標</CloudscapeHeader>
+                  }
+                >
+                  <SpaceBetween size="s">
                     {challenge.objectives.map((obj, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="text-blue-600">●</span>
-                        <span>{obj}</span>
-                      </li>
+                      <Box key={i} variant="p">
+                        <StatusIndicator type="info">
+                          {i + 1}. {obj}
+                        </StatusIndicator>
+                      </Box>
                     ))}
-                  </ul>
-                </div>
+                  </SpaceBetween>
+                </Container>
 
                 {/* Instructions */}
                 {challenge.instructions.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="font-semibold mb-3">手順</h3>
-                    <ol className="list-decimal list-inside space-y-2 text-gray-700">
-                      {challenge.instructions.map((inst, i) => (
-                        <li key={i}>{inst}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* JAM: Clues Section */}
-            {isJam && jamChallenge && (
-              <Card>
-                <CardHeader>
-                  <h2 className="text-xl font-semibold">クルー（ヒント）</h2>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {jamChallenge.clues.map((clue: JamClue) => (
-                    <ClueCard
-                      key={clue.id}
-                      clue={clue}
-                      onReveal={() => handleRevealClue(clue.id)}
-                    />
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* GameDay: Hints Section */}
-            {!isJam && challenge.hints.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <h2 className="text-xl font-semibold">ヒント</h2>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {challenge.hints.map((hint: ChallengeHint) => (
-                    <HintCard
-                      key={hint.id}
-                      hint={hint}
-                      onReveal={() => handleRevealHint(hint.id)}
-                    />
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Scoring Criteria */}
-            <Card>
-              <CardHeader>
-                <h2 className="text-xl font-semibold">採点基準</h2>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {challenge.scoringCriteria.map((criterion, i) => (
-                    <div key={i} className="p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium">{criterion.name}</h4>
-                        <span className="font-semibold text-blue-600">
-                          {criterion.currentPoints ?? 0} / {criterion.maxPoints}{' '}
-                          pts
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        {criterion.description}
-                      </p>
-                      {criterion.isPassed !== undefined && (
-                        <div className="mt-2">
-                          {criterion.isPassed ? (
-                            <Badge variant="success" size="sm">
-                              ✓ 達成
-                            </Badge>
-                          ) : (
-                            <Badge variant="default" size="sm">
-                              未達成
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Resources */}
-            {challenge.resources.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <h2 className="text-xl font-semibold">参考資料</h2>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {challenge.resources.map((resource, i) => (
-                      <li key={i}>
-                        <a
-                          href={resource.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-2"
-                        >
-                          {resource.type === 'video' && '🎬'}
-                          {resource.type === 'document' && '📄'}
-                          {resource.type === 'link' && '🔗'}
-                          {resource.name}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Score Card */}
-            <Card>
-              <CardContent className="space-y-4">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-blue-600">
-                    {challenge.myScore ?? 0}
-                  </div>
-                  <div className="text-gray-500">
-                    / {challenge.maxScore} pts
-                  </div>
-                </div>
-
-                <ScoreProgress
-                  score={challenge.myScore ?? 0}
-                  maxScore={challenge.maxScore}
-                />
-
-                {/* GameDay: Request Scoring */}
-                {!isJam && (
-                  <Button
-                    onClick={handleRequestScoring}
-                    loading={scoring}
-                    fullWidth
-                    size="lg"
-                    disabled={scoring || latestSubmission?.status === 'scoring'}
+                  <Container
+                    header={
+                      <CloudscapeHeader variant="h2">手順</CloudscapeHeader>
+                    }
                   >
-                    {latestSubmission?.status === 'scoring'
-                      ? '採点中...'
-                      : '採点をリクエスト'}
-                  </Button>
+                    <SpaceBetween size="s">
+                      {challenge.instructions.map((inst, i) => (
+                        <Box key={i} variant="p">
+                          <Box variant="span" fontWeight="bold">
+                            ステップ {i + 1}:
+                          </Box>{' '}
+                          {inst}
+                        </Box>
+                      ))}
+                    </SpaceBetween>
+                  </Container>
                 )}
 
-                {/* JAM: Submit Answer */}
-                {isJam && (
-                  <div className="space-y-3">
-                    <textarea
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="回答を入力..."
-                      className="w-full p-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      rows={3}
-                    />
-                    <Button
-                      onClick={handleSubmitAnswer}
-                      loading={submitting}
-                      fullWidth
-                      size="lg"
-                      disabled={!answer.trim() || submitting}
+                {/* JAM: Clues Section */}
+                {isJam && jamChallenge && (
+                  <Container
+                    header={
+                      <CloudscapeHeader
+                        variant="h2"
+                        counter={`(${jamChallenge.clues.length})`}
+                      >
+                        クルー（ヒント）
+                      </CloudscapeHeader>
+                    }
+                  >
+                    <SpaceBetween size="m">
+                      {jamChallenge.clues.map((clue: JamClue) => (
+                        <ExpandableSection
+                          key={clue.id}
+                          variant="container"
+                          headerText={`クルー #${clue.order}: ${clue.title}`}
+                          headerInfo={
+                            clue.isRevealed ? (
+                              <Badge color="blue">公開済み</Badge>
+                            ) : (
+                              <Badge color="grey">未公開</Badge>
+                            )
+                          }
+                          headerDescription={`使用すると ${clue.costPoints} ポイント減点`}
+                        >
+                          {clue.isRevealed ? (
+                            <SpaceBetween size="s">
+                              <Box variant="p">{clue.content}</Box>
+                              <Box color="text-status-error" fontSize="body-s">
+                                -{clue.costPoints} pts
+                              </Box>
+                            </SpaceBetween>
+                          ) : (
+                            <Box textAlign="center" padding="m">
+                              <SpaceBetween size="s" alignItems="center">
+                                <Box variant="p">
+                                  このクルーを公開すると{clue.costPoints}
+                                  ポイント減点されます
+                                </Box>
+                                <CloudscapeButton
+                                  onClick={() => handleRevealClue(clue.id)}
+                                >
+                                  公開する
+                                </CloudscapeButton>
+                              </SpaceBetween>
+                            </Box>
+                          )}
+                        </ExpandableSection>
+                      ))}
+                    </SpaceBetween>
+                  </Container>
+                )}
+
+                {/* GameDay: Hints Section */}
+                {!isJam && challenge.hints.length > 0 && (
+                  <Container
+                    header={
+                      <CloudscapeHeader
+                        variant="h2"
+                        counter={`(${challenge.hints.length})`}
+                      >
+                        ヒント
+                      </CloudscapeHeader>
+                    }
+                  >
+                    <SpaceBetween size="m">
+                      {challenge.hints.map((hint: ChallengeHint, index) => (
+                        <ExpandableSection
+                          key={hint.id}
+                          variant="container"
+                          headerText={`ヒント ${index + 1}`}
+                          headerInfo={
+                            hint.isRevealed ? (
+                              <Badge color="blue">公開済み</Badge>
+                            ) : (
+                              <Badge color="grey">未公開</Badge>
+                            )
+                          }
+                          headerDescription={`使用すると ${hint.costPoints} ポイント減点`}
+                        >
+                          {hint.isRevealed ? (
+                            <SpaceBetween size="s">
+                              <Box variant="p">{hint.content}</Box>
+                              <Box color="text-status-error" fontSize="body-s">
+                                -{hint.costPoints} pts
+                              </Box>
+                            </SpaceBetween>
+                          ) : (
+                            <Box textAlign="center" padding="m">
+                              <SpaceBetween size="s" alignItems="center">
+                                <Box variant="p">
+                                  このヒントを公開すると{hint.costPoints}
+                                  ポイント減点されます
+                                </Box>
+                                <CloudscapeButton
+                                  onClick={() => handleRevealHint(hint.id)}
+                                >
+                                  公開する
+                                </CloudscapeButton>
+                              </SpaceBetween>
+                            </Box>
+                          )}
+                        </ExpandableSection>
+                      ))}
+                    </SpaceBetween>
+                  </Container>
+                )}
+
+                {/* Resources */}
+                {challenge.resources.length > 0 && (
+                  <Container
+                    header={
+                      <CloudscapeHeader
+                        variant="h2"
+                        counter={`(${challenge.resources.length})`}
+                      >
+                        リソース
+                      </CloudscapeHeader>
+                    }
+                  >
+                    <SpaceBetween size="s">
+                      {challenge.resources.map((resource, i) => (
+                        <Box key={i}>
+                          <SpaceBetween direction="horizontal" size="xs">
+                            <Badge color="blue">
+                              {getResourceTypeLabel(resource.type)}
+                            </Badge>
+                            <CloudscapeLink
+                              href={resource.url}
+                              external
+                              externalIconAriaLabel="外部リンク"
+                            >
+                              {resource.name}
+                            </CloudscapeLink>
+                          </SpaceBetween>
+                        </Box>
+                      ))}
+                    </SpaceBetween>
+                  </Container>
+                )}
+
+                {/* Scoring Criteria Table */}
+                <Table
+                  header={
+                    <CloudscapeHeader
+                      variant="h2"
+                      counter={`(${challenge.scoringCriteria.length})`}
                     >
-                      回答を提出
-                    </Button>
-                  </div>
-                )}
+                      採点基準
+                    </CloudscapeHeader>
+                  }
+                  columnDefinitions={[
+                    {
+                      id: 'name',
+                      header: '基準名',
+                      cell: (item) => <Box fontWeight="bold">{item.name}</Box>,
+                      width: 200,
+                    },
+                    {
+                      id: 'description',
+                      header: '説明',
+                      cell: (item) => item.description,
+                    },
+                    {
+                      id: 'points',
+                      header: 'ポイント',
+                      cell: (item) => (
+                        <Box>
+                          {item.currentPoints ?? 0} / {item.maxPoints} pts
+                        </Box>
+                      ),
+                      width: 140,
+                    },
+                    {
+                      id: 'status',
+                      header: 'ステータス',
+                      cell: (item) =>
+                        item.isPassed !== undefined ? (
+                          item.isPassed ? (
+                            <StatusIndicator type="success">
+                              達成
+                            </StatusIndicator>
+                          ) : (
+                            <StatusIndicator type="stopped">
+                              未達成
+                            </StatusIndicator>
+                          )
+                        ) : (
+                          <StatusIndicator type="pending">
+                            未判定
+                          </StatusIndicator>
+                        ),
+                      width: 120,
+                    },
+                  ]}
+                  items={challenge.scoringCriteria}
+                  variant="container"
+                  empty={
+                    <Box textAlign="center" padding="l">
+                      採点基準がありません
+                    </Box>
+                  }
+                />
+              </SpaceBetween>
+            </div>
 
-                {/* Latest Submission Result */}
-                {latestSubmission && (
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-sm text-gray-500 mb-1">最新の提出</div>
-                    <div className="flex items-center justify-between">
-                      <Badge
-                        variant={
-                          latestSubmission.status === 'completed'
-                            ? 'success'
-                            : latestSubmission.status === 'failed'
-                              ? 'danger'
-                              : 'default'
+            {/* Sidebar */}
+            <div>
+              <SpaceBetween size="l">
+                {/* Score Card */}
+                <Container
+                  header={
+                    <CloudscapeHeader variant="h2">スコア</CloudscapeHeader>
+                  }
+                >
+                  <SpaceBetween size="m">
+                    <Box textAlign="center">
+                      <Box
+                        variant="h1"
+                        fontSize="display-l"
+                        color="text-status-info"
+                      >
+                        {challenge.myScore ?? 0}
+                      </Box>
+                      <Box variant="p" color="text-body-secondary">
+                        / {challenge.maxScore} pts
+                      </Box>
+                    </Box>
+
+                    {/* Progress bar */}
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '8px',
+                        backgroundColor: '#e9ebed',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${Math.min(100, ((challenge.myScore ?? 0) / challenge.maxScore) * 100)}%`,
+                          height: '100%',
+                          backgroundColor: '#0972d3',
+                          borderRadius: '4px',
+                          transition: 'width 0.3s ease',
+                        }}
+                      />
+                    </div>
+
+                    {/* GameDay: Request Scoring */}
+                    {!isJam && (
+                      <CloudscapeButton
+                        onClick={handleRequestScoring}
+                        loading={scoring}
+                        fullWidth
+                        variant="primary"
+                        disabled={
+                          scoring || latestSubmission?.status === 'scoring'
                         }
                       >
-                        {latestSubmission.status === 'completed' && '完了'}
-                        {latestSubmission.status === 'scoring' && '採点中'}
-                        {latestSubmission.status === 'pending' && '待機中'}
-                        {latestSubmission.status === 'failed' && '失敗'}
-                      </Badge>
-                      {latestSubmission.score !== undefined && (
-                        <span className="font-semibold">
-                          {latestSubmission.score} / {latestSubmission.maxScore}
-                        </span>
-                      )}
-                    </div>
-                    {/* JAM specific: show if correct */}
-                    {isJam &&
-                      'isCorrect' in latestSubmission &&
-                      latestSubmission.isCorrect !== undefined && (
-                        <div className="mt-2">
-                          {latestSubmission.isCorrect ? (
-                            <span className="text-green-600 font-medium">
-                              ✓ 正解！
-                            </span>
-                          ) : (
-                            <span className="text-red-600 font-medium">
-                              ✗ 不正解
-                            </span>
-                          )}
-                        </div>
-                      )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                        {latestSubmission?.status === 'scoring'
+                          ? '採点中...'
+                          : '採点をリクエスト'}
+                      </CloudscapeButton>
+                    )}
 
-            {/* AWS Credentials (GameDay only) */}
-            {!isJam && credentials && (
-              <Card>
-                <CardHeader>
-                  <h2 className="font-semibold">AWS クレデンシャル</h2>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <div className="text-xs text-gray-500">アカウント ID</div>
-                    <code className="text-sm">{challenge.awsAccountId}</code>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">リージョン</div>
-                    <code className="text-sm">{credentials.region}</code>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">有効期限</div>
-                    <code className="text-sm">
-                      {new Date(credentials.expiresAt).toLocaleString('ja-JP')}
-                    </code>
-                  </div>
-                  <a
-                    href={challenge.awsConsoleUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
+                    {/* JAM: Submit Answer */}
+                    {isJam && (
+                      <SpaceBetween size="s">
+                        <Textarea
+                          value={answer}
+                          onChange={({ detail }) => setAnswer(detail.value)}
+                          placeholder="回答を入力..."
+                          rows={3}
+                        />
+                        <CloudscapeButton
+                          onClick={handleSubmitAnswer}
+                          loading={submitting}
+                          fullWidth
+                          variant="primary"
+                          disabled={!answer.trim() || submitting}
+                        >
+                          回答を提出
+                        </CloudscapeButton>
+                      </SpaceBetween>
+                    )}
+
+                    {/* Latest Submission Result */}
+                    {latestSubmission &&
+                      submissionStatusType &&
+                      submissionStatusLabel && (
+                        <Container
+                          header={
+                            <CloudscapeHeader variant="h3">
+                              最新の提出
+                            </CloudscapeHeader>
+                          }
+                        >
+                          <SpaceBetween size="s">
+                            <StatusIndicator type={submissionStatusType}>
+                              {submissionStatusLabel}
+                            </StatusIndicator>
+                            {latestSubmission.score !== undefined && (
+                              <Box>
+                                {latestSubmission.score} /{' '}
+                                {latestSubmission.maxScore} pts
+                              </Box>
+                            )}
+                            {/* JAM specific: show if correct */}
+                            {isJam &&
+                              'isCorrect' in latestSubmission &&
+                              latestSubmission.isCorrect !== undefined && (
+                                <div>
+                                  {latestSubmission.isCorrect ? (
+                                    <StatusIndicator type="success">
+                                      正解
+                                    </StatusIndicator>
+                                  ) : (
+                                    <StatusIndicator type="error">
+                                      不正解
+                                    </StatusIndicator>
+                                  )}
+                                </div>
+                              )}
+                          </SpaceBetween>
+                        </Container>
+                      )}
+                  </SpaceBetween>
+                </Container>
+
+                {/* AWS Credentials (GameDay only) */}
+                {!isJam && credentials && (
+                  <Container
+                    header={
+                      <CloudscapeHeader variant="h2">
+                        AWS クレデンシャル
+                      </CloudscapeHeader>
+                    }
                   >
-                    <Button variant="outline" fullWidth>
-                      AWS コンソールを開く
-                    </Button>
-                  </a>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Estimated Time */}
-            {challenge.estimatedTimeMinutes && (
-              <Card>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">推定所要時間</span>
-                    <span className="font-medium">
-                      {challenge.estimatedTimeMinutes}分
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+                    <SpaceBetween size="m">
+                      <KeyValuePairs
+                        columns={1}
+                        items={[
+                          {
+                            label: 'アカウント ID',
+                            value: (
+                              <Box variant="code">{challenge.awsAccountId}</Box>
+                            ),
+                          },
+                          {
+                            label: 'リージョン',
+                            value: (
+                              <Box variant="code">{credentials.region}</Box>
+                            ),
+                          },
+                          {
+                            label: '有効期限',
+                            value: (
+                              <Box variant="code">
+                                {new Date(credentials.expiresAt).toLocaleString(
+                                  'ja-JP',
+                                )}
+                              </Box>
+                            ),
+                          },
+                        ]}
+                      />
+                      <a
+                        href={challenge.awsConsoleUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <CloudscapeButton fullWidth iconName="external">
+                          AWS コンソールを開く
+                        </CloudscapeButton>
+                      </a>
+                    </SpaceBetween>
+                  </Container>
+                )}
+              </SpaceBetween>
+            </div>
+          </ColumnLayout>
+        </SpaceBetween>
       </main>
-    </div>
-  );
-}
-
-// Hint Card Component (GameDay)
-function HintCard({
-  hint,
-  onReveal,
-}: {
-  hint: ChallengeHint;
-  onReveal: () => void;
-}) {
-  return (
-    <div className="p-4 border rounded-lg">
-      {hint.isRevealed ? (
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Badge variant="info" size="sm">
-              公開済み
-            </Badge>
-            <span className="text-sm text-red-600">-{hint.costPoints} pts</span>
-          </div>
-          <p className="text-gray-700">{hint.content}</p>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium">ヒントを表示</p>
-            <p className="text-sm text-red-600">
-              使用すると {hint.costPoints} ポイント減点
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={onReveal}>
-            公開する
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Clue Card Component (JAM)
-function ClueCard({ clue, onReveal }: { clue: JamClue; onReveal: () => void }) {
-  return (
-    <div className="p-4 border rounded-lg">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="font-medium">クルー #{clue.order}</span>
-        {clue.isRevealed && (
-          <Badge variant="info" size="sm">
-            公開済み
-          </Badge>
-        )}
-      </div>
-
-      {clue.isRevealed ? (
-        <div>
-          <h4 className="font-medium text-gray-900">{clue.title}</h4>
-          <p className="text-gray-700 mt-1">{clue.content}</p>
-          <p className="text-sm text-red-600 mt-2">-{clue.costPoints} pts</p>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-gray-600">{clue.title}</p>
-            <p className="text-sm text-red-600">
-              使用すると {clue.costPoints} ポイント減点
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={onReveal}>
-            公開する
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

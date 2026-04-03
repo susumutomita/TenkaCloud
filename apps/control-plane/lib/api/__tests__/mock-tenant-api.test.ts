@@ -125,4 +125,46 @@ describe('mockTenantApi', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('triggerProvisioning', () => {
+    it('存在するテナントのプロビジョニングを開始すべき', async () => {
+      const promise = mockTenantApi.triggerProvisioning('1');
+      await vi.advanceTimersByTimeAsync(500);
+      const result = await promise;
+
+      expect(result.success).toBe(true);
+      expect(result.provisioningStatus).toBe('IN_PROGRESS');
+      expect(result.message).toBe('プロビジョニングを開始しました');
+    });
+
+    it('存在しない ID で失敗を返すべき', async () => {
+      const promise = mockTenantApi.triggerProvisioning('nonexistent');
+      await vi.advanceTimersByTimeAsync(500);
+      const result = await promise;
+
+      expect(result.success).toBe(false);
+      expect(result.provisioningStatus).toBe('PENDING');
+    });
+  });
+
+  describe('getProvisioningStatus', () => {
+    it('存在するテナントのプロビジョニングステータスを返すべき', async () => {
+      const promise = mockTenantApi.getProvisioningStatus('1');
+      await vi.advanceTimersByTimeAsync(300);
+      const result = await promise;
+
+      expect(result).not.toBeNull();
+      expect(result?.tenantId).toBe('1');
+      expect(result?.provisioningEnabled).toBe(true);
+      expect(result?.provisioningStatus).toBeDefined();
+    });
+
+    it('存在しない ID で null を返すべき', async () => {
+      const promise = mockTenantApi.getProvisioningStatus('nonexistent');
+      await vi.advanceTimersByTimeAsync(300);
+      const result = await promise;
+
+      expect(result).toBeNull();
+    });
+  });
 });
