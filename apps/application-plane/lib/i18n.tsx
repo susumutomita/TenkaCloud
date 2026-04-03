@@ -330,7 +330,7 @@ const defaultI18nContext: I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-function resolveMessage(locale: Locale, key: string): string {
+export function resolveMessage(locale: Locale, key: string): string {
   const value = key
     .split('.')
     .reduce<TranslationValue | undefined>(
@@ -343,7 +343,7 @@ function resolveMessage(locale: Locale, key: string): string {
   return typeof value === 'string' ? value : key;
 }
 
-function detectLocale(searchParams: URLSearchParams | null): Locale {
+export function detectLocale(searchParams: URLSearchParams | null): Locale {
   const fromQuery = searchParams?.get('lang');
   if (fromQuery === 'ja' || fromQuery === 'en') return fromQuery;
 
@@ -374,14 +374,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLocale = (nextLocale: Locale) => {
     setLocaleState(nextLocale);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('tenkacloud_locale', nextLocale);
-    }
+    window.localStorage.setItem('tenkacloud_locale', nextLocale);
 
     const params = new URLSearchParams(searchParams?.toString() ?? '');
     params.set('lang', nextLocale);
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname);
+    router.replace(`${pathname}?${params.toString()}`);
   };
 
   const value = useMemo<I18nContextValue>(
