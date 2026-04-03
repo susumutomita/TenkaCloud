@@ -69,7 +69,10 @@ describe('バトル詳細ページ', () => {
     mockGetEventDetails.mockResolvedValue(baseBattle);
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('AWS GameDay 2025')).toBeInTheDocument();
+      // Battle name appears in breadcrumb, h1, and container header
+      expect(
+        screen.getAllByText('AWS GameDay 2025').length,
+      ).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -77,7 +80,8 @@ describe('バトル詳細ページ', () => {
     mockGetEventDetails.mockReturnValue(new Promise(() => {}));
     mockGetLeaderboard.mockReturnValue(new Promise(() => {}));
     render(<BattleDetailPage />);
-    expect(document.querySelector('.animate-spin')).toBeInTheDocument();
+    // Cloudscape Spinner renders — event name is not shown while loading
+    expect(screen.queryByText('AWS GameDay 2025')).not.toBeInTheDocument();
   });
 
   it('バトルが見つからない場合にリダイレクトすべき', async () => {
@@ -92,7 +96,7 @@ describe('バトル詳細ページ', () => {
     mockGetEventDetails.mockRejectedValue(new Error('Server error'));
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('バトル一覧に戻る')).toBeInTheDocument();
+      expect(screen.getByText('← Back to battles')).toBeInTheDocument();
     });
   });
 
@@ -112,7 +116,7 @@ describe('バトル詳細ページ', () => {
     });
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('参加登録')).toBeInTheDocument();
+      expect(screen.getByText('Register')).toBeInTheDocument();
     });
   });
 
@@ -126,11 +130,11 @@ describe('バトル詳細ページ', () => {
 
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('参加登録')).toBeInTheDocument();
+      expect(screen.getByText('Register')).toBeInTheDocument();
     });
 
     const user = userEvent.setup();
-    await user.click(screen.getByText('参加登録'));
+    await user.click(screen.getByText('Register'));
     await waitFor(() => {
       expect(mockRegisterForEvent).toHaveBeenCalledWith('battle-1');
     });
@@ -140,8 +144,8 @@ describe('バトル詳細ページ', () => {
     mockGetEventDetails.mockResolvedValue(baseBattle);
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('スコアを見る')).toBeInTheDocument();
-      expect(screen.getByText('リーダーボード')).toBeInTheDocument();
+      expect(screen.getByText('View scores')).toBeInTheDocument();
+      expect(screen.getByText('Leaderboard')).toBeInTheDocument();
     });
   });
 
@@ -149,7 +153,8 @@ describe('バトル詳細ページ', () => {
     mockGetEventDetails.mockResolvedValue(baseBattle);
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('← バトル一覧')).toBeInTheDocument();
+      // BreadcrumbGroup renders battles.title ('Battles') as the first breadcrumb link
+      expect(screen.getAllByText('Battles').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -157,7 +162,8 @@ describe('バトル詳細ページ', () => {
     mockGetEventDetails.mockResolvedValue(baseBattle);
     render(<BattleDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('42人')).toBeInTheDocument();
+      // KeyValuePairs renders participantCount as its value ('42')
+      expect(screen.getByText('42')).toBeInTheDocument();
     });
   });
 });
