@@ -19,6 +19,7 @@ import {
   seedAttackCatalog,
   GameNotFoundError,
   ConcurrentModificationError,
+  CrossTenantAccessError,
 } from '../services/game-controller';
 import {
   registerTeam,
@@ -70,11 +71,18 @@ adminRoutes.post('/game/stop', async (c) => {
     );
   }
   try {
-    const result = await stopGame(parsed.data.eventId);
+    const tenantId = c.get('auth').tenantId;
+    const result = await stopGame(parsed.data.eventId, tenantId);
     return c.json(result, StatusCodes.OK);
   } catch (error) {
     if (error instanceof GameNotFoundError) {
       return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
     }
     throw error;
   }
@@ -86,11 +94,25 @@ adminRoutes.get('/game/status', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  const result = await getGameStatus(eventId);
-  if (!result) {
-    return c.json({ error: 'ゲームが見つかりません' }, StatusCodes.NOT_FOUND);
+  try {
+    const tenantId = c.get('auth').tenantId;
+    const result = await getGameStatus(eventId, tenantId);
+    if (!result) {
+      return c.json(
+        { error: 'ゲームが見つかりません' },
+        StatusCodes.NOT_FOUND
+      );
+    }
+    return c.json(result, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
+    }
+    throw error;
   }
-  return c.json(result, StatusCodes.OK);
 });
 
 // スコア重み切替
@@ -110,7 +132,8 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
     );
   }
   try {
-    const result = await toggleScoreWeight(parsed.data.eventId);
+    const tenantId = c.get('auth').tenantId;
+    const result = await toggleScoreWeight(parsed.data.eventId, tenantId);
     return c.json(result, StatusCodes.OK);
   } catch (error) {
     if (error instanceof GameNotFoundError) {
@@ -118,6 +141,12 @@ adminRoutes.post('/score-weight/toggle', async (c) => {
     }
     if (error instanceof ConcurrentModificationError) {
       return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
     }
     throw error;
   }
@@ -140,7 +169,8 @@ adminRoutes.post('/blackout/toggle', async (c) => {
     );
   }
   try {
-    const result = await toggleBlackout(parsed.data.eventId);
+    const tenantId = c.get('auth').tenantId;
+    const result = await toggleBlackout(parsed.data.eventId, tenantId);
     return c.json(result, StatusCodes.OK);
   } catch (error) {
     if (error instanceof GameNotFoundError) {
@@ -148,6 +178,12 @@ adminRoutes.post('/blackout/toggle', async (c) => {
     }
     if (error instanceof ConcurrentModificationError) {
       return c.json({ error: error.message }, StatusCodes.CONFLICT);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
     }
     throw error;
   }
@@ -169,12 +205,27 @@ adminRoutes.post('/fault-injection/execute', async (c) => {
       StatusCodes.BAD_REQUEST
     );
   }
-  const result = await executeFaultInjection(
-    parsed.data.eventId,
-    parsed.data.teamId,
-    parsed.data.attackSlug
-  );
-  return c.json(result, StatusCodes.CREATED);
+  try {
+    const tenantId = c.get('auth').tenantId;
+    const result = await executeFaultInjection(
+      parsed.data.eventId,
+      parsed.data.teamId,
+      parsed.data.attackSlug,
+      tenantId
+    );
+    return c.json(result, StatusCodes.CREATED);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
+    }
+    throw error;
+  }
 });
 
 // 全チーム状態一覧
@@ -183,8 +234,22 @@ adminRoutes.get('/teams', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  const teams = await listTeams(eventId);
-  return c.json({ teams }, StatusCodes.OK);
+  try {
+    const tenantId = c.get('auth').tenantId;
+    const teams = await listTeams(eventId, tenantId);
+    return c.json({ teams }, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
+    }
+    throw error;
+  }
 });
 
 // 全攻撃履歴
@@ -193,8 +258,22 @@ adminRoutes.get('/attack-logs', async (c) => {
   if (!eventId) {
     return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
-  const logs = await listAttackLogs(eventId);
-  return c.json({ logs }, StatusCodes.OK);
+  try {
+    const tenantId = c.get('auth').tenantId;
+    const logs = await listAttackLogs(eventId, tenantId);
+    return c.json({ logs }, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
+    }
+    throw error;
+  }
 });
 
 // チーム登録
@@ -240,8 +319,22 @@ adminRoutes.post('/attacks/seed', async (c) => {
       StatusCodes.BAD_REQUEST
     );
   }
-  const count = await seedAttackCatalog(parsed.data.eventId);
-  return c.json({ seeded: count }, StatusCodes.CREATED);
+  try {
+    const tenantId = c.get('auth').tenantId;
+    const count = await seedAttackCatalog(parsed.data.eventId, tenantId);
+    return c.json({ seeded: count }, StatusCodes.CREATED);
+  } catch (error) {
+    if (error instanceof GameNotFoundError) {
+      return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
+    }
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
+    }
+    throw error;
+  }
 });
 
 // === Auditor ===

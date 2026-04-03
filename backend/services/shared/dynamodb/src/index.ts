@@ -125,6 +125,23 @@ export type {
   EventProblem,
 } from './types';
 
+// Tenant Context
+export {
+  withTenantContext,
+  validateTenantAccess,
+  buildTenantScopedKey,
+  extractTenantIdFromKey,
+  TenantContextError,
+  CrossTenantAccessError,
+} from './tenant-context';
+export type { TenantContext } from './tenant-context';
+
+// Tenant Isolation Middleware
+export {
+  tenantIsolationMiddleware,
+  validateTenantParamMiddleware,
+} from './middleware/tenant-isolation';
+
 // Repositories
 export { TenantRepository } from './tenant-repository';
 export { UserRepository } from './user-repository';

@@ -11,7 +11,10 @@ import {
   voteSchema,
   updateTeamUrlSchema,
 } from '../schemas';
-import { getGameStatus } from '../services/game-controller';
+import {
+  getGameStatus,
+  CrossTenantAccessError,
+} from '../services/game-controller';
 import {
   getAttackCatalog,
   purchaseAttack,
@@ -140,12 +143,25 @@ participantRoutes.get('/game/status', async (c) => {
     return c.json({ error: 'eventId は必須です' }, StatusCodes.BAD_REQUEST);
   }
 
-  const gameState = await getGameStatus(eventId);
-  if (!gameState) {
-    return c.json({ error: 'ゲームが見つかりません' }, StatusCodes.NOT_FOUND);
+  try {
+    const tenantId = c.get('auth').tenantId;
+    const gameState = await getGameStatus(eventId, tenantId);
+    if (!gameState) {
+      return c.json(
+        { error: 'ゲームが見つかりません' },
+        StatusCodes.NOT_FOUND
+      );
+    }
+    return c.json(gameState, StatusCodes.OK);
+  } catch (error) {
+    if (error instanceof CrossTenantAccessError) {
+      return c.json(
+        { error: '別テナントのリソースにはアクセスできません' },
+        StatusCodes.FORBIDDEN
+      );
+    }
+    throw error;
   }
-
-  return c.json(gameState, StatusCodes.OK);
 });
 
 // 攻撃購入
