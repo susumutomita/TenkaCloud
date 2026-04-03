@@ -49,7 +49,7 @@ const MOCK_TENANTS: Tenant[] = [
   },
 ];
 
-// 遅延をシミュレートする関数
+// \u9045\u5ef6\u3092\u30b7\u30df\u30e5\u30ec\u30fc\u30c8\u3059\u308b\u95a2\u6570
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const mockTenantApi = {
@@ -107,43 +107,6 @@ export const mockTenantApi = {
 
     MOCK_TENANTS.splice(index, 1);
     return true;
-
-  async triggerProvisioning(id: string): Promise<{
-    success: boolean;
-    message: string;
-    provisioningStatus: string;
-  }> {
-    await delay(500);
-    const tenant = MOCK_TENANTS.find((t) => t.id === id);
-    if (!tenant) {
-      return {
-        success: false,
-        message: 'テナントが見つかりません',
-        provisioningStatus: 'PENDING',
-      };
-    }
-    tenant.provisioningStatus = 'IN_PROGRESS';
-    tenant.updatedAt = new Date().toISOString();
-    return {
-      success: true,
-      message: 'プロビジョニングを開始しました',
-      provisioningStatus: 'IN_PROGRESS',
-    };
-  },
-
-  async getProvisioningStatus(id: string): Promise<{
-    tenantId: string;
-    provisioningStatus: string;
-    provisioningEnabled: boolean;
-  } | null> {
-    await delay(300);
-    const tenant = MOCK_TENANTS.find((t) => t.id === id);
-    if (!tenant) return null;
-    return {
-      tenantId: tenant.id,
-      provisioningStatus: tenant.provisioningStatus,
-      provisioningEnabled: true,
-    };
   },
 
   async triggerProvisioning(id: string): Promise<{
@@ -156,7 +119,7 @@ export const mockTenantApi = {
     if (!tenant) {
       return {
         success: false,
-        message: 'テナントが見つかりません',
+        message: '\u30c6\u30ca\u30f3\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093',
         provisioningStatus: 'PENDING',
       };
     }
@@ -164,7 +127,7 @@ export const mockTenantApi = {
     tenant.updatedAt = new Date().toISOString();
     return {
       success: true,
-      message: 'プロビジョニングを開始しました',
+      message: '\u30d7\u30ed\u30d3\u30b8\u30e7\u30cb\u30f3\u30b0\u3092\u958b\u59cb\u3057\u307e\u3057\u305f',
       provisioningStatus: 'IN_PROGRESS',
     };
   },
