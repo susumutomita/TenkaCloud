@@ -33,6 +33,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [score, setScore] = useState<number | undefined>();
   const [rank, setRank] = useState<number | undefined>();
+  const [awsConsoleLoading, setAwsConsoleLoading] = useState(false);
 
   const basePath = `/gameday/${eventId}`;
 
@@ -93,13 +94,35 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
         { type: 'link', text: t('gameday.voteNav'), href: `${basePath}/vote` },
         {
           type: 'link',
-          text: t('gameday.awsConsole'),
-          href: 'https://console.aws.amazon.com',
-          external: true,
+          text: awsConsoleLoading
+            ? `${t('gameday.awsConsole')}...`
+            : t('gameday.awsConsole'),
+          href: `${basePath}/aws-console`,
         },
       ],
     },
   ];
+
+  const openAwsConsole = useCallback(async () => {
+    if (!eventId || awsConsoleLoading) return;
+    setAwsConsoleLoading(true);
+    try {
+      const response = await fetch(
+        `/api/participant/events/${encodeURIComponent(eventId)}/aws-console`,
+      );
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        console.error('AWS Console error:', data.error);
+        return;
+      }
+      const data = (await response.json()) as { url: string };
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('AWS Console fetch error:', err);
+    } finally {
+      setAwsConsoleLoading(false);
+    }
+  }, [eventId, awsConsoleLoading]);
 
   const activeHref = (() => {
     if (pathname === basePath || pathname === `${basePath}/`) return basePath;
@@ -217,8 +240,10 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
             activeHref={activeHref}
             items={navItems}
             onFollow={(event) => {
-              if (!event.detail.external) {
-                event.preventDefault();
+              event.preventDefault();
+              if (event.detail.href === `${basePath}/aws-console`) {
+                openAwsConsole();
+              } else if (!event.detail.external) {
                 router.push(event.detail.href);
               }
             }}
