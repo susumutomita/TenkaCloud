@@ -91,7 +91,7 @@ export default function RankingsPage() {
     <div className="min-h-screen bg-surface-0">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="awsui-dark-mode">
           <SpaceBetween size="l">
             {/* Page Header */}
@@ -199,7 +199,7 @@ export default function RankingsPage() {
                   {
                     id: 'rank',
                     header: '順位',
-                    width: 100,
+                    width: 70,
                     cell: (item) => (
                       <Box
                         fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
