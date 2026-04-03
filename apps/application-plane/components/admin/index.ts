@@ -16,5 +16,6 @@ export {
   type EventFormProps,
   type EventFormData,
 } from './event-form';
+export { ProblemForm, type ProblemFormProps } from './problem-form';
 export { SearchInput, type SearchInputProps } from './search-input';
 export { StatCard, type StatCardProps } from './stat-card';
