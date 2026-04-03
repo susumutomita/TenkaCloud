@@ -80,9 +80,7 @@ describe('Admin 問題デプロイページ', () => {
 
   it('デプロイエラー時にアラートが表示されるべき', async () => {
     const user = userEvent.setup();
-    mockDeployProblem.mockRejectedValue(
-      new Error('テンプレートが無効です'),
-    );
+    mockDeployProblem.mockRejectedValue(new Error('テンプレートが無効です'));
 
     render(<AdminProblemDeployPage />);
 
@@ -95,9 +93,7 @@ describe('Admin 問題デプロイページ', () => {
     await user.click(screen.getByRole('button', { name: 'デプロイ開始' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('テンプレートが無効です'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('テンプレートが無効です')).toBeInTheDocument();
     });
   });
 
@@ -116,9 +112,7 @@ describe('Admin 問題デプロイページ', () => {
     await user.click(screen.getByRole('button', { name: 'デプロイ開始' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('デプロイに失敗しました'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('デプロイに失敗しました')).toBeInTheDocument();
     });
   });
 
@@ -143,7 +137,9 @@ describe('Admin 問題デプロイページ', () => {
       expect(screen.getByText('existing-stack')).toBeInTheDocument();
     });
     // CREATE_COMPLETE はスタックステータスとイベントステータスの両方に表示される
-    expect(screen.getAllByText('CREATE_COMPLETE').length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText('CREATE_COMPLETE').length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Endpoint')).toBeInTheDocument();
     expect(screen.getByText('https://example.com')).toBeInTheDocument();
     expect(screen.getByText('MyBucket')).toBeInTheDocument();
@@ -166,9 +162,7 @@ describe('Admin 問題デプロイページ', () => {
     await user.click(screen.getByRole('button', { name: 'スタック削除' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('スタック削除の確認'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('スタック削除の確認')).toBeInTheDocument();
     });
     expect(
       screen.getByText(
@@ -195,9 +189,7 @@ describe('Admin 問題デプロイページ', () => {
     await user.click(screen.getByRole('button', { name: 'スタック削除' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: '削除' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: '削除' }));
@@ -214,9 +206,7 @@ describe('Admin 問題デプロイページ', () => {
       status: 'CREATE_COMPLETE',
       events: [],
     });
-    mockDeleteDeployment.mockRejectedValue(
-      new Error('削除に失敗しました'),
-    );
+    mockDeleteDeployment.mockRejectedValue(new Error('削除に失敗しました'));
 
     render(<AdminProblemDeployPage />);
 
@@ -226,16 +216,12 @@ describe('Admin 問題デプロイページ', () => {
 
     await user.click(screen.getByRole('button', { name: 'スタック削除' }));
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: '削除' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '削除' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('削除に失敗しました'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('削除に失敗しました')).toBeInTheDocument();
     });
   });
 
@@ -256,9 +242,7 @@ describe('Admin 問題デプロイページ', () => {
 
     await user.click(screen.getByRole('button', { name: 'スタック削除' }));
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: '削除' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '削除' }));
 
@@ -282,9 +266,7 @@ describe('Admin 問題デプロイページ', () => {
       expect(screen.getByText('in-progress-stack')).toBeInTheDocument();
     });
 
-    expect(
-      screen.getByRole('button', { name: 'スタック削除' }),
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'スタック削除' })).toBeDisabled();
   });
 
   it('自動更新が IN_PROGRESS 中に実行されるべき', async () => {
@@ -350,9 +332,7 @@ describe('Admin 問題デプロイページ', () => {
 
     await user.click(screen.getByRole('button', { name: 'スタック削除' }));
     await waitFor(() => {
-      expect(
-        screen.getByText('スタック削除の確認'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('スタック削除の確認')).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'キャンセル' }));
