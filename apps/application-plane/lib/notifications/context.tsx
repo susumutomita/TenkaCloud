@@ -39,7 +39,9 @@ interface NotificationContextValue {
   clearAll: () => void;
 }
 
-const NotificationContext = createContext<NotificationContextValue | null>(null);
+const NotificationContext = createContext<NotificationContextValue | null>(
+  null,
+);
 
 function loadFromStorage(): Notification[] {
   try {
@@ -131,15 +133,15 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     ],
   );
 
-  return (
-    <NotificationContext value={value}>{children}</NotificationContext>
-  );
+  return <NotificationContext value={value}>{children}</NotificationContext>;
 }
 
 export function useNotifications(): NotificationContextValue {
   const ctx = useContext(NotificationContext);
   if (!ctx) {
-    throw new Error('useNotifications must be used within NotificationProvider');
+    throw new Error(
+      'useNotifications must be used within NotificationProvider',
+    );
   }
   return ctx;
 }

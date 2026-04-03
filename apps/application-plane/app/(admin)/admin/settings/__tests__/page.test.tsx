@@ -133,13 +133,9 @@ describe('Admin 設定ページ', () => {
     });
     await user.click(getTab('API キー'));
     await waitFor(() => {
-<<<<<<< Updated upstream
-      expect(screen.getByTestId('masked-api-key').textContent).toBe('sk-****1234');
-=======
       expect(screen.getByTestId('masked-api-key').textContent).toBe(
         'sk-****1234',
       );
->>>>>>> Stashed changes
     });
   });
 
@@ -152,17 +148,6 @@ describe('Admin 設定ページ', () => {
     });
     await user.click(getTab('API キー'));
     await waitFor(() => {
-<<<<<<< Updated upstream
-      expect(screen.getByRole('button', { name: 'API キーを再生成' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'API キーを再生成' }));
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '再生成' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: '再生成' }));
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/admin/settings', { action: 'regenerate-api-key' });
-=======
       expect(
         screen.getByRole('button', { name: 'API キーを再生成' }),
       ).toBeInTheDocument();
@@ -178,7 +163,6 @@ describe('Admin 設定ページ', () => {
       expect(mockPost).toHaveBeenCalledWith('/admin/settings', {
         action: 'regenerate-api-key',
       });
->>>>>>> Stashed changes
     });
   });
 
@@ -206,13 +190,9 @@ describe('Admin 設定ページ', () => {
     });
     await user.click(screen.getByTestId('delete-all-data-button'));
     await waitFor(() => {
-<<<<<<< Updated upstream
-      expect(screen.getByText('確認のため「DELETE」と入力してください')).toBeInTheDocument();
-=======
       expect(
         screen.getByText('確認のため「DELETE」と入力してください'),
       ).toBeInTheDocument();
->>>>>>> Stashed changes
     });
     expect(screen.getByRole('button', { name: '削除を実行' })).toBeDisabled();
   });
@@ -282,13 +262,9 @@ describe('Admin 設定ページ', () => {
     await user.type(screen.getByPlaceholderText('DELETE'), 'DELETE');
     await user.click(screen.getByRole('button', { name: '削除を実行' }));
     await waitFor(() => {
-<<<<<<< Updated upstream
-      expect(screen.getByText('データの削除に失敗しました')).toBeInTheDocument();
-=======
       expect(
         screen.getByText('データの削除に失敗しました'),
       ).toBeInTheDocument();
->>>>>>> Stashed changes
     });
   });
 
@@ -296,13 +272,9 @@ describe('Admin 設定ページ', () => {
     mockGet.mockRejectedValue(new Error('Fetch failed'));
     render(<AdminSettingsPage />);
     await waitFor(() => {
-<<<<<<< Updated upstream
-      expect(screen.getByRole('heading', { name: '設定', level: 1 })).toBeInTheDocument();
-=======
       expect(
         screen.getByRole('heading', { name: '設定', level: 1 }),
       ).toBeInTheDocument();
->>>>>>> Stashed changes
     });
     expect(getTab('一般設定')).toBeInTheDocument();
   });
@@ -357,13 +329,6 @@ describe('Admin 設定ページ', () => {
     });
     await user.click(getTab('API キー'));
     await waitFor(() => {
-<<<<<<< Updated upstream
-      expect(screen.getByRole('button', { name: 'API キーを再生成' })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole('button', { name: 'API キーを再生成' }));
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: '再生成' })).toBeInTheDocument();
-=======
       expect(
         screen.getByRole('button', { name: 'API キーを再生成' }),
       ).toBeInTheDocument();
@@ -373,7 +338,6 @@ describe('Admin 設定ページ', () => {
       expect(
         screen.getByRole('button', { name: '再生成' }),
       ).toBeInTheDocument();
->>>>>>> Stashed changes
     });
     await user.click(screen.getByRole('button', { name: '再生成' }));
     await waitFor(() => {

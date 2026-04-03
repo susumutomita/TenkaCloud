@@ -137,10 +137,8 @@ export function NotificationPanel() {
             maxHeight: '500px',
             overflowY: 'auto',
             zIndex: 1000,
-            background:
-              'var(--color-background-container-content, #0f1b2d)',
-            border:
-              '1px solid var(--color-border-divider-default, #414d5c)',
+            background: 'var(--color-background-container-content, #0f1b2d)',
+            border: '1px solid var(--color-border-divider-default, #414d5c)',
             borderRadius: '8px',
             boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
           }}
@@ -178,11 +176,7 @@ export function NotificationPanel() {
           </div>
           <div style={{ padding: '8px' }}>
             {notifications.length === 0 ? (
-              <Box
-                textAlign="center"
-                padding="l"
-                color="text-body-secondary"
-              >
+              <Box textAlign="center" padding="l" color="text-body-secondary">
                 通知はありません
               </Box>
             ) : (
