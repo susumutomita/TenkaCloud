@@ -20,6 +20,11 @@ vi.mock('next-auth/providers/auth0', () => ({
   })),
 }));
 
+vi.mock('@/lib/auth/is-auth-skip-enabled', () => ({
+  isAuthSkipEnabled: () =>
+    process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production',
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
 

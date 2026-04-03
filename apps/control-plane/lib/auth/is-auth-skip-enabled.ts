@@ -2,10 +2,7 @@
  * AUTH_SKIP モードの共有判定ユーティリティ
  *
  * AUTH_SKIP=1 が設定されており、かつ本番環境でない場合にのみ true を返す。
- * 本番環境では AUTH_SKIP=1 が設定されていても常に false を返す。
- *
- * NOTE: モジュールレベルの throw は next build (NODE_ENV=production) 時に
- * .env.local の AUTH_SKIP=1 でビルドを壊すため、関数内で安全にガードする。
+ * 本番環境で AUTH_SKIP=1 が設定されている場合はエラーを投げる。
  */
 
 /**

@@ -1,10 +1,11 @@
 import NextAuth from 'next-auth';
 import type { Session } from 'next-auth';
 import Auth0 from 'next-auth/providers/auth0';
+import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
 
 const getEnv = (key: string) => process.env[key];
 const skipAuth0Validation = getEnv('SKIP_AUTH0_VALIDATION') === '1';
-const authSkipEnabled = getEnv('AUTH_SKIP') === '1';
+const authSkipEnabled = isAuthSkipEnabled();
 
 /**
  * モックセッション（AUTH_SKIP=1 の場合に使用）
