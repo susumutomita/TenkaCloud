@@ -107,6 +107,43 @@ export const mockTenantApi = {
 
     MOCK_TENANTS.splice(index, 1);
     return true;
+
+  async triggerProvisioning(id: string): Promise<{
+    success: boolean;
+    message: string;
+    provisioningStatus: string;
+  }> {
+    await delay(500);
+    const tenant = MOCK_TENANTS.find((t) => t.id === id);
+    if (!tenant) {
+      return {
+        success: false,
+        message: 'テナントが見つかりません',
+        provisioningStatus: 'PENDING',
+      };
+    }
+    tenant.provisioningStatus = 'IN_PROGRESS';
+    tenant.updatedAt = new Date().toISOString();
+    return {
+      success: true,
+      message: 'プロビジョニングを開始しました',
+      provisioningStatus: 'IN_PROGRESS',
+    };
+  },
+
+  async getProvisioningStatus(id: string): Promise<{
+    tenantId: string;
+    provisioningStatus: string;
+    provisioningEnabled: boolean;
+  } | null> {
+    await delay(300);
+    const tenant = MOCK_TENANTS.find((t) => t.id === id);
+    if (!tenant) return null;
+    return {
+      tenantId: tenant.id,
+      provisioningStatus: tenant.provisioningStatus,
+      provisioningEnabled: true,
+    };
   },
 
   async triggerProvisioning(id: string): Promise<{
