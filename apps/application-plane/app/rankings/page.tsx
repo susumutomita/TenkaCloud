@@ -212,6 +212,7 @@ export default function RankingsPage() {
                   {
                     id: 'name',
                     header: '名前',
+                    width: 300,
                     cell: (item) => (
                       <SpaceBetween
                         size="xs"
