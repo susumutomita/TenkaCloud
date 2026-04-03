@@ -4,22 +4,18 @@
  * PENDING / ACTIVE バッジ
  */
 
-import { Badge } from '@/components/ui';
+import Badge from '@cloudscape-design/components/badge';
+import { useI18n } from '@/lib/i18n';
 import type { AllianceStatus } from '@/lib/api/gameday-types';
 
-const config: Record<
-  AllianceStatus,
-  { label: string; variant: 'warning' | 'success' }
-> = {
-  PENDING: { label: '保留中', variant: 'warning' },
-  ACTIVE: { label: 'アクティブ', variant: 'success' },
-};
+const config: Record<AllianceStatus, { key: string; color: 'blue' | 'green' }> =
+  {
+    PENDING: { key: 'gameday.pending', color: 'blue' },
+    ACTIVE: { key: 'gameday.activeBadge', color: 'green' },
+  };
 
 export function AllianceStatusBadge({ status }: { status: AllianceStatus }) {
-  const { label, variant } = config[status];
-  return (
-    <Badge variant={variant} badgeStyle="subtle" size="sm" dot>
-      {label}
-    </Badge>
-  );
+  const { t } = useI18n();
+  const { key, color } = config[status];
+  return <Badge color={color}>{t(key)}</Badge>;
 }

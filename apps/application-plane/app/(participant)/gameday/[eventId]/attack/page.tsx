@@ -30,8 +30,10 @@ import {
 } from '@/lib/api/gameday';
 import type { Attack, AttackLog, CooldownError } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
+import { useI18n } from '@/lib/i18n';
 
 export default function AttackPage() {
+  const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
   const [catalog, setCatalog] = useState<Attack[]>([]);
   const [history, setHistory] = useState<AttackLog[]>([]);
@@ -68,13 +70,13 @@ export default function AttackPage() {
     if (!eventId) return;
     getParticipantTeams(eventId)
       .then((data) => {
-        const opts = data.teams
+        const options = data.teams
           .filter((team) => team.teamId !== teamId)
           .map((team) => ({
             value: team.teamId,
             label: team.teamName,
           }));
-        setTeamOptions(opts);
+        setTeamOptions(options);
       })
       .catch(() => {});
   }, [eventId, teamId]);
@@ -103,11 +105,15 @@ export default function AttackPage() {
       await executeAttack(eventId, teamId, attackId, selectedTarget.value);
       await fetchData();
     } catch (err) {
-      const e = err as Error & { status?: number; body?: CooldownError };
-      if (e.status === 429 && e.body?.remainingSeconds) {
+      const typedError = err as Error & {
+        status?: number;
+        body?: CooldownError;
+      };
+      if (typedError.status === 429 && typedError.body?.remainingSeconds) {
+        const remainingSeconds = typedError.body.remainingSeconds;
         setCooldowns((prev) => ({
           ...prev,
-          [attackId]: Date.now() + (e.body?.remainingSeconds ?? 0) * 1000,
+          [attackId]: Date.now() + remainingSeconds * 1000,
         }));
       }
     } finally {
@@ -129,39 +135,48 @@ export default function AttackPage() {
         <Box textAlign="center" padding="xl">
           <SpaceBetween size="m">
             <StatusIndicator type="error">{error.message}</StatusIndicator>
-            <Button onClick={fetchData}>再試行</Button>
+            <Button onClick={fetchData}>{t('common.retry')}</Button>
           </SpaceBetween>
         </Box>
       </Container>
     );
   }
 
-  const formatTime = (ts: string) =>
-    new Date(ts).toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatTime = (timestamp: string) =>
+    new Date(timestamp).toLocaleTimeString(
+      locale === 'ja' ? 'ja-JP' : 'en-US',
+      {
+        hour: '2-digit',
+        minute: '2-digit',
+      },
+    );
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1">攻撃ステーション</Header>
+      <Header variant="h1" description={t('gameday.attackDescription')}>
+        {t('gameday.attackStation')}
+      </Header>
 
-      {/* Target Selection */}
-      <Container>
-        <FormField label="ターゲットチーム">
+      <Container
+        header={<Header variant="h2">{t('gameday.targetSelection')}</Header>}
+      >
+        <FormField label={t('common.targetTeam')}>
           <Select
             selectedOption={selectedTarget}
             onChange={({ detail }) => setSelectedTarget(detail.selectedOption)}
             options={teamOptions}
-            placeholder="ターゲットチームを選択"
+            placeholder={t('common.selectTeam')}
             filteringType="auto"
           />
         </FormField>
       </Container>
 
-      {/* Attack Catalog */}
       <Cards
-        header={<Header counter={`(${catalog.length})`}>攻撃カタログ</Header>}
+        header={
+          <Header counter={`(${catalog.length})`}>
+            {t('gameday.attackName')}
+          </Header>
+        }
         items={catalog}
         cardsPerRow={[
           { cards: 1 },
@@ -177,13 +192,15 @@ export default function AttackPage() {
                 <Badge
                   color={attack.attackType === 'vulnerability' ? 'red' : 'blue'}
                 >
-                  {attack.attackType}
+                  {attack.attackType === 'vulnerability'
+                    ? t('gameday.vulnerability')
+                    : t('gameday.chaos')}
                 </Badge>
               ),
             },
             {
               id: 'desc',
-              header: '説明',
+              header: locale === 'ja' ? '説明' : 'Description',
               content: (attack) => (
                 <Box color="text-body-secondary">{attack.description}</Box>
               ),
@@ -193,13 +210,13 @@ export default function AttackPage() {
               content: (attack) => (
                 <SpaceBetween direction="horizontal" size="l">
                   <Box variant="small">
-                    コスト: <b>{attack.purchaseCost}</b>
+                    {t('gameday.cost')}: <b>{attack.purchaseCost}</b>
                   </Box>
                   <Box variant="small">
-                    ダメージ: <b>{attack.damage}</b>
+                    {t('gameday.damage')}: <b>{attack.damage}</b>
                   </Box>
                   <Box variant="small">
-                    報酬: <b>{attack.reward}</b>
+                    {t('gameday.reward')}: <b>{attack.reward}</b>
                   </Box>
                 </SpaceBetween>
               ),
@@ -210,15 +227,18 @@ export default function AttackPage() {
                 const purchased = purchasedIds.has(attack.id);
                 const onCooldown =
                   cooldowns[attack.id] && Date.now() < cooldowns[attack.id];
+
                 return purchased ? (
                   <Button
                     variant="primary"
                     fullWidth
                     onClick={() => handleExecute(attack.id)}
                     loading={executing[attack.id]}
-                    disabled={!selectedTarget?.value || onCooldown || false}
+                    disabled={!selectedTarget?.value || Boolean(onCooldown)}
                   >
-                    {onCooldown ? 'クールダウン中...' : '攻撃実行'}
+                    {onCooldown
+                      ? `${t('gameday.cooldown')}...`
+                      : t('gameday.execute')}
                   </Button>
                 ) : (
                   <Button
@@ -226,50 +246,53 @@ export default function AttackPage() {
                     onClick={() => handlePurchase(attack.id)}
                     loading={purchasing[attack.id]}
                   >
-                    購入 ({attack.purchaseCost} pts)
+                    {t('gameday.purchase')} ({attack.purchaseCost} pts)
                   </Button>
                 );
               },
             },
           ],
         }}
-        empty="攻撃カタログが空です"
+        empty={t('common.noData')}
       />
 
-      {/* Attack History */}
       <Table
-        header={<Header counter={`(${history.length})`}>攻撃履歴</Header>}
+        header={
+          <Header counter={`(${history.length})`}>
+            {t('gameday.attackHistory')}
+          </Header>
+        }
         items={history}
         columnDefinitions={[
           {
             id: 'time',
-            header: '時間',
+            header: t('gameday.time'),
             cell: (log) => formatTime(log.createdAt),
             width: 100,
           },
           {
             id: 'attack',
-            header: '攻撃',
+            header: t('gameday.attackName'),
             cell: (log) => <Box variant="code">{log.attackSlug}</Box>,
           },
           {
             id: 'target',
-            header: '対象',
+            header: t('gameday.target'),
             cell: (log) => log.defenderTeamId,
           },
           {
             id: 'result',
-            header: '結果',
+            header: t('gameday.result'),
             cell: (log) => (
               <StatusIndicator type={log.success ? 'success' : 'error'}>
-                {log.success ? '成功' : '失敗'}
+                {log.success ? t('gameday.success') : t('gameday.failed')}
               </StatusIndicator>
             ),
             width: 120,
           },
           {
             id: 'reward',
-            header: '報酬',
+            header: t('gameday.reward'),
             cell: (log) =>
               log.success ? (
                 <Box color="text-status-success">+{log.reward}</Box>
@@ -279,7 +302,7 @@ export default function AttackPage() {
             width: 100,
           },
         ]}
-        empty="攻撃履歴なし"
+        empty={t('gameday.noAttackHistory')}
         sortingDisabled
       />
     </SpaceBetween>

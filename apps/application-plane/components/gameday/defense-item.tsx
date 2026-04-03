@@ -6,7 +6,14 @@
 
 'use client';
 
-import { Badge, Button } from '@/components/ui';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import { useI18n } from '@/lib/i18n';
 import type { AttackLog } from '@/lib/api/gameday-types';
 import { AttackTypeBadge } from './attack-type-badge';
 
@@ -27,61 +34,73 @@ export function DefenseItem({
   fixLoading = false,
   hint,
 }: DefenseItemProps) {
+  const { t } = useI18n();
   const time = new Date(attack.createdAt).toLocaleTimeString('ja-JP', {
     hour: '2-digit',
     minute: '2-digit',
   });
 
   return (
-    <div className="flex items-center gap-4 p-4 bg-surface-1 border border-border rounded-[var(--radius)] hover:border-hn-accent/30 transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium text-text-primary truncate">
-            {attack.attackSlug}
-          </span>
-          <AttackTypeBadge type={attack.success ? 'vulnerability' : 'chaos'} />
-          {attack.neutralized && (
-            <Badge variant="success" badgeStyle="subtle" size="sm">
-              修正済
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-3 text-xs text-text-muted">
-          <span className="font-mono">{time}</span>
-          <span>ダメージ: {attack.damage}</span>
-          <span>攻撃者: {attack.attackerTeamId}</span>
-        </div>
-        {hint && (
-          <div className="mt-2 p-2 bg-hn-info/10 border border-hn-info/30 rounded-[var(--radius-sm)] text-sm text-hn-info">
-            {hint}
-          </div>
-        )}
-      </div>
+    <Container
+      header={
+        <Header
+          variant="h3"
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              <AttackTypeBadge
+                type={attack.success ? 'vulnerability' : 'chaos'}
+              />
+              {attack.neutralized ? (
+                <Badge color="green">{t('gameday.mitigated')}</Badge>
+              ) : null}
+            </SpaceBetween>
+          }
+        >
+          {attack.attackSlug}
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        <SpaceBetween direction="horizontal" size="l">
+          <Box variant="awsui-key-label">{time}</Box>
+          <Box>
+            {t('gameday.damage')}: {attack.damage}
+          </Box>
+          <Box>
+            {t('gameday.attacker')}: {attack.attackerTeamId}
+          </Box>
+          <StatusIndicator type={attack.success ? 'success' : 'error'}>
+            {attack.success ? t('gameday.impacted') : t('gameday.defended')}
+          </StatusIndicator>
+        </SpaceBetween>
 
-      <div className="flex items-center gap-2 shrink-0">
-        {!attack.neutralized && (
-          <>
+        {hint ? (
+          <Box color="text-status-info">
+            {t('gameday.hint')}: {hint}
+          </Box>
+        ) : null}
+
+        {!attack.neutralized ? (
+          <SpaceBetween direction="horizontal" size="xs">
             <Button
-              variant="ghost"
-              size="sm"
+              variant="normal"
               onClick={onPurchaseHint}
               loading={hintLoading}
               disabled={hintLoading || !!hint}
             >
-              ヒント
+              {t('gameday.hint')}
             </Button>
             <Button
-              variant="success"
-              size="sm"
+              variant="primary"
               onClick={onReportFix}
               loading={fixLoading}
               disabled={fixLoading}
             >
-              修正報告
+              {t('gameday.reportFix')}
             </Button>
-          </>
-        )}
-      </div>
-    </div>
+          </SpaceBetween>
+        ) : null}
+      </SpaceBetween>
+    </Container>
   );
 }

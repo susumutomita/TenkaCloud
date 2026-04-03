@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { auth, authSkipEnabled } from '@/auth';
 import { Providers } from '@/components/providers';
+import { I18nProvider } from '@/lib/i18n';
 import '@cloudscape-design/global-styles/index.css';
 import './globals.css';
 
@@ -20,7 +21,7 @@ export default async function RootLayout({
     <html lang="ja" className="awsui-dark-mode">
       <body className="awsui-dark-mode">
         <Providers session={session} authSkip={authSkipEnabled}>
-          {children}
+          <I18nProvider>{children}</I18nProvider>
         </Providers>
       </body>
     </html>
