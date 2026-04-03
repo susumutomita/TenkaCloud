@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { auth } from '@/auth';
+import { getGamedayApiUrl } from '@/lib/api/backend-urls';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -17,10 +18,9 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   const userId = session?.user?.email ?? 'anonymous';
 
-  const GAMEDAY_API_URL =
-    process.env.GAMEDAY_API_URL || 'http://localhost:3020/api/gameday';
+  const gamedayUrl = getGamedayApiUrl();
   const response = await fetch(
-    `${GAMEDAY_API_URL}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
+    `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
     { headers: { 'Content-Type': 'application/json' } },
   );
   const data = await response.json();
