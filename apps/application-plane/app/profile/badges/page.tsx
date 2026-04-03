@@ -16,10 +16,12 @@ import CloudscapeSpaceBetween from '@cloudscape-design/components/space-between'
 import CloudscapeSpinner from '@cloudscape-design/components/spinner';
 import { useEffect, useState } from 'react';
 import { Header } from '../../../components/layout';
+import { useI18n } from '../../../lib/i18n';
 import { getMyBadges } from '../../../lib/api/profile';
 import type { Badge } from '../../../lib/api/types';
 
 export default function BadgesPage() {
+  const { t } = useI18n();
   const [badges, setBadges] = useState<Badge[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,10 +39,14 @@ export default function BadgesPage() {
         <div className="awsui-dark-mode">
           <CloudscapeSpaceBetween size="l">
             <CloudscapeBox>
-              <CloudscapeLink href="/profile">← プロフィール</CloudscapeLink>
+              <CloudscapeLink href="/profile">
+                {t('profile.backToProfile')}
+              </CloudscapeLink>
             </CloudscapeBox>
 
-            <CloudscapeHeader variant="h1">バッジ</CloudscapeHeader>
+            <CloudscapeHeader variant="h1">
+              {t('profile.badges')}
+            </CloudscapeHeader>
 
             {loading ? (
               <CloudscapeBox textAlign="center" padding="xl">
@@ -58,9 +64,9 @@ export default function BadgesPage() {
                       },
                       {
                         id: 'date',
-                        header: '取得日',
+                        header: t('profile.acquiredDate'),
                         content: (b) =>
-                          new Date(b.earnedAt).toLocaleDateString('ja-JP'),
+                          new Date(b.earnedAt).toLocaleDateString(),
                       },
                     ],
                   }}
@@ -72,12 +78,12 @@ export default function BadgesPage() {
                       color="inherit"
                       padding="m"
                     >
-                      まだバッジを獲得していません
+                      {t('profile.noBadges')}
                     </CloudscapeBox>
                   }
                   header={
                     <CloudscapeHeader>
-                      獲得バッジ ({badges.length}個)
+                      {t('profile.badges')} ({badges.length})
                     </CloudscapeHeader>
                   }
                 />

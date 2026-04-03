@@ -20,6 +20,7 @@ import '@cloudscape-design/global-styles/index.css';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Header as AppHeader } from '../../components/layout';
+import { useI18n } from '../../lib/i18n';
 import { getAvailableEvents } from '../../lib/api/events';
 import type {
   EventStatus,
@@ -27,30 +28,35 @@ import type {
   ProblemType,
 } from '../../lib/api/types';
 
-const statusOptions: SelectProps.Option[] = [
-  { value: '', label: 'すべて' },
-  { value: 'active', label: '開催中' },
-  { value: 'scheduled', label: '開催予定' },
-];
-
-const typeOptions: SelectProps.Option[] = [
-  { value: '', label: 'すべて' },
-  { value: 'gameday', label: 'GameDay' },
-  { value: 'jam', label: 'JAM' },
-];
-
-function getEventStatusIndicator(status: EventStatus) {
+function getEventStatusIndicator(
+  status: EventStatus,
+  t: (k: string) => string,
+) {
   switch (status) {
     case 'active':
-      return <StatusIndicator type="success">開催中</StatusIndicator>;
+      return (
+        <StatusIndicator type="success">{t('events.active')}</StatusIndicator>
+      );
     case 'scheduled':
-      return <StatusIndicator type="pending">開催予定</StatusIndicator>;
+      return (
+        <StatusIndicator type="pending">
+          {t('events.scheduled')}
+        </StatusIndicator>
+      );
     case 'completed':
-      return <StatusIndicator type="stopped">終了</StatusIndicator>;
+      return (
+        <StatusIndicator type="stopped">
+          {t('events.completed')}
+        </StatusIndicator>
+      );
     case 'cancelled':
-      return <StatusIndicator type="error">キャンセル</StatusIndicator>;
+      return (
+        <StatusIndicator type="error">{t('events.cancelled')}</StatusIndicator>
+      );
     case 'paused':
-      return <StatusIndicator type="warning">一時停止</StatusIndicator>;
+      return (
+        <StatusIndicator type="warning">{t('events.paused')}</StatusIndicator>
+      );
     default:
       return <StatusIndicator type="info">{status}</StatusIndicator>;
   }
@@ -84,14 +90,28 @@ function getTimeUntilStart(startTime: string) {
 }
 
 export default function EventsPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const [events, setEvents] = useState<ParticipantEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+
+  const statusOptions: SelectProps.Option[] = [
+    { value: '', label: t('events.all') },
+    { value: 'active', label: t('events.active') },
+    { value: 'scheduled', label: t('events.scheduled') },
+  ];
+
+  const typeOptions: SelectProps.Option[] = [
+    { value: '', label: t('events.all') },
+    { value: 'gameday', label: t('events.gameday') },
+    { value: 'jam', label: t('events.jam') },
+  ];
+
   const [selectedStatus, setSelectedStatus] =
-    useState<SelectProps.Option | null>(statusOptions[0]);
+    useState<SelectProps.Option | null>(null);
   const [selectedType, setSelectedType] = useState<SelectProps.Option | null>(
-    typeOptions[0],
+    null,
   );
 
   useEffect(() => {
@@ -143,24 +163,26 @@ export default function EventsPage() {
               sections: [
                 {
                   id: 'status',
-                  header: 'ステータス',
+                  header: t('events.statusLabel'),
                   content: (event) => (
                     <SpaceBetween direction="horizontal" size="xs">
-                      {getEventStatusIndicator(event.status)}
+                      {getEventStatusIndicator(event.status, t)}
                       <Badge
                         color={event.type === 'gameday' ? 'blue' : 'green'}
                       >
-                        {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+                        {event.type === 'gameday'
+                          ? t('events.gameday')
+                          : t('events.jam')}
                       </Badge>
                       {event.isRegistered && (
-                        <Badge color="green">登録済み</Badge>
+                        <Badge color="green">{t('events.registered')}</Badge>
                       )}
                     </SpaceBetween>
                   ),
                 },
                 {
                   id: 'schedule',
-                  header: 'スケジュール',
+                  header: t('events.schedule'),
                   content: (event) => {
                     const timeUntil =
                       event.status === 'scheduled'
@@ -169,10 +191,10 @@ export default function EventsPage() {
                     return (
                       <SpaceBetween size="xxs">
                         <Box variant="small">
-                          開始: {formatDate(event.startTime)}
+                          {t('events.startTime')}: {formatDate(event.startTime)}
                         </Box>
                         <Box variant="small">
-                          終了: {formatDate(event.endTime)}
+                          {t('events.endTime')}: {formatDate(event.endTime)}
                         </Box>
                         {timeUntil && (
                           <Box color="text-status-info" fontWeight="bold">
@@ -185,17 +207,17 @@ export default function EventsPage() {
                 },
                 {
                   id: 'details',
-                  header: '詳細',
+                  header: t('events.details'),
                   content: (event) => (
                     <SpaceBetween direction="horizontal" size="l">
                       <Box variant="small">
-                        問題数:{' '}
+                        {t('events.problems')}:{' '}
                         <Box variant="span" fontWeight="bold">
                           {event.problemCount}
                         </Box>
                       </Box>
                       <Box variant="small">
-                        参加者:{' '}
+                        {t('events.participants')}:{' '}
                         <Box variant="span" fontWeight="bold">
                           {event.participantCount}
                         </Box>
@@ -205,8 +227,8 @@ export default function EventsPage() {
                       </Box>
                       <Box variant="small">
                         {event.participantType === 'team'
-                          ? 'チーム参加'
-                          : '個人参加'}
+                          ? t('events.team')
+                          : t('events.solo')}
                       </Box>
                     </SpaceBetween>
                   ),
@@ -221,11 +243,11 @@ export default function EventsPage() {
                     >
                       {event.status === 'active'
                         ? event.isRegistered
-                          ? 'バトルに参加'
-                          : '今すぐ参加'
+                          ? t('events.joinBattle')
+                          : t('events.joinNow')
                         : event.isRegistered
-                          ? '詳細を見る'
-                          : '登録する'}
+                          ? t('events.viewDetails')
+                          : t('events.register')}
                     </Button>
                   ),
                 },
@@ -238,13 +260,13 @@ export default function EventsPage() {
             ]}
             items={events}
             loading={loading}
-            loadingText="イベントを読み込み中..."
+            loadingText={t('events.loading')}
             header={
               <Header
                 counter={!loading && !error ? `(${events.length})` : undefined}
-                description="参加可能なイベントを確認して、クラウドバトルに挑もう"
+                description={t('events.description')}
               >
-                イベント一覧
+                {t('events.title')}
               </Header>
             }
             filter={
@@ -255,7 +277,7 @@ export default function EventsPage() {
                     setSelectedStatus(detail.selectedOption)
                   }
                   options={statusOptions}
-                  placeholder="ステータス"
+                  placeholder={t('events.statusLabel')}
                 />
                 <Select
                   selectedOption={selectedType}
@@ -263,7 +285,7 @@ export default function EventsPage() {
                     setSelectedType(detail.selectedOption)
                   }
                   options={typeOptions}
-                  placeholder="タイプ"
+                  placeholder={t('events.typeLabel')}
                 />
               </SpaceBetween>
             }
@@ -275,16 +297,16 @@ export default function EventsPage() {
                       {error.message}
                     </StatusIndicator>
                     <Button onClick={() => window.location.reload()}>
-                      再試行
+                      {t('common.retry')}
                     </Button>
                   </SpaceBetween>
                 </Box>
               ) : (
                 <Box textAlign="center" color="inherit">
                   <SpaceBetween size="m">
-                    <b>イベントが見つかりません</b>
+                    <b>{t('events.empty')}</b>
                     <Box variant="p" color="inherit">
-                      条件に一致するイベントがありません。
+                      {t('events.emptyDescription')}
                     </Box>
                   </SpaceBetween>
                 </Box>

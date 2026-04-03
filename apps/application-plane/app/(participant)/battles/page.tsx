@@ -1,26 +1,26 @@
 /**
  * Battles List Page
  *
- * 参加可能なバトル一覧ページ
+ * Cloudscape Design System — バトル一覧ページ
  */
 
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useId, useState } from 'react';
-import { Header } from '@/components/layout';
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  DifficultyBadge,
-  ErrorState,
-  EventStatusBadge,
-  getErrorMessage,
-  getErrorType,
-  ProblemTypeBadge,
-} from '@/components/ui';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Cards from '@cloudscape-design/components/cards';
+import Header from '@cloudscape-design/components/header';
+import Link from '@cloudscape-design/components/link';
+import Select from '@cloudscape-design/components/select';
+import type { SelectProps } from '@cloudscape-design/components/select';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import '@cloudscape-design/global-styles/index.css';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Header as AppHeader } from '@/components/layout';
+import { useI18n } from '@/lib/i18n';
 import { getAvailableEvents } from '@/lib/api/events';
 import type {
   EventStatus,
@@ -28,9 +28,43 @@ import type {
   ProblemType,
 } from '@/lib/api/types';
 
+function getEventStatusIndicator(
+  status: EventStatus,
+  t: (k: string) => string,
+) {
+  switch (status) {
+    case 'active':
+      return (
+        <StatusIndicator type="success">{t('events.active')}</StatusIndicator>
+      );
+    case 'scheduled':
+      return (
+        <StatusIndicator type="pending">
+          {t('events.scheduled')}
+        </StatusIndicator>
+      );
+    case 'completed':
+      return (
+        <StatusIndicator type="stopped">
+          {t('events.completed')}
+        </StatusIndicator>
+      );
+    case 'cancelled':
+      return (
+        <StatusIndicator type="error">{t('events.cancelled')}</StatusIndicator>
+      );
+    case 'paused':
+      return (
+        <StatusIndicator type="warning">{t('events.paused')}</StatusIndicator>
+      );
+    default:
+      return <StatusIndicator type="info">{status}</StatusIndicator>;
+  }
+}
+
 function formatDate(dateString: string) {
   const date = new Date(dateString);
-  return date.toLocaleDateString('ja-JP', {
+  return date.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -49,230 +83,238 @@ function getTimeUntilStart(startTime: string) {
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
-  if (days > 0) return `あと ${days} 日 ${hours} 時間`;
-  if (hours > 0) return `あと ${hours} 時間`;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h`;
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  return `あと ${minutes} 分`;
+  return `${minutes}m`;
 }
 
 export default function BattlesPage() {
+  const { t } = useI18n();
+  const router = useRouter();
   const [battles, setBattles] = useState<ParticipantEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [filter, setFilter] = useState<{
-    status?: EventStatus;
-    type?: ProblemType;
-  }>({});
-  const statusFilterId = useId();
-  const typeFilterId = useId();
+
+  const statusOptions: SelectProps.Option[] = [
+    { value: '', label: t('events.all') },
+    { value: 'active', label: t('events.active') },
+    { value: 'scheduled', label: t('events.scheduled') },
+  ];
+
+  const typeOptions: SelectProps.Option[] = [
+    { value: '', label: t('events.all') },
+    { value: 'gameday', label: t('events.gameday') },
+    { value: 'jam', label: t('events.jam') },
+  ];
+
+  const [selectedStatus, setSelectedStatus] =
+    useState<SelectProps.Option | null>(statusOptions[0]);
+  const [selectedType, setSelectedType] = useState<SelectProps.Option | null>(
+    typeOptions[0],
+  );
 
   useEffect(() => {
     async function fetchBattles() {
       try {
         setLoading(true);
-        const statusFilter = filter.status
-          ? [filter.status]
+        const statusFilter = selectedStatus?.value
+          ? [selectedStatus.value as EventStatus]
           : ['scheduled', 'active'];
         const res = await getAvailableEvents({
           status: statusFilter as EventStatus[],
-          type: filter.type,
+          type: (selectedType?.value as ProblemType) || undefined,
           limit: 50,
         });
         setBattles(res.events);
+        setError(null);
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
+        setError(err instanceof Error ? err : new Error(t('common.loading')));
       } finally {
         setLoading(false);
       }
     }
 
     fetchBattles();
-  }, [filter]);
+  }, [selectedStatus, selectedType]);
 
   return (
-    <div className="min-h-screen bg-surface-0 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-hn-accent/10 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-hn-purple/10 rounded-full blur-[100px]" />
-      </div>
-
-      <Header />
+    <div className="min-h-screen bg-surface-0">
+      <AppHeader />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-text-primary">バトル一覧</h1>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-4 mb-6">
-          <div>
-            <label
-              htmlFor={statusFilterId}
-              className="block text-sm font-medium text-text-secondary mb-1"
-            >
-              ステータス
-            </label>
-            <select
-              id={statusFilterId}
-              className="bg-surface-1 border border-border text-text-primary rounded-lg px-3 py-2 focus:ring-hn-accent focus:border-hn-accent"
-              value={filter.status || ''}
-              onChange={(e) =>
-                setFilter((f) => ({
-                  ...f,
-                  status: (e.target.value as EventStatus) || undefined,
-                }))
-              }
-            >
-              <option value="" className="bg-surface-1">
-                すべて
-              </option>
-              <option value="active" className="bg-surface-1">
-                開催中
-              </option>
-              <option value="scheduled" className="bg-surface-1">
-                開催予定
-              </option>
-            </select>
-          </div>
-          <div>
-            <label
-              htmlFor={typeFilterId}
-              className="block text-sm font-medium text-text-secondary mb-1"
-            >
-              タイプ
-            </label>
-            <select
-              id={typeFilterId}
-              className="bg-surface-1 border border-border text-text-primary rounded-lg px-3 py-2 focus:ring-hn-accent focus:border-hn-accent"
-              value={filter.type || ''}
-              onChange={(e) =>
-                setFilter((f) => ({
-                  ...f,
-                  type: (e.target.value as ProblemType) || undefined,
-                }))
-              }
-            >
-              <option value="" className="bg-surface-1">
-                すべて
-              </option>
-              <option value="gameday" className="bg-surface-1">
-                GameDay
-              </option>
-              <option value="jam" className="bg-surface-1">
-                JAM
-              </option>
-            </select>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
-          </div>
-        ) : error ? (
-          <ErrorState
-            message={getErrorMessage(error)}
-            type={getErrorType(error)}
-            onRetry={() => window.location.reload()}
-          />
-        ) : battles.length === 0 ? (
-          <Card className="text-center py-12">
-            <h2 className="text-xl font-semibold text-text-primary mb-2">
-              バトルが見つかりません
-            </h2>
-            <p className="text-text-muted">
-              条件に一致するバトルがありません。
-            </p>
-          </Card>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {battles.map((battle) => {
-              const timeUntil =
-                battle.status === 'scheduled'
-                  ? getTimeUntilStart(battle.startTime)
-                  : null;
-
-              return (
+        <div className="awsui-dark-mode">
+          <Cards
+            cardDefinition={{
+              header: (battle) => (
                 <Link
-                  key={battle.id}
                   href={`/battles/${battle.id}`}
-                  data-testid={`battle-card-${battle.id}`}
+                  fontSize="heading-m"
+                  onFollow={(e) => {
+                    e.preventDefault();
+                    router.push(`/battles/${battle.id}`);
+                  }}
                 >
-                  <Card hoverable className="h-full">
-                    <CardContent className="space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex gap-2">
-                          <ProblemTypeBadge type={battle.type} />
-                          <EventStatusBadge status={battle.status} />
-                        </div>
-                        {battle.isRegistered && (
-                          <Badge variant="success" size="sm">
-                            登録済み
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold text-lg text-text-primary">
-                          {battle.name}
-                        </h3>
-                        {timeUntil && (
-                          <p className="text-hn-accent font-medium text-sm mt-1">
-                            {timeUntil}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="text-sm text-text-secondary space-y-1">
-                        <p>
-                          <span className="font-medium">開始:</span>{' '}
-                          {formatDate(battle.startTime)}
-                        </p>
-                        <p>
-                          <span className="font-medium">終了:</span>{' '}
-                          {formatDate(battle.endTime)}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between text-sm text-text-muted">
-                        <span>問題数: {battle.problemCount}</span>
-                        <span>参加者: {battle.participantCount}</span>
-                      </div>
-
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="px-2 py-1 bg-surface-2 rounded text-text-secondary">
-                          {battle.cloudProvider.toUpperCase()}
-                        </span>
-                        <span className="text-text-muted">
-                          {battle.participantType === 'team'
-                            ? 'チーム参加'
-                            : '個人参加'}
-                        </span>
-                      </div>
-
-                      <Button
-                        variant={
-                          battle.status === 'active' ? 'primary' : 'outline'
-                        }
-                        fullWidth
-                      >
-                        {battle.status === 'active'
-                          ? battle.isRegistered
-                            ? 'バトルに参加'
-                            : '今すぐ参加'
-                          : battle.isRegistered
-                            ? '詳細を見る'
-                            : '登録する'}
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  {battle.name}
                 </Link>
-              );
-            })}
-          </div>
-        )}
+              ),
+              sections: [
+                {
+                  id: 'status',
+                  header: t('events.statusLabel'),
+                  content: (battle) => (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      {getEventStatusIndicator(battle.status, t)}
+                      <Badge
+                        color={battle.type === 'gameday' ? 'blue' : 'green'}
+                      >
+                        {battle.type === 'gameday'
+                          ? t('events.gameday')
+                          : t('events.jam')}
+                      </Badge>
+                      {battle.isRegistered && (
+                        <Badge color="green">{t('events.registered')}</Badge>
+                      )}
+                    </SpaceBetween>
+                  ),
+                },
+                {
+                  id: 'schedule',
+                  header: t('events.schedule'),
+                  content: (battle) => {
+                    const timeUntil =
+                      battle.status === 'scheduled'
+                        ? getTimeUntilStart(battle.startTime)
+                        : null;
+                    return (
+                      <SpaceBetween size="xxs">
+                        <Box variant="small">
+                          {t('events.startTime')}:{' '}
+                          {formatDate(battle.startTime)}
+                        </Box>
+                        <Box variant="small">
+                          {t('events.endTime')}: {formatDate(battle.endTime)}
+                        </Box>
+                        {timeUntil && (
+                          <Box color="text-status-info" fontWeight="bold">
+                            {timeUntil}
+                          </Box>
+                        )}
+                      </SpaceBetween>
+                    );
+                  },
+                },
+                {
+                  id: 'details',
+                  header: t('events.details'),
+                  content: (battle) => (
+                    <SpaceBetween direction="horizontal" size="l">
+                      <Box variant="small">
+                        {t('events.problems')}:{' '}
+                        <Box variant="span" fontWeight="bold">
+                          {battle.problemCount}
+                        </Box>
+                      </Box>
+                      <Box variant="small">
+                        {t('events.participants')}:{' '}
+                        <Box variant="span" fontWeight="bold">
+                          {battle.participantCount}
+                        </Box>
+                      </Box>
+                      <Box variant="small">
+                        {battle.cloudProvider.toUpperCase()}
+                      </Box>
+                      <Box variant="small">
+                        {battle.participantType === 'team'
+                          ? t('events.team')
+                          : t('events.solo')}
+                      </Box>
+                    </SpaceBetween>
+                  ),
+                },
+                {
+                  id: 'action',
+                  content: (battle) => (
+                    <Button
+                      variant={
+                        battle.status === 'active' ? 'primary' : 'normal'
+                      }
+                      fullWidth
+                      onClick={() => router.push(`/battles/${battle.id}`)}
+                    >
+                      {battle.status === 'active'
+                        ? battle.isRegistered
+                          ? t('events.joinBattle')
+                          : t('events.joinNow')
+                        : battle.isRegistered
+                          ? t('events.viewDetails')
+                          : t('events.register')}
+                    </Button>
+                  ),
+                },
+              ],
+            }}
+            cardsPerRow={[
+              { cards: 1 },
+              { minWidth: 600, cards: 2 },
+              { minWidth: 1000, cards: 3 },
+            ]}
+            items={battles}
+            loading={loading}
+            loadingText={t('events.loading')}
+            header={
+              <Header
+                counter={!loading && !error ? `(${battles.length})` : undefined}
+                description={t('events.description')}
+              >
+                {t('battles.title')}
+              </Header>
+            }
+            filter={
+              <SpaceBetween direction="horizontal" size="l">
+                <Select
+                  selectedOption={selectedStatus}
+                  onChange={({ detail }) =>
+                    setSelectedStatus(detail.selectedOption)
+                  }
+                  options={statusOptions}
+                  placeholder={t('events.statusLabel')}
+                />
+                <Select
+                  selectedOption={selectedType}
+                  onChange={({ detail }) =>
+                    setSelectedType(detail.selectedOption)
+                  }
+                  options={typeOptions}
+                  placeholder={t('events.typeLabel')}
+                />
+              </SpaceBetween>
+            }
+            empty={
+              error ? (
+                <Box textAlign="center" color="inherit">
+                  <SpaceBetween size="m">
+                    <StatusIndicator type="error">
+                      {error.message}
+                    </StatusIndicator>
+                    <Button onClick={() => window.location.reload()}>
+                      {t('common.retry')}
+                    </Button>
+                  </SpaceBetween>
+                </Box>
+              ) : (
+                <Box textAlign="center" color="inherit">
+                  <SpaceBetween size="m">
+                    <b>{t('battles.empty')}</b>
+                    <Box variant="p" color="inherit">
+                      {t('battles.emptyDescription')}
+                    </Box>
+                  </SpaceBetween>
+                </Box>
+              )
+            }
+          />
+        </div>
       </main>
     </div>
   );

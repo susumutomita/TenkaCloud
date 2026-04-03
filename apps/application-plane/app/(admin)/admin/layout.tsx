@@ -22,6 +22,7 @@ const navItems: SideNavigationProps.Item[] = [
   { type: 'link', text: 'マーケットプレイス', href: '/admin/marketplace' },
   { type: 'link', text: '参加者管理', href: '/admin/participants' },
   { type: 'link', text: 'チーム管理', href: '/admin/teams' },
+  { type: 'link', text: '分析', href: '/admin/analytics' },
   { type: 'divider' },
   { type: 'link', text: 'GameDay管理', href: '/admin/gameday' },
   { type: 'link', text: '設定', href: '/admin/settings' },

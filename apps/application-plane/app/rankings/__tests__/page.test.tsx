@@ -147,7 +147,7 @@ describe('ランキングページ', () => {
     render(<RankingsPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'ランキング' }),
+        screen.getByRole('heading', { name: /ランキング/ }),
       ).toBeInTheDocument();
     });
   });
