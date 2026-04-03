@@ -1,28 +1,32 @@
 /**
  * Admin GameDay Control Panel
  *
- * ゲーム制御 / チーム管理 / 攻撃ログ / 監査
+ * Cloudscape Design System - ゲーム制御 / チーム管理 / 攻撃ログ / 監査
  */
 
 'use client';
 
-import Link from 'next/link';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import type { SelectProps } from '@cloudscape-design/components/select';
+import Select from '@cloudscape-design/components/select';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import Tabs from '@cloudscape-design/components/tabs';
+import Toggle from '@cloudscape-design/components/toggle';
+import '@cloudscape-design/global-styles/index.css';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  ErrorState,
-  getErrorMessage,
-  getErrorType,
-  Input,
-  Select,
-  Skeleton,
-} from '@/components/ui';
-import { HealthIndicator } from '@/components/gameday';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { getAttackCatalog } from '@/lib/api/gameday';
 import {
   executeFaultInjection,
   getAttackLogs,
@@ -37,7 +41,6 @@ import {
   toggleBlackout,
   toggleScoreWeight,
 } from '@/lib/api/gameday-admin';
-import { getAttackCatalog } from '@/lib/api/gameday';
 import type {
   Attack,
   AttackLog,
@@ -45,37 +48,40 @@ import type {
   Team,
 } from '@/lib/api/gameday-types';
 
-type TabId = 'control' | 'teams' | 'logs' | 'audit' | 'fault-injection';
-
 export default function AdminGamedayControlPage() {
   const params = useParams();
   const eventId = params.eventId as string;
 
-  const [activeTab, setActiveTab] = useState<TabId>('control');
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [teams, setTeamsState] = useState<Team[]>([]);
   const [logs, setLogs] = useState<AttackLog[]>([]);
+  const [attacks, setAttacks] = useState<Attack[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Team registration form
+  const [durationMinutes, setDurationMinutes] = useState('60');
+
   const [newTeamId, setNewTeamId] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
+  const [newWebsiteUrl, setNewWebsiteUrl] = useState('');
+  const [newApiUrl, setNewApiUrl] = useState('');
   const [registering, setRegistering] = useState(false);
 
-  // Auditor status
   const [auditorRunning, setAuditorRunning] = useState(false);
 
-  // Fault injection
-  const [attacks, setAttacks] = useState<Attack[]>([]);
-  const [fiTeamId, setFiTeamId] = useState('');
-  const [fiAttackSlug, setFiAttackSlug] = useState('');
+  const [fiTeamId, setFiTeamId] = useState<SelectProps.Option | null>(null);
+  const [fiAttackSlug, setFiAttackSlug] = useState<SelectProps.Option | null>(
+    null,
+  );
   const [fiLoading, setFiLoading] = useState(false);
   const [fiResult, setFiResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
+
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -91,9 +97,7 @@ export default function AdminGamedayControlPage() {
       setAttacks(catalogData.attacks);
       setError(null);
     } catch (err) {
-      setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました'),
-      );
+      setError(err instanceof Error ? err.message : '読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
@@ -105,13 +109,31 @@ export default function AdminGamedayControlPage() {
     return () => clearInterval(id);
   }, [fetchData]);
 
+  useEffect(() => {
+    if (gameState?.isRunning && gameState.startedAt) {
+      const startTime = new Date(gameState.startedAt).getTime();
+      const updateTimer = () => {
+        const now = Date.now();
+        setElapsedSeconds(Math.floor((now - startTime) / 1000));
+      };
+      updateTimer();
+      timerRef.current = setInterval(updateTimer, 1000);
+      return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+      };
+    }
+    setElapsedSeconds(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    return undefined;
+  }, [gameState?.isRunning, gameState?.startedAt]);
+
   const handleAction = async (action: () => Promise<GameState | unknown>) => {
     setActionLoading(true);
     try {
       await action();
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setActionLoading(false);
     }
@@ -121,12 +143,17 @@ export default function AdminGamedayControlPage() {
     if (!newTeamId.trim() || !newTeamName.trim()) return;
     setRegistering(true);
     try {
-      await registerTeam(eventId, newTeamId.trim(), newTeamName.trim());
+      await registerTeam(eventId, newTeamId.trim(), newTeamName.trim(), {
+        websiteUrl: newWebsiteUrl.trim() || undefined,
+        apiUrl: newApiUrl.trim() || undefined,
+      });
       setNewTeamId('');
       setNewTeamName('');
+      setNewWebsiteUrl('');
+      setNewApiUrl('');
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setRegistering(false);
     }
@@ -139,7 +166,7 @@ export default function AdminGamedayControlPage() {
       setAuditorRunning(true);
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setActionLoading(false);
     }
@@ -152,21 +179,21 @@ export default function AdminGamedayControlPage() {
       setAuditorRunning(false);
       await fetchData();
     } catch {
-      // ignore
+      /* ignore */
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleFaultInjection = async () => {
-    if (!fiTeamId || !fiAttackSlug) return;
+    if (!fiTeamId?.value || !fiAttackSlug?.value) return;
     setFiLoading(true);
     setFiResult(null);
     try {
       const result = await executeFaultInjection(
         eventId,
-        fiTeamId,
-        fiAttackSlug,
+        fiTeamId.value,
+        fiAttackSlug.value,
       );
       setFiResult({
         success: result.success,
@@ -182,25 +209,6 @@ export default function AdminGamedayControlPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <ErrorState
-        message={getErrorMessage(error)}
-        type={getErrorType(error)}
-        onRetry={fetchData}
-      />
-    );
-  }
-
   const formatTime = (ts: string) =>
     new Date(ts).toLocaleTimeString('ja-JP', {
       hour: '2-digit',
@@ -208,426 +216,481 @@ export default function AdminGamedayControlPage() {
       second: '2-digit',
     });
 
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'control', label: 'ゲーム制御' },
-    { id: 'teams', label: 'チーム管理' },
-    { id: 'logs', label: '攻撃ログ' },
-    { id: 'audit', label: '監査' },
-    { id: 'fault-injection', label: '妨害注入' },
-  ];
+  const formatTimer = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const getRemainingSeconds = () => {
+    if (!gameState) return 0;
+    const totalSeconds = gameState.durationMinutes * 60;
+    return Math.max(0, totalSeconds - elapsedSeconds);
+  };
+
+  if (loading) {
+    return (
+      <Box textAlign="center" padding="l">
+        <Spinner size="large" />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box textAlign="center" padding="l">
+        <SpaceBetween size="m">
+          <StatusIndicator type="error">{error}</StatusIndicator>
+          <Button onClick={fetchData}>再読み込み</Button>
+        </SpaceBetween>
+      </Box>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center space-x-2 text-sm text-text-muted mb-2 font-mono">
-          <Link
-            href="/admin/gameday"
-            className="hover:text-hn-accent transition-colors"
-          >
-            GameDay管理
-          </Link>
-          <span className="text-hn-accent">/</span>
-          <span className="text-text-secondary">{eventId}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-          <span className="text-hn-accent font-mono">&gt;_</span>
-          コントロールパネル
-        </h1>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-border">
-        <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab.id
-                  ? 'border-hn-accent text-hn-accent'
-                  : 'border-transparent text-text-muted hover:text-text-primary hover:border-border'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Game Control Tab */}
-      {activeTab === 'control' && gameState && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Game State */}
-          <Card>
-            <CardHeader>
-              <span className="font-semibold text-text-primary">
-                ゲーム状態
-              </span>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-sm text-text-muted">状態</span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
-                      className={`w-3 h-3 rounded-full ${
-                        gameState.isRunning
-                          ? 'bg-hn-success animate-pulse'
-                          : 'bg-text-muted'
-                      }`}
-                    />
-                    <span className="font-medium text-text-primary">
-                      {gameState.isRunning ? '稼働中' : '停止'}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-sm text-text-muted">時間</span>
-                  <div className="font-mono text-text-primary mt-1">
-                    {gameState.durationMinutes}分
-                  </div>
-                </div>
-                <div>
-                  <span className="text-sm text-text-muted">スコア重み</span>
-                  <div className="mt-1">
-                    <Badge
-                      variant={
-                        gameState.scoreWeight === 'high' ? 'warning' : 'default'
+    <SpaceBetween size="l">
+      <Header variant="h1" description={`イベント ID: ${eventId}`}>
+        GameDay コントロールパネル
+      </Header>
+      <Tabs
+        tabs={[
+          {
+            label: 'ゲーム制御',
+            id: 'control',
+            content: (
+              <SpaceBetween size="l">
+                <Container
+                  header={
+                    <Header
+                      variant="h2"
+                      actions={
+                        <Button
+                          iconName="refresh"
+                          variant="icon"
+                          onClick={fetchData}
+                          ariaLabel="更新"
+                        />
                       }
-                      badgeStyle="subtle"
                     >
-                      {gameState.scoreWeight === 'high' ? '2x' : '通常'}
-                    </Badge>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-sm text-text-muted">
-                    ブラックアウト
-                  </span>
-                  <div className="mt-1">
-                    <Badge
-                      variant={gameState.blackout ? 'danger' : 'default'}
-                      badgeStyle="subtle"
-                    >
-                      {gameState.blackout ? 'ON' : 'OFF'}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <Card>
-            <CardHeader>
-              <span className="font-semibold text-text-primary">操作</span>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                {!gameState.isRunning ? (
-                  <Button
-                    variant="success"
-                    onClick={() => handleAction(() => startGame(eventId))}
-                    loading={actionLoading}
-                  >
-                    ゲーム開始
-                  </Button>
-                ) : (
-                  <Button
-                    variant="danger"
-                    onClick={() => handleAction(() => stopGame(eventId))}
-                    loading={actionLoading}
-                  >
-                    ゲーム停止
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  onClick={() => handleAction(() => toggleScoreWeight(eventId))}
-                  loading={actionLoading}
-                >
-                  スコア重み切替
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => handleAction(() => toggleBlackout(eventId))}
-                  loading={actionLoading}
-                >
-                  ブラックアウト切替
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => handleAction(() => seedAttacks(eventId))}
-                  loading={actionLoading}
-                >
-                  攻撃カタログ生成
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Teams Tab */}
-      {activeTab === 'teams' && (
-        <div className="space-y-6">
-          {/* Register Team */}
-          <Card>
-            <CardHeader>
-              <span className="font-semibold text-text-primary">
-                チーム登録
-              </span>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-4">
-                <Input
-                  label="チーム ID"
-                  value={newTeamId}
-                  onChange={(e) => setNewTeamId(e.target.value)}
-                  placeholder="team-1"
-                />
-                <Input
-                  label="チーム名"
-                  value={newTeamName}
-                  onChange={(e) => setNewTeamName(e.target.value)}
-                  placeholder="チーム名"
-                />
-                <Button
-                  variant="primary"
-                  onClick={handleRegisterTeam}
-                  loading={registering}
-                  disabled={
-                    !newTeamId.trim() || !newTeamName.trim() || registering
+                      ゲーム制御
+                    </Header>
                   }
                 >
-                  登録
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Team List */}
-          <Card>
-            <CardHeader>
-              <span className="font-semibold text-text-primary">
-                登録チーム ({teams.length})
-              </span>
-            </CardHeader>
-            <CardContent>
-              {teams.length === 0 ? (
-                <p className="text-text-muted text-sm py-4">チームなし</p>
-              ) : (
-                <div className="space-y-2">
-                  {teams.map((team) => (
-                    <div
-                      key={team.teamId}
-                      className="flex items-center justify-between p-3 bg-surface-2 rounded-[var(--radius)]"
-                    >
+                  <SpaceBetween size="l">
+                    <ColumnLayout columns={4} variant="text-grid">
                       <div>
-                        <span className="font-medium text-text-primary">
-                          {team.teamName}
-                        </span>
-                        <span className="text-text-muted text-sm ml-3 font-mono">
-                          {team.teamId}
-                        </span>
+                        <Box variant="awsui-key-label">状態</Box>
+                        <StatusIndicator
+                          type={gameState?.isRunning ? 'success' : 'stopped'}
+                        >
+                          {gameState?.isRunning ? '稼働中' : '停止'}
+                        </StatusIndicator>
                       </div>
-                      {team.score !== undefined && (
-                        <span className="font-mono text-hn-accent">
-                          {team.score} pts
-                        </span>
+                      <div>
+                        <Box variant="awsui-key-label">設定時間</Box>
+                        <Box>{gameState?.durationMinutes ?? 0}分</Box>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">経過時間</Box>
+                        <Box fontWeight="bold">
+                          {gameState?.isRunning
+                            ? formatTimer(elapsedSeconds)
+                            : '--:--:--'}
+                        </Box>
+                      </div>
+                      <div>
+                        <Box variant="awsui-key-label">残り時間</Box>
+                        <Box fontWeight="bold">
+                          {gameState?.isRunning
+                            ? formatTimer(getRemainingSeconds())
+                            : '--:--:--'}
+                        </Box>
+                      </div>
+                    </ColumnLayout>
+                    <SpaceBetween direction="horizontal" size="xs">
+                      {!gameState?.isRunning ? (
+                        <>
+                          <FormField label="ゲーム時間（分）">
+                            <Input
+                              type="number"
+                              value={durationMinutes}
+                              onChange={({ detail }) =>
+                                setDurationMinutes(detail.value)
+                              }
+                              inputMode="numeric"
+                            />
+                          </FormField>
+                          <Box padding={{ top: 'l' }}>
+                            <Button
+                              variant="primary"
+                              loading={actionLoading}
+                              onClick={() =>
+                                handleAction(() =>
+                                  startGame(
+                                    eventId,
+                                    Number(durationMinutes) || undefined,
+                                  ),
+                                )
+                              }
+                            >
+                              ゲーム開始
+                            </Button>
+                          </Box>
+                        </>
+                      ) : (
+                        <Button
+                          variant="normal"
+                          loading={actionLoading}
+                          onClick={() => handleAction(() => stopGame(eventId))}
+                          iconName="close"
+                        >
+                          ゲーム停止
+                        </Button>
                       )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Attack Logs Tab */}
-      {activeTab === 'logs' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-text-primary">
-                攻撃ログ ({logs.length})
-              </span>
-              <Button variant="ghost" size="sm" onClick={fetchData}>
-                更新
-              </Button>
-            </div>
-          </CardHeader>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-surface-2 border-b border-border">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                    時間
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                    攻撃者
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                    防衛者
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                    攻撃
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase">
-                    結果
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase">
-                    ダメージ
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {logs.map((log) => (
-                  <tr key={log.id}>
-                    <td className="px-4 py-3 text-sm font-mono text-text-muted">
-                      {formatTime(log.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-text-primary">
-                      {log.attackerTeamId}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-text-secondary">
-                      {log.defenderTeamId}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-mono text-text-primary">
-                      {log.attackSlug}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge
-                        variant={log.success ? 'success' : 'danger'}
-                        badgeStyle="subtle"
-                        size="sm"
-                      >
-                        {log.success ? '成功' : '失敗'}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right font-mono text-hn-error">
-                      {log.damage}
-                    </td>
-                  </tr>
-                ))}
-                {logs.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-8 text-center text-text-muted text-sm"
-                    >
-                      ログなし
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* Audit Tab */}
-      {activeTab === 'audit' && (
-        <Card>
-          <CardHeader>
-            <span className="font-semibold text-text-primary">
-              監査コントロール
-            </span>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-text-secondary text-sm">
-              ヘルスチェック監査プロセスを制御します。開始すると、全チームのWebサイト/APIの定期的な健全性チェックが実行されます。
-            </p>
-            <div className="flex items-center gap-3 p-3 bg-surface-2 rounded-[var(--radius)]">
-              <HealthIndicator isHealthy={auditorRunning} />
-              <span className="text-sm font-medium text-text-primary">
-                {auditorRunning ? '監査稼働中' : '監査停止中'}
-              </span>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="success"
-                onClick={handleStartAuditor}
-                loading={actionLoading}
-              >
-                監査開始
-              </Button>
-              <Button
-                variant="danger"
-                onClick={handleStopAuditor}
-                loading={actionLoading}
-              >
-                監査停止
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Fault Injection Tab */}
-      {activeTab === 'fault-injection' && (
-        <Card>
-          <CardHeader>
-            <span className="font-semibold text-text-primary">
-              妨害注入（Fault Injection）
-            </span>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-text-secondary text-sm">
-              管理者として指定チームに対して直接攻撃を実行します。
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select
-                label="対象チーム"
-                placeholder="チームを選択"
-                options={teams.map((t) => ({
-                  value: t.teamId,
-                  label: `${t.teamName} (${t.teamId})`,
-                }))}
-                value={fiTeamId}
-                onChange={(e) => setFiTeamId(e.target.value)}
-              />
-              <Select
-                label="攻撃"
-                placeholder="攻撃を選択"
-                options={attacks.map((a) => ({
-                  value: a.slug,
-                  label: `${a.name} (${a.slug})`,
-                }))}
-                value={fiAttackSlug}
-                onChange={(e) => setFiAttackSlug(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-4">
-              <Button
-                variant="danger"
-                onClick={handleFaultInjection}
-                loading={fiLoading}
-                disabled={!fiTeamId || !fiAttackSlug || fiLoading}
-              >
-                妨害実行
-              </Button>
-              {fiResult && (
-                <Badge
-                  variant={fiResult.success ? 'success' : 'danger'}
-                  badgeStyle="subtle"
+                    </SpaceBetween>
+                  </SpaceBetween>
+                </Container>
+                <Container
+                  header={<Header variant="h2">スコア・表示制御</Header>}
                 >
-                  {fiResult.message}
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Terminal footer */}
-      <div className="text-center text-text-muted text-xs font-mono py-4">
-        <span className="text-hn-accent">$</span> gameday --event={eventId}
-        --status={gameState?.isRunning ? 'running' : 'stopped'}
-      </div>
-    </div>
+                  <ColumnLayout columns={2}>
+                    <SpaceBetween size="s">
+                      <Box variant="awsui-key-label">スコア重み</Box>
+                      <Toggle
+                        checked={gameState?.scoreWeight === 'high'}
+                        onChange={() =>
+                          handleAction(() => toggleScoreWeight(eventId))
+                        }
+                        disabled={actionLoading}
+                      >
+                        {gameState?.scoreWeight === 'high' ? (
+                          <Badge color="blue">2x</Badge>
+                        ) : (
+                          '通常'
+                        )}
+                      </Toggle>
+                    </SpaceBetween>
+                    <SpaceBetween size="s">
+                      <Box variant="awsui-key-label">ブラックアウト</Box>
+                      <Toggle
+                        checked={gameState?.blackout ?? false}
+                        onChange={() =>
+                          handleAction(() => toggleBlackout(eventId))
+                        }
+                        disabled={actionLoading}
+                      >
+                        {gameState?.blackout ? (
+                          <Badge color="red">ON</Badge>
+                        ) : (
+                          'OFF'
+                        )}
+                      </Toggle>
+                    </SpaceBetween>
+                  </ColumnLayout>
+                </Container>
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: 'チーム管理',
+            id: 'teams',
+            content: (
+              <SpaceBetween size="l">
+                <Container header={<Header variant="h2">チーム登録</Header>}>
+                  <SpaceBetween size="m">
+                    <ColumnLayout columns={2}>
+                      <FormField label="チーム ID">
+                        <Input
+                          value={newTeamId}
+                          onChange={({ detail }) => setNewTeamId(detail.value)}
+                          placeholder="team-1"
+                        />
+                      </FormField>
+                      <FormField label="チーム名">
+                        <Input
+                          value={newTeamName}
+                          onChange={({ detail }) =>
+                            setNewTeamName(detail.value)
+                          }
+                          placeholder="チーム名"
+                        />
+                      </FormField>
+                      <FormField label="ウェブサイト URL">
+                        <Input
+                          value={newWebsiteUrl}
+                          onChange={({ detail }) =>
+                            setNewWebsiteUrl(detail.value)
+                          }
+                          placeholder="https://example.com"
+                          type="url"
+                        />
+                      </FormField>
+                      <FormField label="API URL">
+                        <Input
+                          value={newApiUrl}
+                          onChange={({ detail }) => setNewApiUrl(detail.value)}
+                          placeholder="https://api.example.com"
+                          type="url"
+                        />
+                      </FormField>
+                    </ColumnLayout>
+                    <Button
+                      variant="primary"
+                      onClick={handleRegisterTeam}
+                      loading={registering}
+                      disabled={
+                        !newTeamId.trim() || !newTeamName.trim() || registering
+                      }
+                    >
+                      チーム登録
+                    </Button>
+                  </SpaceBetween>
+                </Container>
+                <Table
+                  header={
+                    <Header counter={`(${teams.length})`}>登録チーム</Header>
+                  }
+                  items={teams}
+                  empty={
+                    <Box textAlign="center" padding="l">
+                      <Box variant="p" color="text-body-secondary">
+                        チームが登録されていません
+                      </Box>
+                    </Box>
+                  }
+                  columnDefinitions={[
+                    {
+                      id: 'teamName',
+                      header: 'チーム名',
+                      cell: (item) => item.teamName,
+                      sortingField: 'teamName',
+                    },
+                    {
+                      id: 'teamId',
+                      header: 'チーム ID',
+                      cell: (item) => item.teamId,
+                    },
+                    {
+                      id: 'websiteUrl',
+                      header: 'ウェブサイト URL',
+                      cell: (item) => item.websiteUrl ?? '-',
+                    },
+                    {
+                      id: 'apiUrl',
+                      header: 'API URL',
+                      cell: (item) => item.apiUrl ?? '-',
+                    },
+                    {
+                      id: 'score',
+                      header: 'スコア',
+                      cell: (item) =>
+                        item.score !== undefined ? `${item.score} pts` : '-',
+                    },
+                  ]}
+                />
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: '攻撃管理',
+            id: 'attacks',
+            content: (
+              <SpaceBetween size="l">
+                <Container header={<Header variant="h2">攻撃カタログ</Header>}>
+                  <SpaceBetween size="m">
+                    <Box variant="p">
+                      攻撃カタログを生成します。既存のカタログがある場合は上書きされます。
+                    </Box>
+                    <Button
+                      variant="primary"
+                      loading={actionLoading}
+                      onClick={() => handleAction(() => seedAttacks(eventId))}
+                    >
+                      攻撃カタログ生成
+                    </Button>
+                  </SpaceBetween>
+                </Container>
+                <Table
+                  header={
+                    <Header
+                      counter={`(${logs.length})`}
+                      actions={
+                        <Button
+                          iconName="refresh"
+                          variant="icon"
+                          onClick={fetchData}
+                          ariaLabel="更新"
+                        />
+                      }
+                    >
+                      攻撃ログ
+                    </Header>
+                  }
+                  items={logs}
+                  empty={
+                    <Box textAlign="center" padding="l">
+                      <Box variant="p" color="text-body-secondary">
+                        攻撃ログがありません
+                      </Box>
+                    </Box>
+                  }
+                  columnDefinitions={[
+                    {
+                      id: 'time',
+                      header: '時間',
+                      cell: (item) => formatTime(item.createdAt),
+                      sortingField: 'createdAt',
+                    },
+                    {
+                      id: 'attacker',
+                      header: '攻撃者',
+                      cell: (item) => item.attackerTeamId,
+                    },
+                    {
+                      id: 'defender',
+                      header: '防衛者',
+                      cell: (item) => item.defenderTeamId,
+                    },
+                    {
+                      id: 'attack',
+                      header: '攻撃',
+                      cell: (item) => item.attackSlug,
+                    },
+                    {
+                      id: 'success',
+                      header: '結果',
+                      cell: (item) => (
+                        <StatusIndicator
+                          type={item.success ? 'success' : 'error'}
+                        >
+                          {item.success ? '成功' : '失敗'}
+                        </StatusIndicator>
+                      ),
+                    },
+                    {
+                      id: 'damage',
+                      header: 'ダメージ',
+                      cell: (item) => item.damage,
+                    },
+                  ]}
+                />
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: '監査制御',
+            id: 'audit',
+            content: (
+              <SpaceBetween size="l">
+                <Container
+                  header={<Header variant="h2">監査コントロール</Header>}
+                >
+                  <SpaceBetween size="m">
+                    <Box variant="p">
+                      ヘルスチェック監査プロセスを制御します。開始すると、全チームのウェブサイト/APIの定期的な健全性チェックが実行されます。
+                    </Box>
+                    <ColumnLayout columns={2} variant="text-grid">
+                      <div>
+                        <Box variant="awsui-key-label">監査ステータス</Box>
+                        <StatusIndicator
+                          type={auditorRunning ? 'success' : 'stopped'}
+                        >
+                          {auditorRunning ? '稼働中' : '停止'}
+                        </StatusIndicator>
+                      </div>
+                    </ColumnLayout>
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        variant="primary"
+                        onClick={handleStartAuditor}
+                        loading={actionLoading}
+                        disabled={auditorRunning}
+                      >
+                        監査開始
+                      </Button>
+                      <Button
+                        variant="normal"
+                        onClick={handleStopAuditor}
+                        loading={actionLoading}
+                        disabled={!auditorRunning}
+                      >
+                        監査停止
+                      </Button>
+                    </SpaceBetween>
+                  </SpaceBetween>
+                </Container>
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: '妨害注入',
+            id: 'fault-injection',
+            content: (
+              <SpaceBetween size="l">
+                <Container
+                  header={
+                    <Header variant="h2">妨害注入（Fault Injection）</Header>
+                  }
+                >
+                  <SpaceBetween size="m">
+                    <Box variant="p">
+                      管理者として指定チームに対して直接攻撃を実行します。
+                    </Box>
+                    <ColumnLayout columns={2}>
+                      <FormField label="対象チーム">
+                        <Select
+                          selectedOption={fiTeamId}
+                          onChange={({ detail }) =>
+                            setFiTeamId(detail.selectedOption)
+                          }
+                          options={teams.map((t) => ({
+                            value: t.teamId,
+                            label: `${t.teamName} (${t.teamId})`,
+                          }))}
+                          placeholder="チームを選択"
+                        />
+                      </FormField>
+                      <FormField label="攻撃">
+                        <Select
+                          selectedOption={fiAttackSlug}
+                          onChange={({ detail }) =>
+                            setFiAttackSlug(detail.selectedOption)
+                          }
+                          options={attacks.map((a) => ({
+                            value: a.slug,
+                            label: `${a.name} (${a.slug})`,
+                          }))}
+                          placeholder="攻撃を選択"
+                        />
+                      </FormField>
+                    </ColumnLayout>
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        variant="primary"
+                        onClick={handleFaultInjection}
+                        loading={fiLoading}
+                        disabled={
+                          !fiTeamId?.value || !fiAttackSlug?.value || fiLoading
+                        }
+                      >
+                        妨害実行
+                      </Button>
+                      {fiResult && (
+                        <StatusIndicator
+                          type={fiResult.success ? 'success' : 'error'}
+                        >
+                          {fiResult.message}
+                        </StatusIndicator>
+                      )}
+                    </SpaceBetween>
+                  </SpaceBetween>
+                </Container>
+              </SpaceBetween>
+            ),
+          },
+        ]}
+      />
+    </SpaceBetween>
   );
 }
