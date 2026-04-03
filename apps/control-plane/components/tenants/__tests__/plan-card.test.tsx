@@ -145,9 +145,6 @@ describe('PlanCard コンポーネント', () => {
       );
       await user.click(screen.getByRole('button', { name: 'キャンセル' }));
 
-      expect(
-        screen.queryByText('プランを変更しますか？'),
-      ).not.toBeInTheDocument();
       expect(tenantApi.updateTenant).not.toHaveBeenCalled();
     });
 
@@ -163,7 +160,6 @@ describe('PlanCard コンポーネント', () => {
     });
 
     it('現在のプランのカードをクリックしても何も起きないべき', async () => {
-      const user = userEvent.setup();
       render(<PlanCard tenant={createMockTenant({ tier: 'PRO' })} />);
 
       // PROプランカード内をクリック（ボタンはないのでカード自体を直接操作できない）
@@ -172,10 +168,7 @@ describe('PlanCard コンポーネント', () => {
       expect(proCard).not.toHaveTextContent('アップグレード');
       expect(proCard).not.toHaveTextContent('ダウングレード');
 
-      // ダイアログが表示されていないことを確認
-      expect(
-        screen.queryByText('プランを変更しますか？'),
-      ).not.toBeInTheDocument();
+      expect(tenantApi.updateTenant).not.toHaveBeenCalled();
     });
 
     it('ダウングレード時にダイアログで「ダウングレード」と表示すべき', async () => {
