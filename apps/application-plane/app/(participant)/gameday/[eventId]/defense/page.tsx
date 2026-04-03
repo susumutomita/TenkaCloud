@@ -120,10 +120,7 @@ export default function DefensePage() {
 
       <Table
         header={
-          <Header
-            counter={`(${active.length})`}
-            description={t('gameday.defenseDescription')}
-          >
+          <Header counter={`(${active.length})`}>
             {t('gameday.underAttack')}
           </Header>
         }
@@ -190,11 +187,7 @@ export default function DefensePage() {
         sortingDisabled
         footer={
           <Box textAlign="center" color="text-body-secondary" fontSize="body-s">
-            <em>
-              {locale === 'ja'
-                ? '10秒ごとに自動更新'
-                : 'Refreshes every 10 seconds'}
-            </em>
+            <em>{t('gameday.refreshesEvery10Seconds')}</em>
           </Box>
         }
       />

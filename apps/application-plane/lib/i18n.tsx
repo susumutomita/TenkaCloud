@@ -163,6 +163,7 @@ const messages = {
       applicationStatus: 'Application Status',
       attackHistoryAggregate: 'Attack History',
       refreshesEvery30Seconds: '30秒ごとに自動更新',
+      refreshesEvery10Seconds: '10秒ごとに自動更新',
       teams: 'teams',
     },
     events: {
@@ -418,6 +419,7 @@ const messages = {
       applicationStatus: 'Application Status',
       attackHistoryAggregate: 'Attack History',
       refreshesEvery30Seconds: 'Refreshes every 30 seconds',
+      refreshesEvery10Seconds: 'Refreshes every 10 seconds',
       teams: 'teams',
     },
     events: {
