@@ -69,7 +69,7 @@ describe('ランキングページ', () => {
     mockGetGlobalRanking.mockReturnValue(new Promise(() => {}));
     render(<RankingsPage />);
     const spinners = document.querySelectorAll(
-      '[class*="spinner"], [class*="loading"]',
+      '[class*="spinner"], [class*="loading"]'
     );
     expect(spinners.length).toBeGreaterThan(0);
   });
@@ -100,7 +100,7 @@ describe('ランキングページ', () => {
     render(<RankingsPage />);
     await waitFor(() => {
       expect(
-        screen.getByText('ランキングデータがありません'),
+        screen.getByText('ランキングデータがありません')
       ).toBeInTheDocument();
     });
   });
@@ -113,7 +113,7 @@ describe('ランキングページ', () => {
     render(<RankingsPage />);
     await waitFor(() => {
       expect(
-        screen.getByText('ランキングデータがありません'),
+        screen.getByText('ランキングデータがありません')
       ).toBeInTheDocument();
     });
     expect(screen.getByText('最高スコア')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('ランキングページ', () => {
     render(<RankingsPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: /ランキング/ }),
+        screen.getByRole('heading', { name: /ランキング/ })
       ).toBeInTheDocument();
     });
   });

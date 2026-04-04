@@ -132,7 +132,7 @@ export default function AdminProblemDeployPage() {
       startAutoRefresh();
     } catch (err) {
       setDeployError(
-        err instanceof Error ? err.message : 'デプロイに失敗しました',
+        err instanceof Error ? err.message : 'デプロイに失敗しました'
       );
     } finally {
       setDeploying(false);
@@ -145,13 +145,13 @@ export default function AdminProblemDeployPage() {
     try {
       await deleteDeployment(problemId);
       setDeploymentStatus((prev) =>
-        prev ? { ...prev, status: 'DELETE_IN_PROGRESS' } : null,
+        prev ? { ...prev, status: 'DELETE_IN_PROGRESS' } : null
       );
       setDeleteModalVisible(false);
       startAutoRefresh();
     } catch (err) {
       setDeleteError(
-        err instanceof Error ? err.message : 'スタックの削除に失敗しました',
+        err instanceof Error ? err.message : 'スタックの削除に失敗しました'
       );
     } finally {
       setDeleting(false);

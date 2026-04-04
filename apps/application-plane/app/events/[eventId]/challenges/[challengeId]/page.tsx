@@ -16,6 +16,7 @@ import ExpandableSection from '@cloudscape-design/components/expandable-section'
 import CloudscapeHeader from '@cloudscape-design/components/header';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import CloudscapeLink from '@cloudscape-design/components/link';
+import ProgressBar from '@cloudscape-design/components/progress-bar';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
@@ -47,7 +48,7 @@ import type {
 } from '../../../../../lib/api/types';
 
 function getDifficultyColor(
-  difficulty: string,
+  difficulty: string
 ): 'blue' | 'green' | 'red' | 'grey' {
   switch (difficulty) {
     case 'easy':
@@ -163,7 +164,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'ヒントの公開に失敗しました',
+        err instanceof Error ? err.message : 'ヒントの公開に失敗しました'
       );
     }
   };
@@ -177,12 +178,12 @@ export default function ChallengeDetailPage() {
       setChallenge({
         ...jamChallenge,
         clues: jamChallenge.clues.map((c) =>
-          c.id === clueId ? revealedClue : c,
+          c.id === clueId ? revealedClue : c
         ),
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'クルーの公開に失敗しました',
+        err instanceof Error ? err.message : 'クルーの公開に失敗しました'
       );
     }
   };
@@ -201,7 +202,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '採点リクエストに失敗しました',
+        err instanceof Error ? err.message : '採点リクエストに失敗しました'
       );
     } finally {
       setScoring(false);
@@ -648,25 +649,13 @@ export default function ChallengeDetailPage() {
                     </Box>
 
                     {/* Progress bar */}
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '8px',
-                        backgroundColor: '#e9ebed',
-                        borderRadius: '4px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${Math.min(100, ((challenge.myScore ?? 0) / challenge.maxScore) * 100)}%`,
-                          height: '100%',
-                          backgroundColor: '#0972d3',
-                          borderRadius: '4px',
-                          transition: 'width 0.3s ease',
-                        }}
-                      />
-                    </div>
+                    <ProgressBar
+                      value={Math.min(
+                        100,
+                        ((challenge.myScore ?? 0) / challenge.maxScore) * 100
+                      )}
+                      additionalInfo={`${challenge.myScore ?? 0} / ${challenge.maxScore} pts`}
+                    />
 
                     {/* GameDay: Request Scoring */}
                     {!isJam && (
@@ -779,7 +768,7 @@ export default function ChallengeDetailPage() {
                             value: (
                               <Box variant="code">
                                 {new Date(credentials.expiresAt).toLocaleString(
-                                  'ja-JP',
+                                  'ja-JP'
                                 )}
                               </Box>
                             ),

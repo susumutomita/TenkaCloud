@@ -64,7 +64,7 @@ export default function ProblemDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'ヒントの公開に失敗しました',
+        err instanceof Error ? err.message : 'ヒントの公開に失敗しました'
       );
     }
   };

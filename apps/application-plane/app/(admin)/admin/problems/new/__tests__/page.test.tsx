@@ -77,7 +77,7 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('問題のタイトルを入力'),
-      'テスト問題',
+      'テスト問題'
     );
     await userEvent.click(screen.getAllByRole('button', { name: '作成' })[0]);
     await waitFor(() => {
@@ -90,17 +90,17 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('問題のタイトルを入力'),
-      'テスト問題',
+      'テスト問題'
     );
     await userEvent.type(
       screen.getByPlaceholderText('問題の概要を入力'),
-      'テスト概要',
+      'テスト概要'
     );
     await userEvent.click(screen.getAllByRole('button', { name: '作成' })[0]);
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
         '/admin/problems',
-        expect.objectContaining({ title: 'テスト問題' }),
+        expect.objectContaining({ title: 'テスト問題' })
       );
     });
     expect(mockPush).toHaveBeenCalledWith('/admin/problems');
@@ -110,11 +110,11 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('問題のタイトルを入力'),
-      'テスト問題',
+      'テスト問題'
     );
     await userEvent.type(
       screen.getByPlaceholderText('問題の概要を入力'),
-      'テスト概要',
+      'テスト概要'
     );
     await userEvent.click(screen.getAllByRole('button', { name: '作成' })[0]);
     await waitFor(() => {
@@ -127,11 +127,11 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('問題のタイトルを入力'),
-      'テスト',
+      'テスト'
     );
     await userEvent.type(
       screen.getByPlaceholderText('問題の概要を入力'),
-      'テスト概要',
+      'テスト概要'
     );
     await userEvent.click(screen.getAllByRole('button', { name: '作成' })[0]);
     await waitFor(() => {
@@ -153,7 +153,7 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('タグを入力してEnter'),
-      'aws',
+      'aws'
     );
     await userEvent.click(screen.getByRole('button', { name: '追加' }));
     expect(screen.getByText('aws')).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('タグを入力してEnter'),
-      'security{Enter}',
+      'security{Enter}'
     );
     expect(screen.getByText('security')).toBeInTheDocument();
   });
@@ -170,7 +170,7 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('タグを入力してEnter'),
-      'test-tag{Enter}',
+      'test-tag{Enter}'
     );
     expect(screen.getByText('test-tag')).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText('タグ「test-tag」を削除'));
@@ -191,17 +191,17 @@ describe('問題作成ページ', () => {
     render(<AdminProblemCreatePage />);
     await userEvent.type(
       screen.getByPlaceholderText('問題のタイトルを入力'),
-      'テスト問題',
+      'テスト問題'
     );
     await userEvent.type(
       screen.getByPlaceholderText('問題の概要を入力'),
-      'テスト概要',
+      'テスト概要'
     );
     await userEvent.click(screen.getByRole('button', { name: 'AWS' }));
     await userEvent.click(screen.getAllByRole('button', { name: '作成' })[0]);
     await waitFor(() => {
       expect(
-        screen.getByText('プロバイダーを1つ以上選択してください'),
+        screen.getByText('プロバイダーを1つ以上選択してください')
       ).toBeInTheDocument();
     });
   });

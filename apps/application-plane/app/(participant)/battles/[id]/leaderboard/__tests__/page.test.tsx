@@ -117,7 +117,7 @@ describe('リーダーボードページ', () => {
     render(<BattleLeaderboardPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'リーダーボード' }),
+        screen.getByRole('heading', { name: 'リーダーボード' })
       ).toBeInTheDocument();
     });
   });

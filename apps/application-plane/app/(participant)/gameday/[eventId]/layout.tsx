@@ -108,7 +108,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
     setAwsConsoleLoading(true);
     try {
       const response = await fetch(
-        `/api/participant/events/${encodeURIComponent(eventId)}/aws-console`,
+        `/api/participant/events/${encodeURIComponent(eventId)}/aws-console`
       );
       if (!response.ok) {
         const data = (await response.json()) as { error?: string };

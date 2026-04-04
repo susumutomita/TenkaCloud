@@ -22,14 +22,14 @@ describe('AwsConsoleButton', () => {
   it('ボタンが表示されるべき', () => {
     render(<AwsConsoleButton eventId="evt-1" />);
     expect(
-      screen.getByRole('button', { name: /AWS Console を開く/i }),
+      screen.getByRole('button', { name: /AWS Console を開く/i })
     ).toBeInTheDocument();
   });
 
   it('カスタムラベルを表示すべき', () => {
     render(<AwsConsoleButton eventId="evt-1" label="カスタムラベル" />);
     expect(
-      screen.getByRole('button', { name: /カスタムラベル/i }),
+      screen.getByRole('button', { name: /カスタムラベル/i })
     ).toBeInTheDocument();
   });
 
@@ -50,7 +50,7 @@ describe('AwsConsoleButton', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/participant/events/evt-1/aws-console',
+        '/api/participant/events/evt-1/aws-console'
       );
     });
 
@@ -58,7 +58,7 @@ describe('AwsConsoleButton', () => {
       expect(mockWindowOpen).toHaveBeenCalledWith(
         'https://signin.aws.amazon.com/federation?Action=login&SigninToken=test',
         '_blank',
-        'noopener,noreferrer',
+        'noopener,noreferrer'
       );
     });
   });
@@ -79,7 +79,7 @@ describe('AwsConsoleButton', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('AWS Console access is not configured for this event'),
+        screen.getByText('AWS Console access is not configured for this event')
       ).toBeInTheDocument();
     });
   });
@@ -114,7 +114,7 @@ describe('AwsConsoleButton', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/participant/events/event%20with%20spaces/aws-console',
+        '/api/participant/events/event%20with%20spaces/aws-console'
       );
     });
   });

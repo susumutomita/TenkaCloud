@@ -62,7 +62,7 @@ export default function AdminEventDetailPage() {
       setEvent(data);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('イベントの取得に失敗しました'),
+        err instanceof Error ? err : new Error('イベントの取得に失敗しました')
       );
       setEvent(null);
     } finally {

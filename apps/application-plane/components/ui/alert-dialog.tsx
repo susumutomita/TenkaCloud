@@ -36,7 +36,7 @@ function useAlertDialog() {
   const context = useContext(AlertDialogContext);
   if (!context) {
     throw new Error(
-      'AlertDialog コンポーネントは AlertDialog 内で使用する必要があります',
+      'AlertDialog コンポーネントは AlertDialog 内で使用する必要があります'
     );
   }
   return context;
@@ -73,7 +73,7 @@ function AlertDialog({
       }
       onOpenChange?.(newOpen);
     },
-    [isControlled, onOpenChange],
+    [isControlled, onOpenChange]
   );
 
   return (
@@ -220,7 +220,7 @@ const AlertDialogContent = forwardRef<HTMLDivElement, AlertDialogContentProps>(
         </div>
       </AlertDialogPortal>
     );
-  },
+  }
 );
 AlertDialogContent.displayName = 'AlertDialogContent';
 
@@ -338,8 +338,8 @@ const variantClasses: Record<AlertDialogActionVariant, string> = {
     'bg-hn-error text-surface-0',
     'hover:bg-hn-error/90',
     'focus-visible:ring-hn-error',
-    'shadow-[2px_2px_0_#8a4444]',
-    'hover:shadow-[1px_1px_0_#8a4444]',
+    'shadow-[2px_2px_0_var(--color-surface-0)]',
+    'hover:shadow-[1px_1px_0_var(--color-surface-0)]',
     'active:translate-x-[1px] active:translate-y-[1px] active:shadow-none',
   ].join(' '),
   primary: [
@@ -370,7 +370,7 @@ const AlertDialogAction = forwardRef<HTMLButtonElement, AlertDialogActionProps>(
         {...props}
       />
     );
-  },
+  }
 );
 AlertDialogAction.displayName = 'AlertDialogAction';
 

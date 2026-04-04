@@ -42,8 +42,7 @@ export default function AdminTeamsPage() {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.error ||
-              `チームの取得に失敗しました (${response.status})`,
+            errorData.error || `チームの取得に失敗しました (${response.status})`
           );
         }
 
@@ -52,7 +51,7 @@ export default function AdminTeamsPage() {
       } catch (err) {
         console.error('Failed to fetch teams:', err);
         setError(
-          err instanceof Error ? err.message : 'チームの取得に失敗しました',
+          err instanceof Error ? err.message : 'チームの取得に失敗しました'
         );
         setTeams([]);
       } finally {
@@ -72,7 +71,7 @@ export default function AdminTeamsPage() {
   const avgScore =
     teams.length > 0
       ? Math.round(
-          teams.reduce((acc, t) => acc + t.totalScore, 0) / teams.length,
+          teams.reduce((acc, t) => acc + t.totalScore, 0) / teams.length
         )
       : 0;
 

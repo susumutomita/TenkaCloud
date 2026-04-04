@@ -86,7 +86,7 @@ describe('OnboardingPage', () => {
       () => {
         expect(mockPush).toHaveBeenCalledWith('/onboarding/provisioning');
       },
-      { timeout: 2000 },
+      { timeout: 2000 }
     );
   });
 

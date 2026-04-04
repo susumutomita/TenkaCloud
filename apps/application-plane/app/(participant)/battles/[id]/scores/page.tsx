@@ -87,7 +87,7 @@ export default function ScoresPage() {
         }
       } catch (err) {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
+          err instanceof Error ? err : new Error('読み込みに失敗しました')
         );
       } finally {
         setLoading(false);
@@ -134,7 +134,7 @@ export default function ScoresPage() {
 
   const totalMaxScore = battle.problems.reduce(
     (sum, p) => sum + p.maxScore * p.pointMultiplier,
-    0,
+    0
   );
 
   return (

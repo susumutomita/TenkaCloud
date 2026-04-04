@@ -79,7 +79,7 @@ describe('Admin ダッシュボードページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Cloud Battle が開始されました'),
+        screen.getByText('Cloud Battle が開始されました')
       ).toBeInTheDocument();
     });
     expect(screen.getByText('新しい参加者が登録しました')).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe('Admin ダッシュボードページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('まだアクティビティはありません'),
+        screen.getByText('まだアクティビティはありません')
       ).toBeInTheDocument();
     });
   });

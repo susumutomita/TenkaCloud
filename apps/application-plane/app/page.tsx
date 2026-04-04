@@ -211,7 +211,7 @@ export default function Home(): React.JSX.Element {
 
       {/* CTA Section */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="p-8 md:p-12 rounded-2xl bg-gradient-to-br from-hn-accent/10 to-hn-info/5 border border-hn-accent/20 text-center">
+        <div className="p-8 md:p-12 rounded-2xl bg-surface-1 border border-border text-center">
           <div className="w-12 h-12 mx-auto mb-6 rounded-full bg-hn-accent/10 flex items-center justify-center">
             <Target className="w-6 h-6 text-hn-accent" />
           </div>

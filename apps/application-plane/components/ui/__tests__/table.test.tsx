@@ -27,7 +27,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const table = screen.getByTestId('table');
       expect(table.tagName).toBe('TABLE');
@@ -41,7 +41,7 @@ describe('Table コンポーネント', () => {
               <TableCell>テストセル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(screen.getByText('テストセル')).toBeInTheDocument();
     });
@@ -54,7 +54,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const table = screen.getByTestId('table');
       expect(table).toHaveClass('custom-class');
@@ -70,7 +70,7 @@ describe('Table コンポーネント', () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       const header = screen.getByTestId('header');
       expect(header.tagName).toBe('THEAD');
@@ -84,7 +84,7 @@ describe('Table コンポーネント', () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       const header = screen.getByTestId('header');
       expect(header).toHaveClass('custom-header');
@@ -100,7 +100,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const body = screen.getByTestId('body');
       expect(body.tagName).toBe('TBODY');
@@ -114,7 +114,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const body = screen.getByTestId('body');
       expect(body).toHaveClass('custom-body');
@@ -130,7 +130,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
       const footer = screen.getByTestId('footer');
       expect(footer.tagName).toBe('TFOOT');
@@ -144,7 +144,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
       const footer = screen.getByTestId('footer');
       expect(footer).toHaveClass('custom-footer');
@@ -160,7 +160,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const row = screen.getByTestId('row');
       expect(row.tagName).toBe('TR');
@@ -174,7 +174,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const row = screen.getByTestId('row');
       expect(row).toHaveClass('custom-row');
@@ -188,7 +188,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const row = screen.getByTestId('row');
       expect(row).toHaveAttribute('data-state', 'selected');
@@ -205,7 +205,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
 
       await user.click(screen.getByTestId('row'));
@@ -222,7 +222,7 @@ describe('Table コンポーネント', () => {
               <TableHead data-testid="head">ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       const head = screen.getByTestId('head');
       expect(head.tagName).toBe('TH');
@@ -238,7 +238,7 @@ describe('Table コンポーネント', () => {
               </TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       const head = screen.getByTestId('head');
       expect(head).toHaveClass('custom-head');
@@ -254,7 +254,7 @@ describe('Table コンポーネント', () => {
               </TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       const head = screen.getByTestId('head');
       expect(head).toHaveClass('cursor-pointer');
@@ -273,7 +273,7 @@ describe('Table コンポーネント', () => {
               </TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
 
       await user.click(screen.getByTestId('head'));
@@ -290,11 +290,11 @@ describe('Table コンポーネント', () => {
               </TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       expect(screen.getByTestId('head')).toHaveAttribute(
         'aria-sort',
-        'ascending',
+        'ascending'
       );
     });
 
@@ -308,11 +308,11 @@ describe('Table コンポーネント', () => {
               </TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       expect(screen.getByTestId('head')).toHaveAttribute(
         'aria-sort',
-        'descending',
+        'descending'
       );
     });
   });
@@ -326,7 +326,7 @@ describe('Table コンポーネント', () => {
               <TableCell data-testid="cell">セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const cell = screen.getByTestId('cell');
       expect(cell.tagName).toBe('TD');
@@ -342,7 +342,7 @@ describe('Table コンポーネント', () => {
               </TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const cell = screen.getByTestId('cell');
       expect(cell).toHaveClass('custom-cell');
@@ -359,7 +359,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const caption = screen.getByTestId('caption');
       expect(caption.tagName).toBe('CAPTION');
@@ -376,7 +376,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       const caption = screen.getByTestId('caption');
       expect(caption).toHaveClass('custom-caption');
@@ -393,7 +393,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableElement);
     });
@@ -407,7 +407,7 @@ describe('Table コンポーネント', () => {
               <TableHead>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       expect(ref.current?.tagName).toBe('THEAD');
     });
@@ -421,7 +421,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current?.tagName).toBe('TBODY');
     });
@@ -435,7 +435,7 @@ describe('Table コンポーネント', () => {
               <TableCell>フッター</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
       expect(ref.current?.tagName).toBe('TFOOT');
     });
@@ -449,7 +449,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current).toBeInstanceOf(HTMLTableRowElement);
     });
@@ -463,7 +463,7 @@ describe('Table コンポーネント', () => {
               <TableHead ref={ref}>ヘッダー</TableHead>
             </TableRow>
           </TableHeader>
-        </Table>,
+        </Table>
       );
       expect(ref.current?.tagName).toBe('TH');
     });
@@ -477,7 +477,7 @@ describe('Table コンポーネント', () => {
               <TableCell ref={ref}>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current?.tagName).toBe('TD');
     });
@@ -492,7 +492,7 @@ describe('Table コンポーネント', () => {
               <TableCell>セル</TableCell>
             </TableRow>
           </TableBody>
-        </Table>,
+        </Table>
       );
       expect(ref.current?.tagName).toBe('CAPTION');
     });
@@ -524,7 +524,7 @@ describe('Table コンポーネント', () => {
               <TableCell colSpan={2}>合計: 2名</TableCell>
             </TableRow>
           </TableFooter>
-        </Table>,
+        </Table>
       );
 
       expect(screen.getByText('ユーザー一覧')).toBeInTheDocument();

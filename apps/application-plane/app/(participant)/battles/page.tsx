@@ -30,7 +30,7 @@ import type {
 
 function getEventStatusIndicator(
   status: EventStatus,
-  t: (k: string) => string,
+  t: (k: string) => string
 ) {
   switch (status) {
     case 'active':
@@ -111,7 +111,7 @@ export default function BattlesPage() {
   const [selectedStatus, setSelectedStatus] =
     useState<SelectProps.Option | null>(statusOptions[0]);
   const [selectedType, setSelectedType] = useState<SelectProps.Option | null>(
-    typeOptions[0],
+    typeOptions[0]
   );
 
   useEffect(() => {

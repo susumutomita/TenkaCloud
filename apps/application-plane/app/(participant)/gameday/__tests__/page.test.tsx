@@ -26,7 +26,7 @@ describe('GameDay エントリーページ', () => {
   it('説明テキストが表示されるべき', () => {
     render(<GamedayEntryPage />);
     expect(
-      screen.getByText('イベントIDを入力してバトルに参加します'),
+      screen.getByText('イベントIDを入力してバトルに参加します')
     ).toBeInTheDocument();
   });
 

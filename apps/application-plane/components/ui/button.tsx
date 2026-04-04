@@ -63,15 +63,15 @@ const variantClasses: Record<ButtonVariant, string> = {
     'bg-hn-error text-surface-0',
     'hover:bg-hn-error/90',
     'active:translate-x-[1px] active:translate-y-[1px]',
-    'shadow-[2px_2px_0_#8a4444]',
-    'hover:shadow-[1px_1px_0_#8a4444]',
+    'shadow-[2px_2px_0_var(--color-surface-0)]',
+    'hover:shadow-[1px_1px_0_var(--color-surface-0)]',
   ].join(' '),
   success: [
     'bg-hn-success text-surface-0',
     'hover:bg-hn-success/90',
     'active:translate-x-[1px] active:translate-y-[1px]',
-    'shadow-[2px_2px_0_#7a8048]',
-    'hover:shadow-[1px_1px_0_#7a8048]',
+    'shadow-[2px_2px_0_var(--color-surface-0)]',
+    'hover:shadow-[1px_1px_0_var(--color-surface-0)]',
   ].join(' '),
 };
 
@@ -103,7 +103,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled,
       ...props
     },
-    ref,
+    ref
   ) => {
     const combinedClassName = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? 'w-full' : ''} ${className}`;
 
@@ -136,7 +136,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {children}
       </button>
     );
-  },
+  }
 );
 
 Button.displayName = 'Button';

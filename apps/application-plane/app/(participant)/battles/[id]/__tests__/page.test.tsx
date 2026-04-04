@@ -71,7 +71,7 @@ describe('バトル詳細ページ', () => {
     await waitFor(() => {
       // Battle name appears in breadcrumb, h1, and container header
       expect(
-        screen.getAllByText('AWS GameDay 2025').length,
+        screen.getAllByText('AWS GameDay 2025').length
       ).toBeGreaterThanOrEqual(1);
     });
   });

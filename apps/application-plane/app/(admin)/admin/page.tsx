@@ -38,7 +38,7 @@ export default function AdminDashboardPage() {
   const tenant = useTenantOptional();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>(
-    [],
+    []
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -61,14 +61,12 @@ export default function AdminDashboardPage() {
             type: a.type as RecentActivity['type'],
             message: a.message,
             timestamp: a.timestamp,
-          }),
-        ),
+          })
+        )
       );
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err
-          : new Error('データの読み込みに失敗しました'),
+        err instanceof Error ? err : new Error('データの読み込みに失敗しました')
       );
     } finally {
       setLoading(false);

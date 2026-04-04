@@ -40,7 +40,7 @@ export default function ProblemsPage() {
         setBattle(data);
       } catch (err) {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
+          err instanceof Error ? err : new Error('読み込みに失敗しました')
         );
       } finally {
         setLoading(false);
@@ -80,11 +80,11 @@ export default function ProblemsPage() {
   const canAccess = battle.isRegistered && battle.status === 'active';
   const totalMaxScore = battle.problems.reduce(
     (sum, p) => sum + p.maxScore * p.pointMultiplier,
-    0,
+    0
   );
   const totalMyScore = battle.problems.reduce(
     (sum, p) => sum + (p.myScore ?? 0),
-    0,
+    0
   );
 
   return (

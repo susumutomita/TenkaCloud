@@ -43,7 +43,7 @@ const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
       style,
       ...props
     },
-    ref,
+    ref
   ) => {
     const computedStyle: CSSProperties = {
       ...style,
@@ -63,7 +63,7 @@ const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
         {...props}
       />
     );
-  },
+  }
 );
 Skeleton.displayName = 'Skeleton';
 
@@ -101,7 +101,7 @@ const SkeletonText = forwardRef<HTMLDivElement, SkeletonTextProps>(
         })}
       </div>
     );
-  },
+  }
 );
 SkeletonText.displayName = 'SkeletonText';
 
@@ -135,7 +135,7 @@ const SkeletonButton = forwardRef<HTMLDivElement, SkeletonButtonProps>(
         {...props}
       />
     );
-  },
+  }
 );
 SkeletonButton.displayName = 'SkeletonButton';
 
@@ -171,7 +171,7 @@ const SkeletonCard = forwardRef<HTMLDivElement, SkeletonCardProps>(
         </div>
       </div>
     );
-  },
+  }
 );
 SkeletonCard.displayName = 'SkeletonCard';
 
@@ -215,7 +215,7 @@ const SkeletonTable = forwardRef<HTMLDivElement, SkeletonTableProps>(
         </div>
       </div>
     );
-  },
+  }
 );
 SkeletonTable.displayName = 'SkeletonTable';
 

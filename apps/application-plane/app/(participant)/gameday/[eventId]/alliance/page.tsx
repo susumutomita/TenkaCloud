@@ -38,11 +38,11 @@ export default function AlliancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>(
-    {},
+    {}
   );
   const [teamOptions, setTeamOptions] = useState<SelectProps.Option[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<SelectProps.Option | null>(
-    null,
+    null
   );
   const [requesting, setRequesting] = useState(false);
   const previousPendingIdsRef = useRef<Set<string>>(new Set());
@@ -52,7 +52,7 @@ export default function AlliancePage() {
     try {
       const data = await getAlliances(eventId, teamId);
       const incomingPending = data.alliances.filter(
-        (a) => a.status === 'PENDING' && a.targetTeamId === teamId,
+        (a) => a.status === 'PENDING' && a.targetTeamId === teamId
       );
       for (const alliance of incomingPending) {
         if (
@@ -72,7 +72,7 @@ export default function AlliancePage() {
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました'),
+        err instanceof Error ? err : new Error('読み込みに失敗しました')
       );
     } finally {
       setLoading(false);
@@ -165,11 +165,11 @@ export default function AlliancePage() {
   const active = alliances.filter((alliance) => alliance.status === 'ACTIVE');
   const pendingIncoming = alliances.filter(
     (alliance) =>
-      alliance.status === 'PENDING' && alliance.targetTeamId === teamId,
+      alliance.status === 'PENDING' && alliance.targetTeamId === teamId
   );
   const pendingOutgoing = alliances.filter(
     (alliance) =>
-      alliance.status === 'PENDING' && alliance.requesterTeamId === teamId,
+      alliance.status === 'PENDING' && alliance.requesterTeamId === teamId
   );
   const getPartnerTeamId = (alliance: Alliance) =>
     alliance.requesterTeamId === teamId
@@ -178,7 +178,7 @@ export default function AlliancePage() {
   const formatDate = (timestamp: string) =>
     new Date(timestamp).toLocaleDateString(
       locale === 'ja' ? 'ja-JP' : 'en-US',
-      { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' },
+      { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
     );
 
   return (

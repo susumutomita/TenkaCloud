@@ -48,13 +48,12 @@ export default function AdminParticipantsPage() {
         if (searchQuery) params.set('search', searchQuery);
 
         const response = await fetch(
-          `/api/admin/participants?${params.toString()}`,
+          `/api/admin/participants?${params.toString()}`
         );
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.error ||
-              `参加者の取得に失敗しました (${response.status})`,
+            errorData.error || `参加者の取得に失敗しました (${response.status})`
           );
         }
 
@@ -63,7 +62,7 @@ export default function AdminParticipantsPage() {
       } catch (err) {
         console.error('Failed to fetch participants:', err);
         setError(
-          err instanceof Error ? err.message : '参加者の取得に失敗しました',
+          err instanceof Error ? err.message : '参加者の取得に失敗しました'
         );
         setParticipants([]);
       } finally {
@@ -84,7 +83,7 @@ export default function AdminParticipantsPage() {
     participants.length > 0
       ? Math.round(
           participants.reduce((acc, p) => acc + (p.totalScore || 0), 0) /
-            participants.length,
+            participants.length
         )
       : 0;
 
@@ -151,32 +150,7 @@ export default function AdminParticipantsPage() {
             {
               id: 'name',
               header: '名前',
-              cell: (item) => (
-                <SpaceBetween
-                  direction="horizontal"
-                  size="xs"
-                  alignItems="center"
-                >
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: '#0972d3',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontWeight: 'bold',
-                      fontSize: 14,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.displayName.charAt(0)}
-                  </div>
-                  <Box fontWeight="bold">{item.displayName}</Box>
-                </SpaceBetween>
-              ),
+              cell: (item) => <Box fontWeight="bold">{item.displayName}</Box>,
               sortingField: 'displayName',
             },
             {

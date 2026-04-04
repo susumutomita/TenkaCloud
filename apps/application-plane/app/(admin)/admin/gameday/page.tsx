@@ -40,7 +40,7 @@ export default function AdminGamedayPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('イベントが見つかりません'),
+        err instanceof Error ? err : new Error('イベントが見つかりません')
       );
     } finally {
       setLoading(false);

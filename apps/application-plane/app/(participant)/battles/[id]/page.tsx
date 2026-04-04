@@ -253,7 +253,7 @@ export default function BattleDetailPage() {
                                   onFollow={(e) => {
                                     e.preventDefault();
                                     router.push(
-                                      `/battles/${battleId}/problems/${p.id}`,
+                                      `/battles/${battleId}/problems/${p.id}`
                                     );
                                   }}
                                 >

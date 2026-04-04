@@ -53,13 +53,13 @@ export default function DefensePage() {
         }
       }
       previousAttackIdsRef.current = new Set(
-        activeAttacks.map((a) => a.attackId),
+        activeAttacks.map((a) => a.attackId)
       );
       setAttacks(data.attacks);
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました'),
+        err instanceof Error ? err : new Error('読み込みに失敗しました')
       );
     } finally {
       setLoading(false);
@@ -129,7 +129,7 @@ export default function DefensePage() {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-      },
+      }
     );
 
   return (

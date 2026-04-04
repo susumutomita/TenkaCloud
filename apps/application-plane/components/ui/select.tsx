@@ -16,8 +16,10 @@ interface SelectOption {
   disabled?: boolean;
 }
 
-interface SelectProps
-  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
+interface SelectProps extends Omit<
+  SelectHTMLAttributes<HTMLSelectElement>,
+  'size'
+> {
   options: SelectOption[];
   variant?: SelectVariant;
   selectSize?: SelectSize;
@@ -62,7 +64,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       disabled,
       ...props
     },
-    ref,
+    ref
   ) => {
     const generatedId = useId();
     const selectId = id || generatedId;
@@ -146,7 +148,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         )}
       </div>
     );
-  },
+  }
 );
 
 Select.displayName = 'Select';

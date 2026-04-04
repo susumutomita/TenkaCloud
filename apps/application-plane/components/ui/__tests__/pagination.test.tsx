@@ -16,28 +16,28 @@ describe('Pagination コンポーネント', () => {
           totalPages={5}
           onPageChange={() => {}}
           data-testid="pagination"
-        />,
+        />
       );
       expect(screen.getByTestId('pagination')).toBeInTheDocument();
     });
 
     it('現在のページ番号を表示すべき', () => {
       render(
-        <Pagination currentPage={3} totalPages={10} onPageChange={() => {}} />,
+        <Pagination currentPage={3} totalPages={10} onPageChange={() => {}} />
       );
       expect(screen.getByText('3')).toBeInTheDocument();
     });
 
     it('前へボタンを表示すべき', () => {
       render(
-        <Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByLabelText('前のページ')).toBeInTheDocument();
     });
 
     it('次へボタンを表示すべき', () => {
       render(
-        <Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByLabelText('次のページ')).toBeInTheDocument();
     });
@@ -46,14 +46,14 @@ describe('Pagination コンポーネント', () => {
   describe('前へボタン', () => {
     it('最初のページでは disabled であるべき', () => {
       render(
-        <Pagination currentPage={1} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={1} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByLabelText('前のページ')).toBeDisabled();
     });
 
     it('2ページ目以降では enabled であるべき', () => {
       render(
-        <Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={2} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByLabelText('前のページ')).not.toBeDisabled();
     });
@@ -67,7 +67,7 @@ describe('Pagination コンポーネント', () => {
           currentPage={3}
           totalPages={5}
           onPageChange={handlePageChange}
-        />,
+        />
       );
 
       await user.click(screen.getByLabelText('前のページ'));
@@ -78,14 +78,14 @@ describe('Pagination コンポーネント', () => {
   describe('次へボタン', () => {
     it('最後のページでは disabled であるべき', () => {
       render(
-        <Pagination currentPage={5} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={5} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByLabelText('次のページ')).toBeDisabled();
     });
 
     it('最後のページより前では enabled であるべき', () => {
       render(
-        <Pagination currentPage={4} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={4} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByLabelText('次のページ')).not.toBeDisabled();
     });
@@ -99,7 +99,7 @@ describe('Pagination コンポーネント', () => {
           currentPage={3}
           totalPages={5}
           onPageChange={handlePageChange}
-        />,
+        />
       );
 
       await user.click(screen.getByLabelText('次のページ'));
@@ -117,7 +117,7 @@ describe('Pagination コンポーネント', () => {
           currentPage={1}
           totalPages={5}
           onPageChange={handlePageChange}
-        />,
+        />
       );
 
       await user.click(screen.getByText('3'));
@@ -126,7 +126,7 @@ describe('Pagination コンポーネント', () => {
 
     it('現在のページはアクティブスタイルを持つべき', () => {
       render(
-        <Pagination currentPage={3} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={3} totalPages={5} onPageChange={() => {}} />
       );
       const currentPageButton = screen.getByText('3').closest('button');
       expect(currentPageButton).toHaveAttribute('aria-current', 'page');
@@ -134,7 +134,7 @@ describe('Pagination コンポーネント', () => {
 
     it('5ページ以下では全ページ番号を表示すべき', () => {
       render(
-        <Pagination currentPage={1} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={1} totalPages={5} onPageChange={() => {}} />
       );
       expect(screen.getByText('1')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('Pagination コンポーネント', () => {
   describe('省略表示', () => {
     it('多くのページがある場合は省略記号を表示すべき', () => {
       render(
-        <Pagination currentPage={5} totalPages={10} onPageChange={() => {}} />,
+        <Pagination currentPage={5} totalPages={10} onPageChange={() => {}} />
       );
       const ellipses = screen.getAllByText('...');
       expect(ellipses.length).toBeGreaterThan(0);
@@ -155,7 +155,7 @@ describe('Pagination コンポーネント', () => {
 
     it('最初のページ付近では末尾の省略を表示すべき', () => {
       render(
-        <Pagination currentPage={1} totalPages={10} onPageChange={() => {}} />,
+        <Pagination currentPage={1} totalPages={10} onPageChange={() => {}} />
       );
       // 最初のページでは 1, 2, 3, ..., 10 のような表示
       expect(screen.getByText('1')).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe('Pagination コンポーネント', () => {
 
     it('最後のページ付近では先頭の省略を表示すべき', () => {
       render(
-        <Pagination currentPage={10} totalPages={10} onPageChange={() => {}} />,
+        <Pagination currentPage={10} totalPages={10} onPageChange={() => {}} />
       );
       // 最後のページでは 1, ..., 8, 9, 10 のような表示
       expect(screen.getByText('1')).toBeInTheDocument();
@@ -180,7 +180,7 @@ describe('Pagination コンポーネント', () => {
           totalPages={1}
           onPageChange={() => {}}
           data-testid="pagination"
-        />,
+        />
       );
       expect(screen.queryByTestId('pagination')).not.toBeInTheDocument();
     });
@@ -195,7 +195,7 @@ describe('Pagination コンポーネント', () => {
           onPageChange={() => {}}
           className="custom-pagination"
           data-testid="pagination"
-        />,
+        />
       );
       expect(screen.getByTestId('pagination')).toHaveClass('custom-pagination');
     });
@@ -210,7 +210,7 @@ describe('Pagination コンポーネント', () => {
           onPageChange={() => {}}
           size="sm"
           data-testid="pagination"
-        />,
+        />
       );
       const pagination = screen.getByTestId('pagination');
       expect(pagination).toHaveClass('text-sm');
@@ -223,7 +223,7 @@ describe('Pagination コンポーネント', () => {
           totalPages={5}
           onPageChange={() => {}}
           data-testid="pagination"
-        />,
+        />
       );
       const pagination = screen.getByTestId('pagination');
       expect(pagination).toHaveClass('text-base');
@@ -237,7 +237,7 @@ describe('Pagination コンポーネント', () => {
           onPageChange={() => {}}
           size="lg"
           data-testid="pagination"
-        />,
+        />
       );
       const pagination = screen.getByTestId('pagination');
       expect(pagination).toHaveClass('text-lg');
@@ -252,7 +252,7 @@ describe('Pagination コンポーネント', () => {
           totalPages={5}
           onPageChange={() => {}}
           data-testid="pagination"
-        />,
+        />
       );
       expect(screen.getByRole('navigation')).toBeInTheDocument();
     });
@@ -264,11 +264,11 @@ describe('Pagination コンポーネント', () => {
           totalPages={5}
           onPageChange={() => {}}
           data-testid="pagination"
-        />,
+        />
       );
       expect(screen.getByRole('navigation')).toHaveAttribute(
         'aria-label',
-        'ページナビゲーション',
+        'ページナビゲーション'
       );
     });
   });
@@ -281,14 +281,14 @@ describe('Pagination コンポーネント', () => {
           totalPages={10}
           onPageChange={() => {}}
           showPageInfo
-        />,
+        />
       );
       expect(screen.getByText('3 / 10')).toBeInTheDocument();
     });
 
     it('デフォルトではページ情報を非表示にすべき', () => {
       render(
-        <Pagination currentPage={3} totalPages={10} onPageChange={() => {}} />,
+        <Pagination currentPage={3} totalPages={10} onPageChange={() => {}} />
       );
       expect(screen.queryByText('3 / 10')).not.toBeInTheDocument();
     });
@@ -302,7 +302,7 @@ describe('Pagination コンポーネント', () => {
           totalPages={5}
           onPageChange={() => {}}
           disabled
-        />,
+        />
       );
       const buttons = screen.getAllByRole('button');
       for (const button of buttons) {
@@ -319,7 +319,7 @@ describe('Pagination コンポーネント', () => {
           totalPages={0}
           onPageChange={() => {}}
           data-testid="pagination"
-        />,
+        />
       );
       expect(screen.queryByTestId('pagination')).not.toBeInTheDocument();
     });
@@ -331,7 +331,7 @@ describe('Pagination コンポーネント', () => {
           currentPage={10}
           totalPages={5}
           onPageChange={handlePageChange}
-        />,
+        />
       );
       // 次へボタンは disabled
       expect(screen.getByLabelText('次のページ')).toBeDisabled();
@@ -339,7 +339,7 @@ describe('Pagination コンポーネント', () => {
 
     it('currentPage が 0 以下の場合は最初のページとして扱うべき', () => {
       render(
-        <Pagination currentPage={0} totalPages={5} onPageChange={() => {}} />,
+        <Pagination currentPage={0} totalPages={5} onPageChange={() => {}} />
       );
       // 前へボタンは disabled
       expect(screen.getByLabelText('前のページ')).toBeDisabled();

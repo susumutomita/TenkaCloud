@@ -59,7 +59,7 @@ export default function AttackPage() {
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました'),
+        err instanceof Error ? err : new Error('読み込みに失敗しました')
       );
     } finally {
       setLoading(false);
@@ -148,7 +148,7 @@ export default function AttackPage() {
       {
         hour: '2-digit',
         minute: '2-digit',
-      },
+      }
     );
 
   return (

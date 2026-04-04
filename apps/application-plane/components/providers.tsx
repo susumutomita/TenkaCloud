@@ -63,7 +63,7 @@ function AuthSkipProvider({
         return session;
       },
     }),
-    [session],
+    [session]
   );
 
   return (

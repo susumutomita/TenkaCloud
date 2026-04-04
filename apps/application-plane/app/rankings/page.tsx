@@ -37,42 +37,16 @@ interface RankingData {
   myRank?: number;
 }
 
-const getRankIcon = (rank: number) => {
+const getRankLabel = (rank: number) => {
   switch (rank) {
     case 1:
-      return '\u{1F947}';
+      return '1st';
     case 2:
-      return '\u{1F948}';
+      return '2nd';
     case 3:
-      return '\u{1F949}';
+      return '3rd';
     default:
-      return `#${rank}`;
-  }
-};
-
-const getRankColor = (rank: number) => {
-  switch (rank) {
-    case 1:
-      return 'linear-gradient(135deg, #FFD700, #FFA500)';
-    case 2:
-      return 'linear-gradient(135deg, #C0C0C0, #A0A0A0)';
-    case 3:
-      return 'linear-gradient(135deg, #CD7F32, #A0522D)';
-    default:
-      return 'linear-gradient(135deg, #6B7280, #4B5563)';
-  }
-};
-
-const getRankBoxColor = (rank: number) => {
-  switch (rank) {
-    case 1:
-      return '#FFF8E1';
-    case 2:
-      return '#F5F5F5';
-    case 3:
-      return '#FBE9E7';
-    default:
-      return undefined;
+      return `${rank}`;
   }
 };
 
@@ -99,7 +73,7 @@ export default function RankingsPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました'),
+        err instanceof Error ? err : new Error('読み込みに失敗しました')
       );
     } finally {
       setLoading(false);
@@ -210,9 +184,6 @@ export default function RankingsPage() {
                 empty={
                   <Box textAlign="center" padding="xl">
                     <SpaceBetween size="s">
-                      <Box variant="p" fontSize="heading-xl" fontWeight="bold">
-                        {'\u{1F3C6}'}
-                      </Box>
                       <Box variant="h2" fontWeight="bold">
                         ランキングデータがありません
                       </Box>
@@ -230,59 +201,19 @@ export default function RankingsPage() {
                     id: 'rank',
                     header: '順位',
                     width: 100,
-                    cell: (item) => {
-                      const bgColor = getRankBoxColor(item.rank);
-                      return (
-                        <Box
-                          fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
-                          fontWeight="bold"
-                        >
-                          {bgColor ? (
-                            <span
-                              style={{
-                                background: bgColor,
-                                padding: '4px 12px',
-                                borderRadius: '8px',
-                                display: 'inline-block',
-                              }}
-                            >
-                              {getRankIcon(item.rank)}
-                            </span>
-                          ) : (
-                            getRankIcon(item.rank)
-                          )}
-                        </Box>
-                      );
-                    },
+                    cell: (item) => (
+                      <Box
+                        fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
+                        fontWeight="bold"
+                      >
+                        {getRankLabel(item.rank)}
+                      </Box>
+                    ),
                   },
                   {
                     id: 'name',
                     header: '名前',
-                    cell: (item) => (
-                      <SpaceBetween
-                        size="xs"
-                        direction="horizontal"
-                        alignItems="center"
-                      >
-                        <div
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: '50%',
-                            background: getRankColor(item.rank),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: '0.875rem',
-                            color: '#FFFFFF',
-                          }}
-                        >
-                          {item.name.charAt(0)}
-                        </div>
-                        <Box fontWeight="bold">{item.name}</Box>
-                      </SpaceBetween>
-                    ),
+                    cell: (item) => <Box fontWeight="bold">{item.name}</Box>,
                   },
                   {
                     id: 'eventsParticipated',

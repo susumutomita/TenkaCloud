@@ -72,7 +72,7 @@ export default function AdminGamedayControlPage() {
 
   const [fiTeamId, setFiTeamId] = useState<SelectProps.Option | null>(null);
   const [fiAttackSlug, setFiAttackSlug] = useState<SelectProps.Option | null>(
-    null,
+    null
   );
   const [fiLoading, setFiLoading] = useState(false);
   const [fiResult, setFiResult] = useState<{
@@ -193,7 +193,7 @@ export default function AdminGamedayControlPage() {
       const result = await executeFaultInjection(
         eventId,
         fiTeamId.value,
-        fiAttackSlug.value,
+        fiAttackSlug.value
       );
       setFiResult({
         success: result.success,
@@ -329,8 +329,8 @@ export default function AdminGamedayControlPage() {
                                 handleAction(() =>
                                   startGame(
                                     eventId,
-                                    Number(durationMinutes) || undefined,
-                                  ),
+                                    Number(durationMinutes) || undefined
+                                  )
                                 )
                               }
                             >
