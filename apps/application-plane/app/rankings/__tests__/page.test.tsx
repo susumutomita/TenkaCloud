@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import RankingsPage from '../page';
 
@@ -161,5 +161,51 @@ describe('ランキングページ', () => {
       expect(screen.getByText('8,200')).toBeInTheDocument();
       expect(screen.getByText('7,100')).toBeInTheDocument();
     });
+  });
+
+  it('総参加者数が PAGE_SIZE を超える場合にページネーションを表示すべき', async () => {
+    mockGetGlobalRanking.mockResolvedValue({
+      ...rankingsData,
+      total: 100,
+    });
+    render(<RankingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Taro')).toBeInTheDocument();
+    });
+    // Pagination should be present
+    const paginationButtons = document.querySelectorAll(
+      '[class*="awsui_page-number"]',
+    );
+    expect(paginationButtons.length).toBeGreaterThan(0);
+  });
+
+  it('ページ遷移時にオフセット付きで API を呼び出すべき', async () => {
+    mockGetGlobalRanking.mockResolvedValue({
+      ...rankingsData,
+      total: 100,
+    });
+    render(<RankingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Taro')).toBeInTheDocument();
+    });
+    expect(mockGetGlobalRanking).toHaveBeenCalledWith({
+      limit: 20,
+      offset: 0,
+    });
+  });
+
+  it('総参加者数が PAGE_SIZE 以下の場合はページネーションを非表示にすべき', async () => {
+    mockGetGlobalRanking.mockResolvedValue({
+      ...rankingsData,
+      total: 3,
+    });
+    render(<RankingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Taro')).toBeInTheDocument();
+    });
+    const paginationButtons = document.querySelectorAll(
+      '[class*="awsui_page-number"]',
+    );
+    expect(paginationButtons.length).toBe(0);
   });
 });
