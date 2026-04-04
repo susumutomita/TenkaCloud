@@ -67,6 +67,8 @@ const messages = {
       notJoined: '未参加',
       activeStatus: '開催中',
       scheduledStatus: '予定',
+      browseEvents: 'イベントを探す →',
+      noMyEvents: '参加中・登録済みのイベントはありません',
     },
     gameday: {
       title: 'GameDay',
@@ -194,6 +196,12 @@ const messages = {
       emptyDescription: '条件に一致するイベントがありません。',
       schedule: 'スケジュール',
       details: '詳細',
+      viewCards: 'カード',
+      viewList: 'リスト',
+      viewCalendar: 'カレンダー',
+      calendarPrev: '前月',
+      calendarNext: '翌月',
+      name: 'イベント名',
     },
     battles: {
       title: 'バトル一覧',
@@ -321,6 +329,8 @@ const messages = {
       notJoined: 'Not joined',
       activeStatus: 'Active',
       scheduledStatus: 'Scheduled',
+      browseEvents: 'Browse events →',
+      noMyEvents: 'No active or registered events',
     },
     gameday: {
       title: 'GameDay',
@@ -449,6 +459,12 @@ const messages = {
       emptyDescription: 'No events match the criteria.',
       schedule: 'Schedule',
       details: 'Details',
+      viewCards: 'Cards',
+      viewList: 'List',
+      viewCalendar: 'Calendar',
+      calendarPrev: 'Prev',
+      calendarNext: 'Next',
+      name: 'Event',
     },
     battles: {
       title: 'Battles',
