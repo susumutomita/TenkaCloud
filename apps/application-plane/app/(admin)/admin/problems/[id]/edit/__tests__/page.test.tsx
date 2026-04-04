@@ -62,7 +62,7 @@ describe('問題編集ページ', () => {
     mockGet.mockReturnValue(new Promise(() => {}));
     render(<AdminProblemEditPage />);
     expect(
-      document.querySelectorAll('[class*="animate-pulse"]').length
+      document.querySelectorAll('[class*="animate-pulse"]').length,
     ).toBeGreaterThan(0);
   });
   it('データ取得後にフォームを表示すべき', async () => {
@@ -87,7 +87,7 @@ describe('問題編集ページ', () => {
       expect(screen.getByText('問題の取得に失敗しました')).toBeInTheDocument();
     });
     expect(
-      screen.getByRole('link', { name: '問題一覧に戻る' })
+      screen.getByRole('link', { name: '問題一覧に戻る' }),
     ).toBeInTheDocument();
   });
   it('更新ボタンが表示されるべき', async () => {
@@ -95,7 +95,7 @@ describe('問題編集ページ', () => {
     render(<AdminProblemEditPage />);
     await waitFor(() => {
       expect(
-        screen.getAllByRole('button', { name: '更新' }).length
+        screen.getAllByRole('button', { name: '更新' }).length,
       ).toBeGreaterThan(0);
     });
   });
@@ -121,7 +121,7 @@ describe('問題編集ページ', () => {
     await waitFor(() => {
       expect(mockPut).toHaveBeenCalledWith(
         '/admin/problems/prob-123',
-        expect.objectContaining({ title: '既存の問題' })
+        expect.objectContaining({ title: '既存の問題' }),
       );
     });
     expect(mockPush).toHaveBeenCalledWith('/admin/problems');
@@ -188,7 +188,7 @@ describe('問題編集ページ', () => {
       expect(screen.getByDisplayValue('可用性')).toBeInTheDocument();
     });
     expect(
-      screen.getByDisplayValue('サービスの可用性を評価')
+      screen.getByDisplayValue('サービスの可用性を評価'),
     ).toBeInTheDocument();
   });
   it('既存の目標が表示されるべき', async () => {

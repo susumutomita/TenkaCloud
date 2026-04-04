@@ -73,7 +73,7 @@ export interface EventFormErrors {
 
 export function findOption(
   options: SelectProps.Options,
-  value: string | undefined
+  value: string | undefined,
 ): SelectProps.Option | null {
   if (!value) return null;
   return (
@@ -127,13 +127,13 @@ export interface UseEventFormStateReturn {
   serverError: string | null;
   setField: <K extends keyof EventFormState>(
     key: K,
-    value: EventFormState[K]
+    value: EventFormState[K],
   ) => void;
   submit: (apiCall: () => Promise<unknown>) => Promise<boolean>;
 }
 
 export function useEventFormState(
-  initialState: EventFormState = DEFAULT_FORM_STATE
+  initialState: EventFormState = DEFAULT_FORM_STATE,
 ): UseEventFormStateReturn {
   const [form, setForm] = useState<EventFormState>(initialState);
   const [errors, setErrors] = useState<EventFormErrors>({});
@@ -144,7 +144,7 @@ export function useEventFormState(
     <K extends keyof EventFormState>(key: K, value: EventFormState[K]) => {
       setForm((prev) => ({ ...prev, [key]: value }));
     },
-    []
+    [],
   );
 
   const submit = useCallback(
@@ -160,14 +160,14 @@ export function useEventFormState(
         return true;
       } catch (err) {
         setServerError(
-          err instanceof Error ? err.message : 'エラーが発生しました'
+          err instanceof Error ? err.message : 'エラーが発生しました',
         );
         return false;
       } finally {
         setSubmitting(false);
       }
     },
-    [form]
+    [form],
   );
 
   return { form, errors, submitting, serverError, setField, submit };

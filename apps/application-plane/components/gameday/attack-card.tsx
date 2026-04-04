@@ -48,7 +48,7 @@ export function AttackCard({
     function calc() {
       const diff = Math.max(
         0,
-        Math.ceil(((cooldownUntil as number) - Date.now()) / 1000)
+        Math.ceil(((cooldownUntil as number) - Date.now()) / 1000),
       );
       setCooldownRemaining(diff);
     }

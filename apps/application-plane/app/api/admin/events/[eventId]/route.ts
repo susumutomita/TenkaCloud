@@ -40,7 +40,7 @@ interface UpdateEventRequest {
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
+  { params }: { params: Promise<{ eventId: string }> },
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -54,13 +54,13 @@ export async function GET(
 
   try {
     const data = await serverApiRequest<EventDetails>(
-      `/admin/events/${eventId}`
+      `/admin/events/${eventId}`,
     );
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch event:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch event'
+      error instanceof Error ? error.message : 'Failed to fetch event',
     );
   }
 }
@@ -72,7 +72,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
+  { params }: { params: Promise<{ eventId: string }> },
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -92,14 +92,14 @@ export async function PUT(
       {
         method: 'PUT',
         body: JSON.stringify(body),
-      }
+      },
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to update event:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to update event'
+      error instanceof Error ? error.message : 'Failed to update event',
     );
   }
 }
@@ -111,7 +111,7 @@ export async function PUT(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
+  { params }: { params: Promise<{ eventId: string }> },
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -132,7 +132,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Failed to delete event:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to delete event'
+      error instanceof Error ? error.message : 'Failed to delete event',
     );
   }
 }

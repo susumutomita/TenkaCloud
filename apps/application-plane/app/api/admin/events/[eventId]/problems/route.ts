@@ -38,7 +38,7 @@ interface AddProblemToEventResponse {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
+  { params }: { params: Promise<{ eventId: string }> },
 ) {
   const session = await getAdminSession();
   if (!session) {
@@ -61,14 +61,14 @@ export async function POST(
       {
         method: 'POST',
         body: JSON.stringify({ problemId: body.problemId }),
-      }
+      },
     );
 
     return successResponse(data, 201);
   } catch (error) {
     console.error('Failed to add problem to event:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to add problem to event'
+      error instanceof Error ? error.message : 'Failed to add problem to event',
     );
   }
 }

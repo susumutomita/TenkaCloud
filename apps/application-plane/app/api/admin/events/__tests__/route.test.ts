@@ -75,7 +75,7 @@ describe('Admin Events API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/events?page=1&pageSize=10'
+        'http://localhost/api/admin/events?page=1&pageSize=10',
       );
       const response = await GET(request);
 
@@ -95,21 +95,21 @@ describe('Admin Events API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/events?page=2&pageSize=20&status=active&search=test'
+        'http://localhost/api/admin/events?page=2&pageSize=20&status=active&search=test',
       );
       await GET(request);
 
       expect(mockServerApiRequest).toHaveBeenCalledWith(
-        expect.stringContaining('page=2')
+        expect.stringContaining('page=2'),
       );
       expect(mockServerApiRequest).toHaveBeenCalledWith(
-        expect.stringContaining('pageSize=20')
+        expect.stringContaining('pageSize=20'),
       );
       expect(mockServerApiRequest).toHaveBeenCalledWith(
-        expect.stringContaining('status=active')
+        expect.stringContaining('status=active'),
       );
       expect(mockServerApiRequest).toHaveBeenCalledWith(
-        expect.stringContaining('search=test')
+        expect.stringContaining('search=test'),
       );
     });
 

@@ -70,10 +70,10 @@ describe('useEventFormState フック', () => {
     expect(result.current.form.endTime).toBe('2026-05-02');
     expect(result.current.form.timezone).toEqual(TIMEZONE_OPTIONS[1]);
     expect(result.current.form.participantType).toEqual(
-      PARTICIPANT_TYPE_OPTIONS[1]
+      PARTICIPANT_TYPE_OPTIONS[1],
     );
     expect(result.current.form.cloudProvider).toEqual(
-      CLOUD_PROVIDER_OPTIONS[1]
+      CLOUD_PROVIDER_OPTIONS[1],
     );
     expect(result.current.form.maxParticipants).toBe('500');
     expect(result.current.form.scoringType).toEqual(SCORING_TYPE_OPTIONS[1]);
@@ -103,7 +103,7 @@ describe('useEventFormState フック', () => {
     });
     expect(ok).toBe(false);
     expect(result.current.errors.endTime).toBe(
-      '終了日は開始日より後に設定してください'
+      '終了日は開始日より後に設定してください',
     );
   });
 
@@ -166,19 +166,19 @@ describe('useEventFormState フック', () => {
 describe('validateEventForm', () => {
   it('名前が空の場合にエラーを返すべき', () => {
     expect(validateEventForm({ ...DEFAULT_FORM_STATE, name: '' }).name).toBe(
-      'イベント名は必須です'
+      'イベント名は必須です',
     );
   });
 
   it('空白のみの名前にエラーを返すべき', () => {
     expect(validateEventForm({ ...DEFAULT_FORM_STATE, name: '   ' }).name).toBe(
-      'イベント名は必須です'
+      'イベント名は必須です',
     );
   });
 
   it('正常な名前にはエラーを返さないべき', () => {
     expect(
-      validateEventForm({ ...DEFAULT_FORM_STATE, name: 'テスト' }).name
+      validateEventForm({ ...DEFAULT_FORM_STATE, name: 'テスト' }).name,
     ).toBeUndefined();
   });
 
@@ -189,7 +189,7 @@ describe('validateEventForm', () => {
         name: 'テスト',
         startTime: '2026-05-10',
         endTime: '2026-05-01',
-      }).endTime
+      }).endTime,
     ).toBe('終了日は開始日より後に設定してください');
   });
 
@@ -200,7 +200,7 @@ describe('validateEventForm', () => {
         name: 'テスト',
         startTime: '2026-05-10',
         endTime: '2026-05-10',
-      }).endTime
+      }).endTime,
     ).toBe('終了日は開始日より後に設定してください');
   });
 
@@ -211,7 +211,7 @@ describe('validateEventForm', () => {
         name: 'テスト',
         startTime: '',
         endTime: '2026-05-01',
-      }).endTime
+      }).endTime,
     ).toBeUndefined();
   });
 
@@ -222,7 +222,7 @@ describe('validateEventForm', () => {
         name: 'テスト',
         startTime: '2026-05-01',
         endTime: '',
-      }).endTime
+      }).endTime,
     ).toBeUndefined();
   });
 });

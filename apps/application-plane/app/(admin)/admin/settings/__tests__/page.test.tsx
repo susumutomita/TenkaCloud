@@ -50,7 +50,7 @@ describe('Admin 設定ページ', () => {
     render(<AdminSettingsPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: '設定', level: 1 })
+        screen.getByRole('heading', { name: '設定', level: 1 }),
       ).toBeInTheDocument();
     });
   });
@@ -134,7 +134,7 @@ describe('Admin 設定ページ', () => {
     await user.click(getTab('API キー'));
     await waitFor(() => {
       expect(screen.getByTestId('masked-api-key').textContent).toBe(
-        'sk-****1234'
+        'sk-****1234',
       );
     });
   });
@@ -149,13 +149,13 @@ describe('Admin 設定ページ', () => {
     await user.click(getTab('API キー'));
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'API キーを再生成' })
+        screen.getByRole('button', { name: 'API キーを再生成' }),
       ).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: 'API キーを再生成' }));
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: '再生成' })
+        screen.getByRole('button', { name: '再生成' }),
       ).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '再生成' }));
@@ -191,7 +191,7 @@ describe('Admin 設定ページ', () => {
     await user.click(screen.getByTestId('delete-all-data-button'));
     await waitFor(() => {
       expect(
-        screen.getByText('確認のため「DELETE」と入力してください')
+        screen.getByText('確認のため「DELETE」と入力してください'),
       ).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: '削除を実行' })).toBeDisabled();
@@ -263,7 +263,7 @@ describe('Admin 設定ページ', () => {
     await user.click(screen.getByRole('button', { name: '削除を実行' }));
     await waitFor(() => {
       expect(
-        screen.getByText('データの削除に失敗しました')
+        screen.getByText('データの削除に失敗しました'),
       ).toBeInTheDocument();
     });
   });
@@ -273,7 +273,7 @@ describe('Admin 設定ページ', () => {
     render(<AdminSettingsPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: '設定', level: 1 })
+        screen.getByRole('heading', { name: '設定', level: 1 }),
       ).toBeInTheDocument();
     });
     expect(getTab('一般設定')).toBeInTheDocument();
@@ -330,13 +330,13 @@ describe('Admin 設定ページ', () => {
     await user.click(getTab('API キー'));
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'API キーを再生成' })
+        screen.getByRole('button', { name: 'API キーを再生成' }),
       ).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: 'API キーを再生成' }));
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: '再生成' })
+        screen.getByRole('button', { name: '再生成' }),
       ).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: '再生成' }));

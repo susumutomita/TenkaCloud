@@ -48,12 +48,13 @@ export default function AdminParticipantsPage() {
         if (searchQuery) params.set('search', searchQuery);
 
         const response = await fetch(
-          `/api/admin/participants?${params.toString()}`
+          `/api/admin/participants?${params.toString()}`,
         );
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.error || `参加者の取得に失敗しました (${response.status})`
+            errorData.error ||
+              `参加者の取得に失敗しました (${response.status})`,
           );
         }
 
@@ -62,7 +63,7 @@ export default function AdminParticipantsPage() {
       } catch (err) {
         console.error('Failed to fetch participants:', err);
         setError(
-          err instanceof Error ? err.message : '参加者の取得に失敗しました'
+          err instanceof Error ? err.message : '参加者の取得に失敗しました',
         );
         setParticipants([]);
       } finally {
@@ -83,7 +84,7 @@ export default function AdminParticipantsPage() {
     participants.length > 0
       ? Math.round(
           participants.reduce((acc, p) => acc + (p.totalScore || 0), 0) /
-            participants.length
+            participants.length,
         )
       : 0;
 

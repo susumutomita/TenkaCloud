@@ -60,24 +60,24 @@ export default function AdminEventEditPage() {
         setField('endTime', endDate);
         setField(
           'timezone',
-          findOption(TIMEZONE_OPTIONS, data.timezone) ?? TIMEZONE_OPTIONS[0]
+          findOption(TIMEZONE_OPTIONS, data.timezone) ?? TIMEZONE_OPTIONS[0],
         );
         setField(
           'participantType',
-          findOption(PARTICIPANT_TYPE_OPTIONS, data.participantType)
+          findOption(PARTICIPANT_TYPE_OPTIONS, data.participantType),
         );
         setField(
           'cloudProvider',
-          findOption(CLOUD_PROVIDER_OPTIONS, data.cloudProvider)
+          findOption(CLOUD_PROVIDER_OPTIONS, data.cloudProvider),
         );
         setField('maxParticipants', String(data.maxParticipants ?? 100));
         setField(
           'scoringType',
-          findOption(SCORING_TYPE_OPTIONS, data.scoringType)
+          findOption(SCORING_TYPE_OPTIONS, data.scoringType),
         );
       } catch (err) {
         setFetchError(
-          err instanceof Error ? err.message : 'イベントの取得に失敗しました'
+          err instanceof Error ? err.message : 'イベントの取得に失敗しました',
         );
       } finally {
         setLoading(false);
@@ -88,7 +88,7 @@ export default function AdminEventEditPage() {
 
   const handleSubmit = async () => {
     const ok = await submit(() =>
-      put(`/admin/events/${eventId}`, buildPayload(form))
+      put(`/admin/events/${eventId}`, buildPayload(form)),
     );
     if (ok) router.push('/admin/events');
   };

@@ -127,7 +127,7 @@ describe('バトル一覧ページ', () => {
 
     // 初回ロード時にデフォルトフィルターでAPIが呼ばれることを確認
     expect(mockGetAvailableEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ status: ['scheduled', 'active'] })
+      expect.objectContaining({ status: ['scheduled', 'active'] }),
     );
   });
 
@@ -141,7 +141,7 @@ describe('バトル一覧ページ', () => {
 
     // 初回ロード時にタイプフィルターなしでAPIが呼ばれることを確認
     expect(mockGetAvailableEvents).toHaveBeenCalledWith(
-      expect.objectContaining({ type: undefined })
+      expect.objectContaining({ type: undefined }),
     );
   });
 });

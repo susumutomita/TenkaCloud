@@ -35,7 +35,7 @@ type ViewMode = 'cards' | 'list' | 'calendar';
 
 function getEventStatusIndicator(
   status: EventStatus,
-  t: (k: string) => string
+  t: (k: string) => string,
 ) {
   switch (status) {
     case 'active':
@@ -163,7 +163,7 @@ function CalendarView({ events, t, locale, onNavigate }: CalendarViewProps) {
           ariaLabel={t('events.calendarPrev')}
           onClick={() =>
             setCurrentMonth(
-              (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+              (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
             )
           }
         />
@@ -176,7 +176,7 @@ function CalendarView({ events, t, locale, onNavigate }: CalendarViewProps) {
           ariaLabel={t('events.calendarNext')}
           onClick={() =>
             setCurrentMonth(
-              (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+              (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
             )
           }
         />
@@ -296,7 +296,7 @@ export default function EventsPage() {
   const [selectedStatus, setSelectedStatus] =
     useState<SelectProps.Option | null>(null);
   const [selectedType, setSelectedType] = useState<SelectProps.Option | null>(
-    null
+    null,
   );
 
   useEffect(() => {
@@ -315,7 +315,7 @@ export default function EventsPage() {
         setError(null);
       } catch (err) {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました')
+          err instanceof Error ? err : new Error('読み込みに失敗しました'),
         );
       } finally {
         setLoading(false);

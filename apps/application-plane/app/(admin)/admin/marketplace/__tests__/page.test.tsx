@@ -89,12 +89,12 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' })
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
       await waitFor(() => {
         expect(screen.getByText('1.0.0')).toBeInTheDocument();
@@ -109,22 +109,22 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' })
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
       await waitFor(() => {
         expect(
           screen.getByText(
-            '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u7121\u52b9\u5316'
-          )
+            '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u7121\u52b9\u5316',
+          ),
         ).toBeInTheDocument();
       });
       expect(
-        screen.getByText('\u6697\u53f7\u5316\u6709\u52b9\u5316')
+        screen.getByText('\u6697\u53f7\u5316\u6709\u52b9\u5316'),
       ).toBeInTheDocument();
     });
 
@@ -136,12 +136,12 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' })
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
       await waitFor(() => {
         expect(screen.getByText('cloudformation')).toBeInTheDocument();
@@ -156,18 +156,18 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' })
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
       await waitFor(() => {
         expect(
           screen.getByText(
-            '\u554f\u984c\u8a73\u7d30\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f'
-          )
+            '\u554f\u984c\u8a73\u7d30\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -180,18 +180,18 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' })
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
       await waitFor(() => {
         expect(
           screen.getByText(
-            '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u3092\u7121\u52b9\u5316'
-          )
+            '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u3092\u7121\u52b9\u5316',
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -210,20 +210,20 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       await user.click(
         screen.getByRole('button', {
           name: '\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0',
-        })
+        }),
       );
       await waitFor(() => {
         expect(
           screen.getByText(
-            '\u30a4\u30d9\u30f3\u30c8\u4e00\u89a7\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f'
-          )
+            '\u30a4\u30d9\u30f3\u30c8\u4e00\u89a7\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -236,12 +236,12 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       expect(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' })
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       ).not.toBeDisabled();
     });
 
@@ -251,14 +251,14 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       await waitFor(() => {
         expect(
           screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a'
-          )
+            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+          ),
         ).toBeInTheDocument();
       });
       expect(
         screen.getByRole('button', {
           name: '\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0',
-        })
+        }),
       ).not.toBeDisabled();
     });
   });

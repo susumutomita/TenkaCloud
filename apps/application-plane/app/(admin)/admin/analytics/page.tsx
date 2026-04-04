@@ -67,7 +67,7 @@ function exportAnalyticsCsv(data: AnalyticsData): void {
   lines.push('チーム名,スコア,メンバー数,完了率');
   for (const team of data.teamComparison) {
     lines.push(
-      `${team.teamName},${team.score},${team.memberCount},${team.completionRate}%`
+      `${team.teamName},${team.score},${team.memberCount},${team.completionRate}%`,
     );
   }
 
@@ -98,7 +98,7 @@ export default function AdminAnalyticsPage() {
       setError(
         err instanceof Error
           ? err
-          : new Error('分析データの読み込みに失敗しました')
+          : new Error('分析データの読み込みに失敗しました'),
       );
     } finally {
       setLoading(false);
@@ -228,7 +228,7 @@ export default function AdminAnalyticsPage() {
                       0,
                       Math.max(
                         ...data.eventTimeline.map((e) => e.eventCount),
-                        1
+                        1,
                       ),
                     ]}
                     xTitle="月"
@@ -259,7 +259,7 @@ export default function AdminAnalyticsPage() {
                       0,
                       Math.max(
                         ...data.eventTimeline.map((e) => e.participantCount),
-                        1
+                        1,
                       ),
                     ]}
                     xTitle="月"

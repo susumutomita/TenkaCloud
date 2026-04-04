@@ -138,7 +138,7 @@ export default function ScoreboardPage() {
   const [error, setError] = useState<Error | null>(null);
   const [blackout, setBlackout] = useState(false);
   const [boardItems, setBoardItems] = useState<ReadonlyArray<BoardLayoutItem>>(
-    []
+    [],
   );
 
   const fetchData = useCallback(async () => {
@@ -159,7 +159,7 @@ export default function ScoreboardPage() {
         setError(null);
       } else {
         setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました')
+          err instanceof Error ? err : new Error('読み込みに失敗しました'),
         );
       }
     } finally {
@@ -238,7 +238,7 @@ export default function ScoreboardPage() {
       <Board
         renderItem={(
           item: BoardProps.Item<BoardItemData>,
-          _actions: BoardProps.ItemActions
+          _actions: BoardProps.ItemActions,
         ) => (
           <BoardItem
             header={<Header>{item.data.title}</Header>}
@@ -271,7 +271,7 @@ export default function ScoreboardPage() {
           navigationAriaDescription:
             'ボード内を移動するにはクリックしてください',
           navigationItemAriaLabel: (
-            item: BoardProps.Item<BoardItemData> | null
+            item: BoardProps.Item<BoardItemData> | null,
           ) => item?.data.title ?? '',
         }}
         empty="データなし"

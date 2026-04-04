@@ -31,7 +31,7 @@ export default function ProfilePage() {
     getMyProfile()
       .then(setProfile)
       .catch((e) =>
-        setError(e instanceof Error ? e.message : '読み込みに失敗しました')
+        setError(e instanceof Error ? e.message : '読み込みに失敗しました'),
       )
       .finally(() => setLoading(false));
   }, []);

@@ -97,14 +97,14 @@ export default function AdminMarketplacePage() {
     useState<string>('');
 
   const [previewProblem, setPreviewProblem] = useState<AdminProblem | null>(
-    null
+    null,
   );
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [addToEventVisible, setAddToEventVisible] = useState(false);
   const [addToEventProblemId, setAddToEventProblemId] = useState<string | null>(
-    null
+    null,
   );
   const [events, setEvents] = useState<EventOption[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -126,7 +126,7 @@ export default function AdminMarketplacePage() {
       setProblems(data.problems.map(toMarketplaceProblem));
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('問題の取得に失敗しました')
+        err instanceof Error ? err : new Error('問題の取得に失敗しました'),
       );
       setProblems([]);
     } finally {
@@ -148,7 +148,7 @@ export default function AdminMarketplacePage() {
       setPreviewProblem(problem);
     } catch {
       setPreviewError(
-        '\u554f\u984c\u8a73\u7d30\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f'
+        '\u554f\u984c\u8a73\u7d30\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
       );
     } finally {
       setPreviewLoading(false);
@@ -175,11 +175,11 @@ export default function AdminMarketplacePage() {
         (data.events ?? []).map((e: ParticipantEvent) => ({
           id: e.id,
           name: e.name,
-        }))
+        })),
       );
     } catch {
       setEventsError(
-        '\u30a4\u30d9\u30f3\u30c8\u4e00\u89a7\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f'
+        '\u30a4\u30d9\u30f3\u30c8\u4e00\u89a7\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
       );
       setEvents([]);
     } finally {
@@ -204,13 +204,13 @@ export default function AdminMarketplacePage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ problemId: addToEventProblemId }),
-        }
+        },
       );
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.error ||
-            '\u30a4\u30d9\u30f3\u30c8\u3078\u306e\u8ffd\u52a0\u306b\u5931\u6557\u3057\u307e\u3057\u305f'
+            '\u30a4\u30d9\u30f3\u30c8\u3078\u306e\u8ffd\u52a0\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
         );
       }
       setFlashMessages((prev) => [
@@ -238,7 +238,7 @@ export default function AdminMarketplacePage() {
   }, [selectedEventId, addToEventProblemId, handleCloseAddToEvent]);
 
   const getDifficultyBadgeVariant = (
-    difficulty: DifficultyLevel
+    difficulty: DifficultyLevel,
   ): 'default' | 'success' | 'warning' | 'danger' | 'purple' => {
     switch (difficulty) {
       case 'easy':
@@ -328,7 +328,7 @@ export default function AdminMarketplacePage() {
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.tags.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.toLowerCase())
+        tag.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     const matchesCategory =
       selectedCategory === '' || p.category === selectedCategory;
@@ -727,7 +727,7 @@ export default function AdminMarketplacePage() {
                     label:
                       '\u30af\u30e9\u30a6\u30c9\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc',
                     value: getCloudProviderLabel(
-                      previewProblem.deployment.providers[0] ?? ''
+                      previewProblem.deployment.providers[0] ?? '',
                     ),
                   },
                   {
@@ -771,7 +771,7 @@ export default function AdminMarketplacePage() {
                       {previewProblem.description.prerequisites.map(
                         (pre, idx) => (
                           <li key={idx}>{pre}</li>
-                        )
+                        ),
                       )}
                     </ul>
                   </div>
@@ -833,7 +833,7 @@ export default function AdminMarketplacePage() {
                     value: Object.entries(previewProblem.deployment.regions)
                       .map(
                         ([provider, regions]) =>
-                          `${provider}: ${regions.join(', ')}`
+                          `${provider}: ${regions.join(', ')}`,
                       )
                       .join(' | '),
                   },

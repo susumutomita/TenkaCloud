@@ -33,7 +33,7 @@ export function AwsConsoleButton({
 
     try {
       const response = await fetch(
-        `/api/participant/events/${encodeURIComponent(eventId)}/aws-console`
+        `/api/participant/events/${encodeURIComponent(eventId)}/aws-console`,
       );
 
       if (!response.ok) {

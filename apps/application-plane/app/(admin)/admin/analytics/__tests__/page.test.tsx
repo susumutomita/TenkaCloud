@@ -109,7 +109,7 @@ describe('Admin 分析ページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('分析データの読み込みに失敗しました')
+        screen.getByText('分析データの読み込みに失敗しました'),
       ).toBeInTheDocument();
     });
   });
@@ -144,7 +144,7 @@ describe('Admin 分析ページ', () => {
       }
       return document.createElementNS(
         'http://www.w3.org/1999/xhtml',
-        tag
+        tag,
       ) as HTMLElement;
     });
 

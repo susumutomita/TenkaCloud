@@ -73,7 +73,7 @@ export default function RankingsPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err : new Error('読み込みに失敗しました')
+        err instanceof Error ? err : new Error('読み込みに失敗しました'),
       );
     } finally {
       setLoading(false);

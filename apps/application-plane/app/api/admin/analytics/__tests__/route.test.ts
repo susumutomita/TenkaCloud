@@ -145,11 +145,11 @@ describe('Admin Analytics API', () => {
 
       expect(data.scoreDistribution).toHaveLength(5);
       const range41to60 = data.scoreDistribution.find(
-        (d: { category: string }) => d.category === '41-60'
+        (d: { category: string }) => d.category === '41-60',
       );
       expect(range41to60.value).toBe(1);
       const range81to100 = data.scoreDistribution.find(
-        (d: { category: string }) => d.category === '81-100'
+        (d: { category: string }) => d.category === '81-100',
       );
       expect(range81to100.value).toBe(1);
     });

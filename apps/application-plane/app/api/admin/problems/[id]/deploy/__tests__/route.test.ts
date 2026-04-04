@@ -43,7 +43,7 @@ describe('Admin Problem Deploy API', () => {
         {
           method: 'POST',
           body: JSON.stringify({ region: 'ap-northeast-1' }),
-        }
+        },
       );
       const response = await POST(request, routeContext);
 
@@ -59,7 +59,7 @@ describe('Admin Problem Deploy API', () => {
         {
           method: 'POST',
           body: JSON.stringify({ region: '' }),
-        }
+        },
       );
       const response = await POST(request, routeContext);
 
@@ -83,7 +83,7 @@ describe('Admin Problem Deploy API', () => {
         {
           method: 'POST',
           body: JSON.stringify({ region: 'ap-northeast-1' }),
-        }
+        },
       );
       const response = await POST(request, routeContext);
 
@@ -92,7 +92,7 @@ describe('Admin Problem Deploy API', () => {
       expect(data).toEqual(deployResult);
       expect(mockServerApiRequest).toHaveBeenCalledWith(
         '/admin/problems/problem-1/deploy',
-        expect.objectContaining({ method: 'POST' })
+        expect.objectContaining({ method: 'POST' }),
       );
     });
 
@@ -106,7 +106,7 @@ describe('Admin Problem Deploy API', () => {
         {
           method: 'POST',
           body: JSON.stringify({ region: 'ap-northeast-1' }),
-        }
+        },
       );
       const response = await POST(request, routeContext);
 
@@ -125,7 +125,7 @@ describe('Admin Problem Deploy API', () => {
         {
           method: 'POST',
           body: JSON.stringify({ region: 'us-east-1' }),
-        }
+        },
       );
       const response = await POST(request, routeContext);
 
@@ -141,7 +141,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy'
+        'http://localhost/api/admin/problems/problem-1/deploy',
       );
       const response = await GET(request, routeContext);
 
@@ -160,7 +160,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy'
+        'http://localhost/api/admin/problems/problem-1/deploy',
       );
       const response = await GET(request, routeContext);
 
@@ -175,7 +175,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy'
+        'http://localhost/api/admin/problems/problem-1/deploy',
       );
       const response = await GET(request, routeContext);
 
@@ -190,7 +190,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy'
+        'http://localhost/api/admin/problems/problem-1/deploy',
       );
       const response = await GET(request, routeContext);
 
@@ -207,7 +207,7 @@ describe('Admin Problem Deploy API', () => {
       const { DELETE } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/problems/problem-1/deploy',
-        { method: 'DELETE' }
+        { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
 
@@ -222,7 +222,7 @@ describe('Admin Problem Deploy API', () => {
       const { DELETE } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/problems/problem-1/deploy',
-        { method: 'DELETE' }
+        { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
 
@@ -231,7 +231,7 @@ describe('Admin Problem Deploy API', () => {
       expect(data).toEqual(deleteResult);
       expect(mockServerApiRequest).toHaveBeenCalledWith(
         '/admin/problems/problem-1/deploy',
-        expect.objectContaining({ method: 'DELETE' })
+        expect.objectContaining({ method: 'DELETE' }),
       );
     });
 
@@ -242,7 +242,7 @@ describe('Admin Problem Deploy API', () => {
       const { DELETE } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/problems/problem-1/deploy',
-        { method: 'DELETE' }
+        { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
 
@@ -258,7 +258,7 @@ describe('Admin Problem Deploy API', () => {
       const { DELETE } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/problems/problem-1/deploy',
-        { method: 'DELETE' }
+        { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
 

@@ -33,7 +33,7 @@ describe('AWS Console Federation API', () => {
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt-1/aws-console'
+      'http://localhost/api/participant/events/evt-1/aws-console',
     );
     const response = await GET(request, await makeParams('evt-1'));
 
@@ -54,14 +54,14 @@ describe('AWS Console Federation API', () => {
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt-1/aws-console'
+      'http://localhost/api/participant/events/evt-1/aws-console',
     );
     const response = await GET(request, await makeParams('evt-1'));
 
     expect(response.status).toBe(404);
     const data = await response.json();
     expect(data.error).toBe(
-      'AWS Console access is not configured for this event'
+      'AWS Console access is not configured for this event',
     );
   });
 
@@ -85,7 +85,7 @@ describe('AWS Console Federation API', () => {
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt-1/aws-console'
+      'http://localhost/api/participant/events/evt-1/aws-console',
     );
     const response = await GET(request, await makeParams('evt-1'));
 
@@ -114,7 +114,7 @@ describe('AWS Console Federation API', () => {
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt-1/aws-console'
+      'http://localhost/api/participant/events/evt-1/aws-console',
     );
     await GET(request, await makeParams('evt-1'));
 
@@ -122,7 +122,7 @@ describe('AWS Console Federation API', () => {
       'tenant-1',
       'test@example.com',
       'evt-1-team-1',
-      'arn:aws:iam::123456789012:role/ParticipantRole'
+      'arn:aws:iam::123456789012:role/ParticipantRole',
     );
   });
 
@@ -145,7 +145,7 @@ describe('AWS Console Federation API', () => {
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt_special/aws-console'
+      'http://localhost/api/participant/events/evt_special/aws-console',
     );
     await GET(request, await makeParams('evt_special'));
 
@@ -153,7 +153,7 @@ describe('AWS Console Federation API', () => {
       'tenant-1',
       'test@example.com',
       'evt_special-team-1',
-      'arn:aws:iam::999999999999:role/SpecialRole'
+      'arn:aws:iam::999999999999:role/SpecialRole',
     );
 
     delete process.env.AWS_ROLE_ARN_evt_special;
@@ -172,12 +172,12 @@ describe('AWS Console Federation API', () => {
       'arn:aws:iam::123456789012:role/ParticipantRole';
 
     mockGenerateParticipantConsoleUrl.mockRejectedValue(
-      new Error('STS AssumeRole failed: Access denied')
+      new Error('STS AssumeRole failed: Access denied'),
     );
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt-1/aws-console'
+      'http://localhost/api/participant/events/evt-1/aws-console',
     );
     const response = await GET(request, await makeParams('evt-1'));
 
@@ -203,7 +203,7 @@ describe('AWS Console Federation API', () => {
 
     const { GET } = await import('../route');
     const request = new Request(
-      'http://localhost/api/participant/events/evt-1/aws-console'
+      'http://localhost/api/participant/events/evt-1/aws-console',
     );
     await GET(request, await makeParams('evt-1'));
 
@@ -211,7 +211,7 @@ describe('AWS Console Federation API', () => {
       'default',
       'test@example.com',
       'evt-1-no-team',
-      'arn:aws:iam::123456789012:role/ParticipantRole'
+      'arn:aws:iam::123456789012:role/ParticipantRole',
     );
   });
 });

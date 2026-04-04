@@ -18,7 +18,7 @@ import { useNotifications } from '@/lib/notifications';
 import type { Notification, NotificationSeverity } from '@/lib/notifications';
 
 function mapSeverityToFlashType(
-  severity: NotificationSeverity
+  severity: NotificationSeverity,
 ): FlashbarProps.Type {
   switch (severity) {
     case 'success':
@@ -85,7 +85,7 @@ export function NotificationPanel() {
         header: notification.title,
         id: notification.id,
       })),
-    [notifications, markAsRead]
+    [notifications, markAsRead],
   );
 
   return (

@@ -29,7 +29,7 @@ describe('Admin Event Problems API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1/problems',
-        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) }
+        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) },
       );
       const response = await POST(request, {
         params: Promise.resolve({ eventId: 'event-1' }),
@@ -46,7 +46,7 @@ describe('Admin Event Problems API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1/problems',
-        { method: 'POST', body: JSON.stringify({}) }
+        { method: 'POST', body: JSON.stringify({}) },
       );
       const response = await POST(request, {
         params: Promise.resolve({ eventId: 'event-1' }),
@@ -70,7 +70,7 @@ describe('Admin Event Problems API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1/problems',
-        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) }
+        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) },
       );
       const response = await POST(request, {
         params: Promise.resolve({ eventId: 'event-1' }),
@@ -89,7 +89,7 @@ describe('Admin Event Problems API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1/problems',
-        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) }
+        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) },
       );
       const response = await POST(request, {
         params: Promise.resolve({ eventId: 'event-1' }),
@@ -108,14 +108,14 @@ describe('Admin Event Problems API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1/problems',
-        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) }
+        { method: 'POST', body: JSON.stringify({ problemId: 'prob-1' }) },
       );
       const response = await POST(request, {
         params: Promise.resolve({ eventId: 'event-1' }),
       });
       expect(response.status).toBe(400);
       expect((await response.json()).error).toBe(
-        'Failed to add problem to event'
+        'Failed to add problem to event',
       );
     });
   });

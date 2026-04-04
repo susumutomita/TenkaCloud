@@ -77,43 +77,43 @@ export function ProblemForm({
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [type, setType] = useState<ProblemType>(initialData?.type ?? 'gameday');
   const [category, setCategory] = useState<ProblemCategory>(
-    initialData?.category ?? 'architecture'
+    initialData?.category ?? 'architecture',
   );
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(
-    initialData?.difficulty ?? 'medium'
+    initialData?.difficulty ?? 'medium',
   );
   const [overview, setOverview] = useState(
-    initialData?.description?.overview ?? ''
+    initialData?.description?.overview ?? '',
   );
   const [objectives, setObjectives] = useState<string[]>(
-    initialData?.description?.objectives ?? ['']
+    initialData?.description?.objectives ?? [''],
   );
   const [estimatedTime, setEstimatedTime] = useState(
-    initialData?.description?.estimatedTime?.toString() ?? ''
+    initialData?.description?.estimatedTime?.toString() ?? '',
   );
   const [selectedProviders, setSelectedProviders] = useState<CloudProvider[]>(
-    initialData?.deployment?.providers ?? ['aws']
+    initialData?.deployment?.providers ?? ['aws'],
   );
   const [region, setRegion] = useState(
-    Object.values(initialData?.deployment?.regions ?? {})[0]?.[0] ?? ''
+    Object.values(initialData?.deployment?.regions ?? {})[0]?.[0] ?? '',
   );
   const [scoringType, setScoringType] = useState<
     'lambda' | 'container' | 'api' | 'manual'
   >(initialData?.scoring?.type ?? 'lambda');
   const [scoringPath, setScoringPath] = useState(
-    initialData?.scoring?.path ?? ''
+    initialData?.scoring?.path ?? '',
   );
   const [scoringTimeout, setScoringTimeout] = useState(
-    initialData?.scoring?.timeoutMinutes?.toString() ?? '30'
+    initialData?.scoring?.timeoutMinutes?.toString() ?? '30',
   );
   const [criteria, setCriteria] = useState<ProblemScoringCriterion[]>(
     initialData?.scoring?.criteria ?? [
       { name: '', description: '', weight: 1, maxPoints: 100 },
-    ]
+    ],
   );
   const [author, setAuthor] = useState(initialData?.metadata?.author ?? '');
   const [version, setVersion] = useState(
-    initialData?.metadata?.version ?? '1.0.0'
+    initialData?.metadata?.version ?? '1.0.0',
   );
   const [tags, setTags] = useState<string[]>(initialData?.metadata?.tags ?? []);
   const [tagInput, setTagInput] = useState('');
@@ -132,7 +132,7 @@ export function ProblemForm({
     setSelectedProviders((prev) =>
       prev.includes(provider)
         ? prev.filter((p) => p !== provider)
-        : [...prev, provider]
+        : [...prev, provider],
     );
 
   const handleAddCriterion = () =>
@@ -145,7 +145,7 @@ export function ProblemForm({
   const handleCriterionChange = (
     index: number,
     field: keyof ProblemScoringCriterion,
-    value: string | number
+    value: string | number,
   ) => {
     const updated = [...criteria];
     updated[index] = { ...updated[index], [field]: value };
@@ -372,7 +372,7 @@ export function ProblemForm({
             <div className="flex flex-wrap gap-2">
               {PROVIDER_OPTIONS.map((option) => {
                 const isSelected = selectedProviders.includes(
-                  option.value as CloudProvider
+                  option.value as CloudProvider,
                 );
                 return (
                   <button
@@ -417,7 +417,7 @@ export function ProblemForm({
               value={scoringType}
               onChange={(e) =>
                 setScoringType(
-                  e.target.value as 'lambda' | 'container' | 'api' | 'manual'
+                  e.target.value as 'lambda' | 'container' | 'api' | 'manual',
                 )
               }
               options={SCORING_TYPE_OPTIONS}
@@ -487,7 +487,7 @@ export function ProblemForm({
                         handleCriterionChange(
                           index,
                           'description',
-                          e.target.value
+                          e.target.value,
                         )
                       }
                     />
@@ -502,7 +502,7 @@ export function ProblemForm({
                         handleCriterionChange(
                           index,
                           'weight',
-                          Number(e.target.value)
+                          Number(e.target.value),
                         )
                       }
                     />
@@ -515,7 +515,7 @@ export function ProblemForm({
                         handleCriterionChange(
                           index,
                           'maxPoints',
-                          Number(e.target.value)
+                          Number(e.target.value),
                         )
                       }
                     />

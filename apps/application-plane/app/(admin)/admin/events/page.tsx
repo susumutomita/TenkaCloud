@@ -85,7 +85,7 @@ export default function AdminEventsPage() {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
             errorData.error ||
-              `イベントの取得に失敗しました (${response.status})`
+              `イベントの取得に失敗しました (${response.status})`,
           );
         }
 
@@ -93,7 +93,7 @@ export default function AdminEventsPage() {
         setEvents(data.events || []);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : 'イベントの取得に失敗しました'
+          err instanceof Error ? err.message : 'イベントの取得に失敗しました',
         );
         setEvents([]);
       } finally {
@@ -110,7 +110,7 @@ export default function AdminEventsPage() {
 
   const handleDelete = async (event: AdminEvent) => {
     const confirmed = window.confirm(
-      `「${event.name}」を削除しますか？この操作は取り消せません。`
+      `「${event.name}」を削除しますか？この操作は取り消せません。`,
     );
     if (!confirmed) return;
 

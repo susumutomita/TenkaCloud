@@ -48,7 +48,7 @@ import type {
 } from '../../../../../lib/api/types';
 
 function getDifficultyColor(
-  difficulty: string
+  difficulty: string,
 ): 'blue' | 'green' | 'red' | 'grey' {
   switch (difficulty) {
     case 'easy':
@@ -164,7 +164,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'ヒントの公開に失敗しました'
+        err instanceof Error ? err.message : 'ヒントの公開に失敗しました',
       );
     }
   };
@@ -178,12 +178,12 @@ export default function ChallengeDetailPage() {
       setChallenge({
         ...jamChallenge,
         clues: jamChallenge.clues.map((c) =>
-          c.id === clueId ? revealedClue : c
+          c.id === clueId ? revealedClue : c,
         ),
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'クルーの公開に失敗しました'
+        err instanceof Error ? err.message : 'クルーの公開に失敗しました',
       );
     }
   };
@@ -202,7 +202,7 @@ export default function ChallengeDetailPage() {
       });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '採点リクエストに失敗しました'
+        err instanceof Error ? err.message : '採点リクエストに失敗しました',
       );
     } finally {
       setScoring(false);
@@ -652,7 +652,7 @@ export default function ChallengeDetailPage() {
                     <ProgressBar
                       value={Math.min(
                         100,
-                        ((challenge.myScore ?? 0) / challenge.maxScore) * 100
+                        ((challenge.myScore ?? 0) / challenge.maxScore) * 100,
                       )}
                       additionalInfo={`${challenge.myScore ?? 0} / ${challenge.maxScore} pts`}
                     />
@@ -768,7 +768,7 @@ export default function ChallengeDetailPage() {
                             value: (
                               <Box variant="code">
                                 {new Date(credentials.expiresAt).toLocaleString(
-                                  'ja-JP'
+                                  'ja-JP',
                                 )}
                               </Box>
                             ),

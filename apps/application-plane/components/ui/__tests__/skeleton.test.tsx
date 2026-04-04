@@ -145,7 +145,7 @@ describe('SkeletonText コンポーネント', () => {
   describe('カスタムスタイル', () => {
     it('カスタム className を適用すべき', () => {
       render(
-        <SkeletonText className="custom-text" data-testid="skeleton-text" />
+        <SkeletonText className="custom-text" data-testid="skeleton-text" />,
       );
       const skeleton = screen.getByTestId('skeleton-text');
       expect(skeleton).toHaveClass('custom-text');
@@ -205,7 +205,7 @@ describe('SkeletonButton コンポーネント', () => {
         <SkeletonButton
           className="custom-button"
           data-testid="skeleton-button"
-        />
+        />,
       );
       const skeleton = screen.getByTestId('skeleton-button');
       expect(skeleton).toHaveClass('custom-button');
@@ -222,7 +222,7 @@ describe('コンポーネント組み合わせ', () => {
           <SkeletonText lines={2} />
           <SkeletonButton size="sm" />
         </div>
-      </div>
+      </div>,
     );
 
     const card = screen.getByTestId('card-skeleton');
@@ -238,7 +238,7 @@ describe('コンポーネント組み合わせ', () => {
             <SkeletonText lines={1} className="flex-1" />
           </div>
         ))}
-      </div>
+      </div>,
     );
 
     const list = screen.getByTestId('list-skeleton');

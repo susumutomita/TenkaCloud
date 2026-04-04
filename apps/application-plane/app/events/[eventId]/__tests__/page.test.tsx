@@ -53,7 +53,7 @@ describe('イベント詳細ページ', () => {
     render(<EventDetailPage />);
     await waitFor(() => {
       expect(
-        screen.getAllByText('AWS GameDay 2026').length
+        screen.getAllByText('AWS GameDay 2026').length,
       ).toBeGreaterThanOrEqual(1);
     });
   });
@@ -67,7 +67,7 @@ describe('イベント詳細ページ', () => {
     render(<EventDetailPage />);
     await waitFor(() => {
       expect(
-        screen.getByText('まだ問題が登録されていません')
+        screen.getByText('まだ問題が登録されていません'),
       ).toBeInTheDocument();
     });
     expect(screen.queryByText('問題の読み込み中...')).not.toBeInTheDocument();
@@ -82,7 +82,7 @@ describe('イベント詳細ページ', () => {
     render(<EventDetailPage />);
     await waitFor(() => {
       expect(
-        screen.getByText('問題はイベント開始時に公開されます')
+        screen.getByText('問題はイベント開始時に公開されます'),
       ).toBeInTheDocument();
     });
   });
@@ -163,7 +163,7 @@ describe('イベント詳細ページ', () => {
     render(<EventDetailPage />);
     await waitFor(() => {
       expect(
-        screen.getAllByText('AWS GameDay 2026').length
+        screen.getAllByText('AWS GameDay 2026').length,
       ).toBeGreaterThanOrEqual(1);
     });
     expect(screen.queryByText('参加登録')).not.toBeInTheDocument();

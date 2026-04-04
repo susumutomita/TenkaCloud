@@ -36,7 +36,7 @@ function useAlertDialog() {
   const context = useContext(AlertDialogContext);
   if (!context) {
     throw new Error(
-      'AlertDialog コンポーネントは AlertDialog 内で使用する必要があります'
+      'AlertDialog コンポーネントは AlertDialog 内で使用する必要があります',
     );
   }
   return context;
@@ -73,7 +73,7 @@ function AlertDialog({
       }
       onOpenChange?.(newOpen);
     },
-    [isControlled, onOpenChange]
+    [isControlled, onOpenChange],
   );
 
   return (
@@ -220,7 +220,7 @@ const AlertDialogContent = forwardRef<HTMLDivElement, AlertDialogContentProps>(
         </div>
       </AlertDialogPortal>
     );
-  }
+  },
 );
 AlertDialogContent.displayName = 'AlertDialogContent';
 
@@ -370,7 +370,7 @@ const AlertDialogAction = forwardRef<HTMLButtonElement, AlertDialogActionProps>(
         {...props}
       />
     );
-  }
+  },
 );
 AlertDialogAction.displayName = 'AlertDialogAction';
 

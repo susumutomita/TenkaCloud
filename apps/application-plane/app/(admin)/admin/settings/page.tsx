@@ -36,7 +36,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>(
-    'idle'
+    'idle',
   );
   const [saveError, setSaveError] = useState('');
   const [activeTabId, setActiveTabId] = useState('general');
@@ -85,7 +85,7 @@ export default function AdminSettingsPage() {
     } catch (err) {
       setSaveStatus('error');
       setSaveError(
-        err instanceof Error ? err.message : '設定の保存に失敗しました'
+        err instanceof Error ? err.message : '設定の保存に失敗しました',
       );
     } finally {
       setSaving(false);
@@ -129,7 +129,7 @@ export default function AdminSettingsPage() {
       setDeleteConfirmation('');
     } catch (err) {
       setDeleteError(
-        err instanceof Error ? err.message : 'データの削除に失敗しました'
+        err instanceof Error ? err.message : 'データの削除に失敗しました',
       );
     } finally {
       setDeleting(false);

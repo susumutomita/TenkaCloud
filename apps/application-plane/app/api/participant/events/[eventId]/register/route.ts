@@ -6,14 +6,14 @@ import { serverApiRequest } from '@/lib/api/server';
 
 export async function POST(
   _request: Request,
-  { params }: { params: Promise<{ eventId: string }> }
+  { params }: { params: Promise<{ eventId: string }> },
 ) {
   const { eventId } = await params;
 
   try {
     const data = await serverApiRequest<{ success: boolean; message: string }>(
       `/participant/events/${eventId}/register`,
-      { method: 'POST' }
+      { method: 'POST' },
     );
     return Response.json(data);
   } catch (error) {
@@ -23,7 +23,7 @@ export async function POST(
       {
         error: error instanceof Error ? error.message : 'Failed to register',
       },
-      { status }
+      { status },
     );
   }
 }

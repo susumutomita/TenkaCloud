@@ -30,7 +30,7 @@ describe('Admin 問題デプロイページ', () => {
         screen.getByRole('heading', {
           name: 'AWS CloudFormation デプロイ',
           level: 1,
-        })
+        }),
       ).toBeInTheDocument();
     });
   });
@@ -39,11 +39,11 @@ describe('Admin 問題デプロイページ', () => {
     render(<AdminProblemDeployPage />);
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'デプロイ設定', level: 2 })
+        screen.getByRole('heading', { name: 'デプロイ設定', level: 2 }),
       ).toBeInTheDocument();
     });
     expect(
-      screen.getByRole('button', { name: 'デプロイ開始' })
+      screen.getByRole('button', { name: 'デプロイ開始' }),
     ).toBeInTheDocument();
   });
 
@@ -59,7 +59,7 @@ describe('Admin 問題デプロイページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'デプロイ開始' })
+        screen.getByRole('button', { name: 'デプロイ開始' }),
       ).toBeInTheDocument();
     });
 
@@ -68,7 +68,7 @@ describe('Admin 問題デプロイページ', () => {
     await waitFor(() => {
       expect(mockDeployProblem).toHaveBeenCalledWith(
         'prob-123',
-        'ap-northeast-1'
+        'ap-northeast-1',
       );
     });
 
@@ -86,7 +86,7 @@ describe('Admin 問題デプロイページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'デプロイ開始' })
+        screen.getByRole('button', { name: 'デプロイ開始' }),
       ).toBeInTheDocument();
     });
 
@@ -105,7 +105,7 @@ describe('Admin 問題デプロイページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'デプロイ開始' })
+        screen.getByRole('button', { name: 'デプロイ開始' }),
       ).toBeInTheDocument();
     });
 
@@ -138,7 +138,7 @@ describe('Admin 問題デプロイページ', () => {
     });
     // CREATE_COMPLETE はスタックステータスとイベントステータスの両方に表示される
     expect(
-      screen.getAllByText('CREATE_COMPLETE').length
+      screen.getAllByText('CREATE_COMPLETE').length,
     ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Endpoint')).toBeInTheDocument();
     expect(screen.getByText('https://example.com')).toBeInTheDocument();
@@ -166,8 +166,8 @@ describe('Admin 問題デプロイページ', () => {
     });
     expect(
       screen.getByText(
-        'スタック「delete-target」を削除します。 この操作は取り消せません。'
-      )
+        'スタック「delete-target」を削除します。 この操作は取り消せません。',
+      ),
     ).toBeInTheDocument();
   });
 
@@ -248,7 +248,7 @@ describe('Admin 問題デプロイページ', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('スタックの削除に失敗しました')
+        screen.getByText('スタックの削除に失敗しました'),
       ).toBeInTheDocument();
     });
   });
