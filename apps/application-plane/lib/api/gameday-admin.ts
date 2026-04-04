@@ -3,13 +3,10 @@
  */
 
 import { getAuthToken } from '@/lib/auth/get-auth-token';
+import { getGamedayApiUrl } from '@/lib/api/backend-urls';
 import type { AttackLog, GameState, Team } from './gameday-types';
 
-const GAMEDAY_API_URL =
-  process.env.NEXT_PUBLIC_GAMEDAY_API_URL ||
-  'http://localhost:3020/api/gameday';
-
-const ADMIN_URL = `${GAMEDAY_API_URL}/admin`;
+const ADMIN_URL = `${getGamedayApiUrl()}/admin`;
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;

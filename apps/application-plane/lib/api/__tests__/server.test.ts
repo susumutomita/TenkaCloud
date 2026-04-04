@@ -9,6 +9,10 @@ vi.mock('@/auth', () => ({
   auth: () => mockAuth(),
 }));
 
+vi.mock('@/lib/api/backend-urls', () => ({
+  getProblemServiceUrl: () => 'http://localhost:3100/api',
+}));
+
 // Mock fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -24,6 +28,18 @@ describe('Server API Utilities', () => {
   });
 
   describe('レスポンスヘルパー', () => {
+    it('errorResponse は統一エラー形式を返すべき', async () => {
+      const { errorResponse } = await import('../server');
+      const response = errorResponse('テストエラー', 422);
+
+      expect(response).toBeInstanceOf(NextResponse);
+      expect(response.status).toBe(422);
+
+      const data = await response.json();
+      expect(data.error).toBe('テストエラー');
+      expect(data.statusCode).toBe(422);
+    });
+
     it('unauthorizedResponse は 401 ステータスを返すべき', async () => {
       const { unauthorizedResponse } = await import('../server');
       const response = unauthorizedResponse('テストエラー');

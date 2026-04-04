@@ -6,26 +6,39 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { getProblemServiceUrl } from '@/lib/api/backend-urls';
+
+/**
+ * 統一エラーレスポンス
+ *
+ * 全 API ルートで一貫した { error, statusCode } 形式を返す
+ */
+export function errorResponse(message: string, statusCode: number) {
+  return NextResponse.json(
+    { error: message, statusCode },
+    { status: statusCode },
+  );
+}
 
 /**
  * 認証エラーレスポンス
  */
 export function unauthorizedResponse(message = 'Unauthorized') {
-  return NextResponse.json({ error: message }, { status: 401 });
+  return errorResponse(message, 401);
 }
 
 /**
  * 権限エラーレスポンス
  */
 export function forbiddenResponse(message = 'Forbidden') {
-  return NextResponse.json({ error: message }, { status: 403 });
+  return errorResponse(message, 403);
 }
 
 /**
  * バリデーションエラーレスポンス
  */
 export function badRequestResponse(message = 'Bad Request') {
-  return NextResponse.json({ error: message }, { status: 400 });
+  return errorResponse(message, 400);
 }
 
 /**
@@ -60,11 +73,9 @@ export async function getAdminSession() {
  * API Base URL（サーバーサイド用）
  *
  * サーバーサイドでは内部 URL を使用可能
+ * getProblemServiceUrl() から一元的に取得
  */
-export const API_BASE_URL =
-  process.env.API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:3100/api';
+export const API_BASE_URL = getProblemServiceUrl();
 
 /**
  * サーバーサイド API リクエスト

@@ -3,6 +3,7 @@
  */
 
 import { getAuthToken } from '@/lib/auth/get-auth-token';
+import { getGamedayApiUrl } from '@/lib/api/backend-urls';
 import type {
   Alliance,
   Attack,
@@ -17,9 +18,7 @@ import type {
   Vote,
 } from './gameday-types';
 
-const GAMEDAY_API_URL =
-  process.env.NEXT_PUBLIC_GAMEDAY_API_URL ||
-  'http://localhost:3020/api/gameday';
+const GAMEDAY_API_URL = getGamedayApiUrl();
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
