@@ -8,7 +8,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import {
   ProblemTypeBadge,
   Skeleton,
 } from '@/components/ui';
-import { get } from '@/lib/api/client';
+import { get, patch } from '@/lib/api/client';
 import type { EventStatus } from '@/lib/api/admin-types';
 import type { ProblemType } from '@/lib/api/types';
 
@@ -46,10 +46,12 @@ interface EventDetail {
 
 export default function AdminEventDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const eventId = params.eventId as string;
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const [activeTab, setActiveTab] = useState<
     'overview' | 'problems' | 'participants'
   >('overview');
@@ -73,6 +75,20 @@ export default function AdminEventDetailPage() {
   useEffect(() => {
     fetchEvent();
   }, [fetchEvent]);
+
+  const handlePublish = useCallback(async () => {
+    setPublishing(true);
+    try {
+      const updated = await patch<EventDetail>(`/admin/events/${eventId}`, {
+        status: 'published',
+      });
+      setEvent(updated);
+    } catch {
+      // Error is shown via re-fetch
+    } finally {
+      setPublishing(false);
+    }
+  }, [eventId]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -180,9 +196,20 @@ export default function AdminEventDetailPage() {
         </div>
         <div className="flex gap-3">
           {event.status === 'draft' && (
-            <Button variant="success">公開する</Button>
+            <Button
+              variant="success"
+              onClick={handlePublish}
+              disabled={publishing}
+            >
+              {publishing ? '公開中...' : '公開する'}
+            </Button>
           )}
-          <Button variant="secondary">編集</Button>
+          <Button
+            variant="secondary"
+            onClick={() => router.push(`/admin/events/${eventId}/edit`)}
+          >
+            編集
+          </Button>
         </div>
       </div>
 
@@ -379,7 +406,12 @@ export default function AdminEventDetailPage() {
               </svg>
               問題一覧
             </CardTitle>
-            <Button size="sm">
+            <Button
+              size="sm"
+              onClick={() =>
+                router.push(`/admin/problems/new?eventId=${eventId}`)
+              }
+            >
               <svg
                 className="w-4 h-4 mr-1"
                 fill="none"
@@ -401,7 +433,14 @@ export default function AdminEventDetailPage() {
               <div className="text-center py-8">
                 <div className="text-4xl mb-4">📝</div>
                 <p className="text-text-muted">問題がまだありません</p>
-                <Button className="mt-4">問題を追加</Button>
+                <Button
+                  className="mt-4"
+                  onClick={() =>
+                    router.push(`/admin/problems/new?eventId=${eventId}`)
+                  }
+                >
+                  問題を追加
+                </Button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -430,7 +469,13 @@ export default function AdminEventDetailPage() {
                           {problem.solvedCount}
                         </div>
                       </div>
-                      <Button variant="ghost" size="sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          router.push(`/admin/problems/${problem.id}/edit`)
+                        }
+                      >
                         編集
                       </Button>
                     </div>
@@ -451,7 +496,14 @@ export default function AdminEventDetailPage() {
           <p className="text-text-muted">
             {event.participantCount} 人が参加しています
           </p>
-          <Button className="mt-4">参加者一覧を見る</Button>
+          <Button
+            className="mt-4"
+            onClick={() =>
+              router.push(`/admin/participants?eventId=${eventId}`)
+            }
+          >
+            参加者一覧を見る
+          </Button>
         </Card>
       )}
 
