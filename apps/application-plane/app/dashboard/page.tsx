@@ -168,12 +168,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <PageLayout>
-      <SpaceBetween size="xl">
+    <PageLayout
+      header={
         <Header variant="h1" description={t('dashboard.description')}>
           {t('dashboard.title')}
         </Header>
-
+      }
+    >
+      <SpaceBetween size="xl">
         {loading ? (
           <Box textAlign="center" padding="xxl">
             <Spinner size="large" />
