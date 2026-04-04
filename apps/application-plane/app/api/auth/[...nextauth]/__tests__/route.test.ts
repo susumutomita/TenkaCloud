@@ -61,7 +61,7 @@ describe('NextAuth route handler', () => {
 
     it('AUTH_SKIP モードで他のパスは handlers.GET に委譲すべき', async () => {
       mockHandlersGET.mockResolvedValue(
-        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        new Response(JSON.stringify({ ok: true }), { status: 200 })
       );
 
       const { GET } = await import('../route');
@@ -79,7 +79,7 @@ describe('NextAuth route handler', () => {
       process.env.AUTH0_ISSUER = 'https://test.auth0.com';
 
       mockHandlersGET.mockResolvedValue(
-        new Response(JSON.stringify({ session: null }), { status: 200 }),
+        new Response(JSON.stringify({ session: null }), { status: 200 })
       );
 
       const { GET } = await import('../route');

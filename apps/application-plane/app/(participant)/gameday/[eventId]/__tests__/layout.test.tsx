@@ -40,7 +40,7 @@ describe('GamedayLayout', () => {
     render(<GamedayLayout>content</GamedayLayout>);
     await waitFor(() => {
       expect(screen.getAllByText('TenkaCloud').length).toBeGreaterThanOrEqual(
-        1,
+        1
       );
     });
   });

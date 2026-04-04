@@ -34,7 +34,7 @@ interface UpdateTeamRequest {
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ teamId: string }> },
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -52,7 +52,7 @@ export async function GET(
   } catch (error) {
     console.error('Failed to fetch team:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch team',
+      error instanceof Error ? error.message : 'Failed to fetch team'
     );
   }
 }
@@ -64,7 +64,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ teamId: string }> },
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -88,7 +88,7 @@ export async function PUT(
   } catch (error) {
     console.error('Failed to update team:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to update team',
+      error instanceof Error ? error.message : 'Failed to update team'
     );
   }
 }
@@ -100,7 +100,7 @@ export async function PUT(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ teamId: string }> },
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -121,7 +121,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Failed to delete team:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to delete team',
+      error instanceof Error ? error.message : 'Failed to delete team'
     );
   }
 }

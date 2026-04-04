@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const gamedayUrl = getGamedayApiUrl();
   const response = await fetch(
     `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: { 'Content-Type': 'application/json' } }
   );
   const data = await response.json();
   return Response.json(data, { status: response.status });

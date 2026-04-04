@@ -9,7 +9,7 @@ import { stsFederation } from '@/lib/aws';
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ eventId: string }> },
+  { params }: { params: Promise<{ eventId: string }> }
 ) {
   const { eventId } = await params;
 
@@ -27,7 +27,7 @@ export async function GET(
   if (!roleArn) {
     return Response.json(
       { error: 'AWS Console access is not configured for this event' },
-      { status: 404 },
+      { status: 404 }
     );
   }
 
@@ -40,7 +40,7 @@ export async function GET(
       tenantId,
       participantId,
       `${eventId}-${teamId}`,
-      roleArn,
+      roleArn
     );
 
     return Response.json({
@@ -56,7 +56,7 @@ export async function GET(
             ? error.message
             : 'Failed to generate AWS Console URL',
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

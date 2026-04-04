@@ -59,14 +59,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
           region: body.region,
           parameters: body.parameters,
         }),
-      },
+      }
     );
 
     return successResponse(data, 201);
   } catch (error) {
     console.error('Failed to deploy problem:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to deploy',
+      error instanceof Error ? error.message : 'Failed to deploy'
     );
   }
 }
@@ -88,14 +88,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   try {
     const data = await serverApiRequest<DeploymentStatus>(
-      `/admin/problems/${problemId}/deploy`,
+      `/admin/problems/${problemId}/deploy`
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to get deploy status:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to get status',
+      error instanceof Error ? error.message : 'Failed to get status'
     );
   }
 }
@@ -118,14 +118,14 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const data = await serverApiRequest<{ message: string }>(
       `/admin/problems/${problemId}/deploy`,
-      { method: 'DELETE' },
+      { method: 'DELETE' }
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to delete stack:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to delete stack',
+      error instanceof Error ? error.message : 'Failed to delete stack'
     );
   }
 }

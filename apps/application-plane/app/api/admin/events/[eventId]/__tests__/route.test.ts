@@ -32,7 +32,7 @@ describe('Admin Event Detail API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/events/event-1',
+        'http://localhost/api/admin/events/event-1'
       );
       const response = await GET(request, { params: createParams('event-1') });
 
@@ -58,7 +58,7 @@ describe('Admin Event Detail API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/events/event-1',
+        'http://localhost/api/admin/events/event-1'
       );
       const response = await GET(request, { params: createParams('event-1') });
 
@@ -66,7 +66,7 @@ describe('Admin Event Detail API', () => {
       const data = await response.json();
       expect(data).toEqual(mockEvent);
       expect(mockServerApiRequest).toHaveBeenCalledWith(
-        '/admin/events/event-1',
+        '/admin/events/event-1'
       );
     });
 
@@ -81,7 +81,7 @@ describe('Admin Event Detail API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/events/event-1',
+        'http://localhost/api/admin/events/event-1'
       );
       const response = await GET(request, { params: createParams('event-1') });
 
@@ -101,7 +101,7 @@ describe('Admin Event Detail API', () => {
         {
           method: 'PUT',
           body: JSON.stringify({ name: 'Updated Event' }),
-        },
+        }
       );
       const response = await PUT(request, { params: createParams('event-1') });
 
@@ -130,7 +130,7 @@ describe('Admin Event Detail API', () => {
         {
           method: 'PUT',
           body: JSON.stringify({ name: 'Updated Event', status: 'active' }),
-        },
+        }
       );
       const response = await PUT(request, { params: createParams('event-1') });
 
@@ -141,7 +141,7 @@ describe('Admin Event Detail API', () => {
         '/admin/events/event-1',
         expect.objectContaining({
           method: 'PUT',
-        }),
+        })
       );
     });
   });
@@ -153,7 +153,7 @@ describe('Admin Event Detail API', () => {
       const { DELETE } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1',
-        { method: 'DELETE' },
+        { method: 'DELETE' }
       );
       const response = await DELETE(request, {
         params: createParams('event-1'),
@@ -174,7 +174,7 @@ describe('Admin Event Detail API', () => {
       const { DELETE } = await import('../route');
       const request = new NextRequest(
         'http://localhost/api/admin/events/event-1',
-        { method: 'DELETE' },
+        { method: 'DELETE' }
       );
       const response = await DELETE(request, {
         params: createParams('event-1'),

@@ -58,7 +58,7 @@ export async function GET() {
   const serviceUrls = getAllServiceUrls();
 
   const services = await Promise.all(
-    Object.entries(serviceUrls).map(([name, url]) => checkService(name, url)),
+    Object.entries(serviceUrls).map(([name, url]) => checkService(name, url))
   );
 
   const healthyCount = services.filter((s) => s.status === 'healthy').length;
@@ -81,6 +81,6 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       services,
     },
-    { status: httpStatus },
+    { status: httpStatus }
   );
 }

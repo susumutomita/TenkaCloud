@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch participant events:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch events',
+      error instanceof Error ? error.message : 'Failed to fetch events'
     );
   }
 }

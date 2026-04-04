@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const qs = params.toString();
   const data = await serverApiRequest(
-    `/participant/rankings${qs ? `?${qs}` : ''}`,
+    `/participant/rankings${qs ? `?${qs}` : ''}`
   );
   return successResponse(data);
 }

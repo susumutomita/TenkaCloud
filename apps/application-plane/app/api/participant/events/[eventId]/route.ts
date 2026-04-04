@@ -9,13 +9,13 @@ import type { EventDetails } from '@/lib/api/types';
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ eventId: string }> },
+  { params }: { params: Promise<{ eventId: string }> }
 ) {
   const { eventId } = await params;
 
   try {
     const data = await serverApiRequest<EventDetails>(
-      `/participant/events/${eventId}`,
+      `/participant/events/${eventId}`
     );
     return Response.json(data);
   } catch (error) {
@@ -25,7 +25,7 @@ export async function GET(
       {
         error: error instanceof Error ? error.message : 'Failed to fetch event',
       },
-      { status },
+      { status }
     );
   }
 }

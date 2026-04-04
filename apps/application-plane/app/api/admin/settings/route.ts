@@ -57,7 +57,7 @@ export async function GET() {
     return successResponse(data);
   } catch (error) {
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch settings',
+      error instanceof Error ? error.message : 'Failed to fetch settings'
     );
   }
 }
@@ -91,7 +91,7 @@ export async function PUT(request: NextRequest) {
     return successResponse(data);
   } catch (error) {
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to update settings',
+      error instanceof Error ? error.message : 'Failed to update settings'
     );
   }
 }
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         '/admin/settings/api-key',
         {
           method: 'POST',
-        },
+        }
       );
       return successResponse(data);
     }
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     if (body.action === 'delete-all-data') {
       if (body.confirmationToken !== 'DELETE') {
         return badRequestResponse(
-          'Confirmation token must be "DELETE" to proceed',
+          'Confirmation token must be "DELETE" to proceed'
         );
       }
 
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             confirmationToken: body.confirmationToken,
           }),
-        },
+        }
       );
       return successResponse(data);
     }
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     return badRequestResponse(`Unknown action: ${body.action}`);
   } catch (error) {
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to execute action',
+      error instanceof Error ? error.message : 'Failed to execute action'
     );
   }
 }

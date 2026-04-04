@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   if (offset) params.set('offset', offset);
   const qs = params.toString();
   const data = await serverApiRequest(
-    `/participant/profile/history${qs ? `?${qs}` : ''}`,
+    `/participant/profile/history${qs ? `?${qs}` : ''}`
   );
   return successResponse(data);
 }

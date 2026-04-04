@@ -57,7 +57,7 @@ interface BackendTeamsResponse {
  * 月ごとにイベントを集計する
  */
 function aggregateEventsByMonth(
-  events: BackendEventsResponse['events'],
+  events: BackendEventsResponse['events']
 ): Array<{ month: string; eventCount: number; participantCount: number }> {
   const monthMap = new Map<
     string,
@@ -90,7 +90,7 @@ function aggregateEventsByMonth(
  * スコア分布を計算する
  */
 function calculateScoreDistribution(
-  teams: BackendTeamsResponse['teams'],
+  teams: BackendTeamsResponse['teams']
 ): Array<{ category: string; value: number }> {
   const ranges = [
     { category: '0-20', min: 0, max: 20 },
@@ -125,11 +125,11 @@ export async function GET() {
   try {
     const [eventsData, statsData, teamsData] = await Promise.all([
       serverApiRequest<BackendEventsResponse>(
-        '/admin/events?page=1&pageSize=1000',
+        '/admin/events?page=1&pageSize=1000'
       ),
       serverApiRequest<BackendDashboardStats>('/admin/dashboard/stats'),
       serverApiRequest<BackendTeamsResponse>(
-        '/admin/teams?page=1&pageSize=1000',
+        '/admin/teams?page=1&pageSize=1000'
       ),
     ]);
 
@@ -141,7 +141,7 @@ export async function GET() {
       teams.length > 0 ? Math.round(totalScores / teams.length) : 0;
 
     const completedEvents = events.filter(
-      (e) => e.status === 'completed',
+      (e) => e.status === 'completed'
     ).length;
     const completionRate =
       events.length > 0
@@ -169,7 +169,7 @@ export async function GET() {
   } catch (error) {
     console.error('Failed to fetch analytics:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch analytics',
+      error instanceof Error ? error.message : 'Failed to fetch analytics'
     );
   }
 }

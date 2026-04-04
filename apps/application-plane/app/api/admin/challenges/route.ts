@@ -88,14 +88,14 @@ export async function GET(request: NextRequest) {
     if (search) queryParams.set('search', search);
 
     const data = await serverApiRequest<AdminChallengeListResponse>(
-      `/admin/challenges?${queryParams.toString()}`,
+      `/admin/challenges?${queryParams.toString()}`
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch challenges:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch challenges',
+      error instanceof Error ? error.message : 'Failed to fetch challenges'
     );
   }
 }
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to create challenge:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to create challenge',
+      error instanceof Error ? error.message : 'Failed to create challenge'
     );
   }
 }

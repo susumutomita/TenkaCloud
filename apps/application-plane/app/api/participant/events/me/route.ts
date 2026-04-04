@@ -23,13 +23,13 @@ interface MyEventsResponse {
 export async function GET() {
   try {
     const data = await serverApiRequest<MyEventsResponse>(
-      '/participant/events/me',
+      '/participant/events/me'
     );
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch my events:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch events',
+      error instanceof Error ? error.message : 'Failed to fetch events'
     );
   }
 }

@@ -242,7 +242,7 @@ describe('Admin Settings API', () => {
       expect(response.status).toBe(200);
       expect(mockServerApiRequest).toHaveBeenCalledWith(
         '/admin/settings/api-key',
-        { method: 'POST' },
+        { method: 'POST' }
       );
     });
 
@@ -297,7 +297,7 @@ describe('Admin Settings API', () => {
         {
           method: 'POST',
           body: JSON.stringify({ confirmationToken: 'DELETE' }),
-        },
+        }
       );
     });
 

@@ -67,14 +67,14 @@ export async function GET(request: NextRequest) {
     if (search) queryParams.set('search', search);
 
     const data = await serverApiRequest<AdminTeamListResponse>(
-      `/admin/teams?${queryParams.toString()}`,
+      `/admin/teams?${queryParams.toString()}`
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch teams:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch teams',
+      error instanceof Error ? error.message : 'Failed to fetch teams'
     );
   }
 }
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to create team:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to create team',
+      error instanceof Error ? error.message : 'Failed to create team'
     );
   }
 }

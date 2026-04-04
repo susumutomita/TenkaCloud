@@ -35,7 +35,7 @@ interface UpdateParticipantRequest {
  */
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ participantId: string }> },
+  { params }: { params: Promise<{ participantId: string }> }
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -49,13 +49,13 @@ export async function GET(
 
   try {
     const data = await serverApiRequest<ParticipantProfile>(
-      `/admin/participants/${participantId}`,
+      `/admin/participants/${participantId}`
     );
     return successResponse(data);
   } catch (error) {
     console.error('Failed to fetch participant:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch participant',
+      error instanceof Error ? error.message : 'Failed to fetch participant'
     );
   }
 }
@@ -67,7 +67,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ participantId: string }> },
+  { params }: { params: Promise<{ participantId: string }> }
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -87,14 +87,14 @@ export async function PUT(
       {
         method: 'PUT',
         body: JSON.stringify(body),
-      },
+      }
     );
 
     return successResponse(data);
   } catch (error) {
     console.error('Failed to update participant:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to update participant',
+      error instanceof Error ? error.message : 'Failed to update participant'
     );
   }
 }
@@ -106,7 +106,7 @@ export async function PUT(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ participantId: string }> },
+  { params }: { params: Promise<{ participantId: string }> }
 ) {
   // 管理者権限チェック
   const session = await getAdminSession();
@@ -127,7 +127,7 @@ export async function DELETE(
   } catch (error) {
     console.error('Failed to delete participant:', error);
     return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to delete participant',
+      error instanceof Error ? error.message : 'Failed to delete participant'
     );
   }
 }

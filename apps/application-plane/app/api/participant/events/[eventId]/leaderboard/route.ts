@@ -7,13 +7,13 @@ import type { Leaderboard } from '@/lib/api/types';
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ eventId: string }> },
+  { params }: { params: Promise<{ eventId: string }> }
 ) {
   const { eventId } = await params;
 
   try {
     const data = await serverApiRequest<Leaderboard>(
-      `/participant/events/${eventId}/leaderboard`,
+      `/participant/events/${eventId}/leaderboard`
     );
     return Response.json(data);
   } catch (error) {

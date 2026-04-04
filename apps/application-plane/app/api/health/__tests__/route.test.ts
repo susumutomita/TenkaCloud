@@ -29,7 +29,7 @@ describe('Health Check API', () => {
     expect(data.status).toBe('healthy');
     expect(data.services).toHaveLength(3);
     expect(
-      data.services.every((s: { status: string }) => s.status === 'healthy'),
+      data.services.every((s: { status: string }) => s.status === 'healthy')
     ).toBe(true);
   });
 
@@ -47,7 +47,7 @@ describe('Health Check API', () => {
     expect(data.status).toBe('degraded');
 
     const gamedayService = data.services.find(
-      (s: { name: string }) => s.name === 'gameday-service',
+      (s: { name: string }) => s.name === 'gameday-service'
     );
     expect(gamedayService.status).toBe('unhealthy');
     expect(gamedayService.error).toBe('Connection refused');
@@ -63,7 +63,7 @@ describe('Health Check API', () => {
     expect(response.status).toBe(503);
     expect(data.status).toBe('unhealthy');
     expect(
-      data.services.every((s: { status: string }) => s.status === 'unhealthy'),
+      data.services.every((s: { status: string }) => s.status === 'unhealthy')
     ).toBe(true);
   });
 
@@ -79,7 +79,7 @@ describe('Health Check API', () => {
 
     expect(data.status).toBe('degraded');
     const gamedayService = data.services.find(
-      (s: { name: string }) => s.name === 'gameday-service',
+      (s: { name: string }) => s.name === 'gameday-service'
     );
     expect(gamedayService.status).toBe('unhealthy');
     expect(gamedayService.error).toBe('HTTP 500');
