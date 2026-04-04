@@ -75,7 +75,30 @@ export default function OnboardingPage() {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationName: formData.organizationName,
+          role: formData.role,
+          plan: formData.plan,
+          tenantName: formData.tenantName,
+          tenantSlug: formData.tenantSlug,
+          region: formData.region,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error ?? 'Registration failed');
+      }
+
+      const data = await response.json();
+      router.push(
+        `/onboarding/provisioning${data.tenantId ? `?tenantId=${data.tenantId}` : ''}`,
+      );
+    } catch {
+      // Error handling - still navigate to provisioning to show status
       router.push('/onboarding/provisioning');
     } finally {
       setIsLoading(false);

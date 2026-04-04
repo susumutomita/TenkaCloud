@@ -13,6 +13,7 @@ import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Container from '@cloudscape-design/components/container';
 import CloudscapeHeader from '@cloudscape-design/components/header';
 import Link from '@cloudscape-design/components/link';
+import Pagination from '@cloudscape-design/components/pagination';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
@@ -50,16 +51,20 @@ const getRankLabel = (rank: number) => {
   }
 };
 
+const PAGE_SIZE = 20;
+
 export default function RankingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [data, setData] = useState<RankingData | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchRankings = useCallback(async () => {
+  const fetchRankings = useCallback(async (page: number) => {
     try {
       setLoading(true);
       setError(null);
-      const res = await getGlobalRanking({ limit: 50 });
+      const offset = (page - 1) * PAGE_SIZE;
+      const res = await getGlobalRanking({ limit: PAGE_SIZE, offset });
       setData({
         rankings: res.rankings.map((r) => ({
           rank: r.rank,
@@ -81,8 +86,12 @@ export default function RankingsPage() {
   }, []);
 
   useEffect(() => {
-    fetchRankings();
-  }, [fetchRankings]);
+    fetchRankings(currentPage);
+  }, [fetchRankings, currentPage]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
 
   const rankings = data?.rankings ?? [];
   const totalParticipants = data?.total ?? 0;
@@ -160,7 +169,9 @@ export default function RankingsPage() {
                   <StatusIndicator type="error">
                     {getErrorMessage(error)}
                   </StatusIndicator>
-                  <Button onClick={fetchRankings}>再試行</Button>
+                  <Button onClick={() => fetchRankings(currentPage)}>
+                    再試行
+                  </Button>
                 </SpaceBetween>
               </Container>
             )}
@@ -172,8 +183,7 @@ export default function RankingsPage() {
                   <CloudscapeHeader
                     variant="h1"
                     description="クラウドエンジニアの頂点を目指せ"
-                    counter={`(${rankings.length})`}
-                    actions={<Badge color="blue">Top 50</Badge>}
+                    counter={`(${totalParticipants})`}
                   >
                     ランキング
                   </CloudscapeHeader>
@@ -181,6 +191,17 @@ export default function RankingsPage() {
                 loading={loading}
                 loadingText="ランキングを読み込み中..."
                 items={rankings}
+                pagination={
+                  totalParticipants > PAGE_SIZE ? (
+                    <Pagination
+                      currentPageIndex={currentPage}
+                      pagesCount={Math.ceil(totalParticipants / PAGE_SIZE)}
+                      onChange={({ detail }) =>
+                        handlePageChange(detail.currentPageIndex)
+                      }
+                    />
+                  ) : undefined
+                }
                 empty={
                   <Box textAlign="center" padding="xl">
                     <SpaceBetween size="s">
