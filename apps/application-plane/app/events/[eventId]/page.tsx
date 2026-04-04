@@ -153,7 +153,8 @@ export default function EventDetailPage() {
     }
 
     fetchData();
-  }, [eventId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
 
   const refreshEvent = async () => {
     const updatedEvent = await getEventDetails(eventId);
@@ -588,7 +589,7 @@ export default function EventDetailPage() {
                 empty={
                   <Box textAlign="center" padding="l">
                     {isActive
-                      ? '問題の読み込み中...'
+                      ? 'まだ問題が登録されていません'
                       : '問題はイベント開始時に公開されます'}
                   </Box>
                 }
