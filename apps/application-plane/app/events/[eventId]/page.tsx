@@ -427,7 +427,13 @@ export default function EventDetailPage() {
                 <Header
                   variant="h1"
                   description={
-                    <SpaceBetween direction="horizontal" size="xs">
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        gap: '6px',
+                        alignItems: 'center',
+                      }}
+                    >
                       {getEventStatusIndicator(event.status)}
                       <Badge
                         color={event.type === 'gameday' ? 'blue' : 'green'}
@@ -437,7 +443,7 @@ export default function EventDetailPage() {
                       {event.isRegistered && (
                         <Badge color="green">登録済み</Badge>
                       )}
-                    </SpaceBetween>
+                    </span>
                   }
                   actions={
                     <SpaceBetween direction="horizontal" size="xs">
