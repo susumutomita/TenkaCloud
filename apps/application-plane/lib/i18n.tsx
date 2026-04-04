@@ -591,7 +591,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
-  const [locale, setLocaleState] = useState<Locale>(() => detectLocale(null));
+  const [locale, setLocaleState] = useState<Locale>('en');
 
   useEffect(() => {
     setLocaleState(detectLocale(searchParams));
