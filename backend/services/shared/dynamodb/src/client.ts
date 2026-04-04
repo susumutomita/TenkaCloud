@@ -11,9 +11,11 @@ let docClient: DynamoDBDocumentClient | null = null;
 let tableName: string = '';
 
 export function initDynamoDB(config: DynamoDBConfig): void {
+  const endpoint =
+    config.endpoint ?? process.env.DYNAMODB_ENDPOINT ?? undefined;
   const client = new DynamoDBClient({
     region: config.region ?? process.env.AWS_REGION ?? 'ap-northeast-1',
-    ...(config.endpoint && { endpoint: config.endpoint }),
+    ...(endpoint && { endpoint }),
   });
 
   docClient = DynamoDBDocumentClient.from(client, {

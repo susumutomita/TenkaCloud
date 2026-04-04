@@ -2,7 +2,7 @@
 .PHONY: start-compose stop-compose stop stop-dev-servers restart status
 .PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
-.PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant
+.PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant init-db seed-data
 .PHONY: auth0-check-tfvars auth0-init auth0-plan auth0-apply auth0-output auth0-setup
 .PHONY: gameday-seed
 
@@ -496,8 +496,10 @@ help:
 	@echo "❓ ヘルプ:"
 	@echo "  make help             このヘルプを表示"
 	@echo ""
-	@echo "🎮 GameDay:"
-	@echo "  make gameday-seed     デモデータを投入してすぐにプレイ可能にする"
+	@echo "🎮 GameDay / シード:"
+	@echo "  make init-db          DynamoDB テーブルを作成（エミュレータ起動後）"
+	@echo "  make seed-data        開発用シードデータを投入（テナント・イベント・問題・チーム・攻撃）"
+	@echo "  make gameday-seed     GameDay デモデータを投入してすぐにプレイ可能にする"
 	@echo ""
 	@echo "🧪 ローカル開発（Kumo / LocalStack / Floci）:"
 	@echo "  make start-local      ローカル環境を起動（デフォルト: Kumo）"
@@ -581,6 +583,14 @@ test-lambda: check-aws-cli
 	@echo "✅ テナントを作成しました"
 	@echo ""
 	@echo "💡 ログを確認: make logs-local"
+
+# DynamoDB テーブル作成（エミュレータが起動済みであること）
+init-db: check-aws-cli
+	@./scripts/init-dynamodb-tables.sh
+
+# シードデータ投入（テーブル作成済みであること）
+seed-data: check-aws-cli
+	@./scripts/seed-data.sh
 
 # GameDay シード: デモデータを投入してすぐにプレイ可能にする
 gameday-seed:

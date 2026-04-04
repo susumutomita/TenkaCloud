@@ -64,6 +64,33 @@ make before-commit    # lint, format, typecheck, test, build
 make gameday-seed     # GameDay デモデータ投入
 ```
 
+## ローカル DynamoDB 開発
+
+LocalStack を使って DynamoDB のローカル開発環境を構築できます。
+
+```bash
+# 1. LocalStack を起動
+make start-localstack
+
+# 2. DynamoDB テーブルを作成（start-localstack で自動実行済みだが、手動でも可）
+make init-db
+
+# 3. 開発用シードデータを投入（テナント・イベント・問題・チーム・攻撃）
+make seed-data
+
+# 4. GameDay デモデータを投入（GameDay サービス起動後）
+make gameday-seed
+```
+
+バックエンドサービスは `DYNAMODB_ENDPOINT` 環境変数でエンドポイントを切り替えます。`make start` で起動すると自動的に `http://localhost:4566` が設定されます。
+
+Kumo（軽量 Go ベース）や Floci（JVM ベース）も代替エミュレータとして使用できます。
+
+```bash
+make start-kumo    # Kumo で起動
+make start-floci   # Floci で起動
+```
+
 ## ドキュメントの正本
 
 - 概要: [docs/OVERVIEW.md](./docs/OVERVIEW.md)
