@@ -1,6 +1,21 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Home from '../page';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/',
+  useSearchParams: () => null,
+}));
+
+vi.mock('next-auth/react', () => ({
+  useSession: () => ({ data: null, status: 'unauthenticated' }),
+  signOut: vi.fn(),
+}));
+
+vi.mock('@/lib/tenant', () => ({
+  useTenantOptional: () => null,
+}));
 
 describe('Participant App ホームページ', () => {
   it('ヒーローセクションのキャッチコピーが表示されるべき', () => {
