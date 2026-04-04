@@ -25,6 +25,8 @@ import {
   prisma as _prisma,
 } from '../repositories';
 import { getLeaderboard } from '../jam/dashboard';
+import { getChallengeDetail } from '../jam/challenge';
+import { openClue, validateAnswer } from '../jam/scoring';
 import type { EventStatus, EventType, ScoringCriterion } from '../types';
 
 const participantRouter = new Hono();
@@ -502,6 +504,60 @@ participantRouter.get(
         return c.json({ error: 'Challenge not found' }, 404);
       }
 
+      // Prisma が利用可能な場合は JAM モジュールを使用
+      if (_prisma && user.teamId) {
+        const detail = await getChallengeDetail(
+          eventId,
+          user.teamId,
+          challengeId
+        );
+
+        if (detail.success && detail.challenge) {
+          const ch = detail.challenge;
+          return c.json({
+            id: challengeId,
+            title: ch.title,
+            type: 'jam',
+            category: ch.category,
+            difficulty: '',
+            overview: ch.description,
+            objectives: [],
+            order: eventProblem.order,
+            pointMultiplier: eventProblem.pointMultiplier,
+            maxScore: ch.taskScoring,
+            isUnlocked:
+              !eventProblem.unlockTime ||
+              new Date() >= eventProblem.unlockTime,
+            isCompleted: ch.completed,
+            myScore: ch.score,
+            description: ch.description,
+            instructions: [],
+            clues: ch.tasks.flatMap((task) =>
+              task.clues.map((clue) => ({
+                id: `${task.taskId}:${clue.order}`,
+                order: clue.order,
+                title: clue.title,
+                content: task.usedClues[clue.order] || '',
+                costPoints:
+                  (clue.order === 0
+                    ? task.clue1PenaltyPoints
+                    : clue.order === 1
+                      ? task.clue2PenaltyPoints
+                      : task.clue3PenaltyPoints) || 0,
+                isRevealed: clue.order < task.usedClues.length,
+                revealedAt: undefined,
+              }))
+            ),
+            tasks: ch.tasks,
+            resources: [],
+            scoringCriteria: [],
+            answerFormat: 'text',
+            answerValidation: undefined,
+          });
+        }
+      }
+
+      // フォールバック: DynamoDB の問題データから返す
       const problem = await problemRepository.findById(eventProblem.problemId);
       const maxScore =
         problem?.scoring.criteria?.reduce(
@@ -522,11 +578,11 @@ participantRouter.get(
         maxScore,
         isUnlocked:
           !eventProblem.unlockTime || new Date() >= eventProblem.unlockTime,
-        isCompleted: false, // TODO: 実際の完了状態
-        myScore: undefined, // TODO: 実際のスコア
+        isCompleted: false,
+        myScore: undefined,
         description: problem?.description.overview || '',
         instructions: problem?.description.objectives || [],
-        clues: [], // TODO: Challenge モデルから取得
+        clues: [],
         resources: [],
         scoringCriteria: problem?.scoring.criteria || [],
         answerFormat: 'text',
@@ -615,25 +671,56 @@ participantRouter.post(
 
 /**
  * クルーを公開（JAM）
+ *
+ * clueId は "taskId:clueOrder" 形式
  */
 participantRouter.post(
   '/events/:eventId/challenges/:challengeId/clues/:clueId/reveal',
   async (c) => {
-    const {
-      eventId: _eventId,
-      challengeId: _challengeId,
-      clueId,
-    } = c.req.param();
+    const user = c.get('user') as AuthenticatedUser;
+    const { eventId, challengeId, clueId } = c.req.param();
 
     try {
-      // TODO: 実際のクルー公開処理
+      // Prisma が利用不可の場合は 501 を返す
+      if (!_prisma) {
+        return c.json(
+          {
+            error: 'Clue reveal not yet available',
+            message:
+              'Database migration in progress. This feature requires Prisma client.',
+          },
+          501
+        );
+      }
+
+      if (!user.teamId) {
+        return c.json({ error: 'Team membership required' }, 400);
+      }
+
+      // clueId は "taskId:clueOrder" 形式をパース
+      const parts = clueId.split(':');
+      const taskId = parts.length === 2 ? parts[0] : clueId;
+      const clueOrder =
+        parts.length === 2 ? Number.parseInt(parts[1], 10) : 0;
+
+      const result = await openClue(
+        eventId,
+        user.teamId,
+        challengeId,
+        taskId,
+        clueOrder
+      );
+
+      if (!result.success) {
+        return c.json({ error: result.message }, 400);
+      }
 
       return c.json({
         id: clueId,
-        order: 1,
-        title: 'クルータイトル',
-        content: 'クルーの内容がここに表示されます',
-        costPoints: 50,
+        order: clueOrder,
+        title: '',
+        content: result.message,
+        costPoints: 0,
         isRevealed: true,
         revealedAt: new Date().toISOString(),
       });
@@ -699,53 +786,20 @@ participantRouter.post(
         );
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const prisma = _prisma as any;
-
-      // イベントとチャレンジの存在確認
-      const challenge = await prisma.challenge.findFirst({
-        where: {
-          id: challengeId,
-          event: { id: eventId },
-        },
-        include: {
-          event: true,
-        },
-      });
-
-      if (!challenge) {
-        return c.json({ error: 'Challenge not found' }, 404);
+      if (!user.teamId) {
+        return c.json({ error: 'Team membership required' }, 400);
       }
 
-      // テナント分離チェック
-      if (challenge.event.tenantId !== user.tenantId) {
-        return c.json({ error: 'Challenge not found' }, 404);
-      }
+      // validateAnswer で回答を検証し、スコア更新まで一括処理
+      const result = await validateAnswer(
+        eventId,
+        user.teamId,
+        challengeId,
+        titleId,
+        answer
+      );
 
-      // 正解データを取得
-      const correctAnswer = await prisma.answer.findUnique({
-        where: {
-          challengeId_titleId: { challengeId, titleId },
-        },
-      });
-
-      if (!correctAnswer) {
-        return c.json(
-          { error: 'Answer configuration not found for this task' },
-          404
-        );
-      }
-
-      // 回答の検証（大文字小文字を無視、前後の空白を除去）
-      const isCorrect =
-        answer.toLowerCase().trim() ===
-        correctAnswer.answerKey.toLowerCase().trim();
-
-      // 提出IDを生成
       const submissionId = `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // TODO: TeamChallengeAnswer に提出を記録
-      // TODO: 使用したクルー数から減点計算
 
       return c.json({
         id: submissionId,
@@ -754,12 +808,13 @@ participantRouter.post(
         titleId,
         submittedAt: new Date().toISOString(),
         status: 'completed',
-        score: isCorrect ? 100 : 0,
+        score: result.correct ? 100 : 0,
         maxScore: 100,
         answer,
-        isCorrect,
-        cluesUsed: 0, // TODO: 実際の使用クルー数
-        clueDeduction: 0, // TODO: 実際の減点
+        isCorrect: result.correct,
+        message: result.message,
+        cluesUsed: 0,
+        clueDeduction: 0,
       });
     } catch (error) {
       console.error('Failed to submit answer:', error);
@@ -793,12 +848,52 @@ participantRouter.get(
 participantRouter.get(
   '/events/:eventId/challenges/:challengeId/submissions/latest',
   async (c) => {
-    const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
+    const user = c.get('user') as AuthenticatedUser;
+    const { eventId, challengeId } = c.req.param();
 
     try {
-      // TODO: 実際の最新提出を取得
+      if (!_prisma || !user.teamId) {
+        return c.json({ error: 'No submissions found' }, 404);
+      }
 
-      return c.json({ error: 'No submissions found' }, 404);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prisma = _prisma as any;
+
+      // チャレンジを取得
+      const challenge = await prisma.challenge.findFirst({
+        where: { eventId, challengeId },
+      });
+
+      if (!challenge) {
+        return c.json({ error: 'No submissions found' }, 404);
+      }
+
+      // チームチャレンジ回答を取得
+      const teamAnswer = await prisma.teamChallengeAnswer.findUnique({
+        where: {
+          teamId_challengeId: {
+            teamId: user.teamId,
+            challengeId: challenge.id,
+          },
+        },
+      });
+
+      if (!teamAnswer) {
+        return c.json({ error: 'No submissions found' }, 404);
+      }
+
+      return c.json({
+        id: `sub_${teamAnswer.teamId}_${challengeId}`,
+        problemId: challengeId,
+        eventId,
+        submittedAt: new Date().toISOString(),
+        status: teamAnswer.completed ? 'completed' : 'in_progress',
+        score: teamAnswer.score,
+        maxScore: 100,
+        isCorrect: teamAnswer.completed,
+        cluesUsed: 0,
+        clueDeduction: 0,
+      });
     } catch (error) {
       console.error('Failed to fetch latest submission:', error);
       return c.json({ error: 'Failed to fetch submission' }, 500);
