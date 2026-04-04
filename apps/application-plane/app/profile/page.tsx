@@ -16,7 +16,7 @@ import CloudscapeLink from '@cloudscape-design/components/link';
 import CloudscapeSpaceBetween from '@cloudscape-design/components/space-between';
 import CloudscapeSpinner from '@cloudscape-design/components/spinner';
 import { useEffect, useState } from 'react';
-import { Header } from '../../components/layout';
+import { PageLayout } from '../../components/layout';
 import { useI18n } from '../../lib/i18n';
 import { getMyProfile } from '../../lib/api/profile';
 import type { ParticipantProfile } from '../../lib/api/types';
@@ -37,85 +37,75 @@ export default function ProfilePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-surface-0">
-      <Header />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="awsui-dark-mode">
+    <PageLayout maxWidth="3xl">
+      <CloudscapeSpaceBetween size="l">
+        <CloudscapeHeader variant="h1">{t('profile.title')}</CloudscapeHeader>
+
+        {loading && (
+          <CloudscapeBox textAlign="center" padding="xl">
+            <CloudscapeSpinner size="large" />
+          </CloudscapeBox>
+        )}
+
+        {error && (
+          <CloudscapeContainer>
+            <CloudscapeBox color="text-status-error">{error}</CloudscapeBox>
+          </CloudscapeContainer>
+        )}
+
+        {!loading && !error && (
           <CloudscapeSpaceBetween size="l">
-            <CloudscapeHeader variant="h1">
-              {t('profile.title')}
-            </CloudscapeHeader>
+            <CloudscapeContainer
+              header={
+                <CloudscapeHeader variant="h2">
+                  {profile?.name ?? 'ユーザー'}
+                </CloudscapeHeader>
+              }
+            >
+              <CloudscapeKeyValuePairs
+                columns={2}
+                items={[
+                  {
+                    label: t('profile.email'),
+                    value: profile?.email ?? '-',
+                  },
+                  {
+                    label: t('profile.rank'),
+                    value: profile?.rank
+                      ? `${profile.rank}${t('profile.rankSuffix')}`
+                      : '-',
+                  },
+                  {
+                    label: t('profile.eventsParticipated'),
+                    value: String(profile?.totalEventsParticipated ?? 0),
+                  },
+                  {
+                    label: t('profile.totalScore'),
+                    value: `${(profile?.totalScore ?? 0).toLocaleString()} pts`,
+                  },
+                ]}
+              />
+            </CloudscapeContainer>
 
-            {loading && (
-              <CloudscapeBox textAlign="center" padding="xl">
-                <CloudscapeSpinner size="large" />
-              </CloudscapeBox>
-            )}
-
-            {error && (
-              <CloudscapeContainer>
-                <CloudscapeBox color="text-status-error">{error}</CloudscapeBox>
-              </CloudscapeContainer>
-            )}
-
-            {!loading && !error && (
-              <CloudscapeSpaceBetween size="l">
-                <CloudscapeContainer
-                  header={
-                    <CloudscapeHeader variant="h2">
-                      {profile?.name ?? 'ユーザー'}
-                    </CloudscapeHeader>
-                  }
-                >
-                  <CloudscapeKeyValuePairs
-                    columns={2}
-                    items={[
-                      {
-                        label: t('profile.email'),
-                        value: profile?.email ?? '-',
-                      },
-                      {
-                        label: t('profile.rank'),
-                        value: profile?.rank
-                          ? `${profile.rank}${t('profile.rankSuffix')}`
-                          : '-',
-                      },
-                      {
-                        label: t('profile.eventsParticipated'),
-                        value: String(profile?.totalEventsParticipated ?? 0),
-                      },
-                      {
-                        label: t('profile.totalScore'),
-                        value: `${(profile?.totalScore ?? 0).toLocaleString()} pts`,
-                      },
-                    ]}
-                  />
-                </CloudscapeContainer>
-
-                <CloudscapeContainer
-                  header={
-                    <CloudscapeHeader variant="h2">
-                      {t('profile.menu')}
-                    </CloudscapeHeader>
-                  }
-                >
-                  <CloudscapeColumnLayout columns={2}>
-                    <CloudscapeLink
-                      href="/profile/history"
-                      fontSize="heading-s"
-                    >
-                      {t('profile.history')}
-                    </CloudscapeLink>
-                    <CloudscapeLink href="/profile/badges" fontSize="heading-s">
-                      {t('profile.badges')}
-                    </CloudscapeLink>
-                  </CloudscapeColumnLayout>
-                </CloudscapeContainer>
-              </CloudscapeSpaceBetween>
-            )}
+            <CloudscapeContainer
+              header={
+                <CloudscapeHeader variant="h2">
+                  {t('profile.menu')}
+                </CloudscapeHeader>
+              }
+            >
+              <CloudscapeColumnLayout columns={2}>
+                <CloudscapeLink href="/profile/history" fontSize="heading-s">
+                  {t('profile.history')}
+                </CloudscapeLink>
+                <CloudscapeLink href="/profile/badges" fontSize="heading-s">
+                  {t('profile.badges')}
+                </CloudscapeLink>
+              </CloudscapeColumnLayout>
+            </CloudscapeContainer>
           </CloudscapeSpaceBetween>
-        </div>
-      </main>
-    </div>
+        )}
+      </CloudscapeSpaceBetween>
+    </PageLayout>
   );
 }

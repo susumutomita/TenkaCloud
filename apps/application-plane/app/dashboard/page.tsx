@@ -20,7 +20,7 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import '@cloudscape-design/global-styles/index.css';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Header as AppHeader } from '../../components/layout';
+import { PageLayout } from '../../components/layout';
 import { useI18n } from '../../lib/i18n';
 import { getMyEvents } from '../../lib/api/events';
 import type { ParticipantEvent } from '../../lib/api/types';
@@ -168,140 +168,124 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen">
-      <AppHeader />
+    <PageLayout>
+      <SpaceBetween size="xl">
+        <Header variant="h1" description={t('dashboard.description')}>
+          {t('dashboard.title')}
+        </Header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <SpaceBetween size="xl">
-          <Header variant="h1" description={t('dashboard.description')}>
-            {t('dashboard.title')}
-          </Header>
-
-          {loading ? (
-            <Box textAlign="center" padding="xxl">
-              <Spinner size="large" />
-            </Box>
-          ) : error ? (
-            <Box textAlign="center" padding="xl">
-              <SpaceBetween size="m">
-                <StatusIndicator type="error">{error.message}</StatusIndicator>
-                <Button onClick={() => window.location.reload()}>
-                  {t('common.retry')}
-                </Button>
-              </SpaceBetween>
-            </Box>
-          ) : (
-            <SpaceBetween size="xl">
-              {/* Stats summary */}
-              <ColumnLayout columns={3} variant="text-grid">
-                <Container>
-                  <Box
-                    fontSize="display-l"
-                    fontWeight="bold"
-                    textAlign="center"
-                  >
-                    {activeEvents.length}
-                  </Box>
-                  <Box
-                    color="text-body-secondary"
-                    textAlign="center"
-                    variant="small"
-                  >
-                    {t('dashboard.active')}
-                  </Box>
-                </Container>
-                <Container>
-                  <Box
-                    fontSize="display-l"
-                    fontWeight="bold"
-                    textAlign="center"
-                  >
-                    {scheduledEvents.length}
-                  </Box>
-                  <Box
-                    color="text-body-secondary"
-                    textAlign="center"
-                    variant="small"
-                  >
-                    {t('dashboard.scheduled')}
-                  </Box>
-                </Container>
-                <Container>
-                  <Box
-                    fontSize="display-l"
-                    fontWeight="bold"
-                    textAlign="center"
-                  >
-                    {myEvents.length}
-                  </Box>
-                  <Box
-                    color="text-body-secondary"
-                    textAlign="center"
-                    variant="small"
-                  >
-                    合計
-                  </Box>
-                </Container>
-              </ColumnLayout>
-
-              {/* Active events */}
-              {activeEvents.length > 0 && (
-                <Container
-                  header={<Header variant="h2">{t('dashboard.active')}</Header>}
-                >
-                  <Cards
-                    cardDefinition={cardDefinitionActive}
-                    cardsPerRow={[{ cards: 1 }, { minWidth: 480, cards: 2 }]}
-                    items={activeEvents}
-                    loadingText={t('common.loading')}
-                  />
-                </Container>
-              )}
-
-              {/* Scheduled (registered) events */}
-              {scheduledEvents.length > 0 && (
-                <Container
-                  header={
-                    <Header variant="h2">{t('dashboard.scheduled')}</Header>
-                  }
-                >
-                  <Cards
-                    cardDefinition={cardDefinitionScheduled}
-                    cardsPerRow={[
-                      { cards: 1 },
-                      { minWidth: 320, cards: 2 },
-                      { minWidth: 960, cards: 3 },
-                    ]}
-                    items={scheduledEvents}
-                    loadingText={t('common.loading')}
-                  />
-                </Container>
-              )}
-
-              {/* No events CTA */}
-              {myEvents.length === 0 && (
-                <Container>
-                  <Box textAlign="center" padding="xxl">
-                    <SpaceBetween size="m">
-                      <Box fontSize="display-l">🏆</Box>
-                      <Header variant="h2">{t('dashboard.noMyEvents')}</Header>
-                      <Box color="text-body-secondary">
-                        {t('dashboard.noEventsDescription')}
-                      </Box>
-                      <Button
-                        variant="primary"
-                        onClick={() => router.push('/events')}
-                      >
-                        {t('dashboard.browseEvents')}
-                      </Button>
-                    </SpaceBetween>
-                  </Box>
-                </Container>
-              )}
+        {loading ? (
+          <Box textAlign="center" padding="xxl">
+            <Spinner size="large" />
+          </Box>
+        ) : error ? (
+          <Box textAlign="center" padding="xl">
+            <SpaceBetween size="m">
+              <StatusIndicator type="error">{error.message}</StatusIndicator>
+              <Button onClick={() => window.location.reload()}>
+                {t('common.retry')}
+              </Button>
             </SpaceBetween>
-          )}
-        </SpaceBetween>
-      </main>
-    </div>
+          </Box>
+        ) : (
+          <SpaceBetween size="xl">
+            {/* Stats summary */}
+            <ColumnLayout columns={3} variant="text-grid">
+              <Container>
+                <Box fontSize="display-l" fontWeight="bold" textAlign="center">
+                  {activeEvents.length}
+                </Box>
+                <Box
+                  color="text-body-secondary"
+                  textAlign="center"
+                  variant="small"
+                >
+                  {t('dashboard.active')}
+                </Box>
+              </Container>
+              <Container>
+                <Box fontSize="display-l" fontWeight="bold" textAlign="center">
+                  {scheduledEvents.length}
+                </Box>
+                <Box
+                  color="text-body-secondary"
+                  textAlign="center"
+                  variant="small"
+                >
+                  {t('dashboard.scheduled')}
+                </Box>
+              </Container>
+              <Container>
+                <Box fontSize="display-l" fontWeight="bold" textAlign="center">
+                  {myEvents.length}
+                </Box>
+                <Box
+                  color="text-body-secondary"
+                  textAlign="center"
+                  variant="small"
+                >
+                  合計
+                </Box>
+              </Container>
+            </ColumnLayout>
+
+            {/* Active events */}
+            {activeEvents.length > 0 && (
+              <Container
+                header={<Header variant="h2">{t('dashboard.active')}</Header>}
+              >
+                <Cards
+                  cardDefinition={cardDefinitionActive}
+                  cardsPerRow={[{ cards: 1 }, { minWidth: 480, cards: 2 }]}
+                  items={activeEvents}
+                  loadingText={t('common.loading')}
+                />
+              </Container>
+            )}
+
+            {/* Scheduled (registered) events */}
+            {scheduledEvents.length > 0 && (
+              <Container
+                header={
+                  <Header variant="h2">{t('dashboard.scheduled')}</Header>
+                }
+              >
+                <Cards
+                  cardDefinition={cardDefinitionScheduled}
+                  cardsPerRow={[
+                    { cards: 1 },
+                    { minWidth: 320, cards: 2 },
+                    { minWidth: 960, cards: 3 },
+                  ]}
+                  items={scheduledEvents}
+                  loadingText={t('common.loading')}
+                />
+              </Container>
+            )}
+
+            {/* No events CTA */}
+            {myEvents.length === 0 && (
+              <Container>
+                <Box textAlign="center" padding="xxl">
+                  <SpaceBetween size="m">
+                    <Box fontSize="display-l">🏆</Box>
+                    <Header variant="h2">{t('dashboard.noMyEvents')}</Header>
+                    <Box color="text-body-secondary">
+                      {t('dashboard.noEventsDescription')}
+                    </Box>
+                    <Button
+                      variant="primary"
+                      onClick={() => router.push('/events')}
+                    >
+                      {t('dashboard.browseEvents')}
+                    </Button>
+                  </SpaceBetween>
+                </Box>
+              </Container>
+            )}
+          </SpaceBetween>
+        )}
+      </SpaceBetween>
+    </PageLayout>
   );
 }
