@@ -22,7 +22,7 @@ import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Header as AppHeader } from '../../components/layout';
+import { PageLayout } from '../../components/layout';
 import { useI18n } from '../../lib/i18n';
 import { getAvailableEvents } from '../../lib/api/events';
 import type {
@@ -375,225 +375,210 @@ export default function EventsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-surface-0">
-      <AppHeader />
+    <PageLayout>
+      <SpaceBetween size="l">
+        <Header
+          counter={!loading && !error ? `(${events.length})` : undefined}
+          description={t('events.description')}
+          actions={viewToggle}
+        >
+          {t('events.title')}
+        </Header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="awsui-dark-mode">
-          <SpaceBetween size="l">
-            <Header
-              counter={!loading && !error ? `(${events.length})` : undefined}
-              description={t('events.description')}
-              actions={viewToggle}
-            >
-              {t('events.title')}
-            </Header>
+        {filterBar}
 
-            {filterBar}
-
-            {loading ? (
-              <Box textAlign="center" padding="xl">
-                <Spinner size="large" />
-              </Box>
-            ) : viewMode === 'cards' ? (
-              <Cards
-                cardDefinition={{
-                  header: (event) => (
-                    <Link
-                      href={`/events/${event.id}`}
-                      fontSize="heading-m"
-                      onFollow={(e) => {
-                        e.preventDefault();
-                        router.push(`/events/${event.id}`);
-                      }}
-                    >
-                      {event.name}
-                    </Link>
+        {loading ? (
+          <Box textAlign="center" padding="xl">
+            <Spinner size="large" />
+          </Box>
+        ) : viewMode === 'cards' ? (
+          <Cards
+            cardDefinition={{
+              header: (event) => (
+                <Link
+                  href={`/events/${event.id}`}
+                  fontSize="heading-m"
+                  onFollow={(e) => {
+                    e.preventDefault();
+                    router.push(`/events/${event.id}`);
+                  }}
+                >
+                  {event.name}
+                </Link>
+              ),
+              sections: [
+                {
+                  id: 'status',
+                  header: t('events.statusLabel'),
+                  content: (event) => (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      {getEventStatusIndicator(event.status, t)}
+                      <Badge
+                        color={event.type === 'gameday' ? 'blue' : 'green'}
+                      >
+                        {event.type === 'gameday'
+                          ? t('events.gameday')
+                          : t('events.jam')}
+                      </Badge>
+                      {event.isRegistered && (
+                        <Badge color="green">{t('events.registered')}</Badge>
+                      )}
+                    </SpaceBetween>
                   ),
-                  sections: [
-                    {
-                      id: 'status',
-                      header: t('events.statusLabel'),
-                      content: (event) => (
-                        <SpaceBetween direction="horizontal" size="xs">
-                          {getEventStatusIndicator(event.status, t)}
-                          <Badge
-                            color={event.type === 'gameday' ? 'blue' : 'green'}
-                          >
-                            {event.type === 'gameday'
-                              ? t('events.gameday')
-                              : t('events.jam')}
-                          </Badge>
-                          {event.isRegistered && (
-                            <Badge color="green">
-                              {t('events.registered')}
-                            </Badge>
-                          )}
-                        </SpaceBetween>
-                      ),
-                    },
-                    {
-                      id: 'schedule',
-                      header: t('events.schedule'),
-                      content: (event) => {
-                        const timeUntil =
-                          event.status === 'scheduled'
-                            ? getTimeUntilStart(event.startTime)
-                            : null;
-                        return (
-                          <SpaceBetween size="xxs">
-                            <Box variant="small">
-                              {t('events.startTime')}:{' '}
-                              {formatDate(event.startTime)}
-                            </Box>
-                            <Box variant="small">
-                              {t('events.endTime')}: {formatDate(event.endTime)}
-                            </Box>
-                            {timeUntil && (
-                              <Box color="text-status-info" fontWeight="bold">
-                                {timeUntil}
-                              </Box>
-                            )}
-                          </SpaceBetween>
-                        );
-                      },
-                    },
-                    {
-                      id: 'details',
-                      header: t('events.details'),
-                      content: (event) => (
-                        <SpaceBetween direction="horizontal" size="l">
-                          <Box variant="small">
-                            {t('events.problems')}:{' '}
-                            <Box variant="span" fontWeight="bold">
-                              {event.problemCount}
-                            </Box>
+                },
+                {
+                  id: 'schedule',
+                  header: t('events.schedule'),
+                  content: (event) => {
+                    const timeUntil =
+                      event.status === 'scheduled'
+                        ? getTimeUntilStart(event.startTime)
+                        : null;
+                    return (
+                      <SpaceBetween size="xxs">
+                        <Box variant="small">
+                          {t('events.startTime')}: {formatDate(event.startTime)}
+                        </Box>
+                        <Box variant="small">
+                          {t('events.endTime')}: {formatDate(event.endTime)}
+                        </Box>
+                        {timeUntil && (
+                          <Box color="text-status-info" fontWeight="bold">
+                            {timeUntil}
                           </Box>
-                          <Box variant="small">
-                            {t('events.participants')}:{' '}
-                            <Box variant="span" fontWeight="bold">
-                              {event.participantCount}
-                            </Box>
-                          </Box>
-                          <Box variant="small">
-                            {event.cloudProvider.toUpperCase()}
-                          </Box>
-                          <Box variant="small">
-                            {event.participantType === 'team'
-                              ? t('events.team')
-                              : t('events.solo')}
-                          </Box>
-                        </SpaceBetween>
-                      ),
-                    },
-                    {
-                      id: 'action',
-                      content: (event) => (
-                        <Button
-                          variant={
-                            event.status === 'active' ? 'primary' : 'normal'
-                          }
-                          fullWidth
-                          onClick={() => router.push(`/events/${event.id}`)}
-                        >
-                          {getActionLabel(event, t)}
-                        </Button>
-                      ),
-                    },
-                  ],
-                }}
-                cardsPerRow={[
-                  { cards: 1 },
-                  { minWidth: 600, cards: 2 },
-                  { minWidth: 1000, cards: 3 },
-                ]}
-                items={events}
-                empty={emptyNode}
-              />
-            ) : viewMode === 'list' ? (
-              <Table
-                columnDefinitions={[
-                  {
-                    id: 'name',
-                    header: t('events.name'),
-                    cell: (event) => (
-                      <Link
-                        href={`/events/${event.id}`}
-                        onFollow={(e) => {
-                          e.preventDefault();
-                          router.push(`/events/${event.id}`);
-                        }}
-                      >
-                        {event.name}
-                      </Link>
-                    ),
-                    minWidth: 200,
-                  },
-                  {
-                    id: 'status',
-                    header: t('events.statusLabel'),
-                    cell: (event) => (
-                      <SpaceBetween direction="horizontal" size="xs">
-                        {getEventStatusIndicator(event.status, t)}
-                        <Badge
-                          color={event.type === 'gameday' ? 'blue' : 'green'}
-                        >
-                          {event.type === 'gameday'
-                            ? t('events.gameday')
-                            : t('events.jam')}
-                        </Badge>
+                        )}
                       </SpaceBetween>
-                    ),
-                    width: 220,
+                    );
                   },
-                  {
-                    id: 'start',
-                    header: t('events.startTime'),
-                    cell: (event) => formatDate(event.startTime),
-                    width: 160,
-                  },
-                  {
-                    id: 'end',
-                    header: t('events.endTime'),
-                    cell: (event) => formatDate(event.endTime),
-                    width: 160,
-                  },
-                  {
-                    id: 'participants',
-                    header: t('events.participants'),
-                    cell: (event) => event.participantCount,
-                    width: 110,
-                  },
-                  {
-                    id: 'action',
-                    header: '',
-                    cell: (event) => (
-                      <Button
-                        variant={
-                          event.status === 'active' ? 'primary' : 'normal'
-                        }
-                        onClick={() => router.push(`/events/${event.id}`)}
-                      >
-                        {getActionLabel(event, t)}
-                      </Button>
-                    ),
-                    width: 140,
-                  },
-                ]}
-                items={events}
-                empty={emptyNode}
-              />
-            ) : (
-              <CalendarView
-                events={events}
-                t={t}
-                locale={locale}
-                onNavigate={(path) => router.push(path)}
-              />
-            )}
-          </SpaceBetween>
-        </div>
-      </main>
-    </div>
+                },
+                {
+                  id: 'details',
+                  header: t('events.details'),
+                  content: (event) => (
+                    <SpaceBetween direction="horizontal" size="l">
+                      <Box variant="small">
+                        {t('events.problems')}:{' '}
+                        <Box variant="span" fontWeight="bold">
+                          {event.problemCount}
+                        </Box>
+                      </Box>
+                      <Box variant="small">
+                        {t('events.participants')}:{' '}
+                        <Box variant="span" fontWeight="bold">
+                          {event.participantCount}
+                        </Box>
+                      </Box>
+                      <Box variant="small">
+                        {event.cloudProvider.toUpperCase()}
+                      </Box>
+                      <Box variant="small">
+                        {event.participantType === 'team'
+                          ? t('events.team')
+                          : t('events.solo')}
+                      </Box>
+                    </SpaceBetween>
+                  ),
+                },
+                {
+                  id: 'action',
+                  content: (event) => (
+                    <Button
+                      variant={event.status === 'active' ? 'primary' : 'normal'}
+                      fullWidth
+                      onClick={() => router.push(`/events/${event.id}`)}
+                    >
+                      {getActionLabel(event, t)}
+                    </Button>
+                  ),
+                },
+              ],
+            }}
+            cardsPerRow={[
+              { cards: 1 },
+              { minWidth: 600, cards: 2 },
+              { minWidth: 1000, cards: 3 },
+            ]}
+            items={events}
+            empty={emptyNode}
+          />
+        ) : viewMode === 'list' ? (
+          <Table
+            columnDefinitions={[
+              {
+                id: 'name',
+                header: t('events.name'),
+                cell: (event) => (
+                  <Link
+                    href={`/events/${event.id}`}
+                    onFollow={(e) => {
+                      e.preventDefault();
+                      router.push(`/events/${event.id}`);
+                    }}
+                  >
+                    {event.name}
+                  </Link>
+                ),
+                minWidth: 200,
+              },
+              {
+                id: 'status',
+                header: t('events.statusLabel'),
+                cell: (event) => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    {getEventStatusIndicator(event.status, t)}
+                    <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
+                      {event.type === 'gameday'
+                        ? t('events.gameday')
+                        : t('events.jam')}
+                    </Badge>
+                  </SpaceBetween>
+                ),
+                width: 220,
+              },
+              {
+                id: 'start',
+                header: t('events.startTime'),
+                cell: (event) => formatDate(event.startTime),
+                width: 160,
+              },
+              {
+                id: 'end',
+                header: t('events.endTime'),
+                cell: (event) => formatDate(event.endTime),
+                width: 160,
+              },
+              {
+                id: 'participants',
+                header: t('events.participants'),
+                cell: (event) => event.participantCount,
+                width: 110,
+              },
+              {
+                id: 'action',
+                header: '',
+                cell: (event) => (
+                  <Button
+                    variant={event.status === 'active' ? 'primary' : 'normal'}
+                    onClick={() => router.push(`/events/${event.id}`)}
+                  >
+                    {getActionLabel(event, t)}
+                  </Button>
+                ),
+                width: 140,
+              },
+            ]}
+            items={events}
+            empty={emptyNode}
+          />
+        ) : (
+          <CalendarView
+            events={events}
+            t={t}
+            locale={locale}
+            onNavigate={(path) => router.push(path)}
+          />
+        )}
+      </SpaceBetween>
+    </PageLayout>
   );
 }

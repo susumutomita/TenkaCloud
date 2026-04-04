@@ -19,7 +19,7 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useState } from 'react';
-import { Header } from '../../components/layout';
+import { PageLayout } from '../../components/layout';
 import { getErrorMessage } from '../../components/ui';
 import { getGlobalRanking } from '../../lib/api/profile';
 
@@ -115,205 +115,197 @@ export default function RankingsPage() {
   const topScore = rankings[0]?.totalScore;
 
   return (
-    <div className="min-h-screen bg-surface-0">
-      <Header />
+    <PageLayout>
+      <SpaceBetween size="l">
+        {/* My Rank Banner */}
+        {data?.myRank && (
+          <Container>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+              }}
+            >
+              <Box fontSize="display-l" fontWeight="heavy">
+                {data.myRank}位
+              </Box>
+              <div>
+                <Box variant="p" color="text-body-secondary">
+                  あなたの現在の順位
+                </Box>
+                <Box variant="p" color="text-body-secondary">
+                  / {data.total}人中
+                </Box>
+              </div>
+            </div>
+          </Container>
+        )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="awsui-dark-mode">
-          <SpaceBetween size="l">
-            {/* My Rank Banner */}
-            {data?.myRank && (
-              <Container>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                  }}
-                >
-                  <Box fontSize="display-l" fontWeight="heavy">
-                    {data.myRank}位
+        {/* Stats Cards */}
+        {!error && (
+          <ColumnLayout columns={2}>
+            <Container
+              header={
+                <CloudscapeHeader variant="h3">総参加者数</CloudscapeHeader>
+              }
+            >
+              {loading ? (
+                <Spinner size="large" />
+              ) : (
+                <Box variant="p" fontSize="display-l" fontWeight="heavy">
+                  {totalParticipants.toLocaleString()}
+                </Box>
+              )}
+            </Container>
+
+            <Container
+              header={
+                <CloudscapeHeader variant="h3">最高スコア</CloudscapeHeader>
+              }
+            >
+              {loading ? (
+                <Spinner size="large" />
+              ) : (
+                <Box variant="p" fontSize="display-l" fontWeight="heavy">
+                  {topScore !== undefined ? topScore.toLocaleString() : '-'}
+                </Box>
+              )}
+            </Container>
+          </ColumnLayout>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <Container>
+            <SpaceBetween size="m" direction="vertical" alignItems="center">
+              <StatusIndicator type="error">
+                {getErrorMessage(error)}
+              </StatusIndicator>
+              <Button onClick={fetchRankings}>再試行</Button>
+            </SpaceBetween>
+          </Container>
+        )}
+
+        {/* Rankings Table */}
+        {!error && (
+          <Table
+            header={
+              <CloudscapeHeader
+                variant="h1"
+                description="クラウドエンジニアの頂点を目指せ"
+                counter={`(${rankings.length})`}
+                actions={<Badge color="blue">Top 50</Badge>}
+              >
+                ランキング
+              </CloudscapeHeader>
+            }
+            loading={loading}
+            loadingText="ランキングを読み込み中..."
+            items={rankings}
+            empty={
+              <Box textAlign="center" padding="xl">
+                <SpaceBetween size="s">
+                  <Box variant="p" fontSize="heading-xl" fontWeight="bold">
+                    {'\u{1F3C6}'}
                   </Box>
-                  <div>
-                    <Box variant="p" color="text-body-secondary">
-                      あなたの現在の順位
-                    </Box>
-                    <Box variant="p" color="text-body-secondary">
-                      / {data.total}人中
-                    </Box>
-                  </div>
-                </div>
-              </Container>
-            )}
-
-            {/* Stats Cards */}
-            {!error && (
-              <ColumnLayout columns={2}>
-                <Container
-                  header={
-                    <CloudscapeHeader variant="h3">総参加者数</CloudscapeHeader>
-                  }
-                >
-                  {loading ? (
-                    <Spinner size="large" />
-                  ) : (
-                    <Box variant="p" fontSize="display-l" fontWeight="heavy">
-                      {totalParticipants.toLocaleString()}
-                    </Box>
-                  )}
-                </Container>
-
-                <Container
-                  header={
-                    <CloudscapeHeader variant="h3">最高スコア</CloudscapeHeader>
-                  }
-                >
-                  {loading ? (
-                    <Spinner size="large" />
-                  ) : (
-                    <Box variant="p" fontSize="display-l" fontWeight="heavy">
-                      {topScore !== undefined ? topScore.toLocaleString() : '-'}
-                    </Box>
-                  )}
-                </Container>
-              </ColumnLayout>
-            )}
-
-            {/* Error State */}
-            {error && (
-              <Container>
-                <SpaceBetween size="m" direction="vertical" alignItems="center">
-                  <StatusIndicator type="error">
-                    {getErrorMessage(error)}
-                  </StatusIndicator>
-                  <Button onClick={fetchRankings}>再試行</Button>
+                  <Box variant="h2" fontWeight="bold">
+                    ランキングデータがありません
+                  </Box>
+                  <Box variant="p" color="text-body-secondary">
+                    イベントに参加してランキングに載ろう！
+                  </Box>
+                  <Button variant="primary" href="/events">
+                    イベントを探す
+                  </Button>
                 </SpaceBetween>
-              </Container>
-            )}
-
-            {/* Rankings Table */}
-            {!error && (
-              <Table
-                header={
-                  <CloudscapeHeader
-                    variant="h1"
-                    description="クラウドエンジニアの頂点を目指せ"
-                    counter={`(${rankings.length})`}
-                    actions={<Badge color="blue">Top 50</Badge>}
-                  >
-                    ランキング
-                  </CloudscapeHeader>
-                }
-                loading={loading}
-                loadingText="ランキングを読み込み中..."
-                items={rankings}
-                empty={
-                  <Box textAlign="center" padding="xl">
-                    <SpaceBetween size="s">
-                      <Box variant="p" fontSize="heading-xl" fontWeight="bold">
-                        {'\u{1F3C6}'}
-                      </Box>
-                      <Box variant="h2" fontWeight="bold">
-                        ランキングデータがありません
-                      </Box>
-                      <Box variant="p" color="text-body-secondary">
-                        イベントに参加してランキングに載ろう！
-                      </Box>
-                      <Button variant="primary" href="/events">
-                        イベントを探す
-                      </Button>
-                    </SpaceBetween>
-                  </Box>
-                }
-                columnDefinitions={[
-                  {
-                    id: 'rank',
-                    header: '順位',
-                    width: 100,
-                    cell: (item) => {
-                      const bgColor = getRankBoxColor(item.rank);
-                      return (
-                        <Box
-                          fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
-                          fontWeight="bold"
-                        >
-                          {bgColor ? (
-                            <span
-                              style={{
-                                background: bgColor,
-                                padding: '4px 12px',
-                                borderRadius: '8px',
-                                display: 'inline-block',
-                              }}
-                            >
-                              {getRankIcon(item.rank)}
-                            </span>
-                          ) : (
-                            getRankIcon(item.rank)
-                          )}
-                        </Box>
-                      );
-                    },
-                  },
-                  {
-                    id: 'name',
-                    header: '名前',
-                    cell: (item) => (
-                      <SpaceBetween
-                        size="xs"
-                        direction="horizontal"
-                        alignItems="center"
-                      >
-                        <div
+              </Box>
+            }
+            columnDefinitions={[
+              {
+                id: 'rank',
+                header: '順位',
+                width: 100,
+                cell: (item) => {
+                  const bgColor = getRankBoxColor(item.rank);
+                  return (
+                    <Box
+                      fontSize={item.rank <= 3 ? 'heading-m' : 'body-m'}
+                      fontWeight="bold"
+                    >
+                      {bgColor ? (
+                        <span
                           style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: '50%',
-                            background: getRankColor(item.rank),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: '0.875rem',
-                            color: '#FFFFFF',
+                            background: bgColor,
+                            padding: '4px 12px',
+                            borderRadius: '8px',
+                            display: 'inline-block',
                           }}
                         >
-                          {item.name.charAt(0)}
-                        </div>
-                        <Box fontWeight="bold">{item.name}</Box>
-                      </SpaceBetween>
-                    ),
-                  },
-                  {
-                    id: 'eventsParticipated',
-                    header: '参加イベント',
-                    width: 150,
-                    cell: (item) => (
-                      <Badge color="blue">
-                        {`${item.eventsParticipated}回`}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    id: 'totalScore',
-                    header: '合計スコア',
-                    width: 180,
-                    cell: (item) => (
-                      <Box fontWeight="bold" fontSize="heading-s">
-                        {item.totalScore.toLocaleString()}
-                        <Box variant="span" color="text-body-secondary">
-                          {' '}
-                          pts
-                        </Box>
-                      </Box>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </SpaceBetween>
-        </div>
-      </main>
-    </div>
+                          {getRankIcon(item.rank)}
+                        </span>
+                      ) : (
+                        getRankIcon(item.rank)
+                      )}
+                    </Box>
+                  );
+                },
+              },
+              {
+                id: 'name',
+                header: '名前',
+                cell: (item) => (
+                  <SpaceBetween
+                    size="xs"
+                    direction="horizontal"
+                    alignItems="center"
+                  >
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: getRankColor(item.rank),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '0.875rem',
+                        color: '#FFFFFF',
+                      }}
+                    >
+                      {item.name.charAt(0)}
+                    </div>
+                    <Box fontWeight="bold">{item.name}</Box>
+                  </SpaceBetween>
+                ),
+              },
+              {
+                id: 'eventsParticipated',
+                header: '参加イベント',
+                width: 150,
+                cell: (item) => (
+                  <Badge color="blue">{`${item.eventsParticipated}回`}</Badge>
+                ),
+              },
+              {
+                id: 'totalScore',
+                header: '合計スコア',
+                width: 180,
+                cell: (item) => (
+                  <Box fontWeight="bold" fontSize="heading-s">
+                    {item.totalScore.toLocaleString()}
+                    <Box variant="span" color="text-body-secondary">
+                      {' '}
+                      pts
+                    </Box>
+                  </Box>
+                ),
+              },
+            ]}
+          />
+        )}
+      </SpaceBetween>
+    </PageLayout>
   );
 }
