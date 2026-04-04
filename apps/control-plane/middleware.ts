@@ -19,9 +19,10 @@ function handleAuth(isLoggedIn: boolean, req: NextAuthRequest): NextResponse {
 
   // 未認証ユーザーがログインページ以外にアクセスした場合、ログインページにリダイレクト
   if (!isLoggedIn && !isOnLoginPage) {
-    return NextResponse.redirect(
-      new URL(`${BASE_PATH}/login`, req.nextUrl.origin),
-    );
+    const loginUrl = new URL(`${BASE_PATH}/login`, req.nextUrl.origin);
+    const callbackPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+    loginUrl.searchParams.set('callbackUrl', callbackPath);
+    return NextResponse.redirect(loginUrl);
   }
 
   // 認証済みユーザーがログインページにアクセスした場合、ダッシュボードにリダイレクト
@@ -39,8 +40,9 @@ function handleAuth(isLoggedIn: boolean, req: NextAuthRequest): NextResponse {
  * AUTH_SKIP=1 の場合は authReq.auth が設定されていなくても true として扱う
  */
 const authMiddleware = auth((authReq) => {
-  // ランタイムで AUTH_SKIP を評価
-  const isAuthSkip = process.env.AUTH_SKIP === '1';
+  // ランタイムで AUTH_SKIP を評価（本番環境では無効）
+  const isAuthSkip =
+    process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production';
   const isLoggedIn = isAuthSkip || !!authReq.auth;
   return handleAuth(isLoggedIn, authReq);
 });

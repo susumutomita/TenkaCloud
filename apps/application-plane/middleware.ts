@@ -18,6 +18,7 @@ import {
  */
 const PUBLIC_PATHS = [
   '/login',
+  '/signup',
   '/api/auth',
   '/_next',
   '/favicon.ico',
