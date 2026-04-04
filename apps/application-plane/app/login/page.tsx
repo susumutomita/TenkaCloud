@@ -15,7 +15,7 @@ export default function LoginPage() {
   return (
     <div
       className="awsui-dark-mode flex min-h-screen items-center justify-center"
-      style={{ background: 'var(--color-background-layout-main, #0f1b2d)' }}
+      style={{ background: 'var(--color-background-layout-main)' }}
     >
       <div style={{ width: '100%', maxWidth: 400 }}>
         <Container
@@ -36,8 +36,6 @@ export default function LoginPage() {
                 style={{
                   width: '100%',
                   padding: '8px 20px',
-                  background: '#0972d3',
-                  color: '#fff',
                   border: 'none',
                   borderRadius: 4,
                   fontSize: 14,

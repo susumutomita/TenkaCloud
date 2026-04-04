@@ -101,14 +101,24 @@ participantRouter.get('/events', async (c) => {
     });
 
     // 参加状況を追加
-    const eventsWithRegistration = events.map((event) => ({
-      ...event,
-      problemCount: 0,
-      participantCount: 0,
-      isRegistered: false, // TODO: 実際の登録状況を確認
-      myRank: undefined,
-      myScore: undefined,
-    }));
+    const eventsWithRegistration = await Promise.all(
+      events.map(async (event) => {
+        const [isRegistered, participantCount] = await Promise.all([
+          eventRepository
+            .isParticipantRegistered(event.id, user.id)
+            .catch(() => false),
+          eventRepository.getParticipantCount(event.id).catch(() => 0),
+        ]);
+        return {
+          ...event,
+          problemCount: 0,
+          participantCount,
+          isRegistered,
+          myRank: undefined,
+          myScore: undefined,
+        };
+      })
+    );
 
     return c.json({ events: eventsWithRegistration, total });
   } catch (error) {
@@ -208,8 +218,9 @@ participantRouter.get('/events/:eventId', async (c) => {
       })
     );
 
-    const [isRegistered] = await Promise.all([
+    const [isRegistered, participantCount] = await Promise.all([
       eventRepository.isParticipantRegistered(eventId, user.id),
+      eventRepository.getParticipantCount(eventId),
     ]);
 
     return c.json({
@@ -226,7 +237,7 @@ participantRouter.get('/events/:eventId', async (c) => {
       scoringType: eventData.scoringType.toLowerCase(),
       leaderboardVisible: eventData.leaderboardVisible,
       problemCount: problems.length,
-      participantCount: 0, // TODO: 実際の参加者数
+      participantCount,
       isRegistered,
       problems,
       teamInfo: undefined, // TODO: チーム情報を取得
@@ -304,7 +315,7 @@ participantRouter.post('/events/:eventId/unregister', async (c) => {
       return c.json({ error: 'Cannot unregister from an active event' }, 400);
     }
 
-    // TODO: 実際の登録解除処理
+    await eventRepository.unregisterParticipant(eventId, user.id);
 
     return c.json({
       success: true,

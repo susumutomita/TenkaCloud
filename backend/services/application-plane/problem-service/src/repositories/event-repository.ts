@@ -295,6 +295,17 @@ export class DynamoEventRepository implements IEventRepository {
   ): Promise<boolean> {
     return this.repo.isParticipantRegistered(eventId, userId);
   }
+
+  async unregisterParticipant(
+    eventId: string,
+    userId: string
+  ): Promise<void> {
+    return this.repo.unregisterParticipant(eventId, userId);
+  }
+
+  async getParticipantCount(eventId: string): Promise<number> {
+    return this.repo.getParticipantCount(eventId);
+  }
 }
 
 /**

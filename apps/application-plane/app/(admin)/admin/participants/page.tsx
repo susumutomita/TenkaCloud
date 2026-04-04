@@ -151,32 +151,7 @@ export default function AdminParticipantsPage() {
             {
               id: 'name',
               header: '名前',
-              cell: (item) => (
-                <SpaceBetween
-                  direction="horizontal"
-                  size="xs"
-                  alignItems="center"
-                >
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: '#0972d3',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontWeight: 'bold',
-                      fontSize: 14,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.displayName.charAt(0)}
-                  </div>
-                  <Box fontWeight="bold">{item.displayName}</Box>
-                </SpaceBetween>
-              ),
+              cell: (item) => <Box fontWeight="bold">{item.displayName}</Box>,
               sortingField: 'displayName',
             },
             {

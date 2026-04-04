@@ -338,8 +338,8 @@ const variantClasses: Record<AlertDialogActionVariant, string> = {
     'bg-hn-error text-surface-0',
     'hover:bg-hn-error/90',
     'focus-visible:ring-hn-error',
-    'shadow-[2px_2px_0_#8a4444]',
-    'hover:shadow-[1px_1px_0_#8a4444]',
+    'shadow-[2px_2px_0_var(--color-surface-0)]',
+    'hover:shadow-[1px_1px_0_var(--color-surface-0)]',
     'active:translate-x-[1px] active:translate-y-[1px] active:shadow-none',
   ].join(' '),
   primary: [

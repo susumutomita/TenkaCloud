@@ -137,8 +137,8 @@ export function NotificationPanel() {
             maxHeight: '500px',
             overflowY: 'auto',
             zIndex: 1000,
-            background: 'var(--color-background-container-content, #0f1b2d)',
-            border: '1px solid var(--color-border-divider-default, #414d5c)',
+            background: 'var(--color-background-container-content)',
+            border: '1px solid var(--color-border-divider-default)',
             borderRadius: '8px',
             boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
           }}
@@ -146,8 +146,7 @@ export function NotificationPanel() {
           <div
             style={{
               padding: '12px 16px',
-              borderBottom:
-                '1px solid var(--color-border-divider-default, #414d5c)',
+              borderBottom: '1px solid var(--color-border-divider-default)',
             }}
           >
             <Header

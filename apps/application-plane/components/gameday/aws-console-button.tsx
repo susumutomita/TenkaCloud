@@ -7,6 +7,7 @@
 
 'use client';
 
+import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import { useCallback, useState } from 'react';
 
@@ -66,15 +67,13 @@ export function AwsConsoleButton({
         {label}
       </Button>
       {error && (
-        <div
-          style={{
-            color: '#d91515',
-            fontSize: '12px',
-            marginTop: '4px',
-          }}
+        <Box
+          color="text-status-error"
+          fontSize="body-s"
+          margin={{ top: 'xxs' }}
         >
           {error}
-        </div>
+        </Box>
       )}
     </div>
   );

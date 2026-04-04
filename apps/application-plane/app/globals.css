@@ -56,23 +56,6 @@
   --color-border-light: #4a5459;
   --color-border-focus: var(--color-hn-accent);
 
-  /* Gradients */
-  --gradient-accent: linear-gradient(
-    135deg,
-    var(--color-hn-accent),
-    var(--color-hn-info)
-  );
-  --gradient-dark: linear-gradient(
-    135deg,
-    var(--color-surface-0),
-    var(--color-surface-1)
-  );
-  --gradient-surface: linear-gradient(
-    180deg,
-    var(--color-surface-1),
-    var(--color-surface-0)
-  );
-
   /* Shadows */
   --shadow-brutal: 3px 3px 0 var(--color-surface-0);
   --shadow-brutal-sm: 2px 2px 0 var(--color-surface-0);
@@ -279,14 +262,6 @@
 }
 
 @layer utilities {
-  /* Text gradient with accent color */
-  .text-accent-gradient {
-    background: var(--gradient-accent);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
   /* Glass morphism effect */
   .glass {
     background: color-mix(in srgb, var(--color-surface-1) 70%, transparent);
@@ -323,29 +298,6 @@
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
     opacity: 0.03;
     pointer-events: none;
-  }
-
-  /* Scanline effect */
-  .scanlines::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0, 0, 0, 0.1) 2px,
-      rgba(0, 0, 0, 0.1) 4px
-    );
-    pointer-events: none;
-  }
-
-  /* Grid pattern background */
-  .bg-grid {
-    background-image:
-      linear-gradient(var(--color-border) 1px, transparent 1px),
-      linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
-    background-size: 20px 20px;
   }
 
   /* ===== Animations ===== */

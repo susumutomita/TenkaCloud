@@ -5,7 +5,20 @@ import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
 
 const getEnv = (key: string) => process.env[key];
 const skipAuth0Validation = getEnv('SKIP_AUTH0_VALIDATION') === '1';
-const authSkipEnabled = isAuthSkipEnabled();
+// During `next build`, NEXT_PHASE is set to 'phase-production-build'.
+// If AUTH_SKIP=1 is present in a local .env.local, isAuthSkipEnabled() will
+// throw because NODE_ENV=production, but it is harmless at build time.
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+let authSkipEnabled: boolean;
+try {
+  authSkipEnabled = isAuthSkipEnabled();
+} catch {
+  // Caught only when AUTH_SKIP=1 && NODE_ENV=production (e.g. local build).
+  // Treat as disabled but allow stubs so the build can succeed.
+  authSkipEnabled = false;
+}
+const useStubAuth =
+  authSkipEnabled || (isBuildPhase && process.env.AUTH_SKIP === '1');
 
 /**
  * モックセッション（AUTH_SKIP=1 の場合に使用）
@@ -42,20 +55,18 @@ if (authSkipEnabled && typeof console !== 'undefined') {
 const auth0Config = {
   clientId:
     getEnv('AUTH0_CLIENT_ID') ??
-    (skipAuth0Validation || authSkipEnabled ? 'stub-client-id' : undefined),
+    (skipAuth0Validation || useStubAuth ? 'stub-client-id' : undefined),
   clientSecret:
     getEnv('AUTH0_CLIENT_SECRET') ??
-    (skipAuth0Validation || authSkipEnabled ? 'stub-client-secret' : undefined),
+    (skipAuth0Validation || useStubAuth ? 'stub-client-secret' : undefined),
   issuer:
     getEnv('AUTH0_ISSUER') ??
-    (skipAuth0Validation || authSkipEnabled
-      ? 'https://example.com'
-      : undefined),
+    (skipAuth0Validation || useStubAuth ? 'https://example.com' : undefined),
 };
 
 if (
   !skipAuth0Validation &&
-  !authSkipEnabled &&
+  !useStubAuth &&
   (!auth0Config.clientId || !auth0Config.clientSecret || !auth0Config.issuer)
 ) {
   throw new Error(
