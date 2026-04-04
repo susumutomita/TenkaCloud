@@ -22,7 +22,7 @@ export function Header() {
   const isLoading = status === 'loading';
 
   return (
-    <header className="bg-surface-1 border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
+    <header className="bg-surface-3 border-b-2 border-hn-accent/40 sticky top-0 z-50 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
