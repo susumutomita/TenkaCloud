@@ -147,13 +147,17 @@ const mockGameController = vi.hoisted(() => ({
 
 vi.mock('../services/participant-service', () => mockParticipantService);
 vi.mock('../services/dashboard-service', () => mockDashboardService);
-vi.mock('../services/game-controller', async () => {
-  const actual = await vi.importActual('../services/game-controller');
-  return {
-    ...actual,
-    getGameStatus: mockGameController.getGameStatus,
-  };
-});
+vi.mock('../services/game-controller', () => ({
+  getGameStatus: mockGameController.getGameStatus,
+  CrossTenantAccessError: class CrossTenantAccessError extends Error {
+    constructor(requestTenantId: string, resourceTenantId: string) {
+      super(
+        `クロステナントアクセスが拒否されました: リクエストテナント=${requestTenantId}, リソーステナント=${resourceTenantId}`
+      );
+      this.name = 'CrossTenantAccessError';
+    }
+  },
+}));
 
 import { participantRoutes } from './participant';
 
@@ -163,6 +167,14 @@ describe('プレーヤー API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = new Hono();
+    app.use('/*', async (c, next) => {
+      c.set('auth' as never, {
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+        roles: ['participant'],
+      });
+      await next();
+    });
     app.route('/', participantRoutes);
   });
 

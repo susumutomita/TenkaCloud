@@ -15,6 +15,14 @@ const mockGameController = vi.hoisted(() => {
       this.name = 'ConcurrentModificationError';
     }
   }
+  class CrossTenantAccessError extends Error {
+    constructor(requestTenantId: string, resourceTenantId: string) {
+      super(
+        `クロステナントアクセスが拒否されました: リクエストテナント=${requestTenantId}, リソーステナント=${resourceTenantId}`
+      );
+      this.name = 'CrossTenantAccessError';
+    }
+  }
   return {
     startGame: vi.fn(),
     stopGame: vi.fn(),
@@ -27,6 +35,7 @@ const mockGameController = vi.hoisted(() => {
     seedAttackCatalog: vi.fn(),
     GameNotFoundError,
     ConcurrentModificationError,
+    CrossTenantAccessError,
   };
 });
 
@@ -613,7 +622,8 @@ describe('管理者 API', () => {
         const body = await res.json();
         expect(body.seeded).toBe(6);
         expect(mockGameController.seedAttackCatalog).toHaveBeenCalledWith(
-          'event-1'
+          'event-1',
+          'tenant-1'
         );
       });
     });

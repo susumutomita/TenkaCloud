@@ -31,7 +31,21 @@ import {
   listAttackLogs,
   seedAttackCatalog,
   GameNotFoundError,
+  CrossTenantAccessError,
 } from './game-controller';
+
+const TENANT_ID = 'tenant-1';
+const OTHER_TENANT_ID = 'tenant-other';
+
+const baseGameState: GameState = {
+  eventId: 'event-1',
+  tenantId: TENANT_ID,
+  isRunning: true,
+  startedAt: '2026-03-09T00:00:00.000Z',
+  scoreWeight: 'normal',
+  blackout: false,
+  durationMinutes: 240,
+};
 
 describe('ゲームコントローラーサービス', () => {
   beforeEach(() => {
@@ -41,23 +55,14 @@ describe('ゲームコントローラーサービス', () => {
   describe('startGame', () => {
     describe('有効なパラメータの場合', () => {
       it('新しいゲームを作成して返すべき', async () => {
-        const expected: GameState = {
-          eventId: 'event-1',
-          tenantId: 'tenant-1',
-          isRunning: true,
-          startedAt: '2026-03-09T00:00:00.000Z',
-          scoreWeight: 'normal',
-          blackout: false,
-          durationMinutes: 240,
-        };
-        mockGamedayRepository.createGameState.mockResolvedValue(expected);
+        mockGamedayRepository.createGameState.mockResolvedValue(baseGameState);
 
-        const result = await startGame('event-1', 'tenant-1', 240);
+        const result = await startGame('event-1', TENANT_ID, 240);
 
-        expect(result).toEqual(expected);
+        expect(result).toEqual(baseGameState);
         expect(mockGamedayRepository.createGameState).toHaveBeenCalledWith({
           eventId: 'event-1',
-          tenantId: 'tenant-1',
+          tenantId: TENANT_ID,
           durationMinutes: 240,
         });
       });
@@ -67,18 +72,11 @@ describe('ゲームコントローラーサービス', () => {
   describe('stopGame', () => {
     describe('ゲームが存在する場合', () => {
       it('ゲームを停止して返すべき', async () => {
-        const expected: GameState = {
-          eventId: 'event-1',
-          tenantId: 'tenant-1',
-          isRunning: false,
-          startedAt: '2026-03-09T00:00:00.000Z',
-          scoreWeight: 'normal',
-          blackout: false,
-          durationMinutes: 240,
-        };
+        const expected: GameState = { ...baseGameState, isRunning: false };
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.stopGame.mockResolvedValue(expected);
 
-        const result = await stopGame('event-1');
+        const result = await stopGame('event-1', TENANT_ID);
 
         expect(result).toEqual(expected);
         expect(mockGamedayRepository.stopGame).toHaveBeenCalledWith('event-1');
@@ -87,14 +85,24 @@ describe('ゲームコントローラーサービス', () => {
 
     describe('ゲームが存在しない場合', () => {
       it('GameNotFoundError を投げるべき', async () => {
-        mockGamedayRepository.stopGame.mockResolvedValue(null);
+        mockGamedayRepository.getGameState.mockResolvedValue(null);
 
-        await expect(stopGame('nonexistent')).rejects.toThrow(
+        await expect(stopGame('nonexistent', TENANT_ID)).rejects.toThrow(
           GameNotFoundError
         );
-        await expect(stopGame('nonexistent')).rejects.toThrow(
+        await expect(stopGame('nonexistent', TENANT_ID)).rejects.toThrow(
           'ゲームが見つかりません'
         );
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          stopGame('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
@@ -102,20 +110,11 @@ describe('ゲームコントローラーサービス', () => {
   describe('getGameStatus', () => {
     describe('ゲームが存在する場合', () => {
       it('ゲーム状態を返すべき', async () => {
-        const expected: GameState = {
-          eventId: 'event-1',
-          tenantId: 'tenant-1',
-          isRunning: true,
-          startedAt: '2026-03-09T00:00:00.000Z',
-          scoreWeight: 'normal',
-          blackout: false,
-          durationMinutes: 240,
-        };
-        mockGamedayRepository.getGameState.mockResolvedValue(expected);
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
 
-        const result = await getGameStatus('event-1');
+        const result = await getGameStatus('event-1', TENANT_ID);
 
-        expect(result).toEqual(expected);
+        expect(result).toEqual(baseGameState);
       });
     });
 
@@ -123,9 +122,19 @@ describe('ゲームコントローラーサービス', () => {
       it('null を返すべき', async () => {
         mockGamedayRepository.getGameState.mockResolvedValue(null);
 
-        const result = await getGameStatus('nonexistent');
+        const result = await getGameStatus('nonexistent', TENANT_ID);
 
         expect(result).toBeNull();
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          getGameStatus('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
@@ -134,17 +143,13 @@ describe('ゲームコントローラーサービス', () => {
     describe('ゲームが存在する場合', () => {
       it('切替後のゲーム状態を返すべき', async () => {
         const expected: GameState = {
-          eventId: 'event-1',
-          tenantId: 'tenant-1',
-          isRunning: true,
-          startedAt: '2026-03-09T00:00:00.000Z',
+          ...baseGameState,
           scoreWeight: 'high',
-          blackout: false,
-          durationMinutes: 240,
         };
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.toggleScoreWeight.mockResolvedValue(expected);
 
-        const result = await toggleScoreWeight('event-1');
+        const result = await toggleScoreWeight('event-1', TENANT_ID);
 
         expect(result).toEqual(expected);
       });
@@ -152,14 +157,21 @@ describe('ゲームコントローラーサービス', () => {
 
     describe('ゲームが存在しない場合', () => {
       it('GameNotFoundError を投げるべき', async () => {
-        mockGamedayRepository.toggleScoreWeight.mockResolvedValue(null);
+        mockGamedayRepository.getGameState.mockResolvedValue(null);
 
-        await expect(toggleScoreWeight('nonexistent')).rejects.toThrow(
-          GameNotFoundError
-        );
-        await expect(toggleScoreWeight('nonexistent')).rejects.toThrow(
-          'ゲームが見つかりません'
-        );
+        await expect(
+          toggleScoreWeight('nonexistent', TENANT_ID)
+        ).rejects.toThrow(GameNotFoundError);
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          toggleScoreWeight('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
@@ -168,17 +180,13 @@ describe('ゲームコントローラーサービス', () => {
     describe('ゲームが存在する場合', () => {
       it('切替後のゲーム状態を返すべき', async () => {
         const expected: GameState = {
-          eventId: 'event-1',
-          tenantId: 'tenant-1',
-          isRunning: true,
-          startedAt: '2026-03-09T00:00:00.000Z',
-          scoreWeight: 'normal',
+          ...baseGameState,
           blackout: true,
-          durationMinutes: 240,
         };
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.toggleBlackout.mockResolvedValue(expected);
 
-        const result = await toggleBlackout('event-1');
+        const result = await toggleBlackout('event-1', TENANT_ID);
 
         expect(result).toEqual(expected);
       });
@@ -186,14 +194,21 @@ describe('ゲームコントローラーサービス', () => {
 
     describe('ゲームが存在しない場合', () => {
       it('GameNotFoundError を投げるべき', async () => {
-        mockGamedayRepository.toggleBlackout.mockResolvedValue(null);
+        mockGamedayRepository.getGameState.mockResolvedValue(null);
 
-        await expect(toggleBlackout('nonexistent')).rejects.toThrow(
-          GameNotFoundError
-        );
-        await expect(toggleBlackout('nonexistent')).rejects.toThrow(
-          'ゲームが見つかりません'
-        );
+        await expect(
+          toggleBlackout('nonexistent', TENANT_ID)
+        ).rejects.toThrow(GameNotFoundError);
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          toggleBlackout('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
@@ -215,12 +230,14 @@ describe('ゲームコントローラーサービス', () => {
           details: '管理者による障害注入: sql-injection',
           createdAt: '2026-03-09T00:00:00.000Z',
         };
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.addAttackLog.mockResolvedValue(expected);
 
         const result = await executeFaultInjection(
           'event-1',
           'team-1',
-          'sql-injection'
+          'sql-injection',
+          TENANT_ID
         );
 
         expect(result).toEqual(expected);
@@ -237,6 +254,16 @@ describe('ゲームコントローラーサービス', () => {
         });
       });
     });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          executeFaultInjection('event-1', 'team-1', 'sql-injection', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
+      });
+    });
   });
 
   describe('listTeams', () => {
@@ -251,11 +278,22 @@ describe('ゲームコントローラーサービス', () => {
             isHealthy: true,
           },
         ];
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.listTeams.mockResolvedValue(expected);
 
-        const result = await listTeams('event-1');
+        const result = await listTeams('event-1', TENANT_ID);
 
         expect(result).toEqual(expected);
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          listTeams('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
@@ -279,11 +317,22 @@ describe('ゲームコントローラーサービス', () => {
             createdAt: '2026-03-09T00:00:00.000Z',
           },
         ];
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.listAttackLogs.mockResolvedValue(expected);
 
-        const result = await listAttackLogs('event-1');
+        const result = await listAttackLogs('event-1', TENANT_ID);
 
         expect(result).toEqual(expected);
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          listAttackLogs('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
@@ -291,11 +340,12 @@ describe('ゲームコントローラーサービス', () => {
   describe('seedAttackCatalog', () => {
     describe('有効なパラメータの場合', () => {
       it('デフォルト攻撃カタログをシードして件数を返すべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
         mockGamedayRepository.seedAttackCatalog.mockResolvedValue(undefined);
 
-        const result = await seedAttackCatalog('event-1');
+        const result = await seedAttackCatalog('event-1', TENANT_ID);
 
-        expect(result).toBe(6);
+        expect(result).toBe(12);
         expect(mockGamedayRepository.seedAttackCatalog).toHaveBeenCalledWith(
           'event-1',
           expect.arrayContaining([
@@ -307,6 +357,16 @@ describe('ゲームコントローラーサービス', () => {
             expect.objectContaining({ slug: 'ha-resilience' }),
           ])
         );
+      });
+    });
+
+    describe('別テナントのゲームにアクセスした場合', () => {
+      it('CrossTenantAccessError を投げるべき', async () => {
+        mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+
+        await expect(
+          seedAttackCatalog('event-1', OTHER_TENANT_ID)
+        ).rejects.toThrow(CrossTenantAccessError);
       });
     });
   });
