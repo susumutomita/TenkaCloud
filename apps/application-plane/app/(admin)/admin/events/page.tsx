@@ -23,8 +23,23 @@ import { useEffect, useState } from 'react';
 import '@cloudscape-design/global-styles/index.css';
 
 import type { AdminEvent, EventStatus } from '@/lib/api/admin-types';
-import { del } from '@/lib/api/client';
+import { del, patch } from '@/lib/api/client';
 import { formatDateTime } from '@/lib/utils';
+
+function getNextStatusAction(
+  status: EventStatus,
+): { label: string; nextStatus: EventStatus } | null {
+  switch (status) {
+    case 'draft':
+      return { label: '\u516c\u958b', nextStatus: 'scheduled' as EventStatus };
+    case 'scheduled':
+      return { label: '\u958b\u59cb', nextStatus: 'active' as EventStatus };
+    case 'active':
+      return { label: '\u7d42\u4e86', nextStatus: 'completed' as EventStatus };
+    default:
+      return null;
+  }
+}
 
 const STATUS_OPTIONS: SelectProps.Option[] = [
   { label: 'すべて', value: '' },
@@ -67,6 +82,9 @@ export default function AdminEventsPage() {
   const [filter, setFilter] = useState<{ status?: EventStatus }>({});
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [transitioningIds, setTransitioningIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const [selectedStatusOption, setSelectedStatusOption] =
     useState<SelectProps.Option>(STATUS_OPTIONS[0]);
@@ -122,6 +140,27 @@ export default function AdminEventsPage() {
       window.alert('イベントの削除に失敗しました。再試行してください。');
     } finally {
       setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(event.id);
+        return next;
+      });
+    }
+  };
+
+  const handleTransition = async (
+    event: AdminEvent,
+    nextStatus: EventStatus,
+  ) => {
+    try {
+      setTransitioningIds((prev) => new Set(prev).add(event.id));
+      await patch(`/admin/events/${event.id}`, { status: nextStatus });
+      setFilter({ ...filter });
+    } catch {
+      window.alert(
+        '\u30b9\u30c6\u30fc\u30bf\u30b9\u306e\u5909\u66f4\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u518d\u8a66\u884c\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+      );
+    } finally {
+      setTransitioningIds((prev) => {
         const next = new Set(prev);
         next.delete(event.id);
         return next;
@@ -234,24 +273,38 @@ export default function AdminEventsPage() {
         },
         {
           id: 'actions',
-          header: 'アクション',
-          cell: (item) => (
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button
-                variant="link"
-                onClick={() => router.push(`/admin/events/${item.id}`)}
-              >
-                編集
-              </Button>
-              <Button
-                variant="link"
-                loading={deletingIds.has(item.id)}
-                onClick={() => handleDelete(item)}
-              >
-                削除
-              </Button>
-            </SpaceBetween>
-          ),
+          header: '\u30a2\u30af\u30b7\u30e7\u30f3',
+          cell: (item) => {
+            const nextAction = getNextStatusAction(item.status);
+            return (
+              <SpaceBetween direction="horizontal" size="xs">
+                {nextAction && (
+                  <Button
+                    variant="link"
+                    loading={transitioningIds.has(item.id)}
+                    onClick={() =>
+                      handleTransition(item, nextAction.nextStatus)
+                    }
+                  >
+                    {nextAction.label}
+                  </Button>
+                )}
+                <Button
+                  variant="link"
+                  onClick={() => router.push(`/admin/events/${item.id}`)}
+                >
+                  {'\u7de8\u96c6'}
+                </Button>
+                <Button
+                  variant="link"
+                  loading={deletingIds.has(item.id)}
+                  onClick={() => handleDelete(item)}
+                >
+                  {'\u524a\u9664'}
+                </Button>
+              </SpaceBetween>
+            );
+          },
         },
       ]}
     />
