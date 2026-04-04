@@ -103,7 +103,9 @@ describe('イベント詳細ページ', () => {
     });
     render(<EventDetailPage />);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /参加登録/ })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /参加登録/ }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -166,7 +168,11 @@ describe('イベント詳細ページ', () => {
         screen.getAllByText('AWS GameDay 2026').length,
       ).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.queryByRole('button', { name: /参加登録/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /チームで登録/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /参加登録/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /チームで登録/ }),
+    ).not.toBeInTheDocument();
   });
 });

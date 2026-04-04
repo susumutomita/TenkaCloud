@@ -4,7 +4,20 @@ import Auth0 from 'next-auth/providers/auth0';
 import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
 
 const getEnv = (key: string) => process.env[key];
-const authSkipEnabled = isAuthSkipEnabled();
+// During `next build`, NEXT_PHASE is set to 'phase-production-build'.
+// If AUTH_SKIP=1 is present in a local .env.local, isAuthSkipEnabled() will
+// throw because NODE_ENV=production, but it is harmless at build time.
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+let authSkipEnabled: boolean;
+try {
+  authSkipEnabled = isAuthSkipEnabled();
+} catch {
+  // Caught only when AUTH_SKIP=1 && NODE_ENV=production (e.g. local build).
+  // Treat as disabled but allow stubs so the build can succeed.
+  authSkipEnabled = false;
+}
+const useStubAuth =
+  authSkipEnabled || (isBuildPhase && process.env.AUTH_SKIP === '1');
 
 /**
  * モックセッション（AUTH_SKIP=1 の場合に使用）
@@ -40,7 +53,7 @@ if (authSkipEnabled && typeof console !== 'undefined') {
 
 // Auth0 設定のバリデーション
 /* v8 ignore start -- Stub config only used when AUTH_SKIP=1 */
-const stubConfig = authSkipEnabled
+const stubConfig = useStubAuth
   ? {
       clientId: 'stub-client-id',
       clientSecret: 'stub-client-secret',
@@ -57,7 +70,7 @@ const auth0Config = {
 
 /* v8 ignore start -- Module-level validation tested in auth.test.ts */
 if (
-  !authSkipEnabled &&
+  !useStubAuth &&
   (!auth0Config.clientId || !auth0Config.clientSecret || !auth0Config.issuer)
 ) {
   throw new Error(
