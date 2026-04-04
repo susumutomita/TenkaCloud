@@ -453,6 +453,17 @@ export interface DeployProblemResponse {
 }
 
 /**
+ * スタックイベント型
+ */
+export interface StackEvent {
+  timestamp: string;
+  logicalResourceId: string;
+  resourceType: string;
+  resourceStatus: string;
+  resourceStatusReason?: string;
+}
+
+/**
  * デプロイステータス型
  */
 export interface DeploymentStatus {
@@ -461,6 +472,7 @@ export interface DeploymentStatus {
   status: string;
   statusReason?: string;
   outputs?: Record<string, string>;
+  events?: StackEvent[];
   lastUpdatedTime?: string;
 }
 
