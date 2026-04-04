@@ -15,7 +15,7 @@ import CloudscapeSpaceBetween from '@cloudscape-design/components/space-between'
 import CloudscapeSpinner from '@cloudscape-design/components/spinner';
 import CloudscapeTable from '@cloudscape-design/components/table';
 import { useEffect, useState } from 'react';
-import { Header } from '../../../components/layout';
+import { PageLayout } from '../../../components/layout';
 import { useI18n } from '../../../lib/i18n';
 import { getEventHistory } from '../../../lib/api/profile';
 import type { ParticipantEventSummary } from '../../../lib/api/types';
@@ -33,75 +33,63 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-surface-0">
-      <Header />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="awsui-dark-mode">
-          <CloudscapeSpaceBetween size="l">
-            <CloudscapeBox>
-              <CloudscapeLink href="/profile">
-                {t('profile.backToProfile')}
-              </CloudscapeLink>
-            </CloudscapeBox>
+    <PageLayout maxWidth="3xl">
+      <CloudscapeSpaceBetween size="l">
+        <CloudscapeBox>
+          <CloudscapeLink href="/profile">
+            {t('profile.backToProfile')}
+          </CloudscapeLink>
+        </CloudscapeBox>
 
-            <CloudscapeHeader variant="h1">
-              {t('profile.history')}
-            </CloudscapeHeader>
+        <CloudscapeHeader variant="h1">{t('profile.history')}</CloudscapeHeader>
 
-            {loading ? (
-              <CloudscapeBox textAlign="center" padding="xl">
-                <CloudscapeSpinner size="large" />
-              </CloudscapeBox>
-            ) : (
-              <CloudscapeContainer>
-                <CloudscapeTable
-                  columnDefinitions={[
-                    {
-                      id: 'event',
-                      header: t('profile.event'),
-                      cell: (e) => e.eventName,
-                    },
-                    {
-                      id: 'date',
-                      header: t('profile.date'),
-                      cell: (e) =>
-                        new Date(e.participatedAt).toLocaleDateString(),
-                    },
-                    {
-                      id: 'rank',
-                      header: t('leaderboard.rank'),
-                      cell: (e) =>
-                        e.finalRank
-                          ? `${e.finalRank} / ${e.totalParticipants}`
-                          : '-',
-                    },
-                    {
-                      id: 'score',
-                      header: t('profile.score'),
-                      cell: (e) => `${e.score.toLocaleString()} pts`,
-                    },
-                  ]}
-                  items={events}
-                  empty={
-                    <CloudscapeBox
-                      textAlign="center"
-                      color="inherit"
-                      padding="m"
-                    >
-                      {t('profile.historyEmpty')}
-                    </CloudscapeBox>
-                  }
-                  header={
-                    <CloudscapeHeader>
-                      {t('profile.history')} ({events.length})
-                    </CloudscapeHeader>
-                  }
-                />
-              </CloudscapeContainer>
-            )}
-          </CloudscapeSpaceBetween>
-        </div>
-      </main>
-    </div>
+        {loading ? (
+          <CloudscapeBox textAlign="center" padding="xl">
+            <CloudscapeSpinner size="large" />
+          </CloudscapeBox>
+        ) : (
+          <CloudscapeContainer>
+            <CloudscapeTable
+              columnDefinitions={[
+                {
+                  id: 'event',
+                  header: t('profile.event'),
+                  cell: (e) => e.eventName,
+                },
+                {
+                  id: 'date',
+                  header: t('profile.date'),
+                  cell: (e) => new Date(e.participatedAt).toLocaleDateString(),
+                },
+                {
+                  id: 'rank',
+                  header: t('leaderboard.rank'),
+                  cell: (e) =>
+                    e.finalRank
+                      ? `${e.finalRank} / ${e.totalParticipants}`
+                      : '-',
+                },
+                {
+                  id: 'score',
+                  header: t('profile.score'),
+                  cell: (e) => `${e.score.toLocaleString()} pts`,
+                },
+              ]}
+              items={events}
+              empty={
+                <CloudscapeBox textAlign="center" color="inherit" padding="m">
+                  {t('profile.historyEmpty')}
+                </CloudscapeBox>
+              }
+              header={
+                <CloudscapeHeader>
+                  {t('profile.history')} ({events.length})
+                </CloudscapeHeader>
+              }
+            />
+          </CloudscapeContainer>
+        )}
+      </CloudscapeSpaceBetween>
+    </PageLayout>
   );
 }
