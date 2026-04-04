@@ -1,7 +1,7 @@
 /**
  * Dashboard Page
  *
- * 参加者ダッシュボード
+ * 参加者ダッシュボード — マイイベント（参加中・登録済み）の個人ビュー
  */
 
 'use client';
@@ -10,85 +10,162 @@ import Badge from '@cloudscape-design/components/badge';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Cards from '@cloudscape-design/components/cards';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
+import Link from '@cloudscape-design/components/link';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import '@cloudscape-design/global-styles/index.css';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Header as AppHeader } from '../../components/layout';
 import { useI18n } from '../../lib/i18n';
-import { getAvailableEvents, getMyEvents } from '../../lib/api/events';
+import { getMyEvents } from '../../lib/api/events';
 import type { ParticipantEvent } from '../../lib/api/types';
 
-function getProblemTypeColor(type: string): 'blue' | 'green' {
-  return type === 'gameday' ? 'blue' : 'green';
-}
-
-function getProblemTypeLabel(type: string) {
-  return type === 'gameday' ? 'GameDay' : 'JAM';
-}
-
-function getStatusType(status: string): 'success' | 'warning' | 'info' {
-  if (status === 'active') return 'success';
-  if (status === 'scheduled') return 'warning';
-  return 'info';
-}
-
-function getStatusLabel(status: string, t: (key: string) => string) {
-  if (status === 'active') return t('dashboard.activeStatus');
-  if (status === 'scheduled') return t('dashboard.scheduledStatus');
-  return status;
+function getStatusIndicator(status: string, t: (k: string) => string) {
+  if (status === 'active')
+    return (
+      <StatusIndicator type="success">
+        {t('dashboard.activeStatus')}
+      </StatusIndicator>
+    );
+  if (status === 'scheduled')
+    return (
+      <StatusIndicator type="pending">
+        {t('dashboard.scheduledStatus')}
+      </StatusIndicator>
+    );
+  return <StatusIndicator type="info">{status}</StatusIndicator>;
 }
 
 export default function DashboardPage() {
   const { t, locale } = useI18n();
+  const router = useRouter();
   const [myEvents, setMyEvents] = useState<ParticipantEvent[]>([]);
-  const [upcomingEvents, setUpcomingEvents] = useState<ParticipantEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const [myEventsRes, upcomingRes] = await Promise.all([
-          getMyEvents(),
-          getAvailableEvents({ status: ['scheduled', 'active'], limit: 5 }),
-        ]);
-        setMyEvents(myEventsRes.events);
-        setUpcomingEvents(
-          upcomingRes.events.filter(
-            (e) => !myEventsRes.events.some((me) => me.id === e.id),
-          ),
-        );
-        setError(null);
-      } catch (err) {
+    getMyEvents()
+      .then((res) => setMyEvents(res.events))
+      .catch((err) =>
         setError(
           err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
+        ),
+      )
+      .finally(() => setLoading(false));
   }, []);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString(
+      locale === 'ja' ? 'ja-JP' : 'en-US',
+      {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      },
+    );
 
   const activeEvents = myEvents.filter((e) => e.status === 'active');
   const scheduledEvents = myEvents.filter((e) => e.status === 'scheduled');
+
+  const cardDefinitionActive = {
+    header: (event: ParticipantEvent) => (
+      <Link
+        href={`/events/${event.id}`}
+        fontSize="heading-m"
+        onFollow={(e) => {
+          e.preventDefault();
+          router.push(`/events/${event.id}`);
+        }}
+      >
+        {event.name}
+      </Link>
+    ),
+    sections: [
+      {
+        id: 'meta',
+        header: t('dashboard.type'),
+        content: (event: ParticipantEvent) => (
+          <SpaceBetween direction="horizontal" size="xs">
+            <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
+              {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+            </Badge>
+            {getStatusIndicator(event.status, t)}
+          </SpaceBetween>
+        ),
+      },
+      {
+        id: 'end',
+        header: t('dashboard.end'),
+        content: (event: ParticipantEvent) => formatDate(event.endTime),
+      },
+      {
+        id: 'stats',
+        header: t('dashboard.status'),
+        content: (event: ParticipantEvent) =>
+          `${t('dashboard.problems')}: ${event.problemCount ?? 0} / ${t('dashboard.participants')}: ${event.participantCount ?? 0}`,
+      },
+      {
+        id: 'rank',
+        header: t('dashboard.rank'),
+        content: (event: ParticipantEvent) =>
+          event.myRank
+            ? `#${event.myRank} / ${event.myScore ?? 0} pts`
+            : t('dashboard.notJoined'),
+      },
+      {
+        id: 'action',
+        content: (event: ParticipantEvent) => (
+          <Button
+            variant="primary"
+            fullWidth
+            onClick={() => router.push(`/events/${event.id}`)}
+          >
+            {t('dashboard.join')}
+          </Button>
+        ),
+      },
+    ],
+  };
+
+  const cardDefinitionScheduled = {
+    header: (event: ParticipantEvent) => (
+      <Link
+        href={`/events/${event.id}`}
+        fontSize="heading-m"
+        onFollow={(e) => {
+          e.preventDefault();
+          router.push(`/events/${event.id}`);
+        }}
+      >
+        {event.name}
+      </Link>
+    ),
+    sections: [
+      {
+        id: 'meta',
+        header: t('dashboard.type'),
+        content: (event: ParticipantEvent) => (
+          <SpaceBetween direction="horizontal" size="xs">
+            <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
+              {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+            </Badge>
+            {getStatusIndicator(event.status, t)}
+          </SpaceBetween>
+        ),
+      },
+      {
+        id: 'start',
+        header: t('dashboard.start'),
+        content: (event: ParticipantEvent) => formatDate(event.startTime),
+      },
+    ],
+  };
 
   return (
     <div className="min-h-screen">
@@ -115,106 +192,81 @@ export default function DashboardPage() {
             </Box>
           ) : (
             <SpaceBetween size="xl">
-              {activeEvents.length > 0 ? (
+              {/* Stats summary */}
+              <ColumnLayout columns={3} variant="text-grid">
+                <Container>
+                  <Box
+                    fontSize="display-l"
+                    fontWeight="bold"
+                    textAlign="center"
+                  >
+                    {activeEvents.length}
+                  </Box>
+                  <Box
+                    color="text-body-secondary"
+                    textAlign="center"
+                    variant="small"
+                  >
+                    {t('dashboard.active')}
+                  </Box>
+                </Container>
+                <Container>
+                  <Box
+                    fontSize="display-l"
+                    fontWeight="bold"
+                    textAlign="center"
+                  >
+                    {scheduledEvents.length}
+                  </Box>
+                  <Box
+                    color="text-body-secondary"
+                    textAlign="center"
+                    variant="small"
+                  >
+                    {t('dashboard.scheduled')}
+                  </Box>
+                </Container>
+                <Container>
+                  <Box
+                    fontSize="display-l"
+                    fontWeight="bold"
+                    textAlign="center"
+                  >
+                    {myEvents.length}
+                  </Box>
+                  <Box
+                    color="text-body-secondary"
+                    textAlign="center"
+                    variant="small"
+                  >
+                    合計
+                  </Box>
+                </Container>
+              </ColumnLayout>
+
+              {/* Active events */}
+              {activeEvents.length > 0 && (
                 <Container
                   header={<Header variant="h2">{t('dashboard.active')}</Header>}
                 >
                   <Cards
-                    cardDefinition={{
-                      header: (event) => (
-                        <Link href={`/events/${event.id}`}>{event.name}</Link>
-                      ),
-                      sections: [
-                        {
-                          id: 'meta',
-                          header: t('dashboard.type'),
-                          content: (event) => (
-                            <SpaceBetween direction="horizontal" size="xs">
-                              <Badge color={getProblemTypeColor(event.type)}>
-                                {getProblemTypeLabel(event.type)}
-                              </Badge>
-                              <StatusIndicator
-                                type={getStatusType(event.status)}
-                              >
-                                {getStatusLabel(event.status, t)}
-                              </StatusIndicator>
-                            </SpaceBetween>
-                          ),
-                        },
-                        {
-                          id: 'schedule',
-                          header: t('dashboard.end'),
-                          content: (event) => formatDate(event.endTime),
-                        },
-                        {
-                          id: 'stats',
-                          header: t('dashboard.status'),
-                          content: (event) =>
-                            `${t('dashboard.problems')}: ${event.problemCount} / ${t('dashboard.participants')}: ${event.participantCount}`,
-                        },
-                        {
-                          id: 'rank',
-                          header: t('dashboard.rank'),
-                          content: (event) =>
-                            event.myRank
-                              ? `#${event.myRank} / ${event.myScore} pts`
-                              : t('dashboard.notJoined'),
-                        },
-                        {
-                          id: 'action',
-                          header: t('gameday.action'),
-                          content: (event) => (
-                            <Link href={`/events/${event.id}`}>
-                              <Button variant="primary" fullWidth>
-                                {t('dashboard.join')}
-                              </Button>
-                            </Link>
-                          ),
-                        },
-                      ],
-                    }}
+                    cardDefinition={cardDefinitionActive}
                     cardsPerRow={[{ cards: 1 }, { minWidth: 480, cards: 2 }]}
                     items={activeEvents}
                     loadingText={t('common.loading')}
                   />
                 </Container>
-              ) : null}
+              )}
 
-              {scheduledEvents.length > 0 ? (
+              {/* Scheduled (registered) events */}
+              {scheduledEvents.length > 0 && (
                 <Container
                   header={
                     <Header variant="h2">{t('dashboard.scheduled')}</Header>
                   }
                 >
                   <Cards
-                    cardDefinition={{
-                      header: (event) => (
-                        <Link href={`/events/${event.id}`}>{event.name}</Link>
-                      ),
-                      sections: [
-                        {
-                          id: 'meta',
-                          header: t('dashboard.type'),
-                          content: (event) => (
-                            <SpaceBetween direction="horizontal" size="xs">
-                              <Badge color={getProblemTypeColor(event.type)}>
-                                {getProblemTypeLabel(event.type)}
-                              </Badge>
-                              <StatusIndicator
-                                type={getStatusType(event.status)}
-                              >
-                                {getStatusLabel(event.status, t)}
-                              </StatusIndicator>
-                            </SpaceBetween>
-                          ),
-                        },
-                        {
-                          id: 'schedule',
-                          header: t('dashboard.start'),
-                          content: (event) => formatDate(event.startTime),
-                        },
-                      ],
-                    }}
+                    cardDefinition={cardDefinitionScheduled}
                     cardsPerRow={[
                       { cards: 1 },
                       { minWidth: 320, cards: 2 },
@@ -224,93 +276,28 @@ export default function DashboardPage() {
                     loadingText={t('common.loading')}
                   />
                 </Container>
-              ) : null}
+              )}
 
-              {upcomingEvents.length > 0 ? (
-                <Container
-                  header={
-                    <Header
-                      variant="h2"
-                      actions={
-                        <Link href="/events">
-                          <Button variant="link">
-                            {t('dashboard.viewAll')}
-                          </Button>
-                        </Link>
-                      }
-                    >
-                      {t('dashboard.upcoming')}
-                    </Header>
-                  }
-                >
-                  <Cards
-                    cardDefinition={{
-                      header: (event) => (
-                        <Link href={`/events/${event.id}`}>{event.name}</Link>
-                      ),
-                      sections: [
-                        {
-                          id: 'meta',
-                          header: t('dashboard.type'),
-                          content: (event) => (
-                            <SpaceBetween direction="horizontal" size="xs">
-                              <Badge color={getProblemTypeColor(event.type)}>
-                                {getProblemTypeLabel(event.type)}
-                              </Badge>
-                              <Box color="text-body-secondary">
-                                {event.participantCount}{' '}
-                                {t('dashboard.registeredCount')}
-                              </Box>
-                            </SpaceBetween>
-                          ),
-                        },
-                        {
-                          id: 'schedule',
-                          header: t('dashboard.start'),
-                          content: (event) => formatDate(event.startTime),
-                        },
-                        {
-                          id: 'action',
-                          header: t('gameday.action'),
-                          content: (event) => (
-                            <Link href={`/events/${event.id}`}>
-                              <Button variant="normal" fullWidth>
-                                {t('dashboard.details')}
-                              </Button>
-                            </Link>
-                          ),
-                        },
-                      ],
-                    }}
-                    cardsPerRow={[
-                      { cards: 1 },
-                      { minWidth: 320, cards: 2 },
-                      { minWidth: 960, cards: 3 },
-                    ]}
-                    items={upcomingEvents}
-                    loadingText={t('common.loading')}
-                  />
-                </Container>
-              ) : null}
-
-              {myEvents.length === 0 && upcomingEvents.length === 0 ? (
+              {/* No events CTA */}
+              {myEvents.length === 0 && (
                 <Container>
                   <Box textAlign="center" padding="xxl">
                     <SpaceBetween size="m">
                       <Box fontSize="display-l">🏆</Box>
-                      <Header variant="h2">{t('dashboard.noEvents')}</Header>
+                      <Header variant="h2">{t('dashboard.noMyEvents')}</Header>
                       <Box color="text-body-secondary">
                         {t('dashboard.noEventsDescription')}
                       </Box>
-                      <Link href="/events">
-                        <Button variant="primary">
-                          {t('dashboard.eventsList')}
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="primary"
+                        onClick={() => router.push('/events')}
+                      >
+                        {t('dashboard.browseEvents')}
+                      </Button>
                     </SpaceBetween>
                   </Box>
                 </Container>
-              ) : null}
+              )}
             </SpaceBetween>
           )}
         </SpaceBetween>
