@@ -841,4 +841,41 @@ export class EventRepository {
 
     return result.Item !== undefined;
   }
+
+  async unregisterParticipant(
+    eventId: string,
+    userId: string
+  ): Promise<void> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    await client.send(
+      new DeleteCommand({
+        TableName: tableName,
+        Key: {
+          PK: buildEventPK(eventId),
+          SK: buildParticipantSK(userId),
+        },
+      })
+    );
+  }
+
+  async getParticipantCount(eventId: string): Promise<number> {
+    const client = getDocClient();
+    const tableName = getTableName();
+
+    const result = await client.send(
+      new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': buildEventPK(eventId),
+          ':skPrefix': 'PARTICIPANT#',
+        },
+        Select: 'COUNT',
+      })
+    );
+
+    return result.Count ?? 0;
+  }
 }

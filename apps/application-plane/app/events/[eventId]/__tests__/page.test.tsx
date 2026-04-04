@@ -93,4 +93,80 @@ describe('イベント詳細ページ', () => {
     render(<EventDetailPage />);
     expect(screen.queryByText('AWS GameDay 2026')).not.toBeInTheDocument();
   });
+
+  it('未登録の場合は参加登録ボタンが表示されるべき', async () => {
+    mockGetEventDetails.mockResolvedValue({
+      ...baseEvent,
+      status: 'scheduled',
+      isRegistered: false,
+      participantType: 'individual',
+    });
+    render(<EventDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('参加登録')).toBeInTheDocument();
+    });
+  });
+
+  it('登録済みの場合は登録済みバッジが表示されるべき', async () => {
+    mockGetEventDetails.mockResolvedValue({
+      ...baseEvent,
+      isRegistered: true,
+    });
+    render(<EventDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('登録済み')).toBeInTheDocument();
+    });
+  });
+
+  it('チームイベントではチームで登録ボタンが表示されるべき', async () => {
+    mockGetEventDetails.mockResolvedValue({
+      ...baseEvent,
+      status: 'scheduled',
+      isRegistered: false,
+      participantType: 'team',
+    });
+    render(<EventDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('チームで登録')).toBeInTheDocument();
+    });
+  });
+
+  it('参加者数が表示されるべき', async () => {
+    mockGetEventDetails.mockResolvedValue({
+      ...baseEvent,
+      participantCount: 10,
+    });
+    render(<EventDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('10人')).toBeInTheDocument();
+    });
+  });
+
+  it('登録済みかつアクティブイベントではバトルに参加ボタンが表示されるべき', async () => {
+    mockGetEventDetails.mockResolvedValue({
+      ...baseEvent,
+      status: 'active',
+      isRegistered: true,
+    });
+    render(<EventDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('バトルに参加')).toBeInTheDocument();
+    });
+  });
+
+  it('完了済みイベントでは参加登録ボタンが表示されないべき', async () => {
+    mockGetEventDetails.mockResolvedValue({
+      ...baseEvent,
+      status: 'completed',
+      isRegistered: false,
+    });
+    render(<EventDetailPage />);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText('AWS GameDay 2026').length,
+      ).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByText('参加登録')).not.toBeInTheDocument();
+    expect(screen.queryByText('チームで登録')).not.toBeInTheDocument();
+  });
 });

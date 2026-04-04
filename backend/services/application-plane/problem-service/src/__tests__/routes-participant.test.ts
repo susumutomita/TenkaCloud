@@ -22,6 +22,8 @@ const {
     count: vi.fn().mockResolvedValue(0),
     isParticipantRegistered: vi.fn().mockResolvedValue(false),
     registerParticipant: vi.fn().mockResolvedValue(undefined),
+    unregisterParticipant: vi.fn().mockResolvedValue(undefined),
+    getParticipantCount: vi.fn().mockResolvedValue(0),
   },
   mockPrisma: {
     challenge: {
@@ -346,6 +348,76 @@ describe('Participant Routes', () => {
         }
       );
       expect(res.status).toBe(200);
+    });
+
+    it('登録解除時にリポジトリの unregisterParticipant が呼ばれるべき', async () => {
+      mockEventRepository.findById.mockResolvedValue({
+        id: 'event-1',
+        tenantId: 'tenant-1',
+        status: 'scheduled',
+      });
+
+      await app.request('/api/participant/events/event-1/unregister', {
+        method: 'POST',
+      });
+      expect(mockEventRepository.unregisterParticipant).toHaveBeenCalledWith(
+        'event-1',
+        'user-1'
+      );
+    });
+  });
+
+  describe('participantCount の取得', () => {
+    beforeEach(() => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', roles: ['competitor'] },
+      });
+      vi.mocked(hasRole).mockReturnValue(true);
+    });
+
+    it('イベント詳細で実際の参加者数を返すべき', async () => {
+      vi.mocked(getEventWithProblems).mockResolvedValue({
+        event: {
+          id: 'event-1',
+          tenantId: 'tenant-1',
+          name: 'Test Event',
+          type: 'JAM',
+          status: 'ACTIVE',
+          startTime: new Date('2025-01-01'),
+          endTime: new Date('2025-01-02'),
+          timezone: 'Asia/Tokyo',
+          participantType: 'TEAM',
+          cloudProvider: 'AWS',
+          regions: ['ap-northeast-1'],
+          scoringType: 'REALTIME',
+          leaderboardVisible: true,
+        },
+        problems: [],
+      });
+      mockEventRepository.getParticipantCount.mockResolvedValue(42);
+      mockEventRepository.isParticipantRegistered.mockResolvedValue(true);
+
+      const res = await app.request('/api/participant/events/event-1');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.participantCount).toBe(42);
+      expect(body.isRegistered).toBe(true);
+    });
+
+    it('イベント一覧で実際の参加者数を返すべき', async () => {
+      mockEventRepository.findByTenant.mockResolvedValue([
+        { id: 'event-1', tenantId: 'tenant-1' },
+      ]);
+      mockEventRepository.count.mockResolvedValue(1);
+      mockEventRepository.getParticipantCount.mockResolvedValue(5);
+      mockEventRepository.isParticipantRegistered.mockResolvedValue(true);
+
+      const res = await app.request('/api/participant/events');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.events[0].participantCount).toBe(5);
+      expect(body.events[0].isRegistered).toBe(true);
     });
   });
 

@@ -122,4 +122,26 @@ describe('イベント一覧ページ', () => {
       expect(screen.getByText('No events found')).toBeInTheDocument();
     });
   });
+
+  it('登録済みイベントでは登録済みバッジが表示されるべき', async () => {
+    mockGetAvailableEvents.mockResolvedValue({
+      events: [{ ...sampleEvent, isRegistered: true }],
+      total: 1,
+    });
+    render(<EventsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Registered')).toBeInTheDocument();
+    });
+  });
+
+  it('参加者数がカードに表示されるべき', async () => {
+    mockGetAvailableEvents.mockResolvedValue({
+      events: [{ ...sampleEvent, participantCount: 42 }],
+      total: 1,
+    });
+    render(<EventsPage />);
+    await waitFor(() => {
+      expect(screen.getByText('42')).toBeInTheDocument();
+    });
+  });
 });
