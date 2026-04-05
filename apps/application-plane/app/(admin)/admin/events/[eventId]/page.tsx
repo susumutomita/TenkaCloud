@@ -250,6 +250,44 @@ export default function AdminEventDetailPage() {
         )}
       </Container>
 
+      {/* GameDay Quick Actions (only for gameday events) */}
+      {event.type === 'gameday' && (
+        <Container header={<Header variant="h2">GameDay 管理</Header>}>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              variant="primary"
+              onClick={() => router.push(`/admin/gameday/${eventId}`)}
+            >
+              ゲーム制御パネル
+            </Button>
+            <Button
+              onClick={() => router.push(`/admin/events/${eventId}/attacks`)}
+            >
+              攻撃カタログ
+            </Button>
+            <Button
+              onClick={() => router.push(`/admin/events/${eventId}/problems`)}
+            >
+              問題管理
+            </Button>
+          </SpaceBetween>
+        </Container>
+      )}
+
+      {/* JAM Quick Actions (only for jam events) */}
+      {event.type === 'jam' && (
+        <Container header={<Header variant="h2">JAM 管理</Header>}>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              variant="primary"
+              onClick={() => router.push(`/admin/events/${eventId}/problems`)}
+            >
+              問題管理
+            </Button>
+          </SpaceBetween>
+        </Container>
+      )}
+
       {/* Problems table */}
       <Table
         header={

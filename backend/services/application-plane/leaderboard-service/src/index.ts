@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { createLogger } from './lib/logger';
 import { healthRoutes } from './api/health';
 import { leaderboardRoutes } from './api/leaderboard';
+import { gamedayLeaderboardRoutes } from './api/gameday-leaderboard';
 import { authMiddleware } from './middleware/auth';
 
 const logger = createLogger('leaderboard-service');
@@ -24,6 +25,7 @@ app.use('/api/leaderboards/*', authMiddleware);
 // ルート登録
 app.route('/', healthRoutes);
 app.route('/', leaderboardRoutes);
+app.route('/', gamedayLeaderboardRoutes);
 
 // PORT バリデーション
 const parsePort = (value: string | undefined): number => {
