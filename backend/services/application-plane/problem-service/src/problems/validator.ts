@@ -4,17 +4,17 @@
  * JSON Schema を使用した問題定義のバリデーション
  */
 
-import Ajv, { type ErrorObject } from 'ajv';
-import addFormats from 'ajv-formats';
-import problemSchema from '../schemas/problem.schema.json';
-import eventSchema from '../schemas/event.schema.json';
-import type { Event, Problem } from '../types';
+import Ajv, { type ErrorObject } from "ajv";
+import addFormats from "ajv-formats";
+import problemSchema from "../schemas/problem.schema.json";
+import eventSchema from "../schemas/event.schema.json";
+import type { Event, Problem } from "../types";
 
 // Ajv インスタンスの作成
 const ajv = new Ajv({
-  allErrors: true,
-  verbose: true,
-  strict: false,
+	allErrors: true,
+	verbose: true,
+	strict: false,
 });
 
 // フォーマットバリデーションの追加
@@ -28,18 +28,18 @@ const validateEventSchema = ajv.compile(eventSchema);
  * バリデーションエラー
  */
 export interface ValidationError {
-  path: string;
-  message: string;
-  keyword: string;
-  params?: Record<string, unknown>;
+	path: string;
+	message: string;
+	keyword: string;
+	params?: Record<string, unknown>;
 }
 
 /**
  * バリデーション結果
  */
 export interface ValidationResult {
-  valid: boolean;
-  errors: ValidationError[];
+	valid: boolean;
+	errors: ValidationError[];
 }
 
 /**
@@ -48,26 +48,26 @@ export interface ValidationResult {
  * @returns バリデーション結果
  */
 export function validateProblem(data: unknown): ValidationResult {
-  const valid = validateProblemSchema(data);
+	const valid = validateProblemSchema(data);
 
-  if (valid) {
-    // 追加のビジネスロジックバリデーション
-    const problem = data as unknown as Problem;
-    const businessErrors = validateProblemBusinessRules(problem);
-    if (businessErrors.length > 0) {
-      return {
-        valid: false,
-        errors: businessErrors,
-      };
-    }
+	if (valid) {
+		// 追加のビジネスロジックバリデーション
+		const problem = data as unknown as Problem;
+		const businessErrors = validateProblemBusinessRules(problem);
+		if (businessErrors.length > 0) {
+			return {
+				valid: false,
+				errors: businessErrors,
+			};
+		}
 
-    return { valid: true, errors: [] };
-  }
+		return { valid: true, errors: [] };
+	}
 
-  return {
-    valid: false,
-    errors: formatAjvErrors(validateProblemSchema.errors || []),
-  };
+	return {
+		valid: false,
+		errors: formatAjvErrors(validateProblemSchema.errors || []),
+	};
 }
 
 /**
@@ -76,92 +76,92 @@ export function validateProblem(data: unknown): ValidationResult {
  * @returns バリデーション結果
  */
 export function validateEvent(data: unknown): ValidationResult {
-  const valid = validateEventSchema(data);
+	const valid = validateEventSchema(data);
 
-  if (valid) {
-    // 追加のビジネスロジックバリデーション
-    const event = data as unknown as Event;
-    const businessErrors = validateEventBusinessRules(event);
-    if (businessErrors.length > 0) {
-      return {
-        valid: false,
-        errors: businessErrors,
-      };
-    }
+	if (valid) {
+		// 追加のビジネスロジックバリデーション
+		const event = data as unknown as Event;
+		const businessErrors = validateEventBusinessRules(event);
+		if (businessErrors.length > 0) {
+			return {
+				valid: false,
+				errors: businessErrors,
+			};
+		}
 
-    return { valid: true, errors: [] };
-  }
+		return { valid: true, errors: [] };
+	}
 
-  return {
-    valid: false,
-    errors: formatAjvErrors(validateEventSchema.errors || []),
-  };
+	return {
+		valid: false,
+		errors: formatAjvErrors(validateEventSchema.errors || []),
+	};
 }
 
 /**
  * 問題定義のビジネスルールバリデーション
  */
 function validateProblemBusinessRules(problem: Problem): ValidationError[] {
-  const errors: ValidationError[] = [];
+	const errors: ValidationError[] = [];
 
-  // 採点基準の重みが100%になるか確認
-  const totalWeight = problem.scoring.criteria.reduce(
-    (sum, c) => sum + c.weight,
-    0
-  );
-  if (totalWeight !== 100) {
-    errors.push({
-      path: '/scoring/criteria',
-      message: `採点基準の重みの合計は100%である必要があります（現在: ${totalWeight}%）`,
-      keyword: 'weight-sum',
-      params: { totalWeight },
-    });
-  }
+	// 採点基準の重みが100%になるか確認
+	const totalWeight = problem.scoring.criteria.reduce(
+		(sum, c) => sum + c.weight,
+		0,
+	);
+	if (totalWeight !== 100) {
+		errors.push({
+			path: "/scoring/criteria",
+			message: `採点基準の重みの合計は100%である必要があります（現在: ${totalWeight}%）`,
+			keyword: "weight-sum",
+			params: { totalWeight },
+		});
+	}
 
-  // デプロイテンプレートが指定されたプロバイダー分存在するか確認
-  for (const provider of problem.deployment.providers) {
-    if (!problem.deployment.templates[provider]) {
-      errors.push({
-        path: `/deployment/templates/${provider}`,
-        message: `プロバイダー '${provider}' のデプロイテンプレートが定義されていません`,
-        keyword: 'required-template',
-        params: { provider },
-      });
-    }
-  }
+	// デプロイテンプレートが指定されたプロバイダー分存在するか確認
+	for (const provider of problem.deployment.providers) {
+		if (!problem.deployment.templates[provider]) {
+			errors.push({
+				path: `/deployment/templates/${provider}`,
+				message: `プロバイダー '${provider}' のデプロイテンプレートが定義されていません`,
+				keyword: "required-template",
+				params: { provider },
+			});
+		}
+	}
 
-  // リージョンが指定されている場合、対応プロバイダーがあるか確認
-  if (problem.deployment.regions) {
-    for (const provider of Object.keys(problem.deployment.regions)) {
-      if (
-        !problem.deployment.providers.includes(
-          provider as (typeof problem.deployment.providers)[number]
-        )
-      ) {
-        errors.push({
-          path: `/deployment/regions/${provider}`,
-          message: `リージョンが指定されたプロバイダー '${provider}' は providers に含まれていません`,
-          keyword: 'invalid-provider',
-          params: { provider },
-        });
-      }
-    }
-  }
+	// リージョンが指定されている場合、対応プロバイダーがあるか確認
+	if (problem.deployment.regions) {
+		for (const provider of Object.keys(problem.deployment.regions)) {
+			if (
+				!problem.deployment.providers.includes(
+					provider as (typeof problem.deployment.providers)[number],
+				)
+			) {
+				errors.push({
+					path: `/deployment/regions/${provider}`,
+					message: `リージョンが指定されたプロバイダー '${provider}' は providers に含まれていません`,
+					keyword: "invalid-provider",
+					params: { provider },
+				});
+			}
+		}
+	}
 
-  return errors;
+	return errors;
 }
 
 /**
  * ネスト構造のイベントデータ型（JSON Schema 互換）
  */
 interface EventNested {
-  startTime: Date | string;
-  endTime: Date | string;
-  participants?: {
-    type?: string;
-    minTeamSize?: number;
-    maxTeamSize?: number;
-  };
+	startTime: Date | string;
+	endTime: Date | string;
+	participants?: {
+		type?: string;
+		minTeamSize?: number;
+		maxTeamSize?: number;
+	};
 }
 
 /**
@@ -169,59 +169,59 @@ interface EventNested {
  * フラット構造（Admin API）とネスト構造（JSON Schema/YAML）の両方をサポート
  */
 function validateEventBusinessRules(event: Event): ValidationError[] {
-  const errors: ValidationError[] = [];
+	const errors: ValidationError[] = [];
 
-  // ネスト構造の場合に対応
-  const nested = event as unknown as EventNested;
+	// ネスト構造の場合に対応
+	const nested = event as unknown as EventNested;
 
-  // 終了時刻が開始時刻より後であることを確認
-  if (event.endTime <= event.startTime) {
-    errors.push({
-      path: '/endTime',
-      message: '終了時刻は開始時刻より後である必要があります',
-      keyword: 'date-range',
-    });
-  }
+	// 終了時刻が開始時刻より後であることを確認
+	if (event.endTime <= event.startTime) {
+		errors.push({
+			path: "/endTime",
+			message: "終了時刻は開始時刻より後である必要があります",
+			keyword: "date-range",
+		});
+	}
 
-  // 参加者タイプを取得（フラット/ネスト両対応）
-  const participantType = event.participantType ?? nested.participants?.type;
-  const minTeamSize = event.minTeamSize ?? nested.participants?.minTeamSize;
-  const maxTeamSize = event.maxTeamSize ?? nested.participants?.maxTeamSize;
+	// 参加者タイプを取得（フラット/ネスト両対応）
+	const participantType = event.participantType ?? nested.participants?.type;
+	const minTeamSize = event.minTeamSize ?? nested.participants?.minTeamSize;
+	const maxTeamSize = event.maxTeamSize ?? nested.participants?.maxTeamSize;
 
-  // チーム参加の場合、チームサイズの設定を確認
-  if (participantType === 'team') {
-    if (!minTeamSize || !maxTeamSize) {
-      errors.push({
-        path: '/participantType',
-        message:
-          'チーム参加の場合、minTeamSize と maxTeamSize の設定が必要です',
-        keyword: 'team-size-required',
-      });
-    } else if (minTeamSize > maxTeamSize) {
-      errors.push({
-        path: '/minTeamSize',
-        message: 'minTeamSize は maxTeamSize 以下である必要があります',
-        keyword: 'team-size-range',
-      });
-    }
-  }
+	// チーム参加の場合、チームサイズの設定を確認
+	if (participantType === "team") {
+		if (!minTeamSize || !maxTeamSize) {
+			errors.push({
+				path: "/participantType",
+				message:
+					"チーム参加の場合、minTeamSize と maxTeamSize の設定が必要です",
+				keyword: "team-size-required",
+			});
+		} else if (minTeamSize > maxTeamSize) {
+			errors.push({
+				path: "/minTeamSize",
+				message: "minTeamSize は maxTeamSize 以下である必要があります",
+				keyword: "team-size-range",
+			});
+		}
+	}
 
-  // 注意: 問題の順序バリデーションは EventProblem 関連テーブルで管理するため、
-  // ここでは基本的なイベント情報のバリデーションのみを行う
+	// 注意: 問題の順序バリデーションは EventProblem 関連テーブルで管理するため、
+	// ここでは基本的なイベント情報のバリデーションのみを行う
 
-  return errors;
+	return errors;
 }
 
 /**
  * Ajv エラーを ValidationError 形式に変換
  */
 function formatAjvErrors(errors: ErrorObject[]): ValidationError[] {
-  return errors.map((error) => ({
-    path: error.instancePath || '/',
-    message: error.message || 'Unknown error',
-    keyword: error.keyword,
-    params: error.params as Record<string, unknown>,
-  }));
+	return errors.map((error) => ({
+		path: error.instancePath || "/",
+		message: error.message || "Unknown error",
+		keyword: error.keyword,
+		params: error.params as Record<string, unknown>,
+	}));
 }
 
 /**
@@ -230,33 +230,33 @@ function formatAjvErrors(errors: ErrorObject[]): ValidationError[] {
  * @returns バリデーション結果と解析されたデータ
  */
 export async function parseAndValidateProblemYaml(yaml: string): Promise<{
-  result: ValidationResult;
-  data?: Problem;
+	result: ValidationResult;
+	data?: Problem;
 }> {
-  try {
-    // 動的インポートで yaml パーサーを読み込み
-    const { parse } = await import('yaml');
-    const data = parse(yaml);
+	try {
+		// 動的インポートで yaml パーサーを読み込み
+		const { parse } = await import("yaml");
+		const data = parse(yaml);
 
-    const result = validateProblem(data);
-    return {
-      result,
-      data: result.valid ? (data as Problem) : undefined,
-    };
-  } catch (error) {
-    return {
-      result: {
-        valid: false,
-        errors: [
-          {
-            path: '/',
-            message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
-            keyword: 'parse-error',
-          },
-        ],
-      },
-    };
-  }
+		const result = validateProblem(data);
+		return {
+			result,
+			data: result.valid ? (data as Problem) : undefined,
+		};
+	} catch (error) {
+		return {
+			result: {
+				valid: false,
+				errors: [
+					{
+						path: "/",
+						message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
+						keyword: "parse-error",
+					},
+				],
+			},
+		};
+	}
 }
 
 /**
@@ -265,30 +265,30 @@ export async function parseAndValidateProblemYaml(yaml: string): Promise<{
  * @returns バリデーション結果と解析されたデータ
  */
 export async function parseAndValidateEventYaml(yaml: string): Promise<{
-  result: ValidationResult;
-  data?: Event;
+	result: ValidationResult;
+	data?: Event;
 }> {
-  try {
-    const { parse } = await import('yaml');
-    const data = parse(yaml);
+	try {
+		const { parse } = await import("yaml");
+		const data = parse(yaml);
 
-    const result = validateEvent(data);
-    return {
-      result,
-      data: result.valid ? (data as Event) : undefined,
-    };
-  } catch (error) {
-    return {
-      result: {
-        valid: false,
-        errors: [
-          {
-            path: '/',
-            message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
-            keyword: 'parse-error',
-          },
-        ],
-      },
-    };
-  }
+		const result = validateEvent(data);
+		return {
+			result,
+			data: result.valid ? (data as Event) : undefined,
+		};
+	} catch (error) {
+		return {
+			result: {
+				valid: false,
+				errors: [
+					{
+						path: "/",
+						message: `YAML パースエラー: ${error instanceof Error ? error.message : String(error)}`,
+						keyword: "parse-error",
+					},
+				],
+			},
+		};
+	}
 }
