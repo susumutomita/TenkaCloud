@@ -2,4 +2,4 @@
  * Events Module - Barrel Export
  */
 
-export * from './repository';
+export * from "./repository";

@@ -4,10 +4,10 @@
  * Hono + Bun で起動
  */
 
-import { serve } from 'bun';
-import { app } from './routes';
+import { serve } from "bun";
+import { app } from "./routes";
 
-const port = parseInt(process.env.PORT || '3100');
+const port = parseInt(process.env.PORT || "3100");
 
 console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -22,14 +22,14 @@ console.log(`
 ║    - Health:          http://localhost:${port}/health           ║
 ║                                                              ║
 ║  Environment:                                                ║
-║    - NODE_ENV: ${process.env.NODE_ENV || 'development'}                             ║
-║    - AUTH_SKIP: ${process.env.AUTH_SKIP || '0'}                                      ║
+║    - NODE_ENV: ${process.env.NODE_ENV || "development"}                             ║
+║    - AUTH_SKIP: ${process.env.AUTH_SKIP || "0"}                                      ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
 
 serve({
-  fetch: app.fetch,
-  port,
+	fetch: app.fetch,
+	port,
 });
 
 console.log(`🚀 Server is running on http://localhost:${port}`);
