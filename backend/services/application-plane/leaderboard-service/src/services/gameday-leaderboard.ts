@@ -1,89 +1,92 @@
-/**
- * GameDay Leaderboard Service
- *
- * gameday-service の /dashboard/leaderboard からスコアを取得してリーダーボード形式に変換
- * ADR-003: Option A — GameDay のスコアを直接読み取る
- */
-
-import { createLogger } from '../lib/logger';
-
-const logger = createLogger('gameday-leaderboard');
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { getDocClient, getTableName } from "@tenkacloud/dynamodb";
 
 export interface GameDayLeaderboardEntry {
-  rank: number;
-  teamId: string;
-  teamName: string;
-  score: number;
-  attacksLaunched: number;
-  attacksReceived: number;
-  vulnerabilitiesFixed: number;
+	rank: number;
+	teamId: string;
+	teamName: string;
+	score: number;
 }
 
 export interface GameDayLeaderboardResult {
-  eventId: string;
-  frozen: boolean;
-  entries: GameDayLeaderboardEntry[];
-  updatedAt: Date;
+	eventId: string;
+	entries: GameDayLeaderboardEntry[];
 }
 
-const GAMEDAY_API_URL =
-  process.env.GAMEDAY_API_URL || 'http://localhost:3020/api/gameday';
+interface TeamStateItem {
+	PK: string;
+	SK: string;
+	EntityType: string;
+	eventId: string;
+	teamId: string;
+	teamName: string;
+	score: number;
+}
 
-/**
- * GameDay サービスからリーダーボードを取得
- */
+export interface GameDayLeaderboardRepository {
+	listTeams(eventId: string): Promise<TeamStateItem[]>;
+}
+
+export class DynamoDBGameDayLeaderboardRepository
+	implements GameDayLeaderboardRepository
+{
+	async listTeams(eventId: string): Promise<TeamStateItem[]> {
+		const client = getDocClient();
+		const tableName = getTableName();
+		const allItems: TeamStateItem[] = [];
+		let exclusiveStartKey: Record<string, unknown> | undefined;
+
+		do {
+			const result = await client.send(
+				new QueryCommand({
+					TableName: tableName,
+					KeyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
+					ExpressionAttributeValues: {
+						":pk": `GAMEDAY#${eventId}`,
+						":skPrefix": "TEAM#",
+					},
+					ExclusiveStartKey: exclusiveStartKey,
+				}),
+			);
+
+			for (const item of result.Items ?? []) {
+				const sk = item.SK as string;
+				if (sk.startsWith("TEAM#") && !sk.includes("#", 5)) {
+					allItems.push(item as TeamStateItem);
+				}
+			}
+
+			exclusiveStartKey = result.LastEvaluatedKey as
+				| Record<string, unknown>
+				| undefined;
+		} while (exclusiveStartKey);
+
+		return allItems;
+	}
+}
+
+export function buildGameDayLeaderboard(
+	teams: TeamStateItem[],
+): GameDayLeaderboardEntry[] {
+	const sorted = [...teams].sort((a, b) => b.score - a.score);
+
+	return sorted.map((t, index) => ({
+		rank: index + 1,
+		teamId: t.teamId,
+		teamName: t.teamName,
+		score: t.score,
+	}));
+}
+
 export async function getGameDayLeaderboard(
-  eventId: string,
-  token?: string,
-): Promise<GameDayLeaderboardResult | null> {
-  try {
-    const url = `${GAMEDAY_API_URL}/dashboard/leaderboard?eventId=${encodeURIComponent(eventId)}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+	eventId: string,
+	repository: GameDayLeaderboardRepository,
+): Promise<GameDayLeaderboardResult> {
+	const teams = await repository.listTeams(eventId);
+	const entries = buildGameDayLeaderboard(teams);
 
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      throw new Error(`GameDay API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const leaderboard = data.leaderboard ?? [];
-
-    return {
-      eventId,
-      frozen: false,
-      entries: leaderboard.map(
-        (
-          entry: {
-            teamId: string;
-            teamName: string;
-            score: number;
-            rank: number;
-            attacksLaunched?: number;
-            attacksReceived?: number;
-            vulnerabilitiesFixed?: number;
-          },
-          index: number,
-        ) => ({
-          rank: entry.rank ?? index + 1,
-          teamId: entry.teamId,
-          teamName: entry.teamName,
-          score: entry.score,
-          attacksLaunched: entry.attacksLaunched ?? 0,
-          attacksReceived: entry.attacksReceived ?? 0,
-          vulnerabilitiesFixed: entry.vulnerabilitiesFixed ?? 0,
-        }),
-      ),
-      updatedAt: new Date(),
-    };
-  } catch (error) {
-    logger.error({ error, eventId }, 'GameDay リーダーボードの取得に失敗');
-    return null;
-  }
+	return {
+		eventId,
+		entries,
+	};
 }

@@ -58,7 +58,11 @@ import type {
 	CloudProvider,
 	CloudCredentials,
 } from "../types";
-import { initializeGamedayService } from "../lib/gameday-client";
+import {
+	validateTransition,
+	InvalidStatusTransitionError,
+	getValidTransitions,
+} from "../services/event-lifecycle";
 
 const adminRouter = new Hono();
 
@@ -474,19 +478,6 @@ adminRouter.post(
 				}
 			}
 
-			// GameDay タイプの場合、gameday-service を自動初期化
-			if (data.type === "gameday") {
-				const gamedayResult = await initializeGamedayService({
-					eventId: event.id,
-					tenantId,
-				});
-				if (!gamedayResult.success) {
-					console.warn(
-						`GameDay サービスの初期化に失敗しましたが、イベント作成は成功しました: ${gamedayResult.error}`,
-					);
-				}
-			}
-
 			return c.json(event, 201);
 		} catch (error) {
 			console.error("Failed to create event:", error);
@@ -572,12 +563,34 @@ adminRouter.patch(
 	),
 	async (c) => {
 		const eventId = c.req.param("eventId");
-		const { status } = c.req.valid("json");
+		const { status: targetStatus } = c.req.valid("json");
 
 		try {
-			await eventRepository.updateStatus(eventId, status);
-			return c.json({ success: true, status });
+			const event = await eventRepository.findById(eventId);
+			if (!event) {
+				return c.json({ error: "Event not found" }, 404);
+			}
+
+			validateTransition(event.status, targetStatus);
+
+			await eventRepository.updateStatus(eventId, targetStatus);
+			return c.json({
+				success: true,
+				status: targetStatus,
+				validTransitions: getValidTransitions(targetStatus),
+			});
 		} catch (error) {
+			if (error instanceof InvalidStatusTransitionError) {
+				return c.json(
+					{
+						error: error.message,
+						currentStatus: error.currentStatus,
+						targetStatus: error.targetStatus,
+						validTransitions: getValidTransitions(error.currentStatus),
+					},
+					400,
+				);
+			}
 			console.error("Failed to update event status:", error);
 			return c.json({ error: "Failed to update event status" }, 500);
 		}

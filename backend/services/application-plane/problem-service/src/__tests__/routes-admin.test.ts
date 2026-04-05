@@ -7,10 +7,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 
-const mockInitializeGamedayService = vi.hoisted(() =>
-	vi.fn().mockResolvedValue({ success: true }),
-);
-
 // vi.hoisted でモックを作成（ホイスティングされても参照可能）
 const {
 	mockEventRepository,
@@ -22,6 +18,7 @@ const {
 	mockEventRepository: {
 		findByTenant: vi.fn().mockResolvedValue([]),
 		findAll: vi.fn().mockResolvedValue([]),
+		findById: vi.fn().mockResolvedValue(null),
 		count: vi.fn().mockResolvedValue(0),
 		create: vi.fn().mockResolvedValue({ id: "event-1", name: "Test Event" }),
 		update: vi.fn().mockResolvedValue({ id: "event-1", name: "Updated Event" }),
@@ -114,6 +111,7 @@ vi.mock("../repositories", () => ({
 	PrismaEventRepository: class {
 		findByTenant = mockEventRepository.findByTenant;
 		findAll = mockEventRepository.findAll;
+		findById = mockEventRepository.findById;
 		count = mockEventRepository.count;
 		create = mockEventRepository.create;
 		update = mockEventRepository.update;
@@ -178,10 +176,6 @@ vi.mock("../jam/eventlog", () => ({
 
 vi.mock("../providers/aws", () => ({
 	getAWSProvider: () => mockAWSProvider,
-}));
-
-vi.mock("../lib/gameday-client", () => ({
-	initializeGamedayService: mockInitializeGamedayService,
 }));
 
 import { authenticateRequest, hasRole } from "../auth";
@@ -595,90 +589,6 @@ describe("Admin Routes", () => {
 			});
 			expect(res.status).toBe(500);
 		});
-
-		it("gameday タイプのイベント作成時に gameday-service を初期化すべき", async () => {
-			mockEventRepository.create.mockResolvedValueOnce({
-				id: "event-gd-1",
-				name: "GameDay Event",
-				type: "gameday",
-			});
-
-			const res = await app.request("/api/admin/events", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					name: "GameDay Event",
-					type: "gameday",
-					startTime: "2025-01-01T00:00:00Z",
-					endTime: "2025-01-02T00:00:00Z",
-					participantType: "team",
-					maxParticipants: 100,
-					cloudProvider: "aws",
-					regions: ["ap-northeast-1"],
-					scoringType: "realtime",
-					scoringIntervalMinutes: 5,
-				}),
-			});
-			expect(res.status).toBe(201);
-			expect(mockInitializeGamedayService).toHaveBeenCalledWith({
-				eventId: "event-gd-1",
-				tenantId: "tenant-1",
-			});
-		});
-
-		it("jam タイプのイベント作成時に gameday-service を呼び出さないべき", async () => {
-			const res = await app.request("/api/admin/events", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					name: "JAM Event",
-					type: "jam",
-					startTime: "2025-01-01T00:00:00Z",
-					endTime: "2025-01-02T00:00:00Z",
-					participantType: "team",
-					maxParticipants: 100,
-					cloudProvider: "aws",
-					regions: ["ap-northeast-1"],
-					scoringType: "realtime",
-					scoringIntervalMinutes: 5,
-				}),
-			});
-			expect(res.status).toBe(201);
-			expect(mockInitializeGamedayService).not.toHaveBeenCalled();
-		});
-
-		it("gameday-service の初期化失敗時もイベント作成は成功すべき", async () => {
-			mockEventRepository.create.mockResolvedValueOnce({
-				id: "event-gd-2",
-				name: "GameDay Event",
-				type: "gameday",
-			});
-			mockInitializeGamedayService.mockResolvedValueOnce({
-				success: false,
-				error: "Connection refused",
-			});
-
-			const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-			const res = await app.request("/api/admin/events", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					name: "GameDay Event",
-					type: "gameday",
-					startTime: "2025-01-01T00:00:00Z",
-					endTime: "2025-01-02T00:00:00Z",
-					participantType: "team",
-					maxParticipants: 100,
-					cloudProvider: "aws",
-					regions: ["ap-northeast-1"],
-					scoringType: "realtime",
-					scoringIntervalMinutes: 5,
-				}),
-			});
-			expect(res.status).toBe(201);
-			expect(mockInitializeGamedayService).toHaveBeenCalled();
-			consoleSpy.mockRestore();
-		});
 	});
 
 	describe("PUT /events/:eventId", () => {
@@ -752,23 +662,105 @@ describe("Admin Routes", () => {
 			setupAdminAuth();
 		});
 
-		it("イベントステータスを更新できるべき", async () => {
+		it("有効な遷移でイベントステータスを更新でき���べき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				status: "scheduled",
+			});
 			const res = await app.request("/api/admin/events/event-1/status", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ status: "active" }),
 			});
 			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.success).toBe(true);
+			expect(body.status).toBe("active");
+			expect(body.validTransitions).toEqual(["paused", "completed"]);
+		});
+
+		it("イベントが見つからない場合は 404 を返すべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce(null);
+			const res = await app.request("/api/admin/events/event-1/status", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "active" }),
+			});
+			expect(res.status).toBe(404);
+		});
+
+		it("無効なステータス遷移の場合は 400 を返すべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				status: "draft",
+			});
+			const res = await app.request("/api/admin/events/event-1/status", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "active" }),
+			});
+			expect(res.status).toBe(400);
+			const body = await res.json();
+			expect(body.currentStatus).toBe("draft");
+			expect(body.targetStatus).toBe("active");
+			expect(body.validTransitions).toEqual(["scheduled"]);
+		});
+
+		it("draft から scheduled への遷移を許可するべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				status: "draft",
+			});
+			const res = await app.request("/api/admin/events/event-1/status", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "scheduled" }),
+			});
+			expect(res.status).toBe(200);
+			expect(mockEventRepository.updateStatus).toHaveBeenCalledWith(
+				"event-1",
+				"scheduled",
+			);
+		});
+
+		it("active から completed への遷移を許可するべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				status: "active",
+			});
+			const res = await app.request("/api/admin/events/event-1/status", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "completed" }),
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it("cancelled からの遷移を拒否する��き", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				status: "cancelled",
+			});
+			const res = await app.request("/api/admin/events/event-1/status", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ status: "active" }),
+			});
+			expect(res.status).toBe(400);
 		});
 
 		it("エラー発生時に 500 を返すべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				status: "draft",
+			});
 			mockEventRepository.updateStatus.mockRejectedValueOnce(
 				new Error("Database error"),
 			);
 			const res = await app.request("/api/admin/events/event-1/status", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ status: "active" }),
+				body: JSON.stringify({ status: "scheduled" }),
 			});
 			expect(res.status).toBe(500);
 		});
