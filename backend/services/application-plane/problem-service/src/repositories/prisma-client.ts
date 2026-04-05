@@ -51,3 +51,4 @@ if (process.env.NODE_ENV !== "production" && _prisma) {
  * 利用側で null チェックをスキップする場合は non-null assertion を使用する。
  */
 export const prisma = _prisma as PrismaClient;
+export default prisma;
