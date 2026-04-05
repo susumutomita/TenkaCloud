@@ -4,4 +4,4 @@
  * 採点プロバイダーのエクスポート
  */
 
-export * from './aws-gameday';
+export * from "./aws-gameday";
