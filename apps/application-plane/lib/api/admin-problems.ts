@@ -113,3 +113,38 @@ export async function deleteDeployment(
 export async function getAWSRegions(): Promise<{ regions: AWSRegion[] }> {
   return get<{ regions: AWSRegion[] }>('/admin/aws/regions');
 }
+
+// =============================================================================
+// Event-Problem Association
+// =============================================================================
+
+/**
+ * イベントの問題一覧を取得
+ */
+export async function getEventProblems(
+  eventId: string,
+): Promise<{ problems: AdminProblem[]; total: number }> {
+  return get<{ problems: AdminProblem[]; total: number }>(
+    `/admin/events/${eventId}/problems`,
+  );
+}
+
+/**
+ * イベントに問題を追加
+ */
+export async function addProblemToEvent(
+  eventId: string,
+  problemId: string,
+): Promise<{ eventId: string; problemId: string; addedAt: string }> {
+  return post(`/admin/events/${eventId}/problems`, { problemId });
+}
+
+/**
+ * イベントから問題を削除
+ */
+export async function removeProblemFromEvent(
+  eventId: string,
+  problemId: string,
+): Promise<{ success: boolean }> {
+  return del(`/admin/events/${eventId}/problems/${problemId}`);
+}

@@ -1,7 +1,8 @@
 /**
  * Admin Event Problems API
  *
- * イベントへの問題追加エンドポイント
+ * イベントの問題管理エンドポイント
+ * - GET: イベントの問題一覧取得
  * - POST: イベントに問題を追加
  */
 
@@ -14,6 +15,35 @@ import {
   successResponse,
   serverApiRequest,
 } from '@/lib/api/server';
+
+/**
+ * GET /api/admin/events/[eventId]/problems
+ *
+ * イベントの問題一覧を取得（管理者のみ）
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ eventId: string }> },
+) {
+  const session = await getAdminSession();
+  if (!session) {
+    return session === null
+      ? unauthorizedResponse('Authentication required')
+      : forbiddenResponse('Admin role required');
+  }
+
+  const { eventId } = await params;
+
+  try {
+    const data = await serverApiRequest(`/admin/events/${eventId}/problems`);
+    return successResponse(data);
+  } catch (error) {
+    console.error('Failed to fetch event problems:', error);
+    return badRequestResponse(
+      error instanceof Error ? error.message : 'Failed to fetch event problems',
+    );
+  }
+}
 
 /**
  * イベント問題追加リクエスト型
