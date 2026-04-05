@@ -1,3 +1,4 @@
+import Header from '@cloudscape-design/components/header';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PageLayout } from '../page-layout';
@@ -18,7 +19,7 @@ vi.mock('@/lib/tenant', () => ({
 }));
 
 describe('PageLayout', () => {
-  it('ヘッダーが表示されるべき', () => {
+  it('アプリヘッダー（TenkaCloud）が表示されるべき', () => {
     render(<PageLayout>content</PageLayout>);
     expect(screen.getByText('TenkaCloud')).toBeInTheDocument();
   });
@@ -28,20 +29,52 @@ describe('PageLayout', () => {
     expect(screen.getByText('test content')).toBeInTheDocument();
   });
 
-  it('デフォルトで max-w-7xl が適用されるべき', () => {
-    render(<PageLayout>content</PageLayout>);
-    const main = document.querySelector('main');
-    expect(main?.className).toContain('max-w-7xl');
-  });
-
-  it('maxWidth prop で幅を変更できるべき', () => {
-    render(<PageLayout maxWidth="3xl">content</PageLayout>);
-    const main = document.querySelector('main');
-    expect(main?.className).toContain('max-w-3xl');
-  });
-
   it('awsui-dark-mode ラッパーを含むべき', () => {
     render(<PageLayout>content</PageLayout>);
     expect(document.querySelector('.awsui-dark-mode')).toBeInTheDocument();
+  });
+
+  it('header を渡すと ContentLayout でラップされるべき', () => {
+    render(
+      <PageLayout header={<Header variant="h1">ページタイトル</Header>}>
+        content
+      </PageLayout>,
+    );
+    expect(screen.getByText('ページタイトル')).toBeInTheDocument();
+  });
+
+  it('breadcrumbs を渡すとパンくずリストが表示されるべき', () => {
+    render(
+      <PageLayout
+        breadcrumbs={[
+          { text: 'トップ', href: '/' },
+          { text: 'イベント一覧', href: '/events' },
+          { text: 'イベント詳細' },
+        ]}
+      >
+        content
+      </PageLayout>,
+    );
+    expect(screen.getAllByText('トップ').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('イベント一覧').length).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(screen.getAllByText('イベント詳細').length).toBeGreaterThanOrEqual(
+      1,
+    );
+  });
+
+  it('breadcrumbs なしの場合はパンくずリストが表示されないべき', () => {
+    render(<PageLayout>content</PageLayout>);
+    expect(
+      screen.queryByRole('navigation', { name: 'パンくずリスト' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('maxWidth prop でコンテンツ幅を変更できるべき', () => {
+    const { container } = render(
+      <PageLayout maxWidth="3xl">content</PageLayout>,
+    );
+    expect(container.querySelector('.max-w-3xl')).toBeInTheDocument();
   });
 });

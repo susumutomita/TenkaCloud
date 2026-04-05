@@ -27,7 +27,7 @@ import '@cloudscape-design/global-styles/index.css';
 import NextLink from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Header as AppHeader } from '../../../components/layout';
+import { PageLayout } from '../../../components/layout';
 import {
   getEventDetails,
   getLeaderboard,
@@ -264,36 +264,42 @@ export default function EventDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface-0">
-        <AppHeader />
-        <div className="flex justify-center items-center h-64">
+      <PageLayout
+        breadcrumbs={[
+          { text: 'ホーム', href: '/' },
+          { text: 'イベント', href: '/events' },
+          { text: '読み込み中...' },
+        ]}
+      >
+        <Box textAlign="center" padding="xxl">
           <Spinner size="large" />
-        </div>
-      </div>
+        </Box>
+      </PageLayout>
     );
   }
 
   if (error || !event) {
     return (
-      <div className="min-h-screen bg-surface-0">
-        <AppHeader />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="awsui-dark-mode">
-            <Container>
-              <Box textAlign="center" padding="xl">
-                <SpaceBetween size="m">
-                  <StatusIndicator type="error">
-                    {error || 'イベントが見つかりません'}
-                  </StatusIndicator>
-                  <Button onClick={() => router.push('/events')}>
-                    イベント一覧に戻る
-                  </Button>
-                </SpaceBetween>
-              </Box>
-            </Container>
-          </div>
-        </main>
-      </div>
+      <PageLayout
+        breadcrumbs={[
+          { text: 'ホーム', href: '/' },
+          { text: 'イベント', href: '/events' },
+          { text: 'エラー' },
+        ]}
+      >
+        <Container>
+          <Box textAlign="center" padding="xl">
+            <SpaceBetween size="m">
+              <StatusIndicator type="error">
+                {error || 'イベントが見つかりません'}
+              </StatusIndicator>
+              <Button onClick={() => router.push('/events')}>
+                イベント一覧に戻る
+              </Button>
+            </SpaceBetween>
+          </Box>
+        </Container>
+      </PageLayout>
     );
   }
 
@@ -301,425 +307,389 @@ export default function EventDetailPage() {
   const canParticipate = event.isRegistered && isActive;
 
   return (
-    <div className="min-h-screen bg-surface-0">
-      <AppHeader />
-
-      {/* Registration Modal */}
-      <div className="awsui-dark-mode">
-        <Modal
-          visible={showModal}
-          onDismiss={() => setShowModal(false)}
-          closeAriaLabel="閉じる"
-          header="参加登録"
-          size="medium"
-          footer={
-            <Box float="right">
-              <Button variant="link" onClick={() => setShowModal(false)}>
-                キャンセル
-              </Button>
-            </Box>
+    <PageLayout
+      breadcrumbs={[
+        { text: 'ホーム', href: '/' },
+        { text: 'イベント', href: '/events' },
+        { text: event.name },
+      ]}
+      header={
+        <Header
+          variant="h1"
+          description={
+            <SpaceBetween direction="horizontal" size="xs">
+              {getEventStatusIndicator(event.status)}
+              <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
+                {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+              </Badge>
+              {event.isRegistered && <Badge color="green">登録済み</Badge>}
+            </SpaceBetween>
+          }
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              {!event.isRegistered && event.status !== 'completed' && (
+                <Button
+                  variant="primary"
+                  onClick={handleRegisterClick}
+                  loading={registering}
+                >
+                  {event.participantType === 'team'
+                    ? 'チームで登録'
+                    : '参加登録'}
+                </Button>
+              )}
+              {canParticipate && (
+                <NextLink href={`/gameday/${eventId}`}>
+                  <Button variant="primary">バトルに参加</Button>
+                </NextLink>
+              )}
+            </SpaceBetween>
           }
         >
-          <SpaceBetween size="l">
-            <Box variant="p" color="text-body-secondary">
-              参加方法を選択してください
-            </Box>
+          {event.name}
+        </Header>
+      }
+    >
+      {/* Registration Modal */}
+      <Modal
+        visible={showModal}
+        onDismiss={() => setShowModal(false)}
+        closeAriaLabel="閉じる"
+        header="参加登録フォーム"
+        size="medium"
+        footer={
+          <Box float="right">
+            <Button variant="link" onClick={() => setShowModal(false)}>
+              キャンセル
+            </Button>
+          </Box>
+        }
+      >
+        <SpaceBetween size="l">
+          <Box variant="p" color="text-body-secondary">
+            参加方法を選択してください
+          </Box>
 
-            <Tabs
-              activeTabId={activeTab}
-              onChange={({ detail }) => {
-                setActiveTab(detail.activeTabId);
-                setModalError(null);
-              }}
-              tabs={[
-                {
-                  id: 'solo',
-                  label: '一人で参加',
-                  content: (
-                    <SpaceBetween size="m">
-                      <Box variant="p">個人として参加します。</Box>
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        onClick={() => void handleSoloRegister()}
-                        loading={registering}
-                      >
-                        一人で参加する
-                      </Button>
-                    </SpaceBetween>
-                  ),
-                },
-                {
-                  id: 'create',
-                  label: 'チームを作成',
-                  content: (
-                    <SpaceBetween size="m">
-                      <FormField label="チーム名">
-                        <Input
-                          value={teamName}
-                          onChange={({ detail }) => setTeamName(detail.value)}
-                          placeholder="チーム名を入力"
-                        />
-                      </FormField>
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        onClick={() => void handleCreateTeam()}
-                        loading={registering}
-                      >
-                        チームを作成して参加
-                      </Button>
-                    </SpaceBetween>
-                  ),
-                },
-                {
-                  id: 'join',
-                  label: '招待コードで参加',
-                  content: (
-                    <SpaceBetween size="m">
-                      <FormField label="招待コード">
-                        <Input
-                          value={inviteCode}
-                          onChange={({ detail }) =>
-                            setInviteCode(detail.value.toUpperCase())
-                          }
-                          placeholder="6文字のコードを入力"
-                        />
-                      </FormField>
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        onClick={() => void handleJoinTeam()}
-                        loading={registering}
-                      >
-                        チームに参加
-                      </Button>
-                    </SpaceBetween>
-                  ),
-                },
-              ]}
-            />
-
-            {modalError && (
-              <StatusIndicator type="error">{modalError}</StatusIndicator>
-            )}
-          </SpaceBetween>
-        </Modal>
-      </div>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="awsui-dark-mode">
-          <SpaceBetween size="l">
-            {/* Breadcrumb */}
-            <CloudscapeLink
-              href="/events"
-              onFollow={(e) => {
-                e.preventDefault();
-                router.push('/events');
-              }}
-            >
-              &larr; イベント一覧
-            </CloudscapeLink>
-
-            {/* Event Header Container */}
-            <Container
-              header={
-                <Header
-                  variant="h1"
-                  description={
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        gap: '6px',
-                        alignItems: 'center',
-                      }}
+          <Tabs
+            activeTabId={activeTab}
+            onChange={({ detail }) => {
+              setActiveTab(detail.activeTabId);
+              setModalError(null);
+            }}
+            tabs={[
+              {
+                id: 'solo',
+                label: '一人で参加',
+                content: (
+                  <SpaceBetween size="m">
+                    <Box variant="p">個人として参加します。</Box>
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={() => void handleSoloRegister()}
+                      loading={registering}
                     >
-                      {getEventStatusIndicator(event.status)}
-                      <Badge
-                        color={event.type === 'gameday' ? 'blue' : 'green'}
-                      >
-                        {event.type === 'gameday' ? 'GameDay' : 'JAM'}
-                      </Badge>
-                      {event.isRegistered && (
-                        <Badge color="green">登録済み</Badge>
-                      )}
-                    </span>
-                  }
-                  actions={
-                    <SpaceBetween direction="horizontal" size="xs">
-                      {!event.isRegistered && event.status !== 'completed' && (
-                        <Button
-                          variant="primary"
-                          onClick={handleRegisterClick}
-                          loading={registering}
-                        >
-                          {event.participantType === 'team'
-                            ? 'チームで登録'
-                            : '参加登録'}
-                        </Button>
-                      )}
-                      {canParticipate && (
-                        <NextLink href={`/gameday/${eventId}`}>
-                          <Button variant="primary">バトルに参加</Button>
-                        </NextLink>
-                      )}
-                    </SpaceBetween>
-                  }
-                >
-                  {event.name}
-                </Header>
-              }
-            >
-              <KeyValuePairs
-                columns={4}
-                items={[
-                  {
-                    label: '開始',
-                    value: formatDate(event.startTime),
-                  },
-                  {
-                    label: '終了',
-                    value: formatDate(event.endTime),
-                  },
-                  {
-                    label: '期間',
-                    value: getEventDuration(event.startTime, event.endTime),
-                  },
-                  {
-                    label: '参加者数',
-                    value: `${event.participantCount}人`,
-                  },
-                  {
-                    label: '参加形式',
-                    value: event.participantType === 'team' ? 'チーム' : '個人',
-                  },
-                  {
-                    label: 'クラウド',
-                    value: event.cloudProvider.toUpperCase(),
-                  },
-                  {
-                    label: '採点方式',
-                    value:
-                      event.scoringType === 'realtime'
-                        ? 'リアルタイム'
-                        : 'バッチ',
-                  },
-                  ...(event.myRank
-                    ? [
-                        {
-                          label: 'あなたの順位',
-                          value: (
-                            <Box fontSize="heading-l" fontWeight="bold">
-                              #{event.myRank}
-                              <Box
-                                variant="span"
-                                fontSize="body-s"
-                                color="text-body-secondary"
-                              >
-                                {' '}
-                                ({event.myScore} pts)
-                              </Box>
-                            </Box>
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </Container>
-
-            <ColumnLayout
-              columns={
-                event.participantType === 'team' && event.teamInfo ? 2 : 1
-              }
-            >
-              {/* Problems List */}
-              <Cards
-                ariaLabels={{
-                  itemSelectionLabel: (_e, n) => `選択: ${n.title}`,
-                  selectionGroupLabel: '問題選択',
-                }}
-                cardDefinition={{
-                  header: (problem) => (
-                    <SpaceBetween direction="horizontal" size="xs">
-                      <CloudscapeLink
-                        href={
-                          canParticipate && problem.isUnlocked
-                            ? `/events/${eventId}/challenges/${problem.id}`
-                            : undefined
+                      一人で参加する
+                    </Button>
+                  </SpaceBetween>
+                ),
+              },
+              {
+                id: 'create',
+                label: 'チームを作成',
+                content: (
+                  <SpaceBetween size="m">
+                    <FormField label="チーム名">
+                      <Input
+                        value={teamName}
+                        onChange={({ detail }) => setTeamName(detail.value)}
+                        placeholder="チーム名を入力"
+                      />
+                    </FormField>
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={() => void handleCreateTeam()}
+                      loading={registering}
+                    >
+                      チームを作成して参加
+                    </Button>
+                  </SpaceBetween>
+                ),
+              },
+              {
+                id: 'join',
+                label: '招待コードで参加',
+                content: (
+                  <SpaceBetween size="m">
+                    <FormField label="招待コード">
+                      <Input
+                        value={inviteCode}
+                        onChange={({ detail }) =>
+                          setInviteCode(detail.value.toUpperCase())
                         }
-                        onFollow={(e) => {
-                          if (canParticipate && problem.isUnlocked) {
-                            e.preventDefault();
-                            router.push(
-                              `/events/${eventId}/challenges/${problem.id}`,
-                            );
-                          }
-                        }}
-                        fontSize="heading-m"
-                      >
-                        {problem.title}
-                      </CloudscapeLink>
+                        placeholder="6文字のコードを入力"
+                      />
+                    </FormField>
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={() => void handleJoinTeam()}
+                      loading={registering}
+                    >
+                      チームに参加
+                    </Button>
+                  </SpaceBetween>
+                ),
+              },
+            ]}
+          />
+
+          {modalError && (
+            <StatusIndicator type="error">{modalError}</StatusIndicator>
+          )}
+        </SpaceBetween>
+      </Modal>
+
+      <SpaceBetween size="l">
+        {/* Event Metadata */}
+        <Container>
+          <KeyValuePairs
+            columns={4}
+            items={[
+              {
+                label: '開始',
+                value: formatDate(event.startTime),
+              },
+              {
+                label: '終了',
+                value: formatDate(event.endTime),
+              },
+              {
+                label: '期間',
+                value: getEventDuration(event.startTime, event.endTime),
+              },
+              {
+                label: '参加者数',
+                value: `${event.participantCount}人`,
+              },
+              {
+                label: '参加形式',
+                value: event.participantType === 'team' ? 'チーム' : '個人',
+              },
+              {
+                label: 'クラウド',
+                value: event.cloudProvider.toUpperCase(),
+              },
+              {
+                label: '採点方式',
+                value:
+                  event.scoringType === 'realtime' ? 'リアルタイム' : 'バッチ',
+              },
+              ...(event.myRank
+                ? [
+                    {
+                      label: 'あなたの順位',
+                      value: (
+                        <Box fontSize="heading-l" fontWeight="bold">
+                          #{event.myRank}
+                          <Box
+                            variant="span"
+                            fontSize="body-s"
+                            color="text-body-secondary"
+                          >
+                            {' '}
+                            ({event.myScore} pts)
+                          </Box>
+                        </Box>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </Container>
+
+        <ColumnLayout
+          columns={event.participantType === 'team' && event.teamInfo ? 2 : 1}
+        >
+          {/* Problems List */}
+          <Cards
+            ariaLabels={{
+              itemSelectionLabel: (_e, n) => `選択: ${n.title}`,
+              selectionGroupLabel: '問題選択',
+            }}
+            cardDefinition={{
+              header: (problem) => (
+                <SpaceBetween direction="horizontal" size="xs">
+                  <CloudscapeLink
+                    href={
+                      canParticipate && problem.isUnlocked
+                        ? `/events/${eventId}/challenges/${problem.id}`
+                        : undefined
+                    }
+                    onFollow={(e) => {
+                      if (canParticipate && problem.isUnlocked) {
+                        e.preventDefault();
+                        router.push(
+                          `/events/${eventId}/challenges/${problem.id}`,
+                        );
+                      }
+                    }}
+                    fontSize="heading-m"
+                  >
+                    {problem.title}
+                  </CloudscapeLink>
+                </SpaceBetween>
+              ),
+              sections: [
+                {
+                  id: 'meta',
+                  content: (problem) => (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      {getDifficultyBadge(problem.difficulty)}
+                      {getProblemStatusIndicator(problem)}
+                      <Box variant="small">
+                        {problem.maxScore * problem.pointMultiplier} pts
+                      </Box>
                     </SpaceBetween>
                   ),
-                  sections: [
+                },
+                {
+                  id: 'overview',
+                  header: '概要',
+                  content: (problem) => (
+                    <Box variant="p" color="text-body-secondary">
+                      {problem.overview}
+                    </Box>
+                  ),
+                },
+              ],
+            }}
+            cardsPerRow={[{ cards: 1 }, { minWidth: 500, cards: 2 }]}
+            items={event.problems}
+            loadingText="問題を読み込み中"
+            header={
+              <Header counter={`(${event.problemCount})`}>問題一覧</Header>
+            }
+            empty={
+              <Box textAlign="center" padding="l">
+                {isActive
+                  ? 'まだ問題が登録されていません'
+                  : '問題はイベント開始時に公開されます'}
+              </Box>
+            }
+          />
+
+          {/* Team Info (if team event) */}
+          {event.participantType === 'team' && event.teamInfo && (
+            <Container header={<Header variant="h2">チーム情報</Header>}>
+              <SpaceBetween size="l">
+                <KeyValuePairs
+                  columns={2}
+                  items={[
                     {
-                      id: 'meta',
-                      content: (problem) => (
-                        <SpaceBetween direction="horizontal" size="xs">
-                          {getDifficultyBadge(problem.difficulty)}
-                          {getProblemStatusIndicator(problem)}
-                          <Box variant="small">
-                            {problem.maxScore * problem.pointMultiplier} pts
-                          </Box>
-                        </SpaceBetween>
-                      ),
+                      label: 'チーム名',
+                      value: <Box fontWeight="bold">{event.teamInfo.name}</Box>,
                     },
                     {
-                      id: 'overview',
-                      header: '概要',
-                      content: (problem) => (
-                        <Box variant="p" color="text-body-secondary">
-                          {problem.overview}
-                        </Box>
-                      ),
+                      label: 'メンバー数',
+                      value: `${event.teamInfo.members.length}人`,
                     },
-                  ],
-                }}
-                cardsPerRow={[{ cards: 1 }, { minWidth: 500, cards: 2 }]}
-                items={event.problems}
-                loadingText="問題を読み込み中"
-                header={
-                  <Header counter={`(${event.problemCount})`}>問題一覧</Header>
-                }
-                empty={
-                  <Box textAlign="center" padding="l">
-                    {isActive
-                      ? 'まだ問題が登録されていません'
-                      : '問題はイベント開始時に公開されます'}
+                  ]}
+                />
+
+                <Box variant="h3">メンバー</Box>
+                <SpaceBetween direction="horizontal" size="xs">
+                  {event.teamInfo.members.map((member) => (
+                    <Badge
+                      key={member.id}
+                      color={member.role === 'captain' ? 'blue' : 'grey'}
+                    >
+                      {member.name}
+                      {member.role === 'captain' && ' (キャプテン)'}
+                    </Badge>
+                  ))}
+                </SpaceBetween>
+
+                {event.teamInfo.inviteCode && (
+                  <Container header={<Header variant="h3">招待コード</Header>}>
+                    <Box fontSize="heading-l" fontWeight="bold" variant="code">
+                      {event.teamInfo.inviteCode}
+                    </Box>
+                  </Container>
+                )}
+              </SpaceBetween>
+            </Container>
+          )}
+        </ColumnLayout>
+
+        {/* Leaderboard Preview */}
+        {leaderboard && event.leaderboardVisible && (
+          <Table
+            columnDefinitions={[
+              {
+                id: 'rank',
+                header: '順位',
+                cell: (entry) => (
+                  <Box fontWeight={entry.rank <= 3 ? 'bold' : 'normal'}>
+                    #{entry.rank}
                   </Box>
-                }
-              />
-
-              {/* Team Info (if team event) */}
-              {event.participantType === 'team' && event.teamInfo && (
-                <Container header={<Header variant="h2">チーム情報</Header>}>
-                  <SpaceBetween size="l">
-                    <KeyValuePairs
-                      columns={2}
-                      items={[
-                        {
-                          label: 'チーム名',
-                          value: (
-                            <Box fontWeight="bold">{event.teamInfo.name}</Box>
-                          ),
-                        },
-                        {
-                          label: 'メンバー数',
-                          value: `${event.teamInfo.members.length}人`,
-                        },
-                      ]}
-                    />
-
-                    <Box variant="h3">メンバー</Box>
-                    <SpaceBetween direction="horizontal" size="xs">
-                      {event.teamInfo.members.map((member) => (
-                        <Badge
-                          key={member.id}
-                          color={member.role === 'captain' ? 'blue' : 'grey'}
-                        >
-                          {member.name}
-                          {member.role === 'captain' && ' (キャプテン)'}
-                        </Badge>
-                      ))}
-                    </SpaceBetween>
-
-                    {event.teamInfo.inviteCode && (
-                      <Container
-                        header={<Header variant="h3">招待コード</Header>}
-                      >
-                        <Box
-                          fontSize="heading-l"
-                          fontWeight="bold"
-                          variant="code"
-                        >
-                          {event.teamInfo.inviteCode}
-                        </Box>
-                      </Container>
-                    )}
+                ),
+                width: 80,
+              },
+              {
+                id: 'name',
+                header: '名前',
+                cell: (entry) => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <span>{entry.name}</span>
+                    {entry.isMe && <Badge color="blue">自分</Badge>}
                   </SpaceBetween>
-                </Container>
-              )}
-            </ColumnLayout>
-
-            {/* Leaderboard Preview */}
-            {leaderboard && event.leaderboardVisible && (
-              <Table
-                columnDefinitions={[
-                  {
-                    id: 'rank',
-                    header: '順位',
-                    cell: (entry) => (
-                      <Box fontWeight={entry.rank <= 3 ? 'bold' : 'normal'}>
-                        #{entry.rank}
-                      </Box>
-                    ),
-                    width: 80,
-                  },
-                  {
-                    id: 'name',
-                    header: '名前',
-                    cell: (entry) => (
-                      <SpaceBetween direction="horizontal" size="xs">
-                        <span>{entry.name}</span>
-                        {entry.isMe && <Badge color="blue">自分</Badge>}
-                      </SpaceBetween>
-                    ),
-                  },
-                  {
-                    id: 'score',
-                    header: 'スコア',
-                    cell: (entry) => (
-                      <Box fontWeight="bold">{entry.totalScore}</Box>
-                    ),
-                    width: 120,
-                  },
-                ]}
-                items={leaderboard.entries.slice(0, 5)}
-                loadingText="読み込み中"
-                header={
-                  <Header
-                    actions={
-                      <NextLink href={`/events/${eventId}/leaderboard`}>
-                        <Button variant="link">全ランキングを見る</Button>
-                      </NextLink>
-                    }
-                    description={
-                      leaderboard.isFrozen ? (
-                        <StatusIndicator type="warning">凍結中</StatusIndicator>
-                      ) : undefined
-                    }
-                  >
-                    リーダーボード
-                  </Header>
+                ),
+              },
+              {
+                id: 'score',
+                header: 'スコア',
+                cell: (entry) => (
+                  <Box fontWeight="bold">{entry.totalScore}</Box>
+                ),
+                width: 120,
+              },
+            ]}
+            items={leaderboard.entries.slice(0, 5)}
+            loadingText="読み込み中"
+            header={
+              <Header
+                actions={
+                  <NextLink href={`/events/${eventId}/leaderboard`}>
+                    <Button variant="link">全ランキングを見る</Button>
+                  </NextLink>
                 }
-                empty="リーダーボードデータはありません"
-              />
-            )}
+                description={
+                  leaderboard.isFrozen ? (
+                    <StatusIndicator type="warning">凍結中</StatusIndicator>
+                  ) : undefined
+                }
+              >
+                リーダーボード
+              </Header>
+            }
+            empty="リーダーボードデータはありません"
+          />
+        )}
 
-            {/* Waiting message for registered but not active */}
-            {event.isRegistered && !isActive && (
-              <Container>
-                <Box textAlign="center" padding="l">
-                  <StatusIndicator type="pending">
-                    イベント開始をお待ちください
-                  </StatusIndicator>
-                </Box>
-              </Container>
-            )}
-          </SpaceBetween>
-        </div>
-      </main>
-    </div>
+        {/* Waiting message for registered but not active */}
+        {event.isRegistered && !isActive && (
+          <Container>
+            <Box textAlign="center" padding="l">
+              <StatusIndicator type="pending">
+                イベント開始をお待ちください
+              </StatusIndicator>
+            </Box>
+          </Container>
+        )}
+      </SpaceBetween>
+    </PageLayout>
   );
 }
