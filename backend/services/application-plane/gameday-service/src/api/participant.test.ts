@@ -93,6 +93,7 @@ const mockParticipantService = vi.hoisted(() => {
     getMonitoringStatus: vi.fn(),
     castVote: vi.fn(),
     getVotingResults: vi.fn(),
+    getAllAttackLogs: vi.fn(),
     GameNotRunningError,
     AttackNotFoundError,
     AttackNotPurchasedError,
@@ -166,6 +167,8 @@ describe('プレーヤー API', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // デフォルトの getAllAttackLogs は空配列を返す
+    mockParticipantService.getAllAttackLogs.mockResolvedValue([]);
     app = new Hono();
     app.use('/*', async (c, next) => {
       c.set('auth' as never, {
@@ -1111,18 +1114,27 @@ describe('プレーヤー API', () => {
   // === ダッシュボード: 攻撃統計 ===
   describe('GET /dashboard/attack-stats', () => {
     it('正常系で OK を返すべき', async () => {
-      mockDashboardService.getAttackStatistics.mockResolvedValue([
+      mockParticipantService.getAllAttackLogs.mockResolvedValue([
         {
-          teamId: 'team-1',
-          attacksSent: 2,
-          attacksReceived: 1,
-          successRate: 0.5,
+          attackerTeamId: 'team-1',
+          defenderTeamId: 'team-2',
+          attackSlug: 'sql-injection',
+          success: true,
+        },
+        {
+          attackerTeamId: 'team-1',
+          defenderTeamId: 'team-2',
+          attackSlug: 'sql-injection',
+          success: false,
         },
       ]);
       const res = await app.request('/dashboard/attack-stats?eventId=event-1');
       expect(res.status).toBe(StatusCodes.OK);
       const body = await res.json();
       expect(body.stats).toHaveLength(1);
+      expect(body.stats[0].attackSlug).toBe('sql-injection');
+      expect(body.stats[0].totalExecutions).toBe(2);
+      expect(body.stats[0].successRate).toBe(0.5);
     });
 
     it('eventId なしで BAD_REQUEST を返すべき', async () => {
@@ -1147,12 +1159,14 @@ describe('プレーヤー API', () => {
       expect(body.team.teamId).toBe('team-1');
     });
 
-    it('チームが存在しない場合 NOT_FOUND を返すべき', async () => {
+    it('チームが存在しない場合はデフォルト値で OK を返すべき', async () => {
       mockDashboardService.getTeamDashboard.mockResolvedValue(null);
       const res = await app.request(
         '/dashboard/team?eventId=event-1&teamId=nonexistent'
       );
-      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.team.teamId).toBe('nonexistent');
     });
 
     it('パラメータ不足で BAD_REQUEST を返すべき', async () => {
