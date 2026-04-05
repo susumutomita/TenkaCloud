@@ -375,8 +375,8 @@ export default function EventsPage() {
   );
 
   return (
-    <PageLayout>
-      <SpaceBetween size="l">
+    <PageLayout
+      header={
         <Header
           counter={!loading && !error ? `(${events.length})` : undefined}
           description={t('events.description')}
@@ -384,7 +384,9 @@ export default function EventsPage() {
         >
           {t('events.title')}
         </Header>
-
+      }
+    >
+      <SpaceBetween size="l">
         {filterBar}
 
         {loading ? (

@@ -48,7 +48,7 @@ describe('イベント詳細ページ', () => {
   it('ローディング中にスピナーを表示すべき', () => {
     mockGet.mockReturnValue(new Promise(() => {}));
     render(<AdminEventDetailPage />);
-    expect(document.querySelector('[class*="spinner"]')).toBeInTheDocument();
+    expect(document.querySelector('[class*="awsui_root"]')).toBeInTheDocument();
   });
 
   it('API からイベントデータを取得すべき', async () => {

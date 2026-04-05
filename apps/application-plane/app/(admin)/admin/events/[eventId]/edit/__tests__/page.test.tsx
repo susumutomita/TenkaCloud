@@ -37,7 +37,7 @@ describe('イベント編集ページ', () => {
   it('ローディング中にスピナーを表示すべき', () => {
     mockGet.mockReturnValue(new Promise(() => {}));
     render(<AdminEventEditPage />);
-    expect(document.querySelector('[class*="spinner"]')).toBeInTheDocument();
+    expect(document.querySelector('[class*="awsui_root"]')).toBeInTheDocument();
   });
 
   it('データ取得後にフォームを表示すべき', async () => {

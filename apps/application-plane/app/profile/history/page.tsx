@@ -1,7 +1,7 @@
 /**
  * Profile History Page
  *
- * 参加履歴ページ
+ * 参加履歴ページ（ページネーション対応）
  */
 
 'use client';
@@ -11,26 +11,44 @@ import CloudscapeBox from '@cloudscape-design/components/box';
 import CloudscapeContainer from '@cloudscape-design/components/container';
 import CloudscapeHeader from '@cloudscape-design/components/header';
 import CloudscapeLink from '@cloudscape-design/components/link';
+import CloudscapePagination from '@cloudscape-design/components/pagination';
 import CloudscapeSpaceBetween from '@cloudscape-design/components/space-between';
 import CloudscapeSpinner from '@cloudscape-design/components/spinner';
 import CloudscapeTable from '@cloudscape-design/components/table';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { PageLayout } from '../../../components/layout';
 import { useI18n } from '../../../lib/i18n';
 import { getEventHistory } from '../../../lib/api/profile';
 import type { ParticipantEventSummary } from '../../../lib/api/types';
 
+const PAGE_SIZE = 20;
+
 export default function HistoryPage() {
   const { t } = useI18n();
   const [events, setEvents] = useState<ParticipantEventSummary[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const fetchHistory = useCallback(async (page: number) => {
+    setLoading(true);
+    try {
+      const offset = (page - 1) * PAGE_SIZE;
+      const d = await getEventHistory({ limit: PAGE_SIZE, offset });
+      setEvents(d.events);
+      setTotal(d.total);
+    } catch {
+      // Silently handle - empty state will show
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    getEventHistory({ limit: 50 })
-      .then((d) => setEvents(d.events))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    fetchHistory(currentPage);
+  }, [fetchHistory, currentPage]);
+
+  const pagesCount = Math.ceil(total / PAGE_SIZE);
 
   return (
     <PageLayout maxWidth="3xl">
@@ -83,8 +101,19 @@ export default function HistoryPage() {
               }
               header={
                 <CloudscapeHeader>
-                  {t('profile.history')} ({events.length})
+                  {t('profile.history')} ({total})
                 </CloudscapeHeader>
+              }
+              pagination={
+                pagesCount > 1 ? (
+                  <CloudscapePagination
+                    currentPageIndex={currentPage}
+                    pagesCount={pagesCount}
+                    onChange={({ detail }) =>
+                      setCurrentPage(detail.currentPageIndex)
+                    }
+                  />
+                ) : undefined
               }
             />
           </CloudscapeContainer>

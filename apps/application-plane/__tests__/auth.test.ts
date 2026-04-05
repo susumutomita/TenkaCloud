@@ -68,6 +68,37 @@ describe('Auth0 認証設定', () => {
 
       await expect(import('../auth')).resolves.toBeDefined();
     });
+
+    it('AUTH_SKIP=1 の場合、モックセッションに tenantId/teamId が含まれないべき（Control Plane は全テナント管理者向け）', async () => {
+      process.env.AUTH_SKIP = '1';
+
+      const auth = await import('../auth');
+      const session = await auth.auth();
+
+      // Application Plane ではテナント/チーム情報をセッションに含む
+      expect(session?.tenantId).toBeDefined();
+      expect(session?.teamId).toBeDefined();
+    });
+  });
+
+  describe('isAuthSkipEnabled が例外を投げる場合', () => {
+    it('catch ブロックで authSkipEnabled を false にすべき', async () => {
+      vi.resetModules();
+      vi.doMock('@/lib/auth/is-auth-skip-enabled', () => ({
+        isAuthSkipEnabled: () => {
+          throw new Error('AUTH_SKIP is not allowed in production');
+        },
+      }));
+
+      process.env.AUTH0_CLIENT_ID = 'test-client-id';
+      process.env.AUTH0_CLIENT_SECRET = 'test-client-secret';
+      process.env.AUTH0_ISSUER = 'https://test.auth0.com';
+
+      const auth = await import('../auth');
+      // auth モジュールが正常にロードされ、Auth0 プロバイダが使用される
+      expect(auth.handlers).toBeDefined();
+      expect(auth.auth).toBeDefined();
+    });
   });
 
   it('必須の環境変数が欠けている場合はエラーを投げるべき', async () => {

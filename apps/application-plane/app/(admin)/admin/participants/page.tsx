@@ -19,6 +19,7 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import type { AdminParticipant } from '@/lib/api/admin-types';
 import { formatDate } from '@/lib/utils';
@@ -33,6 +34,8 @@ const STATUS_MAP: Record<
 };
 
 export default function AdminParticipantsPage() {
+  const searchParams = useSearchParams();
+  const eventId = searchParams.get('eventId');
   const [participants, setParticipants] = useState<AdminParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,6 +49,7 @@ export default function AdminParticipantsPage() {
 
         const params = new URLSearchParams();
         if (searchQuery) params.set('search', searchQuery);
+        if (eventId) params.set('eventId', eventId);
 
         const response = await fetch(
           `/api/admin/participants?${params.toString()}`,
@@ -74,7 +78,7 @@ export default function AdminParticipantsPage() {
     // デバウンス用のタイマー
     const timeoutId = setTimeout(fetchParticipants, searchQuery ? 300 : 0);
     return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
+  }, [searchQuery, eventId]);
 
   // API がフィルタリングするため、クライアント側ではそのまま使用
   const filteredParticipants = participants;
@@ -92,6 +96,7 @@ export default function AdminParticipantsPage() {
     <SpaceBetween size="l">
       <Header
         variant="h1"
+        description={eventId ? `イベント ID: ${eventId}` : undefined}
         actions={
           <Button variant="primary" iconName="add-plus">
             参加者を招待
