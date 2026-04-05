@@ -159,3 +159,7 @@ export {
 export { ProblemTemplateRepository } from './problem-template-repository';
 export { EventRepository } from './event-repository';
 export type { EventFilterOptions } from './event-repository';
+
+// Score Event (ADR-003)
+export { ScoreCategory, POINT_ECONOMY } from './score-event';
+export type { ScoreEvent } from './score-event';

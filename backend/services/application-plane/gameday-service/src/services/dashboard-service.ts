@@ -1,5 +1,6 @@
 import { gamedayRepository } from "../lib/dynamodb";
 import { TeamAlreadyExistsError } from "../repositories/gameday-repository";
+import { POINT_ECONOMY } from "@tenkacloud/dynamodb";
 import type { TeamState } from "../repositories/gameday-repository";
 import type { AttackLog, HealthCheckResult } from "../types";
 
@@ -22,7 +23,19 @@ export async function registerTeam(input: {
 	apiUrl?: string;
 	inviteCode?: string;
 }): Promise<TeamState> {
-	return gamedayRepository.createTeam(input);
+	const team = await gamedayRepository.createTeam(input);
+
+	// ADR-003: ゲーム実行中に登録した場合、初期ポイントを付与
+	const game = await gamedayRepository.getGameState(input.eventId);
+	if (game?.isRunning) {
+		await gamedayRepository.updateTeamScore(
+			input.eventId,
+			input.teamId,
+			POINT_ECONOMY.INITIAL_POINTS,
+		);
+	}
+
+	return team;
 }
 
 export async function joinTeamByInviteCode(

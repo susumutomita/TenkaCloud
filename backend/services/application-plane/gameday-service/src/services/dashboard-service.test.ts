@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { POINT_ECONOMY } from "@tenkacloud/dynamodb";
 
 const mockRepository = vi.hoisted(() => ({
 	createTeam: vi.fn(),
@@ -9,6 +10,7 @@ const mockRepository = vi.hoisted(() => ({
 	getTeamState: vi.fn(),
 	listHealthChecks: vi.fn(),
 	findTeamByInviteCode: vi.fn(),
+	updateTeamScore: vi.fn(),
 }));
 
 vi.mock("../lib/dynamodb", () => ({
@@ -57,6 +59,7 @@ describe("ダッシュボードサービス", () => {
 				apiUrl: "https://api.example.com",
 			};
 			mockRepository.createTeam.mockResolvedValue(team);
+			mockRepository.getGameState.mockResolvedValue(null);
 
 			const result = await registerTeam({
 				eventId: "event-1",
@@ -88,6 +91,65 @@ describe("ダッシュボードサービス", () => {
 					teamName: "チームA",
 				}),
 			).rejects.toThrow(TeamAlreadyExistsError);
+		});
+
+		it("ゲーム実行中に登録した場合、初期ポイントを付与すべき", async () => {
+			const team = {
+				eventId: "event-1",
+				teamId: "team-1",
+				teamName: "チームA",
+				score: 0,
+				isHealthy: true,
+				websiteUrl: null,
+				apiUrl: null,
+				inviteCode: "ABC123",
+			};
+			mockRepository.createTeam.mockResolvedValue(team);
+			mockRepository.getGameState.mockResolvedValue({
+				eventId: "event-1",
+				tenantId: "tenant-1",
+				isRunning: true,
+				startedAt: "2026-03-09T00:00:00.000Z",
+				scoreWeight: "normal",
+				blackout: false,
+				durationMinutes: 240,
+			});
+			mockRepository.updateTeamScore.mockResolvedValue(undefined);
+
+			await registerTeam({
+				eventId: "event-1",
+				teamId: "team-1",
+				teamName: "チームA",
+			});
+
+			expect(mockRepository.updateTeamScore).toHaveBeenCalledWith(
+				"event-1",
+				"team-1",
+				POINT_ECONOMY.INITIAL_POINTS,
+			);
+		});
+
+		it("ゲーム未開始の場合、初期ポイントを付与しないべき", async () => {
+			const team = {
+				eventId: "event-1",
+				teamId: "team-1",
+				teamName: "チームA",
+				score: 0,
+				isHealthy: true,
+				websiteUrl: null,
+				apiUrl: null,
+				inviteCode: "ABC123",
+			};
+			mockRepository.createTeam.mockResolvedValue(team);
+			mockRepository.getGameState.mockResolvedValue(null);
+
+			await registerTeam({
+				eventId: "event-1",
+				teamId: "team-1",
+				teamName: "チームA",
+			});
+
+			expect(mockRepository.updateTeamScore).not.toHaveBeenCalled();
 		});
 	});
 

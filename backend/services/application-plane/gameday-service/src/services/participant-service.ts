@@ -3,6 +3,7 @@ import {
 	AttackAlreadyPurchasedError,
 	VoteAlreadyExistsError,
 } from "../repositories/gameday-repository";
+import { POINT_ECONOMY } from "@tenkacloud/dynamodb";
 import type {
 	Attack,
 	AttackPurchase,
@@ -321,12 +322,21 @@ export async function reportFix(
 ): Promise<TeamVulnerability> {
 	await ensureGameRunning(eventId);
 
-	return gamedayRepository.upsertTeamVulnerability({
+	const result = await gamedayRepository.upsertTeamVulnerability({
 		eventId,
 		teamId,
 		vulnerabilitySlug,
 		isFixed: true,
 	});
+
+	// ADR-003: 防御修正で +1,500 ポイント付与
+	await gamedayRepository.updateTeamScore(
+		eventId,
+		teamId,
+		POINT_ECONOMY.DEFENSE_FIX,
+	);
+
+	return result;
 }
 
 // === 同盟 ===

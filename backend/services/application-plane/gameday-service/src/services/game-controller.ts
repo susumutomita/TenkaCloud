@@ -3,6 +3,7 @@ import { ConcurrentModificationError } from "../repositories/gameday-repository"
 import {
 	validateTenantAccess,
 	CrossTenantAccessError,
+	POINT_ECONOMY,
 } from "@tenkacloud/dynamodb";
 import type { GameState, AttackLog } from "../types";
 import type { TeamState } from "../repositories/gameday-repository";
@@ -52,11 +53,25 @@ export async function startGame(
 	tenantId: string,
 	durationMinutes: number,
 ): Promise<GameState> {
-	return gamedayRepository.createGameState({
+	const game = await gamedayRepository.createGameState({
 		eventId,
 		tenantId,
 		durationMinutes,
 	});
+
+	// ADR-003: ゲーム開始時に登録済みチームへ初期ポイントを付与
+	const teams = await gamedayRepository.listTeams(eventId);
+	await Promise.all(
+		teams.map((team) =>
+			gamedayRepository.updateTeamScore(
+				eventId,
+				team.teamId,
+				POINT_ECONOMY.INITIAL_POINTS,
+			),
+		),
+	);
+
+	return game;
 }
 
 export async function stopGame(

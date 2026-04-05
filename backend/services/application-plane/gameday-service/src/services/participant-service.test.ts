@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { POINT_ECONOMY } from "@tenkacloud/dynamodb";
 
 const { mockGamedayRepository } = vi.hoisted(() => ({
 	mockGamedayRepository: {
@@ -640,10 +641,32 @@ describe("プレーヤーサービス", () => {
 				isFixed: true,
 			};
 			mockGamedayRepository.upsertTeamVulnerability.mockResolvedValue(vuln);
+			mockGamedayRepository.updateTeamScore.mockResolvedValue(undefined);
 
 			const result = await reportFix("event-1", "team-1", "sql-injection");
 
 			expect(result).toEqual(vuln);
+		});
+
+		it("防御修正で ADR-003 準拠のポイントを付与すべき", async () => {
+			mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
+			const vuln = {
+				id: "v-1",
+				eventId: "event-1",
+				teamId: "team-1",
+				vulnerabilitySlug: "sql-injection",
+				isFixed: true,
+			};
+			mockGamedayRepository.upsertTeamVulnerability.mockResolvedValue(vuln);
+			mockGamedayRepository.updateTeamScore.mockResolvedValue(undefined);
+
+			await reportFix("event-1", "team-1", "sql-injection");
+
+			expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
+				"event-1",
+				"team-1",
+				POINT_ECONOMY.DEFENSE_FIX,
+			);
 		});
 	});
 

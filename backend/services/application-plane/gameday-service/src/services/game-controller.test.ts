@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { GameState, AttackLog } from "../types";
+import { POINT_ECONOMY } from "@tenkacloud/dynamodb";
 
 const { mockGamedayRepository } = vi.hoisted(() => ({
 	mockGamedayRepository: {
@@ -14,6 +15,7 @@ const { mockGamedayRepository } = vi.hoisted(() => ({
 		listTeams: vi.fn(),
 		getTeamState: vi.fn(),
 		seedAttackCatalog: vi.fn(),
+		updateTeamScore: vi.fn(),
 	},
 }));
 
@@ -82,6 +84,7 @@ describe("ゲームコントローラーサービス", () => {
 		describe("有効なパラメータの場合", () => {
 			it("新しいゲームを作成して返すべき", async () => {
 				mockGamedayRepository.createGameState.mockResolvedValue(baseGameState);
+				mockGamedayRepository.listTeams.mockResolvedValue([]);
 
 				const result = await startGame("event-1", TENANT_ID, 240);
 
@@ -91,6 +94,57 @@ describe("ゲームコントローラーサービス", () => {
 					tenantId: TENANT_ID,
 					durationMinutes: 240,
 				});
+			});
+
+			it("登録済みチームに初期ポイントを付与すべき", async () => {
+				const teams = [
+					{
+						eventId: "event-1",
+						teamId: "team-1",
+						teamName: "チームA",
+						score: 0,
+						isHealthy: true,
+						websiteUrl: null,
+						apiUrl: null,
+						inviteCode: "ABC123",
+					},
+					{
+						eventId: "event-1",
+						teamId: "team-2",
+						teamName: "チームB",
+						score: 0,
+						isHealthy: true,
+						websiteUrl: null,
+						apiUrl: null,
+						inviteCode: "DEF456",
+					},
+				];
+				mockGamedayRepository.createGameState.mockResolvedValue(baseGameState);
+				mockGamedayRepository.listTeams.mockResolvedValue(teams);
+				mockGamedayRepository.updateTeamScore.mockResolvedValue(undefined);
+
+				await startGame("event-1", TENANT_ID, 240);
+
+				expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledTimes(2);
+				expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
+					"event-1",
+					"team-1",
+					POINT_ECONOMY.INITIAL_POINTS,
+				);
+				expect(mockGamedayRepository.updateTeamScore).toHaveBeenCalledWith(
+					"event-1",
+					"team-2",
+					POINT_ECONOMY.INITIAL_POINTS,
+				);
+			});
+
+			it("登録チームがいない場合はスコア更新しないべき", async () => {
+				mockGamedayRepository.createGameState.mockResolvedValue(baseGameState);
+				mockGamedayRepository.listTeams.mockResolvedValue([]);
+
+				await startGame("event-1", TENANT_ID, 240);
+
+				expect(mockGamedayRepository.updateTeamScore).not.toHaveBeenCalled();
 			});
 		});
 	});
