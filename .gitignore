@@ -152,3 +152,4 @@ vite.config.ts.timestamp-*
 .playwright-mcp
 apps/*/test-results/
 apps/*/playwright-report/
+package-lock.json
