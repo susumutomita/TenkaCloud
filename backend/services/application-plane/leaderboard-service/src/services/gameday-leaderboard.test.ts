@@ -2,8 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
 	buildGameDayLeaderboard,
 	getGameDayLeaderboard,
+	DynamoDBGameDayLeaderboardRepository,
 	type GameDayLeaderboardRepository,
 } from "./gameday-leaderboard";
+
+const mockSend = vi.fn();
+
+vi.mock("@tenkacloud/dynamodb", () => ({
+	getDocClient: () => ({ send: mockSend }),
+	getTableName: () => "TestTable",
+}));
 
 function createTeamItem(overrides: Record<string, unknown> = {}) {
 	return {
@@ -121,5 +129,125 @@ describe("getGameDayLeaderboard", () => {
 
 		expect(result.eventId).toBe("event-1");
 		expect(result.entries).toEqual([]);
+	});
+});
+
+describe("DynamoDBGameDayLeaderboardRepository", () => {
+	let repo: DynamoDBGameDayLeaderboardRepository;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		repo = new DynamoDBGameDayLeaderboardRepository();
+	});
+
+	it("DynamoDB からチーム一覧を取得するべき", async () => {
+		mockSend.mockResolvedValue({
+			Items: [
+				{
+					PK: "GAMEDAY#event-1",
+					SK: "TEAM#team-1",
+					EntityType: "TEAM",
+					eventId: "event-1",
+					teamId: "team-1",
+					teamName: "Alpha",
+					score: 200,
+				},
+				{
+					PK: "GAMEDAY#event-1",
+					SK: "TEAM#team-2",
+					EntityType: "TEAM",
+					eventId: "event-1",
+					teamId: "team-2",
+					teamName: "Beta",
+					score: 100,
+				},
+			],
+			LastEvaluatedKey: undefined,
+		});
+
+		const teams = await repo.listTeams("event-1");
+
+		expect(teams).toHaveLength(2);
+		expect(teams[0].teamName).toBe("Alpha");
+		expect(teams[1].teamName).toBe("Beta");
+	});
+
+	it("Items が空の場合は空配列を返すべき", async () => {
+		mockSend.mockResolvedValue({
+			Items: undefined,
+			LastEvaluatedKey: undefined,
+		});
+
+		const teams = await repo.listTeams("event-1");
+
+		expect(teams).toEqual([]);
+	});
+
+	it("ページネーションで全件取得するべき", async () => {
+		mockSend
+			.mockResolvedValueOnce({
+				Items: [
+					{
+						PK: "GAMEDAY#event-1",
+						SK: "TEAM#team-1",
+						EntityType: "TEAM",
+						eventId: "event-1",
+						teamId: "team-1",
+						teamName: "Alpha",
+						score: 200,
+					},
+				],
+				LastEvaluatedKey: { PK: "GAMEDAY#event-1", SK: "TEAM#team-1" },
+			})
+			.mockResolvedValueOnce({
+				Items: [
+					{
+						PK: "GAMEDAY#event-1",
+						SK: "TEAM#team-2",
+						EntityType: "TEAM",
+						eventId: "event-1",
+						teamId: "team-2",
+						teamName: "Beta",
+						score: 100,
+					},
+				],
+				LastEvaluatedKey: undefined,
+			});
+
+		const teams = await repo.listTeams("event-1");
+
+		expect(teams).toHaveLength(2);
+		expect(mockSend).toHaveBeenCalledTimes(2);
+	});
+
+	it("TEAM# プレフィックスのサブキーを除外するべき", async () => {
+		mockSend.mockResolvedValue({
+			Items: [
+				{
+					PK: "GAMEDAY#event-1",
+					SK: "TEAM#team-1",
+					EntityType: "TEAM",
+					eventId: "event-1",
+					teamId: "team-1",
+					teamName: "Alpha",
+					score: 200,
+				},
+				{
+					PK: "GAMEDAY#event-1",
+					SK: "TEAM#team-1#MEMBER#user-1",
+					EntityType: "MEMBER",
+					eventId: "event-1",
+					teamId: "team-1",
+					teamName: "Alpha",
+					score: 0,
+				},
+			],
+			LastEvaluatedKey: undefined,
+		});
+
+		const teams = await repo.listTeams("event-1");
+
+		expect(teams).toHaveLength(1);
+		expect(teams[0].teamId).toBe("team-1");
 	});
 });

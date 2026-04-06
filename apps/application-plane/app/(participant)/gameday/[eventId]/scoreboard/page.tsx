@@ -20,9 +20,10 @@ import {
   getErrorMessage,
   getErrorType,
 } from '@/components/ui';
-import { getAttackStats, getLeaderboard } from '@/lib/api/gameday';
+import { getAttackStats } from '@/lib/api/gameday';
 import type { AttackStats, LeaderboardEntry } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
+import { useLeaderboardSSE } from '@/lib/hooks/use-leaderboard-sse';
 
 interface BoardItemData {
   title: string;
@@ -132,6 +133,7 @@ function AttackStatsTable({ stats }: { stats: AttackStats[] }) {
 
 export default function ScoreboardPage() {
   const { eventId, teamId } = useGamedaySession();
+  const { data: sseData, error: sseError } = useLeaderboardSSE(eventId);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [attackStats, setAttackStats] = useState<AttackStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,37 +143,48 @@ export default function ScoreboardPage() {
     [],
   );
 
-  const fetchData = useCallback(async () => {
+  // SSE からリーダーボードデータを反映
+  useEffect(() => {
+    if (sseData) {
+      setLeaderboard(
+        sseData.entries.map((entry) => ({
+          ...entry,
+          attacksLaunched: 0,
+          attacksReceived: 0,
+          vulnerabilitiesFixed: 0,
+        })),
+      );
+      setBlackout(false);
+      setLoading(false);
+    }
+  }, [sseData]);
+
+  useEffect(() => {
+    if (sseError) {
+      setError(new Error(sseError));
+      setLoading(false);
+    }
+  }, [sseError]);
+
+  // 攻撃統計はポーリングで取得（攻撃ログの集計は leaderboard-service にない）
+  const fetchAttackStats = useCallback(async () => {
     if (!eventId) return;
     try {
-      const [lbData, statsData] = await Promise.all([
-        getLeaderboard(eventId),
-        getAttackStats(eventId),
-      ]);
-      setLeaderboard(lbData.leaderboard);
+      const statsData = await getAttackStats(eventId);
       setAttackStats(statsData.stats);
-      setBlackout(false);
-      setError(null);
     } catch (err) {
       const e = err as Error & { status?: number };
       if (e.status === 403) {
         setBlackout(true);
-        setError(null);
-      } else {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
       }
-    } finally {
-      setLoading(false);
     }
   }, [eventId]);
 
   useEffect(() => {
-    fetchData();
-    const id = setInterval(fetchData, 10000);
+    fetchAttackStats();
+    const id = setInterval(fetchAttackStats, 10000);
     return () => clearInterval(id);
-  }, [fetchData]);
+  }, [fetchAttackStats]);
 
   useEffect(() => {
     setBoardItems([
@@ -223,7 +236,7 @@ export default function ScoreboardPage() {
       <ErrorState
         message={getErrorMessage(error)}
         type={getErrorType(error)}
-        onRetry={fetchData}
+        onRetry={fetchAttackStats}
       />
     );
   }

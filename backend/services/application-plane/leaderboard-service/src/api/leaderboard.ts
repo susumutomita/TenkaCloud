@@ -52,8 +52,7 @@ leaderboardRoutes.get("/api/leaderboards/:battleId/stream", async (c) => {
 	return streamSSE(c, async (stream) => {
 		let running = true;
 
-		/* v8 ignore next 3 */
-		stream.onAbort(() => {
+		stream.onAbort(/* istanbul ignore next */ () => {
 			running = false;
 		});
 

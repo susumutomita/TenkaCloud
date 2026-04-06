@@ -70,10 +70,34 @@ describe('Backend URL ヘルパー', () => {
     });
   });
 
+  describe('getLeaderboardApiUrl', () => {
+    it('LEADERBOARD_API_URL が設定されている場合はそれを返すべき', async () => {
+      process.env.LEADERBOARD_API_URL = 'http://leaderboard:3012';
+      process.env.NEXT_PUBLIC_LEADERBOARD_API_URL = 'http://public-lb:3012';
+      const { getLeaderboardApiUrl } = await import('../backend-urls');
+      expect(getLeaderboardApiUrl()).toBe('http://leaderboard:3012');
+    });
+
+    it('LEADERBOARD_API_URL がなく NEXT_PUBLIC_LEADERBOARD_API_URL がある場合はフォールバックすべき', async () => {
+      process.env.LEADERBOARD_API_URL = '';
+      process.env.NEXT_PUBLIC_LEADERBOARD_API_URL = 'http://public-lb:3012';
+      const { getLeaderboardApiUrl } = await import('../backend-urls');
+      expect(getLeaderboardApiUrl()).toBe('http://public-lb:3012');
+    });
+
+    it('環境変数がない場合はデフォルト URL を返すべき', async () => {
+      process.env.LEADERBOARD_API_URL = '';
+      process.env.NEXT_PUBLIC_LEADERBOARD_API_URL = '';
+      const { getLeaderboardApiUrl } = await import('../backend-urls');
+      expect(getLeaderboardApiUrl()).toBe('http://localhost:3012');
+    });
+  });
+
   describe('getAllServiceUrls', () => {
     it('全サービスの URL マップを返すべき', async () => {
       process.env.API_URL = 'http://problem:3100/api';
       process.env.GAMEDAY_API_URL = 'http://gameday:3020/api/gameday';
+      process.env.LEADERBOARD_API_URL = 'http://leaderboard:3012';
       process.env.TENANT_SERVICE_URL = 'http://tenant:3200/api/tenant';
       const { getAllServiceUrls } = await import('../backend-urls');
 
@@ -81,6 +105,7 @@ describe('Backend URL ヘルパー', () => {
       expect(urls).toEqual({
         'problem-service': 'http://problem:3100/api',
         'gameday-service': 'http://gameday:3020/api/gameday',
+        'leaderboard-service': 'http://leaderboard:3012',
         'tenant-management': 'http://tenant:3200/api/tenant',
       });
     });
@@ -90,6 +115,8 @@ describe('Backend URL ヘルパー', () => {
       process.env.NEXT_PUBLIC_API_URL = '';
       process.env.GAMEDAY_API_URL = '';
       process.env.NEXT_PUBLIC_GAMEDAY_API_URL = '';
+      process.env.LEADERBOARD_API_URL = '';
+      process.env.NEXT_PUBLIC_LEADERBOARD_API_URL = '';
       process.env.TENANT_SERVICE_URL = '';
       const { getAllServiceUrls } = await import('../backend-urls');
 
@@ -97,10 +124,12 @@ describe('Backend URL ヘルパー', () => {
       expect(Object.keys(urls)).toEqual([
         'problem-service',
         'gameday-service',
+        'leaderboard-service',
         'tenant-management',
       ]);
       expect(urls['problem-service']).toBe('http://localhost:3100/api');
       expect(urls['gameday-service']).toBe('http://localhost:3020/api/gameday');
+      expect(urls['leaderboard-service']).toBe('http://localhost:3012');
       expect(urls['tenant-management']).toBe(
         'http://localhost:3200/api/tenant',
       );
