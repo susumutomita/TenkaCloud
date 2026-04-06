@@ -10,6 +10,7 @@ import type {
 	ProblemCategory as PrismaProblemCategory,
 	DifficultyLevel as PrismaDifficultyLevel,
 	CloudProvider as PrismaCloudProvider,
+	TemplateType as PrismaTemplateType,
 	MarketplaceListing,
 } from "@prisma/client";
 import { prisma as _prisma } from "./prisma-client";
@@ -175,6 +176,21 @@ function toPrismaCloudProvider(provider: CloudProvider): PrismaCloudProvider {
 	return map[provider];
 }
 
+function toPrismaTemplateType(
+	type: DeploymentTemplateType | undefined,
+): PrismaTemplateType {
+	const map: Record<DeploymentTemplateType, PrismaTemplateType> = {
+		cloudformation: "CLOUDFORMATION",
+		sam: "SAM",
+		cdk: "CDK",
+		terraform: "TERRAFORM",
+		"deployment-manager": "DEPLOYMENT_MANAGER",
+		arm: "ARM",
+		"docker-compose": "DOCKER_COMPOSE",
+	};
+	return map[type ?? "cloudformation"] ?? "CLOUDFORMATION";
+}
+
 /**
  * Prisma Problem Repository 実装
  */
@@ -210,7 +226,7 @@ export class PrismaProblemRepository implements IProblemRepository {
 					create: Object.entries(problem.deployment.templates || {}).map(
 						([provider, t]) => ({
 							provider: toPrismaCloudProvider(provider as CloudProvider),
-							type: (t.type?.toUpperCase() ?? "CLOUDFORMATION") as "CLOUDFORMATION" | "SAM" | "CDK" | "TERRAFORM" | "DEPLOYMENT_MANAGER" | "ARM" | "DOCKER_COMPOSE",
+							type: toPrismaTemplateType(t.type),
 							path: t.path ?? null,
 							content: t.content ?? null,
 							parameters: t.parameters ?? {},

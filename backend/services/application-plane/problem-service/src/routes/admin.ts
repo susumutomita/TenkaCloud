@@ -823,40 +823,30 @@ adminRouter.post(
 );
 
 // 問題インポート（テンプレート内容を含む）
-const importProblemSchema = z.object({
-	title: z.string().min(1),
-	type: z.enum(["gameday", "jam"]),
-	category: z.string().min(1),
-	difficulty: z.enum(["easy", "medium", "hard", "expert"]),
-	description: z.object({
-		overview: z.string(),
-		objectives: z.array(z.string()),
-		hints: z.array(z.string()),
-		prerequisites: z.array(z.string()).optional(),
-	}),
-	metadata: z.object({
-		author: z.string(),
-		version: z.string(),
-		tags: z.array(z.string()),
-	}),
+const templateTypeEnum = z.enum([
+	"cloudformation",
+	"sam",
+	"cdk",
+	"terraform",
+	"deployment-manager",
+	"arm",
+	"docker-compose",
+]);
+
+const importProblemSchema = createProblemSchema.extend({
 	deployment: z.object({
-		providers: z.array(z.string()),
+		providers: z.array(z.enum(["aws", "gcp", "azure", "local"])).min(1),
 		timeout: z.number().optional(),
 		regions: z.record(z.array(z.string())).optional(),
 	}),
-	scoring: z.object({
-		type: z.enum(["lambda", "container", "api", "manual"]),
-		path: z.string().optional(),
-		timeoutMinutes: z.number(),
-		criteria: z.array(
+	templates: z
+		.record(
 			z.object({
-				name: z.string(),
-				weight: z.number(),
-				maxPoints: z.number(),
+				type: templateTypeEnum,
+				content: z.string().min(1),
 			}),
-		),
-	}),
-	templates: z.record(z.string()).default({}),
+		)
+		.default({}),
 });
 
 adminRouter.post(
@@ -866,41 +856,31 @@ adminRouter.post(
 		const data = c.req.valid("json");
 
 		try {
-			const templateEntries: Record<string, { type: string; content: string }> = {};
-			for (const [provider, content] of Object.entries(data.templates)) {
-				templateEntries[provider] = {
-					type: "cloudformation",
-					content,
-				};
-			}
-
 			const problem = await problemRepository.create({
 				id: crypto.randomUUID(),
 				title: data.title,
 				type: data.type,
 				category: data.category,
 				difficulty: data.difficulty,
-				description: {
-					...data.description,
-					prerequisites: data.description.prerequisites ?? [],
-				},
+				description: data.description,
 				metadata: {
 					author: data.metadata.author,
 					version: data.metadata.version,
 					tags: data.metadata.tags,
+					license: data.metadata.license,
 					createdAt: new Date().toISOString(),
 					updatedAt: new Date().toISOString(),
 				},
 				deployment: {
-					providers: data.deployment.providers as Array<"aws" | "gcp" | "azure" | "local">,
+					providers: data.deployment.providers,
 					timeout: data.deployment.timeout,
 					templates: Object.fromEntries(
-						Object.entries(templateEntries).map(([provider, t]) => [
+						Object.entries(data.templates).map(([provider, t]) => [
 							provider,
-							{ type: t.type as "cloudformation", content: t.content },
+							{ type: t.type, content: t.content },
 						]),
 					),
-					regions: (data.deployment.regions ?? {}) as Record<string, string[]>,
+					regions: data.deployment.regions ?? {},
 				},
 				scoring: data.scoring,
 			});

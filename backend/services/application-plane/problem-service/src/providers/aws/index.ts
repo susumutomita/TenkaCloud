@@ -108,7 +108,7 @@ export class AWSCloudProvider implements ICloudProvider {
 			// CloudFormation CreateStack を呼び出し
 			const createStackParams = {
 				StackName: options.stackName,
-				TemplateBody: template.content ?? await this.loadTemplate(template.path ?? ""),
+				TemplateBody: await this.resolveTemplateBody(template),
 				Parameters: parameters,
 				Tags: tags,
 				Capabilities: [
@@ -469,10 +469,23 @@ export class AWSCloudProvider implements ICloudProvider {
 		}));
 	}
 
+	private async resolveTemplateBody(
+		template: { content?: string; path?: string },
+	): Promise<string> {
+		if (template.content) {
+			return template.content;
+		}
+		if (template.path) {
+			return this.loadTemplate(template.path);
+		}
+		throw new Error(
+			"デプロイテンプレートに content も path も設定されていません",
+		);
+	}
+
 	private async loadTemplate(path: string): Promise<string> {
-		// 実際の実装ではファイルシステムまたは S3 からテンプレートを読み込む
-		console.log(`[AWS] Loading template from ${path}`);
-		return "{}";
+		const fs = await import("node:fs/promises");
+		return fs.readFile(path, "utf-8");
 	}
 
 	private async validateTemplate(
