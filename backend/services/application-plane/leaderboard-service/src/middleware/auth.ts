@@ -31,7 +31,7 @@ async function getJWKS() {
 export const authMiddleware = createMiddleware(async (c, next) => {
 	if (
 		process.env.AUTH_SKIP === "1" &&
-		process.env.NODE_ENV !== "production"
+		(process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test")
 	) {
 		c.set("auth", {
 			userId: "dev-user",

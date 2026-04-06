@@ -186,7 +186,7 @@ describe("管理者 API", () => {
 
 	describe("POST /game/init", () => {
 		describe("有効なリクエストの場合", () => {
-			it("CREATED を返し isRunning: false のゲーム状態を含むべき", async () => {
+			it("CREATED を返し認証コンテキストの tenantId を使用すべき", async () => {
 				const gameState = {
 					eventId: "event-1",
 					tenantId: "tenant-1",
@@ -203,7 +203,6 @@ describe("管理者 API", () => {
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						eventId: "event-1",
-						tenantId: "tenant-1",
 						durationMinutes: 240,
 					}),
 				});
@@ -212,7 +211,6 @@ describe("管理者 API", () => {
 				const body = await res.json();
 				expect(body.eventId).toBe("event-1");
 				expect(body.isRunning).toBe(false);
-				expect(body.startedAt).toBeNull();
 				expect(mockGameController.initGame).toHaveBeenCalledWith(
 					"event-1",
 					"tenant-1",
@@ -226,18 +224,7 @@ describe("管理者 API", () => {
 				const res = await app.request("/game/init", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ eventId: "", tenantId: "tenant-1" }),
-				});
-				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-			});
-		});
-
-		describe("tenantId が空の場合", () => {
-			it("BAD_REQUEST を返すべき", async () => {
-				const res = await app.request("/game/init", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ eventId: "event-1", tenantId: "" }),
+					body: JSON.stringify({ eventId: "" }),
 				});
 				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
 			});
@@ -267,7 +254,6 @@ describe("管理者 API", () => {
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						eventId: "event-1",
-						tenantId: "tenant-1",
 						durationMinutes: 240,
 					}),
 				});
@@ -289,7 +275,6 @@ describe("管理者 API", () => {
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						eventId: "event-1",
-						tenantId: "tenant-1",
 						durationMinutes: 240,
 					}),
 				});

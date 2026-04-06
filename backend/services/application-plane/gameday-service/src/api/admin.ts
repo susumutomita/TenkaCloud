@@ -81,9 +81,10 @@ adminRoutes.post("/game/init", async (c) => {
 		);
 	}
 	try {
+		const tenantId = c.get("auth").tenantId;
 		const result = await initGame(
 			parsed.data.eventId,
-			parsed.data.tenantId,
+			tenantId,
 			parsed.data.durationMinutes,
 		);
 		return c.json(result, StatusCodes.CREATED);
