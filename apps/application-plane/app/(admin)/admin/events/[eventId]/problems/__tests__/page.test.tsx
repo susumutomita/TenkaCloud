@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import AdminEventProblemsPage from '../page';
 
@@ -21,6 +22,9 @@ const mockGetEventProblems = vi.fn();
 const mockGetProblems = vi.fn();
 const mockAddProblemToEvent = vi.fn();
 const mockRemoveProblemFromEvent = vi.fn();
+const mockDeployProblem = vi.fn();
+const mockGetDeploymentStatus = vi.fn();
+const mockDeleteDeployment = vi.fn();
 
 vi.mock('@/lib/api/admin-problems', () => ({
   getEventProblems: (...args: unknown[]) => mockGetEventProblems(...args),
@@ -28,6 +32,9 @@ vi.mock('@/lib/api/admin-problems', () => ({
   addProblemToEvent: (...args: unknown[]) => mockAddProblemToEvent(...args),
   removeProblemFromEvent: (...args: unknown[]) =>
     mockRemoveProblemFromEvent(...args),
+  deployProblem: (...args: unknown[]) => mockDeployProblem(...args),
+  getDeploymentStatus: (...args: unknown[]) => mockGetDeploymentStatus(...args),
+  deleteDeployment: (...args: unknown[]) => mockDeleteDeployment(...args),
 }));
 
 const baseProblem = {
@@ -43,7 +50,11 @@ const baseProblem = {
     prerequisites: [],
   },
   metadata: { author: 'admin', version: '1.0', tags: [] },
-  deployment: { providers: ['aws' as const], templates: {}, regions: {} },
+  deployment: {
+    providers: ['aws' as const],
+    templates: {},
+    regions: { aws: ['ap-northeast-1'] },
+  },
   scoring: {
     type: 'lambda' as const,
     path: 'handler',
@@ -100,6 +111,109 @@ describe('AdminEventProblemsPage', () => {
         name: /問題を追加/i,
       });
       expect(addButtons.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('問題ごとにデプロイボタンを表示すべき', async () => {
+    mockGetEventProblems.mockResolvedValue({ problems: [baseProblem] });
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'デプロイ' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイボタンクリックでデプロイモーダルを表示すべき', async () => {
+    mockGetEventProblems.mockResolvedValue({ problems: [baseProblem] });
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'デプロイ' }),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'デプロイ' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/デプロイ:/)).toBeInTheDocument();
+      expect(screen.getByText('リージョン')).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイモーダルでドライランオプションを表示すべき', async () => {
+    mockGetEventProblems.mockResolvedValue({ problems: [baseProblem] });
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'デプロイ' }),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'デプロイ' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('テンプレートの検証のみ（実際のデプロイは行わない）'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイ実行後にステータスを表示すべき', async () => {
+    mockGetEventProblems.mockResolvedValue({ problems: [baseProblem] });
+    mockDeployProblem.mockResolvedValue({
+      stackName: 'test-stack',
+      message: 'deployed',
+    });
+    mockGetDeploymentStatus.mockResolvedValue({
+      stackName: 'test-stack',
+      status: 'CREATE_COMPLETE',
+    });
+
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'デプロイ' }),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'デプロイ' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'デプロイ実行' }),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'デプロイ実行' }));
+
+    await waitFor(() => {
+      expect(mockDeployProblem).toHaveBeenCalledWith('prob-1', {
+        region: 'ap-northeast-1',
+        dryRun: false,
+      });
+    });
+  });
+
+  it('取得エラー時にエラーメッセージを表示すべき', async () => {
+    mockGetEventProblems.mockRejectedValue(new Error('取得失敗'));
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('取得失敗')).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイカラムのヘッダーを表示すべき', async () => {
+    mockGetEventProblems.mockResolvedValue({ problems: [baseProblem] });
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('デプロイ').length).toBeGreaterThanOrEqual(1);
     });
   });
 });
