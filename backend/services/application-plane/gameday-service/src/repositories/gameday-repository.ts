@@ -10,36 +10,42 @@ import {
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { ulid } from "ulid";
 import { getDocClient, getTableName } from "@tenkacloud/dynamodb";
-import type {
-	GameState,
-	AttackLog,
-	Attack,
-	AttackPurchase,
-	TeamVulnerability,
-	Alliance,
-	AllianceStatus,
-	HealthCheckResult,
-	Vote,
-	ScoreWeight,
-} from "../types";
-
-// Key builders
-const buildGamedayPK = (eventId: string) => `GAMEDAY#${eventId}`;
-const buildMetadataSK = () => "METADATA";
-const buildAttackLogSK = (id: string) => `ATTACKLOG#${id}`;
-const buildTeamSK = (teamId: string) => `TEAM#${teamId}`;
-const buildAttackSK = (slug: string) => `ATTACK#${slug}`;
-const buildPurchaseSK = (teamId: string, attackSlug: string) =>
-	`PURCHASE#${teamId}#${attackSlug}`;
-const buildVulnerabilitySK = (teamId: string, vulnSlug: string) =>
-	`VULNERABILITY#${teamId}#${vulnSlug}`;
-const buildAllianceSK = (allianceId: string) => `ALLIANCE#${allianceId}`;
-const buildHealthCheckSK = (teamId: string, timestamp: string) =>
-	`HEALTHCHECK#${teamId}#${timestamp}`;
-const buildVoteSK = (voterId: string) => `VOTE#${voterId}`;
-const buildMemberSK = (userId: string) => `MEMBER#${userId}`;
-const buildTenantGamedayGSI = (tenantId: string) =>
-	`TENANT#${tenantId}#GAMEDAY`;
+import type { GameState, AttackLog, Attack, AttackPurchase, Alliance, HealthCheckResult, Vote } from "../types";
+import {
+	buildGamedayPK,
+	buildMetadataSK,
+	buildAttackLogSK,
+	buildTeamSK,
+	buildAttackSK,
+	buildPurchaseSK,
+	buildVulnerabilitySK,
+	buildAllianceSK,
+	buildHealthCheckSK,
+	buildVoteSK,
+	buildMemberSK,
+	buildTenantGamedayGSI,
+	toGameState,
+	toAttackLog,
+	toTeamState,
+	toMemberRecord,
+	toAttack,
+	toAttackPurchase,
+	toTeamVulnerability,
+	toAlliance,
+	toHealthCheckResult,
+	toVote,
+	GameAlreadyExistsError,
+	ConcurrentModificationError,
+	AttackAlreadyPurchasedError,
+	VoteAlreadyExistsError,
+	TeamAlreadyExistsError,
+	type GameStateItem,
+	type AttackLogItem,
+	type TeamStateItem,
+	type MemberItem,
+	type TeamState,
+	type MemberRecord,
+} from "./repository-helpers";
 
 interface GameStateItem {
 	PK: string;
