@@ -485,15 +485,28 @@ export class AWSCloudProvider implements ICloudProvider {
 		);
 	}
 
+	/**
+	 * テンプレートファイルをファイルシステムから読み込む
+	 *
+	 * パストラバーサル防止: realpath で正規化後、ベースディレクトリ内か検証する。
+	 * シンボリックリンク攻撃にも対応。
+	 *
+	 * @param templatePath - ベースディレクトリからの相対パス
+	 * @throws {Error} ベースディレクトリ外のファイルを参照した場合
+	 */
 	private async loadTemplate(templatePath: string): Promise<string> {
 		const fs = await import("node:fs/promises");
 		const nodePath = await import("node:path");
-		const baseDir = nodePath.resolve(process.cwd(), "problems");
-		const resolved = nodePath.resolve(baseDir, templatePath);
-		if (!resolved.startsWith(baseDir + nodePath.sep)) {
-			throw new Error("パストラバーサルが検出されました");
+		const baseDir = process.env.PROBLEMS_DIR
+			? nodePath.resolve(process.env.PROBLEMS_DIR)
+			: nodePath.resolve(process.cwd(), "problems");
+		const candidate = nodePath.resolve(baseDir, templatePath);
+		const realBase = await fs.realpath(baseDir);
+		const realPath = await fs.realpath(candidate);
+		if (!realPath.startsWith(realBase + nodePath.sep)) {
+			throw new Error("無効なファイルパスです");
 		}
-		return fs.readFile(resolved, "utf-8");
+		return fs.readFile(realPath, "utf-8");
 	}
 
 	private async validateTemplate(
