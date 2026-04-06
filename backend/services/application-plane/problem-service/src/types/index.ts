@@ -106,7 +106,8 @@ export interface ProblemDescription {
 
 export interface DeploymentTemplate {
 	type: DeploymentTemplateType;
-	path: string;
+	path?: string;
+	content?: string;
 	parameters?: Record<string, string>;
 }
 
