@@ -1,8 +1,29 @@
 import { z } from "zod";
 
-/** プライベート/リンクローカルIPへのSSRFを防止するURLバリデーション */
-const BLOCKED_HOST_PATTERNS =
-	/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|\[::1\])/i;
+/**
+ * プライベート/リンクローカルIPへのSSRFを防止するURLバリデーション
+ *
+ * ブロック対象:
+ * - localhost, 127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.x, 0.0.0.0
+ * - IPv6 ループバック [::1], マップドアドレス [::ffff:...]
+ * - 数値IP（10進/16進/8進エンコード）
+ * - 非 http/https スキーム
+ */
+function isBlockedHost(hostname: string): boolean {
+	const h = hostname.toLowerCase();
+	// ホスト名ベースのブロック
+	if (h === "localhost") return true;
+	// IPv6 ブラケット除去
+	const bare = h.startsWith("[") ? h.slice(1, -1) : h;
+	// IPv6 ループバック・マップドアドレス
+	if (bare === "::1" || bare.startsWith("::ffff:")) return true;
+	// 数値のみのホスト名（10進/16進/8進 IP エンコード）をブロック
+	if (/^(0x[\da-f]+|\d+)$/i.test(bare)) return true;
+	// プライベート IPv4 レンジ
+	const PRIVATE_RANGES =
+		/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0)/;
+	return PRIVATE_RANGES.test(bare);
+}
 
 const safeUrl = z
 	.string()
@@ -14,7 +35,7 @@ const safeUrl = z
 				if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
 					return false;
 				}
-				return !BLOCKED_HOST_PATTERNS.test(parsed.hostname);
+				return !isBlockedHost(parsed.hostname);
 			} catch {
 				return false;
 			}

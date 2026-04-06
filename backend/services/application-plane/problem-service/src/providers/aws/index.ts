@@ -488,8 +488,9 @@ export class AWSCloudProvider implements ICloudProvider {
 	private async loadTemplate(templatePath: string): Promise<string> {
 		const fs = await import("node:fs/promises");
 		const nodePath = await import("node:path");
-		const resolved = nodePath.resolve(templatePath);
-		if (resolved.includes("..")) {
+		const baseDir = nodePath.resolve(process.cwd(), "problems");
+		const resolved = nodePath.resolve(baseDir, templatePath);
+		if (!resolved.startsWith(baseDir + nodePath.sep)) {
 			throw new Error("パストラバーサルが検出されました");
 		}
 		return fs.readFile(resolved, "utf-8");
