@@ -176,6 +176,17 @@ describe("ゲームコントローラーサービス", () => {
 			});
 		});
 
+		describe("リポジトリが null を返す場合", () => {
+			it("GameNotFoundError を投げるべき", async () => {
+				mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+				mockGamedayRepository.stopGame.mockResolvedValue(null);
+
+				await expect(stopGame("event-1", TENANT_ID)).rejects.toThrow(
+					GameNotFoundError,
+				);
+			});
+		});
+
 		describe("別テナントのゲームにアクセスした場合", () => {
 			it("CrossTenantAccessError を投げるべき", async () => {
 				mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
@@ -245,6 +256,17 @@ describe("ゲームコントローラーサービス", () => {
 			});
 		});
 
+		describe("リポジトリが null を返す場合", () => {
+			it("GameNotFoundError を投げるべき", async () => {
+				mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+				mockGamedayRepository.toggleScoreWeight.mockResolvedValue(null);
+
+				await expect(
+					toggleScoreWeight("event-1", TENANT_ID),
+				).rejects.toThrow(GameNotFoundError);
+			});
+		});
+
 		describe("別テナントのゲームにアクセスした場合", () => {
 			it("CrossTenantAccessError を投げるべき", async () => {
 				mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
@@ -279,6 +301,17 @@ describe("ゲームコントローラーサービス", () => {
 				await expect(toggleBlackout("nonexistent", TENANT_ID)).rejects.toThrow(
 					GameNotFoundError,
 				);
+			});
+		});
+
+		describe("リポジトリが null を返す場合", () => {
+			it("GameNotFoundError を投げるべき", async () => {
+				mockGamedayRepository.getGameState.mockResolvedValue(baseGameState);
+				mockGamedayRepository.toggleBlackout.mockResolvedValue(null);
+
+				await expect(
+					toggleBlackout("event-1", TENANT_ID),
+				).rejects.toThrow(GameNotFoundError);
 			});
 		});
 

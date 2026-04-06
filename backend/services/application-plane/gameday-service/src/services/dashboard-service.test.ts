@@ -37,6 +37,7 @@ import {
 	getAttackStatistics,
 	getTeamDashboard,
 	joinTeamByInviteCode,
+	listTeams,
 	BlackoutActiveError,
 	TeamAlreadyExistsError,
 } from "./dashboard-service";
@@ -324,6 +325,32 @@ describe("ダッシュボードサービス", () => {
 			const result = await getAttackStatistics("event-1");
 			expect(result[0].successRate).toBe(0);
 		});
+
+		it("ログに含まれるチームが teams リストに存在しない場合は無視するべき", async () => {
+			mockRepository.listTeams.mockResolvedValue([
+				{
+					teamId: "team-1",
+					teamName: "A",
+					score: 0,
+					isHealthy: true,
+					websiteUrl: null,
+					apiUrl: null,
+				},
+			]);
+			// team-unknown は teams リストに存在しない
+			mockRepository.listAttackLogs.mockResolvedValue([
+				{
+					attackerTeamId: "team-unknown",
+					defenderTeamId: "team-unknown",
+					success: true,
+				},
+			]);
+
+			const result = await getAttackStatistics("event-1");
+			// team-1 の統計には影響なし
+			expect(result[0].attacksSent).toBe(0);
+			expect(result[0].attacksReceived).toBe(0);
+		});
 	});
 
 	// === チームダッシュボード ===
@@ -361,6 +388,29 @@ describe("ダッシュボードサービス", () => {
 
 			const result = await getTeamDashboard("event-1", "nonexistent");
 			expect(result).toBeNull();
+		});
+	});
+
+	// === チーム一覧取得 ===
+	describe("listTeams", () => {
+		it("チーム一覧を返すべき", async () => {
+			const teams = [
+				{
+					eventId: "event-1",
+					teamId: "team-1",
+					teamName: "チームA",
+					score: 5000,
+					isHealthy: true,
+					websiteUrl: null,
+					apiUrl: null,
+				},
+			];
+			mockRepository.listTeams.mockResolvedValue(teams);
+
+			const result = await listTeams("event-1");
+
+			expect(result).toEqual(teams);
+			expect(mockRepository.listTeams).toHaveBeenCalledWith("event-1");
 		});
 	});
 

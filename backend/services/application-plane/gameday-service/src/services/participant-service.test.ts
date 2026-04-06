@@ -62,6 +62,7 @@ import {
 	executeAttack,
 	getAttackHistory,
 	getActiveAttacks,
+	getAllAttackLogs,
 	purchaseHint,
 	reportFix,
 	listTeamAlliances,
@@ -498,6 +499,71 @@ describe("プレーヤーサービス", () => {
 			});
 		});
 
+		describe("クールダウン後の場合", () => {
+			it("クールダウン済みであれば攻撃を実行すべき", async () => {
+				mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
+				mockGamedayRepository.getAttack.mockResolvedValue(sampleAttack);
+				// lastUsedAt を十分過去の時刻に設定（cooldownSeconds=300 を超えている）
+				const oldTime = new Date(Date.now() - 600_000).toISOString();
+				mockGamedayRepository.getAttackPurchase.mockResolvedValue({
+					id: "p-1",
+					lastUsedAt: oldTime,
+				});
+				mockGamedayRepository.getTeamState.mockResolvedValue({
+					...sampleTeam,
+					teamId: "team-2",
+				});
+				mockGamedayRepository.getTeamVulnerability.mockResolvedValue(null);
+				mockGamedayRepository.updatePurchaseLastUsedAt.mockResolvedValue(undefined);
+				mockGamedayRepository.updateMultipleTeamScores.mockResolvedValue(undefined);
+				mockGamedayRepository.listTeamActiveAlliances.mockResolvedValue([]);
+				mockGamedayRepository.addAttackLog.mockResolvedValue({ id: "log-1" });
+
+				const result = await executeAttack(
+					"event-1",
+					"team-1",
+					"team-2",
+					"sql-injection",
+				);
+
+				expect(result).toBeDefined();
+			});
+		});
+
+		describe("非 vulnerability 攻撃の場合", () => {
+			it("脆弱性チェックなしで攻撃を実行すべき", async () => {
+				const chaosAttack = {
+					...sampleAttack,
+					attackType: "chaos" as const,
+					targetVulnerability: undefined,
+				};
+				mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
+				mockGamedayRepository.getAttack.mockResolvedValue(chaosAttack);
+				mockGamedayRepository.getAttackPurchase.mockResolvedValue({
+					id: "p-1",
+					lastUsedAt: null,
+				});
+				mockGamedayRepository.getTeamState.mockResolvedValue({
+					...sampleTeam,
+					teamId: "team-2",
+				});
+				mockGamedayRepository.updatePurchaseLastUsedAt.mockResolvedValue(undefined);
+				mockGamedayRepository.updateMultipleTeamScores.mockResolvedValue(undefined);
+				mockGamedayRepository.listTeamActiveAlliances.mockResolvedValue([]);
+				mockGamedayRepository.addAttackLog.mockResolvedValue({ id: "log-1" });
+
+				const result = await executeAttack(
+					"event-1",
+					"team-1",
+					"team-2",
+					"chaos-attack",
+				);
+
+				expect(result).toBeDefined();
+				expect(mockGamedayRepository.getTeamVulnerability).not.toHaveBeenCalled();
+			});
+		});
+
 		describe("ターゲットチームが見つからない場合", () => {
 			it("TeamNotFoundError を投げるべき", async () => {
 				mockGamedayRepository.getGameState.mockResolvedValue(runningGame);
@@ -858,6 +924,28 @@ describe("プレーヤーサービス", () => {
 			mockGamedayRepository.listVotes.mockResolvedValue([]);
 			const result = await getVotingResults("event-1");
 			expect(result).toEqual([]);
+		});
+	});
+
+	// === 全攻撃ログ取得 ===
+	describe("getAllAttackLogs", () => {
+		it("全攻撃ログを返すべき", async () => {
+			const logs = [
+				{
+					id: "log-1",
+					eventId: "event-1",
+					attackerTeamId: "team-1",
+					defenderTeamId: "team-2",
+					attackSlug: "sql-injection",
+					success: true,
+				},
+			];
+			mockGamedayRepository.listAttackLogs.mockResolvedValue(logs);
+
+			const result = await getAllAttackLogs("event-1");
+
+			expect(result).toEqual(logs);
+			expect(mockGamedayRepository.listAttackLogs).toHaveBeenCalledWith("event-1");
 		});
 	});
 });

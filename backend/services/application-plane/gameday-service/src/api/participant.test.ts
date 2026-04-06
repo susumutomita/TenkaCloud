@@ -142,22 +142,38 @@ const mockDashboardService = vi.hoisted(() => {
   };
 });
 
-const mockGameController = vi.hoisted(() => ({
-  getGameStatus: vi.fn(),
-}));
-
-vi.mock('../services/participant-service', () => mockParticipantService);
-vi.mock('../services/dashboard-service', () => mockDashboardService);
-vi.mock('../services/game-controller', () => ({
-  getGameStatus: mockGameController.getGameStatus,
-  CrossTenantAccessError: class CrossTenantAccessError extends Error {
+const mockGameController = vi.hoisted(() => {
+  class CrossTenantAccessError extends Error {
     constructor(requestTenantId: string, resourceTenantId: string) {
       super(
         `クロステナントアクセスが拒否されました: リクエストテナント=${requestTenantId}, リソーステナント=${resourceTenantId}`
       );
       this.name = 'CrossTenantAccessError';
     }
+  }
+  return {
+    getGameStatus: vi.fn(),
+    CrossTenantAccessError,
+  };
+});
+
+const mockGamedayRepository = vi.hoisted(() => ({
+  addMember: vi.fn(),
+  getMembership: vi.fn(),
+}));
+
+vi.mock('../repositories/gameday-repository', () => ({
+  GamedayRepository: class {
+    addMember = mockGamedayRepository.addMember;
+    getMembership = mockGamedayRepository.getMembership;
   },
+}));
+
+vi.mock('../services/participant-service', () => mockParticipantService);
+vi.mock('../services/dashboard-service', () => mockDashboardService);
+vi.mock('../services/game-controller', () => ({
+  getGameStatus: mockGameController.getGameStatus,
+  CrossTenantAccessError: mockGameController.CrossTenantAccessError,
 }));
 
 import { participantRoutes } from './participant';
@@ -169,6 +185,8 @@ describe('プレーヤー API', () => {
     vi.clearAllMocks();
     // デフォルトの getAllAttackLogs は空配列を返す
     mockParticipantService.getAllAttackLogs.mockResolvedValue([]);
+    mockGamedayRepository.addMember.mockResolvedValue(undefined);
+    mockGamedayRepository.getMembership.mockResolvedValue(null);
     app = new Hono();
     app.use('/*', async (c, next) => {
       c.set('auth' as never, {
@@ -1354,6 +1372,269 @@ describe('プレーヤー API', () => {
       expect(body.team.teamId).toBe('unknown');
       expect(body.score).toBe(0);
       expect(body.recentAttacks).toEqual([]);
+    });
+  });
+
+  // === teams/create 不正な JSON ===
+  describe('POST /teams/create (不正な JSON)', () => {
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockDashboardService.registerTeam.mockRejectedValue(new Error('DB error'));
+      const res = await app.request('/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'テストチーム',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === teams/join 不正な JSON ===
+  describe('POST /teams/join (不正な JSON)', () => {
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === teams/update-url 予期しないエラー ===
+  describe('POST /teams/update-url (予期しないエラー)', () => {
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockDashboardService.updateTeamUrl.mockRejectedValue(new Error('DB error'));
+      const res = await app.request('/teams/update-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          websiteUrl: 'https://example.com',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  // === リーダーボード getAllAttackLogs が失敗する場合 ===
+  describe('GET /dashboard/leaderboard (getAllAttackLogs 失敗)', () => {
+    it('getAllAttackLogs が失敗しても空ログでリーダーボードを返すべき', async () => {
+      mockDashboardService.getLeaderboard.mockResolvedValue([
+        { teamId: 'team-1', teamName: 'チームA', score: 5000 },
+      ]);
+      mockParticipantService.getAllAttackLogs.mockRejectedValue(
+        new Error('DynamoDB error')
+      );
+      const res = await app.request('/dashboard/leaderboard?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.leaderboard).toHaveLength(1);
+    });
+  });
+
+  // === 攻撃統計 getAllAttackLogs が失敗する場合 ===
+  describe('GET /dashboard/attack-stats (getAllAttackLogs 失敗)', () => {
+    it('getAllAttackLogs が失敗しても空の統計を返すべき', async () => {
+      mockParticipantService.getAllAttackLogs.mockRejectedValue(
+        new Error('DynamoDB error')
+      );
+      const res = await app.request('/dashboard/attack-stats?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.stats).toHaveLength(0);
+    });
+  });
+
+  // === userId ありのチーム作成 ===
+  describe('POST /teams/create (userId あり)', () => {
+    it('userId あり でメンバー登録も行うべき', async () => {
+      mockDashboardService.registerTeam.mockResolvedValue({
+        eventId: 'event-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        score: 0,
+        isHealthy: true,
+        websiteUrl: null,
+        apiUrl: null,
+        inviteCode: 'ABC123',
+      });
+      const res = await app.request('/teams/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          teamId: 'team-1',
+          teamName: 'テストチーム',
+          userId: 'user-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.CREATED);
+      expect(mockGamedayRepository.addMember).toHaveBeenCalledWith({
+        eventId: 'event-1',
+        userId: 'user-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        mode: 'team',
+      });
+    });
+  });
+
+  // === userId ありのチーム参加 ===
+  describe('POST /teams/join (userId あり)', () => {
+    it('userId あり でメンバー登録も行うべき', async () => {
+      mockDashboardService.joinTeamByInviteCode.mockResolvedValue({
+        eventId: 'event-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        score: 0,
+        isHealthy: true,
+        websiteUrl: null,
+        apiUrl: null,
+        inviteCode: 'ABC123',
+      });
+      const res = await app.request('/teams/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: 'event-1',
+          inviteCode: 'ABC123',
+          userId: 'user-1',
+        }),
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+      expect(mockGamedayRepository.addMember).toHaveBeenCalledWith({
+        eventId: 'event-1',
+        userId: 'user-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        mode: 'team',
+      });
+    });
+  });
+
+  // === ソロ参加登録 ===
+  describe('POST /teams/solo', () => {
+    it('正常系で CREATED を返すべき', async () => {
+      const res = await app.request('/teams/solo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1', userId: 'user-1' }),
+      });
+      expect(res.status).toBe(StatusCodes.CREATED);
+      const body = await res.json();
+      expect(body.mode).toBe('solo');
+      expect(mockGamedayRepository.addMember).toHaveBeenCalledWith({
+        eventId: 'event-1',
+        userId: 'user-1',
+        teamId: 'solo-user-1',
+        teamName: 'ソロ参加',
+        mode: 'solo',
+      });
+    });
+
+    it('必須フィールドが欠けている場合 BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/solo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+
+    it('不正な JSON で BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/solo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid-json',
+      });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === メンバーシップ取得 ===
+  describe('GET /teams/my-membership', () => {
+    it('メンバーシップが存在する場合 OK を返すべき', async () => {
+      mockGamedayRepository.getMembership.mockResolvedValue({
+        userId: 'user-1',
+        teamId: 'team-1',
+        teamName: 'テストチーム',
+        mode: 'team',
+      });
+      const res = await app.request(
+        '/teams/my-membership?eventId=event-1&userId=user-1'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.membership.teamId).toBe('team-1');
+    });
+
+    it('メンバーシップが存在しない場合 OK で null を返すべき', async () => {
+      const res = await app.request(
+        '/teams/my-membership?eventId=event-1&userId=nonexistent'
+      );
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.membership).toBeNull();
+    });
+
+    it('必須パラメータが欠けている場合 BAD_REQUEST を返すべき', async () => {
+      const res = await app.request('/teams/my-membership?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    });
+  });
+
+  // === リーダーボード（攻撃ログあり）===
+  describe('GET /dashboard/leaderboard (攻撃ログあり)', () => {
+    it('攻撃ログを集計してリーダーボードに反映すべき', async () => {
+      mockDashboardService.getLeaderboard.mockResolvedValue([
+        { teamId: 'team-1', teamName: 'チームA', score: 5000 },
+        { teamId: 'team-2', teamName: 'チームB', score: 3000 },
+      ]);
+      mockParticipantService.getAllAttackLogs.mockResolvedValue([
+        {
+          attackerTeamId: 'team-1',
+          defenderTeamId: 'team-2',
+          attackSlug: 'sql-injection',
+          success: true,
+        },
+      ]);
+      const res = await app.request('/dashboard/leaderboard?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.OK);
+      const body = await res.json();
+      expect(body.leaderboard).toHaveLength(2);
+      expect(body.leaderboard[0].attacksLaunched).toBe(1);
+      expect(body.leaderboard[1].attacksReceived).toBe(1);
+    });
+  });
+
+  // === ゲームステータス CrossTenantAccessError ===
+  describe('GET /game/status (CrossTenantAccess)', () => {
+    it('別テナントアクセスで FORBIDDEN を返すべき', async () => {
+      mockGameController.getGameStatus.mockRejectedValue(
+        new mockGameController.CrossTenantAccessError('tenant-1', 'tenant-2')
+      );
+      const res = await app.request('/game/status?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    });
+
+    it('予期しないエラーで INTERNAL_SERVER_ERROR を返すべき', async () => {
+      mockGameController.getGameStatus.mockRejectedValue(new Error('DB error'));
+      const res = await app.request('/game/status?eventId=event-1');
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     });
   });
 });
