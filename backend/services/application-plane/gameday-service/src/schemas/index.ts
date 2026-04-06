@@ -1,24 +1,41 @@
 import { z } from "zod";
 
 /**
- * プライベート/リンクローカルIPへのSSRFを防止するURLバリデーション
+ * ホスト名がプライベート/リンクローカルIPかどうかを判定する
  *
  * ブロック対象:
- * - localhost, 127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.x, 0.0.0.0
- * - IPv6 ループバック [::1], マップドアドレス [::ffff:...]
- * - 数値IP（10進/16進/8進エンコード）
+ * - localhost
+ * - プライベート IPv4: 127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.x, 0.0.0.0
+ * - IPv6 ループバック: ::1
+ * - IPv6 マップドアドレス: ::ffff:x.x.x.x, ::ffff:xxxx:xxxx
+ * - 数値 IP エンコード: 10進、16進（0x）、8進（0）、混合形式
  * - 非 http/https スキーム
+ *
+ * @param hostname - URL.hostname から取得したホスト名
+ * @returns ブロック対象の場合 true
  */
-function isBlockedHost(hostname: string): boolean {
+export function isBlockedHost(hostname: string): boolean {
 	const h = hostname.toLowerCase();
-	// ホスト名ベースのブロック
 	if (h === "localhost") return true;
 	// IPv6 ブラケット除去
 	const bare = h.startsWith("[") ? h.slice(1, -1) : h;
-	// IPv6 ループバック・マップドアドレス
-	if (bare === "::1" || bare.startsWith("::ffff:")) return true;
-	// 数値のみのホスト名（10進/16進/8進 IP エンコード）をブロック
-	if (/^(0x[\da-f]+|\d+)$/i.test(bare)) return true;
+	// IPv6 ループバック
+	if (bare === "::1") return true;
+	// IPv6 マップドアドレス（テキスト形式・16進形式の両方）
+	if (bare.startsWith("::ffff:")) return true;
+	// 数値のみ/16進/8進のホスト名（10進IP、0x16進IP、先頭0の8進IP）
+	if (/^[\d.ox]+$/i.test(bare) && /^[\d.]+$/.test(bare) === false) return true;
+	// 純粋な10進数値IP（例: 2130706433）
+	if (/^\d+$/.test(bare)) return true;
+	// 各オクテットに8進数(0始まり)や16進数(0x始まり)が含まれるIPをブロック
+	// 例: 0177.0.0.1, 0x7f.0.0.1
+	const octets = bare.split(".");
+	if (
+		octets.length === 4 &&
+		octets.some((o) => /^0[xo0-7]/i.test(o) && o !== "0")
+	) {
+		return true;
+	}
 	// プライベート IPv4 レンジ
 	const PRIVATE_RANGES =
 		/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0)/;
