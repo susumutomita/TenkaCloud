@@ -23,6 +23,12 @@ const mockGameController = vi.hoisted(() => {
 			this.name = "CrossTenantAccessError";
 		}
 	}
+	class GameAlreadyExistsError extends Error {
+		constructor(eventId: string) {
+			super(`ゲームは既に存在します: ${eventId}`);
+			this.name = "GameAlreadyExistsError";
+		}
+	}
 	return {
 		initGame: vi.fn(),
 		startGame: vi.fn(),
@@ -35,6 +41,7 @@ const mockGameController = vi.hoisted(() => {
 		listAttackLogs: vi.fn(),
 		seedAttackCatalog: vi.fn(),
 		GameNotFoundError,
+		GameAlreadyExistsError,
 		ConcurrentModificationError,
 		CrossTenantAccessError,
 	};
@@ -141,6 +148,40 @@ describe("管理者 API", () => {
 				expect(body.error).toBe("JSON の解析に失敗しました");
 			});
 		});
+
+		describe("ゲームが既に存在する場合", () => {
+			it("CONFLICT を返すべき", async () => {
+				mockGameController.startGame.mockRejectedValue(
+					new mockGameController.GameAlreadyExistsError("event-1"),
+				);
+
+				const res = await app.request("/game/start", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1", durationMinutes: 240 }),
+				});
+
+				expect(res.status).toBe(StatusCodes.CONFLICT);
+				const body = await res.json();
+				expect(body.error).toContain("既に存在します");
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.startGame.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/game/start", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1", durationMinutes: 240 }),
+				});
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+			});
+		});
 	});
 
 	describe("POST /game/init", () => {
@@ -212,6 +253,48 @@ describe("管理者 API", () => {
 				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
 				const body = await res.json();
 				expect(body.error).toBe("JSON の解析に失敗しました");
+			});
+		});
+
+		describe("ゲームが既に存在する場合", () => {
+			it("CONFLICT を返すべき", async () => {
+				mockGameController.initGame.mockRejectedValue(
+					new mockGameController.GameAlreadyExistsError("event-1"),
+				);
+
+				const res = await app.request("/game/init", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						eventId: "event-1",
+						tenantId: "tenant-1",
+						durationMinutes: 240,
+					}),
+				});
+
+				expect(res.status).toBe(StatusCodes.CONFLICT);
+				const body = await res.json();
+				expect(body.error).toContain("既に存在します");
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.initGame.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/game/init", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						eventId: "event-1",
+						tenantId: "tenant-1",
+						durationMinutes: 240,
+					}),
+				});
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
 			});
 		});
 	});

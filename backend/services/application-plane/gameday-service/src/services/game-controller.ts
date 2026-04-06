@@ -1,5 +1,8 @@
 import { gamedayRepository } from "../lib/dynamodb";
-import { ConcurrentModificationError } from "../repositories/gameday-repository";
+import {
+	ConcurrentModificationError,
+	GameAlreadyExistsError,
+} from "../repositories/gameday-repository";
 import {
 	validateTenantAccess,
 	CrossTenantAccessError,
@@ -11,6 +14,7 @@ import { DEFAULT_ATTACKS } from "../data/default-attacks";
 import { ulid } from "ulid";
 
 export { ConcurrentModificationError };
+export { GameAlreadyExistsError };
 export { CrossTenantAccessError };
 
 export class GameNotFoundError extends Error {
