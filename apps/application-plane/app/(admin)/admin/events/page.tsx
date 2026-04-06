@@ -31,11 +31,13 @@ function getNextStatusAction(
 ): { label: string; nextStatus: EventStatus } | null {
   switch (status) {
     case 'draft':
-      return { label: '\u516c\u958b', nextStatus: 'scheduled' as EventStatus };
+      return { label: '公開', nextStatus: 'scheduled' };
     case 'scheduled':
-      return { label: '\u958b\u59cb', nextStatus: 'active' as EventStatus };
+      return { label: '開始', nextStatus: 'active' };
     case 'active':
-      return { label: '\u7d42\u4e86', nextStatus: 'completed' as EventStatus };
+      return { label: '終了', nextStatus: 'completed' };
+    case 'paused':
+      return { label: '再開', nextStatus: 'active' };
     default:
       return null;
   }
@@ -46,7 +48,9 @@ const STATUS_OPTIONS: SelectProps.Option[] = [
   { label: '下書き', value: 'draft' },
   { label: '予定', value: 'scheduled' },
   { label: '開催中', value: 'active' },
+  { label: '一時停止', value: 'paused' },
   { label: '終了', value: 'completed' },
+  { label: 'キャンセル', value: 'cancelled' },
 ];
 
 function getStatusIndicator(status: EventStatus) {
@@ -57,6 +61,10 @@ function getStatusIndicator(status: EventStatus) {
       return <StatusIndicator type="pending">予定</StatusIndicator>;
     case 'completed':
       return <StatusIndicator type="stopped">終了</StatusIndicator>;
+    case 'paused':
+      return <StatusIndicator type="warning">一時停止</StatusIndicator>;
+    case 'cancelled':
+      return <StatusIndicator type="error">キャンセル</StatusIndicator>;
     case 'draft':
       return <StatusIndicator type="info">下書き</StatusIndicator>;
     default:

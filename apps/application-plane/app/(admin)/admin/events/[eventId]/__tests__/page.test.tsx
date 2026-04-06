@@ -197,32 +197,54 @@ describe('イベント詳細ページ', () => {
     });
   });
 
-  it('予定ステータスで「開始する」ボタンが表示されるべき', async () => {
+  it('予定ステータスで「開始する」と「キャンセル」ボタンが表示されるべき', async () => {
     mockGet.mockResolvedValue({ ...mockEvent, status: 'scheduled' });
     render(<AdminEventDetailPage />);
     await waitFor(() => {
       expect(
         screen.getByRole('button', { name: '開始する' }),
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'キャンセル' }),
+      ).toBeInTheDocument();
     });
   });
 
-  it('開催中ステータスで「終了する」ボタンが表示されるべき', async () => {
+  it('開催中ステータスで「一時停止」と「終了する」ボタンが表示されるべき', async () => {
     mockGet.mockResolvedValue({ ...mockEvent, status: 'active' });
     render(<AdminEventDetailPage />);
     await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '一時停止' }),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole('button', { name: '終了する' }),
       ).toBeInTheDocument();
     });
   });
 
-  it('完了ステータスではステータス遷移ボタンが表示されないべき', async () => {
+  it('一時停止ステータスで「再開する」と「キャンセル」ボタンが表示されるべき', async () => {
+    mockGet.mockResolvedValue({ ...mockEvent, status: 'paused' });
+    render(<AdminEventDetailPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '再開する' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'キャンセル' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('完了ステータスで「キャンセル」ボタンのみ表示されるべき', async () => {
     mockGet.mockResolvedValue({ ...mockEvent, status: 'completed' });
     render(<AdminEventDetailPage />);
     await waitFor(() => {
       expect(screen.getByText('テストイベント 2026')).toBeInTheDocument();
     });
+    expect(
+      screen.getByRole('button', { name: 'キャンセル' }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: '公開する' }),
     ).not.toBeInTheDocument();
@@ -231,6 +253,20 @@ describe('イベント詳細ページ', () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: '終了する' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('キャンセル済みステータスでは遷移ボタンが表示されないべき', async () => {
+    mockGet.mockResolvedValue({ ...mockEvent, status: 'cancelled' });
+    render(<AdminEventDetailPage />);
+    await waitFor(() => {
+      expect(screen.getByText('テストイベント 2026')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole('button', { name: '公開する' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'キャンセル' }),
     ).not.toBeInTheDocument();
   });
 

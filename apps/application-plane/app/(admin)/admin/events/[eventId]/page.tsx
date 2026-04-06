@@ -46,6 +46,10 @@ function getStatusIndicator(status: EventStatus) {
       return <StatusIndicator type="pending">予定</StatusIndicator>;
     case 'completed':
       return <StatusIndicator type="stopped">終了</StatusIndicator>;
+    case 'paused':
+      return <StatusIndicator type="warning">一時停止</StatusIndicator>;
+    case 'cancelled':
+      return <StatusIndicator type="error">キャンセル</StatusIndicator>;
     case 'draft':
       return <StatusIndicator type="info">下書き</StatusIndicator>;
     default:
@@ -64,21 +68,38 @@ function getTypeBadge(type: string) {
   }
 }
 
+interface StatusAction {
+  label: string;
+  status: EventStatus;
+  variant: 'primary' | 'normal';
+}
+
 /**
- * 次のステータスを取得
+ * 現在のステータスから有効な遷移アクションを返す
  */
-function getNextStatus(
-  current: EventStatus,
-): { label: string; status: EventStatus } | null {
+function getStatusActions(current: EventStatus): StatusAction[] {
   switch (current) {
     case 'draft':
-      return { label: '公開する', status: 'scheduled' };
+      return [{ label: '公開する', status: 'scheduled', variant: 'primary' }];
     case 'scheduled':
-      return { label: '開始する', status: 'active' };
+      return [
+        { label: '開始する', status: 'active', variant: 'primary' },
+        { label: 'キャンセル', status: 'cancelled', variant: 'normal' },
+      ];
     case 'active':
-      return { label: '終了する', status: 'completed' };
+      return [
+        { label: '一時停止', status: 'paused', variant: 'normal' },
+        { label: '終了する', status: 'completed', variant: 'primary' },
+      ];
+    case 'paused':
+      return [
+        { label: '再開する', status: 'active', variant: 'primary' },
+        { label: 'キャンセル', status: 'cancelled', variant: 'normal' },
+      ];
+    case 'completed':
+      return [{ label: 'キャンセル', status: 'cancelled', variant: 'normal' }];
     default:
-      return null;
+      return [];
   }
 }
 
@@ -168,7 +189,7 @@ export default function AdminEventDetailPage() {
     );
   }
 
-  const nextAction = getNextStatus(event.status);
+  const actions = getStatusActions(event.status);
 
   return (
     <SpaceBetween size="l">
@@ -177,15 +198,16 @@ export default function AdminEventDetailPage() {
         variant="h1"
         actions={
           <SpaceBetween direction="horizontal" size="xs">
-            {nextAction && (
+            {actions.map((action) => (
               <Button
-                variant="primary"
+                key={action.status}
+                variant={action.variant}
                 loading={transitioning}
-                onClick={() => handleStatusTransition(nextAction.status)}
+                onClick={() => handleStatusTransition(action.status)}
               >
-                {nextAction.label}
+                {action.label}
               </Button>
-            )}
+            ))}
             <Button
               onClick={() => router.push(`/admin/events/${eventId}/edit`)}
             >
