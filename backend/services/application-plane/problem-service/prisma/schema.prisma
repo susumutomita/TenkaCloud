@@ -220,7 +220,8 @@ model DeploymentTemplate {
   problem     Problem       @relation(fields: [problemId], references: [id], onDelete: Cascade)
   provider    CloudProvider
   type        TemplateType
-  path        String
+  path        String?
+  content     String?       @db.Text
   parameters  Json          @default("{}")
 
   createdAt   DateTime      @default(now())

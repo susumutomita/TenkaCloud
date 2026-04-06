@@ -108,7 +108,7 @@ export class AWSCloudProvider implements ICloudProvider {
 			// CloudFormation CreateStack を呼び出し
 			const createStackParams = {
 				StackName: options.stackName,
-				TemplateBody: await this.loadTemplate(template.path),
+				TemplateBody: template.content ?? await this.loadTemplate(template.path ?? ""),
 				Parameters: parameters,
 				Tags: tags,
 				Capabilities: [

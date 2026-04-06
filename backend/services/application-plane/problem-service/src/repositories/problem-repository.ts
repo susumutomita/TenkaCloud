@@ -49,7 +49,8 @@ function toProblem(
 		templates?: {
 			provider: string;
 			type: string;
-			path: string;
+			path: string | null;
+			content: string | null;
 			parameters: unknown;
 		}[];
 		regions?: { provider: string; regions: string[] }[];
@@ -67,7 +68,8 @@ function toProblem(
 		const provider = t.provider.toLowerCase() as CloudProvider;
 		templatesMap[provider] = {
 			type: t.type as DeploymentTemplateType,
-			path: t.path,
+			path: t.path ?? undefined,
+			content: t.content ?? undefined,
 			parameters: t.parameters as Record<string, string> | undefined,
 		};
 	});
@@ -204,6 +206,34 @@ export class PrismaProblemRepository implements IProblemRepository {
 				scoringPath: problem.scoring.path,
 				scoringTimeoutMinutes: problem.scoring.timeoutMinutes || 5,
 				scoringIntervalMinutes: problem.scoring.intervalMinutes,
+				templates: {
+					create: Object.entries(problem.deployment.templates || {}).map(
+						([provider, t]) => ({
+							provider: toPrismaCloudProvider(provider as CloudProvider),
+							type: (t.type?.toUpperCase() ?? "CLOUDFORMATION") as "CLOUDFORMATION" | "SAM" | "CDK" | "TERRAFORM" | "DEPLOYMENT_MANAGER" | "ARM" | "DOCKER_COMPOSE",
+							path: t.path ?? null,
+							content: t.content ?? null,
+							parameters: t.parameters ?? {},
+						}),
+					),
+				},
+				regions: {
+					create: Object.entries(problem.deployment.regions || {}).map(
+						([provider, regions]) => ({
+							provider: toPrismaCloudProvider(provider as CloudProvider),
+							regions: regions ?? [],
+						}),
+					),
+				},
+				criteria: {
+					create: (problem.scoring.criteria || []).map((c, i) => ({
+						name: c.name,
+						description: c.description ?? null,
+						weight: c.weight,
+						maxPoints: c.maxPoints,
+						order: i,
+					})),
+				},
 			},
 			include: {
 				templates: true,
