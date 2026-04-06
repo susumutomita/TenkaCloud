@@ -20,6 +20,7 @@ import {
 	listAttackLogs,
 	seedAttackCatalog,
 	GameNotFoundError,
+	GameAlreadyExistsError,
 	ConcurrentModificationError,
 	CrossTenantAccessError,
 } from "../services/game-controller";
@@ -47,13 +48,20 @@ adminRoutes.post("/game/start", async (c) => {
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const tenantId = c.get("auth").tenantId;
-	const result = await startGame(
-		parsed.data.eventId,
-		tenantId,
-		parsed.data.durationMinutes,
-	);
-	return c.json(result, StatusCodes.CREATED);
+	try {
+		const tenantId = c.get("auth").tenantId;
+		const result = await startGame(
+			parsed.data.eventId,
+			tenantId,
+			parsed.data.durationMinutes,
+		);
+		return c.json(result, StatusCodes.CREATED);
+	} catch (error) {
+		if (error instanceof GameAlreadyExistsError) {
+			return c.json({ error: error.message }, StatusCodes.CONFLICT);
+		}
+		throw error;
+	}
 });
 
 // ゲーム初期化（isRunning: false で作成、イベント作成時に自動呼び出し）
@@ -72,12 +80,19 @@ adminRoutes.post("/game/init", async (c) => {
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const result = await initGame(
-		parsed.data.eventId,
-		parsed.data.tenantId,
-		parsed.data.durationMinutes,
-	);
-	return c.json(result, StatusCodes.CREATED);
+	try {
+		const result = await initGame(
+			parsed.data.eventId,
+			parsed.data.tenantId,
+			parsed.data.durationMinutes,
+		);
+		return c.json(result, StatusCodes.CREATED);
+	} catch (error) {
+		if (error instanceof GameAlreadyExistsError) {
+			return c.json({ error: error.message }, StatusCodes.CONFLICT);
+		}
+		throw error;
+	}
 });
 
 // ゲーム停止

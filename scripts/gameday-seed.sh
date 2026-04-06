@@ -36,8 +36,23 @@ fi
 echo "✅ GameDay サービスに接続しました"
 echo ""
 
-# 1. 攻撃カタログをシード
-echo "📦 ステップ 1/4: 攻撃カタログをシード中..."
+# 1. ゲーム初期化（isRunning: false でゲーム状態を作成）
+echo "📦 ステップ 1/5: ゲームを初期化中..."
+TENANT_ID="${TENANT_ID:-dev-tenant}"
+INIT_RESULT=$(curl -sf -X POST "$GAMEDAY_API/admin/game/init" \
+  -H "Content-Type: application/json" \
+  -d "{\"eventId\": \"$EVENT_ID\", \"tenantId\": \"$TENANT_ID\", \"durationMinutes\": $DURATION}" 2>&1) || {
+  # 既に初期化済みの場合は続行
+  echo "  ⏭️  ゲームは既に初期化されています"
+  INIT_RESULT=""
+}
+if [ -n "$INIT_RESULT" ]; then
+  echo "✅ ゲームを初期化しました (tenantId: $TENANT_ID)"
+fi
+
+# 2. 攻撃カタログをシード
+echo ""
+echo "📦 ステップ 2/5: 攻撃カタログをシード中..."
 SEED_RESULT=$(curl -sf -X POST "$GAMEDAY_API/admin/attacks/seed" \
   -H "Content-Type: application/json" \
   -d "{\"eventId\": \"$EVENT_ID\"}" 2>&1) || {
@@ -48,9 +63,9 @@ SEED_RESULT=$(curl -sf -X POST "$GAMEDAY_API/admin/attacks/seed" \
 SEEDED=$(echo "$SEED_RESULT" | grep -o '"seeded":[0-9]*' | grep -o '[0-9]*')
 echo "✅ ${SEEDED:-?} 個の攻撃をシードしました"
 
-# 2. チーム登録
+# 3. チーム登録
 echo ""
-echo "📦 ステップ 2/4: デモチームを登録中..."
+echo "📦 ステップ 3/5: デモチームを登録中..."
 
 register_team() {
   local team_id="$1"
@@ -78,9 +93,9 @@ register_team "team-charlie" "Team Charlie"
 register_team "team-9" "Team 9"
 register_team "red-xiii" "レッドXIII"
 
-# 3. ゲーム開始
+# 4. ゲーム開始
 echo ""
-echo "📦 ステップ 3/4: ゲームを開始中 (${DURATION}分)..."
+echo "📦 ステップ 4/5: ゲームを開始中 (${DURATION}分)..."
 START_RESULT=$(curl -sf -X POST "$GAMEDAY_API/admin/game/start" \
   -H "Content-Type: application/json" \
   -d "{\"eventId\": \"$EVENT_ID\", \"durationMinutes\": $DURATION}" 2>&1) || {
@@ -92,9 +107,9 @@ if [ -n "$START_RESULT" ]; then
   echo "✅ ゲームを開始しました"
 fi
 
-# 4. 状態確認
+# 5. 状態確認
 echo ""
-echo "📦 ステップ 4/4: 状態を確認中..."
+echo "📦 ステップ 5/5: 状態を確認中..."
 STATUS=$(curl -sf "$GAMEDAY_API/admin/game/status?eventId=$EVENT_ID" 2>&1)
 IS_RUNNING=$(echo "$STATUS" | grep -o '"isRunning":true' || echo "")
 if [ -n "$IS_RUNNING" ]; then
