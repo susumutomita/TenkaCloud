@@ -2,159 +2,138 @@
 
 TenkaCloud へのコントリビューションを歓迎します。
 
-## 開発に参加する方法
+## 開発環境
 
-### 1. Issue を確認する
+### 前提
 
-[GitHub Issues](https://github.com/susumutomita/TenkaCloud/issues) で現在のタスクを確認してください。
+- [Bun](https://bun.sh) v1.2+（`mise` で自動管理）
+- Docker Desktop
+- Git
 
-- `good first issue` ラベル: 初めての方におすすめ
-- `help wanted` ラベル: コントリビューション募集中
-- `bug` ラベル: バグ修正
-- `enhancement` ラベル: 機能追加
-
-### 2. 開発環境をセットアップする
+### セットアップ
 
 ```bash
-# リポジトリをフォーク後、クローン
-git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
-
-# 依存関係をインストール
-bun install
-
-# ローカル環境を起動
-make start
+make install   # 依存関係インストール
+make start     # 全サービス起動
 ```
 
 詳細は [QUICKSTART.md](./QUICKSTART.md) を参照。
 
-### 3. ブランチを作成する
+## 開発フロー
+
+1. Issue を確認し、ブランチを作成する
+2. **テストを先に書く**（TDD）
+3. 実装する
+4. `make before-commit` を通す
+5. PR を作成する
 
 ```bash
-git checkout -b feature/your-feature-name
-# または
-git checkout -b fix/bug-description
+git checkout -b feat/your-feature
+# テストを書く → 実装する → 繰り返す
+make before-commit   # 必須。通らなければ PR を出さない
+git push -u origin HEAD
+gh pr create
 ```
 
-### 4. コードを書く
+## 品質基準
 
-#### コーディング規約
+### `make before-commit` が実行するチェック
 
-- **TypeScript**: strict mode を使用
-- **テスト**: TDD でテストを先に書く
-- **テストタイトル**: 日本語で「〜すべき」形式
-- **コミット前**: `make before-commit` を必ず実行
+| チェック | ツール | 基準 |
+|---------|-------|------|
+| Markdown lint | Textlint | 日本語ルール準拠 |
+| フォーマット | Biome | 自動整形ルール準拠 |
+| 型チェック | TypeScript (`tsc --noEmit`) | エラーゼロ |
+| テスト | Vitest + Istanbul | カバレッジ 99％+ (statements, branches, functions, lines) |
+| ビルド | Next.js | 全アプリビルド成功 |
 
-#### 必須チェック
+### テスト
 
-```bash
-# コミット前に以下がすべて通ることを確認
-make before-commit
-```
+- テストタイトルは**日本語「〜すべき」形式**
+- カバレッジ 99％+ を維持する
+- テスト不能コード（SSE abort 等）は `/* istanbul ignore next */` で除外し理由を書く
+- `vi.hoisted` + `vi.mock` パターンで `instanceof` チェックのあるクラスをモックする
 
-このコマンドは以下の処理を実行します。
+### セキュリティ
 
-- `lint` - ESLint によるコード検証
-- `format` - Prettier によるフォーマット
-- `typecheck` - TypeScript 型チェック
-- `test` - Vitest によるテスト（カバレッジ 99％ 以上）
-- `build` - ビルド成功確認
+- ユーザー入力は **Zod スキーマ**でバリデーション
+- 認証バイパス（`AUTH_SKIP`）には **`NODE_ENV !== "production"` ガード**必須
+- シークレットをコミットしない（`.env`, credentials）
+- XSS/インジェクション対策を意識する
 
-### 5. Pull Request を送る
+### コーディングスタイル
 
-```bash
-# 変更をコミット
-git add .
-git commit -m "feat: 機能の説明"
+- **TypeScript strict mode**
+- **Biome** でフォーマット・リント（フロントエンド）
+- **Cloudscape Design System** で UI を構築（独自コンポーネントより Cloudscape 優先）
+- パッケージ操作は `ni` / `nr` / `bunx` を使う（**`npx` 禁止**）
 
-# フォーク先にプッシュ
-git push origin feature/your-feature-name
-```
+## コミットメッセージ
 
-GitHub で Pull Request を作成してください。
-
-## コミットメッセージ規約
-
-[Conventional Commits](https://www.conventionalcommits.org/) に従います。
-
-```
-<type>: <description>
-
-[optional body]
-```
-
-### Type の種類
+[Conventional Commits](https://www.conventionalcommits.org/) に従う。
 
 | Type | 用途 |
 |------|------|
 | `feat` | 新機能 |
 | `fix` | バグ修正 |
-| `docs` | ドキュメント変更 |
-| `style` | フォーマット変更（コード動作に影響なし） |
-| `refactor` | リファクタリング |
 | `test` | テスト追加・修正 |
+| `docs` | ドキュメント変更 |
+| `refactor` | リファクタリング |
 | `chore` | ビルド設定・ツール変更 |
 
-### 例
-
-```bash
+```
 feat: テナント一覧の検索機能を追加
 fix: ログイン時のリダイレクトエラーを修正
-docs: CONTRIBUTING.md を追加
-test: tenant-management の単体テストを追加
+test(gameday-service): カバレッジを 99% 以上に改善
 ```
 
 ## 禁止事項
 
 以下に該当する PR はリジェクトされます。
 
-- `rm` コマンドの使用（環境破壊リスク）
-- コミット/PR での `#番号` 形式の Issue 引用（GitHub 自動リンクでノイズになる）
-- モックデータ、ハードコード配列、スタブ API（実際の DB 接続と API 統合を実装する）
-- テストカバレッジ 99％ 未満
+| 禁止 | 理由 |
+|------|------|
+| `rm` コマンド | 環境破壊リスク |
+| `npx` | `bunx` を使う |
+| コミットでの `#番号` Issue 引用 | GitHub 自動クローズ誤作動 |
+| モックデータ・スタブ API | DynamoDB を使う |
+| カバレッジ 99％未満 | 品質基準 |
+| 設定ファイルの直接変更 | コードで解決する |
 
 ## プロジェクト構造
 
 ```
 TenkaCloud/
-├── apps/                    # フロントエンド（Next.js）
-├── backend/services/        # バックエンド（マイクロサービス）
-├── packages/                # 共有パッケージ
-├── infrastructure/          # IaC（Terraform）
-├── docs/                    # ドキュメント
-└── Makefile                 # 開発コマンド
+├── apps/
+│   ├── control-plane/         # テナント管理 UI (Next.js, :13000)
+│   └── application-plane/     # GameDay/Battle UI (Next.js, :13001)
+├── backend/services/
+│   ├── shared/                # DynamoDB, イベント型, 認証
+│   ├── control-plane/         # テナント管理, プロビジョニング
+│   └── application-plane/     # problem, gameday, battle, scoring, leaderboard
+├── packages/                  # 共有ライブラリ
+├── docs/decisions/            # ADR（アーキテクチャ決定記録）
+├── infrastructure/            # IaC（Terraform, Auth0）
+└── Makefile                   # 開発コマンド（`make help` で一覧）
 ```
-
-詳細は [OVERVIEW.md](./OVERVIEW.md) を参照。
 
 ## よく使うコマンド
 
 ```bash
-# ローカル環境
-make start              # 起動
-make stop               # 停止
-make status             # 状態確認
-
-# 開発
-make dev                # Control Plane のみ起動
-make test               # テスト実行
-make test-coverage      # カバレッジ付きテスト
-
-# コード品質
-make lint               # Linter 実行
-make format             # フォーマット
-make typecheck          # 型チェック
-make before-commit      # コミット前チェック（必須）
-
-# すべてのコマンドを表示
-make help
+make start           # 全サービス起動
+make stop            # 全サービス停止
+make status          # サービス状態確認
+make test_quick      # 高速テスト（カバレッジなし）
+make before-commit   # コミット前チェック（必須）
+make help            # 全コマンド一覧
 ```
 
 ## 質問・相談
 
-- **技術的な質問**: [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions)
-- **バグ報告**: [GitHub Issues](https://github.com/susumutomita/TenkaCloud/issues)
+- 技術的な質問: [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions)
+- バグ報告: [GitHub Issues](https://github.com/susumutomita/TenkaCloud/issues)
 
 ## ライセンス
 
