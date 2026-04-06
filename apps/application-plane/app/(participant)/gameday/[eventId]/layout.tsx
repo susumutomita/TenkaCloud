@@ -69,6 +69,11 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
           text: t('gameday.scoreboard'),
           href: `${basePath}/scoreboard`,
         },
+        {
+          type: 'link',
+          text: t('gameday.tutorial'),
+          href: `${basePath}/tutorial`,
+        },
       ],
     },
     {
@@ -133,6 +138,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
       '/attack',
       '/alliance',
       '/vote',
+      '/tutorial',
     ];
     for (const suffix of suffixes) {
       if (pathname.startsWith(`${basePath}${suffix}`))

@@ -6,6 +6,7 @@
 
 'use client';
 
+import Alert from '@cloudscape-design/components/alert';
 import Badge from '@cloudscape-design/components/badge';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
@@ -229,6 +230,11 @@ export default function AdminGamedayControlPage() {
     return Math.max(0, totalSeconds - elapsedSeconds);
   };
 
+  const hasEnoughTeams = teams.length >= 2;
+  const hasAttacks = attacks.length > 0;
+  const hasGameState = gameState !== null;
+  const allChecksPassed = hasEnoughTeams && hasAttacks && hasGameState;
+
   if (loading) {
     return (
       <Box textAlign="center" padding="l">
@@ -260,6 +266,34 @@ export default function AdminGamedayControlPage() {
             id: 'control',
             content: (
               <SpaceBetween size="l">
+                <Container
+                  header={<Header variant="h2">開始前チェックリスト</Header>}
+                >
+                  <SpaceBetween size="s">
+                    <StatusIndicator
+                      type={hasEnoughTeams ? 'success' : 'error'}
+                    >
+                      {hasEnoughTeams
+                        ? `チーム登録済み（${teams.length}チーム）`
+                        : 'チームが2チーム以上必要です（チーム管理タブで登録）'}
+                    </StatusIndicator>
+                    <StatusIndicator type={hasAttacks ? 'success' : 'error'}>
+                      {hasAttacks
+                        ? `攻撃カタログ登録済み（${attacks.length}件）`
+                        : '攻撃カタログが未登録です（攻撃管理タブで生成）'}
+                    </StatusIndicator>
+                    <StatusIndicator type={hasGameState ? 'success' : 'error'}>
+                      {hasGameState
+                        ? 'ゲーム状態初期化済み'
+                        : 'ゲーム状態が未初期化です'}
+                    </StatusIndicator>
+                    {!allChecksPassed && (
+                      <Alert type="warning">
+                        すべてのチェック項目を満たすまでゲームを開始できません
+                      </Alert>
+                    )}
+                  </SpaceBetween>
+                </Container>
                 <Container
                   header={
                     <Header
@@ -325,6 +359,7 @@ export default function AdminGamedayControlPage() {
                             <Button
                               variant="primary"
                               loading={actionLoading}
+                              disabled={!allChecksPassed}
                               onClick={() =>
                                 handleAction(() =>
                                   startGame(

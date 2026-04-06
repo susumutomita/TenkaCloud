@@ -33,11 +33,11 @@ MVP では以下の 2 つのイベントタイプをサポートする。
 1. イベント作成（名前・タイプ・日時・チーム設定）
 2. GameDay → 攻撃カタログ設定
    JAM → 問題追加・配点設定
-3. イベント公開（draft → published）
+3. イベント公開（draft → scheduled）
 4. 参加者の登録を確認
-5. ゲーム開始（published → running）
+5. ゲーム開始（scheduled → active）
 6. リアルタイム監視（スコアボード・攻撃ログ）
-7. ゲーム終了（running → finished）
+7. ゲーム終了（active → completed）
 8. 結果確認・表彰
 
 [参加者フロー]
@@ -100,23 +100,36 @@ interface ScoreEvent {
 ### イベントライフサイクル
 
 ```text
-draft → published → running → finished → archived
-  ↓        ↓          ↓         ↓
+draft → scheduled → active → completed → cancelled
+  ↓        ↓          ↓ ↑        ↓
  編集可   参加受付   プレイ中   結果確認
+                      ↓ ↑
+                     paused
 ```
 
-### 必要な UI ページ（不足分）
+実装: `problem-service/src/services/event-lifecycle.ts`
+
+### UI ページ実装状態
 
 **管理者側:**
-- `/admin/events/new` — イベント作成フォーム（不足）
-- `/admin/events/[id]/edit` — イベント編集（不足）
-- `/admin/events/[id]/problems` — 問題管理（JAM 用、不足）
-- `/admin/events/[id]/attacks` — 攻撃カタログ管理（GameDay 用、不足）
+- `/admin/events/new` — イベント作成フォーム（実装済み）
+- `/admin/events/[id]/edit` — イベント編集（実装済み）
+- `/admin/events/[id]/problems` — 問題管理+デプロイ（実装済み）
+- `/admin/events/[id]/attacks` — 攻撃カタログ管理（実装済み）
+- `/admin/gameday/[id]` — ゲーム制御パネル（実装済み）
+- `/admin/gameday/[id]/dashboard` — リアルタイムダッシュボード（実装中）
+- `/admin/gameday/[id]/report` — ポストゲームレポート（実装中）
 
 **参加者側:**
-- `/events` — イベント一覧（既存だが登録状態がスタブ）
-- `/events/[id]` — イベント詳細+参加登録（既存だが接続不完全）
-- `/events/[id]/register` — 参加登録+チーム編成フロー（不足）
+- `/events` — イベント一覧（実装済み）
+- `/events/[id]` — イベント詳細+参加登録（実装済み）
+- `/gameday/[id]` — 司令部（実装済み）
+- `/gameday/[id]/attack` — 攻撃ステーション（実装済み）
+- `/gameday/[id]/defense` — 防御トレンチ（実装済み）
+- `/gameday/[id]/alliance` — 同盟（実装済み）
+- `/gameday/[id]/vote` — 投票（実装済み）
+- `/gameday/[id]/scoreboard` — スコアボード（実装済み、SSE）
+- `/gameday/[id]/tutorial` — チュートリアル（実装中）
 
 ## Consequences
 
