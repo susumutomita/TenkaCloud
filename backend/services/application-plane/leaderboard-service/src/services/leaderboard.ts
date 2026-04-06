@@ -2,6 +2,9 @@ import type { Battle, BattleParticipant } from "@tenkacloud/dynamodb";
 import { BattleStatus } from "@tenkacloud/dynamodb";
 import type { BattleRepository } from "@tenkacloud/dynamodb";
 
+/**
+ * リーダーボードのエントリ
+ */
 export interface LeaderboardEntry {
 	rank: number;
 	userId: string;
@@ -9,6 +12,9 @@ export interface LeaderboardEntry {
 	updatedAt: Date;
 }
 
+/**
+ * リーダーボードの取得結果
+ */
 export interface LeaderboardResult {
 	battleId: string;
 	battleTitle: string;
@@ -20,6 +26,16 @@ export interface LeaderboardResult {
 
 const DEFAULT_FREEZE_MINUTES = 10;
 
+/**
+ * リーダーボードがフリーズ状態かどうかを判定する
+ *
+ * バトル終了直前の一定時間（デフォルト10分）はリーダーボードをフリーズする。
+ *
+ * @param battle - バトル情報
+ * @param freezeMinutes - フリーズ開始までの残り時間（分）
+ * @param now - 現在時刻
+ * @returns フリーズ中の場合は true
+ */
 export function isLeaderboardFrozen(
 	battle: Battle,
 	freezeMinutes: number = DEFAULT_FREEZE_MINUTES,
@@ -39,6 +55,14 @@ export function isLeaderboardFrozen(
 	return now.getTime() >= freezeStartMs;
 }
 
+/**
+ * 参加者一覧からリーダーボードを構築する
+ *
+ * 退出済み参加者を除外し、スコア降順（同点は参加順）でソートして順位を付与する。
+ *
+ * @param participants - バトル参加者一覧
+ * @returns ランク付きリーダーボードエントリ
+ */
 export function buildLeaderboard(
 	participants: BattleParticipant[],
 ): LeaderboardEntry[] {
@@ -57,6 +81,18 @@ export function buildLeaderboard(
 	}));
 }
 
+/**
+ * バトルのリーダーボードを取得する
+ *
+ * バトルの状態に応じてリーダーボードを構築する。
+ * DRAFT/OPEN 状態では空のエントリを返す。RUNNING 以降は参加者のスコアを集計する。
+ *
+ * @param battleId - バトルID
+ * @param tenantId - テナントID
+ * @param repository - バトルリポジトリ
+ * @param freezeMinutes - フリーズ開始までの残り時間（分）
+ * @returns リーダーボード結果、バトルが見つからない場合は null
+ */
 export async function getLeaderboard(
 	battleId: string,
 	tenantId: string,

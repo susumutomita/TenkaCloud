@@ -68,7 +68,7 @@ describe('Admin Settings API', () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('API Error');
+      expect(data.error).toBe('Failed to fetch settings');
     });
 
     it('Error 以外の例外の場合はデフォルトメッセージを返すべき', async () => {
@@ -173,7 +173,7 @@ describe('Admin Settings API', () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('Update failed');
+      expect(data.error).toBe('Failed to update settings');
     });
 
     it('Error 以外の例外の場合はデフォルトメッセージを返すべき', async () => {
@@ -329,7 +329,7 @@ describe('Admin Settings API', () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('Regenerate failed');
+      expect(data.error).toBe('Failed to execute action');
     });
 
     it('Error 以外の例外の場合はデフォルトメッセージを返すべき', async () => {

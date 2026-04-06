@@ -9,6 +9,7 @@
  * - プロフィール
  */
 
+import { createLogger } from "../lib/logger";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
@@ -28,6 +29,8 @@ import { getLeaderboard } from "../jam/dashboard";
 import { getChallengeDetail } from "../jam/challenge";
 import { openClue, validateAnswer } from "../jam/scoring";
 import type { EventStatus, EventType, ScoringCriterion } from "../types";
+
+const logger = createLogger("participant-routes");
 
 const participantRouter = new Hono();
 
@@ -128,10 +131,10 @@ participantRouter.get("/events", async (c) => {
 			"code" in error &&
 			(error as { code: string }).code === "ECONNREFUSED"
 		) {
-			console.warn("DynamoDB is not available. Returning empty events list.");
+			logger.warn("DynamoDB is not available. Returning empty events list.");
 			return c.json({ events: [], total: 0 });
 		}
-		console.error("Failed to fetch events:", error);
+		logger.error({ error }, "Failed to fetch events");
 		return c.json({ error: "Failed to fetch events" }, 500);
 	}
 });
@@ -158,10 +161,10 @@ participantRouter.get("/events/me", async (c) => {
 			"code" in error &&
 			(error as { code: string }).code === "ECONNREFUSED"
 		) {
-			console.warn("DynamoDB is not available. Returning empty events list.");
+			logger.warn("DynamoDB is not available. Returning empty events list.");
 			return c.json({ events: [] });
 		}
-		console.error("Failed to fetch my events:", error);
+		logger.error({ error }, "Failed to fetch my events");
 		return c.json({ error: "Failed to fetch events" }, 500);
 	}
 });
@@ -243,7 +246,7 @@ participantRouter.get("/events/:eventId", async (c) => {
 			teamInfo: undefined, // TODO: チーム情報を取得
 		});
 	} catch (error) {
-		console.error("Failed to fetch event:", error);
+		logger.error({ error }, "Failed to fetch event");
 		return c.json({ error: "Failed to fetch event" }, 500);
 	}
 });
@@ -286,7 +289,7 @@ participantRouter.post("/events/:eventId/register", async (c) => {
 			message: "Successfully registered for the event",
 		});
 	} catch (error) {
-		console.error("Failed to register for event:", error);
+		logger.error({ error }, "Failed to register for event");
 		return c.json({ error: "Failed to register" }, 500);
 	}
 });
@@ -322,7 +325,7 @@ participantRouter.post("/events/:eventId/unregister", async (c) => {
 			message: "Successfully unregistered from the event",
 		});
 	} catch (error) {
-		console.error("Failed to unregister from event:", error);
+		logger.error({ error }, "Failed to unregister from event");
 		return c.json({ error: "Failed to unregister" }, 500);
 	}
 });
@@ -364,7 +367,7 @@ participantRouter.get("/events/:eventId/leaderboard", async (c) => {
 			myPosition: myPosition > 0 ? myPosition : undefined,
 		});
 	} catch (error) {
-		console.error("Failed to fetch leaderboard:", error);
+		logger.error({ error }, "Failed to fetch leaderboard");
 		return c.json({ error: "Failed to fetch leaderboard" }, 500);
 	}
 });
@@ -390,7 +393,7 @@ participantRouter.get("/events/:eventId/my-ranking", async (c) => {
 			completedChallenges: myEntry.completedChallenges,
 		});
 	} catch (error) {
-		console.error("Failed to fetch ranking:", error);
+		logger.error({ error }, "Failed to fetch ranking");
 		return c.json({ error: "Failed to fetch ranking" }, 500);
 	}
 });
@@ -480,7 +483,7 @@ participantRouter.get("/events/:eventId/challenges/:challengeId", async (c) => {
 			awsConsoleUrl: undefined, // TODO: コンソールURL生成
 		});
 	} catch (error) {
-		console.error("Failed to fetch challenge:", error);
+		logger.error({ error }, "Failed to fetch challenge");
 		return c.json({ error: "Failed to fetch challenge" }, 500);
 	}
 });
@@ -599,7 +602,7 @@ participantRouter.get(
 				answerValidation: undefined,
 			});
 		} catch (error) {
-			console.error("Failed to fetch JAM challenge:", error);
+			logger.error({ error }, "Failed to fetch JAM challenge");
 			return c.json({ error: "Failed to fetch challenge" }, 500);
 		}
 	},
@@ -643,7 +646,7 @@ participantRouter.get(
 				501,
 			);
 		} catch (error) {
-			console.error("Failed to get credentials:", error);
+			logger.error({ error }, "Failed to get credentials");
 			return c.json({ error: "Failed to get credentials" }, 500);
 		}
 	},
@@ -673,7 +676,7 @@ participantRouter.post(
 				isRevealed: true,
 			});
 		} catch (error) {
-			console.error("Failed to reveal hint:", error);
+			logger.error({ error }, "Failed to reveal hint");
 			return c.json({ error: "Failed to reveal hint" }, 500);
 		}
 	},
@@ -734,7 +737,7 @@ participantRouter.post(
 				revealedAt: new Date().toISOString(),
 			});
 		} catch (error) {
-			console.error("Failed to reveal clue:", error);
+			logger.error({ error }, "Failed to reveal clue");
 			return c.json({ error: "Failed to reveal clue" }, 500);
 		}
 	},
@@ -760,7 +763,7 @@ participantRouter.post(
 				message: "採点リクエストを受け付けました。結果は数分後に反映されます。",
 			});
 		} catch (error) {
-			console.error("Failed to request scoring:", error);
+			logger.error({ error }, "Failed to request scoring");
 			return c.json({ error: "Failed to request scoring" }, 500);
 		}
 	},
@@ -826,7 +829,7 @@ participantRouter.post(
 				clueDeduction: 0,
 			});
 		} catch (error) {
-			console.error("Failed to submit answer:", error);
+			logger.error({ error }, "Failed to submit answer");
 			return c.json({ error: "Failed to submit answer" }, 500);
 		}
 	},
@@ -845,7 +848,7 @@ participantRouter.get(
 
 			return c.json({ submissions: [] });
 		} catch (error) {
-			console.error("Failed to fetch submissions:", error);
+			logger.error({ error }, "Failed to fetch submissions");
 			return c.json({ error: "Failed to fetch submissions" }, 500);
 		}
 	},
@@ -904,7 +907,7 @@ participantRouter.get(
 				clueDeduction: 0,
 			});
 		} catch (error) {
-			console.error("Failed to fetch latest submission:", error);
+			logger.error({ error }, "Failed to fetch latest submission");
 			return c.json({ error: "Failed to fetch submission" }, 500);
 		}
 	},
@@ -925,7 +928,7 @@ participantRouter.get("/events/:eventId/team", async (c) => {
 
 		return c.json({ error: "Team not found" }, 404);
 	} catch (error) {
-		console.error("Failed to fetch team:", error);
+		logger.error({ error }, "Failed to fetch team");
 		return c.json({ error: "Failed to fetch team" }, 500);
 	}
 });
@@ -966,7 +969,7 @@ participantRouter.post(
 				inviteCode,
 			});
 		} catch (error) {
-			console.error("Failed to create team:", error);
+			logger.error({ error }, "Failed to create team");
 			return c.json({ error: "Failed to create team" }, 500);
 		}
 	},
@@ -996,7 +999,7 @@ participantRouter.post(
 				captainId: "captain_id",
 			});
 		} catch (error) {
-			console.error("Failed to join team:", error);
+			logger.error({ error }, "Failed to join team");
 			return c.json({ error: "Failed to join team" }, 500);
 		}
 	},
@@ -1013,7 +1016,7 @@ participantRouter.post("/events/:eventId/team/leave", async (c) => {
 
 		return c.json({ success: true, message: "Successfully left the team" });
 	} catch (error) {
-		console.error("Failed to leave team:", error);
+		logger.error({ error }, "Failed to leave team");
 		return c.json({ error: "Failed to leave team" }, 500);
 	}
 });
@@ -1031,7 +1034,7 @@ participantRouter.post("/events/:eventId/team/invite-code", async (c) => {
 
 		return c.json({ inviteCode: newInviteCode });
 	} catch (error) {
-		console.error("Failed to regenerate invite code:", error);
+		logger.error({ error }, "Failed to regenerate invite code");
 		return c.json({ error: "Failed to regenerate invite code" }, 500);
 	}
 });
@@ -1060,7 +1063,7 @@ participantRouter.post(
 				captainId: newCaptainId,
 			});
 		} catch (error) {
-			console.error("Failed to transfer captain:", error);
+			logger.error({ error }, "Failed to transfer captain");
 			return c.json({ error: "Failed to transfer captain" }, 500);
 		}
 	},
@@ -1077,7 +1080,7 @@ participantRouter.get("/events/:eventId/team/members", async (c) => {
 
 		return c.json({ members: [] });
 	} catch (error) {
-		console.error("Failed to fetch team members:", error);
+		logger.error({ error }, "Failed to fetch team members");
 		return c.json({ error: "Failed to fetch members" }, 500);
 	}
 });
@@ -1095,7 +1098,7 @@ participantRouter.delete(
 
 			return c.json({ success: true, message: "Member removed from team" });
 		} catch (error) {
-			console.error("Failed to remove member:", error);
+			logger.error({ error }, "Failed to remove member");
 			return c.json({ error: "Failed to remove member" }, 500);
 		}
 	},
@@ -1112,7 +1115,7 @@ participantRouter.delete("/events/:eventId/team", async (c) => {
 
 		return c.json({ success: true, message: "Team disbanded" });
 	} catch (error) {
-		console.error("Failed to disband team:", error);
+		logger.error({ error }, "Failed to disband team");
 		return c.json({ error: "Failed to disband team" }, 500);
 	}
 });
@@ -1142,7 +1145,7 @@ participantRouter.get("/profile", async (c) => {
 			recentEvents: [],
 		});
 	} catch (error) {
-		console.error("Failed to fetch profile:", error);
+		logger.error({ error }, "Failed to fetch profile");
 		return c.json({ error: "Failed to fetch profile" }, 500);
 	}
 });
@@ -1177,7 +1180,7 @@ participantRouter.put(
 				recentEvents: [],
 			});
 		} catch (error) {
-			console.error("Failed to update profile:", error);
+			logger.error({ error }, "Failed to update profile");
 			return c.json({ error: "Failed to update profile" }, 500);
 		}
 	},
@@ -1192,7 +1195,7 @@ participantRouter.get("/profile/badges", async (c) => {
 
 		return c.json({ badges: [] });
 	} catch (error) {
-		console.error("Failed to fetch badges:", error);
+		logger.error({ error }, "Failed to fetch badges");
 		return c.json({ error: "Failed to fetch badges" }, 500);
 	}
 });
@@ -1211,7 +1214,7 @@ participantRouter.get("/profile/history", async (c) => {
 			total: 0,
 		});
 	} catch (error) {
-		console.error("Failed to fetch history:", error);
+		logger.error({ error }, "Failed to fetch history");
 		return c.json({ error: "Failed to fetch history" }, 500);
 	}
 });
@@ -1231,7 +1234,7 @@ participantRouter.get("/rankings", async (c) => {
 			myRank: undefined,
 		});
 	} catch (error) {
-		console.error("Failed to fetch rankings:", error);
+		logger.error({ error }, "Failed to fetch rankings");
 		return c.json({ error: "Failed to fetch rankings" }, 500);
 	}
 });

@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     console.error('Onboarding error:', error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Registration failed',
+        error: 'Registration failed',
       },
       { status: 500 },
     );

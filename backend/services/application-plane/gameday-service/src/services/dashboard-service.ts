@@ -6,6 +6,9 @@ import type { AttackLog, HealthCheckResult } from "../types";
 
 export { TeamAlreadyExistsError };
 
+/**
+ * ブラックアウト中にリーダーボードへアクセスした場合に発生するエラー
+ */
 export class BlackoutActiveError extends Error {
 	constructor() {
 		super("ブラックアウト中はリーダーボードを閲覧できません");
@@ -15,6 +18,15 @@ export class BlackoutActiveError extends Error {
 
 // === チーム登録 ===
 
+/**
+ * チームを登録する
+ *
+ * ゲーム実行中に登録した場合、初期ポイントを自動付与する。
+ *
+ * @param input - チーム登録情報
+ * @returns 作成されたチーム状態
+ * @throws {TeamAlreadyExistsError} 同一チームIDが既に存在する場合
+ */
 export async function registerTeam(input: {
 	eventId: string;
 	teamId: string;
@@ -38,6 +50,13 @@ export async function registerTeam(input: {
 	return team;
 }
 
+/**
+ * 招待コードでチームに参加する
+ *
+ * @param eventId - イベントID
+ * @param inviteCode - 招待コード
+ * @returns チーム状態、見つからない場合は null
+ */
 export async function joinTeamByInviteCode(
 	eventId: string,
 	inviteCode: string,
@@ -47,6 +66,14 @@ export async function joinTeamByInviteCode(
 
 // === チーム URL 更新 ===
 
+/**
+ * チームのURL情報を更新する
+ *
+ * @param eventId - イベントID
+ * @param teamId - チームID
+ * @param urls - 更新するURL（websiteUrl, apiUrl）
+ * @throws {TeamNotFoundError} チームが見つからない場合
+ */
 export async function updateTeamUrl(
 	eventId: string,
 	teamId: string,
@@ -59,6 +86,9 @@ export async function updateTeamUrl(
 	await gamedayRepository.updateTeamUrls(eventId, teamId, urls);
 }
 
+/**
+ * チームが見つからない場合に発生するエラー
+ */
 export class TeamNotFoundError extends Error {
 	constructor(teamId: string) {
 		super(`チームが見つかりません: ${teamId}`);
@@ -66,12 +96,27 @@ export class TeamNotFoundError extends Error {
 	}
 }
 
+/**
+ * チーム一覧を取得する
+ *
+ * @param eventId - イベントID
+ * @returns チーム一覧
+ */
 export async function listTeams(eventId: string): Promise<TeamState[]> {
 	return gamedayRepository.listTeams(eventId);
 }
 
 // === リーダーボード ===
 
+/**
+ * リーダーボードを取得する
+ *
+ * ブラックアウト中はアクセスを拒否する。スコア降順でチームを返す。
+ *
+ * @param eventId - イベントID
+ * @returns スコア降順のチーム一覧
+ * @throws {BlackoutActiveError} ブラックアウト中の場合
+ */
 export async function getLeaderboard(eventId: string): Promise<TeamState[]> {
 	const game = await gamedayRepository.getGameState(eventId);
 	if (game?.blackout) {
@@ -84,6 +129,9 @@ export async function getLeaderboard(eventId: string): Promise<TeamState[]> {
 
 // === 攻撃統計 ===
 
+/**
+ * チームの攻撃統計情報
+ */
 export interface AttackStatistics {
 	teamId: string;
 	teamName: string;
@@ -92,6 +140,14 @@ export interface AttackStatistics {
 	successRate: number;
 }
 
+/**
+ * 全チームの攻撃統計を取得する
+ *
+ * 各チームの送信・受信攻撃数と成功率を集計する。管理者によるログは除外する。
+ *
+ * @param eventId - イベントID
+ * @returns チームごとの攻撃統計一覧
+ */
 export async function getAttackStatistics(
 	eventId: string,
 ): Promise<AttackStatistics[]> {
@@ -140,12 +196,24 @@ export async function getAttackStatistics(
 
 // === チームダッシュボード ===
 
+/**
+ * チームダッシュボードの集約情報
+ */
 export interface TeamDashboard {
 	team: TeamState;
 	recentHealthChecks: HealthCheckResult[];
 	attackHistory: AttackLog[];
 }
 
+/**
+ * チームダッシュボード情報を取得する
+ *
+ * チーム状態、ヘルスチェック、攻撃履歴を集約して返す。
+ *
+ * @param eventId - イベントID
+ * @param teamId - チームID
+ * @returns チームダッシュボード、チームが見つからない場合は null
+ */
 export async function getTeamDashboard(
 	eventId: string,
 	teamId: string,

@@ -11,12 +11,22 @@ const UPTIME_BONUS = 100;
 const DOWNTIME_PENALTY_NORMAL = -100;
 const DOWNTIME_PENALTY_HIGH = -1000;
 
+/**
+ * HTTP ヘルスチェックの結果
+ */
 export interface HttpCheckResult {
 	isHealthy: boolean;
 	statusCode: number | null;
 	responseTimeMs: number;
 }
 
+/**
+ * Auditor サービス
+ *
+ * 定期的にチームの Web サイトと API のヘルスチェックを実行し、
+ * アップタイムボーナス / ダウンタイムペナルティを自動適用する。
+ * ゲーム時間の管理と自動ブラックアウトも担当する。
+ */
 export class AuditorService {
 	private intervalId: ReturnType<typeof setInterval> | null = null;
 	private eventId: string | null = null;
@@ -197,8 +207,9 @@ export class AuditorService {
 				statusCode: response.status,
 				responseTimeMs,
 			};
-		} catch {
+		} catch (error) {
 			const responseTimeMs = Date.now() - start;
+			logger.debug({ url, error, responseTimeMs }, "HTTP チェック失敗");
 			return {
 				isHealthy: false,
 				statusCode: null,

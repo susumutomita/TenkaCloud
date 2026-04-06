@@ -8,6 +8,7 @@
  * - ダッシュボード（管理者ビュー）
  */
 
+import { createLogger } from "../lib/logger";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
@@ -63,6 +64,8 @@ import {
 	InvalidStatusTransitionError,
 	getValidTransitions,
 } from "../services/event-lifecycle";
+
+const logger = createLogger("admin-routes");
 
 const adminRouter = new Hono();
 
@@ -183,7 +186,7 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			console.error("Anthropic API error:", errorText);
+			logger.error({ errorText }, "Anthropic API error");
 			return { success: false, error: "AI generation failed" };
 		}
 
@@ -206,7 +209,7 @@ ${input.additionalContext ? `追加コンテキスト: ${input.additionalContext
 		const generatedProblem = JSON.parse(jsonContent) as AiGeneratedProblem;
 		return { success: true, data: generatedProblem };
 	} catch (error) {
-		console.error("Failed to generate problem with AI:", error);
+		logger.error({ error }, "Failed to generate problem with AI");
 		if (error instanceof Error && error.name === "AbortError") {
 			return { success: false, error: "AI generation request timed out" };
 		}
@@ -380,7 +383,7 @@ adminRouter.get("/events", async (c) => {
 
 		return c.json({ events, total });
 	} catch (error) {
-		console.error("Failed to get events:", error);
+		logger.error({ error }, "Failed to get events");
 		return c.json({ error: "Failed to get events" }, 500);
 	}
 });
@@ -433,7 +436,7 @@ adminRouter.get("/events/:eventId", async (c) => {
 
 		return c.json(event);
 	} catch (error) {
-		console.error("Failed to get event:", error);
+		logger.error({ error }, "Failed to get event");
 		return c.json({ error: "Failed to get event" }, 500);
 	}
 });
@@ -480,7 +483,7 @@ adminRouter.post(
 
 			return c.json(event, 201);
 		} catch (error) {
-			console.error("Failed to create event:", error);
+			logger.error({ error }, "Failed to create event");
 			return c.json({ error: "Failed to create event" }, 500);
 		}
 	},
@@ -526,7 +529,7 @@ adminRouter.put(
 			const event = await eventRepository.update(eventId, updates);
 			return c.json(event);
 		} catch (error) {
-			console.error("Failed to update event:", error);
+			logger.error({ error }, "Failed to update event");
 			return c.json({ error: "Failed to update event" }, 500);
 		}
 	},
@@ -540,7 +543,7 @@ adminRouter.delete("/events/:eventId", async (c) => {
 		await eventRepository.delete(eventId);
 		return c.json({ success: true });
 	} catch (error) {
-		console.error("Failed to delete event:", error);
+		logger.error({ error }, "Failed to delete event");
 		return c.json({ error: "Failed to delete event" }, 500);
 	}
 });
@@ -591,7 +594,7 @@ adminRouter.patch(
 					400,
 				);
 			}
-			console.error("Failed to update event status:", error);
+			logger.error({ error }, "Failed to update event status");
 			return c.json({ error: "Failed to update event status" }, 500);
 		}
 	},
@@ -621,7 +624,7 @@ adminRouter.post(
 			});
 			return c.json(eventProblem, 201);
 		} catch (error) {
-			console.error("Failed to add problem to event:", error);
+			logger.error({ error }, "Failed to add problem to event");
 			return c.json({ error: "Failed to add problem to event" }, 500);
 		}
 	},
@@ -636,7 +639,7 @@ adminRouter.delete("/events/:eventId/problems/:problemId", async (c) => {
 		await removeProblemFromEvent(eventId, problemId);
 		return c.json({ success: true });
 	} catch (error) {
-		console.error("Failed to remove problem from event:", error);
+		logger.error({ error }, "Failed to remove problem from event");
 		return c.json({ error: "Failed to remove problem from event" }, 500);
 	}
 });
@@ -694,7 +697,7 @@ adminRouter.get("/problems", async (c) => {
 
 		return c.json({ problems, total });
 	} catch (error) {
-		console.error("Failed to get problems:", error);
+		logger.error({ error }, "Failed to get problems");
 		return c.json({ error: "Failed to get problems" }, 500);
 	}
 });
@@ -710,7 +713,7 @@ adminRouter.get("/problems/:problemId", async (c) => {
 		}
 		return c.json(problem);
 	} catch (error) {
-		console.error("Failed to get problem:", error);
+		logger.error({ error }, "Failed to get problem");
 		return c.json({ error: "Failed to get problem" }, 500);
 	}
 });
@@ -816,7 +819,7 @@ adminRouter.post(
 			});
 			return c.json(problem, 201);
 		} catch (error) {
-			console.error("Failed to create problem:", error);
+			logger.error({ error }, "Failed to create problem");
 			return c.json({ error: "Failed to create problem" }, 500);
 		}
 	},
@@ -887,7 +890,7 @@ adminRouter.post(
 
 			return c.json(problem, 201);
 		} catch (error) {
-			console.error("Failed to import problem:", error);
+			logger.error({ error }, "Failed to import problem");
 			return c.json({ error: "Failed to import problem" }, 500);
 		}
 	},
@@ -933,7 +936,7 @@ adminRouter.put(
 			const problem = await problemRepository.update(problemId, updates);
 			return c.json(problem);
 		} catch (error) {
-			console.error("Failed to update problem:", error);
+			logger.error({ error }, "Failed to update problem");
 			return c.json({ error: "Failed to update problem" }, 500);
 		}
 	},
@@ -952,7 +955,7 @@ adminRouter.delete("/problems/:problemId", async (c) => {
 		await problemRepository.delete(problemId);
 		return c.json({ success: true });
 	} catch (error) {
-		console.error("Failed to delete problem:", error);
+		logger.error({ error }, "Failed to delete problem");
 		return c.json({ error: "Failed to delete problem" }, 500);
 	}
 });
@@ -994,7 +997,7 @@ adminRouter.get("/marketplace", async (c) => {
 
 		return c.json(result);
 	} catch (error) {
-		console.error("Failed to search marketplace:", error);
+		logger.error({ error }, "Failed to search marketplace");
 		return c.json({ error: "Failed to search marketplace" }, 500);
 	}
 });
@@ -1011,7 +1014,7 @@ adminRouter.post("/marketplace/:marketplaceId/install", async (c) => {
 		}
 		return c.json({ success: true, installedId: problem.id });
 	} catch (error) {
-		console.error("Failed to install problem:", error);
+		logger.error({ error }, "Failed to install problem");
 		return c.json({ error: "Failed to install problem" }, 500);
 	}
 });
@@ -1091,7 +1094,7 @@ adminRouter.post(
 				warnings: result.warnings,
 			});
 		} catch (error) {
-			console.error("Failed to export problem:", error);
+			logger.error({ error }, "Failed to export problem");
 			return c.json({ error: "Failed to export problem" }, 500);
 		}
 	},
@@ -1138,7 +1141,7 @@ adminRouter.post(
 				warnings: result.warnings,
 			});
 		} catch (error) {
-			console.error("Failed to export problems:", error);
+			logger.error({ error }, "Failed to export problems");
 			return c.json({ error: "Failed to export problems" }, 500);
 		}
 	},
@@ -1166,7 +1169,7 @@ adminRouter.post(
 				warnings: result.warnings,
 			});
 		} catch (error) {
-			console.error("Failed to preview problem import:", error);
+			logger.error({ error }, "Failed to preview problem import");
 			return c.json({ error: "Failed to preview problem import" }, 500);
 		}
 	},
@@ -1195,7 +1198,7 @@ adminRouter.post(
 				warnings: result.warnings,
 			});
 		} catch (error) {
-			console.error("Failed to preview batch problem import:", error);
+			logger.error({ error }, "Failed to preview batch problem import");
 			return c.json({ error: "Failed to preview batch problem import" }, 500);
 		}
 	},
@@ -1520,7 +1523,7 @@ adminRouter.get("/templates", async (c) => {
 
 		return c.json({ templates, total });
 	} catch (error) {
-		console.error("Failed to get templates:", error);
+		logger.error({ error }, "Failed to get templates");
 		return c.json({ error: "Failed to get templates" }, 500);
 	}
 });
@@ -1566,7 +1569,7 @@ adminRouter.get("/templates/search", async (c) => {
 
 		return c.json(result);
 	} catch (error) {
-		console.error("Failed to search templates:", error);
+		logger.error({ error }, "Failed to search templates");
 		return c.json({ error: "Failed to search templates" }, 500);
 	}
 });
@@ -1582,7 +1585,7 @@ adminRouter.get("/templates/:templateId", async (c) => {
 		}
 		return c.json(template);
 	} catch (error) {
-		console.error("Failed to get template:", error);
+		logger.error({ error }, "Failed to get template");
 		return c.json({ error: "Failed to get template" }, 500);
 	}
 });
@@ -1601,7 +1604,7 @@ adminRouter.post(
 			});
 			return c.json(template, 201);
 		} catch (error) {
-			console.error("Failed to create template:", error);
+			logger.error({ error }, "Failed to create template");
 			return c.json({ error: "Failed to create template" }, 500);
 		}
 	},
@@ -1624,7 +1627,7 @@ adminRouter.put(
 			const template = await templateRepository.update(templateId, data);
 			return c.json(template);
 		} catch (error) {
-			console.error("Failed to update template:", error);
+			logger.error({ error }, "Failed to update template");
 			return c.json({ error: "Failed to update template" }, 500);
 		}
 	},
@@ -1643,7 +1646,7 @@ adminRouter.delete("/templates/:templateId", async (c) => {
 		await templateRepository.delete(templateId);
 		return c.json({ success: true });
 	} catch (error) {
-		console.error("Failed to delete template:", error);
+		logger.error({ error }, "Failed to delete template");
 		return c.json({ error: "Failed to delete template" }, 500);
 	}
 });
@@ -1772,7 +1775,7 @@ adminRouter.post(
 
 			return c.json(problem, 201);
 		} catch (error) {
-			console.error("Failed to create problem from template:", error);
+			logger.error({ error }, "Failed to create problem from template");
 			return c.json({ error: "Failed to create problem from template" }, 500);
 		}
 	},
@@ -1866,7 +1869,7 @@ adminRouter.post(
 
 			return c.json(problem, 201);
 		} catch (error) {
-			console.error("Failed to save AI-generated problem:", error);
+			logger.error({ error }, "Failed to save AI-generated problem");
 			return c.json(
 				{ error: "Failed to save generated problem to database" },
 				500,

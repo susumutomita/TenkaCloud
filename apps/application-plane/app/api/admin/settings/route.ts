@@ -56,9 +56,8 @@ export async function GET() {
     const data = await serverApiRequest<SettingsResponse>('/admin/settings');
     return successResponse(data);
   } catch (error) {
-    return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch settings',
-    );
+    console.error('Failed to fetch settings:', error);
+    return badRequestResponse('Failed to fetch settings');
   }
 }
 
@@ -90,9 +89,8 @@ export async function PUT(request: NextRequest) {
 
     return successResponse(data);
   } catch (error) {
-    return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to update settings',
-    );
+    console.error('Failed to update settings:', error);
+    return badRequestResponse('Failed to update settings');
   }
 }
 
@@ -147,8 +145,7 @@ export async function POST(request: NextRequest) {
 
     return badRequestResponse(`Unknown action: ${body.action}`);
   } catch (error) {
-    return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to execute action',
-    );
+    console.error('Failed to execute action:', error);
+    return badRequestResponse('Failed to execute action');
   }
 }

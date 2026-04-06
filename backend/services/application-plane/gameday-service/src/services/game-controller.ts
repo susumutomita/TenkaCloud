@@ -17,6 +17,9 @@ export { ConcurrentModificationError };
 export { GameAlreadyExistsError };
 export { CrossTenantAccessError };
 
+/**
+ * ゲームが見つからない場合に発生するエラー
+ */
 export class GameNotFoundError extends Error {
 	constructor() {
 		super("ゲームが見つかりません");
@@ -40,6 +43,17 @@ async function validateGameTenantAccess(
 	return game;
 }
 
+/**
+ * ゲームを初期化する
+ *
+ * ゲーム状態を作成するが、開始はしない。
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @param durationMinutes - ゲーム時間（分）
+ * @returns 初期化されたゲーム状態
+ * @throws {GameAlreadyExistsError} 既にゲームが存在する場合
+ */
 export async function initGame(
 	eventId: string,
 	tenantId: string,
@@ -52,6 +66,17 @@ export async function initGame(
 	});
 }
 
+/**
+ * ゲームを開始する
+ *
+ * ゲーム状態を作成し、登録済みチームへ初期ポイントを付与する。
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @param durationMinutes - ゲーム時間（分）
+ * @returns 開始されたゲーム状態
+ * @throws {GameAlreadyExistsError} 既にゲームが存在する場合
+ */
 export async function startGame(
 	eventId: string,
 	tenantId: string,
@@ -78,6 +103,15 @@ export async function startGame(
 	return game;
 }
 
+/**
+ * ゲームを停止する
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns 停止されたゲーム状態
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function stopGame(
 	eventId: string,
 	tenantId: string,
@@ -90,6 +124,14 @@ export async function stopGame(
 	return result;
 }
 
+/**
+ * ゲーム状態を取得する
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns ゲーム状態、存在しない場合は null
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function getGameStatus(
 	eventId: string,
 	tenantId: string,
@@ -102,6 +144,15 @@ export async function getGameStatus(
 	return game;
 }
 
+/**
+ * スコアウェイトを切り替える（normal/high）
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns 更新されたゲーム状態
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function toggleScoreWeight(
 	eventId: string,
 	tenantId: string,
@@ -114,6 +165,17 @@ export async function toggleScoreWeight(
 	return result;
 }
 
+/**
+ * ブラックアウトを切り替える
+ *
+ * ブラックアウト中はリーダーボードが非表示になる。
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns 更新されたゲーム状態
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function toggleBlackout(
 	eventId: string,
 	tenantId: string,
@@ -126,6 +188,17 @@ export async function toggleBlackout(
 	return result;
 }
 
+/**
+ * 管理者による障害注入を実行する
+ *
+ * @param eventId - イベントID
+ * @param teamId - 対象チームID
+ * @param attackSlug - 攻撃スラッグ
+ * @param tenantId - テナントID
+ * @returns 攻撃ログ
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function executeFaultInjection(
 	eventId: string,
 	teamId: string,
@@ -146,6 +219,15 @@ export async function executeFaultInjection(
 	});
 }
 
+/**
+ * チーム一覧を取得する
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns チーム一覧
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function listTeams(
 	eventId: string,
 	tenantId: string,
@@ -154,6 +236,15 @@ export async function listTeams(
 	return gamedayRepository.listTeams(eventId);
 }
 
+/**
+ * 攻撃ログ一覧を取得する
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns 攻撃ログ一覧
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function listAttackLogs(
 	eventId: string,
 	tenantId: string,
@@ -162,6 +253,15 @@ export async function listAttackLogs(
 	return gamedayRepository.listAttackLogs(eventId);
 }
 
+/**
+ * デフォルト攻撃カタログをシードする
+ *
+ * @param eventId - イベントID
+ * @param tenantId - テナントID
+ * @returns シードされた攻撃の数
+ * @throws {GameNotFoundError} ゲームが見つからない場合
+ * @throws {CrossTenantAccessError} テナントIDが一致しない場合
+ */
 export async function seedAttackCatalog(
 	eventId: string,
 	tenantId: string,

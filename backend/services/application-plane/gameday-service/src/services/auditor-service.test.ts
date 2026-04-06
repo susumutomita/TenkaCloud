@@ -16,6 +16,7 @@ vi.mock("../lib/dynamodb", () => ({
 
 vi.mock("../lib/logger", () => ({
 	createLogger: () => ({
+		debug: vi.fn(),
 		info: vi.fn(),
 		warn: vi.fn(),
 		error: vi.fn(),
