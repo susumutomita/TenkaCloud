@@ -212,6 +212,30 @@ describe("Auditor サービス", () => {
 			);
 		});
 
+		it("apiUrl のみ設定時、api だけチェックするべき", async () => {
+			const team = {
+				eventId: "event-1",
+				teamId: "team-1",
+				teamName: "A",
+				score: 0,
+				isHealthy: true,
+				websiteUrl: null,
+				apiUrl: "https://api.example.com",
+			};
+
+			await auditor.checkTeam("event-1", team, "normal");
+
+			expect(mockRepository.createHealthCheck).toHaveBeenCalledTimes(1);
+			expect(mockRepository.createHealthCheck).toHaveBeenCalledWith(
+				expect.objectContaining({ checkType: "api" }),
+			);
+			expect(mockRepository.updateTeamScore).toHaveBeenCalledWith(
+				"event-1",
+				"team-1",
+				100,
+			);
+		});
+
 		it("URL 未設定のチームはスキップするべき", async () => {
 			const team = {
 				eventId: "event-1",
@@ -281,6 +305,75 @@ describe("Auditor サービス", () => {
 			await auditor.runCheck();
 
 			expect(mockRepository.getGameState).not.toHaveBeenCalled();
+		});
+
+		it("チームのチェックが成功する場合 runCheck を正常に完了すべき", async () => {
+			vi.useRealTimers();
+			vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 200 }));
+			(auditor as unknown as { eventId: string }).eventId = "event-1";
+			mockRepository.getGameState.mockResolvedValue({
+				eventId: "event-1",
+				tenantId: "tenant-1",
+				isRunning: true,
+				scoreWeight: "normal",
+				blackout: false,
+				durationMinutes: 240,
+				startedAt: new Date().toISOString(),
+			});
+			mockRepository.listTeams.mockResolvedValue([
+				{
+					eventId: "event-1",
+					teamId: "team-1",
+					teamName: "テストチーム",
+					score: 0,
+					isHealthy: true,
+					websiteUrl: "https://example.com",
+					apiUrl: null,
+				},
+			]);
+			mockRepository.createHealthCheck.mockResolvedValue({});
+			mockRepository.updateTeamScore.mockResolvedValue(undefined);
+			mockRepository.updateTeamHealthy.mockResolvedValue(undefined);
+
+			await auditor.runCheck();
+
+			expect(mockRepository.createHealthCheck).toHaveBeenCalled();
+		});
+
+		it("チームのチェック中にエラーが発生しても runCheck を続行すべき", async () => {
+			vi.useRealTimers();
+			vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 200 }));
+			(auditor as unknown as { eventId: string }).eventId = "event-1";
+			mockRepository.getGameState.mockResolvedValue({
+				eventId: "event-1",
+				tenantId: "tenant-1",
+				isRunning: true,
+				scoreWeight: "normal",
+				blackout: false,
+				durationMinutes: 240,
+				startedAt: new Date().toISOString(),
+			});
+			mockRepository.listTeams.mockResolvedValue([
+				{
+					eventId: "event-1",
+					teamId: "team-1",
+					teamName: "テストチーム",
+					score: 0,
+					isHealthy: true,
+					websiteUrl: "https://example.com",
+					apiUrl: null,
+				},
+			]);
+			// createHealthCheck を失敗させて checkTeam を reject させる
+			mockRepository.createHealthCheck.mockRejectedValue(
+				new Error("DynamoDB write error"),
+			);
+			mockRepository.updateTeamScore.mockResolvedValue(undefined);
+			mockRepository.updateTeamHealthy.mockResolvedValue(undefined);
+
+			await auditor.runCheck();
+
+			expect(mockRepository.listTeams).toHaveBeenCalled();
 		});
 	});
 
@@ -486,6 +579,29 @@ describe("Auditor サービス", () => {
 
 			auditor.start("event-1");
 			auditor.start("event-1");
+
+			expect(auditor.isRunning()).toBe(true);
+		});
+
+		it("start 後の即時 runCheck がエラーでもクラッシュしないべき", async () => {
+			vi.useRealTimers();
+			mockRepository.getGameState.mockRejectedValue(new Error("DB error"));
+
+			auditor.start("event-1");
+
+			// 即時呼び出しの .catch が実行されることを確認（エラーが伝播しない）
+			await new Promise((resolve) => {
+				process.nextTick(resolve);
+			});
+			expect(auditor.isRunning()).toBe(true);
+		});
+
+		it("インターバル内の runCheck がエラーでもクラッシュしないべき", async () => {
+			mockRepository.getGameState.mockRejectedValue(new Error("DB error"));
+
+			auditor.start("event-1");
+			// インターバルを1回だけ進める
+			await vi.advanceTimersByTimeAsync(60_000);
 
 			expect(auditor.isRunning()).toBe(true);
 		});

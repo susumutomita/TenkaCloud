@@ -276,6 +276,22 @@ describe("管理者 API", () => {
 			});
 		});
 
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.stopGame.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/game/stop", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1" }),
+				});
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
+
 		describe("eventId が空の場合", () => {
 			it("BAD_REQUEST を返すべき", async () => {
 				const res = await app.request("/game/stop", {
@@ -339,6 +355,30 @@ describe("管理者 API", () => {
 			it("BAD_REQUEST を返すべき", async () => {
 				const res = await app.request("/game/status");
 				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+			});
+		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.getGameStatus.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/game/status?eventId=event-1");
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.getGameStatus.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/game/status?eventId=event-1");
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
 			});
 		});
 	});
@@ -446,6 +486,22 @@ describe("管理者 API", () => {
 				expect(body.error).toBe("JSON の解析に失敗しました");
 			});
 		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.toggleScoreWeight.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/score-weight/toggle", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1" }),
+				});
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
 	});
 
 	describe("POST /blackout/toggle", () => {
@@ -551,6 +607,22 @@ describe("管理者 API", () => {
 				expect(body.error).toBe("JSON の解析に失敗しました");
 			});
 		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.toggleBlackout.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/blackout/toggle", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1" }),
+				});
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
 	});
 
 	describe("POST /fault-injection/execute", () => {
@@ -611,6 +683,66 @@ describe("管理者 API", () => {
 				expect(body.error).toBe("JSON の解析に失敗しました");
 			});
 		});
+
+		describe("ゲームが存在しない場合", () => {
+			it("NOT_FOUND を返すべき", async () => {
+				mockGameController.executeFaultInjection.mockRejectedValue(
+					new mockGameController.GameNotFoundError(),
+				);
+
+				const res = await app.request("/fault-injection/execute", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						eventId: "event-1",
+						teamId: "team-1",
+						attackSlug: "sql-injection",
+					}),
+				});
+
+				expect(res.status).toBe(StatusCodes.NOT_FOUND);
+			});
+		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.executeFaultInjection.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/fault-injection/execute", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						eventId: "event-1",
+						teamId: "team-1",
+						attackSlug: "sql-injection",
+					}),
+				});
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.executeFaultInjection.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/fault-injection/execute", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						eventId: "event-1",
+						teamId: "team-1",
+						attackSlug: "sql-injection",
+					}),
+				});
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+			});
+		});
 	});
 
 	describe("GET /teams", () => {
@@ -640,6 +772,42 @@ describe("管理者 API", () => {
 			it("BAD_REQUEST を返すべき", async () => {
 				const res = await app.request("/teams");
 				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+			});
+		});
+
+		describe("ゲームが存在しない場合", () => {
+			it("NOT_FOUND を返すべき", async () => {
+				mockGameController.listTeams.mockRejectedValue(
+					new mockGameController.GameNotFoundError(),
+				);
+
+				const res = await app.request("/teams?eventId=nonexistent");
+
+				expect(res.status).toBe(StatusCodes.NOT_FOUND);
+			});
+		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.listTeams.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/teams?eventId=event-1");
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.listTeams.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/teams?eventId=event-1");
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
 			});
 		});
 	});
@@ -677,6 +845,42 @@ describe("管理者 API", () => {
 			it("BAD_REQUEST を返すべき", async () => {
 				const res = await app.request("/attack-logs");
 				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+			});
+		});
+
+		describe("ゲームが存在しない場合", () => {
+			it("NOT_FOUND を返すべき", async () => {
+				mockGameController.listAttackLogs.mockRejectedValue(
+					new mockGameController.GameNotFoundError(),
+				);
+
+				const res = await app.request("/attack-logs?eventId=nonexistent");
+
+				expect(res.status).toBe(StatusCodes.NOT_FOUND);
+			});
+		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.listAttackLogs.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/attack-logs?eventId=event-1");
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.listAttackLogs.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/attack-logs?eventId=event-1");
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
 			});
 		});
 	});
@@ -723,6 +927,54 @@ describe("管理者 API", () => {
 				expect(res.status).toBe(StatusCodes.BAD_REQUEST);
 				const body = await res.json();
 				expect(body.error).toBe("JSON の解析に失敗しました");
+			});
+		});
+
+		describe("ゲームが存在しない場合", () => {
+			it("NOT_FOUND を返すべき", async () => {
+				mockGameController.seedAttackCatalog.mockRejectedValue(
+					new mockGameController.GameNotFoundError(),
+				);
+
+				const res = await app.request("/attacks/seed", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "nonexistent" }),
+				});
+
+				expect(res.status).toBe(StatusCodes.NOT_FOUND);
+			});
+		});
+
+		describe("別テナントのゲームにアクセスした場合", () => {
+			it("FORBIDDEN を返すべき", async () => {
+				mockGameController.seedAttackCatalog.mockRejectedValue(
+					new mockGameController.CrossTenantAccessError("tenant-1", "tenant-2"),
+				);
+
+				const res = await app.request("/attacks/seed", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1" }),
+				});
+
+				expect(res.status).toBe(StatusCodes.FORBIDDEN);
+			});
+		});
+
+		describe("予期しないエラーが発生した場合", () => {
+			it("INTERNAL_SERVER_ERROR を返すべき", async () => {
+				mockGameController.seedAttackCatalog.mockRejectedValue(
+					new Error("DB接続エラー"),
+				);
+
+				const res = await app.request("/attacks/seed", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ eventId: "event-1" }),
+				});
+
+				expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
 			});
 		});
 	});
