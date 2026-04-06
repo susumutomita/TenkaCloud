@@ -1,7 +1,7 @@
 /**
  * Admin Event Problems Page
  *
- * Cloudscape Design System - イベントに紐づく問題の管理
+ * Cloudscape Design System - イベントに紐づく問題の管理・デプロイ
  */
 
 'use client';
@@ -10,23 +10,61 @@ import Badge from '@cloudscape-design/components/badge';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
 import Header from '@cloudscape-design/components/header';
 import Modal from '@cloudscape-design/components/modal';
+import type { SelectProps } from '@cloudscape-design/components/select';
+import Select from '@cloudscape-design/components/select';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Spinner from '@cloudscape-design/components/spinner';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
+import Toggle from '@cloudscape-design/components/toggle';
 import '@cloudscape-design/global-styles/index.css';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { AdminProblem } from '@/lib/api/admin-types';
+import type { AdminProblem, DeploymentStatus } from '@/lib/api/admin-types';
 import {
   addProblemToEvent,
+  deleteDeployment,
+  deployProblem,
+  getDeploymentStatus,
   getEventProblems,
   getProblems,
   removeProblemFromEvent,
 } from '@/lib/api/admin-problems';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+interface DeployState {
+  stackName?: string;
+  region?: string;
+  status?: string;
+  error?: string;
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const REGION_OPTIONS: SelectProps.Option[] = [
+  { label: 'アジアパシフィック (東京)', value: 'ap-northeast-1' },
+  { label: 'アジアパシフィック (大阪)', value: 'ap-northeast-3' },
+  { label: 'アジアパシフィック (ソウル)', value: 'ap-northeast-2' },
+  { label: 'アジアパシフィック (シンガポール)', value: 'ap-southeast-1' },
+  { label: '米国東部 (バージニア)', value: 'us-east-1' },
+  { label: '米国西部 (オレゴン)', value: 'us-west-2' },
+  { label: '欧州 (アイルランド)', value: 'eu-west-1' },
+];
+
+const STATUS_POLL_INTERVAL = 5000;
+
+// =============================================================================
+// Helpers
+// =============================================================================
 
 function getDifficultyBadge(difficulty: string) {
   switch (difficulty) {
@@ -41,6 +79,24 @@ function getDifficultyBadge(difficulty: string) {
   }
 }
 
+function getDeployStatusIndicator(status: string | undefined) {
+  if (!status) return null;
+  if (status.includes('COMPLETE') && !status.includes('ROLLBACK')) {
+    return <StatusIndicator type="success">{status}</StatusIndicator>;
+  }
+  if (status.includes('IN_PROGRESS')) {
+    return <StatusIndicator type="in-progress">{status}</StatusIndicator>;
+  }
+  if (status.includes('FAILED') || status.includes('ROLLBACK')) {
+    return <StatusIndicator type="error">{status}</StatusIndicator>;
+  }
+  return <StatusIndicator type="info">{status}</StatusIndicator>;
+}
+
+// =============================================================================
+// Component
+// =============================================================================
+
 export default function AdminEventProblemsPage() {
   const router = useRouter();
   const params = useParams();
@@ -51,10 +107,33 @@ export default function AdminEventProblemsPage() {
   const [error, setError] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
+  // Add problem modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [allProblems, setAllProblems] = useState<AdminProblem[]>([]);
   const [addModalLoading, setAddModalLoading] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
+
+  // Deploy modal
+  const [deployTarget, setDeployTarget] = useState<AdminProblem | null>(null);
+  const [selectedRegion, setSelectedRegion] =
+    useState<SelectProps.Option | null>(REGION_OPTIONS[0]);
+  const [dryRun, setDryRun] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+
+  // Deploy states per problem
+  const [deployStates, setDeployStates] = useState<Record<string, DeployState>>(
+    {},
+  );
+  const [deletingDeploy, setDeletingDeploy] = useState<Set<string>>(new Set());
+  const pollingRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    const intervals = pollingRef.current;
+    return () => {
+      Object.values(intervals).forEach(clearInterval);
+    };
+  }, []);
 
   const fetchProblems = useCallback(async () => {
     try {
@@ -63,11 +142,7 @@ export default function AdminEventProblemsPage() {
       const data = await getEventProblems(eventId);
       setProblems(data.problems);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : '\u554f\u984c\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
-      );
+      setError(err instanceof Error ? err.message : '問題の取得に失敗しました');
     } finally {
       setLoading(false);
     }
@@ -120,6 +195,97 @@ export default function AdminEventProblemsPage() {
     }
   };
 
+  // --- Deploy ---
+
+  const startPolling = (
+    problemId: string,
+    stackName: string,
+    region: string,
+  ) => {
+    if (pollingRef.current[problemId]) {
+      clearInterval(pollingRef.current[problemId]);
+    }
+    pollingRef.current[problemId] = setInterval(async () => {
+      try {
+        const status: DeploymentStatus = await getDeploymentStatus(
+          problemId,
+          stackName,
+          region,
+        );
+        setDeployStates((prev) => ({
+          ...prev,
+          [problemId]: {
+            stackName,
+            region,
+            status: status.status,
+          },
+        }));
+        if (!status.status.includes('IN_PROGRESS')) {
+          clearInterval(pollingRef.current[problemId]);
+          delete pollingRef.current[problemId];
+        }
+      } catch {
+        clearInterval(pollingRef.current[problemId]);
+        delete pollingRef.current[problemId];
+      }
+    }, STATUS_POLL_INTERVAL);
+  };
+
+  const handleDeploy = async () => {
+    if (!deployTarget || !selectedRegion?.value) return;
+    setDeploying(true);
+    try {
+      const result = await deployProblem(deployTarget.id, {
+        region: selectedRegion.value,
+        dryRun,
+      });
+      setDeployStates((prev) => ({
+        ...prev,
+        [deployTarget.id]: {
+          stackName: result.stackName,
+          region: selectedRegion.value,
+          status: 'CREATE_IN_PROGRESS',
+        },
+      }));
+      setDeployTarget(null);
+      if (!dryRun) {
+        startPolling(deployTarget.id, result.stackName, selectedRegion.value);
+      }
+    } catch (err) {
+      setDeployStates((prev) => ({
+        ...prev,
+        [deployTarget.id]: {
+          error: err instanceof Error ? err.message : 'デプロイに失敗しました',
+        },
+      }));
+      setDeployTarget(null);
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  const handleDeleteDeploy = async (problemId: string) => {
+    const state = deployStates[problemId];
+    if (!state?.stackName || !state.region) return;
+    setDeletingDeploy((prev) => new Set(prev).add(problemId));
+    try {
+      await deleteDeployment(problemId, state.stackName, state.region);
+      setDeployStates((prev) => {
+        const next = { ...prev };
+        delete next[problemId];
+        return next;
+      });
+    } catch {
+      // Error handling
+    } finally {
+      setDeletingDeploy((prev) => {
+        const next = new Set(prev);
+        next.delete(problemId);
+        return next;
+      });
+    }
+  };
+
   if (loading) {
     return (
       <Box textAlign="center" padding="xl">
@@ -135,27 +301,25 @@ export default function AdminEventProblemsPage() {
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button variant="primary" onClick={handleOpenAddModal}>
-              {'\u554f\u984c\u3092\u8ffd\u52a0'}
+              問題を追加
             </Button>
             <Button onClick={() => router.push('/admin/problems/new')}>
-              {'\u65b0\u898f\u554f\u984c\u4f5c\u6210'}
+              新規問題作成
             </Button>
             <Button onClick={() => router.push(`/admin/events/${eventId}`)}>
-              {'\u30a4\u30d9\u30f3\u30c8\u306b\u623b\u308b'}
+              イベントに戻る
             </Button>
           </SpaceBetween>
         }
       >
-        {'\u554f\u984c\u7ba1\u7406'}
+        問題管理
       </Header>
 
       {error && (
         <Container>
           <SpaceBetween size="m" direction="vertical" alignItems="center">
             <StatusIndicator type="error">{error}</StatusIndicator>
-            <Button onClick={fetchProblems}>
-              {'\u518d\u8aad\u307f\u8fbc\u307f'}
-            </Button>
+            <Button onClick={fetchProblems}>再読み込み</Button>
           </SpaceBetween>
         </Container>
       )}
@@ -163,28 +327,20 @@ export default function AdminEventProblemsPage() {
       {!error && (
         <Table
           loading={loading}
-          loadingText={'\u554f\u984c\u3092\u8aad\u307f\u8fbc\u307f\u4e2d...'}
+          loadingText="問題を読み込み中..."
           items={problems}
           header={
-            <Header counter={`(${problems.length})`}>
-              {'\u30a4\u30d9\u30f3\u30c8\u306e\u554f\u984c\u4e00\u89a7'}
-            </Header>
+            <Header counter={`(${problems.length})`}>イベントの問題一覧</Header>
           }
           empty={
             <Box textAlign="center" padding="l">
               <SpaceBetween size="m">
-                <Box variant="h3">
-                  {
-                    '\u554f\u984c\u304c\u307e\u3060\u3042\u308a\u307e\u305b\u3093'
-                  }
-                </Box>
+                <Box variant="h3">問題がまだありません</Box>
                 <Box color="text-body-secondary">
-                  {
-                    '\u554f\u984c\u3092\u8ffd\u52a0\u3057\u3066\u30a4\u30d9\u30f3\u30c8\u3092\u69cb\u6210\u3057\u307e\u3057\u3087\u3046\u3002'
-                  }
+                  問題を追加してイベントを構成しましょう。
                 </Box>
                 <Button variant="primary" onClick={handleOpenAddModal}>
-                  {'\u554f\u984c\u3092\u8ffd\u52a0'}
+                  問題を追加
                 </Button>
               </SpaceBetween>
             </Box>
@@ -192,22 +348,22 @@ export default function AdminEventProblemsPage() {
           columnDefinitions={[
             {
               id: 'title',
-              header: '\u30bf\u30a4\u30c8\u30eb',
+              header: 'タイトル',
               cell: (item) => <Box fontWeight="bold">{item.title}</Box>,
             },
             {
               id: 'category',
-              header: '\u30ab\u30c6\u30b4\u30ea',
+              header: 'カテゴリ',
               cell: (item) => item.category,
             },
             {
               id: 'difficulty',
-              header: '\u96e3\u6613\u5ea6',
+              header: '難易度',
               cell: (item) => getDifficultyBadge(item.difficulty),
             },
             {
               id: 'scoring',
-              header: '\u914d\u70b9',
+              header: '配点',
               cell: (item) => {
                 const total = item.scoring.criteria.reduce(
                   (sum, c) => sum + c.maxPoints,
@@ -217,8 +373,51 @@ export default function AdminEventProblemsPage() {
               },
             },
             {
+              id: 'deploy',
+              header: 'デプロイ',
+              cell: (item) => {
+                const state = deployStates[item.id];
+                if (state?.error) {
+                  return (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <StatusIndicator type="error">失敗</StatusIndicator>
+                      <Button
+                        variant="link"
+                        onClick={() => setDeployTarget(item)}
+                      >
+                        再試行
+                      </Button>
+                    </SpaceBetween>
+                  );
+                }
+                if (state?.status) {
+                  return (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      {getDeployStatusIndicator(state.status)}
+                      {!state.status.includes('IN_PROGRESS') &&
+                        state.status.includes('COMPLETE') &&
+                        !state.status.includes('ROLLBACK') && (
+                          <Button
+                            variant="link"
+                            loading={deletingDeploy.has(item.id)}
+                            onClick={() => handleDeleteDeploy(item.id)}
+                          >
+                            破棄
+                          </Button>
+                        )}
+                    </SpaceBetween>
+                  );
+                }
+                return (
+                  <Button variant="link" onClick={() => setDeployTarget(item)}>
+                    デプロイ
+                  </Button>
+                );
+              },
+            },
+            {
               id: 'actions',
-              header: '\u30a2\u30af\u30b7\u30e7\u30f3',
+              header: 'アクション',
               cell: (item) => (
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button
@@ -227,14 +426,14 @@ export default function AdminEventProblemsPage() {
                       router.push(`/admin/problems/${item.id}/edit`)
                     }
                   >
-                    {'\u7de8\u96c6'}
+                    編集
                   </Button>
                   <Button
                     variant="link"
                     loading={removingIds.has(item.id)}
                     onClick={() => handleRemove(item.id)}
                   >
-                    {'\u524a\u9664'}
+                    削除
                   </Button>
                 </SpaceBetween>
               ),
@@ -247,7 +446,7 @@ export default function AdminEventProblemsPage() {
       <Modal
         visible={showAddModal}
         onDismiss={() => setShowAddModal(false)}
-        header={'\u554f\u984c\u3092\u9078\u629e'}
+        header="問題を選択"
         size="large"
       >
         {addModalLoading ? (
@@ -257,13 +456,9 @@ export default function AdminEventProblemsPage() {
         ) : allProblems.length === 0 ? (
           <Box textAlign="center" padding="l">
             <SpaceBetween size="m">
-              <Box>
-                {
-                  '\u8ffd\u52a0\u53ef\u80fd\u306a\u554f\u984c\u304c\u3042\u308a\u307e\u305b\u3093'
-                }
-              </Box>
+              <Box>追加可能な問題がありません</Box>
               <Button onClick={() => router.push('/admin/problems/new')}>
-                {'\u65b0\u898f\u554f\u984c\u4f5c\u6210'}
+                新規問題作成
               </Button>
             </SpaceBetween>
           </Box>
@@ -273,17 +468,17 @@ export default function AdminEventProblemsPage() {
             columnDefinitions={[
               {
                 id: 'title',
-                header: '\u30bf\u30a4\u30c8\u30eb',
+                header: 'タイトル',
                 cell: (item) => item.title,
               },
               {
                 id: 'category',
-                header: '\u30ab\u30c6\u30b4\u30ea',
+                header: 'カテゴリ',
                 cell: (item) => item.category,
               },
               {
                 id: 'difficulty',
-                header: '\u96e3\u6613\u5ea6',
+                header: '難易度',
                 cell: (item) => getDifficultyBadge(item.difficulty),
               },
               {
@@ -295,13 +490,66 @@ export default function AdminEventProblemsPage() {
                     loading={addingId === item.id}
                     onClick={() => handleAddProblem(item.id)}
                   >
-                    {'\u8ffd\u52a0'}
+                    追加
                   </Button>
                 ),
               },
             ]}
           />
         )}
+      </Modal>
+
+      {/* Deploy Modal */}
+      <Modal
+        visible={deployTarget !== null}
+        onDismiss={() => setDeployTarget(null)}
+        header={`デプロイ: ${deployTarget?.title ?? ''}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setDeployTarget(null)}>キャンセル</Button>
+              <Button
+                variant="primary"
+                loading={deploying}
+                onClick={handleDeploy}
+              >
+                {dryRun ? 'ドライラン実行' : 'デプロイ実行'}
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="l">
+          <FormField label="リージョン">
+            <Select
+              selectedOption={selectedRegion}
+              onChange={({ detail }) =>
+                setSelectedRegion(detail.selectedOption)
+              }
+              options={REGION_OPTIONS}
+              placeholder="リージョンを選択"
+            />
+          </FormField>
+          <FormField label="ドライラン">
+            <Toggle
+              checked={dryRun}
+              onChange={({ detail }) => setDryRun(detail.checked)}
+            >
+              テンプレートの検証のみ（実際のデプロイは行わない）
+            </Toggle>
+          </FormField>
+          {deployTarget?.deployment?.providers && (
+            <FormField label="対応プロバイダー">
+              <SpaceBetween direction="horizontal" size="xs">
+                {deployTarget.deployment.providers.map((p) => (
+                  <Badge key={p} color="blue">
+                    {p.toUpperCase()}
+                  </Badge>
+                ))}
+              </SpaceBetween>
+            </FormField>
+          )}
+        </SpaceBetween>
       </Modal>
     </SpaceBetween>
   );

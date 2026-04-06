@@ -21,6 +21,8 @@ describe("認証ミドルウェア", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		delete process.env.AUTH_SKIP;
+		delete process.env.NODE_ENV;
 		app = new Hono();
 		app.use("/*", authMiddleware);
 		app.get("/test", (c) => c.json({ auth: c.get("auth") }));
@@ -181,6 +183,30 @@ describe("認証ミドルウェア", () => {
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.auth.roles).toEqual([]);
+	});
+
+	it("AUTH_SKIP=1 で開発環境の場合は認証をスキップすべき", async () => {
+		process.env.AUTH_SKIP = "1";
+		process.env.NODE_ENV = "development";
+
+		const res = await app.request("/test");
+
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.auth).toEqual({
+			userId: "dev-user",
+			tenantId: "dev-tenant",
+			roles: ["admin", "participant"],
+		});
+	});
+
+	it("AUTH_SKIP=1 でも本番環境では認証をスキップしないべき", async () => {
+		process.env.AUTH_SKIP = "1";
+		process.env.NODE_ENV = "production";
+
+		const res = await app.request("/test");
+
+		expect(res.status).toBe(401);
 	});
 
 	it("realm_accessにrolesがない場合は空配列をrolesとするべき", async () => {

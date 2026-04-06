@@ -29,6 +29,18 @@ async function getJWKS() {
 }
 
 export const authMiddleware = createMiddleware(async (c, next) => {
+	if (
+		process.env.AUTH_SKIP === "1" &&
+		process.env.NODE_ENV !== "production"
+	) {
+		c.set("auth", {
+			userId: "dev-user",
+			tenantId: "dev-tenant",
+			roles: ["admin", "participant"],
+		});
+		return next();
+	}
+
 	const authHeader = c.req.header("Authorization");
 
 	if (!authHeader?.startsWith("Bearer ")) {
