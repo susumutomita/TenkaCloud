@@ -72,7 +72,8 @@ export class AWSCloudProvider implements ICloudProvider {
 			// STS GetCallerIdentity で認証を検証
 			const stsResponse = await this.callSTS(credentials, "GetCallerIdentity");
 			return !!stsResponse.Account;
-		} catch {
+		} catch (error) {
+			console.debug("[AWSCloudProvider] validateCredentials failed:", error);
 			return false;
 		}
 	}
@@ -220,7 +221,8 @@ export class AWSCloudProvider implements ICloudProvider {
 					? new Date(stack.LastUpdatedTime as string)
 					: undefined,
 			};
-		} catch {
+		} catch (error) {
+			console.debug("[AWSCloudProvider] getStackStatus failed:", { stackName, error });
 			return null;
 		}
 	}
@@ -391,8 +393,8 @@ export class AWSCloudProvider implements ICloudProvider {
 			const iamResponse = await this.callIAM(credentials, "ListAccountAliases");
 			const aliases = iamResponse.AccountAliases as string[] | undefined;
 			alias = aliases?.[0];
-		} catch {
-			// エイリアスが取得できない場合は無視
+		} catch (error) {
+			console.debug("[AWSCloudProvider] IAM エイリアスの取得に失敗:", error);
 		}
 
 		return {

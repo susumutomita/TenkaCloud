@@ -124,8 +124,8 @@ export class AWSGameDayScoringProvider implements IScoringExecutor {
 				`tenkacloud-${problem.id}-${competitorAccountId}`,
 				credentials,
 			);
-		} catch {
-			// スタック出力が取得できない場合は続行
+		} catch (error) {
+			console.debug("[AWSGameDay] スタック出力の取得に失敗（続行します）:", error);
 		}
 
 		const criteriaResults: ScoringExecutionResult["criteriaResults"] = [];
