@@ -175,6 +175,81 @@ function toMemberRecord(item: MemberItem): MemberRecord {
 	};
 }
 
+function toAttack(item: Record<string, unknown>): Attack {
+	return {
+		id: item.id as string,
+		eventId: item.eventId as string,
+		name: item.name as string,
+		slug: item.slug as string,
+		attackType: item.attackType as "vulnerability" | "chaos",
+		targetVulnerability: (item.targetVulnerability as string) ?? null,
+		description: item.description as string,
+		purchaseCost: item.purchaseCost as number,
+		damage: item.damage as number,
+		reward: item.reward as number,
+		cooldownSeconds: item.cooldownSeconds as number,
+		defenseHint: item.defenseHint as string,
+		hintCost: item.hintCost as number,
+	};
+}
+
+function toAttackPurchase(item: Record<string, unknown>): AttackPurchase {
+	return {
+		id: item.id as string,
+		eventId: item.eventId as string,
+		teamId: item.teamId as string,
+		attackId: item.attackId as string,
+		attackSlug: item.attackSlug as string,
+		purchasedAt: item.purchasedAt as string,
+		lastUsedAt: (item.lastUsedAt as string) ?? null,
+	};
+}
+
+function toTeamVulnerability(item: Record<string, unknown>): TeamVulnerability {
+	return {
+		eventId: item.eventId as string,
+		teamId: item.teamId as string,
+		vulnerabilitySlug: item.vulnerabilitySlug as string,
+		isFixed: item.isFixed as boolean,
+		fixedAt: (item.fixedAt as string) ?? null,
+	};
+}
+
+function toAlliance(item: Record<string, unknown>): Alliance {
+	return {
+		id: item.id as string,
+		eventId: item.eventId as string,
+		requesterTeamId: item.requesterTeamId as string,
+		targetTeamId: item.targetTeamId as string,
+		status: item.status as AllianceStatus,
+		createdAt: item.createdAt as string,
+		updatedAt: item.updatedAt as string,
+	};
+}
+
+function toHealthCheckResult(item: Record<string, unknown>): HealthCheckResult {
+	return {
+		id: item.id as string,
+		eventId: item.eventId as string,
+		teamId: item.teamId as string,
+		checkType: item.checkType as "website" | "api",
+		isHealthy: item.isHealthy as boolean,
+		statusCode: (item.statusCode as number) ?? null,
+		responseTimeMs: (item.responseTimeMs as number) ?? null,
+		createdAt: item.createdAt as string,
+	};
+}
+
+function toVote(item: Record<string, unknown>): Vote {
+	return {
+		id: item.id as string,
+		eventId: item.eventId as string,
+		voterTeamId: item.voterTeamId as string,
+		votedForTeamId: item.votedForTeamId as string,
+		createdAt: item.createdAt as string,
+	};
+}
+
 export class GameAlreadyExistsError extends Error {
 	constructor(eventId: string) {
 		super(`ゲームは既に存在します: ${eventId}`);
@@ -497,7 +572,7 @@ export class GamedayRepository {
 		const now = new Date().toISOString();
 		const inviteCode =
 			input.inviteCode ??
-			Math.random().toString(36).substring(2, 8).toUpperCase();
+			crypto.randomUUID().substring(0, 8).toUpperCase();
 
 		const item: TeamStateItem = {
 			PK: buildGamedayPK(input.eventId),
@@ -828,7 +903,7 @@ export class GamedayRepository {
 				// Kumo の begins_with バグ回避: アプリ側でフィルタ
 				const sk = (item as Record<string, unknown>).SK as string | undefined;
 				if (!sk || !sk.startsWith("ATTACK#")) continue;
-				allItems.push(item as unknown as Attack);
+				allItems.push(toAttack(item as Record<string, unknown>));
 			}
 			exclusiveStartKey = result.LastEvaluatedKey as
 				| Record<string, unknown>
@@ -856,7 +931,7 @@ export class GamedayRepository {
 			return null;
 		}
 
-		return result.Item as unknown as Attack;
+		return toAttack(result.Item as Record<string, unknown>);
 	}
 
 	async seedAttackCatalog(eventId: string, attacks: Attack[]): Promise<void> {
@@ -913,7 +988,7 @@ export class GamedayRepository {
 			return null;
 		}
 
-		return result.Item as unknown as AttackPurchase;
+		return toAttackPurchase(result.Item as Record<string, unknown>);
 	}
 
 	async createAttackPurchase(input: {
@@ -956,7 +1031,7 @@ export class GamedayRepository {
 			throw error;
 		}
 
-		return item as unknown as AttackPurchase;
+		return toAttackPurchase(item as Record<string, unknown>);
 	}
 
 	async updatePurchaseLastUsedAt(
@@ -1007,7 +1082,7 @@ export class GamedayRepository {
 			return null;
 		}
 
-		return result.Item as unknown as TeamVulnerability;
+		return toTeamVulnerability(result.Item as Record<string, unknown>);
 	}
 
 	async upsertTeamVulnerability(input: {
@@ -1038,7 +1113,7 @@ export class GamedayRepository {
 			}),
 		);
 
-		return item as unknown as TeamVulnerability;
+		return toTeamVulnerability(item as Record<string, unknown>);
 	}
 
 	// === 同盟 ===
@@ -1066,7 +1141,7 @@ export class GamedayRepository {
 				// Kumo の begins_with バグ回避: アプリ側でフィルタ
 				const sk = (item as Record<string, unknown>).SK as string | undefined;
 				if (!sk || !sk.startsWith("ALLIANCE#")) continue;
-				allItems.push(item as unknown as Alliance);
+				allItems.push(toAlliance(item as Record<string, unknown>));
 			}
 			exclusiveStartKey = result.LastEvaluatedKey as
 				| Record<string, unknown>
@@ -1119,7 +1194,7 @@ export class GamedayRepository {
 						allianceItem.targetTeamId !== teamId)
 				)
 					continue;
-				allItems.push(item as unknown as Alliance);
+				allItems.push(toAlliance(item as Record<string, unknown>));
 			}
 			exclusiveStartKey = result.LastEvaluatedKey as
 				| Record<string, unknown>
@@ -1150,7 +1225,7 @@ export class GamedayRepository {
 			return null;
 		}
 
-		return result.Item as unknown as Alliance;
+		return toAlliance(result.Item as Record<string, unknown>);
 	}
 
 	async createAlliance(input: {
@@ -1183,7 +1258,7 @@ export class GamedayRepository {
 			}),
 		);
 
-		return item as unknown as Alliance;
+		return toAlliance(item as Record<string, unknown>);
 	}
 
 	async updateAllianceStatus(
@@ -1258,7 +1333,7 @@ export class GamedayRepository {
 				// Kumo の begins_with バグ回避: アプリ側でフィルタ
 				const sk = (item as Record<string, unknown>).SK as string | undefined;
 				if (sk && sk.startsWith(`HEALTHCHECK#${teamId}#`)) {
-					allItems.push(item as unknown as HealthCheckResult);
+					allItems.push(toHealthCheckResult(item as Record<string, unknown>));
 				}
 			}
 			exclusiveStartKey = result.LastEvaluatedKey as
@@ -1303,7 +1378,7 @@ export class GamedayRepository {
 			}),
 		);
 
-		return item as unknown as HealthCheckResult;
+		return toHealthCheckResult(item as Record<string, unknown>);
 	}
 
 	// === 投票 ===
@@ -1345,7 +1420,7 @@ export class GamedayRepository {
 			throw error;
 		}
 
-		return item as unknown as Vote;
+		return toVote(item as Record<string, unknown>);
 	}
 
 	async listVotes(eventId: string): Promise<Vote[]> {
@@ -1371,7 +1446,7 @@ export class GamedayRepository {
 				// Kumo の begins_with バグ回避: アプリ側でフィルタ
 				const sk = (item as Record<string, unknown>).SK as string | undefined;
 				if (!sk || !sk.startsWith("VOTE#")) continue;
-				allItems.push(item as unknown as Vote);
+				allItems.push(toVote(item as Record<string, unknown>));
 			}
 			exclusiveStartKey = result.LastEvaluatedKey as
 				| Record<string, unknown>
