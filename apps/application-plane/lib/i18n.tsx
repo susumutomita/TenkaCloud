@@ -166,6 +166,7 @@ const messages = {
       attackHistoryAggregate: 'Attack History',
       refreshesEvery30Seconds: '30秒ごとに自動更新',
       teams: 'teams',
+      tutorial: 'ルール',
     },
     events: {
       title: 'イベント一覧',
@@ -437,6 +438,7 @@ const messages = {
       attackHistoryAggregate: 'Attack History',
       refreshesEvery30Seconds: 'Refreshes every 30 seconds',
       teams: 'teams',
+      tutorial: 'Rules',
     },
     events: {
       title: 'Events',

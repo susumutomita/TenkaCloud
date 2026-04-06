@@ -141,4 +141,142 @@ describe('AdminGamedayControlPage', () => {
       expect(screen.getByText(/イベント ID: ev-1/)).toBeInTheDocument();
     });
   });
+
+  describe('開始前チェックリスト', () => {
+    it('チェックリスト項目を表示すべき', async () => {
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('開始前チェックリスト')).toBeInTheDocument();
+      });
+    });
+
+    it('チェック項目がすべて失敗の場合ゲーム開始ボタンを無効にすべき', async () => {
+      mockGetGameStatus.mockResolvedValue(baseGameState);
+      mockGetTeams.mockResolvedValue({ teams: [] });
+      mockGetAttackCatalog.mockResolvedValue({ attacks: [] });
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('ゲーム開始')).toBeInTheDocument();
+      });
+
+      const startButton = screen.getByText('ゲーム開始').closest('button');
+      expect(startButton).toBeDisabled();
+    });
+
+    it('チーム不足の場合エラー表示すべき', async () => {
+      mockGetTeams.mockResolvedValue({
+        teams: [{ teamId: 't1', teamName: 'Team 1', eventId: 'ev-1' }],
+      });
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'チームが2チーム以上必要です（チーム管理タブで登録）',
+          ),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('攻撃カタログ未登録の場合エラー表示すべき', async () => {
+      mockGetAttackCatalog.mockResolvedValue({ attacks: [] });
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('攻撃カタログが未登録です（攻撃管理タブで生成）'),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('すべてのチェックが通った場合ゲーム開始ボタンを有効にすべき', async () => {
+      mockGetGameStatus.mockResolvedValue(baseGameState);
+      mockGetTeams.mockResolvedValue({
+        teams: [
+          { teamId: 't1', teamName: 'Team 1', eventId: 'ev-1' },
+          { teamId: 't2', teamName: 'Team 2', eventId: 'ev-1' },
+        ],
+      });
+      mockGetAttackCatalog.mockResolvedValue({
+        attacks: [
+          {
+            id: 'a1',
+            name: 'Attack 1',
+            slug: 'attack-1',
+            attackType: 'vulnerability',
+            targetVulnerability: null,
+            description: 'desc',
+            purchaseCost: 10,
+            damage: 5,
+            reward: 3,
+            cooldownSeconds: 60,
+            defenseHint: 'hint',
+            hintCost: 5,
+          },
+        ],
+      });
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('ゲーム開始')).toBeInTheDocument();
+      });
+
+      const startButton = screen.getByText('ゲーム開始').closest('button');
+      expect(startButton).not.toBeDisabled();
+    });
+
+    it('チェック未達の場合警告アラートを表示すべき', async () => {
+      mockGetTeams.mockResolvedValue({ teams: [] });
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'すべてのチェック項目を満たすまでゲームを開始できません',
+          ),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('すべてのチェックが通った場合警告アラートを非表示にすべき', async () => {
+      mockGetGameStatus.mockResolvedValue(baseGameState);
+      mockGetTeams.mockResolvedValue({
+        teams: [
+          { teamId: 't1', teamName: 'Team 1', eventId: 'ev-1' },
+          { teamId: 't2', teamName: 'Team 2', eventId: 'ev-1' },
+        ],
+      });
+      mockGetAttackCatalog.mockResolvedValue({
+        attacks: [
+          {
+            id: 'a1',
+            name: 'Attack 1',
+            slug: 'attack-1',
+            attackType: 'vulnerability',
+            targetVulnerability: null,
+            description: 'desc',
+            purchaseCost: 10,
+            damage: 5,
+            reward: 3,
+            cooldownSeconds: 60,
+            defenseHint: 'hint',
+            hintCost: 5,
+          },
+        ],
+      });
+      render(<AdminGamedayControlPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('開始前チェックリスト')).toBeInTheDocument();
+      });
+
+      expect(
+        screen.queryByText(
+          'すべてのチェック項目を満たすまでゲームを開始できません',
+        ),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
