@@ -485,9 +485,14 @@ export class AWSCloudProvider implements ICloudProvider {
 		);
 	}
 
-	private async loadTemplate(path: string): Promise<string> {
+	private async loadTemplate(templatePath: string): Promise<string> {
 		const fs = await import("node:fs/promises");
-		return fs.readFile(path, "utf-8");
+		const nodePath = await import("node:path");
+		const resolved = nodePath.resolve(templatePath);
+		if (resolved.includes("..")) {
+			throw new Error("パストラバーサルが検出されました");
+		}
+		return fs.readFile(resolved, "utf-8");
 	}
 
 	private async validateTemplate(

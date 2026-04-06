@@ -38,16 +38,15 @@ echo ""
 
 # 1. ゲーム初期化（isRunning: false でゲーム状態を作成）
 echo "📦 ステップ 1/5: ゲームを初期化中..."
-TENANT_ID="${TENANT_ID:-dev-tenant}"
 INIT_RESULT=$(curl -sf -X POST "$GAMEDAY_API/admin/game/init" \
   -H "Content-Type: application/json" \
-  -d "{\"eventId\": \"$EVENT_ID\", \"tenantId\": \"$TENANT_ID\", \"durationMinutes\": $DURATION}" 2>&1) || {
+  -d "{\"eventId\": \"$EVENT_ID\", \"durationMinutes\": $DURATION}" 2>&1) || {
   # 既に初期化済みの場合は続行
   echo "  ⏭️  ゲームは既に初期化されています"
   INIT_RESULT=""
 }
 if [ -n "$INIT_RESULT" ]; then
-  echo "✅ ゲームを初期化しました (tenantId: $TENANT_ID)"
+  echo "✅ ゲームを初期化しました"
 fi
 
 # 2. 攻撃カタログをシード

@@ -1,5 +1,27 @@
 import { z } from "zod";
 
+/** プライベート/リンクローカルIPへのSSRFを防止するURLバリデーション */
+const BLOCKED_HOST_PATTERNS =
+	/^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|\[::1\])/i;
+
+const safeUrl = z
+	.string()
+	.url()
+	.refine(
+		(url) => {
+			try {
+				const parsed = new URL(url);
+				if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+					return false;
+				}
+				return !BLOCKED_HOST_PATTERNS.test(parsed.hostname);
+			} catch {
+				return false;
+			}
+		},
+		{ message: "プライベートネットワークへのURLは許可されていません" },
+	);
+
 // 共通: eventId のみのリクエスト
 export const eventIdSchema = z.object({
 	eventId: z.string().min(1),
@@ -11,10 +33,9 @@ export const startGameSchema = z.object({
 	durationMinutes: z.number().int().min(1).max(480).default(240),
 });
 
-// 管理者: ゲーム初期化（isRunning: false で作成）
+// 管理者: ゲーム初期化（isRunning: false で作成。tenantId は認証コンテキストから取得）
 export const initGameSchema = z.object({
 	eventId: z.string().min(1),
-	tenantId: z.string().min(1),
 	durationMinutes: z.number().int().min(1).max(480).default(240),
 });
 
@@ -35,16 +56,16 @@ export const registerTeamSchema = z.object({
 	eventId: z.string().min(1),
 	teamId: z.string().min(1),
 	teamName: z.string().min(1),
-	websiteUrl: z.string().url().optional(),
-	apiUrl: z.string().url().optional(),
+	websiteUrl: safeUrl.optional(),
+	apiUrl: safeUrl.optional(),
 });
 
 // プレーヤー: チーム URL 更新
 export const updateTeamUrlSchema = z.object({
 	eventId: z.string().min(1),
 	teamId: z.string().min(1),
-	websiteUrl: z.string().url().optional(),
-	apiUrl: z.string().url().optional(),
+	websiteUrl: safeUrl.optional(),
+	apiUrl: safeUrl.optional(),
 });
 
 // プレーヤー: 攻撃購入
