@@ -18,34 +18,35 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
   }),
 }));
 
-const mockGetLeaderboard = vi.fn();
+const mockUseLeaderboardSSE = vi.fn();
+
+vi.mock('@/lib/hooks/use-leaderboard-sse', () => ({
+  useLeaderboardSSE: (...args: unknown[]) => mockUseLeaderboardSSE(...args),
+}));
+
 const mockGetAttackStats = vi.fn();
 
 vi.mock('@/lib/api/gameday', () => ({
-  getLeaderboard: (...args: unknown[]) => mockGetLeaderboard(...args),
   getAttackStats: (...args: unknown[]) => mockGetAttackStats(...args),
 }));
 
-const baseLeaderboard = [
-  {
-    rank: 1,
-    teamId: 'team-2',
-    teamName: 'TeamBeta',
-    score: 1500,
-    attacksLaunched: 5,
-    attacksReceived: 2,
-    vulnerabilitiesFixed: 3,
-  },
-  {
-    rank: 2,
-    teamId: 'team-1',
-    teamName: 'TeamAlpha',
-    score: 1200,
-    attacksLaunched: 3,
-    attacksReceived: 4,
-    vulnerabilitiesFixed: 2,
-  },
-];
+const baseSSEData = {
+  eventId: 'ev-1',
+  entries: [
+    {
+      rank: 1,
+      teamId: 'team-2',
+      teamName: 'TeamBeta',
+      score: 1500,
+    },
+    {
+      rank: 2,
+      teamId: 'team-1',
+      teamName: 'TeamAlpha',
+      score: 1200,
+    },
+  ],
+};
 
 const baseAttackStats = [
   {
@@ -59,12 +60,20 @@ const baseAttackStats = [
 describe('ScoreboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetLeaderboard.mockResolvedValue({ leaderboard: baseLeaderboard });
+    mockUseLeaderboardSSE.mockReturnValue({
+      data: baseSSEData,
+      error: null,
+      connected: true,
+    });
     mockGetAttackStats.mockResolvedValue({ stats: baseAttackStats });
   });
 
-  it('ローディング中はリーダーボードデータを表示しないべき', () => {
-    mockGetLeaderboard.mockReturnValue(new Promise(() => {}));
+  it('SSEデータ未受信時はリーダーボードデータを表示しないべき', () => {
+    mockUseLeaderboardSSE.mockReturnValue({
+      data: null,
+      error: null,
+      connected: false,
+    });
     mockGetAttackStats.mockReturnValue(new Promise(() => {}));
     render(<ScoreboardPage />);
     expect(screen.queryByText('TeamBeta')).not.toBeInTheDocument();
@@ -95,12 +104,15 @@ describe('ScoreboardPage', () => {
     });
   });
 
-  it('APIエラー時にエラー状態を表示すべき', async () => {
-    mockGetLeaderboard.mockRejectedValue(new Error('Server error'));
+  it('SSEエラー時にエラー状態を表示すべき', async () => {
+    mockUseLeaderboardSSE.mockReturnValue({
+      data: null,
+      error: 'Server error',
+      connected: false,
+    });
     render(<ScoreboardPage />);
 
     await waitFor(() => {
-      // ErrorState renders a title
       expect(screen.getByText('エラーが発生しました')).toBeInTheDocument();
     });
   });
@@ -109,7 +121,7 @@ describe('ScoreboardPage', () => {
     const forbiddenError = Object.assign(new Error('Forbidden'), {
       status: 403,
     });
-    mockGetLeaderboard.mockRejectedValue(forbiddenError);
+    mockGetAttackStats.mockRejectedValue(forbiddenError);
     render(<ScoreboardPage />);
 
     await waitFor(() => {

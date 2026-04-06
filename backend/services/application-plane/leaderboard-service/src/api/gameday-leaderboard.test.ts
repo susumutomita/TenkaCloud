@@ -99,4 +99,63 @@ describe("GameDay リーダーボード API", () => {
 			expect(body.error).toBe("GameDayリーダーボードの取得に失敗しました");
 		});
 	});
+
+	describe("GET /api/leaderboards/gameday/:eventId/stream", () => {
+		it("SSEストリームでGameDayリーダーボードを配信するべき", async () => {
+			const mockResult = {
+				eventId: "event-1",
+				entries: [
+					{ rank: 1, teamId: "team-1", teamName: "Alpha", score: 300 },
+				],
+			};
+
+			vi.mocked(
+				gamedayLeaderboardService.getGameDayLeaderboard,
+			)
+				.mockResolvedValueOnce(mockResult)
+				.mockRejectedValueOnce(new Error("stop"));
+
+			const res = await app.request(
+				"/api/leaderboards/gameday/event-1/stream",
+			);
+
+			expect(res.status).toBe(200);
+			expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+			const text = await res.text();
+			expect(text).toContain("event: leaderboard");
+			expect(text).toContain('"eventId":"event-1"');
+			expect(text).toContain('"teamName":"Alpha"');
+		});
+
+		it("サービスエラーの場合はerrorイベントを送信するべき", async () => {
+			vi.mocked(
+				gamedayLeaderboardService.getGameDayLeaderboard,
+			).mockRejectedValue(new Error("DynamoDB接続エラー"));
+
+			const res = await app.request(
+				"/api/leaderboards/gameday/event-1/stream",
+			);
+
+			expect(res.status).toBe(200);
+			const text = await res.text();
+			expect(text).toContain("event: error");
+			expect(text).toContain("DynamoDB接続エラー");
+		});
+
+		it("Error以外のthrowの場合はデフォルトメッセージでerrorイベントを送信するべき", async () => {
+			vi.mocked(
+				gamedayLeaderboardService.getGameDayLeaderboard,
+			).mockRejectedValue("unexpected");
+
+			const res = await app.request(
+				"/api/leaderboards/gameday/event-1/stream",
+			);
+
+			expect(res.status).toBe(200);
+			const text = await res.text();
+			expect(text).toContain("event: error");
+			expect(text).toContain("GameDayリーダーボードの取得に失敗しました");
+		});
+	});
 });

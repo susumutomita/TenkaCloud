@@ -45,6 +45,20 @@ export function getTenantServiceUrl(): string {
 }
 
 /**
+ * Leaderboard Service の URL を取得する
+ *
+ * 環境変数: LEADERBOARD_API_URL, NEXT_PUBLIC_LEADERBOARD_API_URL
+ * デフォルト: http://localhost:3012
+ */
+export function getLeaderboardApiUrl(): string {
+  return (
+    process.env.LEADERBOARD_API_URL ||
+    process.env.NEXT_PUBLIC_LEADERBOARD_API_URL ||
+    'http://localhost:3012'
+  );
+}
+
+/**
  * 全バックエンドサービスの URL マップを取得する
  *
  * ヘルスチェックやデバッグで使用
@@ -53,6 +67,7 @@ export function getAllServiceUrls(): Record<string, string> {
   return {
     'problem-service': getProblemServiceUrl(),
     'gameday-service': getGamedayApiUrl(),
+    'leaderboard-service': getLeaderboardApiUrl(),
     'tenant-management': getTenantServiceUrl(),
   };
 }
