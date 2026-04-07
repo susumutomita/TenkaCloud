@@ -60,9 +60,9 @@ function getStatusIndicator(status: EventStatus) {
 function getTypeBadge(type: string) {
   switch (type) {
     case 'gameday':
-      return <Badge color="blue">GameDay</Badge>;
+      return <Badge color="blue">Incident Drill</Badge>;
     case 'jam':
-      return <Badge color="green">Jam</Badge>;
+      return <Badge color="green">Challenge</Badge>;
     default:
       return <Badge>{type}</Badge>;
   }

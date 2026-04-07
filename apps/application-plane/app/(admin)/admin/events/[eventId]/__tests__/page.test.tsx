@@ -289,19 +289,19 @@ describe('イベント詳細ページ', () => {
     });
   });
 
-  it('GameDay タイプバッジが表示されるべき', async () => {
+  it('Incident Drill タイプバッジが表示されるべき', async () => {
     mockGet.mockResolvedValue(mockEvent);
     render(<AdminEventDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('GameDay')).toBeInTheDocument();
+      expect(screen.getByText('Incident Drill')).toBeInTheDocument();
     });
   });
 
-  it('Jam タイプバッジが表示されるべき', async () => {
+  it('Challenge タイプバッジが表示されるべき', async () => {
     mockGet.mockResolvedValue({ ...mockEvent, type: 'jam' });
     render(<AdminEventDetailPage />);
     await waitFor(() => {
-      expect(screen.getByText('Jam')).toBeInTheDocument();
+      expect(screen.getByText('Challenge')).toBeInTheDocument();
     });
   });
 });

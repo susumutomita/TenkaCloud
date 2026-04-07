@@ -12,8 +12,8 @@ import { useCallback, useState } from 'react';
 // =============================================================================
 
 export const TYPE_OPTIONS: SelectProps.Options = [
-  { label: 'GameDay', value: 'gameday' },
-  { label: 'Jam', value: 'jam' },
+  { label: 'Incident Drill', value: 'gameday' },
+  { label: 'Challenge', value: 'jam' },
 ];
 
 export const STATUS_OPTIONS: SelectProps.Options = [

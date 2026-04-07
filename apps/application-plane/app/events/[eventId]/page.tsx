@@ -317,13 +317,19 @@ export default function EventDetailPage() {
         <Header
           variant="h1"
           description={
-            <SpaceBetween direction="horizontal" size="xs">
+            <span
+              style={{
+                display: 'inline-flex',
+                gap: '8px',
+                alignItems: 'center',
+              }}
+            >
               {getEventStatusIndicator(event.status)}
               <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
-                {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+                {event.type === 'gameday' ? 'Incident Drill' : 'Challenge'}
               </Badge>
               {event.isRegistered && <Badge color="green">登録済み</Badge>}
-            </SpaceBetween>
+            </span>
           }
           actions={
             <SpaceBetween direction="horizontal" size="xs">

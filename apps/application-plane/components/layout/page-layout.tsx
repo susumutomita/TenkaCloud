@@ -26,10 +26,12 @@
 import BreadcrumbGroup from '@cloudscape-design/components/breadcrumb-group';
 import ContentLayout from '@cloudscape-design/components/content-layout';
 import SpaceBetween from '@cloudscape-design/components/space-between';
+import TopNavigation from '@cloudscape-design/components/top-navigation';
 import '@cloudscape-design/global-styles/index.css';
 import { useRouter } from 'next/navigation';
-import type { ReactNode } from 'react';
-import { Header } from './header';
+import { signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 export interface BreadcrumbItem {
   text: string;
@@ -66,12 +68,83 @@ export function PageLayout({
   maxWidth = '7xl',
 }: PageLayoutProps) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const [mounted, setMounted] = useState(false);
   const widthClass = maxWidthClass[maxWidth];
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="min-h-screen bg-surface-0">
-      <Header />
       <div className="awsui-dark-mode">
+        {mounted && (
+          <div id="participant-top-nav">
+            <TopNavigation
+              identity={{
+                href: '/dashboard',
+                title: 'TenkaCloud',
+                onFollow: (e) => {
+                  e.preventDefault();
+                  router.push('/dashboard');
+                },
+              }}
+              utilities={[
+                {
+                  type: 'button' as const,
+                  text: 'ダッシュボード',
+                  href: '/dashboard',
+                },
+                {
+                  type: 'button' as const,
+                  text: 'イベント',
+                  href: '/events',
+                },
+                {
+                  type: 'button' as const,
+                  text: 'ランキング',
+                  href: '/rankings',
+                },
+                ...(session
+                  ? [
+                      {
+                        type: 'menu-dropdown' as const,
+                        text: session.user?.name || 'ユーザー',
+                        iconName: 'user-profile' as const,
+                        items: [
+                          { id: 'profile', text: 'プロフィール' },
+                          { id: 'signout', text: 'ログアウト' },
+                        ],
+                        onItemClick: ({
+                          detail,
+                        }: {
+                          detail: { id: string };
+                        }) => {
+                          if (detail.id === 'signout') {
+                            signOut({ callbackUrl: '/login' });
+                          }
+                          if (detail.id === 'profile') {
+                            router.push('/profile');
+                          }
+                        },
+                      },
+                    ]
+                  : [
+                      {
+                        type: 'button' as const,
+                        text: 'ログイン',
+                        href: '/login',
+                      },
+                    ]),
+              ]}
+              i18nStrings={{
+                overflowMenuTriggerText: 'その他',
+                overflowMenuTitleText: 'すべて',
+              }}
+            />
+          </div>
+        )}
         {breadcrumbs && breadcrumbs.length > 0 && (
           <div className={`${widthClass} mx-auto px-4 sm:px-6 lg:px-8 pt-4`}>
             <BreadcrumbGroup

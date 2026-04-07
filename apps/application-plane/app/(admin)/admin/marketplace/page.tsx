@@ -581,7 +581,9 @@ export default function AdminMarketplacePage() {
                   <Badge
                     variant={problem.type === 'gameday' ? 'primary' : 'info'}
                   >
-                    {problem.type === 'gameday' ? 'GameDay' : 'JAM'}
+                    {problem.type === 'gameday'
+                      ? 'Incident Drill'
+                      : 'Challenge'}
                   </Badge>
                 </div>
               </CardHeader>

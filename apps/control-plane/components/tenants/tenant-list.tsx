@@ -135,8 +135,8 @@ export function TenantList({ tenants }: TenantListProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredTenants.map((tenant) => (
-              <TableRow key={tenant.id}>
+            {filteredTenants.map((tenant, index) => (
+              <TableRow key={tenant.id || `tenant-${index}`}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <Link

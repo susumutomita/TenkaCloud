@@ -13,9 +13,9 @@ describe('GameDay エントリーページ', () => {
     vi.clearAllMocks();
   });
 
-  it('ページタイトル「GameDay」が表示されるべき', () => {
+  it('ページタイトル「Incident Drill」が表示されるべき', () => {
     render(<GamedayEntryPage />);
-    expect(screen.getByText('GameDay')).toBeInTheDocument();
+    expect(screen.getByText('Incident Drill')).toBeInTheDocument();
   });
 
   it('イベントID入力フィールドが表示されるべき', () => {
