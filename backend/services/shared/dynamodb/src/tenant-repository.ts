@@ -159,9 +159,14 @@ export class TenantRepository {
       })
     );
 
-    const tenants = (result.Items ?? []).map((item) =>
-      toDomain(item as TenantItem)
-    );
+    const tenants = (result.Items ?? [])
+      .filter(
+        (item) =>
+          item.EntityType === EntityType.TENANT &&
+          typeof item.id === 'string' &&
+          item.id.length > 0
+      )
+      .map((item) => toDomain(item as TenantItem));
 
     return {
       tenants,
