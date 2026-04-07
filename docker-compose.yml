@@ -57,7 +57,7 @@ services:
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-      - AUTH_SKIP=${AUTH_SKIP:-1}
+      - AUTH_SKIP=${AUTH_SKIP:-0}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:13004/health"]
       interval: 10s

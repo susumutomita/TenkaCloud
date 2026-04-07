@@ -75,6 +75,27 @@ vi.mock('@cloudscape-design/components/space-between', () => ({
   ),
 }));
 
+vi.mock('@cloudscape-design/components/modal', () => ({
+  default: ({
+    visible,
+    children,
+    header,
+    footer,
+  }: {
+    visible: boolean;
+    children?: React.ReactNode;
+    header?: React.ReactNode;
+    footer?: React.ReactNode;
+  }) =>
+    visible ? (
+      <div role="dialog">
+        <div>{header}</div>
+        <div>{children}</div>
+        <div>{footer}</div>
+      </div>
+    ) : null,
+}));
+
 vi.mock('@cloudscape-design/global-styles/index.css', () => ({}));
 
 const mockTenants: Tenant[] = [

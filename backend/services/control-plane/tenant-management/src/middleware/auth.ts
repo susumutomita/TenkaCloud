@@ -5,23 +5,21 @@ import { createLogger } from '../lib/logger';
 const logger = createLogger('auth-middleware');
 
 // ── AUTH_SKIP ガード ─────────────────────────────────
-/* v8 ignore start -- Production safety guard */
+/* istanbul ignore next -- Production safety guard */
 if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
   throw new Error('AUTH_SKIP cannot be enabled in production');
 }
-/* v8 ignore stop */
 
 const authSkipEnabled =
   process.env.AUTH_SKIP === '1' &&
   process.env.NODE_ENV !== 'production';
 
-/* v8 ignore start -- Development-only warning */
+/* istanbul ignore next -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
   console.warn(
     '\x1b[33m⚠️  AUTH_SKIP mode is enabled in tenant-management. JWT verification is bypassed.\x1b[0m'
   );
 }
-/* v8 ignore stop */
 
 // Auth0 configuration
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN || 'dev-tenkacloud.auth0.com';
