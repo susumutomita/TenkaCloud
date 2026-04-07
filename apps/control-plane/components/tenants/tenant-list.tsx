@@ -2,7 +2,19 @@
 
 import { Search } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getStatusVariant } from '@/lib/tenant-utils';
+import { tenantApi } from '@/lib/api/tenant-api';
 import type { Tenant, TenantStatus, TenantTier } from '@/types/tenant';
 import { TENANT_STATUS_LABELS, TENANT_TIER_LABELS } from '@/types/tenant';
 
@@ -22,9 +35,23 @@ interface TenantListProps {
 }
 
 export function TenantList({ tenants }: TenantListProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenantStatus | 'ALL'>('ALL');
   const [tierFilter, setTierFilter] = useState<TenantTier | 'ALL'>('ALL');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await tenantApi.deleteTenant(id);
+      router.refresh();
+    } catch {
+      // エラーは tenantApi 内でログされる
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const filteredTenants = tenants.filter((tenant) => {
     const matchesSearch =
@@ -176,6 +203,39 @@ export function TenantList({ tenants }: TenantListProps) {
                         編集
                       </Button>
                     </Link>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                        >
+                          削除
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            テナントを削除しますか？
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            「{tenant.name}
+                            」を削除します。この操作は取り消せません。
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDelete(tenant.id)}
+                            disabled={deletingId === tenant.id}
+                          >
+                            {deletingId === tenant.id
+                              ? '削除中...'
+                              : '削除する'}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </TableCell>
               </TableRow>

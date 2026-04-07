@@ -5,10 +5,15 @@ import { getStatusVariant } from '@/lib/tenant-utils';
 import type { Tenant } from '@/types/tenant';
 import TenantsPage from '../page';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
 // tenant-api のモック
 vi.mock('@/lib/api/tenant-api', () => ({
   tenantApi: {
     listTenants: vi.fn(),
+    deleteTenant: vi.fn().mockResolvedValue(true),
   },
 }));
 
