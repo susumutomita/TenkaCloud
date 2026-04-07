@@ -104,4 +104,32 @@ describe('TenantRepository', () => {
       expect(result.tenants).toHaveLength(0);
     });
   });
+
+  describe('findBySlug', () => {
+    it('EntityTypeがTENANTのアイテムのみ返すべき', async () => {
+      mockSend.mockResolvedValue({ Items: [validTenantItem] });
+
+      const result = await repo.findBySlug('test-tenant');
+
+      expect(result).not.toBeNull();
+      expect(result?.slug).toBe('test-tenant');
+    });
+
+    it('EntityTypeがTENANT以外のアイテムが返っても nullを返すべき', async () => {
+      const eventItem = { ...validTenantItem, EntityType: 'EVENT' };
+      mockSend.mockResolvedValue({ Items: [eventItem] });
+
+      const result = await repo.findBySlug('test-tenant');
+
+      expect(result).toBeNull();
+    });
+
+    it('アイテムが空の場合はnullを返すべき', async () => {
+      mockSend.mockResolvedValue({ Items: [] });
+
+      const result = await repo.findBySlug('no-such-slug');
+
+      expect(result).toBeNull();
+    });
+  });
 });

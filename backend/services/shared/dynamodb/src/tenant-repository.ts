@@ -110,19 +110,25 @@ export class TenantRepository {
         TableName: tableName,
         IndexName: 'GSI1',
         KeyConditionExpression: 'GSI1PK = :pk AND GSI1SK = :sk',
+        FilterExpression: 'EntityType = :entityType',
         ExpressionAttributeValues: {
           ':pk': `SLUG#${slug}`,
           ':sk': buildMetadataSK(),
+          ':entityType': EntityType.TENANT,
         },
         Limit: 1,
       })
     );
 
-    if (!result.Items || result.Items.length === 0) {
+    const tenantItem = (result.Items ?? []).find(
+      (item) => item.EntityType === EntityType.TENANT
+    );
+
+    if (!tenantItem) {
       return null;
     }
 
-    return toDomain(result.Items[0] as TenantItem);
+    return toDomain(tenantItem as TenantItem);
   }
 
   async list(options?: {
