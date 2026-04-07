@@ -1,8 +1,84 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tenant } from '@/types/tenant';
 import { TenantList } from '../tenant-list';
+
+const mocks = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  deleteTenant: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: mocks.refresh, push: vi.fn() }),
+}));
+
+vi.mock('@/lib/api/tenant-api', () => ({
+  tenantApi: {
+    deleteTenant: mocks.deleteTenant,
+  },
+}));
+
+vi.mock('@cloudscape-design/components/modal', () => ({
+  default: ({
+    visible,
+    onDismiss,
+    header,
+    footer,
+    children,
+  }: {
+    visible: boolean;
+    onDismiss: () => void;
+    header?: React.ReactNode;
+    footer?: React.ReactNode;
+    children?: React.ReactNode;
+  }) =>
+    visible ? (
+      <div role="dialog">
+        <div>{header}</div>
+        <div>{children}</div>
+        <div>{footer}</div>
+        <button type="button" onClick={onDismiss}>
+          閉じる
+        </button>
+      </div>
+    ) : null,
+}));
+
+vi.mock('@cloudscape-design/components/button', () => ({
+  default: ({
+    children,
+    onClick,
+    loading,
+    variant,
+  }: {
+    children?: React.ReactNode;
+    onClick?: () => void;
+    loading?: boolean;
+    variant?: string;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      data-variant={variant}
+    >
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/box', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
+
+vi.mock('@cloudscape-design/components/space-between', () => ({
+  default: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
 
 const mockTenants: Tenant[] = [
   {
@@ -50,6 +126,11 @@ const mockTenants: Tenant[] = [
 ];
 
 describe('TenantList コンポーネント', () => {
+  beforeEach(() => {
+    mocks.refresh.mockClear();
+    mocks.deleteTenant.mockClear();
+  });
+
   describe('初期表示', () => {
     it('テナント一覧を表示すべき', () => {
       render(<TenantList tenants={mockTenants} />);
@@ -282,6 +363,171 @@ describe('TenantList コンポーネント', () => {
       expect(screen.getByText('admin1@example.com')).toBeInTheDocument();
       expect(screen.getByText('admin2@example.com')).toBeInTheDocument();
       expect(screen.getByText('admin3@example.com')).toBeInTheDocument();
+    });
+
+    it('削除ボタンを表示すべき', () => {
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      expect(deleteButtons.length).toBe(3);
+    });
+  });
+
+  describe('テナント削除', () => {
+    it('削除確認ダイアログを表示すべき', async () => {
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      expect(screen.getByText('テナントを削除しますか？')).toBeInTheDocument();
+    });
+
+    it('削除を実行すべき', async () => {
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mocks.deleteTenant).toHaveBeenCalledWith('1');
+      });
+    });
+
+    it('削除成功時に router.refresh を呼ぶべき', async () => {
+      mocks.deleteTenant.mockResolvedValueOnce(true);
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mocks.refresh).toHaveBeenCalled();
+      });
+    });
+
+    it('削除が false を返した場合 router.refresh を呼ばないべき', async () => {
+      mocks.deleteTenant.mockResolvedValueOnce(false);
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mocks.deleteTenant).toHaveBeenCalled();
+      });
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    });
+
+    it('削除失敗時にエラーメッセージを表示すべき', async () => {
+      mocks.deleteTenant.mockRejectedValueOnce(new Error('Delete failed'));
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent('Delete failed');
+      });
+    });
+
+    it('キャンセルボタンでダイアログを閉じるべき', async () => {
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      const cancelButton = screen.getByRole('button', { name: 'キャンセル' });
+      await user.click(cancelButton);
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('onDismiss でダイアログを閉じるべき', async () => {
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      const closeButton = screen.getByRole('button', { name: '閉じる' });
+      await user.click(closeButton);
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('削除失敗時にクラッシュしないべき', async () => {
+      mocks.deleteTenant.mockRejectedValueOnce(new Error('Delete failed'));
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(mocks.deleteTenant).toHaveBeenCalled();
+      });
+    });
+
+    it('削除が false を返した場合エラーメッセージを表示すべき', async () => {
+      mocks.deleteTenant.mockResolvedValueOnce(false);
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'テナントの削除に失敗しました。対象が見つかりません。',
+        );
+      });
+    });
+
+    it('Error 以外の例外時にデフォルトエラーメッセージを表示すべき', async () => {
+      mocks.deleteTenant.mockRejectedValueOnce('string error');
+      const user = userEvent.setup();
+      render(<TenantList tenants={mockTenants} />);
+
+      const deleteButtons = screen.getAllByRole('button', { name: '削除' });
+      await user.click(deleteButtons[0]);
+
+      const confirmButton = screen.getByRole('button', { name: '削除する' });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'テナントの削除中にエラーが発生しました。',
+        );
+      });
     });
   });
 });

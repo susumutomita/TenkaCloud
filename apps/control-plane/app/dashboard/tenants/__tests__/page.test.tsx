@@ -5,10 +5,15 @@ import { getStatusVariant } from '@/lib/tenant-utils';
 import type { Tenant } from '@/types/tenant';
 import TenantsPage from '../page';
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
 // tenant-api のモック
 vi.mock('@/lib/api/tenant-api', () => ({
   tenantApi: {
     listTenants: vi.fn(),
+    deleteTenant: vi.fn().mockResolvedValue(true),
   },
 }));
 
@@ -68,6 +73,27 @@ vi.mock('@cloudscape-design/components/space-between', () => ({
   default: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
+}));
+
+vi.mock('@cloudscape-design/components/modal', () => ({
+  default: ({
+    visible,
+    children,
+    header,
+    footer,
+  }: {
+    visible: boolean;
+    children?: React.ReactNode;
+    header?: React.ReactNode;
+    footer?: React.ReactNode;
+  }) =>
+    visible ? (
+      <div role="dialog">
+        <div>{header}</div>
+        <div>{children}</div>
+        <div>{footer}</div>
+      </div>
+    ) : null,
 }));
 
 vi.mock('@cloudscape-design/global-styles/index.css', () => ({}));

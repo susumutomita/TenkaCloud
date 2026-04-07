@@ -1,7 +1,12 @@
 'use client';
 
+import Box from '@cloudscape-design/components/box';
+import CloudButton from '@cloudscape-design/components/button';
+import Modal from '@cloudscape-design/components/modal';
+import SpaceBetween from '@cloudscape-design/components/space-between';
 import { Search } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getStatusVariant } from '@/lib/tenant-utils';
+import { tenantApi } from '@/lib/api/tenant-api';
 import type { Tenant, TenantStatus, TenantTier } from '@/types/tenant';
 import { TENANT_STATUS_LABELS, TENANT_TIER_LABELS } from '@/types/tenant';
 
@@ -22,9 +28,35 @@ interface TenantListProps {
 }
 
 export function TenantList({ tenants }: TenantListProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<TenantStatus | 'ALL'>('ALL');
   const [tierFilter, setTierFilter] = useState<TenantTier | 'ALL'>('ALL');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      const success = await tenantApi.deleteTenant(id);
+      if (success) {
+        router.refresh();
+      } else {
+        setDeleteError('テナントの削除に失敗しました。対象が見つかりません。');
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'テナントの削除中にエラーが発生しました。';
+      setDeleteError(message);
+    } finally {
+      setDeletingId(null);
+      setDeleteTarget(null);
+    }
+  }
 
   const filteredTenants = tenants.filter((tenant) => {
     const matchesSearch =
@@ -176,6 +208,17 @@ export function TenantList({ tenants }: TenantListProps) {
                         編集
                       </Button>
                     </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        setDeleteError(null);
+                        setDeleteTarget(tenant);
+                      }}
+                    >
+                      削除
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -183,6 +226,38 @@ export function TenantList({ tenants }: TenantListProps) {
           </TableBody>
         </Table>
       )}
+
+      {deleteError && (
+        <div className="text-sm text-red-600" role="alert">
+          {deleteError}
+        </div>
+      )}
+
+      <Modal
+        visible={deleteTarget !== null}
+        onDismiss={() => setDeleteTarget(null)}
+        header="テナントを削除しますか？"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <CloudButton variant="link" onClick={() => setDeleteTarget(null)}>
+                キャンセル
+              </CloudButton>
+              <CloudButton
+                variant="primary"
+                onClick={() => {
+                  if (deleteTarget) handleDelete(deleteTarget.id);
+                }}
+                loading={deletingId !== null}
+              >
+                削除する
+              </CloudButton>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        「{deleteTarget?.name}」を削除します。この操作は取り消せません。
+      </Modal>
     </div>
   );
 }

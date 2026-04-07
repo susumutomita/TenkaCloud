@@ -60,8 +60,10 @@ export default async function TenantsPage() {
           { label: 'Enterprise', value: enterpriseCount },
         ].map((item) => (
           <Container key={item.label}>
-            <Box variant="awsui-key-label">{item.label}</Box>
-            <Box variant="awsui-value-large">{item.value}</Box>
+            <Box color="text-label">{item.label}</Box>
+            <Box variant="awsui-value-large" color="text-body-secondary">
+              {item.value}
+            </Box>
           </Container>
         ))}
       </ColumnLayout>

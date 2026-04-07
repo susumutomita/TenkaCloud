@@ -4,6 +4,23 @@ import { createLogger } from '../lib/logger';
 
 const logger = createLogger('auth-middleware');
 
+// ── AUTH_SKIP ガード ─────────────────────────────────
+/* istanbul ignore next -- Production safety guard */
+if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
+  throw new Error('AUTH_SKIP cannot be enabled in production');
+}
+
+const authSkipEnabled =
+  process.env.AUTH_SKIP === '1' &&
+  process.env.NODE_ENV !== 'production';
+
+/* istanbul ignore next -- Development-only warning */
+if (authSkipEnabled && typeof console !== 'undefined') {
+  console.warn(
+    '\x1b[33m⚠️  AUTH_SKIP mode is enabled in tenant-management. JWT verification is bypassed.\x1b[0m'
+  );
+}
+
 // Auth0 configuration
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN || 'dev-tenkacloud.auth0.com';
 const AUTH0_AUDIENCE =
@@ -79,6 +96,20 @@ function extractTenantId(payload: JWTPayload): string | undefined {
  * Validates JWT token from Authorization header and attaches user info to context
  */
 export async function authMiddleware(c: Context, next: Next) {
+  // AUTH_SKIP=1: 開発用に JWT 検証をバイパス
+  if (authSkipEnabled) {
+    const mockUser: AuthenticatedUser = {
+      id: 'dev-user',
+      email: 'dev@tenkacloud.local',
+      username: 'Dev Admin',
+      roles: [UserRole.PLATFORM_ADMIN],
+      tenantId: 'dev-tenant',
+    };
+    c.set('user', mockUser);
+    await next();
+    return;
+  }
+
   const authHeader = c.req.header('Authorization');
 
   if (!authHeader) {
