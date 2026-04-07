@@ -29,6 +29,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
       const json = JSON.parse(body);
       if (json.error?.message) {
         userMessage = json.error.message;
+      } else if (typeof json.error === 'string') {
+        userMessage = json.error;
       } else if (json.message) {
         userMessage = json.message;
       }
