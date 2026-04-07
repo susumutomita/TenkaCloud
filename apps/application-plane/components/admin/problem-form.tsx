@@ -33,8 +33,8 @@ export interface ProblemFormProps {
 }
 
 const TYPE_OPTIONS = [
-  { value: 'gameday', label: 'GameDay' },
-  { value: 'jam', label: 'JAM' },
+  { value: 'gameday', label: 'Incident Drill' },
+  { value: 'jam', label: 'Challenge' },
 ];
 
 const CATEGORY_OPTIONS = [

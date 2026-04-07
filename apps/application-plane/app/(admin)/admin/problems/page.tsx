@@ -170,8 +170,8 @@ export default function AdminProblemsPage() {
                 onChange={(e) => setSelectedType(e.target.value)}
                 options={[
                   { value: '', label: 'すべて' },
-                  { value: 'gameday', label: 'GameDay' },
-                  { value: 'jam', label: 'JAM' },
+                  { value: 'gameday', label: 'Incident Drill' },
+                  { value: 'jam', label: 'Challenge' },
                 ]}
               />
             </div>

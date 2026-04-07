@@ -34,7 +34,7 @@
   /* Semantic Colors */
   --color-hn-success: #b5bd68;
   --color-hn-warning: #f0c674;
-  --color-hn-error: #cc6666;
+  --color-hn-error: #d97777;
   --color-hn-info: #8abeb7;
   --color-hn-purple: #b294bb;
 
@@ -48,7 +48,7 @@
   /* Text colors */
   --color-text-primary: #c5c8c6;
   --color-text-secondary: #969896;
-  --color-text-muted: #6c7a80;
+  --color-text-muted: #8a959b;
   --color-text-inverse: #1d2528;
 
   /* Border colors */

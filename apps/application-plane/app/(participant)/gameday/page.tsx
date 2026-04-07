@@ -36,7 +36,7 @@ export default function GamedayEntryPage() {
       <div>
         <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
           <span className="text-3xl">⚔️</span>
-          GameDay
+          Incident Drill
         </h1>
         <p className="text-text-secondary mt-1">
           イベントIDを入力してバトルに参加します

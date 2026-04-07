@@ -335,7 +335,10 @@ export default function ChallengeDetailPage() {
                     items={[
                       {
                         label: 'タイプ',
-                        value: challenge.type === 'gameday' ? 'GameDay' : 'JAM',
+                        value:
+                          challenge.type === 'gameday'
+                            ? 'Incident Drill'
+                            : 'Challenge',
                       },
                       {
                         label: 'カテゴリ',

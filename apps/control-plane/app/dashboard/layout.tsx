@@ -13,7 +13,7 @@ import TopNavigation from '@cloudscape-design/components/top-navigation';
 import '@cloudscape-design/global-styles/index.css';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 const navItems: SideNavigationProps.Item[] = [
   { type: 'link', text: 'ダッシュボード', href: '/dashboard' },
@@ -24,6 +24,11 @@ const navItems: SideNavigationProps.Item[] = [
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const activeHref = navItems
     .filter((item): item is SideNavigationProps.Link => item.type === 'link')
@@ -31,6 +36,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       if (item.href === '/dashboard') return pathname === '/dashboard';
       return pathname.startsWith(item.href);
     })?.href;
+
+  // Cloudscape は SSR で異なる内部 ID を生成するため、CSR のみでレンダリング
+  if (!mounted) {
+    return (
+      <div className="awsui-dark-mode" style={{ minHeight: '100vh' }}>
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="awsui-dark-mode">

@@ -230,7 +230,7 @@ describe('validateEventForm', () => {
 describe('findOption', () => {
   it('値にマッチするオプションを返すべき', () => {
     expect(findOption(TYPE_OPTIONS, 'jam')).toEqual({
-      label: 'Jam',
+      label: 'Challenge',
       value: 'jam',
     });
   });

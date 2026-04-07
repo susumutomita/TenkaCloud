@@ -179,8 +179,12 @@ export function ProblemTypeBadge({ type }: { type: string }) {
     string,
     { variant: BadgeVariant; badgeStyle: BadgeStyle; label: string }
   > = {
-    gameday: { variant: 'primary', badgeStyle: 'solid', label: 'GameDay' },
-    jam: { variant: 'info', badgeStyle: 'solid', label: 'JAM' },
+    gameday: {
+      variant: 'primary',
+      badgeStyle: 'solid',
+      label: 'Incident Drill',
+    },
+    jam: { variant: 'info', badgeStyle: 'solid', label: 'Challenge' },
   };
 
   const config = typeConfig[type] || {

@@ -93,7 +93,7 @@ export default function DashboardPage() {
         content: (event: ParticipantEvent) => (
           <SpaceBetween direction="horizontal" size="xs">
             <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
-              {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+              {event.type === 'gameday' ? 'Incident Drill' : 'Challenge'}
             </Badge>
             {getStatusIndicator(event.status, t)}
           </SpaceBetween>
@@ -153,7 +153,7 @@ export default function DashboardPage() {
         content: (event: ParticipantEvent) => (
           <SpaceBetween direction="horizontal" size="xs">
             <Badge color={event.type === 'gameday' ? 'blue' : 'green'}>
-              {event.type === 'gameday' ? 'GameDay' : 'JAM'}
+              {event.type === 'gameday' ? 'Incident Drill' : 'Challenge'}
             </Badge>
             {getStatusIndicator(event.status, t)}
           </SpaceBetween>

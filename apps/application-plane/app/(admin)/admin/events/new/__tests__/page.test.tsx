@@ -118,9 +118,9 @@ describe('イベント作成ページ', () => {
     });
   });
 
-  it('デフォルトのタイプが GameDay であるべき', () => {
+  it('デフォルトのタイプが Incident Drill であるべき', () => {
     render(<AdminEventCreatePage />);
-    expect(screen.getByText('GameDay')).toBeInTheDocument();
+    expect(screen.getByText('Incident Drill')).toBeInTheDocument();
   });
 
   it('デフォルトのステータスが下書きであるべき', () => {

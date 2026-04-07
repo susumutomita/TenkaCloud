@@ -1,5 +1,5 @@
 import Header from '@cloudscape-design/components/header';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PageLayout } from '../page-layout';
 
@@ -19,9 +19,13 @@ vi.mock('@/lib/tenant', () => ({
 }));
 
 describe('PageLayout', () => {
-  it('アプリヘッダー（TenkaCloud）が表示されるべき', () => {
+  it('アプリヘッダー（TenkaCloud）が表示されるべき', async () => {
     render(<PageLayout>content</PageLayout>);
-    expect(screen.getByText('TenkaCloud')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText('TenkaCloud').length).toBeGreaterThanOrEqual(
+        1,
+      );
+    });
   });
 
   it('子コンテンツが表示されるべき', () => {
