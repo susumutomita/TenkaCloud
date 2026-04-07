@@ -104,6 +104,20 @@ describe('tenantApi', () => {
       );
     });
 
+    it('error が文字列形式のエラーレスポンスを処理すべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: StatusCodes.BAD_REQUEST,
+        text: () =>
+          Promise.resolve(JSON.stringify({ error: 'Invalid tenant ID' })),
+      });
+
+      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
+      await expect(tenantApi.listTenants()).rejects.toThrow(
+        'Invalid tenant ID',
+      );
+    });
+
     it('JSON エラーレスポンスに error.message も message もない場合はデフォルトメッセージを使用すべき', async () => {
       mockFetch.mockResolvedValue({
         ok: false,

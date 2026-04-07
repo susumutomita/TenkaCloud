@@ -533,8 +533,8 @@ describe('テナント管理API', () => {
       expect(body.error).toBe('Tenant not found');
     });
 
-    it('不正なULID形式で400エラーになるべき', async () => {
-      const res = await app.request('/api/tenants/invalid-ulid');
+    it('不正なID形式で400エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid@id!');
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe('Invalid tenant ID');
@@ -647,8 +647,8 @@ describe('テナント管理API', () => {
       expect(body.error).toBe('Tenant not found');
     });
 
-    it('不正なULID形式で400エラーになるべき', async () => {
-      const res = await app.request('/api/tenants/invalid-ulid', {
+    it('不正なID形式で400エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid@id!', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'Updated Name' }),
@@ -952,8 +952,8 @@ describe('テナント管理API', () => {
       expect(body.error).toBe('Tenant not found');
     });
 
-    it('不正なULID形式で400エラーになるべき', async () => {
-      const res = await app.request('/api/tenants/invalid-ulid', {
+    it('不正なID形式で400エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid@id!', {
         method: 'DELETE',
       });
 
@@ -1406,8 +1406,8 @@ describe('テナント管理API', () => {
       expect(body.error).toBe('Tenant not found');
     });
 
-    it('不正なULID形式で 400 エラーになるべき', async () => {
-      const res = await app.request('/api/tenants/invalid-ulid/provision', {
+    it('不正なID形式で 400 エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid@id!/provision', {
         method: 'POST',
       });
 
@@ -1442,8 +1442,8 @@ describe('テナント管理API', () => {
       expect(body.error).toBe('Tenant not found');
     });
 
-    it('不正なULID形式で 400 エラーになるべき', async () => {
-      const res = await app.request('/api/tenants/invalid-ulid/provision');
+    it('不正なID形式で 400 エラーになるべき', async () => {
+      const res = await app.request('/api/tenants/invalid@id!/provision');
 
       expect(res.status).toBe(400);
       const body = await res.json();

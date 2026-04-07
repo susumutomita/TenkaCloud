@@ -63,11 +63,12 @@ app.use(
   requireRoles(UserRole.PLATFORM_ADMIN, UserRole.TENANT_ADMIN)
 );
 
-// ULID format: 26 characters, uppercase alphanumeric
+// Tenant ID: ULID (26 uppercase alphanumeric) or legacy slug (lowercase alphanumeric + hyphens)
 const idSchema = z
   .string()
-  .length(26, 'Invalid ID format')
-  .regex(/^[0-9A-Z]+$/, 'Invalid ID format');
+  .min(1, 'ID is required')
+  .max(128, 'ID too long')
+  .regex(/^[0-9A-Za-z-]+$/, 'Invalid ID format');
 
 const createTenantSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
