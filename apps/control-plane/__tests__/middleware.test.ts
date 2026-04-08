@@ -33,7 +33,7 @@ describe('Control Plane Middleware', () => {
 
   describe('認証チェック', () => {
     it('未認証ユーザーは /login にリダイレクトされるべき', async () => {
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(createMockAuthReq('/dashboard'));
@@ -43,7 +43,7 @@ describe('Control Plane Middleware', () => {
     });
 
     it('リダイレクト時に callbackUrl を含むべき', async () => {
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(createMockAuthReq('/dashboard/tenants'));
@@ -56,7 +56,7 @@ describe('Control Plane Middleware', () => {
     });
 
     it('認証済みユーザーはダッシュボードにアクセスできるべき', async () => {
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(
@@ -66,7 +66,7 @@ describe('Control Plane Middleware', () => {
     });
 
     it('認証済みユーザーがログインページにアクセスした場合はダッシュボードにリダイレクトされるべき', async () => {
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(
@@ -80,7 +80,7 @@ describe('Control Plane Middleware', () => {
 
   describe('公開パス', () => {
     it('/api/auth ルートは認証不要でアクセスできるべき', async () => {
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(createMockAuthReq('/api/auth/callback'));
@@ -88,7 +88,7 @@ describe('Control Plane Middleware', () => {
     });
 
     it('/login は未認証でもアクセスできるべき', async () => {
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(createMockAuthReq('/login'));
@@ -100,7 +100,7 @@ describe('Control Plane Middleware', () => {
     it('AUTH_SKIP=1 の場合は認証済みとして扱われるべき', async () => {
       process.env.AUTH_SKIP = '1';
       vi.stubEnv('NODE_ENV', 'test');
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(createMockAuthReq('/dashboard'));
@@ -111,7 +111,7 @@ describe('Control Plane Middleware', () => {
       process.env.AUTH_SKIP = '1';
       vi.stubEnv('NODE_ENV', 'production');
       vi.resetModules();
-      await import('../middleware');
+      await import('../proxy');
       expect(capturedHandler).not.toBeNull();
 
       const result = capturedHandler!(createMockAuthReq('/dashboard'));

@@ -25,7 +25,7 @@ describe('Application Plane Middleware', () => {
   describe('公開パス', () => {
     it('/login は認証不要でアクセスできるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/login'));
       expect(response.status).toBe(200);
@@ -33,7 +33,7 @@ describe('Application Plane Middleware', () => {
 
     it('/signup は認証不要でアクセスできるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/signup'));
       expect(response.status).toBe(200);
@@ -41,7 +41,7 @@ describe('Application Plane Middleware', () => {
 
     it('/api/auth/callback は認証不要でアクセスできるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/api/auth/callback'));
       expect(response.status).toBe(200);
@@ -51,7 +51,7 @@ describe('Application Plane Middleware', () => {
   describe('認証が必要なパス', () => {
     it('/gameday にアクセスする未認証ユーザーは /login にリダイレクトされるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/gameday'));
       expect(response.status).toBe(307);
@@ -62,7 +62,7 @@ describe('Application Plane Middleware', () => {
 
     it('/events にアクセスする未認証ユーザーは /login にリダイレクトされるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/events'));
       expect(response.status).toBe(307);
@@ -73,7 +73,7 @@ describe('Application Plane Middleware', () => {
 
     it('/profile にアクセスする未認証ユーザーは /login にリダイレクトされるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/profile'));
       expect(response.status).toBe(307);
@@ -84,7 +84,7 @@ describe('Application Plane Middleware', () => {
 
     it('/dashboard にアクセスする未認証ユーザーは /login にリダイレクトされるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/dashboard'));
       expect(response.status).toBe(307);
@@ -99,7 +99,7 @@ describe('Application Plane Middleware', () => {
         roles: ['participant'],
         tenantId: 'test-tenant',
       });
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/gameday'));
       expect(response.status).toBe(200);
@@ -107,7 +107,7 @@ describe('Application Plane Middleware', () => {
 
     it('リダイレクト時にクエリパラメータ付きの callbackUrl を含むべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/events?tab=upcoming'));
       expect(response.status).toBe(307);
@@ -126,7 +126,7 @@ describe('Application Plane Middleware', () => {
         roles: ['admin'],
         tenantId: 'test-tenant',
       });
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/admin'));
       expect(response.status).toBe(200);
@@ -138,7 +138,7 @@ describe('Application Plane Middleware', () => {
         roles: ['admin'],
         tenantId: 'test-tenant',
       });
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/admin/settings'));
       expect(response.status).toBe(200);
@@ -150,7 +150,7 @@ describe('Application Plane Middleware', () => {
         roles: ['participant'],
         tenantId: 'test-tenant',
       });
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/admin'));
       expect(response.status).toBe(307);
@@ -164,7 +164,7 @@ describe('Application Plane Middleware', () => {
         roles: [],
         tenantId: 'test-tenant',
       });
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/admin'));
       expect(response.status).toBe(307);
@@ -174,7 +174,7 @@ describe('Application Plane Middleware', () => {
 
     it('/admin にアクセスする未認証ユーザーは /login にリダイレクトされるべき', async () => {
       mockAuth.mockResolvedValue(null);
-      const { middleware } = await import('../middleware');
+      const { proxy: middleware } = await import('../proxy');
 
       const response = await middleware(createRequest('/admin'));
       expect(response.status).toBe(307);

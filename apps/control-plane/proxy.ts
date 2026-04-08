@@ -53,7 +53,7 @@ const authMiddleware = auth((authReq) => {
  * NextAuth のミドルウェアラッパーを使用し、
  * AUTH_SKIP=1 の場合は常に認証済みとして扱う（ランタイム評価）
  */
-export { authMiddleware as middleware };
+export { authMiddleware as proxy };
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
