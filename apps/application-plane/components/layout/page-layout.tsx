@@ -24,7 +24,6 @@
 'use client';
 
 import BreadcrumbGroup from '@cloudscape-design/components/breadcrumb-group';
-import ContentLayout from '@cloudscape-design/components/content-layout';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TopNavigation from '@cloudscape-design/components/top-navigation';
 import '@cloudscape-design/global-styles/index.css';
@@ -108,6 +107,15 @@ export function PageLayout({
                 },
                 ...(session
                   ? [
+                      ...(session.roles?.includes('admin')
+                        ? [
+                            {
+                              type: 'button' as const,
+                              text: '管理ダッシュボード',
+                              href: '/admin',
+                            },
+                          ]
+                        : []),
                       {
                         type: 'menu-dropdown' as const,
                         text: session.user?.name || 'ユーザー',
@@ -162,17 +170,12 @@ export function PageLayout({
             />
           </div>
         )}
-        {header ? (
-          <ContentLayout header={header}>
-            <div className={`${widthClass} mx-auto px-4 sm:px-6 lg:px-8 pb-8`}>
-              <SpaceBetween size="l">{children}</SpaceBetween>
-            </div>
-          </ContentLayout>
-        ) : (
-          <div className={`${widthClass} mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
-            <SpaceBetween size="l">{children}</SpaceBetween>
-          </div>
-        )}
+        <div className={`${widthClass} mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
+          <SpaceBetween size="l">
+            {header}
+            {children}
+          </SpaceBetween>
+        </div>
       </div>
     </div>
   );
