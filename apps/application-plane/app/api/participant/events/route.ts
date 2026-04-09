@@ -28,7 +28,6 @@ interface ParticipantEventListResponse {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
-  // クエリパラメータをそのまま転送
   const queryParams = new URLSearchParams();
   const status = searchParams.get('status');
   const type = searchParams.get('type');
@@ -63,6 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (isNetworkError) {
+      console.warn('Participant events backend unreachable:', error);
       return successResponse({ events: [], total: 0 });
     }
 
