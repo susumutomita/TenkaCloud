@@ -18,6 +18,21 @@ import {
 } from '@/lib/api/server';
 import type { ParticipantEvent, EventStatus } from '@/lib/api/types';
 
+interface DevEventRecord extends ParticipantEvent {
+  slug: string;
+  createdAt: string;
+}
+
+function getDevEventStore(): DevEventRecord[] {
+  const globalStore = globalThis as typeof globalThis & {
+    __TENKACLOUD_DEV_EVENTS__?: DevEventRecord[];
+  };
+  if (!globalStore.__TENKACLOUD_DEV_EVENTS__) {
+    globalStore.__TENKACLOUD_DEV_EVENTS__ = [];
+  }
+  return globalStore.__TENKACLOUD_DEV_EVENTS__;
+}
+
 /**
  * Admin イベント一覧レスポンス型
  */
@@ -37,6 +52,55 @@ function emptyEventList(page: number, pageSize: number): AdminEventListResponse 
   };
 }
 
+function buildDevEventList(
+  page: number,
+  pageSize: number,
+  status?: EventStatus | null,
+): AdminEventListResponse {
+  const store = getDevEventStore();
+  const filtered = status
+    ? store.filter((event) => event.status === status)
+    : store;
+  const offset = Math.max(page - 1, 0) * pageSize;
+  return {
+    events: filtered.slice(offset, offset + pageSize),
+    total: filtered.length,
+    page,
+    pageSize,
+  };
+}
+
+function createDevEvent(body: CreateEventRequest): DevEventRecord {
+  const now = new Date().toISOString();
+  const event: DevEventRecord = {
+    id: `dev-event-${Date.now()}`,
+    slug: body.slug?.trim() || `event-${Date.now()}`,
+    name: body.name,
+    type: (body.type as ParticipantEvent['type']) || 'gameday',
+    status: body.status || 'draft',
+    startTime: body.startTime || new Date().toISOString(),
+    endTime:
+      body.endTime ||
+      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    timezone: body.timezone || 'Asia/Tokyo',
+    participantType:
+      (body.participantType as ParticipantEvent['participantType']) ||
+      'individual',
+    cloudProvider:
+      (body.cloudProvider as ParticipantEvent['cloudProvider']) || 'aws',
+    regions: body.regions?.length ? body.regions : ['ap-northeast-1'],
+    scoringType:
+      (body.scoringType as ParticipantEvent['scoringType']) || 'realtime',
+    leaderboardVisible: body.leaderboardVisible ?? true,
+    problemCount: 0,
+    participantCount: 0,
+    isRegistered: false,
+    createdAt: now,
+  };
+  getDevEventStore().unshift(event);
+  return event;
+}
+
 /**
  * イベント作成リクエスト型
  */
@@ -50,6 +114,13 @@ interface CreateEventRequest {
   endTime?: string;
   status?: EventStatus;
   imageUrl?: string;
+  type?: string;
+  timezone?: string;
+  participantType?: string;
+  cloudProvider?: string;
+  regions?: string[];
+  scoringType?: string;
+  leaderboardVisible?: boolean;
 }
 
 /**
@@ -96,7 +167,7 @@ export async function GET(request: NextRequest) {
 
     if (isAuthSkipUnauthorized || isNetworkError) {
       console.warn('Admin events fallback to empty dataset:', error);
-      return successResponse(emptyEventList(page, pageSize));
+      return successResponse(buildDevEventList(page, pageSize, status));
     }
 
     console.error('Failed to fetch events:', error);
@@ -120,9 +191,9 @@ export async function POST(request: NextRequest) {
       : forbiddenResponse('Admin role required');
   }
 
-  try {
-    const body = (await request.json()) as CreateEventRequest;
+  const body = (await request.json()) as CreateEventRequest;
 
+  try {
     // 必須フィールドのバリデーション
     if (!body.name?.trim()) {
       return badRequestResponse('Event name is required');
@@ -142,6 +213,18 @@ export async function POST(request: NextRequest) {
 
     return successResponse(data, 201);
   } catch (error) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      error instanceof Error &&
+      /^Unauthorized$/i.test(error.message);
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if (isAuthSkipUnauthorized || isNetworkError) {
+      console.warn('Admin events create fallback to local dev store:', error);
+      return successResponse(createDevEvent(body), 201);
+    }
+
     console.error('Failed to create event:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to create event',

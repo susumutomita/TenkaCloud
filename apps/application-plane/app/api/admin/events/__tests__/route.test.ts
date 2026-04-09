@@ -27,6 +27,11 @@ vi.mock('@/lib/api/server', () => ({
 describe('Admin Events API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (
+      globalThis as typeof globalThis & {
+        __TENKACLOUD_DEV_EVENTS__?: unknown[];
+      }
+    ).__TENKACLOUD_DEV_EVENTS__;
   });
 
   describe('GET /api/admin/events', () => {
@@ -298,6 +303,57 @@ describe('Admin Events API', () => {
       expect(response.status).toBe(201);
       const data = await response.json();
       expect(data).toEqual(createdEvent);
+    });
+
+    it('network error 時は local dev store に作成して 201 を返すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { POST, GET } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Local Event',
+          slug: 'local-event',
+          type: 'gameday',
+          status: 'draft',
+          startTime: '2026-04-09T00:00:00.000Z',
+          endTime: '2026-04-10T23:59:59.000Z',
+          timezone: 'Asia/Tokyo',
+          participantType: 'individual',
+          cloudProvider: 'local',
+          regions: ['local'],
+          scoringType: 'realtime',
+          leaderboardVisible: true,
+        }),
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(201);
+      const data = await response.json();
+      expect(data).toEqual(
+        expect.objectContaining({
+          name: 'Local Event',
+          type: 'gameday',
+          cloudProvider: 'local',
+          regions: ['local'],
+        }),
+      );
+
+      const listResponse = await GET(
+        new NextRequest('http://localhost/api/admin/events'),
+      );
+      await expect(listResponse.json()).resolves.toEqual({
+        events: [expect.objectContaining({ name: 'Local Event' })],
+        total: 1,
+        page: 1,
+        pageSize: 10,
+      });
     });
   });
 });
