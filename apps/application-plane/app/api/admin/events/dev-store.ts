@@ -137,3 +137,7 @@ export function deleteDevEvent(eventId: string): boolean {
   store.splice(index, 1);
   return true;
 }
+
+export function clearDevEvents() {
+  getDevEventStore().length = 0;
+}

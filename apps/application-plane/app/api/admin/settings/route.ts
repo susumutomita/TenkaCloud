@@ -8,6 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { authSkipEnabled } from '@/auth';
 import {
   getAdminSession,
   unauthorizedResponse,
@@ -15,6 +16,7 @@ import {
   successResponse,
   serverApiRequest,
 } from '@/lib/api/server';
+import { clearDevEvents } from '../events/dev-store';
 
 /**
  * 設定レスポンス型
@@ -23,6 +25,42 @@ interface SettingsResponse {
   tenantName: string;
   slug: string;
   apiKey: string;
+}
+
+function buildDevApiKey() {
+  return `sk-dev-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getDevSettingsStore(): SettingsResponse {
+  const globalStore = globalThis as typeof globalThis & {
+    __TENKACLOUD_DEV_SETTINGS__?: SettingsResponse;
+  };
+  if (!globalStore.__TENKACLOUD_DEV_SETTINGS__) {
+    globalStore.__TENKACLOUD_DEV_SETTINGS__ = {
+      tenantName: 'Dev Tenant',
+      slug: 'dev-tenant',
+      apiKey: buildDevApiKey(),
+    };
+  }
+  return globalStore.__TENKACLOUD_DEV_SETTINGS__;
+}
+
+function setDevSettingsStore(next: SettingsResponse) {
+  const globalStore = globalThis as typeof globalThis & {
+    __TENKACLOUD_DEV_SETTINGS__?: SettingsResponse;
+  };
+  globalStore.__TENKACLOUD_DEV_SETTINGS__ = next;
+  return next;
+}
+
+function isLocalDevFallbackError(error: unknown): boolean {
+  const isAuthSkipUnauthorized =
+    authSkipEnabled &&
+    error instanceof Error &&
+    /^Unauthorized$/i.test(error.message);
+  const isNetworkError =
+    error instanceof TypeError && /fetch failed/i.test(String(error));
+  return isAuthSkipUnauthorized || isNetworkError;
 }
 
 /**
@@ -56,6 +94,11 @@ export async function GET() {
     const data = await serverApiRequest<SettingsResponse>('/admin/settings');
     return successResponse(data);
   } catch (error) {
+    if (isLocalDevFallbackError(error)) {
+      console.warn('Admin settings fallback to local dev store:', error);
+      return successResponse(getDevSettingsStore());
+    }
+
     console.error('Failed to fetch settings:', error);
     return badRequestResponse('Failed to fetch settings');
   }
@@ -72,9 +115,9 @@ export async function PUT(request: NextRequest) {
     return unauthorizedResponse('Authentication required');
   }
 
-  try {
-    const body = (await request.json()) as UpdateSettingsRequest;
+  const body = (await request.json()) as UpdateSettingsRequest;
 
+  try {
     if (body.tenantName !== undefined && !body.tenantName.trim()) {
       return badRequestResponse('Tenant name cannot be empty');
     }
@@ -89,6 +132,18 @@ export async function PUT(request: NextRequest) {
 
     return successResponse(data);
   } catch (error) {
+    if (isLocalDevFallbackError(error)) {
+      console.warn('Admin settings update fallback to local dev store:', error);
+      const current = getDevSettingsStore();
+      return successResponse(
+        setDevSettingsStore({
+          ...current,
+          tenantName: body.tenantName ?? current.tenantName,
+          slug: body.slug ?? current.slug,
+        }),
+      );
+    }
+
     console.error('Failed to update settings:', error);
     return badRequestResponse('Failed to update settings');
   }
@@ -107,9 +162,9 @@ export async function POST(request: NextRequest) {
     return unauthorizedResponse('Authentication required');
   }
 
-  try {
-    const body = (await request.json()) as ActionRequest;
+  const body = (await request.json()) as ActionRequest;
 
+  try {
     if (!body.action) {
       return badRequestResponse('Action is required');
     }
@@ -145,6 +200,23 @@ export async function POST(request: NextRequest) {
 
     return badRequestResponse(`Unknown action: ${body.action}`);
   } catch (error) {
+    if (isLocalDevFallbackError(error)) {
+      console.warn('Admin settings action fallback to local dev store:', error);
+      if (body.action === 'regenerate-api-key') {
+        const current = getDevSettingsStore();
+        return successResponse(
+          setDevSettingsStore({
+            ...current,
+            apiKey: buildDevApiKey(),
+          }),
+        );
+      }
+      if (body.action === 'delete-all-data') {
+        clearDevEvents();
+        return successResponse({ success: true });
+      }
+    }
+
     console.error('Failed to execute action:', error);
     return badRequestResponse('Failed to execute action');
   }

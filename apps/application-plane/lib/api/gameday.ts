@@ -4,6 +4,7 @@
 
 import { getAuthToken } from '@/lib/auth/get-auth-token';
 import { getGamedayApiUrl } from '@/lib/api/backend-urls';
+import { getLocalAttacks, isLocalGameDayEvent } from './gameday-local';
 import type {
   Alliance,
   Attack,
@@ -73,6 +74,12 @@ export async function gamedayRequest<T>(
 export function getAttackCatalog(eventId: string) {
   return gamedayRequest<{ attacks: Attack[] }>('/attacks/catalog', {
     params: { eventId },
+  }).catch((error) => {
+    if (isLocalGameDayEvent(eventId)) {
+      console.warn('GameDay catalog fallback to local store:', error);
+      return { attacks: getLocalAttacks(eventId) };
+    }
+    throw error;
   });
 }
 

@@ -5,6 +5,10 @@ import type { Session } from 'next-auth';
 const mockGetAdminSession = vi.fn<() => Promise<Session | null>>();
 const mockServerApiRequest = vi.fn();
 
+vi.mock('@/auth', () => ({
+  authSkipEnabled: true,
+}));
+
 vi.mock('@/lib/api/server', () => ({
   getAdminSession: () => mockGetAdminSession(),
   serverApiRequest: (...args: unknown[]) => mockServerApiRequest(...args),
@@ -27,6 +31,11 @@ const adminSession: Session = {
 describe('Admin Settings API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (
+      globalThis as typeof globalThis & {
+        __TENKACLOUD_DEV_SETTINGS__?: unknown;
+      }
+    ).__TENKACLOUD_DEV_SETTINGS__;
   });
 
   describe('GET /api/admin/settings', () => {
@@ -81,6 +90,23 @@ describe('Admin Settings API', () => {
       expect(response.status).toBe(400);
       const data = await response.json();
       expect(data.error).toBe('Failed to fetch settings');
+    });
+
+    it('network error 時は local dev settings を返すべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { GET } = await import('../route');
+      const response = await GET();
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({
+          tenantName: 'Dev Tenant',
+          slug: 'dev-tenant',
+          apiKey: expect.stringMatching(/^sk-dev-/),
+        }),
+      );
     });
   });
 
@@ -190,6 +216,28 @@ describe('Admin Settings API', () => {
       expect(response.status).toBe(400);
       const data = await response.json();
       expect(data.error).toBe('Failed to update settings');
+    });
+
+    it('network error 時は local dev settings を更新すべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { PUT } = await import('../route');
+      const response = await PUT(
+        new NextRequest('http://localhost/api/admin/settings', {
+          method: 'PUT',
+          body: JSON.stringify({ tenantName: 'Local Tenant', slug: 'local' }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({
+          tenantName: 'Local Tenant',
+          slug: 'local',
+          apiKey: expect.stringMatching(/^sk-dev-/),
+        }),
+      );
     });
   });
 
@@ -346,6 +394,80 @@ describe('Admin Settings API', () => {
       expect(response.status).toBe(400);
       const data = await response.json();
       expect(data.error).toBe('Failed to execute action');
+    });
+
+    it('network error 時は local dev API キーを再生成すべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { GET, POST } = await import('../route');
+
+      const before = await GET();
+      const beforeData = await before.json();
+
+      const response = await POST(
+        new NextRequest('http://localhost/api/admin/settings', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'regenerate-api-key' }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const afterData = await response.json();
+      expect(afterData.apiKey).toMatch(/^sk-dev-/);
+      expect(afterData.apiKey).not.toBe(beforeData.apiKey);
+    });
+
+    it('network error 時の delete-all-data は local dev events を削除すべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      (
+        globalThis as typeof globalThis & {
+          __TENKACLOUD_DEV_EVENTS__?: unknown[];
+        }
+      ).__TENKACLOUD_DEV_EVENTS__ = [
+        {
+          id: 'event-1',
+          slug: 'test-event',
+          name: 'Test Event',
+          type: 'gameday',
+          status: 'draft',
+          startTime: '2026-04-09T00:00:00.000Z',
+          endTime: '2026-04-10T23:59:59.000Z',
+          timezone: 'Asia/Tokyo',
+          participantType: 'individual',
+          cloudProvider: 'local',
+          regions: ['local'],
+          scoringType: 'realtime',
+          leaderboardVisible: true,
+          problemCount: 0,
+          participantCount: 0,
+          isRegistered: false,
+          createdAt: '2026-04-09T00:00:00.000Z',
+        },
+      ];
+
+      const { POST } = await import('../route');
+      const response = await POST(
+        new NextRequest('http://localhost/api/admin/settings', {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'delete-all-data',
+            confirmationToken: 'DELETE',
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ success: true });
+      expect(
+        (
+          globalThis as typeof globalThis & {
+            __TENKACLOUD_DEV_EVENTS__?: unknown[];
+          }
+        ).__TENKACLOUD_DEV_EVENTS__,
+      ).toEqual([]);
     });
   });
 });

@@ -92,9 +92,19 @@ export function buildPayload(form: EventFormState) {
           ? ['japaneast']
           : ['ap-northeast-1'];
 
-  const toIsoDateTime = (value: string, endOfDay = false) => {
+  const toIsoDateTime = (value: string) => {
     if (!value) return undefined;
-    return `${value}T${endOfDay ? '23:59:59' : '00:00:00'}.000Z`;
+    if (value.endsWith('Z')) return value;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return `${value}T00:00:00.000Z`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+      return `${value}:00.000Z`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) {
+      return `${value}.000Z`;
+    }
+    return value;
   };
 
   return {
@@ -106,9 +116,9 @@ export function buildPayload(form: EventFormState) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'event',
-    eventDate: form.startTime,
+    eventDate: form.startTime.split('T')[0] || form.startTime,
     startTime: toIsoDateTime(form.startTime),
-    endTime: toIsoDateTime(form.endTime, true),
+    endTime: toIsoDateTime(form.endTime),
     timezone: form.timezone?.value,
     participantType: form.participantType?.value,
     cloudProvider: provider,
@@ -126,7 +136,7 @@ export function validateEventForm(form: EventFormState): EventFormErrors {
     errs.name = 'イベント名は必須です';
   }
   if (form.startTime && form.endTime && form.endTime <= form.startTime) {
-    errs.endTime = '終了日は開始日より後に設定してください';
+    errs.endTime = '終了日時は開始日時より後に設定してください';
   }
   return errs;
 }
