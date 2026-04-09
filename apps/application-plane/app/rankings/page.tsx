@@ -102,7 +102,7 @@ export default function RankingsPage() {
         <Header
           variant="h1"
           description="クラウドエンジニアの頂点を目指せ"
-          counter={`(${totalParticipants})`}
+          counter={loading ? undefined : `(${totalParticipants})`}
         >
           ランキング
         </Header>
