@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (isNetworkError) {
+      console.warn('Participant events backend unreachable:', error);
       return successResponse({ events: [], total: 0 });
     }
 
