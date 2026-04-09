@@ -7,6 +7,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { openAPIRouteHandler } from "hono-openapi";
+import { apiReference } from "@scalar/hono-api-reference";
 import { adminRouter } from "./admin";
 import { playerRouter } from "./player";
 import { participantRouter } from "./participant";
@@ -62,6 +64,60 @@ app.route("/api/player", playerRouter);
 
 // 参加者API: /api/participant/*
 app.route("/api/participant", participantRouter);
+
+// OpenAPI スペック
+app.get(
+	"/openapi.json",
+	openAPIRouteHandler(app, {
+		documentation: {
+			info: {
+				title: "TenkaCloud Problem Management API",
+				version: "1.0.0",
+				description:
+					"GameDay/JAM 問題管理サービス。管理者・競技者・参加者向け API を提供します。",
+			},
+			tags: [
+				{ name: "Admin / Events", description: "イベント管理 (管理者)" },
+				{ name: "Admin / Problems", description: "問題管理 (管理者)" },
+				{ name: "Admin / Templates", description: "テンプレート管理 (管理者)" },
+				{ name: "Admin / Contest", description: "コンテスト制御 (管理者)" },
+				{ name: "Player / Challenges", description: "チャレンジ操作 (競技者)" },
+				{ name: "Player / Dashboard", description: "チームダッシュボード (競技者)" },
+				{ name: "Participant / Events", description: "イベント参照・登録 (参加者)" },
+				{ name: "Participant / Teams", description: "チーム管理 (参加者)" },
+				{ name: "Participant / Challenges", description: "チャレンジ・採点 (参加者)" },
+				{ name: "Participant / Rankings", description: "ランキング・プロフィール (参加者)" },
+			],
+			components: {
+				securitySchemes: {
+					bearerAuth: {
+						type: "http",
+						scheme: "bearer",
+						bearerFormat: "JWT",
+						description: "Authorization ヘッダーに JWT トークンを指定",
+					},
+					tokenAuth: {
+						type: "apiKey",
+						in: "header",
+						name: "AuthorizationToken",
+						description: "AuthorizationToken ヘッダーにトークンを指定",
+					},
+				},
+			},
+			security: [{ bearerAuth: [] }],
+		},
+	}),
+);
+
+// Scalar API ドキュメント UI
+app.get(
+	"/docs",
+	apiReference({
+		url: "/openapi.json",
+		pageTitle: "TenkaCloud Problem Management API",
+		theme: "default",
+	}),
+);
 
 // 404 ハンドラー
 app.notFound((c) => {

@@ -11,6 +11,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { describeRoute, resolver } from "hono-openapi";
 import {
 	authenticateRequest,
 	canAccessTeam,
@@ -76,6 +77,16 @@ const validateTeamAccess = async (
 // チャレンジ一覧取得
 playerRouter.get(
 	"/events/:eventId/teams/:teamId/challenges",
+	describeRoute({
+		tags: ["Player / Challenges"],
+		summary: "チャレンジ一覧取得",
+		description: "指定チームのチャレンジ一覧を取得します。",
+		responses: {
+			200: { description: "チャレンジ一覧" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	validateTeamAccess,
 	async (c) => {
 		const eventId = c.req.param("eventId");
@@ -89,6 +100,16 @@ playerRouter.get(
 // チャレンジ詳細取得
 playerRouter.get(
 	"/events/:eventId/teams/:teamId/challenges/:challengeId",
+	describeRoute({
+		tags: ["Player / Challenges"],
+		summary: "チャレンジ詳細取得",
+		description: "指定チャレンジの詳細情報を取得します。",
+		responses: {
+			200: { description: "チャレンジ詳細" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	validateTeamAccess,
 	async (c) => {
 		const eventId = c.req.param("eventId");
@@ -107,6 +128,31 @@ playerRouter.get(
 // チャレンジ開始
 playerRouter.post(
 	"/events/:eventId/teams/:teamId/challenges/:challengeId/start",
+	describeRoute({
+		tags: ["Player / Challenges"],
+		summary: "チャレンジ開始",
+		description: "チャレンジを開始します。taskId を指定して環境プロビジョニングを開始します。",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["taskId"],
+						properties: {
+							taskId: { type: "string", description: "タスクID" },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "チャレンジ開始結果" },
+			400: { description: "バリデーションエラー" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	validateTeamAccess,
 	zValidator(
 		"json",
@@ -128,6 +174,31 @@ playerRouter.post(
 // 回答検証
 playerRouter.post(
 	"/events/:eventId/teams/:teamId/challenges/:challengeId/tasks/:taskId/validate",
+	describeRoute({
+		tags: ["Player / Challenges"],
+		summary: "回答検証",
+		description: "タスクに対する回答を検証し、採点結果を返します。",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["answer"],
+						properties: {
+							answer: { type: "string", description: "回答内容" },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "採点結果" },
+			400: { description: "バリデーションエラー" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	validateTeamAccess,
 	zValidator(
 		"json",
@@ -156,6 +227,36 @@ playerRouter.post(
 // クルー開示
 playerRouter.post(
 	"/events/:eventId/teams/:teamId/challenges/:challengeId/tasks/:taskId/clue",
+	describeRoute({
+		tags: ["Player / Challenges"],
+		summary: "クルー開示",
+		description: "指定順序のクルー（ヒント）を開示します（1〜3）。",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["clueOrder"],
+						properties: {
+							clueOrder: {
+								type: "integer",
+								minimum: 1,
+								maximum: 3,
+								description: "クルーの順序（1〜3）",
+							},
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "クルー内容" },
+			400: { description: "バリデーションエラー" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	validateTeamAccess,
 	zValidator(
 		"json",
@@ -188,6 +289,16 @@ playerRouter.post(
 // チームダッシュボード取得
 playerRouter.get(
 	"/events/:eventId/teams/:teamId/dashboard",
+	describeRoute({
+		tags: ["Player / Dashboard"],
+		summary: "チームダッシュボード取得",
+		description: "チームのスコア・進捗・チャレンジ状況をまとめて取得します。",
+		responses: {
+			200: { description: "ダッシュボードデータ" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	validateTeamAccess,
 	async (c) => {
 		const eventId = c.req.param("eventId");
@@ -199,20 +310,32 @@ playerRouter.get(
 );
 
 // リーダーボード（競技者ビュー）
-playerRouter.get("/events/:eventId/leaderboard", async (c) => {
-	const eventId = c.req.param("eventId");
-	const limit = parseInt(c.req.query("limit") || "50");
-	const leaderboard = await getLeaderboard(eventId, limit);
+playerRouter.get(
+	"/events/:eventId/leaderboard",
+	describeRoute({
+		tags: ["Player / Dashboard"],
+		summary: "リーダーボード取得（競技者ビュー）",
+		description: "イベントのリーダーボードを取得します（チーム名・スコア・完了チャレンジ数のみ）。",
+		responses: {
+			200: { description: "リーダーボード" },
+			401: { description: "認証エラー" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const limit = parseInt(c.req.query("limit") || "50");
+		const leaderboard = await getLeaderboard(eventId, limit);
 
-	// 競技者向けには簡略化したリーダーボードを返す
-	const publicLeaderboard = leaderboard.map((entry) => ({
-		rank: entry.rank,
-		teamName: entry.teamName,
-		score: entry.score,
-		completedChallenges: entry.completedChallenges,
-	}));
+		// 競技者向けには簡略化したリーダーボードを返す
+		const publicLeaderboard = leaderboard.map((entry) => ({
+			rank: entry.rank,
+			teamName: entry.teamName,
+			score: entry.score,
+			completedChallenges: entry.completedChallenges,
+		}));
 
-	return c.json({ leaderboard: publicLeaderboard });
-});
+		return c.json({ leaderboard: publicLeaderboard });
+	},
+);
 
 export { playerRouter };
