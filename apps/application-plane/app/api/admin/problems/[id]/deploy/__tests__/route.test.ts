@@ -92,7 +92,45 @@ describe('Admin Problem Deploy API', () => {
       expect(data).toEqual(deployResult);
       expect(mockServerApiRequest).toHaveBeenCalledWith(
         '/admin/problems/problem-1/deploy',
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            provider: 'aws',
+            region: 'ap-northeast-1',
+            parameters: undefined,
+          }),
+        }),
+      );
+    });
+
+    it('local provider をそのまま backend に渡すべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+      mockServerApiRequest.mockResolvedValue({
+        message: 'Deploy started',
+        stackName: 'local-stack',
+      });
+
+      const { POST } = await import('../route');
+      const request = new NextRequest(
+        'http://localhost/api/admin/problems/problem-1/deploy',
+        {
+          method: 'POST',
+          body: JSON.stringify({ provider: 'local', region: 'local' }),
+        },
+      );
+      const response = await POST(request, routeContext);
+
+      expect(response.status).toBe(201);
+      expect(mockServerApiRequest).toHaveBeenCalledWith(
+        '/admin/problems/problem-1/deploy',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            provider: 'local',
+            region: 'local',
+            parameters: undefined,
+          }),
+        }),
       );
     });
 
@@ -141,7 +179,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
       );
       const response = await GET(request, routeContext);
 
@@ -160,13 +198,30 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
       );
       const response = await GET(request, routeContext);
 
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual(statusData);
+      expect(mockServerApiRequest).toHaveBeenCalledWith(
+        '/admin/problems/problem-1/deployments/test-stack/status?provider=aws&region=ap-northeast-1',
+      );
+    });
+
+    it('stackName がない場合は 400 を返すべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+
+      const { GET } = await import('../route');
+      const request = new NextRequest(
+        'http://localhost/api/admin/problems/problem-1/deploy?provider=local',
+      );
+      const response = await GET(request, routeContext);
+
+      expect(response.status).toBe(400);
+      const data = await response.json();
+      expect(data.error).toBe('stackName is required');
     });
 
     it('バックエンドエラー時は 400 を返すべき', async () => {
@@ -175,7 +230,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=local',
       );
       const response = await GET(request, routeContext);
 
@@ -190,7 +245,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { GET } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
       );
       const response = await GET(request, routeContext);
 
@@ -206,7 +261,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { DELETE } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
         { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
@@ -221,7 +276,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { DELETE } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
         { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
@@ -230,7 +285,25 @@ describe('Admin Problem Deploy API', () => {
       const data = await response.json();
       expect(data).toEqual(deleteResult);
       expect(mockServerApiRequest).toHaveBeenCalledWith(
-        '/admin/problems/problem-1/deploy',
+        '/admin/problems/problem-1/deployments/test-stack?provider=aws&region=ap-northeast-1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('local delete では region=local を補うべき', async () => {
+      mockGetAdminSession.mockResolvedValue(adminSession);
+      mockServerApiRequest.mockResolvedValue({ message: 'Deleted' });
+
+      const { DELETE } = await import('../route');
+      const request = new NextRequest(
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=local',
+        { method: 'DELETE' },
+      );
+      const response = await DELETE(request, routeContext);
+
+      expect(response.status).toBe(200);
+      expect(mockServerApiRequest).toHaveBeenCalledWith(
+        '/admin/problems/problem-1/deployments/test-stack?provider=local&region=local',
         expect.objectContaining({ method: 'DELETE' }),
       );
     });
@@ -241,7 +314,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { DELETE } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
         { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);
@@ -257,7 +330,7 @@ describe('Admin Problem Deploy API', () => {
 
       const { DELETE } = await import('../route');
       const request = new NextRequest(
-        'http://localhost/api/admin/problems/problem-1/deploy',
+        'http://localhost/api/admin/problems/problem-1/deploy?stackName=test-stack&provider=aws&region=ap-northeast-1',
         { method: 'DELETE' },
       );
       const response = await DELETE(request, routeContext);

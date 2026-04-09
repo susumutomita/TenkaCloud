@@ -3,8 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminProblemDeployPage from '../page';
 
+const mockReplace = vi.fn();
+let currentSearchParams = new URLSearchParams();
+
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'prob-123' }),
+  useRouter: () => ({ replace: mockReplace }),
+  useSearchParams: () => currentSearchParams,
 }));
 
 const mockDeployProblem = vi.fn();
@@ -20,6 +25,7 @@ vi.mock('@/lib/api/deployment', () => ({
 describe('Admin 問題デプロイページ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentSearchParams = new URLSearchParams();
     mockGetDeployStatus.mockRejectedValue(new Error('Not found'));
   });
 
@@ -28,7 +34,7 @@ describe('Admin 問題デプロイページ', () => {
     await waitFor(() => {
       expect(
         screen.getByRole('heading', {
-          name: 'AWS CloudFormation デプロイ',
+          name: '問題デプロイ',
           level: 1,
         }),
       ).toBeInTheDocument();
@@ -68,6 +74,7 @@ describe('Admin 問題デプロイページ', () => {
     await waitFor(() => {
       expect(mockDeployProblem).toHaveBeenCalledWith(
         'prob-123',
+        'aws',
         'ap-northeast-1',
       );
     });
@@ -117,6 +124,11 @@ describe('Admin 問題デプロイページ', () => {
   });
 
   it('既存のデプロイステータスを表示すべき', async () => {
+    currentSearchParams = new URLSearchParams({
+      stackName: 'existing-stack',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'existing-stack',
       status: 'CREATE_COMPLETE',
@@ -147,6 +159,11 @@ describe('Admin 問題デプロイページ', () => {
 
   it('スタック削除の確認モーダルが表示されるべき', async () => {
     const user = userEvent.setup();
+    currentSearchParams = new URLSearchParams({
+      stackName: 'delete-target',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'delete-target',
       status: 'CREATE_COMPLETE',
@@ -173,6 +190,11 @@ describe('Admin 問題デプロイページ', () => {
 
   it('削除を実行すべき', async () => {
     const user = userEvent.setup();
+    currentSearchParams = new URLSearchParams({
+      stackName: 'delete-target',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'delete-target',
       status: 'CREATE_COMPLETE',
@@ -195,12 +217,21 @@ describe('Admin 問題デプロイページ', () => {
     await user.click(screen.getByRole('button', { name: '削除' }));
 
     await waitFor(() => {
-      expect(mockDeleteDeployment).toHaveBeenCalledWith('prob-123');
+      expect(mockDeleteDeployment).toHaveBeenCalledWith('prob-123', {
+        stackName: 'delete-target',
+        provider: 'aws',
+        region: 'ap-northeast-1',
+      });
     });
   });
 
   it('削除エラー時にモーダル内にエラーが表示されるべき', async () => {
     const user = userEvent.setup();
+    currentSearchParams = new URLSearchParams({
+      stackName: 'delete-target',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'delete-target',
       status: 'CREATE_COMPLETE',
@@ -227,6 +258,11 @@ describe('Admin 問題デプロイページ', () => {
 
   it('削除時に Error 以外の例外でデフォルトメッセージが表示されるべき', async () => {
     const user = userEvent.setup();
+    currentSearchParams = new URLSearchParams({
+      stackName: 'delete-target',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'delete-target',
       status: 'CREATE_COMPLETE',
@@ -254,6 +290,11 @@ describe('Admin 問題デプロイページ', () => {
   });
 
   it('IN_PROGRESS 中はスタック削除ボタンが無効であるべき', async () => {
+    currentSearchParams = new URLSearchParams({
+      stackName: 'in-progress-stack',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'in-progress-stack',
       status: 'CREATE_IN_PROGRESS',
@@ -270,6 +311,11 @@ describe('Admin 問題デプロイページ', () => {
   });
 
   it('自動更新が IN_PROGRESS 中に実行されるべき', async () => {
+    currentSearchParams = new URLSearchParams({
+      stackName: 'auto-refresh-stack',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus
       .mockResolvedValueOnce({
         stackName: 'auto-refresh-stack',
@@ -299,6 +345,11 @@ describe('Admin 問題デプロイページ', () => {
   });
 
   it('イベントなし表示が正しく出るべき', async () => {
+    currentSearchParams = new URLSearchParams({
+      stackName: 'empty-events-stack',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockReset();
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'empty-events-stack',
@@ -317,6 +368,11 @@ describe('Admin 問題デプロイページ', () => {
 
   it('削除確認モーダルのキャンセルでエラーにならないべき', async () => {
     const user = userEvent.setup();
+    currentSearchParams = new URLSearchParams({
+      stackName: 'cancel-test',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockReset();
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'cancel-test',
@@ -344,6 +400,11 @@ describe('Admin 問題デプロイページ', () => {
   });
 
   it('statusReason が表示されるべき', async () => {
+    currentSearchParams = new URLSearchParams({
+      stackName: 'reason-stack',
+      provider: 'aws',
+      region: 'ap-northeast-1',
+    });
     mockGetDeployStatus.mockResolvedValue({
       stackName: 'reason-stack',
       status: 'ROLLBACK_COMPLETE',
@@ -355,6 +416,31 @@ describe('Admin 問題デプロイページ', () => {
 
     await waitFor(() => {
       expect(screen.getByText('リソース作成に失敗')).toBeInTheDocument();
+    });
+  });
+
+  it('local provider でデプロイできるべき', async () => {
+    const user = userEvent.setup();
+    currentSearchParams = new URLSearchParams({
+      provider: 'local',
+      region: 'local',
+    });
+    mockDeployProblem.mockResolvedValue({
+      message: 'Deploy started',
+      stackName: 'local-stack',
+      stackId: 'local:test',
+    });
+
+    render(<AdminProblemDeployPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'デプロイ開始' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'デプロイ開始' }));
+
+    await waitFor(() => {
+      expect(mockDeployProblem).toHaveBeenCalledWith('prob-123', 'local', 'local');
     });
   });
 });

@@ -4,6 +4,9 @@
  * ローカル開発環境用のプロバイダー実装（Docker Compose ベース）
  */
 
+import { execFile } from "node:child_process";
+import * as nodePath from "node:path";
+import { promisify } from "node:util";
 import type {
 	CloudCredentials,
 	CloudProvider,
@@ -19,6 +22,9 @@ import type {
 	ICloudProvider,
 	RegionInfo,
 } from "../interface";
+import { resolveProblemAssetPath } from "../problem-assets";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * ローカル環境の擬似リージョン
@@ -57,46 +63,46 @@ export class LocalCloudProvider implements ICloudProvider {
 		const startedAt = new Date();
 
 		try {
-			// ローカルテンプレートの取得
 			const template = problem.deployment.templates.local;
-			if (!template) {
-				// AWS テンプレートをフォールバックとして使用
-				const awsTemplate = problem.deployment.templates.aws;
-				if (awsTemplate) {
-					console.log(
-						`[Local] Using AWS template as fallback for problem ${problem.id}`,
-					);
-				}
+			if (!template?.path) {
+				throw new Error(
+					"Local deployment template not found for this problem",
+				);
 			}
 
-			if (options.dryRun) {
-				return {
-					success: true,
-					stackName: options.stackName,
-					startedAt,
-					completedAt: new Date(),
-				};
+			const composePath = await resolveProblemAssetPath(template.path);
+			const problemRoot = nodePath.resolve(nodePath.dirname(composePath), "..");
+			const ports = this.allocatePorts();
+			const stackId = `local-${options.stackName}`;
+			const projectName = this.getProjectName(options.stackName);
+			const environment = this.buildComposeEnvironment(
+				template.parameters ?? {},
+				options.parameters ?? {},
+				problemRoot,
+				options.region,
+				options.stackName,
+				ports,
+			);
+
+			if (!options.dryRun) {
+				await this.runDockerCompose("up", composePath, projectName, environment);
 			}
 
-			// Docker Compose でサービスを起動
-			const stackId = `local-${options.stackName}-${Date.now()}`;
-			const composeFile = await this.generateDockerCompose(problem, options);
-
-			// Docker Compose up を実行
-			await this.runDockerCompose("up", composeFile, options.stackName);
-
-			// スタック情報を保存
 			const stack: LocalStack = {
 				stackId,
 				stackName: options.stackName,
 				problemId: problem.id,
-				status: "CREATE_COMPLETE",
+				projectName,
+				status: options.dryRun ? "CREATE_COMPLETE" : "CREATE_COMPLETE",
 				outputs: {
-					ServiceUrl: `http://localhost:${this.getAvailablePort()}`,
-					DashboardUrl: `http://localhost:${this.getAvailablePort() + 1}`,
+					ApiUrl: `http://localhost:${ports.apiPort}`,
+					FrontendUrl: `http://localhost:${ports.frontendPort}`,
+					ServiceUrl: `http://localhost:${ports.frontendPort}`,
+					DashboardUrl: `http://localhost:${ports.frontendPort}`,
 				},
 				createdAt: new Date(),
-				composeFile,
+				composePath,
+				environment,
 			};
 			this.deployedStacks.set(options.stackName, stack);
 
@@ -161,10 +167,12 @@ export class LocalCloudProvider implements ICloudProvider {
 				};
 			}
 
-			// Docker Compose down を実行
-			await this.runDockerCompose("down", stack.composeFile, stackName);
-
-			// スタック情報を削除
+			await this.runDockerCompose(
+				"down",
+				stack.composePath,
+				stack.projectName,
+				stack.environment,
+			);
 			this.deployedStacks.delete(stackName);
 
 			return {
@@ -196,15 +204,13 @@ export class LocalCloudProvider implements ICloudProvider {
 	}
 
 	/**
-	 * 静的ファイルのアップロード（ローカルではファイルコピー）
+	 * 静的ファイルのアップロード（ローカルではファイル参照）
 	 */
 	async uploadStaticFiles(
 		localPath: string,
 		_remotePath: string,
 		_credentials: CloudCredentials,
 	): Promise<string> {
-		// ローカル環境ではファイルをそのまま使用
-		console.log(`[Local] Static files available at: ${localPath}`);
 		return `file://${localPath}`;
 	}
 
@@ -269,73 +275,107 @@ export class LocalCloudProvider implements ICloudProvider {
 		};
 	}
 
-	// ==========================================================================
-	// Private Helper Methods
-	// ==========================================================================
-
-	private async generateDockerCompose(
-		problem: Problem,
-		options: DeployStackOptions,
-	): Promise<string> {
-		// 問題に基づいて Docker Compose ファイルを生成
-		const compose = {
-			version: "3.8",
-			services: {
-				[`${options.stackName}-app`]: {
-					image: `tenkacloud/problem-${problem.id}:latest`,
-					ports: [`${this.getAvailablePort()}:8080`],
-					environment: {
-						PROBLEM_ID: problem.id,
-						STACK_NAME: options.stackName,
-						...options.parameters,
-					},
-					labels: {
-						"tenkacloud.problem-id": problem.id,
-						"tenkacloud.stack-name": options.stackName,
-						"tenkacloud.managed-by": "tenkacloud",
-					},
-				},
-			},
-			networks: {
-				default: {
-					name: `tenkacloud-${options.stackName}`,
-				},
-			},
+	private buildComposeEnvironment(
+		templateParameters: Record<string, string>,
+		overrideParameters: Record<string, string>,
+		problemRoot: string,
+		region: string,
+		stackName: string,
+		ports: { apiPort: number; frontendPort: number },
+	): Record<string, string> {
+		return {
+			...Object.fromEntries(
+				Object.entries(templateParameters).map(([key, value]) => [key, String(value)]),
+			),
+			...Object.fromEntries(
+				Object.entries(overrideParameters).map(([key, value]) => [key, String(value)]),
+			),
+			PROBLEM_ROOT: problemRoot,
+			REGION: region,
+			STACK_NAME: stackName,
+			API_PORT: String(ports.apiPort),
+			FRONTEND_PORT: String(ports.frontendPort),
+			DB_EXPOSE_PORT: String(this.allocateHostPort(3306)),
 		};
-
-		return JSON.stringify(compose, null, 2);
 	}
 
 	private async runDockerCompose(
 		command: "up" | "down",
-		composeContent: string,
+		composePath: string,
 		projectName: string,
+		environment: Record<string, string>,
 	): Promise<void> {
-		// 実際の実装では Docker Compose CLI を実行
-		console.log(`[Local] Docker Compose ${command} for project ${projectName}`);
-		console.log(`[Local] Compose content:`, composeContent);
+		const args =
+			command === "up"
+				? [
+						"compose",
+						"-f",
+						composePath,
+						"-p",
+						projectName,
+						"up",
+						"-d",
+						"--remove-orphans",
+					]
+				: [
+						"compose",
+						"-f",
+						composePath,
+						"-p",
+						projectName,
+						"down",
+						"--remove-orphans",
+						"-v",
+					];
 
-		// シミュレーション: 少し待機
-		await new Promise((resolve) => setTimeout(resolve, 1000));
+		try {
+			await execFileAsync("docker", args, {
+				env: {
+					...process.env,
+					...environment,
+				},
+			});
+		} catch (error) {
+			const commandError = error as {
+				stderr?: string;
+				stdout?: string;
+				message?: string;
+			};
+			const details = commandError.stderr || commandError.stdout || commandError.message;
+			throw new Error(`docker compose ${command} failed: ${details}`);
+		}
 	}
 
-	private getAvailablePort(): number {
-		// 利用可能なポートを取得（実際の実装ではポートスキャンを行う）
-		return 8080 + this.deployedStacks.size;
+	private allocatePorts(): { apiPort: number; frontendPort: number } {
+		const offset = this.deployedStacks.size * 10;
+		return {
+			apiPort: this.allocateHostPort(18080 + offset),
+			frontendPort: this.allocateHostPort(13080 + offset),
+		};
+	}
+
+	private allocateHostPort(basePort: number): number {
+		return basePort + this.deployedStacks.size;
+	}
+
+	private getProjectName(stackName: string): string {
+		return `tenkacloud-${stackName}`
+			.toLowerCase()
+			.replace(/[^a-z0-9_-]/g, "-")
+			.slice(0, 63);
 	}
 }
 
-/**
- * ローカルスタック情報
- */
 interface LocalStack {
 	stackId: string;
 	stackName: string;
 	problemId: string;
+	projectName: string;
 	status: StackStatus["status"];
 	outputs: Record<string, string>;
 	createdAt: Date;
-	composeFile: string;
+	composePath: string;
+	environment: Record<string, string>;
 }
 
 /**

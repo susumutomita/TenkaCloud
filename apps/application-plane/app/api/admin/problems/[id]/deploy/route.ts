@@ -26,6 +26,34 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+function buildDeploymentPath(
+  problemId: string,
+  stackName: string,
+  provider: string,
+  region: string,
+): string {
+  const searchParams = new URLSearchParams({
+    provider,
+    region,
+  });
+
+  return `/admin/problems/${problemId}/deployments/${encodeURIComponent(stackName)}/status?${searchParams.toString()}`;
+}
+
+function buildDeletePath(
+  problemId: string,
+  stackName: string,
+  provider: string,
+  region: string,
+): string {
+  const searchParams = new URLSearchParams({
+    provider,
+    region,
+  });
+
+  return `/admin/problems/${problemId}/deployments/${encodeURIComponent(stackName)}?${searchParams.toString()}`;
+}
+
 /**
  * POST /api/admin/problems/[id]/deploy
  *
@@ -43,6 +71,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   try {
     const body = (await request.json()) as {
+      provider?: 'aws' | 'local';
       region?: string;
       parameters?: Record<string, string>;
     };
@@ -56,6 +85,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       {
         method: 'POST',
         body: JSON.stringify({
+          provider: body.provider ?? 'aws',
           region: body.region,
           parameters: body.parameters,
         }),
@@ -85,10 +115,23 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   const { id: problemId } = await context.params;
+  const url = new URL(_request.url);
+  const stackName = url.searchParams.get('stackName');
+  const provider = url.searchParams.get('provider') ?? 'aws';
+  const region =
+    url.searchParams.get('region') ?? (provider === 'local' ? 'local' : '');
+
+  if (!stackName) {
+    return badRequestResponse('stackName is required');
+  }
+
+  if (!region) {
+    return badRequestResponse('region is required');
+  }
 
   try {
     const data = await serverApiRequest<DeploymentStatus>(
-      `/admin/problems/${problemId}/deploy`,
+      buildDeploymentPath(problemId, stackName, provider, region),
     );
 
     return successResponse(data);
@@ -114,10 +157,23 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   const { id: problemId } = await context.params;
+  const url = new URL(_request.url);
+  const stackName = url.searchParams.get('stackName');
+  const provider = url.searchParams.get('provider') ?? 'aws';
+  const region =
+    url.searchParams.get('region') ?? (provider === 'local' ? 'local' : '');
+
+  if (!stackName) {
+    return badRequestResponse('stackName is required');
+  }
+
+  if (!region) {
+    return badRequestResponse('region is required');
+  }
 
   try {
     const data = await serverApiRequest<{ message: string }>(
-      `/admin/problems/${problemId}/deploy`,
+      buildDeletePath(problemId, stackName, provider, region),
       { method: 'DELETE' },
     );
 

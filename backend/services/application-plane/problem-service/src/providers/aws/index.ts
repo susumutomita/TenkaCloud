@@ -19,6 +19,7 @@ import type {
 	ICloudProvider,
 	RegionInfo,
 } from "../interface";
+import { loadProblemTextAsset } from "../problem-assets";
 
 /**
  * AWS リージョン一覧
@@ -495,28 +496,7 @@ export class AWSCloudProvider implements ICloudProvider {
 	 * @throws {Error} ベースディレクトリ外のファイルを参照した場合、または HTTP エラー
 	 */
 	private async loadTemplate(templatePath: string): Promise<string> {
-		if (templatePath.startsWith("http://") || templatePath.startsWith("https://")) {
-			const res = await fetch(templatePath);
-			if (!res.ok) {
-				throw new Error(
-					`テンプレートの取得に失敗しました: ${res.status} ${res.statusText} (${templatePath})`,
-				);
-			}
-			return res.text();
-		}
-
-		const fs = await import("node:fs/promises");
-		const nodePath = await import("node:path");
-		const baseDir = process.env.PROBLEMS_DIR
-			? nodePath.resolve(process.env.PROBLEMS_DIR)
-			: nodePath.resolve(process.cwd(), "problems");
-		const candidate = nodePath.resolve(baseDir, templatePath);
-		const realBase = await fs.realpath(baseDir);
-		const realPath = await fs.realpath(candidate);
-		if (!realPath.startsWith(realBase + nodePath.sep)) {
-			throw new Error("無効なファイルパスです");
-		}
-		return fs.readFile(realPath, "utf-8");
+		return loadProblemTextAsset(templatePath);
 	}
 
 	private async validateTemplate(
