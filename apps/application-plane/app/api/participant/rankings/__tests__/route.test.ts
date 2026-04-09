@@ -18,30 +18,30 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
 }));
 
-describe('Participant Events API Proxy', () => {
+describe('Participant Rankings API Proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuthSkipEnabled = false;
   });
 
-  it('イベント一覧を取得できるべき', async () => {
+  it('ランキング一覧を取得できるべき', async () => {
     mockServerApiRequest.mockResolvedValue({
-      events: [{ id: 'event-1', name: 'Event 1' }],
+      rankings: [{ rank: 1, userId: 'user-1', name: 'Taro', totalScore: 100 }],
       total: 1,
     });
 
     const { GET } = await import('../route');
     const request = new NextRequest(
-      'http://localhost/api/participant/events?status=active&limit=10',
+      'http://localhost/api/participant/rankings?limit=20&offset=0',
     );
     const response = await GET(request);
 
     expect(response.status).toBe(200);
     expect(mockServerApiRequest).toHaveBeenCalledWith(
-      '/participant/events?status=active&limit=10',
+      '/participant/rankings?limit=20&offset=0',
     );
     await expect(response.json()).resolves.toEqual({
-      events: [{ id: 'event-1', name: 'Event 1' }],
+      rankings: [{ rank: 1, userId: 'user-1', name: 'Taro', totalScore: 100 }],
       total: 1,
     });
   });
@@ -50,11 +50,13 @@ describe('Participant Events API Proxy', () => {
     mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
 
     const { GET } = await import('../route');
-    const request = new NextRequest('http://localhost/api/participant/events');
+    const request = new NextRequest(
+      'http://localhost/api/participant/rankings',
+    );
     const response = await GET(request);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ events: [], total: 0 });
+    await expect(response.json()).resolves.toEqual({ rankings: [], total: 0 });
   });
 
   it('AUTH_SKIP 中に Unauthorized の場合は空一覧を返すべき', async () => {
@@ -62,18 +64,22 @@ describe('Participant Events API Proxy', () => {
     mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
 
     const { GET } = await import('../route');
-    const request = new NextRequest('http://localhost/api/participant/events');
+    const request = new NextRequest(
+      'http://localhost/api/participant/rankings',
+    );
     const response = await GET(request);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ events: [], total: 0 });
+    await expect(response.json()).resolves.toEqual({ rankings: [], total: 0 });
   });
 
   it('通常の API エラーは 400 を返すべき', async () => {
     mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
 
     const { GET } = await import('../route');
-    const request = new NextRequest('http://localhost/api/participant/events');
+    const request = new NextRequest(
+      'http://localhost/api/participant/rankings',
+    );
     const response = await GET(request);
 
     expect(response.status).toBe(400);

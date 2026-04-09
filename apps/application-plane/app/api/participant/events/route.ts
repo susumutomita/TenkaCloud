@@ -7,6 +7,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { authSkipEnabled } from '@/auth';
 import {
   successResponse,
   badRequestResponse,
@@ -46,8 +47,20 @@ export async function GET(request: NextRequest) {
     const data = await serverApiRequest<ParticipantEventListResponse>(endpoint);
     return successResponse(data);
   } catch (error) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      error instanceof Error &&
+      /^Unauthorized$/i.test(error.message);
     const isNetworkError =
       error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if (isAuthSkipUnauthorized) {
+      console.warn(
+        'Participant events backend rejected AUTH_SKIP token. Returning empty list.',
+        error,
+      );
+      return successResponse({ events: [], total: 0 });
+    }
 
     if (isNetworkError) {
       return successResponse({ events: [], total: 0 });

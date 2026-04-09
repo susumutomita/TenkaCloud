@@ -104,4 +104,16 @@ describe('ダッシュボードページ', () => {
     render(<DashboardPage />);
     expect(screen.queryByText('AWS GameDay 2026')).not.toBeInTheDocument();
   });
+
+  it('エラー時は生の例外文言ではなく汎用メッセージを表示すべき', async () => {
+    mockGetMyEvents.mockRejectedValue(new Error('fetch failed'));
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load dashboard')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('fetch failed')).not.toBeInTheDocument();
+    expect(screen.getByText('Retry')).toBeInTheDocument();
+  });
 });
