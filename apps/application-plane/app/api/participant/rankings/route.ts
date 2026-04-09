@@ -21,7 +21,12 @@ export async function GET(request: NextRequest) {
       `/participant/rankings${qs ? `?${qs}` : ''}`,
     );
     return successResponse(data);
-  } catch {
-    return successResponse({ rankings: [], total: 0 });
+  } catch (err) {
+    // 起動タイミングの競合によるネットワーク到達不能のみ空リストで返す
+    // それ以外のエラー（認証エラー、サービス障害等）は伝播させる
+    const isNetworkError =
+      err instanceof TypeError && /fetch failed/i.test(String(err));
+    if (isNetworkError) return successResponse({ rankings: [], total: 0 });
+    throw err;
   }
 }
