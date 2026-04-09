@@ -252,15 +252,20 @@ describe('buildPayload', () => {
   it('フォーム状態からペイロードを正しく構築すべき', () => {
     expect(buildPayload(DEFAULT_FORM_STATE)).toEqual({
       name: '',
+      slug: 'event',
       type: 'gameday',
       status: 'draft',
-      startTime: '',
-      endTime: '',
+      eventDate: '',
+      startTime: undefined,
+      endTime: undefined,
       timezone: 'Asia/Tokyo',
       participantType: 'individual',
       cloudProvider: 'aws',
+      regions: ['ap-northeast-1'],
       maxParticipants: 100,
       scoringType: 'realtime',
+      scoringIntervalMinutes: 5,
+      leaderboardVisible: true,
     });
   });
 
@@ -272,6 +277,22 @@ describe('buildPayload', () => {
     });
     expect(payload.type).toBeUndefined();
     expect(payload.status).toBeUndefined();
+  });
+
+  it('local provider と日付入力を backend 契約に正規化すべき', () => {
+    const payload = buildPayload({
+      ...DEFAULT_FORM_STATE,
+      name: 'Spring GameDay 2026',
+      startTime: '2026-05-01',
+      endTime: '2026-05-02',
+      cloudProvider: { label: 'ローカル', value: 'local' },
+    });
+
+    expect(payload.slug).toBe('spring-gameday-2026');
+    expect(payload.eventDate).toBe('2026-05-01');
+    expect(payload.startTime).toBe('2026-05-01T00:00:00.000Z');
+    expect(payload.endTime).toBe('2026-05-02T23:59:59.000Z');
+    expect(payload.regions).toEqual(['local']);
   });
 });
 

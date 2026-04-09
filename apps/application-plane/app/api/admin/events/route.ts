@@ -42,10 +42,10 @@ function emptyEventList(page: number, pageSize: number): AdminEventListResponse 
  */
 interface CreateEventRequest {
   name: string;
-  slug: string;
+  slug?: string;
   description?: string;
   organizer?: string;
-  eventDate: string;
+  eventDate?: string;
   startTime?: string;
   endTime?: string;
   status?: EventStatus;
@@ -127,11 +127,11 @@ export async function POST(request: NextRequest) {
     if (!body.name?.trim()) {
       return badRequestResponse('Event name is required');
     }
-    if (!body.slug?.trim()) {
-      return badRequestResponse('Event slug is required');
+    if (!body.startTime?.trim()) {
+      return badRequestResponse('Event start time is required');
     }
-    if (!body.eventDate) {
-      return badRequestResponse('Event date is required');
+    if (!body.endTime?.trim()) {
+      return badRequestResponse('Event end time is required');
     }
 
     // バックエンド API を呼び出し

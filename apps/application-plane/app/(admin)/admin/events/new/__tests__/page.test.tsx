@@ -85,7 +85,13 @@ describe('イベント作成ページ', () => {
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
         '/admin/events',
-        expect.objectContaining({ name: 'テストイベント' }),
+        expect.objectContaining({
+          name: 'テストイベント',
+          slug: 'event',
+          regions: ['ap-northeast-1'],
+          scoringIntervalMinutes: 5,
+          leaderboardVisible: true,
+        }),
       );
     });
     expect(mockPush).toHaveBeenCalledWith('/admin/events');

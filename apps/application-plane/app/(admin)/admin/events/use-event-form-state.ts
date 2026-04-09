@@ -82,17 +82,41 @@ export function findOption(
 }
 
 export function buildPayload(form: EventFormState) {
+  const provider = form.cloudProvider?.value ?? 'aws';
+  const defaultRegions =
+    provider === 'local'
+      ? ['local']
+      : provider === 'gcp'
+        ? ['asia-northeast1']
+        : provider === 'azure'
+          ? ['japaneast']
+          : ['ap-northeast-1'];
+
+  const toIsoDateTime = (value: string, endOfDay = false) => {
+    if (!value) return undefined;
+    return `${value}T${endOfDay ? '23:59:59' : '00:00:00'}.000Z`;
+  };
+
   return {
     name: form.name,
     type: form.type?.value,
     status: form.status?.value,
-    startTime: form.startTime,
-    endTime: form.endTime,
+    slug: form.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'event',
+    eventDate: form.startTime,
+    startTime: toIsoDateTime(form.startTime),
+    endTime: toIsoDateTime(form.endTime, true),
     timezone: form.timezone?.value,
     participantType: form.participantType?.value,
-    cloudProvider: form.cloudProvider?.value,
+    cloudProvider: provider,
+    regions: defaultRegions,
     maxParticipants: Number(form.maxParticipants),
     scoringType: form.scoringType?.value,
+    scoringIntervalMinutes: 5,
+    leaderboardVisible: true,
   };
 }
 

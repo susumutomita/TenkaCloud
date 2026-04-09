@@ -212,8 +212,8 @@ describe('Admin Events API', () => {
         method: 'POST',
         body: JSON.stringify({
           name: '',
-          slug: 'test',
-          eventDate: '2024-01-01',
+          startTime: '2024-01-01T00:00:00.000Z',
+          endTime: '2024-01-02T23:59:59.000Z',
         }),
       });
       const response = await POST(request);
@@ -223,7 +223,7 @@ describe('Admin Events API', () => {
       expect(data.error).toBe('Event name is required');
     });
 
-    it('slug が空の場合は 400 を返すべき', async () => {
+    it('startTime がない場合は 400 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -236,18 +236,17 @@ describe('Admin Events API', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Test Event',
-          slug: '',
-          eventDate: '2024-01-01',
+          endTime: '2024-01-02T23:59:59.000Z',
         }),
       });
       const response = await POST(request);
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('Event slug is required');
+      expect(data.error).toBe('Event start time is required');
     });
 
-    it('eventDate がない場合は 400 を返すべき', async () => {
+    it('endTime がない場合は 400 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -258,13 +257,16 @@ describe('Admin Events API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest('http://localhost/api/admin/events', {
         method: 'POST',
-        body: JSON.stringify({ name: 'Test Event', slug: 'test' }),
+        body: JSON.stringify({
+          name: 'Test Event',
+          startTime: '2024-01-01T00:00:00.000Z',
+        }),
       });
       const response = await POST(request);
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('Event date is required');
+      expect(data.error).toBe('Event end time is required');
     });
 
     it('イベントを作成し 201 を返すべき', async () => {
@@ -278,8 +280,6 @@ describe('Admin Events API', () => {
       const createdEvent = {
         id: 'event-1',
         name: 'Test Event',
-        slug: 'test-event',
-        eventDate: '2024-01-01',
         status: 'draft',
       };
       mockServerApiRequest.mockResolvedValue(createdEvent);
@@ -289,8 +289,8 @@ describe('Admin Events API', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Test Event',
-          slug: 'test-event',
-          eventDate: '2024-01-01',
+          startTime: '2024-01-01T00:00:00.000Z',
+          endTime: '2024-01-02T23:59:59.000Z',
         }),
       });
       const response = await POST(request);
