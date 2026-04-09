@@ -11,7 +11,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { describeRoute } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
 import {
 	authenticateRequest,
 	canAccessTeam,
@@ -148,6 +148,7 @@ playerRouter.post(
 		},
 		responses: {
 			200: { description: "チャレンジ開始結果" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -193,6 +194,7 @@ playerRouter.post(
 		},
 		responses: {
 			200: { description: "採点結果" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -250,6 +252,7 @@ playerRouter.post(
 		},
 		responses: {
 			200: { description: "クルー内容" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},

@@ -11,7 +11,7 @@
 
 import { createLogger } from "../lib/logger";
 import { Hono } from "hono";
-import { describeRoute } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import {
@@ -928,21 +928,16 @@ participantRouter.post(
 		tags: ["Participant / Challenges"],
 		summary: "解答提出",
 		requestBody: {
+			required: true,
 			content: {
 				"application/json": {
-					schema: {
-						type: "object",
-						required: ["answer", "titleId"],
-						properties: {
-							answer: { type: "string", minLength: 1 },
-							titleId: { type: "string", minLength: 1 },
-						},
-					},
+					schema: resolver(submitAnswerSchema),
 				},
 			},
 		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 			404: { description: "チャレンジが見つかりません" },
@@ -1147,20 +1142,16 @@ participantRouter.post(
 		tags: ["Participant / Teams"],
 		summary: "チーム作成",
 		requestBody: {
+			required: true,
 			content: {
 				"application/json": {
-					schema: {
-						type: "object",
-						required: ["name"],
-						properties: {
-							name: { type: "string", minLength: 1, maxLength: 50 },
-						},
-					},
+					schema: resolver(createTeamSchema),
 				},
 			},
 		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "チーム作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1211,20 +1202,16 @@ participantRouter.post(
 		tags: ["Participant / Teams"],
 		summary: "チーム参加",
 		requestBody: {
+			required: true,
 			content: {
 				"application/json": {
-					schema: {
-						type: "object",
-						required: ["inviteCode"],
-						properties: {
-							inviteCode: { type: "string", minLength: 1 },
-						},
-					},
+					schema: resolver(joinTeamSchema),
 				},
 			},
 		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 			404: { description: "チームが見つかりません" },
@@ -1320,20 +1307,16 @@ participantRouter.post(
 		tags: ["Participant / Teams"],
 		summary: "キャプテン移譲",
 		requestBody: {
+			required: true,
 			content: {
 				"application/json": {
-					schema: {
-						type: "object",
-						required: ["newCaptainId"],
-						properties: {
-							newCaptainId: { type: "string", minLength: 1 },
-						},
-					},
+					schema: resolver(transferCaptainSchema),
 				},
 			},
 		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 			404: { description: "チームが見つかりません" },
@@ -1498,20 +1481,16 @@ participantRouter.put(
 		tags: ["Participant / Rankings"],
 		summary: "プロフィール更新",
 		requestBody: {
+			required: true,
 			content: {
 				"application/json": {
-					schema: {
-						type: "object",
-						properties: {
-							name: { type: "string", minLength: 1, maxLength: 100 },
-							avatarUrl: { type: "string", format: "uri" },
-						},
-					},
+					schema: resolver(updateProfileSchema),
 				},
 			},
 		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},

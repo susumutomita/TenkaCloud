@@ -10,7 +10,7 @@
 
 import { createLogger } from "../lib/logger";
 import { Hono } from "hono";
-import { describeRoute } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import {
@@ -410,6 +410,7 @@ adminRouter.get(
 			200: { description: "成功" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	async (c) => {
@@ -470,8 +471,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Events"],
 		summary: "イベント作成",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(createEventSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -527,10 +537,20 @@ adminRouter.put(
 	describeRoute({
 		tags: ["Admin / Events"],
 		summary: "イベント更新",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(updateEventSchema),
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	zValidator("json", updateEventSchema),
@@ -586,6 +606,7 @@ adminRouter.delete(
 			200: { description: "成功" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	async (c) => {
@@ -606,8 +627,33 @@ adminRouter.patch(
 	describeRoute({
 		tags: ["Admin / Events"],
 		summary: "イベントステータス更新",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["status"],
+						properties: {
+							status: {
+								type: "string",
+								enum: [
+									"draft",
+									"scheduled",
+									"active",
+									"paused",
+									"completed",
+									"cancelled",
+								],
+							},
+						},
+					},
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -667,8 +713,26 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Events"],
 		summary: "イベントへ問題追加",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["problemId"],
+						properties: {
+							problemId: { type: "string" },
+							order: { type: "number" },
+							unlockTime: { type: "string", format: "date-time" },
+							pointMultiplier: { type: "number" },
+						},
+					},
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -804,6 +868,7 @@ adminRouter.get(
 			200: { description: "成功" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	async (c) => {
@@ -895,8 +960,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題作成",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(createProblemSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -969,8 +1043,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題インポート",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(importProblemSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1023,10 +1106,20 @@ adminRouter.put(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題更新",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(updateProblemSchema),
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	zValidator("json", updateProblemSchema),
@@ -1082,6 +1175,7 @@ adminRouter.delete(
 			200: { description: "成功" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	async (c) => {
@@ -1209,8 +1303,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題ファイルのフォーマット検出",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(formatDetectSchema),
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1240,10 +1343,20 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題エクスポート（単一）",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(exportOptionsSchema),
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	zValidator("json", exportOptionsSchema),
@@ -1287,8 +1400,32 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題エクスポート（複数）",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["format", "problemIds"],
+						properties: {
+							format: {
+								type: "string",
+								enum: ["tenkacloud-yaml", "tenkacloud-json"],
+							},
+							prettyPrint: { type: "boolean" },
+							problemIds: {
+								type: "array",
+								items: { type: "string" },
+								minItems: 1,
+							},
+						},
+					},
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1343,8 +1480,27 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題インポートプレビュー（単一）",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["format", "data"],
+						properties: {
+							format: {
+								type: "string",
+								enum: ["tenkacloud-yaml", "tenkacloud-json"],
+							},
+							data: { type: "string" },
+						},
+					},
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1380,8 +1536,27 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題インポートプレビュー（複数）",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["format", "data"],
+						properties: {
+							format: {
+								type: "string",
+								enum: ["tenkacloud-yaml", "tenkacloud-json"],
+							},
+							data: { type: "string" },
+						},
+					},
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1422,8 +1597,23 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Contest"],
 		summary: "コンテスト開始",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["contestName"],
+						properties: {
+							contestName: { type: "string" },
+						},
+					},
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1449,8 +1639,23 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Contest"],
 		summary: "コンテスト停止",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["contestName"],
+						properties: {
+							contestName: { type: "string" },
+						},
+					},
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1552,8 +1757,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Events"],
 		summary: "コンテストへチャレンジ追加",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(challengeSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1598,8 +1812,27 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Events"],
 		summary: "チーム登録",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["teamName"],
+						properties: {
+							teamName: { type: "string" },
+							members: {
+								type: "array",
+								items: { type: "string" },
+							},
+						},
+					},
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -1949,6 +2182,7 @@ adminRouter.get(
 			200: { description: "成功" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	async (c) => {
@@ -1972,8 +2206,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Templates"],
 		summary: "テンプレート作成",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(createTemplateSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -2001,10 +2244,20 @@ adminRouter.put(
 	describeRoute({
 		tags: ["Admin / Templates"],
 		summary: "テンプレート更新",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(updateTemplateSchema),
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	zValidator("json", updateTemplateSchema),
@@ -2037,6 +2290,7 @@ adminRouter.delete(
 			200: { description: "成功" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	async (c) => {
@@ -2083,10 +2337,20 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Templates"],
 		summary: "テンプレートから問題生成",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(createProblemFromTemplateSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	zValidator("json", createProblemFromTemplateSchema),
@@ -2232,8 +2496,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "AI問題生成プレビュー",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(aiGenerateProblemSchema),
+				},
+			},
+		},
 		responses: {
 			200: { description: "成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -2267,8 +2540,17 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "AI問題生成（保存）",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(aiGenerateProblemSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
 		},
@@ -2409,10 +2691,21 @@ adminRouter.post(
 	describeRoute({
 		tags: ["Admin / Problems"],
 		summary: "問題をAWSにデプロイ",
+		requestBody: {
+			required: true,
+			content: {
+				"application/json": {
+					schema: resolver(deployProblemSchema),
+				},
+			},
+		},
 		responses: {
-			200: { description: "成功" },
+			200: { description: "成功（dryRun時）" },
+			201: { description: "デプロイ成功" },
+			400: { description: "バリデーションエラー" },
 			401: { description: "認証エラー" },
 			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
 		},
 	}),
 	zValidator("json", deployProblemSchema),
