@@ -46,6 +46,13 @@ export async function GET(request: NextRequest) {
     const data = await serverApiRequest<ParticipantEventListResponse>(endpoint);
     return successResponse(data);
   } catch (error) {
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if (isNetworkError) {
+      return successResponse({ events: [], total: 0 });
+    }
+
     console.error('Failed to fetch participant events:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to fetch events',

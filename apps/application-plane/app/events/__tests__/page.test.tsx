@@ -54,7 +54,6 @@ describe('イベント一覧ページ', () => {
     mockGetAvailableEvents.mockResolvedValue({ events: [], total: 0 });
     render(<EventsPage />);
     await waitFor(() => {
-      // SegmentedControl renders each option; some may appear multiple times
       expect(screen.getAllByText('Cards').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('List').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('Calendar').length).toBeGreaterThanOrEqual(1);
@@ -76,7 +75,6 @@ describe('イベント一覧ページ', () => {
     await user.click(screen.getByText('List'));
 
     await waitFor(() => {
-      // リストビューではイベント名が表示される
       expect(screen.getByText('AWS GameDay 2026')).toBeInTheDocument();
     });
   });
@@ -93,7 +91,6 @@ describe('イベント一覧ページ', () => {
     await user.click(screen.getByText('Calendar'));
 
     await waitFor(() => {
-      // カレンダービューでは月ヘッダーが表示される（月/曜日）
       expect(screen.getByText('Mon')).toBeInTheDocument();
     });
   });
@@ -143,5 +140,17 @@ describe('イベント一覧ページ', () => {
     await waitFor(() => {
       expect(screen.getByText('42')).toBeInTheDocument();
     });
+  });
+
+  it('エラー時は生の例外文言ではなく汎用メッセージを表示すべき', async () => {
+    mockGetAvailableEvents.mockRejectedValue(new Error('fetch failed'));
+    render(<EventsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load events')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('fetch failed')).not.toBeInTheDocument();
+    expect(screen.getByText('Retry')).toBeInTheDocument();
   });
 });

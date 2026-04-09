@@ -98,6 +98,17 @@ function getActionLabel(event: ParticipantEvent, t: (k: string) => string) {
   return event.isRegistered ? t('events.viewDetails') : t('events.register');
 }
 
+function getEventsLoadErrorMessage(
+  error: unknown,
+  t: (k: string) => string,
+): string {
+  if (error instanceof Error && /fetch failed/i.test(error.message)) {
+    return t('events.loadError');
+  }
+
+  return t('events.loadError');
+}
+
 // ─── Calendar View ───────────────────────────────────────────────────────────
 
 const DAY_NAMES_JA = ['月', '火', '水', '木', '金', '土', '日'];
@@ -314,16 +325,14 @@ export default function EventsPage() {
         setEvents(res.events);
         setError(null);
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
+        setError(new Error(getEventsLoadErrorMessage(err, t)));
       } finally {
         setLoading(false);
       }
     }
 
     fetchEvents();
-  }, [selectedStatus, selectedType]);
+  }, [selectedStatus, selectedType, t]);
 
   const emptyNode = error ? (
     <Box textAlign="center" color="inherit">
