@@ -40,7 +40,21 @@ export async function resolveProblemAssetPath(assetPath: string): Promise<string
 	const baseDir = await getProblemsBaseDir();
 	const candidate = nodePath.resolve(baseDir, assetPath);
 	const realBase = await realpath(baseDir);
-	const realCandidate = await realpath(candidate);
+	let realCandidate: string;
+
+	try {
+		realCandidate = await realpath(candidate);
+	} catch (error) {
+		if (
+			error &&
+			typeof error === "object" &&
+			"code" in error &&
+			error.code === "ENOENT"
+		) {
+			throw new Error(`Problem asset not found: ${assetPath}`);
+		}
+		throw error;
+	}
 
 	if (
 		realCandidate !== realBase &&
