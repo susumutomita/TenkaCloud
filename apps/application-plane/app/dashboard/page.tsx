@@ -51,13 +51,9 @@ export default function DashboardPage() {
   useEffect(() => {
     getMyEvents()
       .then((res) => setMyEvents(res.events))
-      .catch((err) =>
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        ),
-      )
+      .catch(() => setError(new Error(t('dashboard.loadError'))))
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString(

@@ -14,6 +14,7 @@ import {
   serverApiRequest,
 } from '@/lib/api/server';
 import type { AnalyticsData } from '@/lib/api/admin-analytics';
+import { authSkipEnabled } from '@/auth';
 
 /**
  * バックエンドイベントレスポンス型
@@ -34,7 +35,8 @@ interface BackendEventsResponse {
  */
 interface BackendDashboardStats {
   activeEvents: number;
-  totalParticipants: number;
+  totalParticipants?: number;
+  total?: number;
   totalTeams: number;
   upcomingEvents: number;
 }
@@ -151,7 +153,7 @@ export async function GET() {
     const analyticsData: AnalyticsData = {
       overview: {
         totalEvents: eventsData.total ?? events.length,
-        totalParticipants: statsData.totalParticipants ?? 0,
+        totalParticipants: statsData.totalParticipants ?? statsData.total ?? 0,
         avgScore,
         completionRate,
       },
@@ -167,6 +169,28 @@ export async function GET() {
 
     return successResponse(analyticsData);
   } catch (error) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      error instanceof Error &&
+      /^Unauthorized$/i.test(error.message);
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if (isAuthSkipUnauthorized || isNetworkError) {
+      console.warn('Analytics fallback to empty dataset:', error);
+      return successResponse({
+        overview: {
+          totalEvents: 0,
+          totalParticipants: 0,
+          avgScore: 0,
+          completionRate: 0,
+        },
+        eventTimeline: [],
+        scoreDistribution: [],
+        teamComparison: [],
+      } satisfies AnalyticsData);
+    }
+
     console.error('Failed to fetch analytics:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to fetch analytics',

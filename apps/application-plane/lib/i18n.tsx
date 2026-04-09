@@ -69,6 +69,7 @@ const messages = {
       scheduledStatus: '予定',
       browseEvents: 'イベントを探す →',
       noMyEvents: '参加中・登録済みのイベントはありません',
+      loadError: 'ダッシュボードの読み込みに失敗しました',
     },
     gameday: {
       title: 'Incident Drill',
@@ -341,6 +342,7 @@ const messages = {
       scheduledStatus: 'Scheduled',
       browseEvents: 'Browse events →',
       noMyEvents: 'No active or registered events',
+      loadError: 'Failed to load dashboard',
     },
     gameday: {
       title: 'Incident Drill',

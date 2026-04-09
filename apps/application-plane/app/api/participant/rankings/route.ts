@@ -5,7 +5,12 @@
  */
 
 import { NextRequest } from 'next/server';
-import { serverApiRequest, successResponse } from '@/lib/api/server';
+import { authSkipEnabled } from '@/auth';
+import {
+  badRequestResponse,
+  serverApiRequest,
+  successResponse,
+} from '@/lib/api/server';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,11 +27,35 @@ export async function GET(request: NextRequest) {
     );
     return successResponse(data);
   } catch (err) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      err instanceof Error &&
+      /^Unauthorized$/i.test(err.message);
+
     // 起動タイミングの競合によるネットワーク到達不能のみ空リストで返す
     // それ以外のエラー（認証エラー、サービス障害等）は伝播させる
     const isNetworkError =
       err instanceof TypeError && /fetch failed/i.test(String(err));
-    if (isNetworkError) return successResponse({ rankings: [], total: 0 });
-    throw err;
+
+    if (isAuthSkipUnauthorized) {
+      console.warn(
+        'Participant rankings backend rejected AUTH_SKIP token. Returning empty rankings.',
+        err,
+      );
+      return successResponse({ rankings: [], total: 0 });
+    }
+
+    if (isNetworkError) {
+      console.warn(
+        'Participant rankings backend unreachable. Returning empty rankings.',
+        err,
+      );
+      return successResponse({ rankings: [], total: 0 });
+    }
+
+    console.error('Failed to fetch participant rankings:', err);
+    return badRequestResponse(
+      err instanceof Error ? err.message : 'Failed to fetch rankings',
+    );
   }
 }
