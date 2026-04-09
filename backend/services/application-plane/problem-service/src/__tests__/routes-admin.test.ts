@@ -14,6 +14,7 @@ const {
 	mockMarketplaceRepository,
 	mockTemplateRepository,
 	mockAWSProvider,
+	mockLocalProvider,
 } = vi.hoisted(() => ({
 	mockEventRepository: {
 		findByTenant: vi.fn().mockResolvedValue([]),
@@ -92,6 +93,29 @@ const {
 			{ code: "ap-northeast-1", name: "Asia Pacific (Tokyo)", available: true },
 			{ code: "us-east-1", name: "US East (N. Virginia)", available: true },
 		]),
+	},
+	mockLocalProvider: {
+		validateCredentials: vi.fn().mockResolvedValue(true),
+		deployStack: vi.fn().mockResolvedValue({
+			success: true,
+			stackId: "local-test-stack",
+			stackName: "test-stack",
+			outputs: { FrontendUrl: "http://localhost:13080" },
+			startedAt: new Date(),
+			completedAt: new Date(),
+		}),
+		getStackStatus: vi.fn().mockResolvedValue({
+			stackName: "test-stack",
+			stackId: "local-test-stack",
+			status: "CREATE_COMPLETE",
+			outputs: { FrontendUrl: "http://localhost:13080" },
+		}),
+		deleteStack: vi.fn().mockResolvedValue({
+			success: true,
+			stackName: "test-stack",
+			startedAt: new Date(),
+			completedAt: new Date(),
+		}),
 	},
 }));
 
@@ -176,6 +200,10 @@ vi.mock("../jam/eventlog", () => ({
 
 vi.mock("../providers/aws", () => ({
 	getAWSProvider: () => mockAWSProvider,
+}));
+
+vi.mock("../providers/local", () => ({
+	getLocalProvider: () => mockLocalProvider,
 }));
 
 vi.mock("../repositories/competitor-account-repository", () => ({
@@ -1720,6 +1748,44 @@ describe("Admin Routes", () => {
 				expect(mockAWSProvider.deployStack).toHaveBeenCalled();
 			});
 
+			it("問題をlocalにデプロイできるべき", async () => {
+				const mockProblemWithLocal = {
+					...mockProblemWithAWS,
+					deployment: {
+						...mockProblemWithAWS.deployment,
+						providers: ["aws", "local"],
+						templates: {
+							...mockProblemWithAWS.deployment.templates,
+							local: {
+								type: "docker-compose",
+								path: "./gameday/security-battle-royale/local/docker-compose.yaml",
+							},
+						},
+						regions: {
+							...mockProblemWithAWS.deployment.regions,
+							local: ["local"],
+						},
+					},
+				};
+				mockProblemRepository.findById.mockResolvedValueOnce(
+					mockProblemWithLocal,
+				);
+
+				const res = await app.request("/api/admin/problems/problem-1/deploy", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						provider: "local",
+						region: "local",
+						stackName: "test-stack",
+					}),
+				});
+
+				expect(res.status).toBe(201);
+				expect(mockLocalProvider.deployStack).toHaveBeenCalled();
+				expect(mockAWSProvider.deployStack).not.toHaveBeenCalled();
+			});
+
 			it("問題が見つからない場合は 404 を返すべき", async () => {
 				mockProblemRepository.findById.mockResolvedValueOnce(null);
 
@@ -1857,11 +1923,24 @@ describe("Admin Routes", () => {
 			});
 
 			it("region クエリパラメータがない場合は 400 を返すべき", async () => {
+				mockProblemRepository.exists.mockResolvedValueOnce(true);
+
 				const res = await app.request(
 					"/api/admin/problems/problem-1/deployments/test-stack/status",
 				);
 
 				expect(res.status).toBe(400);
+			});
+
+			it("local デプロイメント状態を取得できるべき", async () => {
+				mockProblemRepository.exists.mockResolvedValueOnce(true);
+
+				const res = await app.request(
+					"/api/admin/problems/problem-1/deployments/test-stack/status?provider=local",
+				);
+
+				expect(res.status).toBe(200);
+				expect(mockLocalProvider.getStackStatus).toHaveBeenCalled();
 			});
 
 			it("問題が見つからない場合は 404 を返すべき", async () => {
@@ -1901,7 +1980,21 @@ describe("Admin Routes", () => {
 				expect(mockAWSProvider.deleteStack).toHaveBeenCalled();
 			});
 
+			it("local デプロイメントを削除できるべき", async () => {
+				mockProblemRepository.exists.mockResolvedValueOnce(true);
+
+				const res = await app.request(
+					"/api/admin/problems/problem-1/deployments/test-stack?provider=local",
+					{ method: "DELETE" },
+				);
+
+				expect(res.status).toBe(200);
+				expect(mockLocalProvider.deleteStack).toHaveBeenCalled();
+			});
+
 			it("region クエリパラメータがない場合は 400 を返すべき", async () => {
+				mockProblemRepository.exists.mockResolvedValueOnce(true);
+
 				const res = await app.request(
 					"/api/admin/problems/problem-1/deployments/test-stack",
 					{ method: "DELETE" },

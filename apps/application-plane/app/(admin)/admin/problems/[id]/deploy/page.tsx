@@ -19,22 +19,32 @@ import Select from '@cloudscape-design/components/select';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DeploymentStatus, StackEvent } from '@/lib/api/admin-types';
 import {
   deleteDeployment,
   deployProblem,
+  type DeployTarget,
   getDeployStatus,
 } from '@/lib/api/deployment';
 
-const REGIONS: SelectProps.Option[] = [
+const PROVIDERS: SelectProps.Option[] = [
+  { value: 'aws', label: 'AWS CloudFormation' },
+  { value: 'local', label: 'Local Docker Compose' },
+];
+
+const AWS_REGIONS: SelectProps.Option[] = [
   { value: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
   { value: 'us-east-1', label: 'US East (N. Virginia)' },
   { value: 'us-west-2', label: 'US West (Oregon)' },
   { value: 'eu-west-1', label: 'Europe (Ireland)' },
   { value: 'eu-central-1', label: 'Europe (Frankfurt)' },
   { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
+];
+
+const LOCAL_REGIONS: SelectProps.Option[] = [
+  { value: 'local', label: 'Local Docker Compose' },
 ];
 
 const AUTO_REFRESH_INTERVAL = 5000;
@@ -68,19 +78,26 @@ function isInProgress(status: string): boolean {
 
 export default function AdminProblemDeployPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const problemId = params.id as string;
 
+  const [selectedProvider, setSelectedProvider] =
+    useState<SelectProps.Option | null>(PROVIDERS[0]);
   const [selectedRegion, setSelectedRegion] =
-    useState<SelectProps.Option | null>(REGIONS[0]);
+    useState<SelectProps.Option | null>(AWS_REGIONS[0]);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState('');
   const [deploymentStatus, setDeploymentStatus] =
     useState<DeploymentStatus | null>(null);
+  const [deployTarget, setDeployTarget] = useState<DeployTarget | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const availableRegions =
+    selectedProvider?.value === 'local' ? LOCAL_REGIONS : AWS_REGIONS;
 
   const stopAutoRefresh = useCallback(() => {
     if (timerRef.current) {
@@ -89,20 +106,28 @@ export default function AdminProblemDeployPage() {
     }
   }, []);
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      setStatusLoading(true);
-      const data = await getDeployStatus(problemId);
-      setDeploymentStatus(data);
-      if (!isInProgress(data.status)) {
-        stopAutoRefresh();
+  const fetchStatus = useCallback(
+    async (targetOverride?: DeployTarget | null) => {
+      const activeTarget = targetOverride ?? deployTarget;
+      if (!activeTarget) {
+        return;
       }
-    } catch {
-      // ステータス取得失敗は無視（まだデプロイされていない場合など）
-    } finally {
-      setStatusLoading(false);
-    }
-  }, [problemId, stopAutoRefresh]);
+
+      try {
+        setStatusLoading(true);
+        const data = await getDeployStatus(problemId, activeTarget);
+        setDeploymentStatus(data);
+        if (!isInProgress(data.status)) {
+          stopAutoRefresh();
+        }
+      } catch {
+        // ステータス取得失敗は無視（まだデプロイされていない場合など）
+      } finally {
+        setStatusLoading(false);
+      }
+    },
+    [deployTarget, problemId, stopAutoRefresh],
+  );
 
   const startAutoRefresh = useCallback(() => {
     stopAutoRefresh();
@@ -112,23 +137,86 @@ export default function AdminProblemDeployPage() {
   }, [fetchStatus, stopAutoRefresh]);
 
   useEffect(() => {
-    fetchStatus();
+    const provider = searchParams.get('provider');
+    const region = searchParams.get('region');
+    const stackName = searchParams.get('stackName');
+
+    if (provider === 'aws' || provider === 'local') {
+      setSelectedProvider(
+        PROVIDERS.find((option) => option.value === provider) ?? PROVIDERS[0],
+      );
+      const regionOptions = provider === 'local' ? LOCAL_REGIONS : AWS_REGIONS;
+      if (region) {
+        setSelectedRegion(
+          regionOptions.find((option) => option.value === region) ??
+            regionOptions[0] ??
+            null,
+        );
+      }
+    }
+
+    if (stackName && region && (provider === 'aws' || provider === 'local')) {
+      setDeployTarget({ stackName, region, provider });
+    } else {
+      setDeployTarget(null);
+      setDeploymentStatus(null);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!selectedRegion?.value) {
+      setSelectedRegion(availableRegions[0] ?? null);
+      return;
+    }
+
+    if (
+      !availableRegions.some((region) => region.value === selectedRegion.value)
+    ) {
+      setSelectedRegion(availableRegions[0] ?? null);
+    }
+  }, [availableRegions, selectedRegion]);
+
+  useEffect(() => {
+    if (!deployTarget) {
+      return () => stopAutoRefresh();
+    }
+
+    fetchStatus(deployTarget);
     return () => stopAutoRefresh();
-  }, [fetchStatus, stopAutoRefresh]);
+  }, [deployTarget, fetchStatus, stopAutoRefresh]);
 
   const handleDeploy = async () => {
-    if (!selectedRegion?.value) return;
+    if (!selectedProvider?.value || !selectedRegion?.value) return;
 
     setDeploying(true);
     setDeployError('');
     try {
-      const result = await deployProblem(problemId, selectedRegion.value);
+      const provider = selectedProvider.value as 'aws' | 'local';
+      const result = await deployProblem(
+        problemId,
+        provider,
+        selectedRegion.value,
+      );
+      const nextTarget = {
+        stackName: result.stackName,
+        provider,
+        region: selectedRegion.value,
+      } satisfies DeployTarget;
+
+      setDeployTarget(nextTarget);
       setDeploymentStatus({
         stackName: result.stackName,
         stackId: result.stackId,
         status: 'CREATE_IN_PROGRESS',
         events: [],
       });
+      router.replace(
+        `/admin/problems/${problemId}/deploy?stackName=${encodeURIComponent(
+          result.stackName,
+        )}&provider=${encodeURIComponent(provider)}&region=${encodeURIComponent(
+          selectedRegion.value,
+        )}`,
+      );
       startAutoRefresh();
     } catch (err) {
       setDeployError(
@@ -140,15 +228,17 @@ export default function AdminProblemDeployPage() {
   };
 
   const handleDelete = async () => {
+    if (!deployTarget) return;
+
     setDeleting(true);
     setDeleteError('');
     try {
-      await deleteDeployment(problemId);
-      setDeploymentStatus((prev) =>
-        prev ? { ...prev, status: 'DELETE_IN_PROGRESS' } : null,
-      );
+      await deleteDeployment(problemId, deployTarget);
+      stopAutoRefresh();
+      setDeploymentStatus(null);
+      setDeployTarget(null);
       setDeleteModalVisible(false);
-      startAutoRefresh();
+      router.replace(`/admin/problems/${problemId}/deploy`);
     } catch (err) {
       setDeleteError(
         err instanceof Error ? err.message : 'スタックの削除に失敗しました',
@@ -164,7 +254,7 @@ export default function AdminProblemDeployPage() {
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1">AWS CloudFormation デプロイ</Header>
+      <Header variant="h1">問題デプロイ</Header>
 
       {/* デプロイ設定 */}
       <Container header={<Header variant="h2">デプロイ設定</Header>}>
@@ -180,13 +270,25 @@ export default function AdminProblemDeployPage() {
           )}
           <SpaceBetween size="m">
             <Box>
+              <Box variant="awsui-key-label">プロバイダー</Box>
+              <Select
+                selectedOption={selectedProvider}
+                onChange={({ detail }) =>
+                  setSelectedProvider(detail.selectedOption)
+                }
+                options={PROVIDERS}
+                placeholder="プロバイダーを選択"
+                disabled={deploying}
+              />
+            </Box>
+            <Box>
               <Box variant="awsui-key-label">リージョン</Box>
               <Select
                 selectedOption={selectedRegion}
                 onChange={({ detail }) =>
                   setSelectedRegion(detail.selectedOption)
                 }
-                options={REGIONS}
+                options={availableRegions}
                 placeholder="リージョンを選択"
                 disabled={deploying}
                 data-testid="region-select"
@@ -214,7 +316,9 @@ export default function AdminProblemDeployPage() {
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button
                     iconName="refresh"
-                    onClick={fetchStatus}
+                    onClick={() => {
+                      void fetchStatus();
+                    }}
                     loading={statusLoading}
                   >
                     更新
@@ -237,6 +341,10 @@ export default function AdminProblemDeployPage() {
               <Box>
                 <Box variant="awsui-key-label">スタック名</Box>
                 <Box>{deploymentStatus.stackName}</Box>
+              </Box>
+              <Box>
+                <Box variant="awsui-key-label">プロバイダー</Box>
+                <Box>{deployTarget?.provider ?? '-'}</Box>
               </Box>
               <Box>
                 <Box variant="awsui-key-label">ステータス</Box>

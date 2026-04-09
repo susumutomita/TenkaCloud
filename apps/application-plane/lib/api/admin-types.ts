@@ -426,6 +426,7 @@ export interface AdminProblemListResponse {
  * デプロイリクエスト型
  */
 export interface DeployProblemRequest {
+  provider?: 'aws' | 'local';
   region: string;
   stackName?: string;
   parameters?: Record<string, string>;
@@ -445,6 +446,8 @@ export interface DeployProblemRequest {
  */
 export interface DeployProblemResponse {
   message: string;
+  provider?: 'aws' | 'local';
+  region?: string;
   stackName: string;
   stackId?: string;
   outputs?: Record<string, string>;

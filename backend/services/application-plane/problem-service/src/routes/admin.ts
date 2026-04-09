@@ -54,6 +54,7 @@ import {
 	type ExternalFormat,
 } from "../problems/converter";
 import { getAWSProvider } from "../providers/aws";
+import { getLocalProvider } from "../providers/local";
 import type {
 	ProblemCategory,
 	DifficultyLevel,
@@ -2633,6 +2634,14 @@ function getAWSCredentialsFromEnv(
 	};
 }
 
+function getLocalCredentials(region?: string): CloudCredentials {
+	return {
+		provider: "local",
+		accountId: "local-dev",
+		region: region || "local",
+	};
+}
+
 // デプロイメント操作の共通バリデーション結果
 type DeploymentValidation =
 	| { valid: true; credentials: CloudCredentials }
@@ -2641,19 +2650,24 @@ type DeploymentValidation =
 // デプロイメント操作の共通バリデーション
 async function validateDeploymentRequest(
 	problemId: string,
+	provider: "aws" | "local",
 	region: string | undefined,
 ): Promise<DeploymentValidation> {
+	const exists = await problemRepository.exists(problemId);
+	if (!exists) {
+		return { valid: false, error: "Problem not found", status: 404 };
+	}
+
+	if (provider === "local") {
+		return { valid: true, credentials: getLocalCredentials(region) };
+	}
+
 	if (!region) {
 		return {
 			valid: false,
 			error: "region query parameter is required",
 			status: 400,
 		};
-	}
-
-	const exists = await problemRepository.exists(problemId);
-	if (!exists) {
-		return { valid: false, error: "Problem not found", status: 404 };
 	}
 
 	const credentials = getAWSCredentialsFromEnv(region);
@@ -2670,6 +2684,7 @@ async function validateDeploymentRequest(
 
 // デプロイリクエストスキーマ
 const deployProblemSchema = z.object({
+	provider: z.enum(["aws", "local"]).default("aws"),
 	region: z.string().min(1).describe("デプロイ先リージョン"),
 	stackName: z
 		.string()
@@ -2696,12 +2711,12 @@ const deployProblemSchema = z.object({
 		.describe("AWS クレデンシャル（省略時は環境変数を使用）"),
 });
 
-// 問題をAWSにデプロイ
+// 問題をクラウド環境にデプロイ
 adminRouter.post(
 	"/problems/:problemId/deploy",
 	describeRoute({
 		tags: ["Admin / Problems"],
-		summary: "問題をAWSにデプロイ",
+		summary: "問題をクラウド環境にデプロイ",
 		requestBody: {
 			required: true,
 			content: {
@@ -2730,22 +2745,22 @@ adminRouter.post(
 			return c.json({ error: "Problem not found" }, 404);
 		}
 
-		// AWS テンプレートの確認
 		if (
-			!problem.deployment.providers.includes("aws") ||
-			!problem.deployment.templates.aws
+			!problem.deployment.providers.includes(input.provider) ||
+			!problem.deployment.templates[input.provider]
 		) {
 			return c.json(
-				{ error: "This problem does not have an AWS deployment template" },
+				{
+					error: `This problem does not have a ${input.provider.toUpperCase()} deployment template`,
+				},
 				400,
 			);
 		}
 
-		// クレデンシャルの取得
-		const credentials = getAWSCredentialsFromEnv(
-			input.region,
-			input.credentials,
-		);
+		const credentials =
+			input.provider === "local"
+				? getLocalCredentials(input.region)
+				: getAWSCredentialsFromEnv(input.region, input.credentials);
 		if (!credentials) {
 			return c.json(
 				{
@@ -2761,16 +2776,25 @@ adminRouter.post(
 			input.stackName ||
 			`tenkacloud-${problem.id.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
 
-		const awsProvider = getAWSProvider();
+		const provider =
+			input.provider === "local" ? getLocalProvider() : getAWSProvider();
 
 		// クレデンシャル検証
-		const isValid = await awsProvider.validateCredentials(credentials);
+		const isValid = await provider.validateCredentials(credentials);
 		if (!isValid) {
-			return c.json({ error: "Invalid AWS credentials" }, 401);
+			return c.json(
+				{
+					error:
+						input.provider === "local"
+							? "Invalid local deployment configuration"
+							: "Invalid AWS credentials",
+				},
+				401,
+			);
 		}
 
 		// デプロイ実行
-		const result = await awsProvider.deployStack(problem, credentials, {
+		const result = await provider.deployStack(problem, credentials, {
 			stackName,
 			region: input.region,
 			parameters: input.parameters,
@@ -2793,6 +2817,8 @@ adminRouter.post(
 					message: input.dryRun
 						? "Template validation successful"
 						: "Deployment completed successfully",
+					provider: input.provider,
+					region: input.region,
 					stackName: result.stackName,
 					stackId: result.stackId,
 					outputs: result.outputs,
@@ -2831,14 +2857,20 @@ adminRouter.get(
 	async (c) => {
 		const { problemId, stackName } = c.req.param();
 		const region = c.req.query("region");
+		const provider = c.req.query("provider") === "local" ? "local" : "aws";
 
-		const validation = await validateDeploymentRequest(problemId, region);
+		const validation = await validateDeploymentRequest(
+			problemId,
+			provider,
+			region,
+		);
 		if (!validation.valid) {
 			return c.json({ error: validation.error }, validation.status);
 		}
 
-		const awsProvider = getAWSProvider();
-		const status = await awsProvider.getStackStatus(
+		const cloudProvider =
+			provider === "local" ? getLocalProvider() : getAWSProvider();
+		const status = await cloudProvider.getStackStatus(
 			stackName,
 			validation.credentials,
 		);
@@ -2871,49 +2903,54 @@ adminRouter.delete(
 		},
 	}),
 	async (c) => {
-	const { problemId, stackName } = c.req.param();
-	const region = c.req.query("region");
+		const { problemId, stackName } = c.req.param();
+		const region = c.req.query("region");
+		const provider = c.req.query("provider") === "local" ? "local" : "aws";
 
-	const validation = await validateDeploymentRequest(problemId, region);
-	if (!validation.valid) {
-		return c.json({ error: validation.error }, validation.status);
-	}
+		const validation = await validateDeploymentRequest(
+			problemId,
+			provider,
+			region,
+		);
+		if (!validation.valid) {
+			return c.json({ error: validation.error }, validation.status);
+		}
 
-	const awsProvider = getAWSProvider();
+		const cloudProvider =
+			provider === "local" ? getLocalProvider() : getAWSProvider();
 
-	// スタックの存在確認
-	const status = await awsProvider.getStackStatus(
-		stackName,
-		validation.credentials,
-	);
-	if (!status) {
-		return c.json({ error: "Stack not found" }, 404);
-	}
-
-	// 削除実行
-	const result = await awsProvider.deleteStack(
-		stackName,
-		validation.credentials,
-	);
-
-	if (result.success) {
-		return c.json({
-			message: "Stack deletion completed",
+		const status = await cloudProvider.getStackStatus(
 			stackName,
-			startedAt: result.startedAt,
-			completedAt: result.completedAt,
-		});
-	}
+			validation.credentials,
+		);
+		if (!status) {
+			return c.json({ error: "Stack not found" }, 404);
+		}
 
-	return c.json(
-		{
-			error: "Stack deletion failed",
-			details: result.error,
+		const result = await cloudProvider.deleteStack(
 			stackName,
-		},
-		500,
-	);
-});
+			validation.credentials,
+		);
+
+		if (result.success) {
+			return c.json({
+				message: "Stack deletion completed",
+				stackName,
+				startedAt: result.startedAt,
+				completedAt: result.completedAt,
+			});
+		}
+
+		return c.json(
+			{
+				error: "Stack deletion failed",
+				details: result.error,
+				stackName,
+			},
+			500,
+		);
+	},
+);
 
 // 利用可能なリージョン一覧
 adminRouter.get(
