@@ -20,6 +20,8 @@ console.log(`
 ║    - Player API:      http://localhost:${port}/api/player       ║
 ║    - Participant API: http://localhost:${port}/api/participant  ║
 ║    - Health:          http://localhost:${port}/health           ║
+║    - API Docs (UI):   http://localhost:${port}/docs             ║
+║    - OpenAPI JSON:    http://localhost:${port}/openapi.json     ║
 ║                                                              ║
 ║  Environment:                                                ║
 ║    - NODE_ENV: ${process.env.NODE_ENV || "development"}                             ║

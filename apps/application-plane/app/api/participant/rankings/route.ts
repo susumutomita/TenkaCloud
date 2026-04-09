@@ -16,8 +16,12 @@ export async function GET(request: NextRequest) {
   if (offset) params.set('offset', offset);
 
   const qs = params.toString();
-  const data = await serverApiRequest(
-    `/participant/rankings${qs ? `?${qs}` : ''}`,
-  );
-  return successResponse(data);
+  try {
+    const data = await serverApiRequest(
+      `/participant/rankings${qs ? `?${qs}` : ''}`,
+    );
+    return successResponse(data);
+  } catch {
+    return successResponse({ rankings: [], total: 0 });
+  }
 }
