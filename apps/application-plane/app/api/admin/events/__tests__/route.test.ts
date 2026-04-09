@@ -5,6 +5,11 @@ import type { Session } from 'next-auth';
 // Mock server utilities
 const mockGetAdminSession = vi.fn<() => Promise<Session | null>>();
 const mockServerApiRequest = vi.fn();
+const mockAuthSkipEnabled = true;
+
+vi.mock('@/auth', () => ({
+  authSkipEnabled: mockAuthSkipEnabled,
+}));
 
 vi.mock('@/lib/api/server', () => ({
   getAdminSession: () => mockGetAdminSession(),
@@ -129,6 +134,54 @@ describe('Admin Events API', () => {
       expect(response.status).toBe(400);
       const data = await response.json();
       expect(data.error).toBe('API Error');
+    });
+
+    it('AUTH_SKIP の Unauthorized は空一覧にフォールバックすべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
+
+      const { GET } = await import('../route');
+      const request = new NextRequest(
+        'http://localhost/api/admin/events?page=3&pageSize=25',
+      );
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({
+        events: [],
+        total: 0,
+        page: 3,
+        pageSize: 25,
+      });
+    });
+
+    it('network error は空一覧にフォールバックすべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { GET } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events');
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({
+        events: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+      });
     });
   });
 
