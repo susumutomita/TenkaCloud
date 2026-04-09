@@ -178,6 +178,33 @@ vi.mock("../providers/aws", () => ({
 	getAWSProvider: () => mockAWSProvider,
 }));
 
+vi.mock("../repositories/competitor-account-repository", () => ({
+	CompetitorAccountRepository: vi.fn().mockImplementation(() => ({
+		create: vi.fn().mockResolvedValue({ id: "account-1", name: "team01" }),
+		findByEventId: vi.fn().mockResolvedValue([]),
+		findById: vi.fn().mockResolvedValue(null),
+		updateStatus: vi.fn().mockResolvedValue(undefined),
+		delete: vi.fn().mockResolvedValue(undefined),
+	})),
+}));
+
+vi.mock("../repositories/gameday-deployment-job-repository", () => ({
+	GameDayDeploymentJobRepository: vi.fn().mockImplementation(() => ({
+		create: vi.fn().mockResolvedValue({ id: "job-1", status: "pending" }),
+		findByEventAndProblem: vi.fn().mockResolvedValue([]),
+		findById: vi.fn().mockResolvedValue(null),
+		findActive: vi.fn().mockResolvedValue([]),
+		updateStatus: vi.fn().mockResolvedValue(undefined),
+	})),
+}));
+
+vi.mock("../problems/gameday-deployer", () => ({
+	deployProblemToTeams: vi.fn().mockResolvedValue([]),
+	retryJob: vi.fn().mockResolvedValue(null),
+	subscribeToJob: vi.fn().mockReturnValue(() => {}),
+	reconcile: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { authenticateRequest, hasRole } from "../auth";
 import { adminRouter } from "../routes/admin";
 import {

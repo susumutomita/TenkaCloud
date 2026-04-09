@@ -486,15 +486,25 @@ export class AWSCloudProvider implements ICloudProvider {
 	}
 
 	/**
-	 * テンプレートファイルをファイルシステムから読み込む
+	 * テンプレートを読み込む
 	 *
-	 * パストラバーサル防止: realpath で正規化後、ベースディレクトリ内か検証する。
-	 * シンボリックリンク攻撃にも対応。
+	 * - http:// / https:// で始まる場合は HTTP フェッチ
+	 * - それ以外はファイルシステム読み込み（パストラバーサル防止付き）
 	 *
-	 * @param templatePath - ベースディレクトリからの相対パス
-	 * @throws {Error} ベースディレクトリ外のファイルを参照した場合
+	 * @param templatePath - ファイルパスまたは URL
+	 * @throws {Error} ベースディレクトリ外のファイルを参照した場合、または HTTP エラー
 	 */
 	private async loadTemplate(templatePath: string): Promise<string> {
+		if (templatePath.startsWith("http://") || templatePath.startsWith("https://")) {
+			const res = await fetch(templatePath);
+			if (!res.ok) {
+				throw new Error(
+					`テンプレートの取得に失敗しました: ${res.status} ${res.statusText} (${templatePath})`,
+				);
+			}
+			return res.text();
+		}
+
 		const fs = await import("node:fs/promises");
 		const nodePath = await import("node:path");
 		const baseDir = process.env.PROBLEMS_DIR

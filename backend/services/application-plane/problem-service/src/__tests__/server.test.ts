@@ -19,6 +19,11 @@ vi.mock("../routes", () => ({
 	},
 }));
 
+// gameday-deployer をモック（DynamoDB 接続を回避）
+vi.mock("../problems/gameday-deployer", () => ({
+	reconcile: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("Server", () => {
 	const originalEnv = process.env;
 	const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
