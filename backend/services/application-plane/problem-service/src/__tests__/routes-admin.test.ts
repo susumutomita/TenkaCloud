@@ -179,23 +179,23 @@ vi.mock("../providers/aws", () => ({
 }));
 
 vi.mock("../repositories/competitor-account-repository", () => ({
-	CompetitorAccountRepository: vi.fn().mockImplementation(() => ({
-		create: vi.fn().mockResolvedValue({ id: "account-1", name: "team01" }),
-		findByEventId: vi.fn().mockResolvedValue([]),
-		findById: vi.fn().mockResolvedValue(null),
-		updateStatus: vi.fn().mockResolvedValue(undefined),
-		delete: vi.fn().mockResolvedValue(undefined),
-	})),
+	CompetitorAccountRepository: class {
+		create = vi.fn().mockResolvedValue({ id: "account-1", name: "team01" });
+		findByEventId = vi.fn().mockResolvedValue([]);
+		findById = vi.fn().mockResolvedValue(null);
+		updateStatus = vi.fn().mockResolvedValue(undefined);
+		delete = vi.fn().mockResolvedValue(undefined);
+	},
 }));
 
 vi.mock("../repositories/gameday-deployment-job-repository", () => ({
-	GameDayDeploymentJobRepository: vi.fn().mockImplementation(() => ({
-		create: vi.fn().mockResolvedValue({ id: "job-1", status: "pending" }),
-		findByEventAndProblem: vi.fn().mockResolvedValue([]),
-		findById: vi.fn().mockResolvedValue(null),
-		findActive: vi.fn().mockResolvedValue([]),
-		updateStatus: vi.fn().mockResolvedValue(undefined),
-	})),
+	GameDayDeploymentJobRepository: class {
+		create = vi.fn().mockResolvedValue({ id: "job-1", status: "pending" });
+		findByEventAndProblem = vi.fn().mockResolvedValue([]);
+		findById = vi.fn().mockResolvedValue(null);
+		findActive = vi.fn().mockResolvedValue([]);
+		updateStatus = vi.fn().mockResolvedValue(undefined);
+	},
 }));
 
 vi.mock("../problems/gameday-deployer", () => ({

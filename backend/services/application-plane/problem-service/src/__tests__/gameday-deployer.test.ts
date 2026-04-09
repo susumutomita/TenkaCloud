@@ -9,39 +9,50 @@ import type { Problem } from "../types";
 // モック
 // ============================================================
 
-const mockCreate = vi.fn();
-const mockFindByEventId = vi.fn();
-const mockFindActive = vi.fn();
-const mockUpdateStatus = vi.fn();
-const mockFindById = vi.fn();
+const mocks = vi.hoisted(() => ({
+	mockCreate: vi.fn(),
+	mockFindByEventId: vi.fn(),
+	mockFindActive: vi.fn(),
+	mockUpdateStatus: vi.fn(),
+	mockFindById: vi.fn(),
+	mockValidateCredentials: vi.fn(),
+	mockDeployStack: vi.fn(),
+}));
+
+const {
+	mockCreate,
+	mockFindByEventId,
+	mockFindActive,
+	mockUpdateStatus,
+	mockFindById,
+	mockValidateCredentials,
+	mockDeployStack,
+} = mocks;
 
 vi.mock("../repositories/competitor-account-repository", () => ({
-	CompetitorAccountRepository: vi.fn().mockImplementation(() => ({
-		create: mockCreate,
-		findByEventId: mockFindByEventId,
-		findById: vi.fn(),
-		updateStatus: vi.fn(),
-		delete: vi.fn(),
-	})),
+	CompetitorAccountRepository: class {
+		create = mocks.mockCreate;
+		findByEventId = mocks.mockFindByEventId;
+		findById = vi.fn();
+		updateStatus = vi.fn();
+		delete = vi.fn();
+	},
 }));
 
 vi.mock("../repositories/gameday-deployment-job-repository", () => ({
-	GameDayDeploymentJobRepository: vi.fn().mockImplementation(() => ({
-		create: mockCreate,
-		findByEventAndProblem: vi.fn(),
-		findById: mockFindById,
-		findActive: mockFindActive,
-		updateStatus: mockUpdateStatus,
-	})),
+	GameDayDeploymentJobRepository: class {
+		create = mocks.mockCreate;
+		findByEventAndProblem = vi.fn();
+		findById = mocks.mockFindById;
+		findActive = mocks.mockFindActive;
+		updateStatus = mocks.mockUpdateStatus;
+	},
 }));
-
-const mockValidateCredentials = vi.fn();
-const mockDeployStack = vi.fn();
 
 vi.mock("../providers/aws", () => ({
 	getAWSProvider: () => ({
-		validateCredentials: mockValidateCredentials,
-		deployStack: mockDeployStack,
+		validateCredentials: mocks.mockValidateCredentials,
+		deployStack: mocks.mockDeployStack,
 	}),
 }));
 
