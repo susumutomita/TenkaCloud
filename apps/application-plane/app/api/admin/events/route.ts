@@ -17,21 +17,7 @@ import {
   serverApiRequest,
 } from '@/lib/api/server';
 import type { ParticipantEvent, EventStatus } from '@/lib/api/types';
-
-interface DevEventRecord extends ParticipantEvent {
-  slug: string;
-  createdAt: string;
-}
-
-function getDevEventStore(): DevEventRecord[] {
-  const globalStore = globalThis as typeof globalThis & {
-    __TENKACLOUD_DEV_EVENTS__?: DevEventRecord[];
-  };
-  if (!globalStore.__TENKACLOUD_DEV_EVENTS__) {
-    globalStore.__TENKACLOUD_DEV_EVENTS__ = [];
-  }
-  return globalStore.__TENKACLOUD_DEV_EVENTS__;
-}
+import { createDevEvent, listDevEvents } from './dev-store';
 
 /**
  * Admin イベント一覧レスポンス型
@@ -50,55 +36,6 @@ function emptyEventList(page: number, pageSize: number): AdminEventListResponse 
     page,
     pageSize,
   };
-}
-
-function buildDevEventList(
-  page: number,
-  pageSize: number,
-  status?: EventStatus | null,
-): AdminEventListResponse {
-  const store = getDevEventStore();
-  const filtered = status
-    ? store.filter((event) => event.status === status)
-    : store;
-  const offset = Math.max(page - 1, 0) * pageSize;
-  return {
-    events: filtered.slice(offset, offset + pageSize),
-    total: filtered.length,
-    page,
-    pageSize,
-  };
-}
-
-function createDevEvent(body: CreateEventRequest): DevEventRecord {
-  const now = new Date().toISOString();
-  const event: DevEventRecord = {
-    id: `dev-event-${Date.now()}`,
-    slug: body.slug?.trim() || `event-${Date.now()}`,
-    name: body.name,
-    type: (body.type as ParticipantEvent['type']) || 'gameday',
-    status: body.status || 'draft',
-    startTime: body.startTime || new Date().toISOString(),
-    endTime:
-      body.endTime ||
-      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    timezone: body.timezone || 'Asia/Tokyo',
-    participantType:
-      (body.participantType as ParticipantEvent['participantType']) ||
-      'individual',
-    cloudProvider:
-      (body.cloudProvider as ParticipantEvent['cloudProvider']) || 'aws',
-    regions: body.regions?.length ? body.regions : ['ap-northeast-1'],
-    scoringType:
-      (body.scoringType as ParticipantEvent['scoringType']) || 'realtime',
-    leaderboardVisible: body.leaderboardVisible ?? true,
-    problemCount: 0,
-    participantCount: 0,
-    isRegistered: false,
-    createdAt: now,
-  };
-  getDevEventStore().unshift(event);
-  return event;
 }
 
 /**
@@ -167,7 +104,7 @@ export async function GET(request: NextRequest) {
 
     if (isAuthSkipUnauthorized || isNetworkError) {
       console.warn('Admin events fallback to empty dataset:', error);
-      return successResponse(buildDevEventList(page, pageSize, status));
+      return successResponse(listDevEvents(page, pageSize, status));
     }
 
     console.error('Failed to fetch events:', error);

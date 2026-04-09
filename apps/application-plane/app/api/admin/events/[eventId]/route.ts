@@ -8,6 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { authSkipEnabled } from '@/auth';
 import {
   getAdminSession,
   unauthorizedResponse,
@@ -17,6 +18,11 @@ import {
   serverApiRequest,
 } from '@/lib/api/server';
 import type { EventDetails, EventStatus } from '@/lib/api/types';
+import {
+  deleteDevEvent,
+  findDevEvent,
+  updateDevEvent,
+} from '../dev-store';
 
 /**
  * イベント更新リクエスト型
@@ -31,6 +37,16 @@ interface UpdateEventRequest {
   endTime?: string;
   status?: EventStatus;
   imageUrl?: string;
+}
+
+function isLocalDevFallbackError(error: unknown): boolean {
+  const isAuthSkipUnauthorized =
+    authSkipEnabled &&
+    error instanceof Error &&
+    /^Unauthorized$/i.test(error.message);
+  const isNetworkError =
+    error instanceof TypeError && /fetch failed/i.test(String(error));
+  return isAuthSkipUnauthorized || isNetworkError;
 }
 
 /**
@@ -58,6 +74,14 @@ export async function GET(
     );
     return successResponse(data);
   } catch (error) {
+    if (isLocalDevFallbackError(error)) {
+      console.warn('Admin event detail fallback to local dev store:', error);
+      const event = findDevEvent(eventId);
+      if (event) {
+        return successResponse(event);
+      }
+    }
+
     console.error('Failed to fetch event:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to fetch event',
@@ -83,10 +107,9 @@ export async function PUT(
   }
 
   const { eventId } = await params;
+  const body = (await request.json()) as UpdateEventRequest;
 
   try {
-    const body = (await request.json()) as UpdateEventRequest;
-
     const data = await serverApiRequest<EventDetails>(
       `/admin/events/${eventId}`,
       {
@@ -97,11 +120,26 @@ export async function PUT(
 
     return successResponse(data);
   } catch (error) {
+    if (isLocalDevFallbackError(error)) {
+      console.warn('Admin event update fallback to local dev store:', error);
+      const event = updateDevEvent(eventId, body);
+      if (event) {
+        return successResponse(event);
+      }
+    }
+
     console.error('Failed to update event:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to update event',
     );
   }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ eventId: string }> },
+) {
+  return PUT(request, context);
 }
 
 /**
@@ -130,6 +168,11 @@ export async function DELETE(
 
     return successResponse({ success: true, message: 'Event deleted' });
   } catch (error) {
+    if (isLocalDevFallbackError(error) && deleteDevEvent(eventId)) {
+      console.warn('Admin event delete fallback to local dev store:', error);
+      return successResponse({ success: true, message: 'Event deleted' });
+    }
+
     console.error('Failed to delete event:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to delete event',
