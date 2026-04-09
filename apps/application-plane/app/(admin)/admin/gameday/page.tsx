@@ -136,7 +136,10 @@ export default function AdminGamedayPage() {
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1" description="GameDayイベントを選択してゲームを管理します">
+      <Header
+        variant="h1"
+        description="GameDayイベントを選択してゲームを管理します"
+      >
         GameDay 管理
       </Header>
 
@@ -154,10 +157,7 @@ export default function AdminGamedayPage() {
           </Box>
         ) : events.length > 0 ? (
           <Cards
-            cardsPerRow={[
-              { cards: 1 },
-              { minWidth: 520, cards: 2 },
-            ]}
+            cardsPerRow={[{ cards: 1 }, { minWidth: 520, cards: 2 }]}
             items={events}
             cardDefinition={{
               header: (event) => (
@@ -186,7 +186,8 @@ export default function AdminGamedayPage() {
                 {
                   id: 'status',
                   header: 'ゲーム状態',
-                  content: (event) => getGameStateSummary(gameStates[event.id]).indicator,
+                  content: (event) =>
+                    getGameStateSummary(gameStates[event.id]).indicator,
                 },
                 {
                   id: 'details',
@@ -226,7 +227,10 @@ export default function AdminGamedayPage() {
 
       <Container
         header={
-          <Header variant="h2" description="イベント ID を直接指定して GameDay 状態を確認します">
+          <Header
+            variant="h2"
+            description="イベント ID を直接指定して GameDay 状態を確認します"
+          >
             直接検索
           </Header>
         }
@@ -257,7 +261,9 @@ export default function AdminGamedayPage() {
             </Button>
           </SpaceBetween>
           {lookupError && (
-            <StatusIndicator type="error">{lookupError.message}</StatusIndicator>
+            <StatusIndicator type="error">
+              {lookupError.message}
+            </StatusIndicator>
           )}
         </SpaceBetween>
       </Container>

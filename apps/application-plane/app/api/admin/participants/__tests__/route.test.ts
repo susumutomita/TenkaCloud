@@ -53,7 +53,9 @@ describe('Admin Participants API', () => {
       mockServerApiRequest.mockResolvedValue(mockParticipants);
 
       const { GET } = await import('../route');
-      const request = new NextRequest('http://localhost/api/admin/participants');
+      const request = new NextRequest(
+        'http://localhost/api/admin/participants',
+      );
       const response = await GET(request);
 
       expect(response.status).toBe(200);
@@ -94,7 +96,9 @@ describe('Admin Participants API', () => {
       mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
 
       const { GET } = await import('../route');
-      const request = new NextRequest('http://localhost/api/admin/participants');
+      const request = new NextRequest(
+        'http://localhost/api/admin/participants',
+      );
       const response = await GET(request);
 
       expect(response.status).toBe(200);

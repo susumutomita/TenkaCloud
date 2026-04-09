@@ -29,7 +29,10 @@ interface AdminEventListResponse {
   pageSize: number;
 }
 
-function emptyEventList(page: number, pageSize: number): AdminEventListResponse {
+function emptyEventList(
+  page: number,
+  pageSize: number,
+): AdminEventListResponse {
   return {
     events: [],
     total: 0,

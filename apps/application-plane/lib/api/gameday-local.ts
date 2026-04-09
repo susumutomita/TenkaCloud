@@ -151,7 +151,8 @@ export function startLocalGame(eventId: string, durationMinutes?: number) {
     ...getLocalGameState(eventId),
     isRunning: true,
     startedAt: new Date().toISOString(),
-    durationMinutes: durationMinutes || getLocalGameState(eventId).durationMinutes,
+    durationMinutes:
+      durationMinutes || getLocalGameState(eventId).durationMinutes,
   });
 }
 
@@ -183,8 +184,12 @@ export function executeLocalFaultInjection(
   teamId: string,
   attackSlug: string,
 ) {
-  const defender = getLocalTeams(eventId).find((team) => team.teamId === teamId);
-  const attack = getLocalAttacks(eventId).find((item) => item.slug === attackSlug);
+  const defender = getLocalTeams(eventId).find(
+    (team) => team.teamId === teamId,
+  );
+  const attack = getLocalAttacks(eventId).find(
+    (item) => item.slug === attackSlug,
+  );
   const log: AttackLog = {
     id: `log-${Date.now()}`,
     eventId,

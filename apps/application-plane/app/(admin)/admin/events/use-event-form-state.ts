@@ -111,11 +111,12 @@ export function buildPayload(form: EventFormState) {
     name: form.name,
     type: form.type?.value,
     status: form.status?.value,
-    slug: form.name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'event',
+    slug:
+      form.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'event',
     eventDate: form.startTime.split('T')[0] || form.startTime,
     startTime: toIsoDateTime(form.startTime),
     endTime: toIsoDateTime(form.endTime),

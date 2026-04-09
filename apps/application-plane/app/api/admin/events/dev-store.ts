@@ -81,8 +81,7 @@ export function createDevEvent(body: DevEventPayload): DevEventRecord {
     status: body.status || 'draft',
     startTime: body.startTime || now,
     endTime:
-      body.endTime ||
-      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      body.endTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     timezone: body.timezone || 'Asia/Tokyo',
     participantType:
       (body.participantType as ParticipantEvent['participantType']) ||

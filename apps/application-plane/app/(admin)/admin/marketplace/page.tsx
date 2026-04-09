@@ -456,7 +456,11 @@ export default function AdminMarketplacePage() {
           <Container>
             <Box variant="awsui-key-label">検索結果</Box>
             <Box variant="awsui-value-large">
-              {loading ? <Skeleton className="h-9 w-12" /> : filteredProblems.length}
+              {loading ? (
+                <Skeleton className="h-9 w-12" />
+              ) : (
+                filteredProblems.length
+              )}
             </Box>
           </Container>
         </ColumnLayout>
@@ -493,10 +497,7 @@ export default function AdminMarketplacePage() {
         </Container>
       ) : !error ? (
         <Cards
-          cardsPerRow={[
-            { cards: 1 },
-            { minWidth: 700, cards: 2 },
-          ]}
+          cardsPerRow={[{ cards: 1 }, { minWidth: 700, cards: 2 }]}
           items={filteredProblems}
           cardDefinition={{
             header: (problem) => (
@@ -504,7 +505,9 @@ export default function AdminMarketplacePage() {
                 <Box fontSize="heading-m" fontWeight="bold">
                   {getCategoryIcon(problem.category)} {problem.title}
                 </Box>
-                <CloudscapeBadge color={problem.type === 'gameday' ? 'blue' : 'green'}>
+                <CloudscapeBadge
+                  color={problem.type === 'gameday' ? 'blue' : 'green'}
+                >
                   {problem.type === 'gameday' ? 'Incident Drill' : 'Challenge'}
                 </CloudscapeBadge>
               </SpaceBetween>
@@ -586,7 +589,7 @@ export default function AdminMarketplacePage() {
           }}
         />
       ) : null}
-      
+
       {/* Preview Modal */}
       <Modal
         visible={previewVisible}
