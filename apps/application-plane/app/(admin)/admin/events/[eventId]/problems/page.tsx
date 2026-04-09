@@ -430,6 +430,16 @@ export default function AdminEventProblemsPage() {
                   </Button>
                   <Button
                     variant="link"
+                    onClick={() =>
+                      router.push(
+                        `/admin/events/${eventId}/problems/${item.id}/deployments`,
+                      )
+                    }
+                  >
+                    チームへデプロイ
+                  </Button>
+                  <Button
+                    variant="link"
                     loading={removingIds.has(item.id)}
                     onClick={() => handleRemove(item.id)}
                   >

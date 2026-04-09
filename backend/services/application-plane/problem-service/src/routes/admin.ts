@@ -65,6 +65,17 @@ import {
 	InvalidStatusTransitionError,
 	getValidTransitions,
 } from "../services/event-lifecycle";
+import {
+	CompetitorAccountRepository,
+} from "../repositories/competitor-account-repository";
+import {
+	GameDayDeploymentJobRepository,
+} from "../repositories/gameday-deployment-job-repository";
+import {
+	deployProblemToTeams,
+	retryJob,
+	subscribeToJob,
+} from "../problems/gameday-deployer";
 
 const logger = createLogger("admin-routes");
 
@@ -2921,5 +2932,280 @@ adminRouter.get(
 	const regions = await awsProvider.getAvailableRegions();
 	return c.json({ regions });
 });
+
+// ====================
+// GameDay チームデプロイ
+// ====================
+
+const competitorAccountRepo = new CompetitorAccountRepository();
+const gamedayJobRepo = new GameDayDeploymentJobRepository();
+
+// チームアカウント登録
+adminRouter.post(
+	"/events/:eventId/competitor-accounts",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "競技アカウント登録",
+		responses: {
+			201: { description: "作成成功" },
+			400: { description: "バリデーションエラー" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	zValidator(
+		"json",
+		z.object({
+			name: z.string().min(1),
+			provider: z.enum(["aws", "gcp", "azure", "local"]).default("aws"),
+			accountId: z.string().min(1),
+			region: z.string().min(1),
+			roleArn: z.string().optional(),
+		}),
+	),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const data = c.req.valid("json");
+
+		try {
+			const account = await competitorAccountRepo.create({
+				eventId,
+				name: data.name,
+				provider: data.provider,
+				accountId: data.accountId,
+				region: data.region,
+				roleArn: data.roleArn,
+			});
+			return c.json(account, 201);
+		} catch (error) {
+			logger.error({ error }, "Failed to create competitor account");
+			return c.json({ error: "Failed to create competitor account" }, 500);
+		}
+	},
+);
+
+// チームアカウント一覧取得
+adminRouter.get(
+	"/events/:eventId/competitor-accounts",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "競技アカウント一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		try {
+			const accounts = await competitorAccountRepo.findByEventId(eventId);
+			return c.json({ accounts });
+		} catch (error) {
+			logger.error({ error }, "Failed to list competitor accounts");
+			return c.json({ error: "Failed to list competitor accounts" }, 500);
+		}
+	},
+);
+
+// チームアカウント削除
+adminRouter.delete(
+	"/events/:eventId/competitor-accounts/:accountId",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "競技アカウント削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const accountId = c.req.param("accountId");
+		try {
+			await competitorAccountRepo.delete(eventId, accountId);
+			return c.json({ success: true });
+		} catch (error) {
+			logger.error({ error }, "Failed to delete competitor account");
+			return c.json({ error: "Failed to delete competitor account" }, 500);
+		}
+	},
+);
+
+// 問題を全チームへデプロイ
+adminRouter.post(
+	"/events/:eventId/problems/:problemId/deploy",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "問題を全チームへデプロイ",
+		responses: {
+			202: { description: "デプロイ受付完了" },
+			400: { description: "バリデーションエラー" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const problemId = c.req.param("problemId");
+
+		const problem = await problemRepository.findById(problemId);
+		if (!problem) {
+			return c.json({ error: "Problem not found" }, 404);
+		}
+
+		try {
+			const jobs = await deployProblemToTeams(problem, eventId);
+			return c.json({ jobs }, 202);
+		} catch (error) {
+			logger.error({ error }, "Failed to deploy problem to teams");
+			return c.json({ error: "Failed to start deployment" }, 500);
+		}
+	},
+);
+
+// デプロイジョブ一覧取得
+adminRouter.get(
+	"/events/:eventId/problems/:problemId/deployments",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "デプロイジョブ一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const problemId = c.req.param("problemId");
+
+		try {
+			const jobs = await gamedayJobRepo.findByEventAndProblem(eventId, problemId);
+			const accounts = await competitorAccountRepo.findByEventId(eventId);
+			const accountMap = new Map(accounts.map((a) => [a.id, a]));
+
+			const enriched = jobs.map((job) => ({
+				...job,
+				teamName: accountMap.get(job.competitorAccountId)?.name ?? job.competitorAccountId,
+				awsAccountId: accountMap.get(job.competitorAccountId)?.accountId,
+			}));
+
+			return c.json({ jobs: enriched });
+		} catch (error) {
+			logger.error({ error }, "Failed to list deployment jobs");
+			return c.json({ error: "Failed to list deployment jobs" }, 500);
+		}
+	},
+);
+
+// デプロイ状態 SSE ストリーム
+adminRouter.get(
+	"/events/:eventId/problems/:problemId/deployments/stream",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "デプロイ状態 SSE ストリーム",
+		responses: {
+			200: { description: "SSE ストリーム" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const problemId = c.req.param("problemId");
+
+		const jobs = await gamedayJobRepo.findByEventAndProblem(eventId, problemId);
+
+		const stream = new ReadableStream({
+			start(controller) {
+				const encoder = new TextEncoder();
+				const send = (data: unknown) => {
+					controller.enqueue(
+						encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+					);
+				};
+
+				// 初期状態を送信
+				send({ type: "snapshot", jobs });
+
+				// 各ジョブの更新をサブスクライブ
+				const unsubscribers = jobs.map((job) =>
+					subscribeToJob(job.id, (updated) => {
+						send({ type: "update", job: updated });
+					}),
+				);
+
+				// クライアント切断時にクリーンアップ
+				/* istanbul ignore next */
+				const cleanup = () => {
+					for (const unsub of unsubscribers) unsub();
+					try {
+						controller.close();
+					} catch {
+						// already closed
+					}
+				};
+
+				// 30秒ごとに keepalive を送信
+				const keepalive = setInterval(() => {
+					try {
+						controller.enqueue(encoder.encode(": keepalive\n\n"));
+					} catch {
+						clearInterval(keepalive);
+						cleanup();
+					}
+				}, 30000);
+			},
+		});
+
+		return new Response(stream, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+			},
+		});
+	},
+);
+
+// ジョブのリトライ
+adminRouter.post(
+	"/events/:eventId/problems/:problemId/deployments/:jobId/retry",
+	describeRoute({
+		tags: ["Admin / GameDay Deploy"],
+		summary: "失敗したデプロイジョブをリトライ",
+		responses: {
+			202: { description: "リトライ受付完了" },
+			400: { description: "バリデーションエラー" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "リソースが見つからない" },
+		},
+	}),
+	async (c) => {
+		const eventId = c.req.param("eventId");
+		const problemId = c.req.param("problemId");
+		const jobId = c.req.param("jobId");
+
+		const problem = await problemRepository.findById(problemId);
+		if (!problem) {
+			return c.json({ error: "Problem not found" }, 404);
+		}
+
+		try {
+			const job = await retryJob(eventId, problemId, jobId, problem);
+			if (!job) {
+				return c.json({ error: "Job not found or not in failed state" }, 400);
+			}
+			return c.json({ job }, 202);
+		} catch (error) {
+			logger.error({ error }, "Failed to retry deployment job");
+			return c.json({ error: "Failed to retry job" }, 500);
+		}
+	},
+);
 
 export { adminRouter };

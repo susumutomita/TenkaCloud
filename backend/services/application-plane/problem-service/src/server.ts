@@ -6,6 +6,7 @@
 
 import { serve } from "bun";
 import { app } from "./routes";
+import { reconcile } from "./problems/gameday-deployer";
 
 const port = parseInt(process.env.PORT || "3100");
 
@@ -35,3 +36,8 @@ serve({
 });
 
 console.log(`🚀 Server is running on http://localhost:${port}`);
+
+// 起動時に pending/in_progress ジョブを failed にリセット（reconcile）
+reconcile().catch((err) => {
+	console.error("reconcile failed:", err);
+});

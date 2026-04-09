@@ -20,3 +20,12 @@ export {
 	type IProblemTemplateRepository,
 	type ProblemTemplateFilterOptions,
 } from "./template-repository";
+export {
+	CompetitorAccountRepository,
+	type CompetitorAccountWithMeta,
+	type CreateCompetitorAccountInput,
+} from "./competitor-account-repository";
+export {
+	GameDayDeploymentJobRepository,
+	type CreateJobInput,
+} from "./gameday-deployment-job-repository";
