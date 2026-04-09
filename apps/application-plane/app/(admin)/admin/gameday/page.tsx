@@ -6,18 +6,20 @@
 
 'use client';
 
-import Link from 'next/link';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Cards from '@cloudscape-design/components/cards';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Spinner from '@cloudscape-design/components/spinner';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import '@cloudscape-design/global-styles/index.css';
+import NextLink from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Button,
-  Card,
-  CardContent,
-  ErrorState,
-  getErrorMessage,
-  getErrorType,
-  Input,
-  Skeleton,
-} from '@/components/ui';
 import { get } from '@/lib/api/client';
 import { getGameStatus } from '@/lib/api/gameday-admin';
 import type { GameState } from '@/lib/api/gameday-types';
@@ -31,7 +33,26 @@ interface AdminEvent {
   participantCount: number;
 }
 
+function getGameStateSummary(gameState: GameState | null) {
+  if (!gameState) {
+    return {
+      indicator: <StatusIndicator type="info">ゲーム未初期化</StatusIndicator>,
+      details: 'ゲーム状態はまだ作成されていません',
+    };
+  }
+
+  return {
+    indicator: gameState.isRunning ? (
+      <StatusIndicator type="success">進行中</StatusIndicator>
+    ) : (
+      <StatusIndicator type="stopped">停止中</StatusIndicator>
+    ),
+    details: `スコア重み: ${gameState.scoreWeight === 'high' ? '2x' : '通常'} / ブラックアウト: ${gameState.blackout ? 'ON' : 'OFF'} / ${gameState.durationMinutes}分`,
+  };
+}
+
 export default function AdminGamedayPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [gameStates, setGameStates] = useState<
     Record<string, GameState | null>
@@ -48,11 +69,10 @@ export default function AdminGamedayPage() {
     try {
       const data = await get<{ events: AdminEvent[] }>('/admin/events');
       const gamedayEvents = (data.events ?? []).filter(
-        (e) => e.type === 'gameday',
+        (event) => event.type === 'gameday',
       );
       setEvents(gamedayEvents);
 
-      // Fetch game status for each event
       const states: Record<string, GameState | null> = {};
       await Promise.all(
         gamedayEvents.map(async (event) => {
@@ -79,6 +99,7 @@ export default function AdminGamedayPage() {
 
   const handleLookup = useCallback(async () => {
     if (!manualEventId.trim()) return;
+
     setLookupLoading(true);
     setLookupError(null);
     try {
@@ -87,9 +108,10 @@ export default function AdminGamedayPage() {
         ...prev,
         [state.eventId]: state,
       }));
-      // Add to events list if not present
       setEvents((prev) => {
-        if (prev.find((e) => e.id === state.eventId)) return prev;
+        if (prev.find((event) => event.id === state.eventId)) {
+          return prev;
+        }
         return [
           ...prev,
           {
@@ -113,119 +135,132 @@ export default function AdminGamedayPage() {
   }, [manualEventId]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-          <span className="text-hn-accent font-mono">&gt;_</span>
-          GameDay 管理
-        </h1>
-        <p className="text-text-secondary mt-1">
-          GameDayイベントを選択してゲームを管理します
-        </p>
-      </div>
+    <SpaceBetween size="l">
+      <Header variant="h1" description="GameDayイベントを選択してゲームを管理します">
+        GameDay 管理
+      </Header>
 
-      {/* Event List */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2].map((i) => (
-            <Card key={i}>
-              <CardContent className="space-y-3">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-4 w-48" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : error ? (
-        <ErrorState
-          message={getErrorMessage(error)}
-          type={getErrorType(error)}
-          onRetry={fetchEvents}
-        />
-      ) : events.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {events.map((event) => {
-            const gs = gameStates[event.id];
-            return (
-              <Card key={event.id} hoverable>
-                <Link href={`/admin/gameday/${event.id}`}>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-text-primary">
-                        {event.name}
-                      </span>
-                      <span
-                        className={`w-3 h-3 rounded-full ${
-                          gs?.isRunning
-                            ? 'bg-hn-success animate-pulse'
-                            : 'bg-text-muted'
-                        }`}
-                      />
-                    </div>
-                    <div className="text-sm font-mono text-text-muted">
+      <Container>
+        {loading ? (
+          <Box textAlign="center" padding="xxl">
+            <Spinner size="large" />
+          </Box>
+        ) : error ? (
+          <Box textAlign="center" padding="xxl">
+            <SpaceBetween size="m" alignItems="center">
+              <StatusIndicator type="error">{error.message}</StatusIndicator>
+              <Button onClick={fetchEvents}>再読み込み</Button>
+            </SpaceBetween>
+          </Box>
+        ) : events.length > 0 ? (
+          <Cards
+            cardsPerRow={[
+              { cards: 1 },
+              { minWidth: 520, cards: 2 },
+            ]}
+            items={events}
+            cardDefinition={{
+              header: (event) => (
+                <NextLink
+                  href={`/admin/gameday/${event.id}`}
+                  className="text-[#539fe5] hover:underline"
+                >
+                  {event.name}
+                </NextLink>
+              ),
+              sections: [
+                {
+                  id: 'event-id',
+                  header: 'イベント ID',
+                  content: (event) => (
+                    <Box variant="code" color="text-body-secondary">
                       {event.id}
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-text-muted">
-                      {gs ? (
-                        <>
-                          <span>
-                            スコア重み:{' '}
-                            {gs.scoreWeight === 'high' ? '2x' : '通常'}
-                          </span>
-                          <span>
-                            ブラックアウト: {gs.blackout ? 'ON' : 'OFF'}
-                          </span>
-                          <span>{gs.durationMinutes}分</span>
-                        </>
-                      ) : (
-                        <span>ゲーム未初期化</span>
-                      )}
-                    </div>
-                  </CardContent>
-                </Link>
-              </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <Card className="text-center py-8">
-          <p className="text-text-muted">GameDay イベントがありません</p>
-          <Button variant="primary" asChild className="mt-4">
-            <Link href="/admin/events/new">新規イベント作成</Link>
-          </Button>
-        </Card>
-      )}
+                    </Box>
+                  ),
+                },
+                {
+                  id: 'participants',
+                  header: '参加者数',
+                  content: (event) => `${event.participantCount ?? 0} 人`,
+                },
+                {
+                  id: 'status',
+                  header: 'ゲーム状態',
+                  content: (event) => getGameStateSummary(gameStates[event.id]).indicator,
+                },
+                {
+                  id: 'details',
+                  header: '詳細',
+                  content: (event) => (
+                    <Box color="text-body-secondary">
+                      {getGameStateSummary(gameStates[event.id]).details}
+                    </Box>
+                  ),
+                },
+              ],
+            }}
+            empty={<></>}
+          />
+        ) : (
+          <Box textAlign="center" padding="xxl">
+            <SpaceBetween size="m" alignItems="center">
+              <Box variant="h2">GameDay イベントがありません</Box>
+              <Box color="text-body-secondary">
+                まずイベント管理から GameDay イベントを作成してください。
+              </Box>
+              <SpaceBetween direction="horizontal" size="s">
+                <Button
+                  variant="primary"
+                  onClick={() => router.push('/admin/events/new')}
+                >
+                  新規イベント作成
+                </Button>
+                <Button onClick={() => router.push('/admin/events')}>
+                  イベント管理へ
+                </Button>
+              </SpaceBetween>
+            </SpaceBetween>
+          </Box>
+        )}
+      </Container>
 
-      {/* Manual Lookup */}
-      <Card>
-        <CardContent>
-          <p className="text-sm text-text-muted mb-3">
-            イベント ID を直接入力して検索することもできます
-          </p>
-          <div className="flex items-end gap-4">
-            <Input
-              label="イベント ID"
-              value={manualEventId}
-              onChange={(e) => setManualEventId(e.target.value)}
-              placeholder="event-id-here"
-              onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
-            />
+      <Container
+        header={
+          <Header variant="h2" description="イベント ID を直接指定して GameDay 状態を確認します">
+            直接検索
+          </Header>
+        }
+      >
+        <SpaceBetween size="m">
+          <SpaceBetween direction="horizontal" size="s">
+            <FormField label="イベント ID" stretch>
+              <Input
+                value={manualEventId}
+                onChange={({ detail }) => setManualEventId(detail.value)}
+                placeholder="event-id-here"
+                onKeyDown={({ detail }) => {
+                  if (detail.key === 'Enter') {
+                    void handleLookup();
+                  }
+                }}
+              />
+            </FormField>
             <Button
-              variant="secondary"
-              onClick={handleLookup}
+              variant="primary"
               loading={lookupLoading}
               disabled={!manualEventId.trim() || lookupLoading}
+              onClick={() => {
+                void handleLookup();
+              }}
             >
               検索
             </Button>
-          </div>
+          </SpaceBetween>
           {lookupError && (
-            <p className="text-sm text-hn-error mt-2">
-              {getErrorMessage(lookupError)}
-            </p>
+            <StatusIndicator type="error">{lookupError.message}</StatusIndicator>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </SpaceBetween>
+      </Container>
+    </SpaceBetween>
   );
 }
