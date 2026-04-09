@@ -16,7 +16,7 @@ vi.mock('@/lib/tenant/identification', () => ({
 }));
 
 // モック後にインポート
-import { middleware } from '../../../middleware';
+import { proxy as middleware } from '../../../proxy';
 import { auth } from '@/auth';
 import { getTenantSlugFromUrl } from '@/lib/tenant/identification';
 

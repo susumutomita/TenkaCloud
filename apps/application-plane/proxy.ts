@@ -91,7 +91,7 @@ async function handleAuth(
 /**
  * Middleware エントリーポイント
  */
-export async function middleware(req: NextRequest): Promise<NextResponse> {
+export async function proxy(req: NextRequest): Promise<NextResponse> {
   // テナントスラッグを URL から取得
   const urlTenantSlug = getTenantSlugFromUrl(req);
 
