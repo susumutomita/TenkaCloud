@@ -78,13 +78,13 @@ export function TenantList({ tenants }: TenantListProps) {
       {/* Search and Filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             placeholder="テナント名、メール、IDで検索..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-gray-300 bg-background pl-10 pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-10 w-full rounded-md border border-border bg-background py-2 pl-10 pr-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
         <div className="flex gap-2">
@@ -93,7 +93,7 @@ export function TenantList({ tenants }: TenantListProps) {
             onChange={(e) =>
               setStatusFilter(e.target.value as TenantStatus | 'ALL')
             }
-            className="flex h-10 rounded-md border border-gray-300 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="ALL">すべてのステータス</option>
             {Object.entries(TENANT_STATUS_LABELS).map(([value, label]) => (
@@ -107,7 +107,7 @@ export function TenantList({ tenants }: TenantListProps) {
             onChange={(e) =>
               setTierFilter(e.target.value as TenantTier | 'ALL')
             }
-            className="flex h-10 rounded-md border border-gray-300 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="ALL">すべてのTier</option>
             {Object.entries(TENANT_TIER_LABELS).map(([value, label]) => (
@@ -228,7 +228,10 @@ export function TenantList({ tenants }: TenantListProps) {
       )}
 
       {deleteError && (
-        <div className="text-sm text-red-600" role="alert">
+        <div
+          className="rounded-md border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-800 dark:text-rose-300"
+          role="alert"
+        >
           {deleteError}
         </div>
       )}

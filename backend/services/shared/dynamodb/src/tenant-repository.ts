@@ -4,6 +4,7 @@ import {
   UpdateCommand,
   QueryCommand,
   DeleteCommand,
+  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';
 import { getDocClient, getTableName } from './client';
@@ -20,11 +21,48 @@ import { EntityType, IsolationModel, ComputeType } from './types';
 // Key builders
 const buildTenantPK = (id: string) => `TENANT#${id}`;
 const buildMetadataSK = () => 'METADATA';
+const TENANT_PK_PREFIX = 'TENANT#';
+
+function parseTenantIdFromPk(pk: string): string | null {
+  if (!pk.startsWith(TENANT_PK_PREFIX)) {
+    return null;
+  }
+
+  const id = pk.slice(TENANT_PK_PREFIX.length);
+  return id.length > 0 ? id : null;
+}
+
+function resolveTenantId(item: Pick<TenantItem, 'PK'> & { id?: string }): string {
+  if (typeof item.id === 'string' && item.id.length > 0) {
+    return item.id;
+  }
+
+  return parseTenantIdFromPk(item.PK) ?? '';
+}
+
+function isTenantMetadataItem(
+  item: Partial<TenantItem>,
+  status?: TenantStatus
+): item is TenantItem {
+  if (
+    typeof item.PK !== 'string' ||
+    typeof item.SK !== 'string' ||
+    item.EntityType !== EntityType.TENANT
+  ) {
+    return false;
+  }
+
+  if (parseTenantIdFromPk(item.PK) === null || item.SK !== buildMetadataSK()) {
+    return false;
+  }
+
+  return status ? item.status === status : true;
+}
 
 // Convert DynamoDB item to domain object
 function toDomain(item: TenantItem): Tenant {
   return {
-    id: item.id,
+    id: resolveTenantId(item),
     name: item.name,
     slug: item.slug,
     status: item.status,
@@ -138,45 +176,33 @@ export class TenantRepository {
   }): Promise<{ tenants: Tenant[]; lastKey?: Record<string, unknown> }> {
     const client = getDocClient();
     const tableName = getTableName();
+    const limit = options?.limit ?? 50;
+    const tenants: Tenant[] = [];
+    let lastKey = options?.lastKey;
 
-    let filterExpression: string | undefined;
-    const expressionValues: Record<string, unknown> = {
-      ':entityType': EntityType.TENANT,
-    };
+    while (tenants.length < limit) {
+      const result = await client.send(
+        new ScanCommand({
+          TableName: tableName,
+          ExclusiveStartKey: lastKey,
+        })
+      );
 
-    if (options?.status) {
-      filterExpression = '#status = :status';
-      expressionValues[':status'] = options.status;
+      tenants.push(
+        ...(result.Items ?? [])
+          .filter((item) => isTenantMetadataItem(item as Partial<TenantItem>, options?.status))
+          .map((item) => toDomain(item as TenantItem))
+      );
+
+      lastKey = result.LastEvaluatedKey;
+      if (!lastKey) {
+        break;
+      }
     }
 
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: 'GSI2',
-        KeyConditionExpression: 'EntityType = :entityType',
-        FilterExpression: filterExpression,
-        ExpressionAttributeValues: expressionValues,
-        ExpressionAttributeNames: filterExpression
-          ? { '#status': 'status' }
-          : undefined,
-        Limit: options?.limit ?? 50,
-        ExclusiveStartKey: options?.lastKey,
-        ScanIndexForward: false, // Newest first
-      })
-    );
-
-    const tenants = (result.Items ?? [])
-      .filter(
-        (item) =>
-          item.EntityType === EntityType.TENANT &&
-          typeof item.id === 'string' &&
-          item.id.length > 0
-      )
-      .map((item) => toDomain(item as TenantItem));
-
     return {
-      tenants,
-      lastKey: result.LastEvaluatedKey,
+      tenants: tenants.slice(0, limit),
+      lastKey,
     };
   }
 
@@ -276,19 +302,23 @@ export class TenantRepository {
   async count(): Promise<number> {
     const client = getDocClient();
     const tableName = getTableName();
+    let total = 0;
+    let lastKey: Record<string, unknown> | undefined;
 
-    const result = await client.send(
-      new QueryCommand({
-        TableName: tableName,
-        IndexName: 'GSI2',
-        KeyConditionExpression: 'EntityType = :entityType',
-        ExpressionAttributeValues: {
-          ':entityType': EntityType.TENANT,
-        },
-        Select: 'COUNT',
-      })
-    );
+    do {
+      const result = await client.send(
+        new ScanCommand({
+          TableName: tableName,
+          ExclusiveStartKey: lastKey,
+        })
+      );
 
-    return result.Count ?? 0;
+      total += (result.Items ?? []).filter((item) =>
+        isTenantMetadataItem(item as Partial<TenantItem>)
+      ).length;
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
+
+    return total;
   }
 }

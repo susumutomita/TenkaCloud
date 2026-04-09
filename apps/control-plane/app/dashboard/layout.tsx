@@ -14,44 +14,62 @@ import '@cloudscape-design/global-styles/index.css';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { stripControlBasePath, withControlBasePath } from '@/lib/base-path';
 
-const navItems: SideNavigationProps.Item[] = [
-  { type: 'link', text: 'ダッシュボード', href: '/dashboard' },
-  { type: 'link', text: 'テナント管理', href: '/dashboard/tenants' },
-  { type: 'link', text: '設定', href: '/dashboard/settings' },
+const navItems: Array<SideNavigationProps.Link & { appPath: string }> = [
+  {
+    type: 'link',
+    text: 'ダッシュボード',
+    href: withControlBasePath('/dashboard'),
+    appPath: '/dashboard',
+  },
+  {
+    type: 'link',
+    text: 'テナント管理',
+    href: withControlBasePath('/dashboard/tenants'),
+    appPath: '/dashboard/tenants',
+  },
+  {
+    type: 'link',
+    text: '設定',
+    href: withControlBasePath('/dashboard/settings'),
+    appPath: '/dashboard/settings',
+  },
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const normalizedPath = stripControlBasePath(pathname);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const activeHref = navItems
-    .filter((item): item is SideNavigationProps.Link => item.type === 'link')
-    .find((item) => {
-      if (item.href === '/dashboard') return pathname === '/dashboard';
-      return pathname.startsWith(item.href);
-    })?.href;
+  const activeHref = navItems.find((item) => {
+    if (item.appPath === '/dashboard') {
+      return normalizedPath === '/dashboard';
+    }
+
+    return normalizedPath.startsWith(item.appPath);
+  })?.href;
 
   // Cloudscape は SSR で異なる内部 ID を生成するため、CSR のみでレンダリング
   if (!mounted) {
     return (
-      <div className="awsui-dark-mode" style={{ minHeight: '100vh' }}>
+      <div style={{ minHeight: '100vh' }}>
         {children}
       </div>
     );
   }
 
   return (
-    <div className="awsui-dark-mode">
+    <div>
       <div id="cp-top-nav">
         <TopNavigation
           identity={{
-            href: '/dashboard',
+            href: withControlBasePath('/dashboard'),
             title: 'TenkaCloud',
             onFollow: (e) => {
               e.preventDefault();
@@ -71,6 +89,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 },
               ],
               onItemClick: ({ detail }) => {
+                if (detail.id === 'settings') {
+                  router.push('/dashboard/settings');
+                  return;
+                }
                 if (detail.id === 'signout') {
                   signOut({ callbackUrl: '/login' });
                 }
@@ -86,12 +108,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <AppLayout
         navigation={
           <SideNavigation
-            header={{ text: 'Control Plane', href: '/dashboard' }}
+            header={{
+              text: 'Control Plane',
+              href: withControlBasePath('/dashboard'),
+            }}
             activeHref={activeHref}
             items={navItems}
             onFollow={(e) => {
               e.preventDefault();
-              router.push(e.detail.href);
+              router.push(stripControlBasePath(e.detail.href));
             }}
           />
         }

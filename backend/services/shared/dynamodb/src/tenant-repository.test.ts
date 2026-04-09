@@ -80,11 +80,27 @@ describe('TenantRepository', () => {
 
       const result = await repo.list();
 
+      expect(result.tenants).toHaveLength(2);
+      expect(result.tenants[0].id).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV');
+    });
+
+    it('legacy item は PK から tenant id を復元して返すべき', async () => {
+      const legacyItem = {
+        ...validTenantItem,
+        id: undefined,
+      };
+      mockSend.mockResolvedValue({
+        Items: [legacyItem],
+        LastEvaluatedKey: undefined,
+      });
+
+      const result = await repo.list();
+
       expect(result.tenants).toHaveLength(1);
       expect(result.tenants[0].id).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV');
     });
 
-    it('idが空文字のアイテムをフィルタリングすべき', async () => {
+    it('idが空文字でも PK から tenant id を復元すべき', async () => {
       const emptyIdItem = { ...validTenantItem, id: '' };
       mockSend.mockResolvedValue({
         Items: [emptyIdItem, validTenantItem],
@@ -93,7 +109,8 @@ describe('TenantRepository', () => {
 
       const result = await repo.list();
 
-      expect(result.tenants).toHaveLength(1);
+      expect(result.tenants).toHaveLength(2);
+      expect(result.tenants[0].id).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV');
     });
 
     it('アイテムが空の場合は空配列を返すべき', async () => {
@@ -130,6 +147,44 @@ describe('TenantRepository', () => {
       const result = await repo.findBySlug('no-such-slug');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('count', () => {
+    it('tenant metadata の件数だけ合計すべき', async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Items: [
+            validTenantItem,
+            {
+              ...validTenantItem,
+              PK: 'EVENT#01ARZ3NDEKTSV4RRFFQ69G5FAV',
+              EntityType: 'EVENT',
+            },
+          ],
+          LastEvaluatedKey: { PK: 'x' },
+        })
+        .mockResolvedValueOnce({
+          Items: [
+            {
+              ...validTenantItem,
+              PK: 'TENANT#01ARZ3NDEKTSV4RRFFQ69G5FAA',
+              id: '01ARZ3NDEKTSV4RRFFQ69G5FAA',
+            },
+            {
+              ...validTenantItem,
+              PK: 'SYSTEM#SETTING',
+              SK: 'KEY#platform',
+              EntityType: 'SYSTEM_SETTING',
+            },
+          ],
+          LastEvaluatedKey: undefined,
+        });
+
+      const result = await repo.count();
+
+      expect(result).toBe(2);
+      expect(mockSend).toHaveBeenCalledTimes(2);
     });
   });
 });

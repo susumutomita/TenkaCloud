@@ -54,14 +54,16 @@ export default function NewTenantPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">新規テナント作成</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          新規テナント作成
+        </h1>
       </div>
 
       {error && (
-        <div className="max-w-2xl rounded-md bg-red-50 border border-red-200 p-4">
+        <div className="max-w-2xl rounded-md border border-rose-500/20 bg-rose-500/10 p-4">
           <div className="flex">
             <svg
-              className="h-5 w-5 text-red-400"
+              className="h-5 w-5 text-rose-500"
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -72,19 +74,21 @@ export default function NewTenantPage() {
               />
             </svg>
             <div className="ml-3">
-              <p className="text-sm font-medium text-red-800">{error}</p>
+              <p className="text-sm font-medium text-rose-800 dark:text-rose-300">
+                {error}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      <div className="rounded-xl border bg-card text-card-foreground shadow max-w-2xl">
+      <div className="max-w-2xl rounded-xl border border-border bg-card text-card-foreground shadow-sm">
         <form onSubmit={handleSubmit}>
           <div className="flex flex-col space-y-1.5 p-6">
             <h3 className="font-semibold leading-none tracking-tight">
               テナント情報
             </h3>
-            <p className="text-sm text-muted-foreground text-gray-500">
+            <p className="text-sm text-muted-foreground">
               新しいテナントを作成します。
             </p>
           </div>
@@ -99,7 +103,7 @@ export default function NewTenantPage() {
               <input
                 id="name"
                 required
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
+                className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background shadow-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="例: 株式会社Acme"
                 value={formData.name}
                 onChange={(e) => {
@@ -128,7 +132,7 @@ export default function NewTenantPage() {
                 pattern="^[a-z0-9-]+$"
                 minLength={3}
                 maxLength={63}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
+                className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background shadow-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="例: acme-corp"
                 value={formData.slug}
                 onChange={(e) => {
@@ -136,7 +140,7 @@ export default function NewTenantPage() {
                   setFormData({ ...formData, slug: e.target.value });
                 }}
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 小文字英数字とハイフンのみ（3〜63文字）
               </p>
             </div>
@@ -151,7 +155,7 @@ export default function NewTenantPage() {
                 id="email"
                 type="email"
                 required
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
+                className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background shadow-sm file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="admin@example.com"
                 value={formData.adminEmail}
                 onChange={(e) =>
@@ -168,7 +172,7 @@ export default function NewTenantPage() {
               </label>
               <select
                 id="tier"
-                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border-gray-300"
+                className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={formData.tier}
                 onChange={(e) =>
                   setFormData({
@@ -189,7 +193,7 @@ export default function NewTenantPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-black text-white"
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
             >
               {isLoading ? '作成中...' : '作成'}
             </button>
