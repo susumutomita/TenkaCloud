@@ -10,6 +10,7 @@
 
 import { createLogger } from "../lib/logger";
 import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import {
@@ -344,7 +345,18 @@ const updateEventSchema = createEventSchema.partial().extend({
 });
 
 // イベント一覧取得
-adminRouter.get("/events", async (c) => {
+adminRouter.get(
+	"/events",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベント一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const tenantId = user.tenantId || "default";
 
@@ -389,7 +401,18 @@ adminRouter.get("/events", async (c) => {
 });
 
 // イベント詳細取得
-adminRouter.get("/events/:eventId", async (c) => {
+adminRouter.get(
+	"/events/:eventId",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベント詳細取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 
 	try {
@@ -444,6 +467,15 @@ adminRouter.get("/events/:eventId", async (c) => {
 // イベント作成
 adminRouter.post(
 	"/events",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベント作成",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", createEventSchema),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
@@ -492,6 +524,15 @@ adminRouter.post(
 // イベント更新
 adminRouter.put(
 	"/events/:eventId",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベント更新",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", updateEventSchema),
 	async (c) => {
 		const eventId = c.req.param("eventId");
@@ -536,7 +577,18 @@ adminRouter.put(
 );
 
 // イベント削除
-adminRouter.delete("/events/:eventId", async (c) => {
+adminRouter.delete(
+	"/events/:eventId",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベント削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 
 	try {
@@ -551,6 +603,15 @@ adminRouter.delete("/events/:eventId", async (c) => {
 // イベントステータス更新
 adminRouter.patch(
 	"/events/:eventId/status",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベントステータス更新",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator(
 		"json",
 		z.object({
@@ -603,6 +664,15 @@ adminRouter.patch(
 // イベントに問題を追加
 adminRouter.post(
 	"/events/:eventId/problems",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベントへ問題追加",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator(
 		"json",
 		z.object({
@@ -631,7 +701,18 @@ adminRouter.post(
 );
 
 // イベントから問題を削除
-adminRouter.delete("/events/:eventId/problems/:problemId", async (c) => {
+adminRouter.delete(
+	"/events/:eventId/problems/:problemId",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベントから問題削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const problemId = c.req.param("problemId");
 
@@ -649,7 +730,18 @@ adminRouter.delete("/events/:eventId/problems/:problemId", async (c) => {
 // ====================
 
 // 問題一覧取得
-adminRouter.get("/problems", async (c) => {
+adminRouter.get(
+	"/problems",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const type = c.req.query("type");
 	const category = c.req.query("category");
 	const difficulty = c.req.query("difficulty");
@@ -703,7 +795,18 @@ adminRouter.get("/problems", async (c) => {
 });
 
 // 問題詳細取得
-adminRouter.get("/problems/:problemId", async (c) => {
+adminRouter.get(
+	"/problems/:problemId",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題詳細取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const problemId = c.req.param("problemId");
 
 	try {
@@ -789,6 +892,15 @@ const updateProblemSchema = createProblemSchema.partial();
 // 問題作成
 adminRouter.post(
 	"/problems",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題作成",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", createProblemSchema),
 	async (c) => {
 		const data = c.req.valid("json");
@@ -854,6 +966,15 @@ const importProblemSchema = createProblemSchema.extend({
 
 adminRouter.post(
 	"/problems/import",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題インポート",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", importProblemSchema),
 	async (c) => {
 		const data = c.req.valid("json");
@@ -899,6 +1020,15 @@ adminRouter.post(
 // 問題更新
 adminRouter.put(
 	"/problems/:problemId",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題更新",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", updateProblemSchema),
 	async (c) => {
 		const problemId = c.req.param("problemId");
@@ -943,7 +1073,18 @@ adminRouter.put(
 );
 
 // 問題削除
-adminRouter.delete("/problems/:problemId", async (c) => {
+adminRouter.delete(
+	"/problems/:problemId",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const problemId = c.req.param("problemId");
 
 	try {
@@ -961,7 +1102,18 @@ adminRouter.delete("/problems/:problemId", async (c) => {
 });
 
 // マーケットプレイス検索
-adminRouter.get("/marketplace", async (c) => {
+adminRouter.get(
+	"/marketplace",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "マーケットプレイス検索",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const query = c.req.query("query");
 	const type = c.req.query("type");
 	const category = c.req.query("category");
@@ -1003,7 +1155,18 @@ adminRouter.get("/marketplace", async (c) => {
 });
 
 // 問題をインストール
-adminRouter.post("/marketplace/:marketplaceId/install", async (c) => {
+adminRouter.post(
+	"/marketplace/:marketplaceId/install",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "マーケットプレイスから問題をインストール",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const marketplaceId = c.req.param("marketplaceId");
 
 	try {
@@ -1043,6 +1206,15 @@ const importOptionsSchema = z.object({
 // フォーマット検出
 adminRouter.post(
 	"/problems/detect-format",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題ファイルのフォーマット検出",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", formatDetectSchema),
 	async (c) => {
 		const { filename } = c.req.valid("json");
@@ -1065,6 +1237,15 @@ adminRouter.post(
 // 単一問題エクスポート
 adminRouter.post(
 	"/problems/:problemId/export",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題エクスポート（単一）",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", exportOptionsSchema),
 	async (c) => {
 		const problemId = c.req.param("problemId");
@@ -1103,6 +1284,15 @@ adminRouter.post(
 // 複数問題エクスポート
 adminRouter.post(
 	"/problems/export",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題エクスポート（複数）",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator(
 		"json",
 		exportOptionsSchema.extend({
@@ -1150,6 +1340,15 @@ adminRouter.post(
 // 単一問題インポート（プレビューのみ - 保存は行わない）
 adminRouter.post(
 	"/problems/import/preview",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題インポートプレビュー（単一）",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", importOptionsSchema),
 	async (c) => {
 		const { format, data } = c.req.valid("json");
@@ -1178,6 +1377,15 @@ adminRouter.post(
 // 複数問題インポート（プレビューのみ - 保存は行わない）
 adminRouter.post(
 	"/problems/import/batch/preview",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題インポートプレビュー（複数）",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", importOptionsSchema),
 	async (c) => {
 		const { format, data } = c.req.valid("json");
@@ -1211,6 +1419,15 @@ adminRouter.post(
 // コンテスト開始
 adminRouter.post(
 	"/events/:eventId/contest/start",
+	describeRoute({
+		tags: ["Admin / Contest"],
+		summary: "コンテスト開始",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator(
 		"json",
 		z.object({
@@ -1229,6 +1446,15 @@ adminRouter.post(
 // コンテスト停止
 adminRouter.post(
 	"/events/:eventId/contest/stop",
+	describeRoute({
+		tags: ["Admin / Contest"],
+		summary: "コンテスト停止",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator(
 		"json",
 		z.object({
@@ -1245,14 +1471,36 @@ adminRouter.post(
 );
 
 // コンテスト一時停止
-adminRouter.post("/events/:eventId/contest/pause", async (c) => {
+adminRouter.post(
+	"/events/:eventId/contest/pause",
+	describeRoute({
+		tags: ["Admin / Contest"],
+		summary: "コンテスト一時停止",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const result = await pauseContest(eventId);
 	return c.json(result);
 });
 
 // コンテスト再開
-adminRouter.post("/events/:eventId/contest/resume", async (c) => {
+adminRouter.post(
+	"/events/:eventId/contest/resume",
+	describeRoute({
+		tags: ["Admin / Contest"],
+		summary: "コンテスト再開",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const result = await resumeContest(eventId);
 	return c.json(result);
@@ -1301,6 +1549,15 @@ const challengeSchema = z.object({
 // 問題追加
 adminRouter.post(
 	"/events/:eventId/challenges",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "コンテストへチャレンジ追加",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", challengeSchema),
 	async (c) => {
 		const eventId = c.req.param("eventId");
@@ -1312,7 +1569,18 @@ adminRouter.post(
 );
 
 // 問題削除
-adminRouter.delete("/events/:eventId/challenges/:challengeId", async (c) => {
+adminRouter.delete(
+	"/events/:eventId/challenges/:challengeId",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "コンテストからチャレンジ削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const challengeId = c.req.param("challengeId");
 
@@ -1327,6 +1595,15 @@ adminRouter.delete("/events/:eventId/challenges/:challengeId", async (c) => {
 // チーム登録
 adminRouter.post(
 	"/events/:eventId/teams",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "チーム登録",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator(
 		"json",
 		z.object({
@@ -1344,7 +1621,18 @@ adminRouter.post(
 );
 
 // チーム一覧取得
-adminRouter.get("/events/:eventId/teams", async (c) => {
+adminRouter.get(
+	"/events/:eventId/teams",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "チーム一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const teams = await getContestTeams(eventId);
 	return c.json({ teams });
@@ -1355,14 +1643,36 @@ adminRouter.get("/events/:eventId/teams", async (c) => {
 // ====================
 
 // イベント全体ダッシュボード
-adminRouter.get("/events/:eventId/dashboard", async (c) => {
+adminRouter.get(
+	"/events/:eventId/dashboard",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベントダッシュボード取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const dashboard = await getEventDashboard(eventId);
 	return c.json(dashboard);
 });
 
 // リーダーボード
-adminRouter.get("/events/:eventId/leaderboard", async (c) => {
+adminRouter.get(
+	"/events/:eventId/leaderboard",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "リーダーボード取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const limit = parseInt(c.req.query("limit") || "100");
 	const leaderboard = await getLeaderboard(eventId, limit);
@@ -1370,21 +1680,54 @@ adminRouter.get("/events/:eventId/leaderboard", async (c) => {
 });
 
 // リーダーボードスナップショット保存
-adminRouter.post("/events/:eventId/leaderboard/snapshot", async (c) => {
+adminRouter.post(
+	"/events/:eventId/leaderboard/snapshot",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "リーダーボードスナップショット保存",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	await saveLeaderboardSnapshot(eventId);
 	return c.json({ success: true, message: "Leaderboard snapshot saved" });
 });
 
 // チャレンジ統計
-adminRouter.get("/events/:eventId/challenges/stats", async (c) => {
+adminRouter.get(
+	"/events/:eventId/challenges/stats",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "チャレンジ統計取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const stats = await getChallengeStatistics(eventId);
 	return c.json({ stats });
 });
 
 // イベントログ
-adminRouter.get("/events/:eventId/logs", async (c) => {
+adminRouter.get(
+	"/events/:eventId/logs",
+	describeRoute({
+		tags: ["Admin / Events"],
+		summary: "イベントログ取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const eventId = c.req.param("eventId");
 	const teamName = c.req.query("teamName");
 	const limit = parseInt(c.req.query("limit") || "50");
@@ -1469,7 +1812,18 @@ const createTemplateSchema = z.object({
 const updateTemplateSchema = createTemplateSchema.partial();
 
 // テンプレート一覧取得
-adminRouter.get("/templates", async (c) => {
+adminRouter.get(
+	"/templates",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレート一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const type = c.req.query("type");
 	const category = c.req.query("category");
 	const difficulty = c.req.query("difficulty");
@@ -1529,7 +1883,18 @@ adminRouter.get("/templates", async (c) => {
 });
 
 // テンプレート検索
-adminRouter.get("/templates/search", async (c) => {
+adminRouter.get(
+	"/templates/search",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレート検索",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const query = c.req.query("query");
 	const type = c.req.query("type");
 	const category = c.req.query("category");
@@ -1575,7 +1940,18 @@ adminRouter.get("/templates/search", async (c) => {
 });
 
 // テンプレート詳細取得
-adminRouter.get("/templates/:templateId", async (c) => {
+adminRouter.get(
+	"/templates/:templateId",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレート詳細取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const templateId = c.req.param("templateId");
 
 	try {
@@ -1593,6 +1969,15 @@ adminRouter.get("/templates/:templateId", async (c) => {
 // テンプレート作成
 adminRouter.post(
 	"/templates",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレート作成",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", createTemplateSchema),
 	async (c) => {
 		const data = c.req.valid("json");
@@ -1613,6 +1998,15 @@ adminRouter.post(
 // テンプレート更新
 adminRouter.put(
 	"/templates/:templateId",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレート更新",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", updateTemplateSchema),
 	async (c) => {
 		const templateId = c.req.param("templateId");
@@ -1634,7 +2028,18 @@ adminRouter.put(
 );
 
 // テンプレート削除
-adminRouter.delete("/templates/:templateId", async (c) => {
+adminRouter.delete(
+	"/templates/:templateId",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレート削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const templateId = c.req.param("templateId");
 
 	try {
@@ -1675,6 +2080,15 @@ const createProblemFromTemplateSchema = z.object({
 
 adminRouter.post(
 	"/templates/:templateId/create-problem",
+	describeRoute({
+		tags: ["Admin / Templates"],
+		summary: "テンプレートから問題生成",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", createProblemFromTemplateSchema),
 	async (c) => {
 		const templateId = c.req.param("templateId");
@@ -1815,6 +2229,15 @@ const aiGenerateProblemSchema = z.object({
 // AI 問題生成（プレビュー）
 adminRouter.post(
 	"/ai/generate/preview",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "AI問題生成プレビュー",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", aiGenerateProblemSchema),
 	async (c) => {
 		const input = c.req.valid("json");
@@ -1841,6 +2264,15 @@ adminRouter.post(
 // AI 問題生成（作成）
 adminRouter.post(
 	"/ai/generate",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "AI問題生成（保存）",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", aiGenerateProblemSchema),
 	async (c) => {
 		const input = c.req.valid("json");
@@ -1974,6 +2406,15 @@ const deployProblemSchema = z.object({
 // 問題をAWSにデプロイ
 adminRouter.post(
 	"/problems/:problemId/deploy",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "問題をAWSにデプロイ",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", deployProblemSchema),
 	async (c) => {
 		const { problemId } = c.req.param();
@@ -2074,6 +2515,15 @@ adminRouter.post(
 // デプロイメント状態取得
 adminRouter.get(
 	"/problems/:problemId/deployments/:stackName/status",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "デプロイメント状態取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	async (c) => {
 		const { problemId, stackName } = c.req.param();
 		const region = c.req.query("region");
@@ -2105,7 +2555,18 @@ adminRouter.get(
 );
 
 // デプロイメント削除
-adminRouter.delete("/problems/:problemId/deployments/:stackName", async (c) => {
+adminRouter.delete(
+	"/problems/:problemId/deployments/:stackName",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "デプロイメント削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { problemId, stackName } = c.req.param();
 	const region = c.req.query("region");
 
@@ -2151,7 +2612,18 @@ adminRouter.delete("/problems/:problemId/deployments/:stackName", async (c) => {
 });
 
 // 利用可能なリージョン一覧
-adminRouter.get("/aws/regions", async (c) => {
+adminRouter.get(
+	"/aws/regions",
+	describeRoute({
+		tags: ["Admin / Problems"],
+		summary: "利用可能なAWSリージョン一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const awsProvider = getAWSProvider();
 	const regions = await awsProvider.getAvailableRegions();
 	return c.json({ regions });

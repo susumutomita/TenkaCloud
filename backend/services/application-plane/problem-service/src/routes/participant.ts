@@ -11,6 +11,7 @@
 
 import { createLogger } from "../lib/logger";
 import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import {
@@ -71,7 +72,18 @@ participantRouter.use("*", async (c, next) => {
 /**
  * 参加可能なイベント一覧を取得
  */
-participantRouter.get("/events", async (c) => {
+participantRouter.get(
+	"/events",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "イベント一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { status, type, limit = "50", offset = "0" } = c.req.query();
 
@@ -142,7 +154,18 @@ participantRouter.get("/events", async (c) => {
 /**
  * 参加中のイベント一覧を取得
  */
-participantRouter.get("/events/me", async (c) => {
+participantRouter.get(
+	"/events/me",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "参加中イベント一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 
 	try {
@@ -172,7 +195,19 @@ participantRouter.get("/events/me", async (c) => {
 /**
  * イベント詳細を取得
  */
-participantRouter.get("/events/:eventId", async (c) => {
+participantRouter.get(
+	"/events/:eventId",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "イベント詳細取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "イベントが見つかりません" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { eventId } = c.req.param();
 
@@ -254,7 +289,19 @@ participantRouter.get("/events/:eventId", async (c) => {
 /**
  * イベントに登録
  */
-participantRouter.post("/events/:eventId/register", async (c) => {
+participantRouter.post(
+	"/events/:eventId/register",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "イベント登録",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "イベントが見つかりません" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { eventId } = c.req.param();
 
@@ -297,7 +344,19 @@ participantRouter.post("/events/:eventId/register", async (c) => {
 /**
  * イベント登録をキャンセル
  */
-participantRouter.post("/events/:eventId/unregister", async (c) => {
+participantRouter.post(
+	"/events/:eventId/unregister",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "イベント登録キャンセル",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "イベントが見つかりません" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { eventId } = c.req.param();
 
@@ -333,7 +392,19 @@ participantRouter.post("/events/:eventId/unregister", async (c) => {
 /**
  * リーダーボードを取得
  */
-participantRouter.get("/events/:eventId/leaderboard", async (c) => {
+participantRouter.get(
+	"/events/:eventId/leaderboard",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "リーダーボード取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "イベントが見つかりません" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { eventId } = c.req.param();
 
@@ -375,7 +446,19 @@ participantRouter.get("/events/:eventId/leaderboard", async (c) => {
 /**
  * 自分のランキングを取得
  */
-participantRouter.get("/events/:eventId/my-ranking", async (c) => {
+participantRouter.get(
+	"/events/:eventId/my-ranking",
+	describeRoute({
+		tags: ["Participant / Events"],
+		summary: "自分のランキング取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "ランキング情報が見つかりません" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { eventId } = c.req.param();
 
@@ -405,7 +488,19 @@ participantRouter.get("/events/:eventId/my-ranking", async (c) => {
 /**
  * チャレンジ詳細を取得
  */
-participantRouter.get("/events/:eventId/challenges/:challengeId", async (c) => {
+participantRouter.get(
+	"/events/:eventId/challenges/:challengeId",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "チャレンジ詳細取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チャレンジが見つかりません" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 	const { eventId, challengeId } = c.req.param();
 
@@ -493,6 +588,16 @@ participantRouter.get("/events/:eventId/challenges/:challengeId", async (c) => {
  */
 participantRouter.get(
 	"/events/:eventId/challenges/:challengeId/jam",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "JAMチャレンジ詳細取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チャレンジが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
 		const { eventId, challengeId } = c.req.param();
@@ -613,6 +718,16 @@ participantRouter.get(
  */
 participantRouter.get(
 	"/events/:eventId/challenges/:challengeId/credentials",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "AWSクレデンシャル取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チャレンジが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
 		const { eventId, challengeId } = c.req.param();
@@ -657,6 +772,16 @@ participantRouter.get(
  */
 participantRouter.post(
 	"/events/:eventId/challenges/:challengeId/hints/:hintId/reveal",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "ヒント公開",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "ヒントが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const {
 			eventId: _eventId,
@@ -689,6 +814,16 @@ participantRouter.post(
  */
 participantRouter.post(
 	"/events/:eventId/challenges/:challengeId/clues/:clueId/reveal",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "クルー公開",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "クルーが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
 		const { eventId, challengeId, clueId } = c.req.param();
@@ -748,6 +883,16 @@ participantRouter.post(
  */
 participantRouter.post(
 	"/events/:eventId/challenges/:challengeId/score",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "採点リクエスト",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チャレンジが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
@@ -779,6 +924,30 @@ const submitAnswerSchema = z.object({
 
 participantRouter.post(
 	"/events/:eventId/challenges/:challengeId/submit",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "解答提出",
+		requestBody: {
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["answer", "titleId"],
+						properties: {
+							answer: { type: "string", minLength: 1 },
+							titleId: { type: "string", minLength: 1 },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チャレンジが見つかりません" },
+		},
+	}),
 	zValidator("json", submitAnswerSchema),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
@@ -840,6 +1009,16 @@ participantRouter.post(
  */
 participantRouter.get(
 	"/events/:eventId/challenges/:challengeId/submissions",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "提出履歴取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チャレンジが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const { eventId: _eventId, challengeId: _challengeId } = c.req.param();
 
@@ -859,6 +1038,16 @@ participantRouter.get(
  */
 participantRouter.get(
 	"/events/:eventId/challenges/:challengeId/submissions/latest",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "最新提出結果取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "提出履歴が見つかりません" },
+		},
+	}),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
 		const { eventId, challengeId } = c.req.param();
@@ -920,7 +1109,19 @@ participantRouter.get(
 /**
  * 自分のチーム情報を取得
  */
-participantRouter.get("/events/:eventId/team", async (c) => {
+participantRouter.get(
+	"/events/:eventId/team",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チーム情報取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チームが見つかりません" },
+		},
+	}),
+	async (c) => {
 	const { eventId: _eventId } = c.req.param();
 
 	try {
@@ -942,6 +1143,28 @@ const createTeamSchema = z.object({
 
 participantRouter.post(
 	"/events/:eventId/team",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チーム作成",
+		requestBody: {
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["name"],
+						properties: {
+							name: { type: "string", minLength: 1, maxLength: 50 },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", createTeamSchema),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
@@ -984,6 +1207,29 @@ const joinTeamSchema = z.object({
 
 participantRouter.post(
 	"/events/:eventId/team/join",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チーム参加",
+		requestBody: {
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["inviteCode"],
+						properties: {
+							inviteCode: { type: "string", minLength: 1 },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チームが見つかりません" },
+		},
+	}),
 	zValidator("json", joinTeamSchema),
 	async (c) => {
 		const { eventId: _eventId } = c.req.param();
@@ -1008,7 +1254,18 @@ participantRouter.post(
 /**
  * チームから離脱
  */
-participantRouter.post("/events/:eventId/team/leave", async (c) => {
+participantRouter.post(
+	"/events/:eventId/team/leave",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チーム離脱",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { eventId: _eventId } = c.req.param();
 
 	try {
@@ -1024,7 +1281,18 @@ participantRouter.post("/events/:eventId/team/leave", async (c) => {
 /**
  * 招待コードを再生成
  */
-participantRouter.post("/events/:eventId/team/invite-code", async (c) => {
+participantRouter.post(
+	"/events/:eventId/team/invite-code",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "招待コード再生成",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { eventId: _eventId } = c.req.param();
 
 	try {
@@ -1048,6 +1316,29 @@ const transferCaptainSchema = z.object({
 
 participantRouter.post(
 	"/events/:eventId/team/transfer-captain",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "キャプテン移譲",
+		requestBody: {
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						required: ["newCaptainId"],
+						properties: {
+							newCaptainId: { type: "string", minLength: 1 },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "チームが見つかりません" },
+		},
+	}),
 	zValidator("json", transferCaptainSchema),
 	async (c) => {
 		const { eventId: _eventId } = c.req.param();
@@ -1072,7 +1363,18 @@ participantRouter.post(
 /**
  * チームメンバー一覧を取得
  */
-participantRouter.get("/events/:eventId/team/members", async (c) => {
+participantRouter.get(
+	"/events/:eventId/team/members",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チームメンバー一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { eventId: _eventId } = c.req.param();
 
 	try {
@@ -1090,6 +1392,16 @@ participantRouter.get("/events/:eventId/team/members", async (c) => {
  */
 participantRouter.delete(
 	"/events/:eventId/team/members/:memberId",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チームメンバー削除",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "メンバーが見つかりません" },
+		},
+	}),
 	async (c) => {
 		const { eventId: _eventId, memberId: _memberId } = c.req.param();
 
@@ -1107,7 +1419,18 @@ participantRouter.delete(
 /**
  * チームを解散
  */
-participantRouter.delete("/events/:eventId/team", async (c) => {
+participantRouter.delete(
+	"/events/:eventId/team",
+	describeRoute({
+		tags: ["Participant / Teams"],
+		summary: "チーム解散",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { eventId: _eventId } = c.req.param();
 
 	try {
@@ -1127,7 +1450,18 @@ participantRouter.delete("/events/:eventId/team", async (c) => {
 /**
  * 自分のプロフィールを取得
  */
-participantRouter.get("/profile", async (c) => {
+participantRouter.get(
+	"/profile",
+	describeRoute({
+		tags: ["Participant / Rankings"],
+		summary: "プロフィール取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const user = c.get("user") as AuthenticatedUser;
 
 	try {
@@ -1160,6 +1494,28 @@ const updateProfileSchema = z.object({
 
 participantRouter.put(
 	"/profile",
+	describeRoute({
+		tags: ["Participant / Rankings"],
+		summary: "プロフィール更新",
+		requestBody: {
+			content: {
+				"application/json": {
+					schema: {
+						type: "object",
+						properties: {
+							name: { type: "string", minLength: 1, maxLength: 100 },
+							avatarUrl: { type: "string", format: "uri" },
+						},
+					},
+				},
+			},
+		},
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
 	zValidator("json", updateProfileSchema),
 	async (c) => {
 		const user = c.get("user") as AuthenticatedUser;
@@ -1189,7 +1545,18 @@ participantRouter.put(
 /**
  * バッジ一覧を取得
  */
-participantRouter.get("/profile/badges", async (c) => {
+participantRouter.get(
+	"/profile/badges",
+	describeRoute({
+		tags: ["Participant / Rankings"],
+		summary: "バッジ一覧取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	try {
 		// TODO: 実際のバッジ一覧を取得
 
@@ -1203,7 +1570,18 @@ participantRouter.get("/profile/badges", async (c) => {
 /**
  * 参加イベント履歴を取得
  */
-participantRouter.get("/profile/history", async (c) => {
+participantRouter.get(
+	"/profile/history",
+	describeRoute({
+		tags: ["Participant / Rankings"],
+		summary: "参加イベント履歴取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { limit: _limit = "20", offset: _offset = "0" } = c.req.query();
 
 	try {
@@ -1222,7 +1600,18 @@ participantRouter.get("/profile/history", async (c) => {
 /**
  * グローバルランキングを取得
  */
-participantRouter.get("/rankings", async (c) => {
+participantRouter.get(
+	"/rankings",
+	describeRoute({
+		tags: ["Participant / Rankings"],
+		summary: "グローバルランキング取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+		},
+	}),
+	async (c) => {
 	const { limit: _limit = "50", offset: _offset = "0" } = c.req.query();
 
 	try {
