@@ -44,6 +44,7 @@ export class LocalCloudProvider implements ICloudProvider {
 	readonly displayName = "Local Development";
 
 	private deployedStacks: Map<string, LocalStack> = new Map();
+	private nextPortOffset = 0;
 
 	/**
 	 * 認証情報の検証（ローカルでは常に成功）
@@ -281,21 +282,27 @@ export class LocalCloudProvider implements ICloudProvider {
 		problemRoot: string,
 		region: string,
 		stackName: string,
-		ports: { apiPort: number; frontendPort: number },
+		ports: LocalPorts,
 	): Record<string, string> {
 		return {
 			...Object.fromEntries(
-				Object.entries(templateParameters).map(([key, value]) => [key, String(value)]),
+				Object.entries(templateParameters).map(([key, value]) => [
+					key,
+					this.sanitizeEnvironmentValue(String(value)),
+				]),
 			),
 			...Object.fromEntries(
-				Object.entries(overrideParameters).map(([key, value]) => [key, String(value)]),
+				Object.entries(overrideParameters).map(([key, value]) => [
+					key,
+					this.sanitizeEnvironmentValue(String(value)),
+				]),
 			),
-			PROBLEM_ROOT: problemRoot,
-			REGION: region,
-			STACK_NAME: stackName,
+			PROBLEM_ROOT: this.sanitizeEnvironmentValue(problemRoot),
+			REGION: this.sanitizeEnvironmentValue(region),
+			STACK_NAME: this.sanitizeEnvironmentValue(stackName),
 			API_PORT: String(ports.apiPort),
 			FRONTEND_PORT: String(ports.frontendPort),
-			DB_EXPOSE_PORT: String(this.allocateHostPort(3306)),
+			DB_EXPOSE_PORT: String(ports.dbPort),
 		};
 	}
 
@@ -346,16 +353,22 @@ export class LocalCloudProvider implements ICloudProvider {
 		}
 	}
 
-	private allocatePorts(): { apiPort: number; frontendPort: number } {
-		const offset = this.deployedStacks.size * 10;
+	private sanitizeEnvironmentValue(value: string): string {
+		return value.replace(/[\r\n\x00-\x1F\x7F]/g, "");
+	}
+
+	private allocatePorts(): LocalPorts {
+		const offset = this.nextPortOffset;
+		this.nextPortOffset += 1;
 		return {
-			apiPort: this.allocateHostPort(18080 + offset),
-			frontendPort: this.allocateHostPort(13080 + offset),
+			apiPort: this.allocateHostPort(18080, offset),
+			frontendPort: this.allocateHostPort(13080, offset),
+			dbPort: this.allocateHostPort(3306, offset),
 		};
 	}
 
-	private allocateHostPort(basePort: number): number {
-		return basePort + this.deployedStacks.size;
+	private allocateHostPort(basePort: number, offset: number): number {
+		return basePort + offset * 10;
 	}
 
 	private getProjectName(stackName: string): string {
@@ -378,9 +391,20 @@ interface LocalStack {
 	environment: Record<string, string>;
 }
 
+interface LocalPorts {
+	apiPort: number;
+	frontendPort: number;
+	dbPort: number;
+}
+
+let localProviderInstance: LocalCloudProvider | null = null;
+
 /**
  * ローカルプロバイダーのシングルトンインスタンスを取得
  */
 export function getLocalProvider(): LocalCloudProvider {
-	return new LocalCloudProvider();
+	if (!localProviderInstance) {
+		localProviderInstance = new LocalCloudProvider();
+	}
+	return localProviderInstance;
 }
