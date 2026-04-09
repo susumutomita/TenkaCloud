@@ -434,13 +434,19 @@ describe('Admin 問題デプロイページ', () => {
     render(<AdminProblemDeployPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'デプロイ開始' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'デプロイ開始' }),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'デプロイ開始' }));
 
     await waitFor(() => {
-      expect(mockDeployProblem).toHaveBeenCalledWith('prob-123', 'local', 'local');
+      expect(mockDeployProblem).toHaveBeenCalledWith(
+        'prob-123',
+        'local',
+        'local',
+      );
     });
   });
 });

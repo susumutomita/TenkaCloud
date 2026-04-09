@@ -106,25 +106,28 @@ export default function AdminProblemDeployPage() {
     }
   }, []);
 
-  const fetchStatus = useCallback(async (targetOverride?: DeployTarget | null) => {
-    const activeTarget = targetOverride ?? deployTarget;
-    if (!activeTarget) {
-      return;
-    }
-
-    try {
-      setStatusLoading(true);
-      const data = await getDeployStatus(problemId, activeTarget);
-      setDeploymentStatus(data);
-      if (!isInProgress(data.status)) {
-        stopAutoRefresh();
+  const fetchStatus = useCallback(
+    async (targetOverride?: DeployTarget | null) => {
+      const activeTarget = targetOverride ?? deployTarget;
+      if (!activeTarget) {
+        return;
       }
-    } catch {
-      // ステータス取得失敗は無視（まだデプロイされていない場合など）
-    } finally {
-      setStatusLoading(false);
-    }
-  }, [deployTarget, problemId, stopAutoRefresh]);
+
+      try {
+        setStatusLoading(true);
+        const data = await getDeployStatus(problemId, activeTarget);
+        setDeploymentStatus(data);
+        if (!isInProgress(data.status)) {
+          stopAutoRefresh();
+        }
+      } catch {
+        // ステータス取得失敗は無視（まだデプロイされていない場合など）
+      } finally {
+        setStatusLoading(false);
+      }
+    },
+    [deployTarget, problemId, stopAutoRefresh],
+  );
 
   const startAutoRefresh = useCallback(() => {
     stopAutoRefresh();
@@ -166,7 +169,9 @@ export default function AdminProblemDeployPage() {
       return;
     }
 
-    if (!availableRegions.some((region) => region.value === selectedRegion.value)) {
+    if (
+      !availableRegions.some((region) => region.value === selectedRegion.value)
+    ) {
       setSelectedRegion(availableRegions[0] ?? null);
     }
   }, [availableRegions, selectedRegion]);
@@ -187,7 +192,11 @@ export default function AdminProblemDeployPage() {
     setDeployError('');
     try {
       const provider = selectedProvider.value as 'aws' | 'local';
-      const result = await deployProblem(problemId, provider, selectedRegion.value);
+      const result = await deployProblem(
+        problemId,
+        provider,
+        selectedRegion.value,
+      );
       const nextTarget = {
         stackName: result.stackName,
         provider,
@@ -307,7 +316,9 @@ export default function AdminProblemDeployPage() {
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button
                     iconName="refresh"
-                    onClick={fetchStatus}
+                    onClick={() => {
+                      void fetchStatus();
+                    }}
                     loading={statusLoading}
                   >
                     更新

@@ -30,7 +30,11 @@ export async function getDeployStatus(
   problemId: string,
   target: DeployTarget,
 ): Promise<DeploymentStatus> {
-  return get<DeploymentStatus>(`/admin/problems/${problemId}/deploy`, target);
+  return get<DeploymentStatus>(`/admin/problems/${problemId}/deploy`, {
+    stackName: target.stackName,
+    provider: target.provider,
+    region: target.region,
+  });
 }
 
 export async function deleteDeployment(
