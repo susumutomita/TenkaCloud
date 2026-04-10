@@ -7,6 +7,7 @@ const mockAuth = vi.fn<() => Promise<Session | null>>();
 
 vi.mock('@/auth', () => ({
   auth: () => mockAuth(),
+  authSkipEnabled: false,
 }));
 
 vi.mock('@/lib/api/backend-urls', () => ({
@@ -179,6 +180,36 @@ describe('Server API Utilities', () => {
 
     it('未認証の場合は Authorization ヘッダーなしでリクエストを送信すべき', async () => {
       mockAuth.mockResolvedValue(null);
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ data: 'test' }),
+      });
+
+      const { serverApiRequest } = await import('../server');
+      await serverApiRequest<{ data: string }>('/test-endpoint');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/test-endpoint'),
+        expect.objectContaining({
+          headers: expect.not.objectContaining({
+            Authorization: expect.any(String),
+          }),
+        }),
+      );
+    });
+
+    it('AUTH_SKIP のモックトークンはバックエンドへ転送しないべき', async () => {
+      mockAuth.mockResolvedValue({
+        user: { name: 'Dev User', email: 'dev@example.com' },
+        expires: new Date().toISOString(),
+        accessToken: 'mock-access-token',
+      } as Session);
+
+      vi.doMock('@/auth', () => ({
+        auth: () => mockAuth(),
+        authSkipEnabled: true,
+      }));
 
       mockFetch.mockResolvedValue({
         ok: true,
