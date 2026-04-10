@@ -142,6 +142,32 @@ describe('テナント管理API', () => {
     });
   });
 
+  describe('API Docs', () => {
+    it('OpenAPI JSON を返すべき', async () => {
+      const res = await app.request('/openapi.json');
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('application/json');
+
+      const body = await res.json();
+      expect(body.info.title).toBe('TenkaCloud Tenant Management API');
+      expect(body.paths['/api/tenants']).toBeDefined();
+      expect(body.paths['/api/tenants/{id}']).toBeDefined();
+      expect(body.components.securitySchemes.bearerAuth).toBeDefined();
+    });
+
+    it('Scalar docs UI を返すべき', async () => {
+      const res = await app.request('/docs');
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+
+      const body = await res.text();
+      expect(body).toContain('TenkaCloud Tenant Management API');
+      expect(body).toContain('/openapi.json');
+    });
+  });
+
   describe('GET /api/stats', () => {
     it('ダッシュボード統計を取得できるべき', async () => {
       const mockTenants = [

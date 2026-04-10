@@ -44,14 +44,15 @@ describe("auth モジュール", () => {
 			expect(mod.authenticateRequest).toBeDefined();
 		});
 
-		it("NODE_ENV が未設定で AUTH_SKIP=1 の場合はバイパスが無効になるべき", async () => {
+		it("NODE_ENV が未設定で AUTH_SKIP=1 の場合はローカル開発としてバイパスすべき", async () => {
 			process.env.AUTH_SKIP = "1";
 			delete process.env.NODE_ENV;
 
 			const mod = await import("../auth");
-			// バイパスが無効なので、トークンなしで認証失敗になる
 			const result = await mod.authenticateRequest({});
-			expect(result.isValid).toBe(false);
+			expect(result.isValid).toBe(true);
+			expect(result.user?.id).toBe("dev-user");
+			expect(result.token).toBe("mock-access-token");
 		});
 	});
 
@@ -105,6 +106,20 @@ describe("auth モジュール", () => {
 			const { authenticateRequest } = await import("../auth");
 			const result = await authenticateRequest({
 				authorizationtoken: "mock-access-token",
+			});
+
+			expect(result.isValid).toBe(true);
+			expect(result.user?.id).toBe("dev-user");
+			expect(result.token).toBe("mock-access-token");
+		});
+
+		it("NODE_ENV が未設定でも mock-access-token を開発用トークンとして受け入れるべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			delete process.env.NODE_ENV;
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({
+				authorization: "Bearer mock-access-token",
 			});
 
 			expect(result.isValid).toBe(true);
