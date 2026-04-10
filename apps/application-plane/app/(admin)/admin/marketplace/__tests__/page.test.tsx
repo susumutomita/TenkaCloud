@@ -80,19 +80,21 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
     vi.clearAllMocks();
   });
 
+  async function waitForProblemCards() {
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
+      ).toBeInTheDocument();
+    });
+  }
+
   describe('\u30d7\u30ec\u30d3\u30e5\u30fc\u30e2\u30fc\u30c0\u30eb', () => {
     it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30dc\u30bf\u30f3\u3092\u30af\u30ea\u30c3\u30af\u3059\u308b\u3068\u554f\u984c\u8a73\u7d30\u30e2\u30fc\u30c0\u30eb\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       await user.click(
         screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
@@ -106,13 +108,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       await user.click(
         screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
@@ -133,13 +129,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       await user.click(
         screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
@@ -153,13 +143,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockRejectedValue(new Error('Not found'));
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       await user.click(
         screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
@@ -177,13 +161,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       await user.click(
         screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       );
@@ -207,13 +185,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
       });
       vi.stubGlobal('fetch', mockFetch);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       await user.click(
         screen.getByRole('button', {
           name: '\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0',
@@ -233,13 +205,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
     it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30dc\u30bf\u30f3\u304c\u6709\u52b9\u3067\u3042\u308b\u3079\u304d', async () => {
       mockGetProblems.mockResolvedValue(problemsResponse);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       expect(
         screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
       ).not.toBeDisabled();
@@ -248,13 +214,7 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
     it('\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0\u30dc\u30bf\u30f3\u304c\u6709\u52b9\u3067\u3042\u308b\u3079\u304d', async () => {
       mockGetProblems.mockResolvedValue(problemsResponse);
       render(<AdminMarketplacePage />);
-      await waitFor(() => {
-        expect(
-          screen.getByText(
-            'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
-          ),
-        ).toBeInTheDocument();
-      });
+      await waitForProblemCards();
       expect(
         screen.getByRole('button', {
           name: '\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0',

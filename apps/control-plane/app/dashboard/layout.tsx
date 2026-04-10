@@ -52,16 +52,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       return normalizedPath === '/dashboard';
     }
 
-    return normalizedPath.startsWith(item.appPath);
+    return (
+      normalizedPath === item.appPath ||
+      normalizedPath.startsWith(`${item.appPath}/`)
+    );
   })?.href;
 
   // Cloudscape は SSR で異なる内部 ID を生成するため、CSR のみでレンダリング
   if (!mounted) {
-    return (
-      <div style={{ minHeight: '100vh' }}>
-        {children}
-      </div>
-    );
+    return <div style={{ minHeight: '100vh' }}>{children}</div>;
   }
 
   return (

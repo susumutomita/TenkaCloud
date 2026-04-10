@@ -39,16 +39,18 @@ vi.mock('@cloudscape-design/components/side-navigation', () => ({
   default: ({
     items,
     header,
+    activeHref,
     onFollow,
   }: {
     items: Array<{ text: string; href: string; type: string }>;
     header: { text: string };
+    activeHref?: string;
     onFollow?: (e: {
       preventDefault: () => void;
       detail: { href: string };
     }) => void;
   }) => (
-    <div data-testid="side-navigation">
+    <div data-testid="side-navigation" data-active-href={activeHref}>
       <span>{header.text}</span>
       {items.map((item: { text: string; href: string; type: string }) => (
         <a
@@ -99,8 +101,8 @@ vi.mock('@cloudscape-design/components/top-navigation', () => ({
       >
         {identity.title}
       </button>
-      {utilities?.map((util) =>
-        util.items?.map((item) => (
+      {utilities?.map((util) => [
+        ...(util.items?.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -112,8 +114,19 @@ vi.mock('@cloudscape-design/components/top-navigation', () => ({
           >
             {item.text}
           </button>
-        )),
-      )}
+        )) ?? []),
+        <button
+          key={`${util.text}-unknown`}
+          type="button"
+          onClick={() => {
+            if (util.onItemClick) {
+              util.onItemClick({ detail: { id: 'unknown' } });
+            }
+          }}
+        >
+          不明なメニュー
+        </button>,
+      ])}
     </div>
   ),
 }));
@@ -215,6 +228,20 @@ describe('DashboardLayout コンポーネント', () => {
     expect(signOut).not.toHaveBeenCalled();
   });
 
+  it('未対応メニューをクリックしても遷移もログアウトも行わないべき', async () => {
+    const user = userEvent.setup();
+    render(
+      <DashboardLayout>
+        <div>テスト</div>
+      </DashboardLayout>,
+    );
+
+    await user.click(screen.getByRole('button', { name: '不明なメニュー' }));
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
   it('テナント管理パスではテナント管理リンクがアクティブになるべき', () => {
     vi.mocked(usePathname).mockReturnValue('/dashboard/tenants');
     render(
@@ -222,8 +249,10 @@ describe('DashboardLayout コンポーネント', () => {
         <div>テスト</div>
       </DashboardLayout>,
     );
-    // SideNavigation にアクティブ状態が渡されることを確認
-    expect(screen.getByText('テナント管理')).toBeInTheDocument();
+    expect(screen.getByTestId('side-navigation')).toHaveAttribute(
+      'data-active-href',
+      '/control/dashboard/tenants',
+    );
   });
 
   it('ダッシュボードパスではダッシュボードリンクがアクティブになるべき', () => {
@@ -233,6 +262,22 @@ describe('DashboardLayout コンポーネント', () => {
         <div>テスト</div>
       </DashboardLayout>,
     );
-    expect(screen.getByText('ダッシュボード')).toBeInTheDocument();
+    expect(screen.getByTestId('side-navigation')).toHaveAttribute(
+      'data-active-href',
+      '/control/dashboard',
+    );
+  });
+
+  it('類似パスでは前方一致で誤ってアクティブにしないべき', () => {
+    vi.mocked(usePathname).mockReturnValue('/dashboard/tenants-legacy');
+    render(
+      <DashboardLayout>
+        <div>テスト</div>
+      </DashboardLayout>,
+    );
+    expect(screen.getByTestId('side-navigation')).not.toHaveAttribute(
+      'data-active-href',
+      '/control/dashboard/tenants',
+    );
   });
 });

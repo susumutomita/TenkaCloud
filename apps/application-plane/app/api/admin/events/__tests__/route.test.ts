@@ -274,6 +274,52 @@ describe('Admin Events API', () => {
       expect(data.error).toBe('Event end time is required');
     });
 
+    it('不正な JSON の場合は 400 を返すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+
+      const { POST } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events', {
+        method: 'POST',
+        body: '{',
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: 'Invalid request',
+      });
+    });
+
+    it('name が文字列でない場合は 400 を返すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+
+      const { POST } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 123,
+          startTime: '2024-01-01T00:00:00.000Z',
+          endTime: '2024-01-02T23:59:59.000Z',
+        }),
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: 'Event name is required',
+      });
+    });
+
     it('イベントを作成し 201 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },

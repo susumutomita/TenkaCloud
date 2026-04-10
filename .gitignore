@@ -153,3 +153,6 @@ vite.config.ts.timestamp-*
 apps/*/test-results/
 apps/*/playwright-report/
 package-lock.json
+
+tmp
+.DS_Store

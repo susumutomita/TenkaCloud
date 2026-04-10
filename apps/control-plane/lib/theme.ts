@@ -1,7 +1,6 @@
 import type { Theme } from '@/types/settings';
 
-export const CONTROL_PLANE_THEME_STORAGE_KEY =
-  'tenkacloud-control-plane-theme';
+export const CONTROL_PLANE_THEME_STORAGE_KEY = 'tenkacloud-control-plane-theme';
 
 export const CONTROL_PLANE_THEME_CHANGE_EVENT =
   'tenkacloud:control-plane-theme-change';

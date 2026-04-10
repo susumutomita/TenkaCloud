@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { saveSettings } from '@/lib/api/settings-api';
-import {
-  getStoredThemePreference,
-  persistThemePreference,
-} from '@/lib/theme';
+import { getStoredThemePreference, persistThemePreference } from '@/lib/theme';
 import {
   DEFAULT_SETTINGS,
   LANGUAGES,

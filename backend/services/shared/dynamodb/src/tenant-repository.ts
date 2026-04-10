@@ -4,7 +4,6 @@ import {
   UpdateCommand,
   QueryCommand,
   DeleteCommand,
-  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ulid } from 'ulid';
 import { getDocClient, getTableName } from './client';
@@ -57,6 +56,22 @@ function isTenantMetadataItem(
   }
 
   return status ? item.status === status : true;
+}
+
+function buildTenantEntityQueryInput(options?: {
+  limit?: number;
+  lastKey?: Record<string, unknown>;
+}) {
+  return {
+    TableName: getTableName(),
+    IndexName: 'GSI2',
+    KeyConditionExpression: 'EntityType = :entityType',
+    ExpressionAttributeValues: {
+      ':entityType': EntityType.TENANT,
+    },
+    ExclusiveStartKey: options?.lastKey,
+    Limit: options?.limit,
+  };
 }
 
 // Convert DynamoDB item to domain object
@@ -175,22 +190,26 @@ export class TenantRepository {
     lastKey?: Record<string, unknown>;
   }): Promise<{ tenants: Tenant[]; lastKey?: Record<string, unknown> }> {
     const client = getDocClient();
-    const tableName = getTableName();
     const limit = options?.limit ?? 50;
     const tenants: Tenant[] = [];
     let lastKey = options?.lastKey;
 
     while (tenants.length < limit) {
+      const remaining = limit - tenants.length;
       const result = await client.send(
-        new ScanCommand({
-          TableName: tableName,
-          ExclusiveStartKey: lastKey,
-        })
+        new QueryCommand(
+          buildTenantEntityQueryInput({ lastKey, limit: remaining }),
+        ),
       );
 
       tenants.push(
         ...(result.Items ?? [])
-          .filter((item) => isTenantMetadataItem(item as Partial<TenantItem>, options?.status))
+          .filter((item) =>
+            isTenantMetadataItem(
+              item as Partial<TenantItem>,
+              options?.status,
+            ),
+          )
           .map((item) => toDomain(item as TenantItem))
       );
 
@@ -301,16 +320,12 @@ export class TenantRepository {
 
   async count(): Promise<number> {
     const client = getDocClient();
-    const tableName = getTableName();
     let total = 0;
     let lastKey: Record<string, unknown> | undefined;
 
     do {
       const result = await client.send(
-        new ScanCommand({
-          TableName: tableName,
-          ExclusiveStartKey: lastKey,
-        })
+        new QueryCommand(buildTenantEntityQueryInput({ lastKey }))
       );
 
       total += (result.Items ?? []).filter((item) =>

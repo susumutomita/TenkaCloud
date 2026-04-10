@@ -120,6 +120,43 @@ describe('TenantRepository', () => {
 
       expect(result.tenants).toHaveLength(0);
     });
+
+    it('limit に達するまで query を継続し、有効な lastKey を返すべき', async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Items: [
+            {
+              ...validTenantItem,
+              PK: 'EVENT#01ARZ3NDEKTSV4RRFFQ69G5FAV',
+              EntityType: 'EVENT',
+            },
+          ],
+          LastEvaluatedKey: { PK: 'cursor-1' },
+        })
+        .mockResolvedValueOnce({
+          Items: [
+            validTenantItem,
+            {
+              ...validTenantItem,
+              PK: 'TENANT#01ARZ3NDEKTSV4RRFFQ69G5FAA',
+              id: '01ARZ3NDEKTSV4RRFFQ69G5FAA',
+              slug: 'test-tenant-2',
+            },
+          ],
+          LastEvaluatedKey: { PK: 'cursor-2' },
+        });
+
+      const result = await repo.list({ limit: 2 });
+
+      expect(result.tenants).toHaveLength(2);
+      expect(result.tenants.map((tenant) => tenant.id)).toEqual([
+        '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        '01ARZ3NDEKTSV4RRFFQ69G5FAA',
+      ]);
+      expect(result.lastKey).toEqual({ PK: 'cursor-2' });
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls[0][0].input.IndexName).toBe('GSI2');
+    });
   });
 
   describe('findBySlug', () => {
@@ -185,6 +222,7 @@ describe('TenantRepository', () => {
 
       expect(result).toBe(2);
       expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls[0][0].input.IndexName).toBe('GSI2');
     });
   });
 });

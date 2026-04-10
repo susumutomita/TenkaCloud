@@ -7,6 +7,7 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { authSkipEnabled } from '@/auth';
 import {
   getAdminSession,
@@ -44,24 +45,44 @@ function emptyEventList(
 /**
  * イベント作成リクエスト型
  */
-interface CreateEventRequest {
-  name: string;
-  slug?: string;
-  description?: string;
-  organizer?: string;
-  eventDate?: string;
-  startTime?: string;
-  endTime?: string;
-  status?: EventStatus;
-  imageUrl?: string;
-  type?: string;
-  timezone?: string;
-  participantType?: string;
-  cloudProvider?: string;
-  regions?: string[];
-  scoringType?: string;
-  leaderboardVisible?: boolean;
-}
+const createEventRequestSchema = z.object({
+  name: z
+    .string({
+      required_error: 'Event name is required',
+      invalid_type_error: 'Event name is required',
+    })
+    .trim()
+    .min(1, 'Event name is required'),
+  slug: z.string().trim().min(1).optional(),
+  description: z.string().optional(),
+  organizer: z.string().optional(),
+  eventDate: z.string().optional(),
+  startTime: z
+    .string({
+      required_error: 'Event start time is required',
+      invalid_type_error: 'Event start time is required',
+    })
+    .trim()
+    .min(1, 'Event start time is required'),
+  endTime: z
+    .string({
+      required_error: 'Event end time is required',
+      invalid_type_error: 'Event end time is required',
+    })
+    .trim()
+    .min(1, 'Event end time is required'),
+  status: z.custom<EventStatus>().optional(),
+  imageUrl: z.string().optional(),
+  type: z.string().optional(),
+  timezone: z.string().optional(),
+  participantType: z.string().optional(),
+  cloudProvider: z.string().optional(),
+  regions: z.array(z.string()).optional(),
+  scoringType: z.string().optional(),
+  leaderboardVisible: z.boolean().optional(),
+});
+
+type CreateEventRequest = z.infer<typeof createEventRequestSchema>;
 
 /**
  * GET /api/admin/events
@@ -131,20 +152,24 @@ export async function POST(request: NextRequest) {
       : forbiddenResponse('Admin role required');
   }
 
-  const body = (await request.json()) as CreateEventRequest;
+  const json = await request
+    .json()
+    .catch(() => null satisfies null | Record<string, unknown>);
+  if (json === null) {
+    return badRequestResponse('Invalid request');
+  }
+
+  const parsedBody = createEventRequestSchema.safeParse(json);
+
+  if (!parsedBody.success) {
+    return badRequestResponse(
+      parsedBody.error.issues[0]?.message ?? 'Invalid request',
+    );
+  }
+
+  const body = parsedBody.data;
 
   try {
-    // 必須フィールドのバリデーション
-    if (!body.name?.trim()) {
-      return badRequestResponse('Event name is required');
-    }
-    if (!body.startTime?.trim()) {
-      return badRequestResponse('Event start time is required');
-    }
-    if (!body.endTime?.trim()) {
-      return badRequestResponse('Event end time is required');
-    }
-
     // バックエンド API を呼び出し
     const data = await serverApiRequest<ParticipantEvent>('/admin/events', {
       method: 'POST',
