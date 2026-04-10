@@ -59,6 +59,24 @@ export function subscribeToJob(
 const jobRepo = new GameDayDeploymentJobRepository();
 const accountRepo = new CompetitorAccountRepository();
 
+export function getGameDayDeploymentValidationError(
+	problem: Pick<Problem, "type" | "deployment">,
+): string | null {
+	if (problem.type !== "gameday") {
+		return "Team deployment is only supported for GameDay problems";
+	}
+
+	if (!problem.deployment.providers.includes("aws")) {
+		return "Team deployment requires AWS deployment support";
+	}
+
+	if (!problem.deployment.templates.aws) {
+		return "Team deployment requires an AWS deployment template";
+	}
+
+	return null;
+}
+
 /**
  * 1 問題 × 全チームへのデプロイを開始する
  *
@@ -69,6 +87,11 @@ export async function deployProblemToTeams(
 	eventId: string,
 	concurrency = 10,
 ): Promise<DeploymentJob[]> {
+	const validationError = getGameDayDeploymentValidationError(problem);
+	if (validationError) {
+		throw new Error(validationError);
+	}
+
 	const accounts = await accountRepo.findByEventId(eventId);
 	if (accounts.length === 0) {
 		return [];

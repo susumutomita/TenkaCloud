@@ -134,6 +134,45 @@ describe("gameday-deployer", () => {
 		vi.clearAllMocks();
 	});
 
+	describe("getGameDayDeploymentValidationError", () => {
+		it("GameDay の AWS 問題はデプロイ可能と判定すべき", async () => {
+			const { getGameDayDeploymentValidationError } = await import(
+				"../problems/gameday-deployer"
+			);
+
+			expect(getGameDayDeploymentValidationError(makeProblem())).toBeNull();
+		});
+
+		it("GameDay 以外の問題は未対応と判定すべき", async () => {
+			const { getGameDayDeploymentValidationError } = await import(
+				"../problems/gameday-deployer"
+			);
+
+			expect(
+				getGameDayDeploymentValidationError({
+					...makeProblem(),
+					type: "jam",
+				}),
+			).toBe("Team deployment is only supported for GameDay problems");
+		});
+
+		it("AWS テンプレートがない問題は未対応と判定すべき", async () => {
+			const { getGameDayDeploymentValidationError } = await import(
+				"../problems/gameday-deployer"
+			);
+
+			expect(
+				getGameDayDeploymentValidationError({
+					...makeProblem(),
+					deployment: {
+						...makeProblem().deployment,
+						templates: {},
+					},
+				}),
+			).toBe("Team deployment requires an AWS deployment template");
+		});
+	});
+
 	describe("reconcile", () => {
 		it("アクティブジョブがない場合は何もしないべき", async () => {
 			mockFindActive.mockResolvedValueOnce([]);

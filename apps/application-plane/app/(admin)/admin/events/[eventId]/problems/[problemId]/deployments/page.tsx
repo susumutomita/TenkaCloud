@@ -23,6 +23,9 @@ import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AdminProblem } from '@/lib/api/admin-types';
+import { getProblem } from '@/lib/api/admin-problems';
+import { getGameDayTeamDeploymentIssue } from '../../../../../../../../lib/api/gameday-team-deploy';
 
 // ============================================================
 // Types
@@ -206,6 +209,8 @@ export default function GameDayDeploymentsPage() {
   const eventId = params.eventId as string;
   const problemId = params.problemId as string;
 
+  const [problem, setProblem] = useState<AdminProblem | null>(null);
+  const [problemLoading, setProblemLoading] = useState(true);
   const [accounts, setAccounts] = useState<CompetitorAccount[]>([]);
   const [jobs, setJobs] = useState<DeploymentJob[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
@@ -228,6 +233,14 @@ export default function GameDayDeploymentsPage() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sseRef = useRef<EventSource | null>(null);
+  const teamDeployIssue = problem
+    ? getGameDayTeamDeploymentIssue(problem)
+    : null;
+  const deployDisabled =
+    deployLoading ||
+    problemLoading ||
+    teamDeployIssue !== null ||
+    accounts.length === 0;
 
   // ---- Data fetching ----
 
@@ -239,6 +252,18 @@ export default function GameDayDeploymentsPage() {
       console.error('Failed to refresh jobs', e);
     }
   }, [eventId, problemId]);
+
+  const refreshProblem = useCallback(async () => {
+    try {
+      setProblemLoading(true);
+      const data = await getProblem(problemId);
+      setProblem(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '問題取得失敗');
+    } finally {
+      setProblemLoading(false);
+    }
+  }, [problemId]);
 
   const refreshAccounts = useCallback(async () => {
     try {
@@ -305,6 +330,7 @@ export default function GameDayDeploymentsPage() {
   // ---- Initial load ----
 
   useEffect(() => {
+    refreshProblem();
     refreshAccounts();
     // SSE が失敗する前の初期データ取得
     fetchJobs(eventId, problemId)
@@ -313,7 +339,7 @@ export default function GameDayDeploymentsPage() {
         setJobsLoading(false);
       })
       .catch(() => setJobsLoading(false));
-  }, [eventId, problemId, refreshAccounts]);
+  }, [eventId, problemId, refreshAccounts, refreshProblem]);
 
   // アクティブジョブがなければポーリングを止める
   useEffect(() => {
@@ -324,6 +350,10 @@ export default function GameDayDeploymentsPage() {
   // ---- Actions ----
 
   const handleDeploy = async () => {
+    if (problemLoading || teamDeployIssue || accounts.length === 0) {
+      return;
+    }
+
     setDeployLoading(true);
     setError(null);
     try {
@@ -406,13 +436,18 @@ export default function GameDayDeploymentsPage() {
     <SpaceBetween size="l">
       <Header
         variant="h1"
+        description={
+          problem?.title
+            ? `${problem.title} をイベント参加チームの AWS アカウントへ配布します。`
+            : undefined
+        }
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button
               variant="primary"
               onClick={handleDeploy}
               loading={deployLoading}
-              disabled={accounts.length === 0}
+              disabled={deployDisabled}
             >
               全チームへデプロイ
             </Button>
@@ -430,6 +465,15 @@ export default function GameDayDeploymentsPage() {
       {error && (
         <Alert type="error" dismissible onDismiss={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+
+      {teamDeployIssue && <Alert type="warning">{teamDeployIssue}</Alert>}
+
+      {!teamDeployIssue && !problemLoading && accounts.length === 0 && (
+        <Alert type="info">
+          先に競技アカウントを追加してください。アカウントが 1 件もない場合は
+          チーム配布を開始できません。
         </Alert>
       )}
 
