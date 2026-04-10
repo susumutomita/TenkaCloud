@@ -1,4 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import {
+  clearDevEvents,
+  createDevEvent,
+  setDevEventRegistration,
+} from '@/app/api/admin/events/dev-store';
 
 const mockServerApiRequest = vi.fn();
 let mockAuthSkipEnabled = false;
@@ -21,17 +26,32 @@ describe('Participant My Events API Proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuthSkipEnabled = false;
+    clearDevEvents();
   });
 
-  it('AUTH_SKIP 中に Unauthorized の場合は空一覧を返すべき', async () => {
+  it('AUTH_SKIP 中に Unauthorized の場合は local registered events を返すべき', async () => {
     mockAuthSkipEnabled = true;
+    const event = createDevEvent({
+      name: 'Registered Event',
+      status: 'active',
+      type: 'gameday',
+    });
+    setDevEventRegistration(event.id, true);
     mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
 
     const { GET } = await import('../route');
     const response = await GET();
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ events: [] });
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        expect.objectContaining({
+          id: event.id,
+          name: 'Registered Event',
+          isRegistered: true,
+        }),
+      ],
+    });
   });
 
   it('参加中のイベント一覧を取得できるべき', async () => {
@@ -49,14 +69,28 @@ describe('Participant My Events API Proxy', () => {
     });
   });
 
-  it('network fetch failure の場合は空一覧を返すべき', async () => {
+  it('network fetch failure の場合は local registered events を返すべき', async () => {
+    const event = createDevEvent({
+      name: 'Offline Event',
+      status: 'scheduled',
+      type: 'jam',
+    });
+    setDevEventRegistration(event.id, true);
     mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
 
     const { GET } = await import('../route');
     const response = await GET();
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ events: [] });
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        expect.objectContaining({
+          id: event.id,
+          name: 'Offline Event',
+          isRegistered: true,
+        }),
+      ],
+    });
   });
 
   it('通常の API エラーは 400 を返すべき', async () => {

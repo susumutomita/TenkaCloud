@@ -16,6 +16,7 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Table from '@cloudscape-design/components/table';
 import '@cloudscape-design/global-styles/index.css';
+import { useEffect, useState } from 'react';
 
 interface ScoreRow {
   action: string;
@@ -148,6 +149,12 @@ const KEY_CONCEPTS: Concept[] = [
 ];
 
 export default function TutorialPage() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <SpaceBetween size="l">
       <Header
@@ -175,41 +182,66 @@ export default function TutorialPage() {
 
       {/* Scoring System */}
       <Container header={<Header variant="h2">スコアリングシステム</Header>}>
-        <Table
-          columnDefinitions={[
-            {
-              id: 'action',
-              header: 'アクション',
-              cell: (item: ScoreRow) => item.action,
-              width: 200,
-            },
-            {
-              id: 'points',
-              header: 'ポイント',
-              cell: (item: ScoreRow) => (
-                <StatusIndicator
-                  type={
-                    item.type === 'positive'
-                      ? 'success'
-                      : item.type === 'negative'
-                        ? 'error'
-                        : 'info'
-                  }
-                >
-                  {item.points}
-                </StatusIndicator>
-              ),
-              width: 150,
-            },
-            {
-              id: 'description',
-              header: '説明',
-              cell: (item: ScoreRow) => item.description,
-            },
-          ]}
-          items={SCORING_TABLE}
-          variant="embedded"
-        />
+        {mounted ? (
+          <Table
+            columnDefinitions={[
+              {
+                id: 'action',
+                header: 'アクション',
+                cell: (item: ScoreRow) => item.action,
+                width: 200,
+              },
+              {
+                id: 'points',
+                header: 'ポイント',
+                cell: (item: ScoreRow) => (
+                  <StatusIndicator
+                    type={
+                      item.type === 'positive'
+                        ? 'success'
+                        : item.type === 'negative'
+                          ? 'error'
+                          : 'info'
+                    }
+                  >
+                    {item.points}
+                  </StatusIndicator>
+                ),
+                width: 150,
+              },
+              {
+                id: 'description',
+                header: '説明',
+                cell: (item: ScoreRow) => item.description,
+              },
+            ]}
+            items={SCORING_TABLE}
+            variant="embedded"
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-3 font-semibold">アクション</th>
+                  <th className="px-4 py-3 font-semibold">ポイント</th>
+                  <th className="px-4 py-3 font-semibold">説明</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SCORING_TABLE.map((item) => (
+                  <tr key={item.action} className="border-b border-border/60">
+                    <td className="px-4 py-3">{item.action}</td>
+                    <td className="px-4 py-3">{item.points}</td>
+                    <td className="px-4 py-3 text-text-secondary">
+                      {item.description}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Container>
 
       {/* How to Play */}

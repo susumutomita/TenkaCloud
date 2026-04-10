@@ -50,13 +50,15 @@ describe('GamedayLayout', () => {
     await waitFor(() => {
       const header = document.querySelector('#gameday-top-nav header');
       expect(header).toBeInTheDocument();
+      expect(header).toHaveClass('border-hn-accent/40');
     });
   });
 
   it('スコアとランクが表示されるべき', async () => {
     render(<GamedayLayout>content</GamedayLayout>);
     await waitFor(() => {
-      expect(screen.getByText(/Score:/)).toBeInTheDocument();
+      expect(screen.getByText('Score')).toBeInTheDocument();
+      expect(screen.getByText('Rank')).toBeInTheDocument();
     });
   });
 

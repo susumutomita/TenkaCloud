@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import TutorialPage from '../page';
 
@@ -54,5 +55,13 @@ describe('TutorialPage', () => {
   it('ゲーム概要セクションを表示すべき', () => {
     render(<TutorialPage />);
     expect(screen.getByText('GameDay とは？')).toBeInTheDocument();
+  });
+
+  it('サーバー描画時は静的テーブルを返すべき', () => {
+    const html = renderToStaticMarkup(<TutorialPage />);
+
+    expect(html).toContain('<table');
+    expect(html).toContain('スコアリングシステム');
+    expect(html).not.toContain('awsui_sticky-scrollbar');
   });
 });

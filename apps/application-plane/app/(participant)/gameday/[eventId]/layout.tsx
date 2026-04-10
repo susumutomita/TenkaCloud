@@ -15,7 +15,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import { getParticipantGameStatus, getTeamDashboard } from '@/lib/api/gameday';
+import {
+  getLeaderboard,
+  getParticipantGameStatus,
+  getTeamDashboard,
+} from '@/lib/api/gameday';
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { NotificationPanel } from '@/components/notifications/notification-panel';
@@ -41,12 +45,19 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
   const fetchStatus = useCallback(async () => {
     if (!eventId || !teamId) return;
     try {
-      const [statusRes, dashRes] = await Promise.all([
+      const [statusRes, dashRes, leaderboardRes] = await Promise.all([
         getParticipantGameStatus(eventId).catch(() => null),
         getTeamDashboard(eventId, teamId).catch(() => null),
+        getLeaderboard(eventId).catch(() => null),
       ]);
       if (statusRes) setGameState(statusRes);
       if (dashRes) setScore(dashRes.score);
+      if (leaderboardRes) {
+        const entry = leaderboardRes.leaderboard.find(
+          (e) => e.teamId === teamId,
+        );
+        if (entry) setRank(entry.rank);
+      }
     } catch {
       // ignore
     }
@@ -159,13 +170,12 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
   return (
     <>
       <div id="gameday-top-nav">
-        <header className="bg-surface-1 border-b border-border sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
-          <div className="px-4 sm:px-6">
-            <div className="flex justify-between items-center h-16">
-              {/* Logo */}
+        <header className="sticky top-0 z-50 border-b-2 border-hn-accent/40 bg-surface-3/95 shadow-md backdrop-blur-sm">
+          <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
+            <div className="flex min-h-16 items-center gap-4 py-3">
               <Link
                 href={basePath}
-                className="flex items-center space-x-2"
+                className="flex shrink-0 items-center space-x-3"
                 onClick={(e) => {
                   e.preventDefault();
                   router.push(basePath);
@@ -177,16 +187,18 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                 <span className="font-bold text-xl text-text-primary">
                   TenkaCloud
                 </span>
-                <span className="hidden sm:block text-sm text-text-secondary font-medium">
+                <span className="hidden text-sm font-medium text-text-secondary md:block">
                   {t('gameday.title')}
                 </span>
               </Link>
 
-              {/* Score / Rank / Status badges */}
-              <div className="hidden md:flex items-center gap-3">
+              <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex">
+                <span className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
+                  Incident Drill
+                </span>
                 {gameState && (
                   <span
-                    className={`text-xs font-bold px-2 py-1 rounded-full ${gameState.isRunning ? 'bg-green-500 text-white' : 'bg-surface-2 text-text-secondary'}`}
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${gameState.isRunning ? 'bg-emerald-500 text-white' : 'bg-surface-2 text-text-secondary'}`}
                   >
                     {gameState.isRunning
                       ? t('gameday.live')
@@ -194,25 +206,34 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                   </span>
                 )}
                 {gameState?.scoreWeight === 'high' && (
-                  <span className="text-xs font-bold px-2 py-1 rounded-full bg-hn-accent text-white">
+                  <span className="rounded-full bg-hn-accent px-3 py-1 text-xs font-bold text-white">
                     2x SCORE
                   </span>
                 )}
-                <span className="text-sm text-text-secondary">
-                  {scoreDisplay}
-                </span>
-                {rank !== undefined && (
-                  <span className="text-sm text-text-secondary">
-                    {rankDisplay}
-                  </span>
-                )}
+                <div className="grid min-w-[220px] grid-cols-2 gap-2">
+                  <div className="rounded-2xl border border-border bg-surface-2 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+                      {t('gameday.score')}
+                    </div>
+                    <div className="text-sm font-semibold text-text-primary">
+                      {scoreDisplay.replace(`${t('gameday.score')}: `, '')}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-surface-2 px-3 py-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+                      {t('gameday.rank')}
+                    </div>
+                    <div className="text-sm font-semibold text-text-primary">
+                      {rankDisplay.replace(`${t('gameday.rank')}: `, '')}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Right side: notifications + locale + team */}
-              <div className="flex items-center gap-3">
+              <div className="ml-auto flex items-center gap-3">
                 <NotificationPanel />
 
-                <div className="hidden sm:flex items-center gap-2">
+                <div className="hidden items-center gap-2 rounded-full border border-border bg-surface-2 px-3 py-1 sm:flex">
                   <button
                     type="button"
                     className={`text-sm ${locale === 'ja' ? 'text-text-primary' : 'text-text-muted'}`}
@@ -234,14 +255,14 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                   <button
                     type="button"
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="flex items-center space-x-2 text-text-secondary hover:text-text-primary transition-colors"
+                    className="flex items-center space-x-2 rounded-full border border-border bg-surface-2 px-2 py-1.5 text-text-secondary transition-colors hover:text-text-primary"
                     aria-expanded={isMenuOpen}
                     aria-haspopup="true"
                   >
-                    <div className="w-8 h-8 bg-hn-accent rounded-full flex items-center justify-center text-surface-0 font-medium">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-hn-accent text-surface-0 font-medium">
                       {(teamName || teamId || 'T').charAt(0).toUpperCase()}
                     </div>
-                    <span className="hidden sm:block font-medium text-sm">
+                    <span className="hidden text-sm font-medium sm:block">
                       {teamName || teamId || 'Team'}
                     </span>
                     <svg
@@ -261,7 +282,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                   </button>
 
                   {isMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-surface-elevated rounded-lg shadow-lg py-1 border border-border z-50">
+                    <div className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-border bg-surface-elevated py-1 shadow-lg">
                       <Link
                         href="/events"
                         className="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"

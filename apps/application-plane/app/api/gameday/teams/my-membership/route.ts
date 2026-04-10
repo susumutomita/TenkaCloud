@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/auth';
 import { getGamedayApiUrl } from '@/lib/api/backend-urls';
+import { getLocalMembership } from '@/lib/api/gameday-local';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -18,11 +19,15 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   const userId = session?.user?.email ?? 'anonymous';
 
-  const gamedayUrl = getGamedayApiUrl();
-  const response = await fetch(
-    `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
-    { headers: { 'Content-Type': 'application/json' } },
-  );
-  const data = await response.json();
-  return Response.json(data, { status: response.status });
+  try {
+    const gamedayUrl = getGamedayApiUrl();
+    const response = await fetch(
+      `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    const data = await response.json();
+    return Response.json(data, { status: response.status });
+  } catch {
+    return Response.json({ membership: getLocalMembership(eventId, userId) });
+  }
 }
