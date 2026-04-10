@@ -57,11 +57,16 @@ app.use(
 // Audit logging for all API requests
 app.use('/api/*', auditMiddleware);
 
-// Authentication required for all tenant management operations
+// Authentication required for tenant management and settings operations
 app.use(
   '/api/tenants*',
   authMiddleware,
   requireRoles(UserRole.PLATFORM_ADMIN, UserRole.TENANT_ADMIN)
+);
+app.use(
+  '/api/settings*',
+  authMiddleware,
+  requireRoles(UserRole.PLATFORM_ADMIN)
 );
 
 // Tenant ID: ULID (26 uppercase alphanumeric) or legacy slug (lowercase alphanumeric + hyphens)

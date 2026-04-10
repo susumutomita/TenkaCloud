@@ -19,7 +19,8 @@ const isNonProduction = process.env.NODE_ENV !== 'production';
 const authSkipEnabled =
   process.env.AUTH_SKIP === '1' &&
   isNonProduction;
-const localDevTokenEnabled = isNonProduction;
+// mock-access-token is only accepted when AUTH_SKIP=1 is explicitly set
+const localDevTokenEnabled = authSkipEnabled;
 const LOCAL_DEV_TOKEN = 'mock-access-token';
 
 /* v8 ignore start -- Development-only warning */

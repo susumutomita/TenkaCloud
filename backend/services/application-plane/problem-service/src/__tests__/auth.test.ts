@@ -85,7 +85,7 @@ describe("auth モジュール", () => {
 	});
 
 	describe("authenticateRequest - 通常モード", () => {
-		it("development では mock-access-token を開発用トークンとして受け入れるべき", async () => {
+		it("AUTH_SKIP=0 では mock-access-token を拒否すべき", async () => {
 			process.env.AUTH_SKIP = "0";
 			process.env.NODE_ENV = "development";
 
@@ -94,12 +94,10 @@ describe("auth モジュール", () => {
 				authorization: "Bearer mock-access-token",
 			});
 
-			expect(result.isValid).toBe(true);
-			expect(result.user?.id).toBe("dev-user");
-			expect(result.token).toBe("mock-access-token");
+			expect(result.isValid).toBe(false);
 		});
 
-		it("test では AuthorizationToken ヘッダーの mock-access-token も受け入れるべき", async () => {
+		it("AUTH_SKIP=0 では authorizationtoken ヘッダーの mock-access-token も拒否すべき", async () => {
 			process.env.AUTH_SKIP = "0";
 			process.env.NODE_ENV = "test";
 
@@ -108,12 +106,10 @@ describe("auth モジュール", () => {
 				authorizationtoken: "mock-access-token",
 			});
 
-			expect(result.isValid).toBe(true);
-			expect(result.user?.id).toBe("dev-user");
-			expect(result.token).toBe("mock-access-token");
+			expect(result.isValid).toBe(false);
 		});
 
-		it("NODE_ENV が未設定でも mock-access-token を開発用トークンとして受け入れるべき", async () => {
+		it("NODE_ENV 未設定かつ AUTH_SKIP=0 では mock-access-token を拒否すべき", async () => {
 			process.env.AUTH_SKIP = "0";
 			delete process.env.NODE_ENV;
 
@@ -122,9 +118,7 @@ describe("auth モジュール", () => {
 				authorization: "Bearer mock-access-token",
 			});
 
-			expect(result.isValid).toBe(true);
-			expect(result.user?.id).toBe("dev-user");
-			expect(result.token).toBe("mock-access-token");
+			expect(result.isValid).toBe(false);
 		});
 
 		it("Authorization ヘッダーがない場合は認証失敗を返すべき", async () => {
