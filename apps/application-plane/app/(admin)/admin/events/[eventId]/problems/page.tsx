@@ -34,6 +34,7 @@ import {
   getProblems,
   removeProblemFromEvent,
 } from '@/lib/api/admin-problems';
+import { getGameDayTeamDeploymentIssue } from '../../../../../../lib/api/gameday-team-deploy';
 
 // =============================================================================
 // Types
@@ -418,35 +419,47 @@ export default function AdminEventProblemsPage() {
             {
               id: 'actions',
               header: 'アクション',
-              cell: (item) => (
-                <SpaceBetween direction="horizontal" size="xs">
-                  <Button
-                    variant="link"
-                    onClick={() =>
-                      router.push(`/admin/problems/${item.id}/edit`)
-                    }
-                  >
-                    編集
-                  </Button>
-                  <Button
-                    variant="link"
-                    onClick={() =>
-                      router.push(
-                        `/admin/events/${eventId}/problems/${item.id}/deployments`,
-                      )
-                    }
-                  >
-                    チームへデプロイ
-                  </Button>
-                  <Button
-                    variant="link"
-                    loading={removingIds.has(item.id)}
-                    onClick={() => handleRemove(item.id)}
-                  >
-                    削除
-                  </Button>
-                </SpaceBetween>
-              ),
+              cell: (item) => {
+                const teamDeployIssue = getGameDayTeamDeploymentIssue(item);
+
+                return (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      variant="link"
+                      onClick={() =>
+                        router.push(`/admin/problems/${item.id}/edit`)
+                      }
+                    >
+                      編集
+                    </Button>
+                    <SpaceBetween size="xxs">
+                      <Button
+                        variant="link"
+                        disabled={teamDeployIssue !== null}
+                        onClick={() =>
+                          router.push(
+                            `/admin/events/${eventId}/problems/${item.id}/deployments`,
+                          )
+                        }
+                      >
+                        チームへデプロイ
+                      </Button>
+                      {teamDeployIssue && (
+                        <Box color="text-body-secondary" fontSize="body-s">
+                          {teamDeployIssue}
+                        </Box>
+                      )}
+                    </SpaceBetween>
+                    <Button
+                      variant="link"
+                      loading={removingIds.has(item.id)}
+                      onClick={() => handleRemove(item.id)}
+                    >
+                      削除
+                    </Button>
+                  </SpaceBetween>
+                );
+              },
             },
           ]}
         />

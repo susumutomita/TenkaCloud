@@ -52,7 +52,12 @@ const baseProblem = {
   metadata: { author: 'admin', version: '1.0', tags: [] },
   deployment: {
     providers: ['aws' as const],
-    templates: {},
+    templates: {
+      aws: {
+        type: 'cloudformation' as const,
+        path: 's3://templates/problem.yaml',
+      },
+    },
     regions: { aws: ['ap-northeast-1'] },
   },
   scoring: {
@@ -61,6 +66,13 @@ const baseProblem = {
     timeoutMinutes: 5,
     criteria: [{ name: '正解', weight: 1, maxPoints: 100 }],
   },
+};
+
+const unsupportedTeamDeployProblem = {
+  ...baseProblem,
+  id: 'prob-unsupported',
+  title: 'JAM 問題',
+  type: 'jam' as const,
 };
 
 describe('AdminEventProblemsPage', () => {
@@ -215,5 +227,41 @@ describe('AdminEventProblemsPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('デプロイ').length).toBeGreaterThanOrEqual(1);
     });
+  });
+
+  it('対応している問題ではチームデプロイ画面へ遷移できるべき', async () => {
+    mockGetEventProblems.mockResolvedValue({ problems: [baseProblem] });
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'チームへデプロイ' }),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'チームへデプロイ' }),
+    );
+
+    expect(mockPush).toHaveBeenCalledWith(
+      '/admin/events/ev-1/problems/prob-1/deployments',
+    );
+  });
+
+  it('未対応の問題ではチームデプロイ理由を表示すべき', async () => {
+    mockGetEventProblems.mockResolvedValue({
+      problems: [unsupportedTeamDeployProblem],
+    });
+    render(<AdminEventProblemsPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('GameDay 問題のみチーム配布に対応しています。'),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'チームへデプロイ' }),
+    ).toBeDisabled();
   });
 });

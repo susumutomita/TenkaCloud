@@ -74,6 +74,7 @@ import {
 } from "../repositories/gameday-deployment-job-repository";
 import {
 	deployProblemToTeams,
+	getGameDayDeploymentValidationError,
 	retryJob,
 	subscribeToJob,
 } from "../problems/gameday-deployer";
@@ -3088,9 +3089,33 @@ adminRouter.post(
 		const eventId = c.req.param("eventId");
 		const problemId = c.req.param("problemId");
 
+		const event = await eventRepository.findById(eventId);
+		if (!event) {
+			return c.json({ error: "Event not found" }, 404);
+		}
+		if (event.type !== "gameday") {
+			return c.json(
+				{ error: "Team deployment is only supported for GameDay events" },
+				400,
+			);
+		}
+
 		const problem = await problemRepository.findById(problemId);
 		if (!problem) {
 			return c.json({ error: "Problem not found" }, 404);
+		}
+
+		const validationError = getGameDayDeploymentValidationError(problem);
+		if (validationError) {
+			return c.json({ error: validationError }, 400);
+		}
+
+		const accounts = await competitorAccountRepo.findByEventId(eventId);
+		if (accounts.length === 0) {
+			return c.json(
+				{ error: "No competitor accounts configured for this event" },
+				400,
+			);
 		}
 
 		try {

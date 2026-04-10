@@ -15,6 +15,19 @@ const {
 	mockTemplateRepository,
 	mockAWSProvider,
 	mockLocalProvider,
+	mockCompetitorAccountCreate,
+	mockCompetitorAccountFindByEventId,
+	mockCompetitorAccountFindById,
+	mockCompetitorAccountUpdateStatus,
+	mockCompetitorAccountDelete,
+	mockGameDayJobCreate,
+	mockGameDayJobFindByEventAndProblem,
+	mockGameDayJobFindById,
+	mockGameDayJobFindActive,
+	mockGameDayJobUpdateStatus,
+	mockDeployProblemToTeams,
+	mockRetryJob,
+	mockSubscribeToJob,
 } = vi.hoisted(() => ({
 	mockEventRepository: {
 		findByTenant: vi.fn().mockResolvedValue([]),
@@ -117,6 +130,23 @@ const {
 			completedAt: new Date(),
 		}),
 	},
+	mockCompetitorAccountCreate: vi
+		.fn()
+		.mockResolvedValue({ id: "account-1", name: "team01" }),
+	mockCompetitorAccountFindByEventId: vi.fn().mockResolvedValue([]),
+	mockCompetitorAccountFindById: vi.fn().mockResolvedValue(null),
+	mockCompetitorAccountUpdateStatus: vi.fn().mockResolvedValue(undefined),
+	mockCompetitorAccountDelete: vi.fn().mockResolvedValue(undefined),
+	mockGameDayJobCreate: vi
+		.fn()
+		.mockResolvedValue({ id: "job-1", status: "pending" }),
+	mockGameDayJobFindByEventAndProblem: vi.fn().mockResolvedValue([]),
+	mockGameDayJobFindById: vi.fn().mockResolvedValue(null),
+	mockGameDayJobFindActive: vi.fn().mockResolvedValue([]),
+	mockGameDayJobUpdateStatus: vi.fn().mockResolvedValue(undefined),
+	mockDeployProblemToTeams: vi.fn().mockResolvedValue([]),
+	mockRetryJob: vi.fn().mockResolvedValue(null),
+	mockSubscribeToJob: vi.fn().mockReturnValue(() => {}),
 }));
 
 // 依存関係をモック
@@ -208,28 +238,48 @@ vi.mock("../providers/local", () => ({
 
 vi.mock("../repositories/competitor-account-repository", () => ({
 	CompetitorAccountRepository: class {
-		create = vi.fn().mockResolvedValue({ id: "account-1", name: "team01" });
-		findByEventId = vi.fn().mockResolvedValue([]);
-		findById = vi.fn().mockResolvedValue(null);
-		updateStatus = vi.fn().mockResolvedValue(undefined);
-		delete = vi.fn().mockResolvedValue(undefined);
+		create = mockCompetitorAccountCreate;
+		findByEventId = mockCompetitorAccountFindByEventId;
+		findById = mockCompetitorAccountFindById;
+		updateStatus = mockCompetitorAccountUpdateStatus;
+		delete = mockCompetitorAccountDelete;
 	},
 }));
 
 vi.mock("../repositories/gameday-deployment-job-repository", () => ({
 	GameDayDeploymentJobRepository: class {
-		create = vi.fn().mockResolvedValue({ id: "job-1", status: "pending" });
-		findByEventAndProblem = vi.fn().mockResolvedValue([]);
-		findById = vi.fn().mockResolvedValue(null);
-		findActive = vi.fn().mockResolvedValue([]);
-		updateStatus = vi.fn().mockResolvedValue(undefined);
+		create = mockGameDayJobCreate;
+		findByEventAndProblem = mockGameDayJobFindByEventAndProblem;
+		findById = mockGameDayJobFindById;
+		findActive = mockGameDayJobFindActive;
+		updateStatus = mockGameDayJobUpdateStatus;
 	},
 }));
 
 vi.mock("../problems/gameday-deployer", () => ({
-	deployProblemToTeams: vi.fn().mockResolvedValue([]),
-	retryJob: vi.fn().mockResolvedValue(null),
-	subscribeToJob: vi.fn().mockReturnValue(() => {}),
+	deployProblemToTeams: mockDeployProblemToTeams,
+	getGameDayDeploymentValidationError: vi.fn(
+		(problem: {
+			type: string;
+			deployment?: {
+				providers?: string[];
+				templates?: { aws?: unknown };
+			};
+		}) => {
+			if (problem.type !== "gameday") {
+				return "Team deployment is only supported for GameDay problems";
+			}
+			if (!problem.deployment?.providers?.includes("aws")) {
+				return "Team deployment requires AWS deployment support";
+			}
+			if (!problem.deployment?.templates?.aws) {
+				return "Team deployment requires an AWS deployment template";
+			}
+			return null;
+		},
+	),
+	retryJob: mockRetryJob,
+	subscribeToJob: mockSubscribeToJob,
 	reconcile: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -245,6 +295,7 @@ import {
 	removeChallengeFromContest,
 	registerTeamToContest,
 } from "../jam/contest";
+import { deployProblemToTeams } from "../problems/gameday-deployer";
 
 // テスト用の管理者ユーザー
 const mockAdminUser = {
@@ -315,6 +366,122 @@ describe("Admin Routes", () => {
 			const body = await res.json();
 			expect(body).toHaveProperty("events");
 			expect(body).toHaveProperty("total");
+		});
+	});
+
+	describe("POST /events/:eventId/problems/:problemId/deploy", () => {
+		beforeEach(() => {
+			setupAdminAuth();
+		});
+
+		it("GameDay 問題のチームデプロイを開始できるべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				type: "gameday",
+			});
+			mockProblemRepository.findById.mockResolvedValueOnce({
+				id: "problem-1",
+				type: "gameday",
+				deployment: {
+					providers: ["aws"],
+					templates: {
+						aws: { type: "cloudformation", path: "s3://template.yaml" },
+					},
+					regions: { aws: ["ap-northeast-1"] },
+				},
+			});
+			mockCompetitorAccountFindByEventId.mockResolvedValueOnce([
+				{ id: "account-1", name: "team01" },
+			]);
+			mockDeployProblemToTeams.mockResolvedValueOnce([
+				{ id: "job-1", status: "pending" },
+			]);
+
+			const res = await app.request(
+				"/api/admin/events/event-1/problems/problem-1/deploy",
+				{ method: "POST" },
+			);
+
+			expect(res.status).toBe(202);
+			expect(deployProblemToTeams).toHaveBeenCalledWith(
+				expect.objectContaining({ id: "problem-1" }),
+				"event-1",
+			);
+		});
+
+		it("GameDay 以外のイベントは拒否すべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				type: "jam",
+			});
+
+			const res = await app.request(
+				"/api/admin/events/event-1/problems/problem-1/deploy",
+				{ method: "POST" },
+			);
+
+			expect(res.status).toBe(400);
+			await expect(res.json()).resolves.toEqual({
+				error: "Team deployment is only supported for GameDay events",
+			});
+			expect(deployProblemToTeams).not.toHaveBeenCalled();
+		});
+
+		it("AWS テンプレートがない問題は拒否すべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				type: "gameday",
+			});
+			mockProblemRepository.findById.mockResolvedValueOnce({
+				id: "problem-1",
+				type: "gameday",
+				deployment: {
+					providers: ["aws"],
+					templates: {},
+					regions: { aws: ["ap-northeast-1"] },
+				},
+			});
+
+			const res = await app.request(
+				"/api/admin/events/event-1/problems/problem-1/deploy",
+				{ method: "POST" },
+			);
+
+			expect(res.status).toBe(400);
+			await expect(res.json()).resolves.toEqual({
+				error: "Team deployment requires an AWS deployment template",
+			});
+			expect(deployProblemToTeams).not.toHaveBeenCalled();
+		});
+
+		it("競技アカウントがない場合は拒否すべき", async () => {
+			mockEventRepository.findById.mockResolvedValueOnce({
+				id: "event-1",
+				type: "gameday",
+			});
+			mockProblemRepository.findById.mockResolvedValueOnce({
+				id: "problem-1",
+				type: "gameday",
+				deployment: {
+					providers: ["aws"],
+					templates: {
+						aws: { type: "cloudformation", path: "s3://template.yaml" },
+					},
+					regions: { aws: ["ap-northeast-1"] },
+				},
+			});
+			mockCompetitorAccountFindByEventId.mockResolvedValueOnce([]);
+
+			const res = await app.request(
+				"/api/admin/events/event-1/problems/problem-1/deploy",
+				{ method: "POST" },
+			);
+
+			expect(res.status).toBe(400);
+			await expect(res.json()).resolves.toEqual({
+				error: "No competitor accounts configured for this event",
+			});
+			expect(deployProblemToTeams).not.toHaveBeenCalled();
 		});
 	});
 
