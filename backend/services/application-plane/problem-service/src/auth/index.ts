@@ -9,18 +9,18 @@
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-// ── AUTH_SKIP ガード ─────────────────────────────────
 /* v8 ignore start -- Production safety guard */
 if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
   throw new Error('AUTH_SKIP cannot be enabled in production');
 }
 /* v8 ignore stop */
 
+const isNonProduction = process.env.NODE_ENV !== 'production';
 const authSkipEnabled =
   process.env.AUTH_SKIP === '1' &&
-  (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test');
-const localDevTokenEnabled =
-  process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+  isNonProduction;
+// mock-access-token is only accepted when AUTH_SKIP=1 is explicitly set
+const localDevTokenEnabled = authSkipEnabled;
 const LOCAL_DEV_TOKEN = 'mock-access-token';
 
 /* v8 ignore start -- Development-only warning */
@@ -34,12 +34,10 @@ if (authSkipEnabled && typeof console !== 'undefined') {
 }
 /* v8 ignore stop */
 
-// ── Keycloak 設定 ────────────────────────────────────
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tenkacloud';
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
 const JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
 
-// Lazy initialization of JWKS
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJWKS() {
@@ -49,7 +47,6 @@ function getJWKS() {
   return jwksCache;
 }
 
-// User roles enum
 export enum UserRole {
   PLATFORM_ADMIN = 'platform-admin',
   TENANT_ADMIN = 'tenant-admin',
@@ -58,7 +55,6 @@ export enum UserRole {
   SPECTATOR = 'spectator',
 }
 
-// JWT payload interface (Keycloak 互換)
 export interface JWTPayload {
   sub: string;
   email?: string;
@@ -76,7 +72,6 @@ export interface JWTPayload {
   tenantId?: string;
 }
 
-// Authenticated user context
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -181,11 +176,10 @@ export async function authenticateRequest(headers: {
   authorizationtoken?: string;
   [key: string]: string | undefined;
 }): Promise<AuthContext> {
-  // AUTH_SKIP=1: 開発用にJWT検証をバイパス
   if (authSkipEnabled) {
     return {
       user: createMockUser(),
-      token: 'mock-access-token',
+      token: LOCAL_DEV_TOKEN,
       isValid: true,
     };
   }
