@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import {
+  clearDevEvents,
+  createDevEvent,
+} from '@/app/api/admin/events/dev-store';
 
 const mockServerApiRequest = vi.fn();
 let mockAuthSkipEnabled = false;
@@ -22,6 +26,7 @@ describe('Participant Events API Proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuthSkipEnabled = false;
+    clearDevEvents();
   });
 
   it('イベント一覧を取得できるべき', async () => {
@@ -46,7 +51,12 @@ describe('Participant Events API Proxy', () => {
     });
   });
 
-  it('network fetch failure の場合は空一覧を返すべき', async () => {
+  it('network fetch failure の場合は local dev events を返すべき', async () => {
+    createDevEvent({
+      name: 'Local Draft Event',
+      status: 'draft',
+      type: 'gameday',
+    });
     mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
 
     const { GET } = await import('../route');
@@ -54,11 +64,24 @@ describe('Participant Events API Proxy', () => {
     const response = await GET(request);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ events: [], total: 0 });
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        expect.objectContaining({
+          name: 'Local Draft Event',
+          status: 'draft',
+        }),
+      ],
+      total: 1,
+    });
   });
 
-  it('AUTH_SKIP 中に Unauthorized の場合は空一覧を返すべき', async () => {
+  it('AUTH_SKIP 中に Unauthorized の場合は local dev events を返すべき', async () => {
     mockAuthSkipEnabled = true;
+    createDevEvent({
+      name: 'Unauthorized Fallback Event',
+      status: 'draft',
+      type: 'jam',
+    });
     mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
 
     const { GET } = await import('../route');
@@ -66,7 +89,46 @@ describe('Participant Events API Proxy', () => {
     const response = await GET(request);
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ events: [], total: 0 });
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        expect.objectContaining({
+          name: 'Unauthorized Fallback Event',
+          status: 'draft',
+        }),
+      ],
+      total: 1,
+    });
+  });
+
+  it('fallback 時も type フィルタを適用すべき', async () => {
+    createDevEvent({
+      name: 'GameDay Event',
+      type: 'gameday',
+      status: 'draft',
+    });
+    createDevEvent({
+      name: 'Jam Event',
+      type: 'jam',
+      status: 'draft',
+    });
+    mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+    const { GET } = await import('../route');
+    const request = new NextRequest(
+      'http://localhost/api/participant/events?type=gameday&limit=10',
+    );
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        expect.objectContaining({
+          name: 'GameDay Event',
+          type: 'gameday',
+        }),
+      ],
+      total: 1,
+    });
   });
 
   it('通常の API エラーは 400 を返すべき', async () => {

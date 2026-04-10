@@ -13,7 +13,8 @@ import {
   badRequestResponse,
   serverApiRequest,
 } from '@/lib/api/server';
-import type { ParticipantEvent } from '@/lib/api/types';
+import type { ParticipantEvent, ProblemType } from '@/lib/api/types';
+import { listDevEvents } from '@/app/api/admin/events/dev-store';
 
 interface ParticipantEventListResponse {
   events: ParticipantEvent[];
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
 
   const queryString = queryParams.toString();
   const endpoint = `/participant/events${queryString ? `?${queryString}` : ''}`;
+  const pageSize = limit ? Number.parseInt(limit, 10) || 50 : 50;
+  const requestedType = (type as ProblemType | null) ?? null;
 
   try {
     const data = await serverApiRequest<ParticipantEventListResponse>(endpoint);
@@ -55,15 +58,20 @@ export async function GET(request: NextRequest) {
 
     if (isAuthSkipUnauthorized) {
       console.warn(
-        'Participant events backend rejected AUTH_SKIP token. Returning empty list.',
+        'Participant events backend rejected AUTH_SKIP token. Returning local dev events.',
         error,
       );
-      return successResponse({ events: [], total: 0 });
+      const data = listDevEvents(1, pageSize, null, requestedType);
+      return successResponse({ events: data.events, total: data.total });
     }
 
     if (isNetworkError) {
-      console.warn('Participant events backend unreachable:', error);
-      return successResponse({ events: [], total: 0 });
+      console.warn(
+        'Participant events backend unreachable. Returning local dev events.',
+        error,
+      );
+      const data = listDevEvents(1, pageSize, null, requestedType);
+      return successResponse({ events: data.events, total: data.total });
     }
 
     console.error('Failed to fetch participant events:', error);

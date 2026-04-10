@@ -1,4 +1,9 @@
-import type { ParticipantEvent, EventStatus } from '@/lib/api/types';
+import type {
+  EventDetails,
+  ParticipantEvent,
+  EventStatus,
+  ProblemType,
+} from '@/lib/api/types';
 
 export interface DevEventRecord extends ParticipantEvent {
   slug: string;
@@ -53,12 +58,24 @@ export function getDevEventStore(): DevEventRecord[] {
 export function listDevEvents(
   page: number,
   pageSize: number,
-  status?: EventStatus | null,
+  status?: EventStatus | EventStatus[] | null,
+  type?: ProblemType | null,
 ): { events: DevEventRecord[]; total: number; page: number; pageSize: number } {
   const store = getDevEventStore();
-  const filtered = status
-    ? store.filter((event) => event.status === status)
-    : store;
+  const statuses = Array.isArray(status)
+    ? status.filter(Boolean)
+    : status
+      ? [status]
+      : [];
+  const filtered = store.filter((event) => {
+    if (statuses.length > 0 && !statuses.includes(event.status)) {
+      return false;
+    }
+    if (type && event.type !== type) {
+      return false;
+    }
+    return true;
+  });
   const offset = Math.max(page - 1, 0) * pageSize;
   return {
     events: filtered.slice(offset, offset + pageSize),
@@ -104,6 +121,18 @@ export function createDevEvent(body: DevEventPayload): DevEventRecord {
 
 export function findDevEvent(eventId: string): DevEventRecord | undefined {
   return getDevEventStore().find((event) => event.id === eventId);
+}
+
+export function getDevEventDetails(eventId: string): EventDetails | null {
+  const event = findDevEvent(eventId);
+  if (!event) {
+    return null;
+  }
+
+  return {
+    ...event,
+    problems: [],
+  };
 }
 
 export function updateDevEvent(
