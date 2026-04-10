@@ -22,12 +22,16 @@ export async function POST(
     );
     return Response.json(data);
   } catch (error) {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
     const isAuthSkipUnauthorized =
+      isDevelopment &&
       authSkipEnabled &&
       error instanceof Error &&
       /^Unauthorized$/i.test(error.message);
     const isNetworkError =
-      error instanceof TypeError && /fetch failed/i.test(String(error));
+      isDevelopment &&
+      error instanceof TypeError &&
+      /fetch failed/i.test(String(error));
 
     if ((isAuthSkipUnauthorized || isNetworkError) && findDevEvent(eventId)) {
       setDevEventRegistration(eventId, true);

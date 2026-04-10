@@ -4,12 +4,26 @@
  * 招待コードでチーム参加エンドポイント
  */
 
+import { z } from 'zod';
 import { auth } from '@/auth';
 import { getGamedayApiUrl } from '@/lib/api/backend-urls';
 import { joinLocalTeamByInvite } from '@/lib/api/gameday-local';
 
+const JoinTeamSchema = z.object({
+  eventId: z.string().min(1),
+  inviteCode: z.string().min(1),
+});
+
 export async function POST(request: Request) {
-  const body = await request.json();
+  const rawBody = await request.json();
+  const parseResult = JoinTeamSchema.safeParse(rawBody);
+  if (!parseResult.success) {
+    return Response.json(
+      { error: 'Invalid request body', details: parseResult.error.flatten() },
+      { status: 400 },
+    );
+  }
+  const body = parseResult.data;
   const session = await auth();
   const userId = session?.user?.email ?? 'anonymous';
 
@@ -22,7 +36,16 @@ export async function POST(request: Request) {
     });
     const data = await response.json();
     return Response.json(data, { status: response.status });
-  } catch {
+  } catch (error) {
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+    if (!isNetworkError) {
+      console.error('Team join failed:', error);
+      return Response.json(
+        { error: 'チーム参加に失敗しました' },
+        { status: 500 },
+      );
+    }
     const membership = joinLocalTeamByInvite(
       body.eventId,
       userId,

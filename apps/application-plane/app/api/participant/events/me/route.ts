@@ -29,12 +29,18 @@ export async function GET() {
     );
     return successResponse(data);
   } catch (error) {
+    const isDevelopment = process.env.NODE_ENV !== 'production';
     const isAuthSkipUnauthorized =
+      isDevelopment &&
       authSkipEnabled &&
       error instanceof Error &&
       /^Unauthorized$/i.test(error.message);
+    const isNetworkError =
+      isDevelopment &&
+      error instanceof TypeError &&
+      /fetch failed/i.test(String(error));
 
-    if (error instanceof TypeError) {
+    if (isNetworkError) {
       console.warn('Participant my-events backend unreachable:', error);
       return successResponse({ events: listRegisteredDevEvents() });
     }

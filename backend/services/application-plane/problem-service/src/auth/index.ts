@@ -19,6 +19,9 @@ if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
 const authSkipEnabled =
   process.env.AUTH_SKIP === '1' &&
   (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test');
+const localDevTokenEnabled =
+  process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+const LOCAL_DEV_TOKEN = 'mock-access-token';
 
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
@@ -199,6 +202,15 @@ export async function authenticateRequest(headers: {
   }
 
   const token = authHeader.replace(/^Bearer\s+/i, '');
+
+  if (localDevTokenEnabled && token === LOCAL_DEV_TOKEN) {
+    return {
+      user: createMockUser(),
+      token,
+      isValid: true,
+    };
+  }
+
   const user = await verifyToken(token);
 
   if (!user) {

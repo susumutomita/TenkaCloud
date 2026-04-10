@@ -15,7 +15,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
-import { getParticipantGameStatus, getTeamDashboard } from '@/lib/api/gameday';
+import {
+  getLeaderboard,
+  getParticipantGameStatus,
+  getTeamDashboard,
+} from '@/lib/api/gameday';
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { NotificationPanel } from '@/components/notifications/notification-panel';
@@ -41,12 +45,19 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
   const fetchStatus = useCallback(async () => {
     if (!eventId || !teamId) return;
     try {
-      const [statusRes, dashRes] = await Promise.all([
+      const [statusRes, dashRes, leaderboardRes] = await Promise.all([
         getParticipantGameStatus(eventId).catch(() => null),
         getTeamDashboard(eventId, teamId).catch(() => null),
+        getLeaderboard(eventId).catch(() => null),
       ]);
       if (statusRes) setGameState(statusRes);
       if (dashRes) setScore(dashRes.score);
+      if (leaderboardRes) {
+        const entry = leaderboardRes.leaderboard.find(
+          (e) => e.teamId === teamId,
+        );
+        if (entry) setRank(entry.rank);
+      }
     } catch {
       // ignore
     }

@@ -103,6 +103,13 @@ export function setLocalTeams(eventId: string, teams: Team[]) {
   return teams;
 }
 
+// Prevents prototype pollution when using dynamic keys
+function assertSafeKey(key: string): void {
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+    throw new Error(`Invalid key: ${key}`);
+  }
+}
+
 function getMembershipStore(eventId: string) {
   const store = getStore();
   store.memberships[eventId] ??= {};
@@ -178,6 +185,7 @@ export function registerLocalMembership(
   teamId: string,
   teamName: string,
 ) {
+  assertSafeKey(userId);
   const membership = { teamId, teamName };
   getMembershipStore(eventId)[userId] = membership;
   return membership;
@@ -207,6 +215,7 @@ export function createLocalTeamWithInvite(
   registerLocalMembership(eventId, userId, teamId, teamName);
 
   const inviteCode = createInviteCode(teamId);
+  assertSafeKey(inviteCode);
   getInviteCodeStore(eventId)[inviteCode] = { teamId, teamName };
 
   return { teamId, teamName, inviteCode };

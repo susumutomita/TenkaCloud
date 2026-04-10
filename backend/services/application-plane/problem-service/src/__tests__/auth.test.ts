@@ -84,6 +84,34 @@ describe("auth モジュール", () => {
 	});
 
 	describe("authenticateRequest - 通常モード", () => {
+		it("development では mock-access-token を開発用トークンとして受け入れるべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "development";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({
+				authorization: "Bearer mock-access-token",
+			});
+
+			expect(result.isValid).toBe(true);
+			expect(result.user?.id).toBe("dev-user");
+			expect(result.token).toBe("mock-access-token");
+		});
+
+		it("test では AuthorizationToken ヘッダーの mock-access-token も受け入れるべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({
+				authorizationtoken: "mock-access-token",
+			});
+
+			expect(result.isValid).toBe(true);
+			expect(result.user?.id).toBe("dev-user");
+			expect(result.token).toBe("mock-access-token");
+		});
+
 		it("Authorization ヘッダーがない場合は認証失敗を返すべき", async () => {
 			process.env.AUTH_SKIP = "0";
 			process.env.NODE_ENV = "test";
