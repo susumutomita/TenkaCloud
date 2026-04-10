@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import DashboardPage from '../page';
 
@@ -56,6 +57,15 @@ describe('ダッシュボードページ', () => {
       // Navigation link + h1 heading both show "Dashboard"
       expect(screen.getAllByText('Dashboard').length).toBeGreaterThanOrEqual(1);
     });
+  });
+
+  it('サーバー描画時は静的な見出しを返すべき', () => {
+    const html = renderToStaticMarkup(<DashboardPage />);
+
+    expect(html).toContain('<h1');
+    expect(html).toContain('Dashboard');
+    expect(html).toContain('Browse joined events and upcoming competitions.');
+    expect(html).not.toContain('awsui_heading');
   });
 
   it('参加中のイベントが表示されるべき', async () => {
