@@ -17,16 +17,24 @@ make before-commit   # lint, format, typecheck, test (99％+ coverage), build
 
 **これが通らない限りタスクは未完了。** 失敗したらコードを修正する（設定ファイルを変えない）。
 
+大きい変更や新機能の前後では、次も実行する。
+
+```bash
+bun scripts/ai-improvement-loop.ts --write --fail-on=high
+```
+
+このループで `high` 以上が出た領域では、機能追加より先に負債を解消する。
+
 ## コマンド一覧
 
-| コマンド | 用途 |
-|---------|------|
-| `ni` | 依存関係インストール（bun 自動選択） |
-| `nr dev` | 全サービス起動 |
-| `nr test` | テスト実行 |
-| `make test_quick` | カバレッジなし高速テスト |
-| `make gameday-seed` | GameDay デモデータ投入 |
-| `make help` | 全コマンド一覧 |
+| コマンド            | 用途                                 |
+| ------------------- | ------------------------------------ |
+| `ni`                | 依存関係インストール（bun 自動選択） |
+| `nr dev`            | 全サービス起動                       |
+| `nr test`           | テスト実行                           |
+| `make test_quick`   | カバレッジなし高速テスト             |
+| `make gameday-seed` | GameDay デモデータ投入               |
+| `make help`         | 全コマンド一覧                       |
 
 ## 制約（破ったら即修正）
 
@@ -34,6 +42,7 @@ make before-commit   # lint, format, typecheck, test (99％+ coverage), build
 - **`rm` コマンド禁止** → ファイル削除が必要なら `git` で管理
 - **`#番号` 形式の Issue 引用禁止** → コミット・PR で使わない
 - **モックデータ・スタブ API 禁止** → DynamoDB を使う
+- **空配列返し・stub・empty dataset で握り潰す fallback 禁止**
 - **テストタイトルは日本語「〜すべき」形式**
 - **設定ファイル（`biome.json`, `vitest.config.*` 等）の直接編集禁止** → コードを修正する
 
@@ -70,6 +79,7 @@ TenkaCloud/
 ### データベース設計
 
 DynamoDB シングルテーブル設計。PK/SK パターンは以下の通り。
+
 - イベント: `PK=EVENT#{eventId}`, `SK=METADATA`
 - GameDay チーム: `PK=GAMEDAY#{eventId}`, `SK=TEAM#{teamId}`
 - テナント別クエリ: GSI1 `PK=TENANT#{tenantId}`
@@ -110,9 +120,17 @@ vi.mock("@tenkacloud/dynamodb", () => ({
 }));
 ```
 
+### ハーネス優先
+
+- 先に壊れるテストや検出ルールを書く
+- 1 テストケースに `expect` を詰め込みすぎない（アサーションルーレット禁止）
+- route handler で fallback を重複実装しない
+- UI から直接 `fetch` や `process.env.*API_URL` を読まない
+
 ## 決定記録
 
 アーキテクチャ決定記録: `docs/decisions/`
+
 - ADR-001: ドキュメント構成
 - ADR-002: GameDay 仕様（攻撃カタログ、スコアリング）
 - ADR-003: MVP リリースアーキテクチャ

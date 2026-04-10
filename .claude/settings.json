@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -q 'git commit'; then make -C \"$(git rev-parse --show-toplevel)\" before-commit; fi",
+            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -q 'git commit'; then ROOT=$(git rev-parse --show-toplevel); bun \"$ROOT/scripts/ai-improvement-loop.ts\" --staged --fail-on=high --root=\"$ROOT\" && make -C \"$ROOT\" before-commit; fi",
             "timeout": 300,
             "statusMessage": "Running make before-commit..."
           }
@@ -33,6 +33,12 @@
             "command": "bash .claude/hooks/post-format.sh",
             "timeout": 30,
             "statusMessage": "Auto-formatting..."
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/quality-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking code quality guard..."
           }
         ]
       }
