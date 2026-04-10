@@ -7,6 +7,7 @@
  * - POST: アクション実行（API キー再生成、全データ削除）
  */
 
+import { randomBytes } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { authSkipEnabled } from '@/auth';
 import {
@@ -28,7 +29,7 @@ interface SettingsResponse {
 }
 
 function buildDevApiKey() {
-  return `sk-dev-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `sk-dev-${Date.now().toString(36)}${randomBytes(6).toString('hex')}`;
 }
 
 function getDevSettingsStore(): SettingsResponse {
