@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const response = await fetch(`${gamedayUrl}/teams/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, userId }),
+      body: JSON.stringify(body),
     });
     const data = await response.json();
     return Response.json(data, { status: response.status });

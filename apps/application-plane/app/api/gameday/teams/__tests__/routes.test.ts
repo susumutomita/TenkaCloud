@@ -226,4 +226,115 @@ describe('GameDay Team Route Fallbacks', () => {
       }),
     });
   });
+
+  it('create route は backend に userId を転送しないべき', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ teamId: 'TEAM001' }), { status: 201 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { POST } = await import('../create/route');
+    await POST(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: 'dev-event-1',
+          teamId: 'TEAM001',
+          teamName: 'Blue Team',
+        }),
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://gameday.local/teams/create',
+      expect.objectContaining({
+        body: JSON.stringify({
+          eventId: 'dev-event-1',
+          teamId: 'TEAM001',
+          teamName: 'Blue Team',
+        }),
+      }),
+    );
+  });
+
+  it('join route は backend に userId を転送しないべき', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ teamId: 'TEAM001' }), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { POST } = await import('../join/route');
+    await POST(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: 'dev-event-1',
+          inviteCode: 'ABC123',
+        }),
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://gameday.local/teams/join',
+      expect.objectContaining({
+        body: JSON.stringify({
+          eventId: 'dev-event-1',
+          inviteCode: 'ABC123',
+        }),
+      }),
+    );
+  });
+
+  it('solo route は backend に userId を転送しないべき', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ mode: 'solo' }), { status: 201 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { POST } = await import('../solo/route');
+    await POST(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({
+          eventId: 'dev-event-1',
+        }),
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://gameday.local/teams/solo',
+      expect.objectContaining({
+        body: JSON.stringify({
+          eventId: 'dev-event-1',
+        }),
+      }),
+    );
+  });
+
+  it('my-membership route は backend query から userId を排除すべき', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ membership: null }), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { GET } = await import('../my-membership/route');
+    await GET(
+      new Request(
+        'http://localhost/api/gameday/teams/my-membership?eventId=dev-event-2',
+      ) as never,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://gameday.local/teams/my-membership?eventId=dev-event-2',
+      expect.any(Object),
+    );
+  });
 });
