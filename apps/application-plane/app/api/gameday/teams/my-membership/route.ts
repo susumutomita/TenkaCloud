@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const gamedayUrl = getGamedayApiUrl();
     const response = await fetch(
-      `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}&userId=${encodeURIComponent(userId)}`,
+      `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}`,
       { headers: { 'Content-Type': 'application/json' } },
     );
     const data = await response.json();

@@ -101,7 +101,7 @@ export const registerTeamSchema = z.object({
 // プレーヤー: チーム URL 更新
 export const updateTeamUrlSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	websiteUrl: safeUrl.optional(),
 	apiUrl: safeUrl.optional(),
 });
@@ -109,14 +109,14 @@ export const updateTeamUrlSchema = z.object({
 // プレーヤー: 攻撃購入
 export const purchaseAttackSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	attackId: z.string().min(1),
 });
 
 // プレーヤー: 攻撃実行
 export const executeAttackSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	attackId: z.string().min(1),
 	targetTeamId: z.string().min(1),
 });
@@ -124,33 +124,51 @@ export const executeAttackSchema = z.object({
 // プレーヤー: ヒント購入
 export const purchaseHintSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	attackId: z.string().min(1),
 });
 
 // プレーヤー: 脆弱性修正報告
 export const reportFixSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	vulnerabilitySlug: z.string().min(1),
 });
 
 // プレーヤー: 同盟申請
 export const requestAllianceSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	targetTeamId: z.string().min(1),
 });
 
 // プレーヤー: 同盟承認/破棄
 export const allianceActionSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 });
 
 // プレーヤー: 投票
 export const voteSchema = z.object({
 	eventId: z.string().min(1),
-	teamId: z.string().min(1),
+	teamId: z.string().min(1).optional(),
 	votedForTeamId: z.string().min(1),
+});
+
+// プレーヤー: チーム作成
+export const createTeamSchema = z.object({
+	eventId: z.string().min(1),
+	teamId: z.string().min(1),
+	teamName: z.string().min(1),
+});
+
+// プレーヤー: 招待コードでチーム参加
+export const joinTeamSchema = z.object({
+	eventId: z.string().min(1),
+	inviteCode: z.string().min(1),
+});
+
+// プレーヤー: ソロ参加
+export const soloParticipationSchema = z.object({
+	eventId: z.string().min(1),
 });

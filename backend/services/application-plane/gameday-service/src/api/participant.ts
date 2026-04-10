@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { StatusCodes } from "http-status-codes";
 import {
@@ -10,6 +11,9 @@ import {
 	allianceActionSchema,
 	voteSchema,
 	updateTeamUrlSchema,
+	createTeamSchema,
+	joinTeamSchema,
+	soloParticipationSchema,
 } from "../schemas";
 import {
 	getGameStatus,
@@ -46,7 +50,6 @@ import {
 import {
 	updateTeamUrl,
 	getLeaderboard,
-	getAttackStatistics,
 	getTeamDashboard,
 	listTeams,
 	registerTeam,
@@ -55,15 +58,27 @@ import {
 	TeamNotFoundError as DashboardTeamNotFoundError,
 	TeamAlreadyExistsError,
 } from "../services/dashboard-service";
-import {
-	getAllAttackLogs,
-	getAttackHistory,
-} from "../services/participant-service";
+import { getAllAttackLogs } from "../services/participant-service";
+import type { MemberRecord } from "../repositories/gameday-repository";
 import { GamedayRepository } from "../repositories/gameday-repository";
 
 const gamedayRepo = new GamedayRepository();
 
 export const participantRoutes = new Hono();
+
+class MembershipRequiredError extends Error {
+	constructor() {
+		super("このイベントへの参加登録が必要です");
+		this.name = "MembershipRequiredError";
+	}
+}
+
+class TeamAccessDeniedError extends Error {
+	constructor() {
+		super("自分のチーム以外を操作することはできません");
+		this.name = "TeamAccessDeniedError";
+	}
+}
 
 function mapErrorToResponse(error: unknown): {
 	error: string;
@@ -110,7 +125,31 @@ function mapErrorToResponse(error: unknown): {
 	if (error instanceof TeamNotFoundError) {
 		return { error: error.message, status: 404 };
 	}
+	if (
+		error instanceof MembershipRequiredError ||
+		error instanceof TeamAccessDeniedError
+	) {
+		return { error: error.message, status: 403 };
+	}
 	return null;
+}
+
+async function getAuthorizedMembership(
+	c: Context,
+	eventId: string,
+	requestedTeamId?: string,
+): Promise<MemberRecord> {
+	const membership = await gamedayRepo.getMembership(
+		eventId,
+		c.get("auth").userId,
+	);
+	if (!membership) {
+		throw new MembershipRequiredError();
+	}
+	if (requestedTeamId && requestedTeamId !== membership.teamId) {
+		throw new TeamAccessDeniedError();
+	}
+	return membership;
 }
 
 // === 攻撃 ===
@@ -178,9 +217,14 @@ participantRoutes.post("/attacks/purchase", async (c) => {
 		);
 	}
 	try {
-		const result = await purchaseAttack(
+		const membership = await getAuthorizedMembership(
+			c,
 			parsed.data.eventId,
 			parsed.data.teamId,
+		);
+		const result = await purchaseAttack(
+			parsed.data.eventId,
+			membership.teamId,
 			parsed.data.attackId,
 		);
 		return c.json(result, StatusCodes.CREATED);
@@ -210,9 +254,14 @@ participantRoutes.post("/attacks/execute", async (c) => {
 		);
 	}
 	try {
-		const result = await executeAttack(
+		const membership = await getAuthorizedMembership(
+			c,
 			parsed.data.eventId,
 			parsed.data.teamId,
+		);
+		const result = await executeAttack(
+			parsed.data.eventId,
+			membership.teamId,
 			parsed.data.targetTeamId,
 			parsed.data.attackId,
 		);
@@ -234,14 +283,20 @@ participantRoutes.post("/attacks/execute", async (c) => {
 participantRoutes.get("/attacks/history", async (c) => {
 	const eventId = c.req.query("eventId");
 	const teamId = c.req.query("teamId");
-	if (!eventId || !teamId) {
-		return c.json(
-			{ error: "eventId と teamId は必須です" },
-			StatusCodes.BAD_REQUEST,
-		);
+	if (!eventId) {
+		return c.json({ error: "eventId は必須です" }, StatusCodes.BAD_REQUEST);
 	}
-	const history = await getAttackHistory(eventId, teamId);
-	return c.json({ history }, StatusCodes.OK);
+	try {
+		const membership = await getAuthorizedMembership(c, eventId, teamId);
+		const history = await getAttackHistory(eventId, membership.teamId);
+		return c.json({ history }, StatusCodes.OK);
+	} catch (error) {
+		const mapped = mapErrorToResponse(error);
+		if (mapped) {
+			return c.json({ error: mapped.error }, mapped.status);
+		}
+		throw error;
+	}
 });
 
 // === 防御 ===
@@ -250,14 +305,20 @@ participantRoutes.get("/attacks/history", async (c) => {
 participantRoutes.get("/defense/active", async (c) => {
 	const eventId = c.req.query("eventId");
 	const teamId = c.req.query("teamId");
-	if (!eventId || !teamId) {
-		return c.json(
-			{ error: "eventId と teamId は必須です" },
-			StatusCodes.BAD_REQUEST,
-		);
+	if (!eventId) {
+		return c.json({ error: "eventId は必須です" }, StatusCodes.BAD_REQUEST);
 	}
-	const attacks = await getActiveAttacks(eventId, teamId);
-	return c.json({ attacks }, StatusCodes.OK);
+	try {
+		const membership = await getAuthorizedMembership(c, eventId, teamId);
+		const attacks = await getActiveAttacks(eventId, membership.teamId);
+		return c.json({ attacks }, StatusCodes.OK);
+	} catch (error) {
+		const mapped = mapErrorToResponse(error);
+		if (mapped) {
+			return c.json({ error: mapped.error }, mapped.status);
+		}
+		throw error;
+	}
 });
 
 // ヒント購入
@@ -277,9 +338,14 @@ participantRoutes.post("/defense/hint", async (c) => {
 		);
 	}
 	try {
-		const result = await purchaseHint(
+		const membership = await getAuthorizedMembership(
+			c,
 			parsed.data.eventId,
 			parsed.data.teamId,
+		);
+		const result = await purchaseHint(
+			parsed.data.eventId,
+			membership.teamId,
 			parsed.data.attackId,
 		);
 		return c.json(result, StatusCodes.OK);
@@ -309,9 +375,14 @@ participantRoutes.post("/defense/report-fix", async (c) => {
 		);
 	}
 	try {
-		const result = await reportFix(
+		const membership = await getAuthorizedMembership(
+			c,
 			parsed.data.eventId,
 			parsed.data.teamId,
+		);
+		const result = await reportFix(
+			parsed.data.eventId,
+			membership.teamId,
 			parsed.data.vulnerabilitySlug,
 		);
 		return c.json(result, StatusCodes.OK);
@@ -330,14 +401,20 @@ participantRoutes.post("/defense/report-fix", async (c) => {
 participantRoutes.get("/alliances", async (c) => {
 	const eventId = c.req.query("eventId");
 	const teamId = c.req.query("teamId");
-	if (!eventId || !teamId) {
-		return c.json(
-			{ error: "eventId と teamId は必須です" },
-			StatusCodes.BAD_REQUEST,
-		);
+	if (!eventId) {
+		return c.json({ error: "eventId は必須です" }, StatusCodes.BAD_REQUEST);
 	}
-	const alliances = await listTeamAlliances(eventId, teamId);
-	return c.json({ alliances }, StatusCodes.OK);
+	try {
+		const membership = await getAuthorizedMembership(c, eventId, teamId);
+		const alliances = await listTeamAlliances(eventId, membership.teamId);
+		return c.json({ alliances }, StatusCodes.OK);
+	} catch (error) {
+		const mapped = mapErrorToResponse(error);
+		if (mapped) {
+			return c.json({ error: mapped.error }, mapped.status);
+		}
+		throw error;
+	}
 });
 
 // 同盟申請
@@ -357,9 +434,14 @@ participantRoutes.post("/alliances/request", async (c) => {
 		);
 	}
 	try {
-		const result = await requestAlliance(
+		const membership = await getAuthorizedMembership(
+			c,
 			parsed.data.eventId,
 			parsed.data.teamId,
+		);
+		const result = await requestAlliance(
+			parsed.data.eventId,
+			membership.teamId,
 			parsed.data.targetTeamId,
 		);
 		return c.json(result, StatusCodes.CREATED);
@@ -390,10 +472,15 @@ participantRoutes.post("/alliances/:id/accept", async (c) => {
 		);
 	}
 	try {
+		const membership = await getAuthorizedMembership(
+			c,
+			parsed.data.eventId,
+			parsed.data.teamId,
+		);
 		const result = await acceptAlliance(
 			parsed.data.eventId,
 			id,
-			parsed.data.teamId,
+			membership.teamId,
 		);
 		return c.json(result, StatusCodes.OK);
 	} catch (error) {
@@ -423,7 +510,12 @@ participantRoutes.post("/alliances/:id/break", async (c) => {
 		);
 	}
 	try {
-		await breakAlliance(parsed.data.eventId, id, parsed.data.teamId);
+		const membership = await getAuthorizedMembership(
+			c,
+			parsed.data.eventId,
+			parsed.data.teamId,
+		);
+		await breakAlliance(parsed.data.eventId, id, membership.teamId);
 		return c.json({ success: true }, StatusCodes.OK);
 	} catch (error) {
 		const mapped = mapErrorToResponse(error);
@@ -440,14 +532,20 @@ participantRoutes.post("/alliances/:id/break", async (c) => {
 participantRoutes.get("/monitoring/status", async (c) => {
 	const eventId = c.req.query("eventId");
 	const teamId = c.req.query("teamId");
-	if (!eventId || !teamId) {
-		return c.json(
-			{ error: "eventId と teamId は必須です" },
-			StatusCodes.BAD_REQUEST,
-		);
+	if (!eventId) {
+		return c.json({ error: "eventId は必須です" }, StatusCodes.BAD_REQUEST);
 	}
-	const checks = await getMonitoringStatus(eventId, teamId);
-	return c.json({ checks }, StatusCodes.OK);
+	try {
+		const membership = await getAuthorizedMembership(c, eventId, teamId);
+		const checks = await getMonitoringStatus(eventId, membership.teamId);
+		return c.json({ checks }, StatusCodes.OK);
+	} catch (error) {
+		const mapped = mapErrorToResponse(error);
+		if (mapped) {
+			return c.json({ error: mapped.error }, mapped.status);
+		}
+		throw error;
+	}
 });
 
 // === 投票 ===
@@ -469,9 +567,14 @@ participantRoutes.post("/voting/vote", async (c) => {
 		);
 	}
 	try {
-		const result = await castVote(
+		const membership = await getAuthorizedMembership(
+			c,
 			parsed.data.eventId,
 			parsed.data.teamId,
+		);
+		const result = await castVote(
+			parsed.data.eventId,
+			membership.teamId,
 			parsed.data.votedForTeamId,
 		);
 		return c.json(result, StatusCodes.CREATED);
@@ -575,33 +678,39 @@ participantRoutes.get("/dashboard/attack-stats", async (c) => {
 participantRoutes.get("/dashboard/team", async (c) => {
 	const eventId = c.req.query("eventId");
 	const teamId = c.req.query("teamId");
-	if (!eventId || !teamId) {
-		return c.json(
-			{ error: "eventId と teamId は必須です" },
-			StatusCodes.BAD_REQUEST,
-		);
+	if (!eventId) {
+		return c.json({ error: "eventId は必須です" }, StatusCodes.BAD_REQUEST);
 	}
-	const dashboard = await getTeamDashboard(eventId, teamId);
-	if (!dashboard) {
-		return c.json(
-			{
-				team: {
-					teamId,
-					teamName: "",
+	try {
+		const membership = await getAuthorizedMembership(c, eventId, teamId);
+		const dashboard = await getTeamDashboard(eventId, membership.teamId);
+		if (!dashboard) {
+			return c.json(
+				{
+					team: {
+						teamId: membership.teamId,
+						teamName: "",
+						score: 0,
+						isHealthy: true,
+						websiteUrl: null,
+						apiUrl: null,
+					},
 					score: 0,
-					isHealthy: true,
-					websiteUrl: null,
-					apiUrl: null,
+					recentAttacks: [],
+					recentHealthChecks: [],
+					attackHistory: [],
 				},
-				score: 0,
-				recentAttacks: [],
-				recentHealthChecks: [],
-				attackHistory: [],
-			},
-			StatusCodes.OK,
-		);
+				StatusCodes.OK,
+			);
+		}
+		return c.json(dashboard, StatusCodes.OK);
+	} catch (error) {
+		const mapped = mapErrorToResponse(error);
+		if (mapped) {
+			return c.json({ error: mapped.error }, mapped.status);
+		}
+		throw error;
 	}
-	return c.json(dashboard, StatusCodes.OK);
 });
 
 // === チーム URL 更新 ===
@@ -621,11 +730,22 @@ participantRoutes.post("/teams/update-url", async (c) => {
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const { eventId, teamId, websiteUrl, apiUrl } = parsed.data;
 	try {
-		await updateTeamUrl(eventId, teamId, { websiteUrl, apiUrl });
+		const membership = await getAuthorizedMembership(
+			c,
+			parsed.data.eventId,
+			parsed.data.teamId,
+		);
+		await updateTeamUrl(parsed.data.eventId, membership.teamId, {
+			websiteUrl: parsed.data.websiteUrl,
+			apiUrl: parsed.data.apiUrl,
+		});
 		return c.json({ success: true }, StatusCodes.OK);
 	} catch (error) {
+		const mapped = mapErrorToResponse(error);
+		if (mapped) {
+			return c.json({ error: mapped.error }, mapped.status);
+		}
 		if (error instanceof DashboardTeamNotFoundError) {
 			return c.json({ error: error.message }, StatusCodes.NOT_FOUND);
 		}
@@ -643,29 +763,22 @@ participantRoutes.post("/teams/create", async (c) => {
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const { eventId, teamId, teamName, userId } = body as {
-		eventId?: string;
-		teamId?: string;
-		teamName?: string;
-		userId?: string;
-	};
-	if (!eventId || !teamId || !teamName) {
+	const parsed = createTeamSchema.safeParse(body);
+	if (!parsed.success) {
 		return c.json(
-			{ error: "eventId, teamId, teamName は必須です" },
+			{ error: "無効なリクエスト", details: parsed.error.issues },
 			StatusCodes.BAD_REQUEST,
 		);
 	}
 	try {
-		const team = await registerTeam({ eventId, teamId, teamName });
-		if (userId) {
-			await gamedayRepo.addMember({
-				eventId,
-				userId,
-				teamId: team.teamId,
-				teamName: team.teamName,
-				mode: "team",
-			});
-		}
+		const team = await registerTeam(parsed.data);
+		await gamedayRepo.addMember({
+			eventId: parsed.data.eventId,
+			userId: c.get("auth").userId,
+			teamId: team.teamId,
+			teamName: team.teamName,
+			mode: "team",
+		});
 		return c.json(
 			{
 				teamId: team.teamId,
@@ -692,30 +805,27 @@ participantRoutes.post("/teams/join", async (c) => {
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const { eventId, inviteCode, userId } = body as {
-		eventId?: string;
-		inviteCode?: string;
-		userId?: string;
-	};
-	if (!eventId || !inviteCode) {
+	const parsed = joinTeamSchema.safeParse(body);
+	if (!parsed.success) {
 		return c.json(
-			{ error: "eventId, inviteCode は必須です" },
+			{ error: "無効なリクエスト", details: parsed.error.issues },
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const team = await joinTeamByInviteCode(eventId, inviteCode);
+	const team = await joinTeamByInviteCode(
+		parsed.data.eventId,
+		parsed.data.inviteCode,
+	);
 	if (!team) {
 		return c.json({ error: "招待コードが無効です" }, StatusCodes.NOT_FOUND);
 	}
-	if (userId) {
-		await gamedayRepo.addMember({
-			eventId,
-			userId,
-			teamId: team.teamId,
-			teamName: team.teamName,
-			mode: "team",
-		});
-	}
+	await gamedayRepo.addMember({
+		eventId: parsed.data.eventId,
+		userId: c.get("auth").userId,
+		teamId: team.teamId,
+		teamName: team.teamName,
+		mode: "team",
+	});
 	return c.json(
 		{ teamId: team.teamId, teamName: team.teamName },
 		StatusCodes.OK,
@@ -732,15 +842,16 @@ participantRoutes.post("/teams/solo", async (c) => {
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const { eventId, userId } = body as { eventId?: string; userId?: string };
-	if (!eventId || !userId) {
+	const parsed = soloParticipationSchema.safeParse(body);
+	if (!parsed.success) {
 		return c.json(
-			{ error: "eventId, userId は必須です" },
+			{ error: "無効なリクエスト", details: parsed.error.issues },
 			StatusCodes.BAD_REQUEST,
 		);
 	}
+	const userId = c.get("auth").userId;
 	await gamedayRepo.addMember({
-		eventId,
+		eventId: parsed.data.eventId,
 		userId,
 		teamId: `solo-${userId}`,
 		teamName: "ソロ参加",
@@ -753,14 +864,13 @@ participantRoutes.post("/teams/solo", async (c) => {
 
 participantRoutes.get("/teams/my-membership", async (c) => {
 	const eventId = c.req.query("eventId");
-	const userId = c.req.query("userId");
-	if (!eventId || !userId) {
+	if (!eventId) {
 		return c.json(
-			{ error: "eventId, userId は必須です" },
+			{ error: "eventId は必須です" },
 			StatusCodes.BAD_REQUEST,
 		);
 	}
-	const membership = await gamedayRepo.getMembership(eventId, userId);
+	const membership = await gamedayRepo.getMembership(eventId, c.get("auth").userId);
 	if (!membership) {
 		return c.json({ membership: null }, StatusCodes.OK);
 	}
