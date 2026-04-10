@@ -44,9 +44,14 @@ function getStatusIndicator(status: string, t: (k: string) => string) {
 export default function DashboardPage() {
   const { t, locale } = useI18n();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [myEvents, setMyEvents] = useState<ParticipantEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     getMyEvents()
@@ -166,9 +171,18 @@ export default function DashboardPage() {
   return (
     <PageLayout
       header={
-        <Header variant="h1" description={t('dashboard.description')}>
-          {t('dashboard.title')}
-        </Header>
+        mounted ? (
+          <Header variant="h1" description={t('dashboard.description')}>
+            {t('dashboard.title')}
+          </Header>
+        ) : (
+          <div>
+            <h1 className="text-3xl font-bold">{t('dashboard.title')}</h1>
+            <p className="mt-2 text-sm text-gray-500">
+              {t('dashboard.description')}
+            </p>
+          </div>
+        )
       }
     >
       <SpaceBetween size="xl">
