@@ -57,8 +57,8 @@ describe('useEventFormState フック', () => {
   it('setField で全フィールドを個別に更新できるべき', () => {
     const { result } = renderHook(() => useEventFormState());
     act(() => {
-      result.current.setField('startTime', '2026-05-01');
-      result.current.setField('endTime', '2026-05-02');
+      result.current.setField('startTime', '2026-05-01T09:00');
+      result.current.setField('endTime', '2026-05-02T18:00');
       result.current.setField('timezone', TIMEZONE_OPTIONS[1]);
       result.current.setField('participantType', PARTICIPANT_TYPE_OPTIONS[1]);
       result.current.setField('cloudProvider', CLOUD_PROVIDER_OPTIONS[1]);
@@ -66,8 +66,8 @@ describe('useEventFormState フック', () => {
       result.current.setField('scoringType', SCORING_TYPE_OPTIONS[1]);
       result.current.setField('status', STATUS_OPTIONS[1]);
     });
-    expect(result.current.form.startTime).toBe('2026-05-01');
-    expect(result.current.form.endTime).toBe('2026-05-02');
+    expect(result.current.form.startTime).toBe('2026-05-01T09:00');
+    expect(result.current.form.endTime).toBe('2026-05-02T18:00');
     expect(result.current.form.timezone).toEqual(TIMEZONE_OPTIONS[1]);
     expect(result.current.form.participantType).toEqual(
       PARTICIPANT_TYPE_OPTIONS[1],
@@ -90,12 +90,12 @@ describe('useEventFormState フック', () => {
     expect(result.current.errors.name).toBe('イベント名は必須です');
   });
 
-  it('終了日が開始日より前の場合にバリデーションエラーを返すべき', async () => {
+  it('終了日時が開始日時より前の場合にバリデーションエラーを返すべき', async () => {
     const { result } = renderHook(() => useEventFormState());
     act(() => {
       result.current.setField('name', 'テスト');
-      result.current.setField('startTime', '2026-05-10');
-      result.current.setField('endTime', '2026-05-01');
+      result.current.setField('startTime', '2026-05-10T10:00');
+      result.current.setField('endTime', '2026-05-10T09:00');
     });
     let ok: boolean | undefined;
     await act(async () => {
@@ -103,7 +103,7 @@ describe('useEventFormState フック', () => {
     });
     expect(ok).toBe(false);
     expect(result.current.errors.endTime).toBe(
-      '終了日は開始日より後に設定してください',
+      '終了日時は開始日時より後に設定してください',
     );
   });
 
@@ -182,45 +182,45 @@ describe('validateEventForm', () => {
     ).toBeUndefined();
   });
 
-  it('終了日が開始日以前の場合にエラーを返すべき', () => {
+  it('終了日時が開始日時以前の場合にエラーを返すべき', () => {
     expect(
       validateEventForm({
         ...DEFAULT_FORM_STATE,
         name: 'テスト',
-        startTime: '2026-05-10',
-        endTime: '2026-05-01',
+        startTime: '2026-05-10T10:00',
+        endTime: '2026-05-10T09:00',
       }).endTime,
-    ).toBe('終了日は開始日より後に設定してください');
+    ).toBe('終了日時は開始日時より後に設定してください');
   });
 
-  it('終了日が開始日と同じ場合にエラーを返すべき', () => {
+  it('終了日時が開始日時と同じ場合にエラーを返すべき', () => {
     expect(
       validateEventForm({
         ...DEFAULT_FORM_STATE,
         name: 'テスト',
-        startTime: '2026-05-10',
-        endTime: '2026-05-10',
+        startTime: '2026-05-10T10:00',
+        endTime: '2026-05-10T10:00',
       }).endTime,
-    ).toBe('終了日は開始日より後に設定してください');
+    ).toBe('終了日時は開始日時より後に設定してください');
   });
 
-  it('開始日が空の場合に終了日エラーを返さないべき', () => {
+  it('開始日時が空の場合に終了日時エラーを返さないべき', () => {
     expect(
       validateEventForm({
         ...DEFAULT_FORM_STATE,
         name: 'テスト',
         startTime: '',
-        endTime: '2026-05-01',
+        endTime: '2026-05-01T12:00',
       }).endTime,
     ).toBeUndefined();
   });
 
-  it('終了日が空の場合にエラーを返さないべき', () => {
+  it('終了日時が空の場合にエラーを返さないべき', () => {
     expect(
       validateEventForm({
         ...DEFAULT_FORM_STATE,
         name: 'テスト',
-        startTime: '2026-05-01',
+        startTime: '2026-05-01T12:00',
         endTime: '',
       }).endTime,
     ).toBeUndefined();
@@ -252,15 +252,20 @@ describe('buildPayload', () => {
   it('フォーム状態からペイロードを正しく構築すべき', () => {
     expect(buildPayload(DEFAULT_FORM_STATE)).toEqual({
       name: '',
+      slug: 'event',
       type: 'gameday',
       status: 'draft',
-      startTime: '',
-      endTime: '',
+      eventDate: '',
+      startTime: undefined,
+      endTime: undefined,
       timezone: 'Asia/Tokyo',
       participantType: 'individual',
       cloudProvider: 'aws',
+      regions: ['ap-northeast-1'],
       maxParticipants: 100,
       scoringType: 'realtime',
+      scoringIntervalMinutes: 5,
+      leaderboardVisible: true,
     });
   });
 
@@ -272,6 +277,22 @@ describe('buildPayload', () => {
     });
     expect(payload.type).toBeUndefined();
     expect(payload.status).toBeUndefined();
+  });
+
+  it('local provider と日時入力を backend 契約に正規化すべき', () => {
+    const payload = buildPayload({
+      ...DEFAULT_FORM_STATE,
+      name: 'Spring GameDay 2026',
+      startTime: '2026-05-01T09:30',
+      endTime: '2026-05-02T18:45',
+      cloudProvider: { label: 'ローカル', value: 'local' },
+    });
+
+    expect(payload.slug).toBe('spring-gameday-2026');
+    expect(payload.eventDate).toBe('2026-05-01');
+    expect(payload.startTime).toBe('2026-05-01T09:30:00.000Z');
+    expect(payload.endTime).toBe('2026-05-02T18:45:00.000Z');
+    expect(payload.regions).toEqual(['local']);
   });
 });
 

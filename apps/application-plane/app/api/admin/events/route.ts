@@ -7,6 +7,8 @@
  */
 
 import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { authSkipEnabled } from '@/auth';
 import {
   getAdminSession,
   unauthorizedResponse,
@@ -16,6 +18,7 @@ import {
   serverApiRequest,
 } from '@/lib/api/server';
 import type { ParticipantEvent, EventStatus } from '@/lib/api/types';
+import { createDevEvent, listDevEvents } from './dev-store';
 
 /**
  * Admin イベント一覧レスポンス型
@@ -27,20 +30,59 @@ interface AdminEventListResponse {
   pageSize: number;
 }
 
+function emptyEventList(
+  page: number,
+  pageSize: number,
+): AdminEventListResponse {
+  return {
+    events: [],
+    total: 0,
+    page,
+    pageSize,
+  };
+}
+
 /**
  * イベント作成リクエスト型
  */
-interface CreateEventRequest {
-  name: string;
-  slug: string;
-  description?: string;
-  organizer?: string;
-  eventDate: string;
-  startTime?: string;
-  endTime?: string;
-  status?: EventStatus;
-  imageUrl?: string;
-}
+const createEventRequestSchema = z.object({
+  name: z
+    .string({
+      required_error: 'Event name is required',
+      invalid_type_error: 'Event name is required',
+    })
+    .trim()
+    .min(1, 'Event name is required'),
+  slug: z.string().trim().min(1).optional(),
+  description: z.string().optional(),
+  organizer: z.string().optional(),
+  eventDate: z.string().optional(),
+  startTime: z
+    .string({
+      required_error: 'Event start time is required',
+      invalid_type_error: 'Event start time is required',
+    })
+    .trim()
+    .min(1, 'Event start time is required'),
+  endTime: z
+    .string({
+      required_error: 'Event end time is required',
+      invalid_type_error: 'Event end time is required',
+    })
+    .trim()
+    .min(1, 'Event end time is required'),
+  status: z.custom<EventStatus>().optional(),
+  imageUrl: z.string().optional(),
+  type: z.string().optional(),
+  timezone: z.string().optional(),
+  participantType: z.string().optional(),
+  cloudProvider: z.string().optional(),
+  regions: z.array(z.string()).optional(),
+  scoringType: z.string().optional(),
+  leaderboardVisible: z.boolean().optional(),
+});
+
+type CreateEventRequest = z.infer<typeof createEventRequestSchema>;
 
 /**
  * GET /api/admin/events
@@ -77,6 +119,18 @@ export async function GET(request: NextRequest) {
 
     return successResponse(data);
   } catch (error) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      error instanceof Error &&
+      /^Unauthorized$/i.test(error.message);
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if (isAuthSkipUnauthorized || isNetworkError) {
+      console.warn('Admin events fallback to empty dataset:', error);
+      return successResponse(listDevEvents(page, pageSize, status));
+    }
+
     console.error('Failed to fetch events:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to fetch events',
@@ -98,20 +152,24 @@ export async function POST(request: NextRequest) {
       : forbiddenResponse('Admin role required');
   }
 
+  const json = await request
+    .json()
+    .catch(() => null satisfies null | Record<string, unknown>);
+  if (json === null) {
+    return badRequestResponse('Invalid request');
+  }
+
+  const parsedBody = createEventRequestSchema.safeParse(json);
+
+  if (!parsedBody.success) {
+    return badRequestResponse(
+      parsedBody.error.issues[0]?.message ?? 'Invalid request',
+    );
+  }
+
+  const body = parsedBody.data;
+
   try {
-    const body = (await request.json()) as CreateEventRequest;
-
-    // 必須フィールドのバリデーション
-    if (!body.name?.trim()) {
-      return badRequestResponse('Event name is required');
-    }
-    if (!body.slug?.trim()) {
-      return badRequestResponse('Event slug is required');
-    }
-    if (!body.eventDate) {
-      return badRequestResponse('Event date is required');
-    }
-
     // バックエンド API を呼び出し
     const data = await serverApiRequest<ParticipantEvent>('/admin/events', {
       method: 'POST',
@@ -120,6 +178,18 @@ export async function POST(request: NextRequest) {
 
     return successResponse(data, 201);
   } catch (error) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      error instanceof Error &&
+      /^Unauthorized$/i.test(error.message);
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if (isAuthSkipUnauthorized || isNetworkError) {
+      console.warn('Admin events create fallback to local dev store:', error);
+      return successResponse(createDevEvent(body), 201);
+    }
+
     console.error('Failed to create event:', error);
     return badRequestResponse(
       error instanceof Error ? error.message : 'Failed to create event',

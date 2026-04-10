@@ -6,6 +6,10 @@ import type { Session } from 'next-auth';
 const mockGetAdminSession = vi.fn<() => Promise<Session | null>>();
 const mockServerApiRequest = vi.fn();
 
+vi.mock('@/auth', () => ({
+  authSkipEnabled: true,
+}));
+
 vi.mock('@/lib/api/server', () => ({
   getAdminSession: () => mockGetAdminSession(),
   serverApiRequest: (...args: unknown[]) => mockServerApiRequest(...args),
@@ -22,6 +26,11 @@ vi.mock('@/lib/api/server', () => ({
 describe('Admin Event Detail API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (
+      globalThis as typeof globalThis & {
+        __TENKACLOUD_DEV_EVENTS__?: unknown[];
+      }
+    ).__TENKACLOUD_DEV_EVENTS__;
   });
 
   const createParams = (eventId: string) => Promise.resolve({ eventId });
@@ -141,6 +150,70 @@ describe('Admin Event Detail API', () => {
         '/admin/events/event-1',
         expect.objectContaining({
           method: 'PUT',
+        }),
+      );
+    });
+
+    it('network error 時は local dev store のイベントを更新すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      (
+        globalThis as typeof globalThis & {
+          __TENKACLOUD_DEV_EVENTS__?: unknown[];
+        }
+      ).__TENKACLOUD_DEV_EVENTS__ = [
+        {
+          id: 'event-1',
+          slug: 'test-event',
+          name: 'Test Event',
+          type: 'gameday',
+          status: 'draft',
+          startTime: '2026-04-09T00:00:00.000Z',
+          endTime: '2026-04-10T23:59:59.000Z',
+          timezone: 'Asia/Tokyo',
+          participantType: 'individual',
+          cloudProvider: 'local',
+          regions: ['local'],
+          scoringType: 'realtime',
+          leaderboardVisible: true,
+          problemCount: 0,
+          participantCount: 0,
+          isRegistered: false,
+          createdAt: '2026-04-09T00:00:00.000Z',
+        },
+      ];
+
+      const { PATCH, GET } = await import('../route');
+      const response = await PATCH(
+        new NextRequest('http://localhost/api/admin/events/event-1', {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'scheduled' }),
+        }),
+        { params: createParams('event-1') },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({
+          id: 'event-1',
+          status: 'scheduled',
+        }),
+      );
+
+      const detailResponse = await GET(
+        new NextRequest('http://localhost/api/admin/events/event-1'),
+        { params: createParams('event-1') },
+      );
+      await expect(detailResponse.json()).resolves.toEqual(
+        expect.objectContaining({
+          id: 'event-1',
+          status: 'scheduled',
         }),
       );
     });

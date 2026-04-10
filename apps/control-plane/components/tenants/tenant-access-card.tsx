@@ -49,7 +49,7 @@ export function TenantAccessCard({
   };
 
   return (
-    <div className="rounded-xl border bg-card text-card-foreground shadow">
+    <div className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
       <div className="flex flex-col space-y-1.5 p-6">
         <h3 className="font-semibold leading-none tracking-tight">
           テナント管理画面
@@ -59,20 +59,22 @@ export function TenantAccessCard({
         </p>
       </div>
       <div className="p-6 pt-0">
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
           <div className="mb-3">
-            <span className="text-sm text-gray-500">URL:</span>
-            <p className="font-mono text-sm">{applicationPlaneUrl}</p>
+            <span className="text-sm text-muted-foreground">URL:</span>
+            <p className="break-all font-mono text-sm text-foreground">
+              {applicationPlaneUrl}
+            </p>
           </div>
 
           {isProvisioningInProgress && (
-            <div className="mb-3 rounded-md bg-amber-50 p-2 text-sm text-amber-700">
+            <div className="mb-3 rounded-md border border-amber-500/20 bg-amber-500/10 p-2 text-sm text-amber-800 dark:text-amber-300">
               プロビジョニング中です。完了までお待ちください。
             </div>
           )}
 
           {isProvisioningFailed && (
-            <div className="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">
+            <div className="mb-3 rounded-md border border-rose-500/20 bg-rose-500/10 p-2 text-sm text-rose-800 dark:text-rose-300">
               プロビジョニング失敗。管理者にお問い合わせください。
             </div>
           )}
@@ -85,8 +87,8 @@ export function TenantAccessCard({
               aria-disabled={!isProvisioningComplete}
               className={`inline-flex items-center rounded-md px-4 py-2 text-sm font-medium ${
                 isProvisioningComplete
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'pointer-events-none cursor-not-allowed bg-gray-300 text-gray-500'
+                  ? 'border border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'pointer-events-none cursor-not-allowed border border-border bg-muted text-muted-foreground'
               }`}
             >
               管理画面を開く
@@ -108,7 +110,7 @@ export function TenantAccessCard({
             <button
               type="button"
               onClick={handleCopyUrl}
-              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
             >
               {copyStatus === 'success' ? (
                 <>

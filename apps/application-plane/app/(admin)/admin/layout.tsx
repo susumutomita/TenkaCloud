@@ -15,6 +15,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { NotificationPanel } from '@/components/notifications/notification-panel';
 import { useTenantOptional } from '@/lib/tenant';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 const navItems: SideNavigationProps.Item[] = [
@@ -38,6 +39,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const tenant = useTenantOptional();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const activeHref = navItems
     .filter((item): item is SideNavigationProps.Link => item.type === 'link')
@@ -48,58 +54,62 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   return (
     <div className="awsui-dark-mode">
-      <div id="admin-top-nav" style={{ position: 'relative' }}>
-        <TopNavigation
-          identity={{
-            href: '/admin',
-            title: 'TenkaCloud',
-            onFollow: (e) => {
-              e.preventDefault();
-              router.push('/admin');
-            },
-          }}
-          utilities={[
-            ...(tenant?.slug
-              ? [
-                  {
-                    type: 'button' as const,
-                    text: tenant.slug,
-                    disableUtilityCollapse: true,
-                  },
-                ]
-              : []),
-            {
-              type: 'button' as const,
-              text: '参加者画面へ',
-              href: '/dashboard',
-              variant: 'link' as const,
-            },
-            {
-              type: 'menu-dropdown' as const,
-              text: session?.user?.name || '管理者',
-              iconName: 'user-profile' as const,
-              items: [
-                { id: 'settings', text: '設定' },
-                { id: 'signout', text: 'サインアウト' },
-              ],
-            },
-          ]}
-          i18nStrings={{
-            overflowMenuTriggerText: 'その他',
-            overflowMenuTitleText: 'すべて',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            right: '200px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            zIndex: 1000,
-          }}
-        >
-          <NotificationPanel />
-        </div>
+      <div id="admin-top-nav" style={{ position: 'relative', minHeight: 72 }}>
+        {mounted ? (
+          <>
+            <TopNavigation
+              identity={{
+                href: '/admin',
+                title: 'TenkaCloud',
+                onFollow: (e) => {
+                  e.preventDefault();
+                  router.push('/admin');
+                },
+              }}
+              utilities={[
+                ...(tenant?.slug
+                  ? [
+                      {
+                        type: 'button' as const,
+                        text: tenant.slug,
+                        disableUtilityCollapse: true,
+                      },
+                    ]
+                  : []),
+                {
+                  type: 'button' as const,
+                  text: '参加者画面へ',
+                  href: '/dashboard',
+                  variant: 'link' as const,
+                },
+                {
+                  type: 'menu-dropdown' as const,
+                  text: session?.user?.name || '管理者',
+                  iconName: 'user-profile' as const,
+                  items: [
+                    { id: 'settings', text: '設定' },
+                    { id: 'signout', text: 'サインアウト' },
+                  ],
+                },
+              ]}
+              i18nStrings={{
+                overflowMenuTriggerText: 'その他',
+                overflowMenuTitleText: 'すべて',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                right: '200px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 1000,
+              }}
+            >
+              <NotificationPanel />
+            </div>
+          </>
+        ) : null}
       </div>
       <AppLayout
         navigation={

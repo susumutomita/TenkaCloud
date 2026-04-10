@@ -9,7 +9,6 @@
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Container from '@cloudscape-design/components/container';
-import DatePicker from '@cloudscape-design/components/date-picker';
 import Form from '@cloudscape-design/components/form';
 import FormField from '@cloudscape-design/components/form-field';
 import Header from '@cloudscape-design/components/header';
@@ -51,13 +50,13 @@ export default function AdminEventEditPage() {
         setLoading(true);
         setFetchError(null);
         const data = await get<AdminEvent>(`/admin/events/${eventId}`);
-        const startDate = data.startTime ? data.startTime.slice(0, 10) : '';
-        const endDate = data.endTime ? data.endTime.slice(0, 10) : '';
+        const startDateTime = data.startTime ? data.startTime.slice(0, 16) : '';
+        const endDateTime = data.endTime ? data.endTime.slice(0, 16) : '';
         setField('name', data.name || '');
         setField('type', findOption(TYPE_OPTIONS, data.type));
         setField('status', findOption(STATUS_OPTIONS, data.status));
-        setField('startTime', startDate);
-        setField('endTime', endDate);
+        setField('startTime', startDateTime);
+        setField('endTime', endDateTime);
         setField(
           'timezone',
           findOption(TIMEZONE_OPTIONS, data.timezone) ?? TIMEZONE_OPTIONS[0],
@@ -163,24 +162,22 @@ export default function AdminEventEditPage() {
             </FormField>
           </SpaceBetween>
           <SpaceBetween direction="horizontal" size="l">
-            <FormField label="開始日">
-              <DatePicker
+            <FormField label="開始日時">
+              <input
+                type="datetime-local"
                 value={form.startTime}
-                onChange={({ detail }) => setField('startTime', detail.value)}
-                placeholder="YYYY/MM/DD"
-                openCalendarAriaLabel={(s) =>
-                  s ? `日付を選択、選択済み ${s}` : '日付を選択'
-                }
+                onChange={(event) => setField('startTime', event.target.value)}
+                placeholder="YYYY-MM-DDTHH:mm"
+                className="awsui-input-type-text"
               />
             </FormField>
-            <FormField label="終了日" errorText={errors.endTime}>
-              <DatePicker
+            <FormField label="終了日時" errorText={errors.endTime}>
+              <input
+                type="datetime-local"
                 value={form.endTime}
-                onChange={({ detail }) => setField('endTime', detail.value)}
-                placeholder="YYYY/MM/DD"
-                openCalendarAriaLabel={(s) =>
-                  s ? `日付を選択、選択済み ${s}` : '日付を選択'
-                }
+                onChange={(event) => setField('endTime', event.target.value)}
+                placeholder="YYYY-MM-DDTHH:mm"
+                className="awsui-input-type-text"
               />
             </FormField>
           </SpaceBetween>

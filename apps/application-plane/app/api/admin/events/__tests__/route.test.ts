@@ -5,6 +5,11 @@ import type { Session } from 'next-auth';
 // Mock server utilities
 const mockGetAdminSession = vi.fn<() => Promise<Session | null>>();
 const mockServerApiRequest = vi.fn();
+const mockAuthSkipEnabled = true;
+
+vi.mock('@/auth', () => ({
+  authSkipEnabled: mockAuthSkipEnabled,
+}));
 
 vi.mock('@/lib/api/server', () => ({
   getAdminSession: () => mockGetAdminSession(),
@@ -22,6 +27,11 @@ vi.mock('@/lib/api/server', () => ({
 describe('Admin Events API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (
+      globalThis as typeof globalThis & {
+        __TENKACLOUD_DEV_EVENTS__?: unknown[];
+      }
+    ).__TENKACLOUD_DEV_EVENTS__;
   });
 
   describe('GET /api/admin/events', () => {
@@ -130,6 +140,54 @@ describe('Admin Events API', () => {
       const data = await response.json();
       expect(data.error).toBe('API Error');
     });
+
+    it('AUTH_SKIP の Unauthorized は空一覧にフォールバックすべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
+
+      const { GET } = await import('../route');
+      const request = new NextRequest(
+        'http://localhost/api/admin/events?page=3&pageSize=25',
+      );
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({
+        events: [],
+        total: 0,
+        page: 3,
+        pageSize: 25,
+      });
+    });
+
+    it('network error は空一覧にフォールバックすべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { GET } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events');
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({
+        events: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+      });
+    });
   });
 
   describe('POST /api/admin/events', () => {
@@ -159,8 +217,8 @@ describe('Admin Events API', () => {
         method: 'POST',
         body: JSON.stringify({
           name: '',
-          slug: 'test',
-          eventDate: '2024-01-01',
+          startTime: '2024-01-01T00:00:00.000Z',
+          endTime: '2024-01-02T23:59:59.000Z',
         }),
       });
       const response = await POST(request);
@@ -170,7 +228,7 @@ describe('Admin Events API', () => {
       expect(data.error).toBe('Event name is required');
     });
 
-    it('slug が空の場合は 400 を返すべき', async () => {
+    it('startTime がない場合は 400 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -183,18 +241,17 @@ describe('Admin Events API', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Test Event',
-          slug: '',
-          eventDate: '2024-01-01',
+          endTime: '2024-01-02T23:59:59.000Z',
         }),
       });
       const response = await POST(request);
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('Event slug is required');
+      expect(data.error).toBe('Event start time is required');
     });
 
-    it('eventDate がない場合は 400 を返すべき', async () => {
+    it('endTime がない場合は 400 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -205,13 +262,62 @@ describe('Admin Events API', () => {
       const { POST } = await import('../route');
       const request = new NextRequest('http://localhost/api/admin/events', {
         method: 'POST',
-        body: JSON.stringify({ name: 'Test Event', slug: 'test' }),
+        body: JSON.stringify({
+          name: 'Test Event',
+          startTime: '2024-01-01T00:00:00.000Z',
+        }),
       });
       const response = await POST(request);
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toBe('Event date is required');
+      expect(data.error).toBe('Event end time is required');
+    });
+
+    it('不正な JSON の場合は 400 を返すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+
+      const { POST } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events', {
+        method: 'POST',
+        body: '{',
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: 'Invalid request',
+      });
+    });
+
+    it('name が文字列でない場合は 400 を返すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+
+      const { POST } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 123,
+          startTime: '2024-01-01T00:00:00.000Z',
+          endTime: '2024-01-02T23:59:59.000Z',
+        }),
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: 'Event name is required',
+      });
     });
 
     it('イベントを作成し 201 を返すべき', async () => {
@@ -225,8 +331,6 @@ describe('Admin Events API', () => {
       const createdEvent = {
         id: 'event-1',
         name: 'Test Event',
-        slug: 'test-event',
-        eventDate: '2024-01-01',
         status: 'draft',
       };
       mockServerApiRequest.mockResolvedValue(createdEvent);
@@ -236,8 +340,8 @@ describe('Admin Events API', () => {
         method: 'POST',
         body: JSON.stringify({
           name: 'Test Event',
-          slug: 'test-event',
-          eventDate: '2024-01-01',
+          startTime: '2024-01-01T00:00:00.000Z',
+          endTime: '2024-01-02T23:59:59.000Z',
         }),
       });
       const response = await POST(request);
@@ -245,6 +349,57 @@ describe('Admin Events API', () => {
       expect(response.status).toBe(201);
       const data = await response.json();
       expect(data).toEqual(createdEvent);
+    });
+
+    it('network error 時は local dev store に作成して 201 を返すべき', async () => {
+      const session: Session = {
+        user: { name: 'Admin', email: 'admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['admin'],
+      };
+      mockGetAdminSession.mockResolvedValue(session);
+      mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
+
+      const { POST, GET } = await import('../route');
+      const request = new NextRequest('http://localhost/api/admin/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Local Event',
+          slug: 'local-event',
+          type: 'gameday',
+          status: 'draft',
+          startTime: '2026-04-09T00:00:00.000Z',
+          endTime: '2026-04-10T23:59:59.000Z',
+          timezone: 'Asia/Tokyo',
+          participantType: 'individual',
+          cloudProvider: 'local',
+          regions: ['local'],
+          scoringType: 'realtime',
+          leaderboardVisible: true,
+        }),
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(201);
+      const data = await response.json();
+      expect(data).toEqual(
+        expect.objectContaining({
+          name: 'Local Event',
+          type: 'gameday',
+          cloudProvider: 'local',
+          regions: ['local'],
+        }),
+      );
+
+      const listResponse = await GET(
+        new NextRequest('http://localhost/api/admin/events'),
+      );
+      await expect(listResponse.json()).resolves.toEqual({
+        events: [expect.objectContaining({ name: 'Local Event' })],
+        total: 1,
+        page: 1,
+        pageSize: 10,
+      });
     });
   });
 });

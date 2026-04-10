@@ -33,8 +33,8 @@ describe('イベント作成ページ', () => {
 
   it('日時設定フィールドが表示されるべき', () => {
     render(<AdminEventCreatePage />);
-    expect(screen.getByText('開始日')).toBeInTheDocument();
-    expect(screen.getByText('終了日')).toBeInTheDocument();
+    expect(screen.getByText('開始日時')).toBeInTheDocument();
+    expect(screen.getByText('終了日時')).toBeInTheDocument();
     expect(screen.getByText('タイムゾーン')).toBeInTheDocument();
   });
 
@@ -85,7 +85,13 @@ describe('イベント作成ページ', () => {
     await waitFor(() => {
       expect(mockPost).toHaveBeenCalledWith(
         '/admin/events',
-        expect.objectContaining({ name: 'テストイベント' }),
+        expect.objectContaining({
+          name: 'テストイベント',
+          slug: 'event',
+          regions: ['ap-northeast-1'],
+          scoringIntervalMinutes: 5,
+          leaderboardVisible: true,
+        }),
       );
     });
     expect(mockPush).toHaveBeenCalledWith('/admin/events');

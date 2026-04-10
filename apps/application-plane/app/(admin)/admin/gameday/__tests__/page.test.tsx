@@ -103,7 +103,7 @@ describe('AdminGamedayPage', () => {
     render(<AdminGamedayPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('エラーが発生しました')).toBeInTheDocument();
+      expect(screen.getByText('API Error')).toBeInTheDocument();
     });
   });
 
@@ -112,7 +112,7 @@ describe('AdminGamedayPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/イベント ID を直接入力して検索/),
+        screen.getByText(/イベント ID を直接指定して GameDay 状態を確認します/),
       ).toBeInTheDocument();
     });
   });

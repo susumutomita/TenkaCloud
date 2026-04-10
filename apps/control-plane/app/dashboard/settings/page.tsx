@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { saveSettings } from '@/lib/api/settings-api';
+import { getStoredThemePreference, persistThemePreference } from '@/lib/theme';
 import {
   DEFAULT_SETTINGS,
   LANGUAGES,
@@ -24,6 +25,17 @@ export default function SettingsPage({
     text: string;
   } | null>(null);
 
+  useEffect(() => {
+    const storedTheme = getStoredThemePreference();
+    setSettings((current) => ({
+      ...current,
+      appearance: {
+        ...current.appearance,
+        theme: storedTheme,
+      },
+    }));
+  }, []);
+
   const handleSave = async () => {
     setIsSaving(true);
     setMessage(null);
@@ -42,23 +54,27 @@ export default function SettingsPage({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">設定</h1>
-        <p className="mt-2 text-sm text-muted-foreground text-gray-500">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          設定
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           プラットフォームの設定を管理します
         </p>
       </div>
 
       {message && (
         <div
-          className={`rounded-md p-4 ${
+          className={`rounded-md border p-4 ${
             message.type === 'success'
-              ? 'bg-green-50 border border-green-200'
-              : 'bg-red-50 border border-red-200'
+              ? 'border-emerald-500/20 bg-emerald-500/10'
+              : 'border-rose-500/20 bg-rose-500/10'
           }`}
         >
           <p
             className={`text-sm ${
-              message.type === 'success' ? 'text-green-800' : 'text-red-800'
+              message.type === 'success'
+                ? 'text-emerald-800 dark:text-emerald-300'
+                : 'text-rose-800 dark:text-rose-300'
             }`}
           >
             {message.text}
@@ -68,12 +84,12 @@ export default function SettingsPage({
 
       <div className="space-y-6">
         {/* プラットフォーム設定 */}
-        <section className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6 border-b">
+        <section className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 border-b border-border p-6">
             <h2 className="text-lg font-semibold leading-none tracking-tight">
               プラットフォーム設定
             </h2>
-            <p className="text-sm text-muted-foreground text-gray-500">
+            <p className="text-sm text-muted-foreground">
               基本的なプラットフォームの設定を行います
             </p>
           </div>
@@ -88,7 +104,7 @@ export default function SettingsPage({
                 </label>
                 <input
                   id="platformName"
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={settings.platform.platformName}
                   onChange={(e) =>
                     setSettings({
@@ -110,7 +126,7 @@ export default function SettingsPage({
                 </label>
                 <select
                   id="language"
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={settings.platform.language}
                   onChange={(e) =>
                     setSettings({
@@ -138,7 +154,7 @@ export default function SettingsPage({
                 </label>
                 <select
                   id="timezone"
-                  className="flex h-10 w-full rounded-md border border-gray-300 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={settings.platform.timezone}
                   onChange={(e) =>
                     setSettings({
@@ -162,12 +178,12 @@ export default function SettingsPage({
         </section>
 
         {/* 外観設定 */}
-        <section className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6 border-b">
+        <section className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 border-b border-border p-6">
             <h2 className="text-lg font-semibold leading-none tracking-tight">
               外観設定
             </h2>
-            <p className="text-sm text-muted-foreground text-gray-500">
+            <p className="text-sm text-muted-foreground">
               アプリケーションの表示設定を行います
             </p>
           </div>
@@ -181,17 +197,19 @@ export default function SettingsPage({
               </label>
               <select
                 id="theme"
-                className="flex h-10 w-full max-w-xs rounded-md border border-gray-300 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={settings.appearance.theme}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const theme = e.target.value as 'light' | 'dark' | 'system';
+                  persistThemePreference(theme);
                   setSettings({
                     ...settings,
                     appearance: {
                       ...settings.appearance,
-                      theme: e.target.value as 'light' | 'dark' | 'system',
+                      theme,
                     },
-                  })
-                }
+                  });
+                }}
               >
                 {THEMES.map((theme) => (
                   <option key={theme.value} value={theme.value}>
@@ -204,12 +222,12 @@ export default function SettingsPage({
         </section>
 
         {/* 通知設定 */}
-        <section className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6 border-b">
+        <section className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 border-b border-border p-6">
             <h2 className="text-lg font-semibold leading-none tracking-tight">
               通知設定
             </h2>
-            <p className="text-sm text-muted-foreground text-gray-500">
+            <p className="text-sm text-muted-foreground">
               通知の受信設定を行います
             </p>
           </div>
@@ -218,7 +236,7 @@ export default function SettingsPage({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   checked={settings.notifications.emailNotificationsEnabled}
                   onChange={(e) =>
                     setSettings({
@@ -232,7 +250,7 @@ export default function SettingsPage({
                 />
                 <div>
                   <span className="text-sm font-medium">メール通知</span>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     重要なイベントをメールで通知します
                   </p>
                 </div>
@@ -240,7 +258,7 @@ export default function SettingsPage({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   checked={settings.notifications.systemAlertsEnabled}
                   onChange={(e) =>
                     setSettings({
@@ -254,7 +272,7 @@ export default function SettingsPage({
                 />
                 <div>
                   <span className="text-sm font-medium">システムアラート</span>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     システムの警告やエラーを通知します
                   </p>
                 </div>
@@ -262,7 +280,7 @@ export default function SettingsPage({
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   checked={
                     settings.notifications.maintenanceNotificationsEnabled
                   }
@@ -278,7 +296,7 @@ export default function SettingsPage({
                 />
                 <div>
                   <span className="text-sm font-medium">メンテナンス通知</span>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     予定されているメンテナンスを通知します
                   </p>
                 </div>
@@ -288,25 +306,27 @@ export default function SettingsPage({
         </section>
 
         {/* セキュリティ設定（読み取り専用） */}
-        <section className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6 border-b">
+        <section className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
+          <div className="flex flex-col space-y-1.5 border-b border-border p-6">
             <h2 className="text-lg font-semibold leading-none tracking-tight">
               セキュリティ設定
             </h2>
-            <p className="text-sm text-muted-foreground text-gray-500">
+            <p className="text-sm text-muted-foreground">
               セキュリティに関する設定を確認できます
             </p>
           </div>
           <div className="p-6">
             <dl className="grid gap-4 md:grid-cols-3">
               <div className="space-y-1">
-                <dt className="text-sm font-medium text-gray-500">MFA 必須</dt>
+                <dt className="text-sm font-medium text-muted-foreground">
+                  MFA 必須
+                </dt>
                 <dd className="text-sm">
                   {settings.security.mfaRequired ? '有効' : '無効'}
                 </dd>
               </div>
               <div className="space-y-1">
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-muted-foreground">
                   セッションタイムアウト
                 </dt>
                 <dd className="text-sm">
@@ -314,7 +334,7 @@ export default function SettingsPage({
                 </dd>
               </div>
               <div className="space-y-1">
-                <dt className="text-sm font-medium text-gray-500">
+                <dt className="text-sm font-medium text-muted-foreground">
                   最大ログイン試行回数
                 </dt>
                 <dd className="text-sm">
@@ -332,7 +352,7 @@ export default function SettingsPage({
           type="button"
           onClick={handleSave}
           disabled={isSaving}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-black text-white"
+          className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
         >
           {isSaving ? '保存中...' : '設定を保存'}
         </button>

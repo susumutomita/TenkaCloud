@@ -9,7 +9,6 @@
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Container from '@cloudscape-design/components/container';
-import DatePicker from '@cloudscape-design/components/date-picker';
 import Form from '@cloudscape-design/components/form';
 import FormField from '@cloudscape-design/components/form-field';
 import Header from '@cloudscape-design/components/header';
@@ -90,24 +89,22 @@ export default function AdminEventCreatePage() {
             </FormField>
           </SpaceBetween>
           <SpaceBetween direction="horizontal" size="l">
-            <FormField label="開始日">
-              <DatePicker
+            <FormField label="開始日時">
+              <input
+                type="datetime-local"
                 value={form.startTime}
-                onChange={({ detail }) => setField('startTime', detail.value)}
-                placeholder="YYYY/MM/DD"
-                openCalendarAriaLabel={(s) =>
-                  s ? `日付を選択、選択済み ${s}` : '日付を選択'
-                }
+                onChange={(event) => setField('startTime', event.target.value)}
+                placeholder="YYYY-MM-DDTHH:mm"
+                className="awsui-input-type-text"
               />
             </FormField>
-            <FormField label="終了日" errorText={errors.endTime}>
-              <DatePicker
+            <FormField label="終了日時" errorText={errors.endTime}>
+              <input
+                type="datetime-local"
                 value={form.endTime}
-                onChange={({ detail }) => setField('endTime', detail.value)}
-                placeholder="YYYY/MM/DD"
-                openCalendarAriaLabel={(s) =>
-                  s ? `日付を選択、選択済み ${s}` : '日付を選択'
-                }
+                onChange={(event) => setField('endTime', event.target.value)}
+                placeholder="YYYY-MM-DDTHH:mm"
+                className="awsui-input-type-text"
               />
             </FormField>
           </SpaceBetween>

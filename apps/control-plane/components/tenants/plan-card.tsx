@@ -75,7 +75,7 @@ export function PlanCard({ tenant }: PlanCardProps) {
       TIER_FEATURES[targetTier].isolationModel;
 
   return (
-    <div className="rounded-xl border bg-card text-card-foreground shadow">
+    <div className="rounded-xl border border-border bg-card text-card-foreground shadow-sm">
       <div className="flex flex-col space-y-1.5 p-6">
         <h3 className="font-semibold leading-none tracking-tight">プラン</h3>
         <p className="text-sm text-muted-foreground">
@@ -97,22 +97,22 @@ export function PlanCard({ tenant }: PlanCardProps) {
               <div
                 key={tier}
                 data-testid={`plan-card-${tier}`}
-                className={`rounded-lg border p-4 ${
+                className={`rounded-lg border p-4 transition-colors ${
                   isCurrent
-                    ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500'
-                    : 'border-gray-200'
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                    : 'border-border bg-background'
                 }`}
               >
                 <div className="mb-4 flex items-center justify-between">
                   <h4 className="font-semibold">{TENANT_TIER_LABELS[tier]}</h4>
                   {isCurrent && (
-                    <span className="rounded-full bg-blue-500 px-2 py-1 text-xs text-white">
+                    <span className="rounded-full bg-primary px-2 py-1 text-xs text-primary-foreground">
                       現在のプラン
                     </span>
                   )}
                 </div>
 
-                <ul className="mb-4 space-y-2 text-sm text-gray-600">
+                <ul className="mb-4 space-y-2 text-sm text-muted-foreground">
                   <li>{formatLimit(features.maxParticipants)}</li>
                   <li>{formatBattleLimit(features.maxBattles)}</li>
                   {features.apiAccess && <li>API アクセス</li>}
@@ -131,8 +131,8 @@ export function PlanCard({ tenant }: PlanCardProps) {
                     onClick={() => handleTierClick(tier)}
                     className={`w-full rounded-md px-3 py-2 text-sm font-medium ${
                       targetOrder > currentTierOrder
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground'
                     }`}
                   >
                     {actionLabel}
@@ -151,20 +151,20 @@ export function PlanCard({ tenant }: PlanCardProps) {
       </div>
 
       {showDialog && targetTier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl">
             <h3 className="mb-4 text-lg font-semibold">
               プランを変更しますか？
             </h3>
 
-            <p className="mb-4 text-sm text-gray-600">
+            <p className="mb-4 text-sm text-muted-foreground">
               {TENANT_TIER_LABELS[tenant.tier]} →{' '}
               {TENANT_TIER_LABELS[targetTier]} に
               {isUpgrade ? 'アップグレード' : 'ダウングレード'}
             </p>
 
             {requiresReprovisioning && (
-              <div className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-700">
+              <div className="mb-4 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
                 <strong>注意:</strong>{' '}
                 分離モデルが変更されるため、再プロビジョニングが必要です。一時的にサービスが停止します。
               </div>
@@ -175,7 +175,7 @@ export function PlanCard({ tenant }: PlanCardProps) {
                 type="button"
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
               >
                 キャンセル
               </button>
@@ -183,7 +183,7 @@ export function PlanCard({ tenant }: PlanCardProps) {
                 type="button"
                 onClick={handleConfirm}
                 disabled={isLoading}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {isLoading ? '処理中...' : '変更を確定'}
               </button>
