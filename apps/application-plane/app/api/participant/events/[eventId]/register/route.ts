@@ -2,6 +2,11 @@
  * Participant Event Registration API Proxy
  */
 
+import { authSkipEnabled } from '@/auth';
+import {
+  findDevEvent,
+  setDevEventRegistration,
+} from '@/app/api/admin/events/dev-store';
 import { serverApiRequest } from '@/lib/api/server';
 
 export async function POST(
@@ -17,6 +22,21 @@ export async function POST(
     );
     return Response.json(data);
   } catch (error) {
+    const isAuthSkipUnauthorized =
+      authSkipEnabled &&
+      error instanceof Error &&
+      /^Unauthorized$/i.test(error.message);
+    const isNetworkError =
+      error instanceof TypeError && /fetch failed/i.test(String(error));
+
+    if ((isAuthSkipUnauthorized || isNetworkError) && findDevEvent(eventId)) {
+      setDevEventRegistration(eventId, true);
+      return Response.json({
+        success: true,
+        message: 'Registered locally',
+      });
+    }
+
     const status =
       error instanceof Error && error.message.includes('400') ? 400 : 500;
     return Response.json(

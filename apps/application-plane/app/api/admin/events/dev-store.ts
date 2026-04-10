@@ -123,6 +123,10 @@ export function findDevEvent(eventId: string): DevEventRecord | undefined {
   return getDevEventStore().find((event) => event.id === eventId);
 }
 
+export function listRegisteredDevEvents(): DevEventRecord[] {
+  return getDevEventStore().filter((event) => event.isRegistered);
+}
+
 export function getDevEventDetails(eventId: string): EventDetails | null {
   const event = findDevEvent(eventId);
   if (!event) {
@@ -151,6 +155,34 @@ export function updateDevEvent(
     ...input,
     slug: input.slug?.trim() || current.slug,
     eventDate: input.eventDate || input.startTime || current.eventDate,
+  };
+  store[index] = updated;
+  return updated;
+}
+
+export function setDevEventRegistration(
+  eventId: string,
+  isRegistered: boolean,
+): DevEventRecord | null {
+  const store = getDevEventStore();
+  const index = store.findIndex((event) => event.id === eventId);
+  if (index === -1) {
+    return null;
+  }
+
+  const current = store[index];
+  const wasRegistered = current.isRegistered;
+  const nextParticipantCount =
+    isRegistered && !wasRegistered
+      ? current.participantCount + 1
+      : !isRegistered && wasRegistered
+        ? Math.max(0, current.participantCount - 1)
+        : current.participantCount;
+
+  const updated: DevEventRecord = {
+    ...current,
+    isRegistered,
+    participantCount: nextParticipantCount,
   };
   store[index] = updated;
   return updated;

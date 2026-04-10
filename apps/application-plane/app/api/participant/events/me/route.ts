@@ -5,6 +5,7 @@
  */
 
 import { authSkipEnabled } from '@/auth';
+import { listRegisteredDevEvents } from '@/app/api/admin/events/dev-store';
 import {
   successResponse,
   badRequestResponse,
@@ -35,15 +36,15 @@ export async function GET() {
 
     if (error instanceof TypeError) {
       console.warn('Participant my-events backend unreachable:', error);
-      return successResponse({ events: [] });
+      return successResponse({ events: listRegisteredDevEvents() });
     }
 
     if (isAuthSkipUnauthorized) {
       console.warn(
-        'Participant my-events backend rejected AUTH_SKIP token. Returning empty list.',
+        'Participant my-events backend rejected AUTH_SKIP token. Returning local registered events.',
         error,
       );
-      return successResponse({ events: [] });
+      return successResponse({ events: listRegisteredDevEvents() });
     }
 
     console.error('Failed to fetch my events:', error);

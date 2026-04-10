@@ -5,6 +5,14 @@ interface LocalGameDayState {
   teams: Record<string, Team[]>;
   logs: Record<string, AttackLog[]>;
   attacks: Record<string, Attack[]>;
+  memberships: Record<
+    string,
+    Record<string, { teamId: string; teamName: string }>
+  >;
+  inviteCodes: Record<
+    string,
+    Record<string, { teamId: string; teamName: string }>
+  >;
   auditorRunning: boolean;
 }
 
@@ -61,6 +69,8 @@ function getStore(): LocalGameDayState {
       teams: {},
       logs: {},
       attacks: {},
+      memberships: {},
+      inviteCodes: {},
       auditorRunning: false,
     };
   }
@@ -91,6 +101,18 @@ export function getLocalTeams(eventId: string): Team[] {
 export function setLocalTeams(eventId: string, teams: Team[]) {
   getStore().teams[eventId] = teams;
   return teams;
+}
+
+function getMembershipStore(eventId: string) {
+  const store = getStore();
+  store.memberships[eventId] ??= {};
+  return store.memberships[eventId];
+}
+
+function getInviteCodeStore(eventId: string) {
+  const store = getStore();
+  store.inviteCodes[eventId] ??= {};
+  return store.inviteCodes[eventId];
 }
 
 export function getLocalAttackLogs(eventId: string): AttackLog[] {
@@ -144,6 +166,64 @@ export function registerLocalTeam(
   };
   teams.push(created);
   return created;
+}
+
+function createInviteCode(teamId: string) {
+  return teamId.slice(-6).toUpperCase().padStart(6, '0');
+}
+
+export function registerLocalMembership(
+  eventId: string,
+  userId: string,
+  teamId: string,
+  teamName: string,
+) {
+  const membership = { teamId, teamName };
+  getMembershipStore(eventId)[userId] = membership;
+  return membership;
+}
+
+export function getLocalMembership(eventId: string, userId: string) {
+  return getMembershipStore(eventId)[userId] ?? null;
+}
+
+export function createLocalSoloMembership(eventId: string, userId: string) {
+  const localPart = userId.split('@')[0] || 'player';
+  const normalized = localPart.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const teamId = `SOLO${normalized.slice(0, 8) || 'PLAYER'}`;
+  const teamName = `${localPart || 'Dev User'} Solo`;
+
+  registerLocalTeam(eventId, teamId, teamName);
+  return registerLocalMembership(eventId, userId, teamId, teamName);
+}
+
+export function createLocalTeamWithInvite(
+  eventId: string,
+  userId: string,
+  teamId: string,
+  teamName: string,
+) {
+  registerLocalTeam(eventId, teamId, teamName);
+  registerLocalMembership(eventId, userId, teamId, teamName);
+
+  const inviteCode = createInviteCode(teamId);
+  getInviteCodeStore(eventId)[inviteCode] = { teamId, teamName };
+
+  return { teamId, teamName, inviteCode };
+}
+
+export function joinLocalTeamByInvite(
+  eventId: string,
+  userId: string,
+  inviteCode: string,
+) {
+  const entry = getInviteCodeStore(eventId)[inviteCode.toUpperCase()];
+  if (!entry) {
+    return null;
+  }
+
+  registerLocalTeam(eventId, entry.teamId, entry.teamName);
+  return registerLocalMembership(eventId, userId, entry.teamId, entry.teamName);
 }
 
 export function startLocalGame(eventId: string, durationMinutes?: number) {
