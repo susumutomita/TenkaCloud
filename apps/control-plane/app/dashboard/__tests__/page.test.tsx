@@ -9,6 +9,7 @@ import DashboardPage from '../page';
 // API のモック（hoisted で先に定義）
 const mockFetchDashboardStats = vi.hoisted(() => vi.fn());
 const mockFetchActivities = vi.hoisted(() => vi.fn());
+const mockFetchServiceConnections = vi.hoisted(() => vi.fn());
 
 // getSession のモック
 vi.mock('@/auth', () => ({
@@ -17,6 +18,27 @@ vi.mock('@/auth', () => ({
 
 vi.mock('@/lib/api/stats-api', () => ({
   fetchDashboardStats: mockFetchDashboardStats,
+}));
+
+vi.mock('@/lib/api/service-health', () => ({
+  fetchServiceConnections: mockFetchServiceConnections,
+  summarizeServiceConnections: (
+    services: Array<{ status: 'connected' | 'unreachable' }>,
+  ) => {
+    const connectedCount = services.filter(
+      (service) => service.status === 'connected',
+    ).length;
+
+    if (connectedCount === services.length && services.length > 0) {
+      return 'healthy';
+    }
+
+    if (connectedCount === 0) {
+      return 'down';
+    }
+
+    return 'degraded';
+  },
 }));
 
 vi.mock('@/lib/api/activities-api', () => ({
@@ -161,6 +183,20 @@ describe('DashboardPage コンポーネント', () => {
         systemStatus: 'healthy',
         uptimePercentage: 100,
       });
+      mockFetchServiceConnections.mockResolvedValue([
+        {
+          id: 'tenant-management',
+          name: 'Tenant Management',
+          status: 'connected',
+          checkedUrl: 'http://tenant-management:13004/health',
+        },
+        {
+          id: 'problem-service',
+          name: 'Problem Service',
+          status: 'connected',
+          checkedUrl: 'http://problem-service:3100/health',
+        },
+      ]);
       mockFetchActivities.mockResolvedValue({
         data: [],
         pagination: { limit: 5, hasNextPage: false },
@@ -198,15 +234,17 @@ describe('DashboardPage コンポーネント', () => {
       const Component = await DashboardPage();
       render(Component);
       expect(screen.getByText('アクティブテナント')).toBeInTheDocument();
-      expect(screen.getByText('システムステータス')).toBeInTheDocument();
+      expect(screen.getByText('サービス接続')).toBeInTheDocument();
       expect(screen.getByText('総テナント数')).toBeInTheDocument();
     });
 
-    it('システムステータスが正常と表示されるべき', async () => {
+    it('サービス接続が正常と表示されるべき', async () => {
       const Component = await DashboardPage();
       render(Component);
       expect(screen.getByText('正常')).toBeInTheDocument();
-      expect(screen.getByText('100%')).toBeInTheDocument();
+      expect(screen.getByText('Tenant Management')).toBeInTheDocument();
+      expect(screen.getByText('Problem Service')).toBeInTheDocument();
+      expect(screen.getAllByText('接続中')).toHaveLength(2);
     });
 
     it('実際の統計値を表示すべき', async () => {
@@ -258,17 +296,34 @@ describe('DashboardPage コンポーネント', () => {
       expect(dashElements.length).toBeGreaterThan(0);
     });
 
-    it('システムステータスが異常の場合は異常と表示すべき', async () => {
-      mockFetchDashboardStats.mockResolvedValue({
-        activeTenants: 3,
-        totalTenants: 8,
-        systemStatus: 'degraded',
-        uptimePercentage: 95.5,
-      });
+    it('サービス接続に失敗がある場合は一部異常と表示すべき', async () => {
+      mockFetchServiceConnections.mockResolvedValue([
+        {
+          id: 'tenant-management',
+          name: 'Tenant Management',
+          status: 'connected',
+          checkedUrl: 'http://tenant-management:13004/health',
+        },
+        {
+          id: 'problem-service',
+          name: 'Problem Service',
+          status: 'unreachable',
+          checkedUrl: 'http://problem-service:3100/health',
+        },
+      ]);
       const Component = await DashboardPage();
       render(Component);
-      expect(screen.getByText('異常')).toBeInTheDocument();
-      expect(screen.getByText('95.5%')).toBeInTheDocument();
+      expect(screen.getByText('一部異常')).toBeInTheDocument();
+      expect(screen.getByText('未接続')).toBeInTheDocument();
+    });
+
+    it('サービス接続一覧が取得できない場合は案内文を表示すべき', async () => {
+      mockFetchServiceConnections.mockRejectedValue(new Error('Network error'));
+      const Component = await DashboardPage();
+      render(Component);
+      expect(
+        screen.getByText('接続先を確認できませんでした'),
+      ).toBeInTheDocument();
     });
 
     it('アクティビティを表示すべき', async () => {
