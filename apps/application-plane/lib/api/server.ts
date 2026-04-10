@@ -5,8 +5,10 @@
  */
 
 import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { auth, authSkipEnabled } from '@/auth';
 import { getProblemServiceUrl } from '@/lib/api/backend-urls';
+
+const MOCK_ACCESS_TOKEN = 'mock-access-token';
 
 /**
  * 統一エラーレスポンス
@@ -88,6 +90,8 @@ export async function serverApiRequest<T>(
 ): Promise<T> {
   const session = await auth();
   const token = session?.accessToken;
+  const shouldForwardToken =
+    token && !(authSkipEnabled && token === MOCK_ACCESS_TOKEN);
 
   const url = `${API_BASE_URL}${endpoint}`;
 
@@ -95,7 +99,7 @@ export async function serverApiRequest<T>(
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(shouldForwardToken ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
