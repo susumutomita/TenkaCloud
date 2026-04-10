@@ -9,7 +9,6 @@ import Button from '@cloudscape-design/components/button';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Link from '@cloudscape-design/components/link';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import '@cloudscape-design/global-styles/index.css';
@@ -17,6 +16,11 @@ import NextLink from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/auth';
 import { fetchActivities } from '@/lib/api/activities-api';
+import {
+  fetchServiceConnections,
+  summarizeServiceConnections,
+  type ServiceConnection,
+} from '@/lib/api/service-health';
 import { fetchDashboardStats, type DashboardStats } from '@/lib/api/stats-api';
 import type { Activity } from '@/types/activity';
 
@@ -32,6 +36,14 @@ async function getActivities(): Promise<Activity[]> {
   try {
     const result = await fetchActivities(5);
     return result.data;
+  } catch {
+    return [];
+  }
+}
+
+async function getServiceConnections(): Promise<ServiceConnection[]> {
+  try {
+    return await fetchServiceConnections();
   } catch {
     return [];
   }
@@ -86,7 +98,12 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const [stats, activities] = await Promise.all([getStats(), getActivities()]);
+  const [stats, activities, serviceConnections] = await Promise.all([
+    getStats(),
+    getActivities(),
+    getServiceConnections(),
+  ]);
+  const serviceStatus = summarizeServiceConnections(serviceConnections);
 
   return (
     <SpaceBetween size="l">
@@ -108,21 +125,48 @@ export default async function DashboardPage() {
             <Header
               variant="h3"
               info={
-                stats?.systemStatus === 'healthy' ? (
+                serviceStatus === 'healthy' ? (
                   <StatusIndicator type="success">正常</StatusIndicator>
+                ) : serviceStatus === 'degraded' ? (
+                  <StatusIndicator type="warning">一部異常</StatusIndicator>
                 ) : (
-                  <StatusIndicator type="error">異常</StatusIndicator>
+                  <StatusIndicator type="error">未接続</StatusIndicator>
                 )
               }
             >
-              システムステータス
+              サービス接続
             </Header>
           }
         >
-          <Box variant="awsui-key-label">稼働率</Box>
-          <Box variant="awsui-value-large">
-            {stats?.uptimePercentage ?? '-'}%
-          </Box>
+          {serviceConnections.length === 0 ? (
+            <Box color="text-body-secondary">接続先を確認できませんでした</Box>
+          ) : (
+            <SpaceBetween size="xs">
+              {serviceConnections.map((service) => (
+                <div
+                  key={service.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}
+                >
+                  <div>
+                    <Box variant="awsui-key-label">{service.name}</Box>
+                    <Box color="text-body-secondary" fontSize="body-s">
+                      {service.id}
+                    </Box>
+                  </div>
+                  <StatusIndicator
+                    type={service.status === 'connected' ? 'success' : 'error'}
+                  >
+                    {service.status === 'connected' ? '接続中' : '未接続'}
+                  </StatusIndicator>
+                </div>
+              ))}
+            </SpaceBetween>
+          )}
         </Container>
 
         <Container header={<Header variant="h3">総テナント数</Header>}>
