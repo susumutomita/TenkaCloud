@@ -21,6 +21,19 @@ const ISSUER =
 
 let jwks: jose.JWTVerifyGetKey | null = null;
 
+function parseAuthSkipRoles(envValue?: string): string[] {
+	if (!envValue) {
+		return ["participant"];
+	}
+
+	const roles = envValue
+		.split(",")
+		.map((role) => role.trim())
+		.filter(Boolean);
+
+	return roles.length > 0 ? roles : ["participant"];
+}
+
 async function getJWKS() {
 	if (!jwks) {
 		jwks = jose.createRemoteJWKSet(new URL(JWKS_URI));
@@ -36,7 +49,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 		c.set("auth", {
 			userId: "dev-user",
 			tenantId: "dev-tenant",
-			roles: ["admin", "participant"],
+			roles: parseAuthSkipRoles(process.env.AUTH_SKIP_ROLES),
 		});
 		return next();
 	}

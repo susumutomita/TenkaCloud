@@ -31,6 +31,7 @@ describe('NextAuth route handler', () => {
     vi.clearAllMocks();
     vi.resetModules();
     delete process.env.AUTH_SKIP;
+    delete process.env.AUTH_SKIP_ROLES;
     delete process.env.AUTH0_CLIENT_ID;
     delete process.env.AUTH0_CLIENT_SECRET;
     delete process.env.AUTH0_ISSUER;
@@ -52,7 +53,7 @@ describe('NextAuth route handler', () => {
       expect(body.user.email).toBe('dev@example.com');
       expect(body.accessToken).toBe('mock-access-token');
       expect(body.idToken).toBe('mock-id-token');
-      expect(body.roles).toEqual(['admin', 'participant']);
+      expect(body.roles).toEqual(['participant']);
       expect(body.tenantId).toBe('dev-tenant');
       expect(body.teamId).toBe('team-alpha');
       // handlers.GET should NOT be called for session path

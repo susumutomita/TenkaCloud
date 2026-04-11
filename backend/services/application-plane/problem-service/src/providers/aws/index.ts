@@ -4,6 +4,28 @@
  * AWS CloudFormation/SAM を使用したスタックデプロイ実装
  */
 
+import { readFile } from "node:fs/promises";
+import {
+	type Capability,
+	CloudFormationClient,
+	CreateStackCommand,
+	DeleteStackCommand,
+	DescribeStacksCommand,
+	DescribeStackResourcesCommand,
+	ListStacksCommand,
+	type StackStatus as CloudFormationStackStatus,
+	ValidateTemplateCommand,
+} from "@aws-sdk/client-cloudformation";
+import {
+	S3Client,
+	PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import {
+	AssumeRoleCommand,
+	GetCallerIdentityCommand,
+	STSClient,
+} from "@aws-sdk/client-sts";
+import type { AwsCredentialIdentity } from "@aws-sdk/types";
 import type {
 	CloudCredentials,
 	CloudProvider,
@@ -223,6 +245,13 @@ export class AWSCloudProvider implements ICloudProvider {
 					: undefined,
 			};
 		} catch (error) {
+			if (
+				error instanceof Error &&
+				(error.message.includes("does not exist") ||
+					error.message.includes("does not exist"))
+			) {
+				return null;
+			}
 			console.debug("[AWSCloudProvider] getStackStatus failed:", { stackName, error });
 			return null;
 		}
@@ -388,19 +417,8 @@ export class AWSCloudProvider implements ICloudProvider {
 	async getAccountInfo(credentials: CloudCredentials): Promise<AccountInfo> {
 		const stsResponse = await this.callSTS(credentials, "GetCallerIdentity");
 
-		// IAM エイリアスの取得を試みる
-		let alias: string | undefined;
-		try {
-			const iamResponse = await this.callIAM(credentials, "ListAccountAliases");
-			const aliases = iamResponse.AccountAliases as string[] | undefined;
-			alias = aliases?.[0];
-		} catch (error) {
-			console.debug("[AWSCloudProvider] IAM エイリアスの取得に失敗:", error);
-		}
-
 		return {
 			accountId: stsResponse.Account as string,
-			alias,
 			provider: "aws",
 		};
 	}
@@ -412,15 +430,21 @@ export class AWSCloudProvider implements ICloudProvider {
 	private async callSTS(
 		credentials: CloudCredentials,
 		action: string,
-		params?: Record<string, unknown>,
 	): Promise<Record<string, unknown>> {
-		// 実際の実装では AWS SDK を使用
-		// ここではモック実装
-		console.log(`[AWS STS] ${action}`, params);
-		return {
-			Account: credentials.accountId,
-			Arn: `arn:aws:iam::${credentials.accountId}:root`,
-		};
+		const client = await this.createSTSClient(credentials);
+
+		switch (action) {
+			case "GetCallerIdentity": {
+				const response = await client.send(new GetCallerIdentityCommand({}));
+				return {
+					Account: response.Account,
+					Arn: response.Arn,
+					UserId: response.UserId,
+				};
+			}
+			default:
+				throw new Error(`Unsupported STS action: ${action}`);
+		}
 	}
 
 	private async callCloudFormation(
@@ -429,29 +453,103 @@ export class AWSCloudProvider implements ICloudProvider {
 		action: string,
 		params: Record<string, unknown>,
 	): Promise<Record<string, unknown>> {
-		// 実際の実装では AWS SDK を使用
-		console.log(`[AWS CloudFormation] ${action} in ${region}`, params);
-		return {
-			StackId: `arn:aws:cloudformation:${region}:${credentials.accountId}:stack/${params.StackName}/xxx`,
-		};
+		const client = await this.createCloudFormationClient(credentials, region);
+
+		switch (action) {
+			case "CreateStack": {
+				const response = await client.send(
+					new CreateStackCommand({
+						StackName: params.StackName as string,
+						TemplateBody: params.TemplateBody as string,
+						Parameters: params.Parameters as {
+							ParameterKey: string;
+							ParameterValue: string;
+						}[],
+						Tags: params.Tags as { Key: string; Value: string }[],
+						Capabilities: params.Capabilities as Capability[],
+						TimeoutInMinutes: params.TimeoutInMinutes as number,
+						OnFailure: params.OnFailure as "DO_NOTHING" | "ROLLBACK" | "DELETE",
+						NotificationARNs: params.NotificationArns as string[] | undefined,
+					}),
+				);
+				return {
+					StackId: response.StackId,
+				};
+			}
+			case "DescribeStacks": {
+				const response = await client.send(
+					new DescribeStacksCommand({
+						StackName: params.StackName as string,
+					}),
+				);
+				return {
+					Stacks: response.Stacks,
+				};
+			}
+			case "DeleteStack": {
+				await client.send(
+					new DeleteStackCommand({
+						StackName: params.StackName as string,
+					}),
+				);
+				return {};
+			}
+			case "ValidateTemplate": {
+				await client.send(
+					new ValidateTemplateCommand({
+						TemplateBody: params.TemplateBody as string,
+					}),
+				);
+				return {};
+			}
+			case "ListStacks": {
+				const response = await client.send(
+					new ListStacksCommand({
+						StackStatusFilter: params.StackStatusFilter as
+							| CloudFormationStackStatus[]
+							| undefined,
+					}),
+				);
+				return {
+					StackSummaries: response.StackSummaries,
+				};
+			}
+			case "DescribeStackResources": {
+				const response = await client.send(
+					new DescribeStackResourcesCommand({
+						StackName: params.StackName as string,
+					}),
+				);
+				return {
+					StackResources: response.StackResources,
+				};
+			}
+			default:
+				throw new Error(`Unsupported CloudFormation action: ${action}`);
+		}
 	}
 
 	private async callS3(
-		_credentials: CloudCredentials,
+		credentials: CloudCredentials,
 		region: string,
 		action: string,
 		params: Record<string, unknown>,
 	): Promise<Record<string, unknown>> {
-		console.log(`[AWS S3] ${action} in ${region}`, params);
-		return {};
-	}
+		const client = await this.createS3Client(credentials, region);
 
-	private async callIAM(
-		_credentials: CloudCredentials,
-		action: string,
-	): Promise<Record<string, unknown>> {
-		console.log(`[AWS IAM] ${action}`);
-		return { AccountAliases: [] };
+		switch (action) {
+			case "PutObject":
+				await client.send(
+					new PutObjectCommand({
+						Bucket: params.Bucket as string,
+						Key: params.Key as string,
+						Body: params.Body as Buffer,
+					}),
+				);
+				return {};
+			default:
+				throw new Error(`Unsupported S3 action: ${action}`);
+		}
 	}
 
 	private buildParameters(
@@ -593,18 +691,68 @@ export class AWSCloudProvider implements ICloudProvider {
 	}
 
 	private async readFile(path: string): Promise<Buffer> {
-		// 実際の実装ではファイルを読み込む
-		console.log(`[AWS] Reading file from ${path}`);
-		return Buffer.from("");
+		return readFile(path);
 	}
 
 	private async listManagedStacks(
-		_credentials: CloudCredentials,
+		credentials: CloudCredentials,
 		tagFilter: Record<string, string>,
 	): Promise<{ StackName: string; StackId: string }[]> {
-		// 実際の実装ではタグでフィルタリングしたスタック一覧を返す
-		console.log(`[AWS] Listing managed stacks with tags:`, tagFilter);
-		return [];
+		const listed = await this.callCloudFormation(
+			credentials,
+			credentials.region,
+			"ListStacks",
+			{
+				StackStatusFilter: [
+					"CREATE_COMPLETE",
+					"UPDATE_COMPLETE",
+					"UPDATE_ROLLBACK_COMPLETE",
+					"ROLLBACK_COMPLETE",
+					"CREATE_FAILED",
+					"UPDATE_FAILED",
+				],
+			},
+		);
+
+		const summaries =
+			(listed.StackSummaries as
+				| { StackName?: string; StackId?: string }[]
+				| undefined) ?? [];
+
+		const managedStacks: { StackName: string; StackId: string }[] = [];
+
+		for (const summary of summaries) {
+			if (!summary.StackName || !summary.StackId) {
+				continue;
+			}
+
+			const described = await this.callCloudFormation(
+				credentials,
+				credentials.region,
+				"DescribeStacks",
+				{ StackName: summary.StackName },
+			);
+			const stack = (described.Stacks as Array<{
+				Tags?: { Key?: string; Value?: string }[];
+			}>)?.[0];
+			const tags = Object.fromEntries(
+				(stack?.Tags ?? [])
+					.filter((tag) => tag.Key && tag.Value)
+					.map((tag) => [tag.Key as string, tag.Value as string]),
+			);
+
+			const matches = Object.entries(tagFilter).every(
+				([key, value]) => tags[key] === value,
+			);
+			if (matches) {
+				managedStacks.push({
+					StackName: summary.StackName,
+					StackId: summary.StackId,
+				});
+			}
+		}
+
+		return managedStacks;
 	}
 
 	private shouldDeleteResource(
@@ -627,6 +775,84 @@ export class AWSCloudProvider implements ICloudProvider {
 
 	private sleep(ms: number): Promise<void> {
 		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
+	private buildBaseCredentials(
+		credentials: CloudCredentials,
+	): AwsCredentialIdentity | undefined {
+		if (!credentials.accessKeyId || !credentials.secretAccessKey) {
+			return undefined;
+		}
+
+		return {
+			accessKeyId: credentials.accessKeyId,
+			secretAccessKey: credentials.secretAccessKey,
+			sessionToken: credentials.sessionToken,
+		};
+	}
+
+	private async resolveRuntimeCredentials(
+		credentials: CloudCredentials,
+	): Promise<AwsCredentialIdentity | undefined> {
+		if (!credentials.roleArn) {
+			return this.buildBaseCredentials(credentials);
+		}
+
+		const client = new STSClient({
+			region: credentials.region,
+			credentials: this.buildBaseCredentials(credentials),
+		});
+
+		const response = await client.send(
+			new AssumeRoleCommand({
+				RoleArn: credentials.roleArn,
+				RoleSessionName: this.buildRoleSessionName(credentials),
+				ExternalId: credentials.externalId,
+			}),
+		);
+
+		if (!response.Credentials) {
+			throw new Error("AssumeRole returned no credentials");
+		}
+
+		return {
+			accessKeyId: response.Credentials.AccessKeyId ?? "",
+			secretAccessKey: response.Credentials.SecretAccessKey ?? "",
+			sessionToken: response.Credentials.SessionToken,
+		};
+	}
+
+	private async createSTSClient(
+		credentials: CloudCredentials,
+	): Promise<STSClient> {
+		return new STSClient({
+			region: credentials.region,
+			credentials: await this.resolveRuntimeCredentials(credentials),
+		});
+	}
+
+	private async createCloudFormationClient(
+		credentials: CloudCredentials,
+		region: string,
+	): Promise<CloudFormationClient> {
+		return new CloudFormationClient({
+			region,
+			credentials: await this.resolveRuntimeCredentials(credentials),
+		});
+	}
+
+	private async createS3Client(
+		credentials: CloudCredentials,
+		region: string,
+	): Promise<S3Client> {
+		return new S3Client({
+			region,
+			credentials: await this.resolveRuntimeCredentials(credentials),
+		});
+	}
+
+	private buildRoleSessionName(credentials: CloudCredentials): string {
+		return `tenkacloud-${credentials.accountId}-${Date.now()}`.slice(0, 64);
 	}
 }
 

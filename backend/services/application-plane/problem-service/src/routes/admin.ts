@@ -2631,6 +2631,7 @@ function getAWSCredentialsFromEnv(
 		secretAccessKey,
 		sessionToken: overrides?.sessionToken || process.env.AWS_SESSION_TOKEN,
 		roleArn: overrides?.roleArn || process.env.AWS_ROLE_ARN,
+		externalId: overrides?.externalId || process.env.AWS_EXTERNAL_ID,
 		region,
 	};
 }
@@ -2707,6 +2708,7 @@ const deployProblemSchema = z.object({
 			sessionToken: z.string().optional(),
 			accountId: z.string().optional(),
 			roleArn: z.string().optional(),
+			externalId: z.string().optional(),
 		})
 		.optional()
 		.describe("AWS クレデンシャル（省略時は環境変数を使用）"),
@@ -2978,6 +2980,13 @@ adminRouter.get(
 const competitorAccountRepo = new CompetitorAccountRepository();
 const gamedayJobRepo = new GameDayDeploymentJobRepository();
 
+function buildCompetitorExternalId(eventId: string, accountId: string): string {
+	const sanitize = (value: string) =>
+		value.replace(/[^A-Za-z0-9+=,.@:/-]/g, "-");
+
+	return `tc-${sanitize(eventId)}-${sanitize(accountId)}`.slice(0, 122);
+}
+
 // チームアカウント登録
 adminRouter.post(
 	"/events/:eventId/competitor-accounts",
@@ -2999,6 +3008,7 @@ adminRouter.post(
 			accountId: z.string().min(1),
 			region: z.string().min(1),
 			roleArn: z.string().optional(),
+			externalId: z.string().min(1).max(122).optional(),
 		}),
 	),
 	async (c) => {
@@ -3013,6 +3023,11 @@ adminRouter.post(
 				accountId: data.accountId,
 				region: data.region,
 				roleArn: data.roleArn,
+				externalId:
+					data.roleArn && data.provider === "aws"
+						? (data.externalId ??
+							buildCompetitorExternalId(eventId, data.accountId))
+						: data.externalId,
 			});
 			return c.json(account, 201);
 		} catch (error) {

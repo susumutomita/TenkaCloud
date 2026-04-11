@@ -22,6 +22,7 @@ describe("認証ミドルウェア", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		delete process.env.AUTH_SKIP;
+		delete process.env.AUTH_SKIP_ROLES;
 		delete process.env.NODE_ENV;
 		app = new Hono();
 		app.use("/*", authMiddleware);
@@ -196,8 +197,20 @@ describe("認証ミドルウェア", () => {
 		expect(body.auth).toEqual({
 			userId: "dev-user",
 			tenantId: "dev-tenant",
-			roles: ["admin", "participant"],
+			roles: ["participant"],
 		});
+	});
+
+	it("AUTH_SKIP_ROLES がある場合はそのロールを返すべき", async () => {
+		process.env.AUTH_SKIP = "1";
+		process.env.AUTH_SKIP_ROLES = "tenant-admin,participant";
+		process.env.NODE_ENV = "development";
+
+		const res = await app.request("/test");
+
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.auth.roles).toEqual(["tenant-admin", "participant"]);
 	});
 
 	it("AUTH_SKIP=1 でも本番環境では認証をスキップしないべき", async () => {

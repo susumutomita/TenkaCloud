@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { auth, authSkipEnabled } from '@/auth';
+import { hasApplicationAdminRole } from '@/lib/auth/roles';
 import { getProblemServiceUrl } from '@/lib/api/backend-urls';
 
 const MOCK_ACCESS_TOKEN = 'mock-access-token';
@@ -63,8 +64,7 @@ export async function getAdminSession() {
     return null;
   }
 
-  const hasAdminRole = session.roles?.includes('admin') ?? false;
-  if (!hasAdminRole) {
+  if (!hasApplicationAdminRole(session)) {
     return null;
   }
 

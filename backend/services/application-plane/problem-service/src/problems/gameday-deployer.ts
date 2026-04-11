@@ -283,6 +283,7 @@ function buildCredentials(account: CompetitorAccountWithMeta): CloudCredentials 
 		region: account.region,
 		accountId: account.accountId,
 		roleArn: account.roleArn,
+		externalId: account.externalId,
 		// accessKeyId / secretAccessKey は AssumeRole の場合不要
 		// STS SDK が roleArn を使って一時クレデンシャルを取得する
 	};

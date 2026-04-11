@@ -26,6 +26,7 @@ export interface CloudCredentials {
 	secretAccessKey?: string;
 	sessionToken?: string;
 	roleArn?: string;
+	externalId?: string;
 	region: string;
 }
 
@@ -197,6 +198,7 @@ export interface CompetitorAccount {
 	provider: CloudProvider;
 	accountId: string;
 	region: string;
+	externalId?: string;
 	credentials?: CloudCredentials;
 	status: "pending" | "ready" | "in_use" | "cleanup" | "error";
 }

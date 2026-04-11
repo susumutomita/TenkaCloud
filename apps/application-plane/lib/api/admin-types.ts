@@ -438,6 +438,7 @@ export interface DeployProblemRequest {
     sessionToken?: string;
     accountId?: string;
     roleArn?: string;
+    externalId?: string;
   };
 }
 

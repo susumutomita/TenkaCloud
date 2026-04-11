@@ -38,6 +38,7 @@ interface CompetitorAccount {
   accountId: string;
   region: string;
   roleArn?: string;
+  externalId?: string;
   status: string;
 }
 
@@ -227,6 +228,7 @@ export default function GameDayDeploymentsPage() {
     accountId: '',
     region: 'ap-northeast-1',
     roleArn: '',
+    externalId: '',
   });
   const [addingAccount, setAddingAccount] = useState(false);
   const [addAccountError, setAddAccountError] = useState('');
@@ -410,6 +412,7 @@ export default function GameDayDeploymentsPage() {
         accountId: newAccount.accountId,
         region: newAccount.region,
         roleArn: newAccount.roleArn || undefined,
+        externalId: newAccount.externalId || undefined,
       });
       setShowAddModal(false);
       setNewAccount({
@@ -417,6 +420,7 @@ export default function GameDayDeploymentsPage() {
         accountId: '',
         region: 'ap-northeast-1',
         roleArn: '',
+        externalId: '',
       });
       await refreshAccounts();
     } catch (e) {
@@ -531,6 +535,11 @@ export default function GameDayDeploymentsPage() {
             id: 'roleArn',
             header: 'Role ARN',
             cell: (item) => item.roleArn ?? '—',
+          },
+          {
+            id: 'externalId',
+            header: 'External ID',
+            cell: (item) => item.externalId ?? '—',
           },
           {
             id: 'actions',
@@ -723,6 +732,21 @@ export default function GameDayDeploymentsPage() {
                   setNewAccount((prev) => ({ ...prev, roleArn: detail.value }))
                 }
                 placeholder="arn:aws:iam::123456789012:role/TenkaCloudDeployRole"
+              />
+            </FormField>
+            <FormField
+              label="External ID"
+              description="未入力時は event / account から安全な値を自動生成します"
+            >
+              <Input
+                value={newAccount.externalId}
+                onChange={({ detail }) =>
+                  setNewAccount((prev) => ({
+                    ...prev,
+                    externalId: detail.value,
+                  }))
+                }
+                placeholder="tc-<eventId>-<accountId>"
               />
             </FormField>
           </SpaceBetween>

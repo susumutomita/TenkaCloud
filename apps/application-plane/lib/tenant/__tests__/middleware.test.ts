@@ -121,6 +121,21 @@ describe('Middleware', () => {
       expect(response.status).toBe(200);
     });
 
+    it('tenant-admin ロールを持つユーザーも /admin にアクセス可能にすべき', async () => {
+      mockAuth.mockResolvedValue({
+        user: { name: 'Tenant Admin', email: 'tenant-admin@example.com' },
+        expires: new Date(Date.now() + 86400000).toISOString(),
+        roles: ['tenant-admin'],
+        tenantId: 'acme',
+      });
+      mockGetTenantSlugFromUrl.mockReturnValue('acme');
+
+      const req = createMockRequest('http://localhost:13001/admin');
+      const response = await middleware(req);
+
+      expect(response.status).toBe(200);
+    });
+
     it('participant ロールのみのユーザーは /admin から /dashboard にリダイレクトすべき', async () => {
       mockAuth.mockResolvedValue({
         user: { name: 'Participant User', email: 'participant@example.com' },

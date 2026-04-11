@@ -31,6 +31,7 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { hasApplicationAdminRole } from '@/lib/auth/roles';
 
 export interface BreadcrumbItem {
   text: string;
@@ -107,7 +108,7 @@ export function PageLayout({
                 },
                 ...(session
                   ? [
-                      ...(session.roles?.includes('admin')
+                      ...(hasApplicationAdminRole(session)
                         ? [
                             {
                               type: 'button' as const,
