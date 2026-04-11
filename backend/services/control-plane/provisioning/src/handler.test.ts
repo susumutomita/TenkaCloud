@@ -36,8 +36,11 @@ describe('Provisioning Lambda Handler', () => {
           id: 'tenant-123',
           name: 'Test Tenant',
           slug: 'test-tenant',
+          adminEmail: 'admin@example.com',
           tier: 'FREE',
           status: 'ACTIVE',
+          isolationModel: 'POOL',
+          region: 'ap-northeast-1',
           provisioningStatus: 'PENDING',
         }),
       ],
@@ -53,8 +56,11 @@ describe('Provisioning Lambda Handler', () => {
           id: 'tenant-123',
           name: 'Test Tenant',
           slug: 'test-tenant',
+          adminEmail: 'admin@example.com',
           tier: 'FREE',
           status: 'DELETED',
+          isolationModel: 'POOL',
+          region: 'ap-northeast-1',
           provisioningStatus: 'PROVISIONED',
         }),
       ],
@@ -72,16 +78,22 @@ describe('Provisioning Lambda Handler', () => {
             id: 'tenant-123',
             name: 'Test Tenant',
             slug: 'test-tenant',
+            adminEmail: 'admin@example.com',
             tier: 'PRO',
             status: 'ACTIVE',
+            isolationModel: 'POOL',
+            region: 'ap-northeast-1',
             provisioningStatus: 'PROVISIONED',
           },
           {
             id: 'tenant-123',
             name: 'Test Tenant',
             slug: 'test-tenant',
+            adminEmail: 'admin@example.com',
             tier: 'FREE',
             status: 'ACTIVE',
+            isolationModel: 'POOL',
+            region: 'ap-northeast-1',
             provisioningStatus: 'PROVISIONED',
           }
         ),
@@ -100,16 +112,22 @@ describe('Provisioning Lambda Handler', () => {
             id: 'tenant-123',
             name: 'Test Tenant',
             slug: 'test-tenant',
+            adminEmail: 'admin@example.com',
             tier: 'FREE',
             status: 'DELETED',
+            isolationModel: 'POOL',
+            region: 'ap-northeast-1',
             provisioningStatus: 'PROVISIONED',
           },
           {
             id: 'tenant-123',
             name: 'Test Tenant',
             slug: 'test-tenant',
+            adminEmail: 'admin@example.com',
             tier: 'FREE',
             status: 'ACTIVE',
+            isolationModel: 'POOL',
+            region: 'ap-northeast-1',
             provisioningStatus: 'PROVISIONED',
           }
         ),
@@ -167,8 +185,11 @@ describe('Provisioning Lambda Handler', () => {
           id: 'tenant-123',
           name: 'Test Tenant',
           slug: 'test-tenant',
+          adminEmail: 'admin@example.com',
           tier: 'FREE',
           status: 'ACTIVE',
+          isolationModel: 'POOL',
+          region: 'ap-northeast-1',
           provisioningStatus: 'PENDING',
         }),
       ],
@@ -194,8 +215,11 @@ describe('Provisioning Lambda Handler', () => {
           id: 'tenant-123',
           name: 'Test Tenant',
           slug: 'test-tenant',
+          adminEmail: 'admin@example.com',
           tier: 'FREE',
           status: 'ACTIVE',
+          isolationModel: 'POOL',
+          region: 'ap-northeast-1',
           provisioningStatus: 'PENDING',
         }),
       ],
@@ -214,16 +238,22 @@ describe('Provisioning Lambda Handler', () => {
             id: 'tenant-123',
             name: 'Test Tenant',
             slug: 'test-tenant',
+            adminEmail: 'admin@example.com',
             tier: 'FREE',
             status: 'ACTIVE',
+            isolationModel: 'POOL',
+            region: 'ap-northeast-1',
             provisioningStatus: 'PROVISIONED',
           },
           {
             id: 'tenant-123',
             name: 'Test Tenant',
             slug: 'test-tenant',
+            adminEmail: 'admin@example.com',
             tier: 'FREE',
             status: 'ACTIVE',
+            isolationModel: 'POOL',
+            region: 'ap-northeast-1',
             provisioningStatus: 'PROVISIONED',
           }
         ),
@@ -260,8 +290,11 @@ interface TenantData {
   id: string;
   name: string;
   slug: string;
+  adminEmail: string;
   tier: string;
   status: string;
+  isolationModel: string;
+  region: string;
   provisioningStatus: string;
 }
 

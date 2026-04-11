@@ -23,28 +23,13 @@ import {
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { Auth0Provisioner } from '@tenkacloud/auth0';
-import type { ProvisionedResources } from '@tenkacloud/events';
+import type {
+  ProvisionedResources,
+  TenantOnboardingDetail,
+} from '@tenkacloud/events';
 import { EventSource, EventDetailType } from '@tenkacloud/events';
 import { createTenantRole } from './iam-provisioner';
 import { createTenantLogGroup } from './cloudwatch-provisioner';
-
-// イベント型定義（Control Plane からのイベント形式）
-// NOTE: provisioning Lambda が発行する形式に合わせる
-interface TenantOnboardingDetail {
-  tenantId: string;
-  tenantSlug: string;
-  tenantTier: 'FREE' | 'PRO' | 'ENTERPRISE';
-  eventType: 'TenantOnboarding' | 'TenantUpdated' | 'TenantOffboarding';
-  timestamp: string;
-  details: {
-    id: string;
-    name: string;
-    slug: string;
-    tier: 'FREE' | 'PRO' | 'ENTERPRISE';
-    status: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-    auth0OrganizationId?: string;
-  };
-}
 
 // 環境変数
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? 'default';
@@ -177,11 +162,10 @@ export async function handler(
 ): Promise<void> {
   console.log('Received TenantOnboarding event', {
     tenantId: event.detail.tenantId,
-    tier: event.detail.tenantTier,
+    tier: event.detail.tier,
   });
 
-  const { tenantId, tenantSlug, tenantTier: tier, details } = event.detail;
-  const tenantName = details.name;
+  const { tenantId, slug: tenantSlug, tier, tenantName } = event.detail;
 
   try {
     const resources: ProvisionedResources = {};

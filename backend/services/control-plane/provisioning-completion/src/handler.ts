@@ -48,7 +48,13 @@ async function updateProvisioningStatus(
     ':status': status,
     ':updatedAt': now,
     ':expectedStatus': 'IN_PROGRESS',
+    ':applicationDeploymentStatus':
+      status === 'COMPLETED' ? 'NOT_DEPLOYED' : 'FAILED',
   };
+
+  updateExpressionParts.push(
+    'applicationDeploymentStatus = :applicationDeploymentStatus'
+  );
 
   // リソース情報があれば追加
   if (resources && Object.keys(resources).length > 0) {

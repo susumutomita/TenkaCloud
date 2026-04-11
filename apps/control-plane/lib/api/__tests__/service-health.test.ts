@@ -76,6 +76,21 @@ describe('service-health', () => {
     );
   });
 
+  it('NEXT_PUBLIC_TENANT_API_BASE_URL が localhost の場合も localhost のヘルス URL を優先すべき', async () => {
+    vi.stubEnv('NEXT_PUBLIC_TENANT_API_BASE_URL', 'http://localhost:13004/api');
+
+    const { resolveServiceHealthUrls } = await import('../service-health');
+
+    expect(resolveServiceHealthUrls()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'battle-service',
+          checkedUrl: 'http://localhost:3010/health',
+        }),
+      ]),
+    );
+  });
+
   it('最初の候補に失敗しても代替 URL で接続できれば接続中と判定すべき', async () => {
     vi.stubEnv('TENANT_API_BASE_URL', 'http://localhost:13004/api');
     global.fetch = vi.fn().mockImplementation((input: string | URL) => {
@@ -177,6 +192,38 @@ describe('service-health', () => {
         status: 'connected',
         checkedUrl: 'http://problem-service:3100/health',
         detail: 'problem-service',
+      }),
+    );
+  });
+
+  it('status が null の payload は unhealthy として扱うべき', async () => {
+    global.fetch = vi.fn().mockImplementation((input: string | URL) => {
+      const url = String(input);
+
+      if (url.includes('problem-service') || url.includes('localhost:3100')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: null }),
+        });
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ status: 'ok', service: 'healthy-service' }),
+      });
+    }) as unknown as typeof fetch;
+
+    const { fetchServiceConnections } = await import('../service-health');
+    const services = await fetchServiceConnections();
+    const problemService = services.find(
+      (service) => service.id === 'problem-service',
+    );
+
+    expect(problemService).toEqual(
+      expect.objectContaining({
+        status: 'unreachable',
+        detail: 'unhealthy',
       }),
     );
   });

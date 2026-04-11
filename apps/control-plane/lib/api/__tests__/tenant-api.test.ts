@@ -15,6 +15,42 @@ describe('API Base URL の決定', () => {
     const module = await import('../tenant-api');
     expect(module.tenantApi).toBeDefined();
   });
+
+  it('クライアントサイドでは NEXT_PUBLIC_TENANT_API_BASE_URL を使用すべき', async () => {
+    vi.resetModules();
+    vi.stubGlobal('window', {});
+    process.env.NEXT_PUBLIC_TENANT_API_BASE_URL = 'http://client.example/api';
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          data: [],
+          pagination: {
+            page: 1,
+            limit: 10,
+            total: 0,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+        }),
+    });
+
+    const { tenantApi: clientTenantApi } = await import('../tenant-api');
+    await clientTenantApi.listTenants();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://client.example/api/tenants',
+      {
+        cache: 'no-store',
+      },
+    );
+
+    delete process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
 });
 
 // グローバル fetch のモック
@@ -405,6 +441,12 @@ describe('tenantApi', () => {
       const mockResponse = {
         tenantId: '1',
         provisioningStatus: 'COMPLETED',
+        applicationDeploymentStatus: 'NOT_DEPLOYED',
+        provisionedResources: {
+          s3Prefix: 'tenants/test-tenant/',
+        },
+        provisioningError: null,
+        provisionedAt: '2026-04-11T00:00:00.000Z',
         provisioningEnabled: true,
       };
 

@@ -210,7 +210,7 @@ describe('CloudWatch Logs Provisioner', () => {
     // LocalStack モードではないことを明示
     vi.stubEnv('AWS_ENDPOINT_URL', '');
 
-    let retentionSet = 0;
+    let retentionSet: number | undefined;
     const { PutRetentionPolicyCommand } =
       await import('@aws-sdk/client-cloudwatch-logs');
 

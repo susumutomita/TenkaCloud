@@ -16,6 +16,11 @@ const MOCK_TENANTS: Tenant[] = [
     isolationModel: 'SILO',
     computeType: 'KUBERNETES',
     provisioningStatus: 'COMPLETED',
+    applicationDeploymentStatus: 'NOT_DEPLOYED',
+    provisionedResources: {
+      s3Bucket: 'tenkacloud-1',
+      iamRoleArn: 'arn:aws:iam::000000000000:role/tenant-1',
+    },
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
   },
@@ -30,6 +35,10 @@ const MOCK_TENANTS: Tenant[] = [
     isolationModel: 'POOL',
     computeType: 'SERVERLESS',
     provisioningStatus: 'COMPLETED',
+    applicationDeploymentStatus: 'NOT_DEPLOYED',
+    provisionedResources: {
+      s3Prefix: 'tenants/2/',
+    },
     createdAt: '2025-02-01T00:00:00Z',
     updatedAt: '2025-02-10T00:00:00Z',
   },
@@ -44,6 +53,10 @@ const MOCK_TENANTS: Tenant[] = [
     isolationModel: 'POOL',
     computeType: 'SERVERLESS',
     provisioningStatus: 'COMPLETED',
+    applicationDeploymentStatus: 'NOT_DEPLOYED',
+    provisionedResources: {
+      s3Prefix: 'tenants/3/',
+    },
     createdAt: '2025-03-01T00:00:00Z',
     updatedAt: '2025-03-01T00:00:00Z',
   },
@@ -77,6 +90,7 @@ export const mockTenantApi = {
       isolationModel: input.isolationModel ?? 'POOL',
       computeType: input.computeType ?? 'SERVERLESS',
       provisioningStatus: 'PENDING',
+      applicationDeploymentStatus: 'NOT_DEPLOYED',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -124,6 +138,7 @@ export const mockTenantApi = {
       };
     }
     tenant.provisioningStatus = 'IN_PROGRESS';
+    tenant.applicationDeploymentStatus = 'DEPLOYING';
     tenant.updatedAt = new Date().toISOString();
     return {
       success: true,
@@ -135,6 +150,7 @@ export const mockTenantApi = {
   async getProvisioningStatus(id: string): Promise<{
     tenantId: string;
     provisioningStatus: string;
+    applicationDeploymentStatus?: string;
     provisioningEnabled: boolean;
   } | null> {
     await delay(300);
@@ -143,6 +159,8 @@ export const mockTenantApi = {
     return {
       tenantId: tenant.id,
       provisioningStatus: tenant.provisioningStatus,
+      applicationDeploymentStatus:
+        tenant.applicationDeploymentStatus ?? 'NOT_DEPLOYED',
       provisioningEnabled: true,
     };
   },

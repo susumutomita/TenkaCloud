@@ -74,6 +74,66 @@ describe('ProvisioningCard コンポーネント', () => {
       expect(screen.getByText('コンピュートタイプ')).toBeInTheDocument();
       expect(screen.getByText('SERVERLESS')).toBeInTheDocument();
     });
+
+    it('Application Plane の状態を表示すべき', () => {
+      render(<ProvisioningCard tenant={createMockTenant()} />);
+      expect(screen.getByText('Application Plane')).toBeInTheDocument();
+      expect(screen.getByText('未デプロイ')).toBeInTheDocument();
+    });
+
+    it('作成済みリソースを表示すべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            provisionedResources: {
+              s3Prefix: 'tenants/test-tenant/',
+              iamRoleArn: 'arn:aws:iam::000000000000:role/test-tenant',
+            },
+          })}
+        />,
+      );
+      expect(screen.getByText('作成済みリソース')).toBeInTheDocument();
+      expect(screen.getByText('tenants/test-tenant/')).toBeInTheDocument();
+      expect(
+        screen.getByText('arn:aws:iam::000000000000:role/test-tenant'),
+      ).toBeInTheDocument();
+    });
+
+    it('デプロイ済みの場合は未デプロイ警告を表示しないべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            applicationDeploymentStatus: 'DEPLOYED',
+          })}
+        />,
+      );
+      expect(screen.queryByText('未デプロイ')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Application Plane bundle はまだ配備されていません/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('その他の作成済みリソースとエラーを表示すべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            applicationDeploymentStatus: 'FAILED',
+            provisionedResources: {
+              s3Bucket: 'tenant-bucket',
+              cloudwatchLogGroup: '/tenkacloud/tenants/test-tenant',
+              auth0OrganizationId: 'org_test_tenant',
+            },
+            provisioningError: 'tenant deployment failed',
+          })}
+        />,
+      );
+      expect(screen.getByText('tenant-bucket')).toBeInTheDocument();
+      expect(
+        screen.getByText('/tenkacloud/tenants/test-tenant'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('org_test_tenant')).toBeInTheDocument();
+      expect(screen.getByText('tenant deployment failed')).toBeInTheDocument();
+    });
   });
 
   describe('ステータス表示', () => {
@@ -190,7 +250,9 @@ describe('ProvisioningCard コンポーネント', () => {
         />,
       );
 
-      user.click(screen.getByRole('button', { name: 'プロビジョニング開始' }));
+      await user.click(
+        screen.getByRole('button', { name: 'プロビジョニング開始' }),
+      );
 
       await waitFor(() => {
         expect(

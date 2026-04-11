@@ -118,6 +118,10 @@ export const tenantApi = {
   async getProvisioningStatus(id: string): Promise<{
     tenantId: string;
     provisioningStatus: string;
+    applicationDeploymentStatus?: string;
+    provisionedResources?: unknown;
+    provisioningError?: string | null;
+    provisionedAt?: string | null;
     provisioningEnabled: boolean;
   } | null> {
     const res = await fetch(`${apiBaseUrl}/tenants/${id}/provision`, {
@@ -127,6 +131,10 @@ export const tenantApi = {
     return handleResponse<{
       tenantId: string;
       provisioningStatus: string;
+      applicationDeploymentStatus?: string;
+      provisionedResources?: unknown;
+      provisioningError?: string | null;
+      provisionedAt?: string | null;
       provisioningEnabled: boolean;
     }>(res);
   },
