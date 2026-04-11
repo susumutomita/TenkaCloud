@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { DynamoDBStreamEvent, DynamoDBRecord } from 'aws-lambda';
 
+type TenantTier = 'FREE' | 'PRO' | 'ENTERPRISE';
+type TenantStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING';
+type IsolationModel = 'POOL' | 'SILO';
+type ProvisioningStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
 // Mock AWS SDK clients
 vi.mock('@aws-sdk/client-eventbridge', () => ({
   EventBridgeClient: vi.fn().mockImplementation(() => ({
@@ -291,11 +296,11 @@ interface TenantData {
   name: string;
   slug: string;
   adminEmail: string;
-  tier: string;
-  status: string;
-  isolationModel: string;
+  tier: TenantTier;
+  status: TenantStatus;
+  isolationModel: IsolationModel;
   region: string;
-  provisioningStatus: string;
+  provisioningStatus: ProvisioningStatus;
 }
 
 function marshallTenant(data: TenantData): Record<string, { S: string }> {

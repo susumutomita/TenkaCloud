@@ -20,7 +20,9 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
 
 const mockGetVotingResults = vi.fn();
 const mockSubmitVote = vi.fn();
+const mockGetParticipantTeams = vi.fn();
 vi.mock('@/lib/api/gameday', () => ({
+  getParticipantTeams: (...args: unknown[]) => mockGetParticipantTeams(...args),
   getVotingResults: (...args: unknown[]) => mockGetVotingResults(...args),
   submitVote: (...args: unknown[]) => mockSubmitVote(...args),
 }));
@@ -40,13 +42,7 @@ const baseVotingResults = {
 describe('VotePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(baseTeamsResponse),
-      }),
-    );
+    mockGetParticipantTeams.mockResolvedValue(baseTeamsResponse);
     mockGetVotingResults.mockResolvedValue(baseVotingResults);
   });
 
@@ -60,21 +56,25 @@ describe('VotePage', () => {
     render(<VotePage />);
 
     await waitFor(() => {
-      expect(screen.getByText('TeamBeta')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Vote targets' }),
+      ).toBeInTheDocument();
     });
+    expect(screen.getAllByText('TeamBeta').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('TeamGamma').length).toBeGreaterThanOrEqual(1);
     // 自チームは表示しない
-    expect(screen.queryByText('TeamAlpha')).not.toBeInTheDocument();
+    expect(screen.queryAllByText('TeamAlpha')).toHaveLength(0);
   });
 
   it('他チームへの投票ボタンを表示すべき', async () => {
     render(<VotePage />);
 
     await waitFor(() => {
-      expect(screen.getByText('TeamBeta')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /Vote/i })).toHaveLength(2);
     });
 
     const voteButtons = screen.getAllByRole('button', { name: /Vote/i });
-    expect(voteButtons.length).toBeGreaterThanOrEqual(1);
+    expect(voteButtons).toHaveLength(2);
   });
 
   it('APIエラー時にエラーメッセージを表示すべき', async () => {
@@ -100,22 +100,15 @@ describe('VotePage', () => {
   });
 
   it('チームがない場合は空状態メッセージを表示すべき', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            teams: [{ teamId: 'team-1', teamName: 'TeamAlpha' }],
-          }),
-      }),
-    );
+    mockGetParticipantTeams.mockResolvedValue({
+      teams: [{ teamId: 'team-1', teamName: 'TeamAlpha' }],
+    });
     render(<VotePage />);
 
     await waitFor(() => {
       expect(
-        screen.getByText('No other teams are registered yet.'),
-      ).toBeInTheDocument();
+        screen.getAllByText('No other teams are registered yet.'),
+      ).toHaveLength(2);
     });
   });
 
@@ -124,7 +117,7 @@ describe('VotePage', () => {
     render(<VotePage />);
 
     await waitFor(() => {
-      expect(screen.getByText('TeamBeta')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /Vote/i })).toHaveLength(2);
     });
 
     const voteButtons = screen.getAllByRole('button', { name: /Vote/i });
