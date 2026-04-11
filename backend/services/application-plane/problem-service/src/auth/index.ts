@@ -8,6 +8,7 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { parseAuthSkipRoles } from './auth-skip-roles';
 
 /* v8 ignore start -- Production safety guard */
 if (process.env.AUTH_SKIP === '1' && process.env.NODE_ENV === 'production') {
@@ -22,6 +23,7 @@ const authSkipEnabled =
 // mock-access-token is only accepted when AUTH_SKIP=1 is explicitly set
 const localDevTokenEnabled = authSkipEnabled;
 const LOCAL_DEV_TOKEN = 'mock-access-token';
+const authSkipRoles = parseAuthSkipRoles(process.env.AUTH_SKIP_ROLES);
 
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
@@ -156,13 +158,13 @@ export interface AuthContext {
 
 /** AUTH_SKIP モードで使用するモックユーザーを生成（リクエスト間の状態共有を防止） */
 function createMockUser(): AuthenticatedUser {
-  return {
-    id: 'dev-user',
-    email: 'dev@localhost',
-    username: 'dev-user',
-    roles: [UserRole.PLATFORM_ADMIN, UserRole.COMPETITOR],
-    tenantId: 'dev-tenant',
-  };
+	return {
+		id: 'dev-user',
+		email: 'dev@localhost',
+		username: 'dev-user',
+		roles: authSkipRoles,
+		tenantId: 'dev-tenant',
+	};
 }
 
 /**

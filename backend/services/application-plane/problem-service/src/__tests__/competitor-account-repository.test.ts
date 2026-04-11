@@ -36,12 +36,14 @@ describe("CompetitorAccountRepository", () => {
 				accountId: "123456789012",
 				region: "ap-northeast-1",
 				roleArn: "arn:aws:iam::123456789012:role/DeployRole",
+				externalId: "tc-event-1-123456789012",
 			});
 
 			expect(result.id).toBe("test-ulid-001");
 			expect(result.eventId).toBe("event-1");
 			expect(result.name).toBe("team01");
 			expect(result.accountId).toBe("123456789012");
+			expect(result.externalId).toBe("tc-event-1-123456789012");
 			expect(result.status).toBe("pending");
 			expect(mockSend).toHaveBeenCalledTimes(1);
 		});

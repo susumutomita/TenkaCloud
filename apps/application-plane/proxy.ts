@@ -8,10 +8,8 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { auth } from '@/auth';
-import {
-  getTenantSlugFromUrl,
-  buildApplicationPlaneUrl,
-} from '@/lib/tenant/identification';
+import { hasApplicationAdminRole } from '@/lib/auth/roles';
+import { getTenantSlugFromUrl } from '@/lib/tenant/identification';
 
 /**
  * 公開パス（認証不要）
@@ -67,8 +65,7 @@ async function handleAuth(
 
   // 管理者パスへのアクセス権限チェック
   if (isAdminPath(pathname)) {
-    const hasAdminRole = roles.includes('admin');
-    if (!hasAdminRole) {
+    if (!hasApplicationAdminRole(roles)) {
       // 権限なし → /dashboard へリダイレクト
       const dashboardUrl = new URL('/dashboard', req.url);
       return NextResponse.redirect(dashboardUrl);

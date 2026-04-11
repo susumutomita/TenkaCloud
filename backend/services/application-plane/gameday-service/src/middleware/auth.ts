@@ -24,6 +24,19 @@ const authSkipEnabled =
 	process.env.AUTH_SKIP === "1" &&
 	process.env.NODE_ENV !== "production";
 
+function parseAuthSkipRoles(envValue?: string): string[] {
+	if (!envValue) {
+		return ["participant"];
+	}
+
+	const roles = envValue
+		.split(",")
+		.map((role) => role.trim())
+		.filter(Boolean);
+
+	return roles.length > 0 ? roles : ["participant"];
+}
+
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== "undefined") {
 	console.warn(
@@ -38,7 +51,7 @@ if (authSkipEnabled && typeof console !== "undefined") {
 const mockAuth: AuthContext = {
 	userId: "dev-user",
 	tenantId: "dev-tenant",
-	roles: ["admin", "participant"],
+	roles: parseAuthSkipRoles(process.env.AUTH_SKIP_ROLES),
 };
 
 const JWKS_URI =
@@ -130,7 +143,12 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 
 export const requireAdmin = createMiddleware(async (c, next) => {
 	const auth = c.get("auth");
-	if (!auth.roles.includes("admin")) {
+	if (
+		!auth.roles.includes("admin") &&
+		!auth.roles.includes("platform-admin") &&
+		!auth.roles.includes("tenant-admin") &&
+		!auth.roles.includes("organizer")
+	) {
 		return c.json({ error: "管理者権限が必要です" }, StatusCodes.FORBIDDEN);
 	}
 	await next();

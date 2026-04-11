@@ -2,6 +2,7 @@ import NextAuth from 'next-auth';
 import type { Session } from 'next-auth';
 import Auth0 from 'next-auth/providers/auth0';
 import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
+import { parseAuthSkipRoles } from '@/lib/auth/roles';
 
 const getEnv = (key: string) => process.env[key];
 // During `next build`, NEXT_PHASE is set to 'phase-production-build'.
@@ -18,6 +19,7 @@ try {
 }
 const useStubAuth =
   authSkipEnabled || (isBuildPhase && process.env.AUTH_SKIP === '1');
+const authSkipRoles = parseAuthSkipRoles(process.env.AUTH_SKIP_ROLES);
 
 /**
  * モックセッション（AUTH_SKIP=1 の場合に使用）
@@ -34,7 +36,7 @@ const mockSession: Session = {
   expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   accessToken: 'mock-access-token',
   idToken: 'mock-id-token',
-  roles: ['admin', 'participant'],
+  roles: authSkipRoles,
   tenantId: 'dev-tenant',
   teamId: 'team-alpha',
 };

@@ -137,6 +137,20 @@ describe('Server API Utilities', () => {
       expect(result).toEqual(session);
     });
 
+    it('tenant-admin ロールも管理者として扱うべき', async () => {
+      const session: Session = {
+        user: { name: 'Tenant Admin', email: 'tenant-admin@example.com' },
+        expires: new Date().toISOString(),
+        roles: ['tenant-admin'],
+      };
+      mockAuth.mockResolvedValue(session);
+
+      const { getAdminSession } = await import('../server');
+      const result = await getAdminSession();
+
+      expect(result).toEqual(session);
+    });
+
     it('roles が undefined の場合は null を返すべき', async () => {
       mockAuth.mockResolvedValue({
         user: { name: 'User', email: 'user@example.com' },

@@ -34,13 +34,17 @@ interface CompetitorAccountItem {
 	accountId: string;
 	region: string;
 	roleArn?: string;
+	externalId?: string;
 	status: string;
 }
 
 const buildPK = (eventId: string) => `EVENT#${eventId}`;
 const buildSK = (accountId: string) => `COMPETITOR_ACCOUNT#${accountId}`;
 
-function toDomain(item: CompetitorAccountItem): CompetitorAccount & { eventId: string; roleArn?: string } {
+function toDomain(item: CompetitorAccountItem): CompetitorAccount & {
+	eventId: string;
+	roleArn?: string;
+} {
 	return {
 		id: item.id,
 		eventId: item.eventId,
@@ -49,11 +53,15 @@ function toDomain(item: CompetitorAccountItem): CompetitorAccount & { eventId: s
 		accountId: item.accountId,
 		region: item.region,
 		roleArn: item.roleArn,
+		externalId: item.externalId,
 		status: item.status as CompetitorAccount["status"],
 	};
 }
 
-export type CompetitorAccountWithMeta = CompetitorAccount & { eventId: string; roleArn?: string };
+export type CompetitorAccountWithMeta = CompetitorAccount & {
+	eventId: string;
+	roleArn?: string;
+};
 
 export interface CreateCompetitorAccountInput {
 	eventId: string;
@@ -62,6 +70,7 @@ export interface CreateCompetitorAccountInput {
 	accountId: string;
 	region: string;
 	roleArn?: string;
+	externalId?: string;
 }
 
 export class CompetitorAccountRepository {
@@ -86,6 +95,7 @@ export class CompetitorAccountRepository {
 			accountId: input.accountId,
 			region: input.region,
 			roleArn: input.roleArn,
+			externalId: input.externalId,
 			status: "pending",
 		};
 

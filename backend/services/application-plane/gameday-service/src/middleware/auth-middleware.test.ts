@@ -27,6 +27,7 @@ describe("authMiddleware", () => {
 		vi.clearAllMocks();
 		vi.resetModules();
 		delete process.env.AUTH_SKIP;
+		delete process.env.AUTH_SKIP_ROLES;
 		delete process.env.JWKS_URI;
 		delete process.env.JWT_ISSUER;
 		delete process.env.JWT_AUDIENCE;
@@ -48,7 +49,7 @@ describe("authMiddleware", () => {
 			const body = await res.json();
 			expect(body.userId).toBe("dev-user");
 			expect(body.tenantId).toBe("dev-tenant");
-			expect(body.roles).toEqual(["admin", "participant"]);
+			expect(body.roles).toEqual(["participant"]);
 		});
 
 		it("AUTH_SKIP モードで Authorization ヘッダーなしでもアクセスできるべき", async () => {
@@ -63,6 +64,22 @@ describe("authMiddleware", () => {
 			// No Authorization header
 			const res = await app.request("/test");
 			expect(res.status).toBe(StatusCodes.OK);
+		});
+
+		it("AUTH_SKIP_ROLES で tenant-admin を付与できるべき", async () => {
+			process.env.AUTH_SKIP = "1";
+			process.env.AUTH_SKIP_ROLES = "tenant-admin,participant";
+
+			const { authMiddleware } = await import("./auth");
+
+			const app = new Hono();
+			app.use("/*", authMiddleware);
+			app.get("/test", (c) => c.json(c.get("auth")));
+
+			const res = await app.request("/test");
+			const body = await res.json();
+
+			expect(body.roles).toEqual(["tenant-admin", "participant"]);
 		});
 	});
 

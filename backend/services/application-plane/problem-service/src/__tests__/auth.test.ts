@@ -12,6 +12,7 @@ describe("auth モジュール", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		process.env = { ...originalEnv };
+		delete process.env.AUTH_SKIP_ROLES;
 	});
 
 	afterEach(() => {
@@ -68,6 +69,7 @@ describe("auth モジュール", () => {
 			expect(result.user).not.toBeNull();
 			expect(result.user!.id).toBe("dev-user");
 			expect(result.user!.email).toBe("dev@localhost");
+			expect(result.user!.roles).toEqual(["competitor"]);
 			expect(result.token).toBe("mock-access-token");
 		});
 
@@ -81,6 +83,17 @@ describe("auth モジュール", () => {
 
 			expect(result1.user).not.toBe(result2.user);
 			expect(result1.user).toEqual(result2.user);
+		});
+
+		it("AUTH_SKIP_ROLES が指定された場合はそのロールを使うべき", async () => {
+			process.env.AUTH_SKIP = "1";
+			process.env.AUTH_SKIP_ROLES = "platform-admin,competitor";
+			process.env.NODE_ENV = "development";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({});
+
+			expect(result.user?.roles).toEqual(["platform-admin", "competitor"]);
 		});
 	});
 
