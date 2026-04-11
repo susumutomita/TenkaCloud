@@ -16,10 +16,14 @@ import {
   EventBridgeClient,
   PutEventsCommand,
 } from '@aws-sdk/client-eventbridge';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import { EventSource } from '@tenkacloud/events';
+import {
+  EventDetailType,
+  EventSource,
+  type TenantOnboardingDetail,
+} from '@tenkacloud/events';
 
 const eventBridge = new EventBridgeClient({});
 const dynamoClient = new DynamoDBClient({});
@@ -34,8 +38,11 @@ interface TenantRecord {
   id: string;
   name: string;
   slug: string;
+  adminEmail: string;
   tier: 'FREE' | 'PRO' | 'ENTERPRISE';
   status: 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  isolationModel: 'POOL' | 'SILO';
+  region: string;
   provisioningStatus: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
   auth0OrganizationId?: string;
   createdAt: string;
@@ -47,7 +54,7 @@ type TenantEventType =
   | 'TenantUpdated'
   | 'TenantOffboarding';
 
-interface TenantEvent {
+interface TenantLifecycleEvent {
   tenantId: string;
   tenantSlug: string;
   tenantTier: string;
@@ -85,12 +92,12 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   // Extract tenant data from the record
   const newImage = record.dynamodb.NewImage
     ? (unmarshall(
-        record.dynamodb.NewImage as Record<string, unknown>
+        record.dynamodb.NewImage as Record<string, AttributeValue>
       ) as TenantRecord)
     : null;
   const oldImage = record.dynamodb.OldImage
     ? (unmarshall(
-        record.dynamodb.OldImage as Record<string, unknown>
+        record.dynamodb.OldImage as Record<string, AttributeValue>
       ) as TenantRecord)
     : null;
 
@@ -140,25 +147,35 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
     return;
   }
 
-  const tenantEvent: TenantEvent = {
-    tenantId,
-    tenantSlug: tenantData.slug,
-    tenantTier: tenantData.tier,
-    eventType,
-    timestamp: new Date().toISOString(),
-    details: {
-      id: tenantData.id,
-      name: tenantData.name,
-      slug: tenantData.slug,
-      tier: tenantData.tier,
-      status: tenantData.status,
-      // Note: auth0OrganizationId is intentionally excluded from logs
-      // but included in the event for downstream processing
-      auth0OrganizationId: tenantData.auth0OrganizationId,
-    },
-  };
+  const eventDetail =
+    eventType === EventDetailType.TENANT_ONBOARDING
+      ? ({
+          tenantId,
+          tenantName: tenantData.name,
+          slug: tenantData.slug,
+          tier: tenantData.tier,
+          adminEmail: tenantData.adminEmail,
+          isolationModel: tenantData.isolationModel,
+          region: tenantData.region,
+          timestamp: new Date().toISOString(),
+        } satisfies TenantOnboardingDetail)
+      : ({
+          tenantId,
+          tenantSlug: tenantData.slug,
+          tenantTier: tenantData.tier,
+          eventType,
+          timestamp: new Date().toISOString(),
+          details: {
+            id: tenantData.id,
+            name: tenantData.name,
+            slug: tenantData.slug,
+            tier: tenantData.tier,
+            status: tenantData.status,
+            auth0OrganizationId: tenantData.auth0OrganizationId,
+          },
+        } satisfies TenantLifecycleEvent);
 
-  await publishEvent(tenantEvent);
+  await publishEvent(eventType, eventDetail);
 
   // Log without sensitive data (auth0OrganizationId)
   console.log('Published tenant event', {
@@ -169,14 +186,17 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   });
 }
 
-async function publishEvent(tenantEvent: TenantEvent): Promise<void> {
+async function publishEvent(
+  detailType: TenantEventType,
+  detail: Record<string, unknown>
+): Promise<void> {
   const command = new PutEventsCommand({
     Entries: [
       {
         EventBusName: EVENT_BUS_NAME,
         Source: EventSource.CONTROL_PLANE,
-        DetailType: tenantEvent.eventType,
-        Detail: JSON.stringify(tenantEvent),
+        DetailType: detailType,
+        Detail: JSON.stringify(detail),
         Time: new Date(),
       },
     ],
@@ -223,7 +243,9 @@ async function updateProvisioningStatus(
   });
 
   try {
-    await docClient.send(command);
+    // Workspace-level AWS SDK duplication makes UpdateCommand structurally
+    // incompatible at compile time, although the runtime command shape is valid.
+    await docClient.send(command as never);
     console.log('Updated provisioning status', { tenantId, status });
   } catch (error) {
     // Ignore if tenant was deleted or condition failed (at-least-once delivery)

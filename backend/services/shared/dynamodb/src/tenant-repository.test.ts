@@ -26,6 +26,7 @@ const validTenantItem = {
   isolationModel: 'POOL',
   computeType: 'SERVERLESS',
   provisioningStatus: 'PENDING',
+  applicationDeploymentStatus: 'NOT_DEPLOYED',
   CreatedAt: '2024-01-01T00:00:00Z',
   UpdatedAt: '2024-01-01T00:00:00Z',
 };
@@ -184,6 +185,30 @@ describe('TenantRepository', () => {
       const result = await repo.findBySlug('no-such-slug');
 
       expect(result).toBeNull();
+    });
+
+    it('追加のプロビジョニング情報をドメイン型へ変換すべき', async () => {
+      mockSend.mockResolvedValue({
+        Items: [
+          {
+            ...validTenantItem,
+            provisioningError: 'deploy failed',
+            provisionedAt: '2024-01-02T00:00:00Z',
+            provisionedResources: {
+              s3Prefix: 'tenants/test-tenant/',
+            },
+          },
+        ],
+      });
+
+      const result = await repo.findBySlug('test-tenant');
+
+      expect(result?.applicationDeploymentStatus).toBe('NOT_DEPLOYED');
+      expect(result?.provisioningError).toBe('deploy failed');
+      expect(result?.provisionedAt?.toISOString()).toBe('2024-01-02T00:00:00.000Z');
+      expect(result?.provisionedResources).toEqual({
+        s3Prefix: 'tenants/test-tenant/',
+      });
     });
   });
 

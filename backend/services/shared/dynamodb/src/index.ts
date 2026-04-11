@@ -10,6 +10,7 @@ export {
   IsolationModel,
   ComputeType,
   ProvisioningStatus,
+  ApplicationDeploymentStatus,
   UserRole,
   UserStatus,
   // Battle
@@ -46,6 +47,8 @@ export type {
   UserItem,
   TenantUserItem,
   Tenant,
+  TenantProvisionedResources,
+  TenantProvisionedService,
   User,
   CreateTenantInput,
   CreateUserInput,

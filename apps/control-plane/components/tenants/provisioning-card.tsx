@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tenantApi } from '@/lib/api/tenant-api';
-import type { Tenant } from '@/types/tenant';
+import type { ApplicationDeploymentStatus, Tenant } from '@/types/tenant';
 
 type ProvisioningStatus = Tenant['provisioningStatus'];
 
@@ -24,6 +24,24 @@ const statusColors: Record<ProvisioningStatus, string> = {
     'border border-rose-500/20 bg-rose-500/10 text-rose-800 dark:text-rose-300',
 };
 
+const applicationStatusLabels: Record<ApplicationDeploymentStatus, string> = {
+  NOT_DEPLOYED: '未デプロイ',
+  DEPLOYING: 'デプロイ中',
+  DEPLOYED: 'デプロイ済み',
+  FAILED: 'デプロイ失敗',
+};
+
+const applicationStatusColors: Record<ApplicationDeploymentStatus, string> = {
+  NOT_DEPLOYED:
+    'border border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300',
+  DEPLOYING:
+    'border border-sky-500/20 bg-sky-500/10 text-sky-800 dark:text-sky-300',
+  DEPLOYED:
+    'border border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300',
+  FAILED:
+    'border border-rose-500/20 bg-rose-500/10 text-rose-800 dark:text-rose-300',
+};
+
 interface ProvisioningCardProps {
   tenant: Tenant;
 }
@@ -36,6 +54,8 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
   const canProvision =
     tenant.provisioningStatus === 'PENDING' ||
     tenant.provisioningStatus === 'FAILED';
+  const applicationDeploymentStatus =
+    tenant.applicationDeploymentStatus ?? 'NOT_DEPLOYED';
 
   const handleProvision = async () => {
     setIsLoading(true);
@@ -76,6 +96,18 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
           </div>
           <div className="grid grid-cols-3 items-center gap-4">
             <dt className="text-sm font-medium text-muted-foreground">
+              Application Plane
+            </dt>
+            <dd className="col-span-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${applicationStatusColors[applicationDeploymentStatus]}`}
+              >
+                {applicationStatusLabels[applicationDeploymentStatus]}
+              </span>
+            </dd>
+          </div>
+          <div className="grid grid-cols-3 items-center gap-4">
+            <dt className="text-sm font-medium text-muted-foreground">
               リージョン
             </dt>
             <dd className="col-span-2">{tenant.region}</dd>
@@ -93,6 +125,69 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
             <dd className="col-span-2">{tenant.computeType}</dd>
           </div>
         </dl>
+
+        {applicationDeploymentStatus === 'NOT_DEPLOYED' ? (
+          <div className="mt-4 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+            現在のプロビジョニングでは基盤リソースのみが作成されています。Application
+            Plane bundle はまだ配備されていません。
+          </div>
+        ) : null}
+
+        {tenant.provisionedResources ? (
+          <div className="mt-4 rounded-md border border-border bg-muted/30 p-4">
+            <div className="text-sm font-medium text-foreground">
+              作成済みリソース
+            </div>
+            <dl className="mt-3 grid gap-2 text-sm">
+              {tenant.provisionedResources.s3Bucket ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <dt className="text-muted-foreground">S3 Bucket</dt>
+                  <dd className="col-span-2 break-all">
+                    {tenant.provisionedResources.s3Bucket}
+                  </dd>
+                </div>
+              ) : null}
+              {tenant.provisionedResources.s3Prefix ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <dt className="text-muted-foreground">S3 Prefix</dt>
+                  <dd className="col-span-2 break-all">
+                    {tenant.provisionedResources.s3Prefix}
+                  </dd>
+                </div>
+              ) : null}
+              {tenant.provisionedResources.iamRoleArn ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <dt className="text-muted-foreground">IAM Role</dt>
+                  <dd className="col-span-2 break-all">
+                    {tenant.provisionedResources.iamRoleArn}
+                  </dd>
+                </div>
+              ) : null}
+              {tenant.provisionedResources.cloudwatchLogGroup ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <dt className="text-muted-foreground">CloudWatch</dt>
+                  <dd className="col-span-2 break-all">
+                    {tenant.provisionedResources.cloudwatchLogGroup}
+                  </dd>
+                </div>
+              ) : null}
+              {tenant.provisionedResources.auth0OrganizationId ? (
+                <div className="grid grid-cols-3 gap-3">
+                  <dt className="text-muted-foreground">Auth0 Org</dt>
+                  <dd className="col-span-2 break-all">
+                    {tenant.provisionedResources.auth0OrganizationId}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          </div>
+        ) : null}
+
+        {tenant.provisioningError ? (
+          <div className="mt-4 rounded-md border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-800 dark:text-rose-300">
+            {tenant.provisioningError}
+          </div>
+        ) : null}
 
         {error && (
           <div className="mt-4 rounded-md border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-800 dark:text-rose-300">

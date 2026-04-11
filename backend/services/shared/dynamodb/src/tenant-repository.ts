@@ -88,6 +88,10 @@ function toDomain(item: TenantItem): Tenant {
     isolationModel: item.isolationModel,
     computeType: item.computeType,
     provisioningStatus: item.provisioningStatus,
+    applicationDeploymentStatus: item.applicationDeploymentStatus,
+    provisionedResources: item.provisionedResources,
+    provisioningError: item.provisioningError,
+    provisionedAt: item.provisionedAt ? new Date(item.provisionedAt) : undefined,
     auth0OrgId: item.auth0OrgId,
     createdAt: new Date(item.CreatedAt),
     updatedAt: new Date(item.UpdatedAt),
@@ -120,6 +124,7 @@ export class TenantRepository {
       isolationModel: input.isolationModel ?? IsolationModel.POOL,
       computeType: input.computeType ?? ComputeType.SERVERLESS,
       provisioningStatus: 'PENDING',
+      applicationDeploymentStatus: 'NOT_DEPLOYED',
     };
 
     await client.send(
@@ -266,6 +271,34 @@ export class TenantRepository {
       updateExpressions.push('#provisioningStatus = :provisioningStatus');
       expressionNames['#provisioningStatus'] = 'provisioningStatus';
       expressionValues[':provisioningStatus'] = input.provisioningStatus;
+    }
+
+    if (input.applicationDeploymentStatus !== undefined) {
+      updateExpressions.push(
+        '#applicationDeploymentStatus = :applicationDeploymentStatus',
+      );
+      expressionNames['#applicationDeploymentStatus'] =
+        'applicationDeploymentStatus';
+      expressionValues[':applicationDeploymentStatus'] =
+        input.applicationDeploymentStatus;
+    }
+
+    if (input.provisionedResources !== undefined) {
+      updateExpressions.push('#provisionedResources = :provisionedResources');
+      expressionNames['#provisionedResources'] = 'provisionedResources';
+      expressionValues[':provisionedResources'] = input.provisionedResources;
+    }
+
+    if (input.provisioningError !== undefined) {
+      updateExpressions.push('#provisioningError = :provisioningError');
+      expressionNames['#provisioningError'] = 'provisioningError';
+      expressionValues[':provisioningError'] = input.provisioningError;
+    }
+
+    if (input.provisionedAt !== undefined) {
+      updateExpressions.push('#provisionedAt = :provisionedAt');
+      expressionNames['#provisionedAt'] = 'provisionedAt';
+      expressionValues[':provisionedAt'] = input.provisionedAt.toISOString();
     }
 
     if (input.auth0OrgId !== undefined) {

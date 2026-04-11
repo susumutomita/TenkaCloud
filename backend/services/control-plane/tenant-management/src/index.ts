@@ -17,7 +17,7 @@ import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { createLogger } from './lib/logger';
 import { authMiddleware, requireRoles, UserRole } from './middleware/auth';
 import { auditMiddleware } from './middleware/audit';
-import { ProvisioningManager } from './provisioning/manager';
+import { TenantProvisioningPublisher } from './provisioning/publisher';
 
 initDynamoDB({
   tableName: process.env.DYNAMODB_TABLE_NAME ?? 'TenkaCloud-dev',
@@ -28,11 +28,13 @@ const tenantRepository = new TenantRepository();
 const settingRepository = new SystemSettingRepository();
 const auditLogRepository = new AuditLogRepository();
 
-// Provisioning is optional and can be disabled for local development
-const provisioningEnabled = process.env.PROVISIONING_ENABLED === 'true';
-const provisioningManager = provisioningEnabled
-  ? new ProvisioningManager()
-  : null;
+function isProvisioningEnabled(): boolean {
+  return process.env.PROVISIONING_ENABLED === 'true';
+}
+
+function createProvisioningPublisher(): TenantProvisioningPublisher | null {
+  return isProvisioningEnabled() ? new TenantProvisioningPublisher() : null;
+}
 
 const app = new Hono();
 const appLogger = createLogger('tenant-api');
@@ -197,6 +199,33 @@ const tenantSchema = {
     provisioningStatus: {
       type: 'string',
       enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED'],
+    },
+    applicationDeploymentStatus: {
+      type: 'string',
+      enum: ['NOT_DEPLOYED', 'DEPLOYING', 'DEPLOYED', 'FAILED'],
+    },
+    provisioningError: { type: 'string' },
+    provisionedAt: { type: 'string', format: 'date-time' },
+    provisionedResources: {
+      type: 'object',
+      properties: {
+        s3Bucket: { type: 'string' },
+        s3Prefix: { type: 'string' },
+        iamRoleArn: { type: 'string' },
+        cloudwatchLogGroup: { type: 'string' },
+        auth0OrganizationId: { type: 'string' },
+        services: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              kind: { type: 'string' },
+              endpoint: { type: 'string' },
+            },
+          },
+        },
+      },
     },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
@@ -856,6 +885,7 @@ app.post(
       403: forbiddenResponse,
       404: notFoundResponse,
       409: { description: 'すでに進行中または完了済み' },
+      503: { description: 'プロビジョニング backend 未設定' },
       500: { description: 'プロビジョニング開始失敗' },
     },
   }),
@@ -891,32 +921,37 @@ app.post(
     }
 
     // Check if provisioning is enabled
-    if (!provisioningManager) {
-      // Simulate provisioning in development mode
-      appLogger.info(
+    const provisioningPublisher = createProvisioningPublisher();
+    if (!provisioningPublisher) {
+      appLogger.warn(
         { tenantId: tenant.id },
-        'Provisioning disabled, marking as completed'
+        'Provisioning requested but no provisioning backend is configured'
       );
-      await tenantRepository.update(tenant.id, {
-        provisioningStatus: 'COMPLETED',
-      });
-      return c.json({
-        success: true,
-        message: 'Provisioning skipped (disabled in this environment)',
-        provisioningStatus: 'COMPLETED',
-      });
+      return c.json(
+        errorResponse('Provisioning is not configured in this environment', 503),
+        503
+      );
     }
 
-    // Start async provisioning
-    appLogger.info({ tenantId: tenant.id }, 'Starting provisioning');
-
-    // Fire and forget - don't await
-    provisioningManager.provisionTenant(tenant).catch((error) => {
-      appLogger.error(
-        { error, tenantId: tenant.id },
-        'Background provisioning failed'
-      );
+    await tenantRepository.update(tenant.id, {
+      provisioningStatus: 'IN_PROGRESS',
+      applicationDeploymentStatus: 'DEPLOYING',
+      provisioningError: null,
     });
+
+    appLogger.info({ tenantId: tenant.id }, 'Publishing tenant onboarding event');
+
+    try {
+      await provisioningPublisher.publishTenantOnboarding(tenant);
+    } catch (error) {
+      await tenantRepository.update(tenant.id, {
+        provisioningStatus: 'FAILED',
+        applicationDeploymentStatus: 'FAILED',
+        provisioningError:
+          error instanceof Error ? error.message : 'Unknown provisioning error',
+      });
+      throw error;
+    }
 
     return c.json({
       success: true,
@@ -968,7 +1003,12 @@ app.get(
     return c.json({
       tenantId: tenant.id,
       provisioningStatus: tenant.provisioningStatus,
-      provisioningEnabled,
+      applicationDeploymentStatus:
+        tenant.applicationDeploymentStatus ?? 'NOT_DEPLOYED',
+      provisionedResources: tenant.provisionedResources,
+      provisioningError: tenant.provisioningError,
+      provisionedAt: tenant.provisionedAt?.toISOString() ?? null,
+      provisioningEnabled: isProvisioningEnabled(),
     });
   } catch (error) {
     appLogger.error(

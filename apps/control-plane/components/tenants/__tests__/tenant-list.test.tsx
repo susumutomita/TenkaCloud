@@ -371,6 +371,25 @@ describe('TenantList コンポーネント', () => {
       const deleteButtons = screen.getAllByRole('button', { name: '削除' });
       expect(deleteButtons.length).toBe(3);
     });
+
+    it('テナントIDが空でも一覧を表示できるべき', () => {
+      render(
+        <TenantList
+          tenants={[
+            {
+              ...mockTenants[0],
+              id: '',
+              name: 'IDなしテナント',
+            },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('IDなしテナント')).toBeInTheDocument();
+      expect(
+        screen.getByText((_, element) => element?.textContent === 'ID: '),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('テナント削除', () => {

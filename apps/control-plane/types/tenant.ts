@@ -6,6 +6,11 @@ export type ProvisioningStatus =
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'FAILED';
+export type ApplicationDeploymentStatus =
+  | 'NOT_DEPLOYED'
+  | 'DEPLOYING'
+  | 'DEPLOYED'
+  | 'FAILED';
 export type IsolationModel = 'POOL' | 'SILO';
 export type ComputeType = 'SERVERLESS' | 'KUBERNETES';
 
@@ -27,6 +32,9 @@ export const PROVISIONING_STATUSES: readonly ProvisioningStatus[] = [
   'COMPLETED',
   'FAILED',
 ] as const;
+
+export const APPLICATION_DEPLOYMENT_STATUSES: readonly ApplicationDeploymentStatus[] =
+  ['NOT_DEPLOYED', 'DEPLOYING', 'DEPLOYED', 'FAILED'] as const;
 
 export const ISOLATION_MODELS: readonly IsolationModel[] = [
   'POOL',
@@ -56,6 +64,31 @@ export const PROVISIONING_STATUS_LABELS: Record<ProvisioningStatus, string> = {
   COMPLETED: 'Completed',
   FAILED: 'Failed',
 };
+
+export const APPLICATION_DEPLOYMENT_STATUS_LABELS: Record<
+  ApplicationDeploymentStatus,
+  string
+> = {
+  NOT_DEPLOYED: 'Not Deployed',
+  DEPLOYING: 'Deploying',
+  DEPLOYED: 'Deployed',
+  FAILED: 'Failed',
+};
+
+export interface TenantProvisionedService {
+  name: string;
+  kind?: 'ui' | 'api' | 'worker' | 'storage' | 'identity' | 'observability';
+  endpoint?: string;
+}
+
+export interface TenantProvisionedResources {
+  s3Bucket?: string;
+  s3Prefix?: string;
+  iamRoleArn?: string;
+  cloudwatchLogGroup?: string;
+  auth0OrganizationId?: string;
+  services?: TenantProvisionedService[];
+}
 
 export const ISOLATION_MODEL_LABELS: Record<IsolationModel, string> = {
   POOL: 'Pool（共有）',
@@ -123,6 +156,10 @@ export interface Tenant {
   isolationModel: IsolationModel;
   computeType: ComputeType;
   provisioningStatus: ProvisioningStatus;
+  applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  provisionedResources?: TenantProvisionedResources;
+  provisioningError?: string;
+  provisionedAt?: string;
   auth0OrgId?: string;
   createdAt: string;
   updatedAt: string;

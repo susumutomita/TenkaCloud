@@ -82,6 +82,16 @@ export const ProvisioningStatus = {
 export type ProvisioningStatus =
   (typeof ProvisioningStatus)[keyof typeof ProvisioningStatus];
 
+export const ApplicationDeploymentStatus = {
+  NOT_DEPLOYED: 'NOT_DEPLOYED',
+  DEPLOYING: 'DEPLOYING',
+  DEPLOYED: 'DEPLOYED',
+  FAILED: 'FAILED',
+} as const;
+
+export type ApplicationDeploymentStatus =
+  (typeof ApplicationDeploymentStatus)[keyof typeof ApplicationDeploymentStatus];
+
 // User Role
 export const UserRole = {
   TENANT_ADMIN: 'TENANT_ADMIN',
@@ -125,6 +135,10 @@ export interface TenantItem extends DynamoDBItem {
   isolationModel: IsolationModel;
   computeType: ComputeType;
   provisioningStatus: ProvisioningStatus;
+  applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  provisionedResources?: TenantProvisionedResources;
+  provisioningError?: string | null;
+  provisionedAt?: string;
   auth0OrgId?: string;
 }
 
@@ -164,9 +178,28 @@ export interface Tenant {
   isolationModel: IsolationModel;
   computeType: ComputeType;
   provisioningStatus: ProvisioningStatus;
+  applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  provisionedResources?: TenantProvisionedResources;
+  provisioningError?: string | null;
+  provisionedAt?: Date;
   auth0OrgId?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface TenantProvisionedService {
+  name: string;
+  kind?: 'ui' | 'api' | 'worker' | 'storage' | 'identity' | 'observability';
+  endpoint?: string;
+}
+
+export interface TenantProvisionedResources {
+  s3Bucket?: string;
+  s3Prefix?: string;
+  iamRoleArn?: string;
+  cloudwatchLogGroup?: string;
+  auth0OrganizationId?: string;
+  services?: TenantProvisionedService[];
 }
 
 export interface User {
@@ -206,6 +239,10 @@ export interface UpdateTenantInput {
   tier?: TenantTier;
   isolationModel?: IsolationModel;
   provisioningStatus?: ProvisioningStatus;
+  applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  provisionedResources?: TenantProvisionedResources;
+  provisioningError?: string | null;
+  provisionedAt?: Date;
   auth0OrgId?: string;
 }
 

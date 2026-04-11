@@ -25,6 +25,10 @@ const mockAuditLogRepoFunctions = vi.hoisted(() => ({
   listByUser: vi.fn(),
 }));
 
+const mockProvisioningPublisherFunctions = vi.hoisted(() => ({
+  publishTenantOnboarding: vi.fn(),
+}));
+
 // Mock DynamoDB - must be before any imports that use it
 vi.mock('@tenkacloud/dynamodb', () => ({
   initDynamoDB: vi.fn(),
@@ -81,6 +85,13 @@ vi.mock('./middleware/auth', async () => {
   };
 });
 
+vi.mock('./provisioning/publisher', () => ({
+  TenantProvisioningPublisher: class MockTenantProvisioningPublisher {
+    publishTenantOnboarding =
+      mockProvisioningPublisherFunctions.publishTenantOnboarding;
+  },
+}));
+
 import { app } from './index';
 
 // Helper to create mock tenant
@@ -96,6 +107,7 @@ function createMockTenant(overrides = {}) {
     isolationModel: 'POOL' as const,
     computeType: 'SERVERLESS' as const,
     provisioningStatus: 'PENDING' as const,
+    applicationDeploymentStatus: 'NOT_DEPLOYED' as const,
     createdAt: new Date('2024-01-01T00:00:00.000Z'),
     updatedAt: new Date('2024-01-01T00:00:00.000Z'),
     ...overrides,
@@ -105,6 +117,7 @@ function createMockTenant(overrides = {}) {
 describe('テナント管理API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     // Set default mock returns
     mockTenantRepoFunctions.count.mockResolvedValue(0);
     mockTenantRepoFunctions.list.mockResolvedValue({
@@ -112,6 +125,9 @@ describe('テナント管理API', () => {
       lastKey: undefined,
     });
     mockTenantRepoFunctions.findBySlug.mockResolvedValue(null);
+    mockProvisioningPublisherFunctions.publishTenantOnboarding.mockResolvedValue(
+      undefined
+    );
   });
 
   afterEach(() => {
@@ -1355,40 +1371,30 @@ describe('テナント管理API', () => {
   });
 
   describe('POST /api/tenants/:id/provision', () => {
-    it('PENDING ステータスのテナントをプロビジョニングできるべき', async () => {
+    it('PENDING ステータスでも backend 未設定時は 503 を返すべき', async () => {
       const mockTenant = createMockTenant({ provisioningStatus: 'PENDING' });
       mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
-      mockTenantRepoFunctions.update.mockResolvedValue({
-        ...mockTenant,
-        provisioningStatus: 'COMPLETED',
-      });
 
       const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
         method: 'POST',
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(503);
       const body = await res.json();
-      expect(body.success).toBe(true);
-      // In test environment, provisioning is disabled so it should mark as COMPLETED
-      expect(body.provisioningStatus).toBe('COMPLETED');
+      expect(body.error).toBe('Provisioning is not configured in this environment');
     });
 
-    it('FAILED ステータスのテナントを再プロビジョニングできるべき', async () => {
+    it('FAILED ステータスでも backend 未設定時は 503 を返すべき', async () => {
       const mockTenant = createMockTenant({ provisioningStatus: 'FAILED' });
       mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
-      mockTenantRepoFunctions.update.mockResolvedValue({
-        ...mockTenant,
-        provisioningStatus: 'COMPLETED',
-      });
 
       const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
         method: 'POST',
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(503);
       const body = await res.json();
-      expect(body.success).toBe(true);
+      expect(body.error).toBe('Provisioning is not configured in this environment');
     });
 
     it('IN_PROGRESS ステータスで 409 エラーになるべき', async () => {
@@ -1407,7 +1413,10 @@ describe('テナント管理API', () => {
     });
 
     it('COMPLETED ステータスで 409 エラーになるべき', async () => {
-      const mockTenant = createMockTenant({ provisioningStatus: 'COMPLETED' });
+      const mockTenant = createMockTenant({
+        provisioningStatus: 'COMPLETED',
+        applicationDeploymentStatus: 'DEPLOYED',
+      });
       mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
 
       const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
@@ -1441,11 +1450,73 @@ describe('テナント管理API', () => {
       const body = await res.json();
       expect(body.error).toBe('Invalid tenant ID');
     });
+
+    it('backend 設定時は TenantOnboarding イベントを発行すべき', async () => {
+      vi.stubEnv('PROVISIONING_ENABLED', 'true');
+      const mockTenant = createMockTenant({ provisioningStatus: 'PENDING' });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+      mockTenantRepoFunctions.update.mockResolvedValue({
+        ...mockTenant,
+        provisioningStatus: 'IN_PROGRESS',
+        applicationDeploymentStatus: 'DEPLOYING',
+      });
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(200);
+      expect(
+        mockProvisioningPublisherFunctions.publishTenantOnboarding
+      ).toHaveBeenCalledWith(mockTenant);
+      expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(mockTenant.id, {
+        provisioningStatus: 'IN_PROGRESS',
+        applicationDeploymentStatus: 'DEPLOYING',
+        provisioningError: null,
+      });
+    });
+
+    it('イベント発行失敗時は FAILED に戻すべき', async () => {
+      vi.stubEnv('PROVISIONING_ENABLED', 'true');
+      const mockTenant = createMockTenant({ provisioningStatus: 'PENDING' });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+      mockTenantRepoFunctions.update
+        .mockResolvedValueOnce({
+          ...mockTenant,
+          provisioningStatus: 'IN_PROGRESS',
+          applicationDeploymentStatus: 'DEPLOYING',
+        })
+        .mockResolvedValueOnce({
+          ...mockTenant,
+          provisioningStatus: 'FAILED',
+          applicationDeploymentStatus: 'FAILED',
+          provisioningError: 'EventBridge unavailable',
+        });
+      mockProvisioningPublisherFunctions.publishTenantOnboarding.mockRejectedValueOnce(
+        new Error('EventBridge unavailable')
+      );
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`, {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(500);
+      expect(mockTenantRepoFunctions.update).toHaveBeenNthCalledWith(2, mockTenant.id, {
+        provisioningStatus: 'FAILED',
+        applicationDeploymentStatus: 'FAILED',
+        provisioningError: 'EventBridge unavailable',
+      });
+    });
   });
 
   describe('GET /api/tenants/:id/provision', () => {
     it('プロビジョニングステータスを取得できるべき', async () => {
-      const mockTenant = createMockTenant({ provisioningStatus: 'COMPLETED' });
+      const mockTenant = createMockTenant({
+        provisioningStatus: 'COMPLETED',
+        applicationDeploymentStatus: 'NOT_DEPLOYED',
+        provisionedResources: { s3Prefix: 'tenants/test/' },
+        provisionedAt: new Date('2024-01-02T00:00:00.000Z'),
+      });
       mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
 
       const res = await app.request(`/api/tenants/${mockTenant.id}/provision`);
@@ -1454,6 +1525,9 @@ describe('テナント管理API', () => {
       const body = await res.json();
       expect(body.tenantId).toBe(mockTenant.id);
       expect(body.provisioningStatus).toBe('COMPLETED');
+      expect(body.applicationDeploymentStatus).toBe('NOT_DEPLOYED');
+      expect(body.provisionedResources).toEqual({ s3Prefix: 'tenants/test/' });
+      expect(body.provisionedAt).toBe('2024-01-02T00:00:00.000Z');
       expect(body.provisioningEnabled).toBe(false); // Disabled in test env
     });
 

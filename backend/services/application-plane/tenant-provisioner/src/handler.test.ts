@@ -100,17 +100,13 @@ describe('Tenant Provisioner Lambda Handler', () => {
       resources: [],
       detail: {
         tenantId,
-        tenantSlug,
-        tenantTier,
-        eventType: 'TenantOnboarding',
+        tenantName,
+        slug: tenantSlug,
+        tier: tenantTier,
+        adminEmail: `${tenantSlug}@example.com`,
+        isolationModel: tenantTier === 'ENTERPRISE' ? 'SILO' : 'POOL',
+        region: 'ap-northeast-1',
         timestamp: new Date().toISOString(),
-        details: {
-          id: tenantId,
-          name: tenantName,
-          slug: tenantSlug,
-          tier: tenantTier,
-          status: 'ACTIVE',
-        },
       },
     };
   }
