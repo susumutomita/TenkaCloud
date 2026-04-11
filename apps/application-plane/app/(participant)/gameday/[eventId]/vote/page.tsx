@@ -103,7 +103,11 @@ export default function VotePage() {
   );
 
   const totalVotes = votes.length;
-  const leadingCandidate = voteCandidates[0] ?? null;
+  const leadingCandidate =
+    voteCandidates[0]?.votes > 0 ? voteCandidates[0] : null;
+  const votedForTeam = votedTeamId
+    ? (voteCandidates.find((team) => team.teamId === votedTeamId) ?? null)
+    : null;
 
   if (loading) {
     return (
@@ -217,8 +221,8 @@ export default function VotePage() {
               </div>
               <div className="text-emerald-200/80">
                 {locale === 'ja'
-                  ? `投票先: ${voteCandidates.find((team) => team.teamId === votedTeamId)?.teamName ?? votedTeamId}`
-                  : `Voted for ${voteCandidates.find((team) => team.teamId === votedTeamId)?.teamName ?? votedTeamId}`}
+                  ? `投票先: ${votedForTeam?.teamName ?? votedTeamId}`
+                  : `Voted for ${votedForTeam?.teamName ?? votedTeamId}`}
               </div>
             </div>
           </div>

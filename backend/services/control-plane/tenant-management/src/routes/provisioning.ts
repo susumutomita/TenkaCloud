@@ -107,7 +107,7 @@ provisioningRoutes.post(
         applicationDeploymentStatus: 'FAILED',
         provisioningError: errorMessage,
       });
-      throw error;
+      return c.json(errorResponse('Failed to start provisioning', 500), 500);
     }
 
     await tenantRepository.update(tenant.id, {

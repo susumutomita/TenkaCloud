@@ -94,31 +94,24 @@ app.get(
         tenantRepository.list({ limit: 100 }),
       ]);
 
-    // Count active tenants
-    const activeTenants = listResult.tenants.filter(
-      (t) => t.status === 'ACTIVE'
-    ).length;
+    let activeTenants = 0;
+    let failedCount = 0;
+    let inProgressCount = 0;
+    let completedCount = 0;
+    let pendingCount = 0;
+    for (const t of listResult.tenants) {
+      if (t.status === 'ACTIVE') activeTenants++;
+      if (t.provisioningStatus === 'FAILED') failedCount++;
+      else if (t.provisioningStatus === 'IN_PROGRESS') inProgressCount++;
+      else if (t.provisioningStatus === 'COMPLETED') completedCount++;
+      else if (t.provisioningStatus === 'PENDING') pendingCount++;
+    }
 
-    // Determine system status based on provisioning state
-    const failedCount = listResult.tenants.filter(
-      (t) => t.provisioningStatus === 'FAILED'
-    ).length;
-    const inProgressCount = listResult.tenants.filter(
-      (t) => t.provisioningStatus === 'IN_PROGRESS'
-    ).length;
-
-    // Calculate system health:
-    // - degraded: any tenant has failed provisioning
-    // - healthy: all tenants completed or pending/in-progress
     const systemStatus: 'healthy' | 'degraded' | 'down' =
       failedCount > 0 ? 'degraded' : 'healthy';
-
-    // Calculate uptime percentage based on successful provisioning
-    // (tenants not in FAILED state / total tenants) * 100
-    const successfulTenants = totalTenants - failedCount;
     const uptimePercentage =
       totalTenants > 0
-        ? Math.round((successfulTenants / totalTenants) * 100)
+        ? Math.round(((totalTenants - failedCount) / totalTenants) * 100)
         : 100;
 
       return c.json({
@@ -126,16 +119,11 @@ app.get(
         totalTenants,
         systemStatus,
         uptimePercentage,
-        // Additional context for debugging
         provisioningStats: {
-          completed: listResult.tenants.filter(
-            (t) => t.provisioningStatus === 'COMPLETED'
-          ).length,
+          completed: completedCount,
           inProgress: inProgressCount,
           failed: failedCount,
-          pending: listResult.tenants.filter(
-            (t) => t.provisioningStatus === 'PENDING'
-          ).length,
+          pending: pendingCount,
         },
       });
     } catch (error) {
