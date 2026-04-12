@@ -1615,6 +1615,34 @@ describe('プレーヤー API', () => {
       expect(res.status).toBe(StatusCodes.CREATED);
       const body = await res.json();
       expect(body.mode).toBe('solo');
+      expect(body.teamId).toBe('solo-user-1');
+      expect(body.teamName).toBe('ソロ参加');
+      expect(mockDashboardService.registerTeam).toHaveBeenCalledWith({
+        eventId: 'event-1',
+        teamId: 'solo-user-1',
+        teamName: 'ソロ参加',
+      });
+      expect(mockGamedayRepository.addMember).toHaveBeenCalledWith({
+        eventId: 'event-1',
+        userId: 'user-1',
+        teamId: 'solo-user-1',
+        teamName: 'ソロ参加',
+        mode: 'solo',
+      });
+    });
+
+    it('ソロチームが既に存在する場合でも参加登録できるべき', async () => {
+      mockDashboardService.registerTeam.mockRejectedValueOnce(
+        new mockDashboardService.TeamAlreadyExistsError('solo-user-1'),
+      );
+
+      const res = await app.request('/teams/solo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1' }),
+      });
+
+      expect(res.status).toBe(StatusCodes.CREATED);
       expect(mockGamedayRepository.addMember).toHaveBeenCalledWith({
         eventId: 'event-1',
         userId: 'user-1',

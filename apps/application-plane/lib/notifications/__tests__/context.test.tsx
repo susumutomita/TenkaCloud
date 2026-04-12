@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider, useNotifications } from '../context';
+import { createLocalStorageMock } from '../../__tests__/test-helpers';
 
 function createWrapper() {
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -11,6 +12,10 @@ function createWrapper() {
 
 describe('NotificationProvider', () => {
   beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: createLocalStorageMock(),
+    });
     window.localStorage.clear();
     vi.restoreAllMocks();
   });

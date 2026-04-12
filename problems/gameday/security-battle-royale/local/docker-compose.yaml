@@ -1,0 +1,47 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: cavsdb
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uadmin -p$${DB_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${DB_EXPOSE_PORT:-3306}:3306"
+    volumes:
+      - ${PROBLEM_ROOT}/local/mysql-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+  api:
+    image: python:3.11-slim
+    working_dir: /app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      LOCAL_DEV: "1"
+      REGION: ${REGION}
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: admin
+      DB_PASSWORD: ${DB_PASSWORD}
+      CAVS_DB_ENDPOINT: mysql
+    volumes:
+      - ${PROBLEM_ROOT}/api:/app:rw
+      - ${PROBLEM_ROOT}/frontend:/frontend:ro
+    command: >
+      sh -lc "pip install --no-cache-dir flask boto3 pymysql requests &&
+      python api.py"
+    ports:
+      - "${API_PORT}:80"
+
+  frontend:
+    image: nginx:1.27-alpine
+    volumes:
+      - ${PROBLEM_ROOT}/frontend:/usr/share/nginx/html:ro
+    ports:
+      - "${FRONTEND_PORT}:80"

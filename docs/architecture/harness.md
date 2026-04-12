@@ -20,9 +20,9 @@
 ## One-Pass Acceptance
 
 - `ONE_PASS_LOCAL`
-  `make start` 後に、tenant 作成、provisioning、tenant Application Plane 到達、event 作成、competitor account 登録、problem deploy、participant join、attack/defense/vote/aws-console までローカルで一気通貫する。
+  `make start-one-pass-local` 後に `make test_one_pass_local` が成功する。local は `Kumo` 等の cloud emulator を `http://localhost:4566`、`DynamoDB Local` を `http://localhost:8000` で使い分ける。対象は tenant 作成、provisioning、Application Plane 到達、local provider での problem deploy、event 作成、competitor account 登録、participant join、`attack / defense / vote`、`aws-console` の fail-closed 確認である。
 - `ONE_PASS_AWS`
-  AWS 上でも同じ順序で、tenant 作成から participant 競技開始まで local fallback なしで一気通貫する。
+  [`docs/guides/one-pass-aws.md`](../guides/one-pass-aws.md) の runbook に従い、tenant 作成から participant 競技開始、STS federation による `aws-console` URL 取得まで local fallback なしで一気通貫する。
 
 ## Banned Assumptions
 
@@ -36,5 +36,14 @@
 - `bun scripts/architecture-harness.ts --staged --fail-on=error`
 - `bun scripts/ai-improvement-loop.ts --staged --fail-on=high`
 - `make before-commit`
+
+## Harness Commands
+
+- Local strict run: `make test_one_pass_local`
+- Local start with one-pass prerequisites: `make start-one-pass-local`
+- AWS strict run: `make test_one_pass_aws`
+
+`make test_one_pass_local` は未実装を `BLOCKED` として可視化し、non-zero で終了する。これにより `ONE_PASS_LOCAL` を partial success で完了扱いにしない。
+local one-pass は `AUTH_SKIP_ROLES` のグローバル昇格ではなく、dev identity header で admin / participant を切り替える。
 
 Git hook と AI エージェント向けガイドは、この文書を参照して同じ判定に従う。

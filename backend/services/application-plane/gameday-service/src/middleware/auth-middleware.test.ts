@@ -81,6 +81,29 @@ describe("authMiddleware", () => {
 
 			expect(body.roles).toEqual(["tenant-admin", "participant"]);
 		});
+
+		it("開発用ヘッダーでモック認証コンテキストを上書きできるべき", async () => {
+			process.env.AUTH_SKIP = "1";
+
+			const { authMiddleware } = await import("./auth");
+
+			const app = new Hono();
+			app.use("/*", authMiddleware);
+			app.get("/test", (c) => c.json(c.get("auth")));
+
+			const res = await app.request("/test", {
+				headers: {
+					"X-TenkaCloud-Dev-User-Id": "participant-2",
+					"X-TenkaCloud-Dev-Tenant-Id": "tenant-beta",
+					"X-TenkaCloud-Dev-Roles": "participant,observer",
+				},
+			});
+			const body = await res.json();
+
+			expect(body.userId).toBe("participant-2");
+			expect(body.tenantId).toBe("tenant-beta");
+			expect(body.roles).toEqual(["participant", "observer"]);
+		});
 	});
 
 	describe("AUTH_SKIP 無効", () => {

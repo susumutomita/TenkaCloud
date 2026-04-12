@@ -161,26 +161,19 @@ export class TenantRepository {
 
   async findBySlug(slug: string): Promise<Tenant | null> {
     const client = getDocClient();
-    const tableName = getTableName();
-
     const result = await client.send(
       new QueryCommand({
-        TableName: tableName,
-        IndexName: 'GSI1',
-        KeyConditionExpression: 'GSI1PK = :pk AND GSI1SK = :sk',
-        FilterExpression: 'EntityType = :entityType',
-        ExpressionAttributeValues: {
-          ':pk': `SLUG#${slug}`,
-          ':sk': buildMetadataSK(),
-          ':entityType': EntityType.TENANT,
-        },
-        Limit: 1,
+        ...buildTenantEntityQueryInput({ limit: 200 }),
       })
     );
 
-    const tenantItem = (result.Items ?? []).find(
-      (item) => item.EntityType === EntityType.TENANT
-    );
+    const tenantItem = (result.Items ?? []).find((item) => {
+      if (!isTenantMetadataItem(item as Partial<TenantItem>)) {
+        return false;
+      }
+
+      return (item as TenantItem).slug === slug;
+    });
 
     if (!tenantItem) {
       return null;

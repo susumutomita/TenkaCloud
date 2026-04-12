@@ -14,8 +14,12 @@ vi.mock('@/lib/api/backend-urls', () => ({
 describe('GameDay Team Route Fallbacks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('AUTH_SKIP', '1');
+    vi.stubEnv('NODE_ENV', 'test');
     mockAuth.mockResolvedValue({
       user: { email: 'dev@example.com' },
+      tenantId: 'dev-tenant',
+      roles: ['participant'],
     });
     mockGetGamedayApiUrl.mockReturnValue('http://gameday.local');
   });
@@ -310,6 +314,11 @@ describe('GameDay Team Route Fallbacks', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://gameday.local/teams/solo',
       expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-TenkaCloud-Dev-User-Id': 'dev@example.com',
+          'X-TenkaCloud-Dev-Tenant-Id': 'dev-tenant',
+          'X-TenkaCloud-Dev-Roles': 'participant',
+        }),
         body: JSON.stringify({
           eventId: 'dev-event-1',
         }),
@@ -334,7 +343,13 @@ describe('GameDay Team Route Fallbacks', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://gameday.local/teams/my-membership?eventId=dev-event-2',
-      expect.any(Object),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-TenkaCloud-Dev-User-Id': 'dev@example.com',
+          'X-TenkaCloud-Dev-Tenant-Id': 'dev-tenant',
+          'X-TenkaCloud-Dev-Roles': 'participant',
+        }),
+      }),
     );
   });
 });

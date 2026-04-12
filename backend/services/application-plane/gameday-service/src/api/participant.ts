@@ -850,14 +850,29 @@ participantRoutes.post("/teams/solo", async (c) => {
 		);
 	}
 	const userId = c.get("auth").userId;
+	const teamId = `solo-${userId}`;
+	const teamName = "ソロ参加";
+
+	try {
+		await registerTeam({
+			eventId: parsed.data.eventId,
+			teamId,
+			teamName,
+		});
+	} catch (error) {
+		if (!(error instanceof TeamAlreadyExistsError)) {
+			throw error;
+		}
+	}
+
 	await gamedayRepo.addMember({
 		eventId: parsed.data.eventId,
 		userId,
-		teamId: `solo-${userId}`,
-		teamName: "ソロ参加",
+		teamId,
+		teamName,
 		mode: "solo",
 	});
-	return c.json({ mode: "solo" }, StatusCodes.CREATED);
+	return c.json({ mode: "solo", teamId, teamName }, StatusCodes.CREATED);
 });
 
 // === メンバーシップ取得 ===

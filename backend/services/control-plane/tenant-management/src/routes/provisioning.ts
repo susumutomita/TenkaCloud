@@ -94,6 +94,12 @@ provisioningRoutes.post(
 
     logger.info({ tenantId: tenant.id }, 'Publishing tenant onboarding event');
 
+    await tenantRepository.update(tenant.id, {
+      provisioningStatus: 'IN_PROGRESS',
+      applicationDeploymentStatus: 'DEPLOYING',
+      provisioningError: null,
+    });
+
     try {
       await provisioningPublisher.publishTenantOnboarding(tenant);
     } catch (error) {
@@ -109,12 +115,6 @@ provisioningRoutes.post(
       });
       return c.json(errorResponse('Failed to start provisioning', 500), 500);
     }
-
-    await tenantRepository.update(tenant.id, {
-      provisioningStatus: 'IN_PROGRESS',
-      applicationDeploymentStatus: 'DEPLOYING',
-      provisioningError: null,
-    });
 
     return c.json({
       success: true,
@@ -163,8 +163,12 @@ provisioningRoutes.get(
       return c.json(errorResponse('Tenant not found', 404), 404);
     }
 
-    const user = c.get('user');
-    const isPlatformAdmin = user.roles.includes(UserRole.PLATFORM_ADMIN);
+    const user = c.get('user') as
+      | { roles?: UserRole[] }
+      | undefined;
+    const isPlatformAdmin =
+      Array.isArray(user?.roles) &&
+      user.roles.includes(UserRole.PLATFORM_ADMIN);
 
     return c.json({
       tenantId: tenant.id,

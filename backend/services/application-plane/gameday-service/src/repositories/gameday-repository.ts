@@ -3,7 +3,6 @@ import {
 	GetCommand,
 	UpdateCommand,
 	QueryCommand,
-	BatchWriteCommand,
 	DeleteCommand,
 	TransactWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
@@ -434,6 +433,46 @@ export class GamedayRepository {
 		} catch (error) {
 			if (error instanceof ConditionalCheckFailedException) {
 				return null;
+			}
+			throw error;
+		}
+	}
+
+	async startExistingGame(eventId: string): Promise<GameState | null> {
+		const client = getDocClient();
+		const tableName = getTableName();
+		const now = new Date().toISOString();
+
+		try {
+			const result = await client.send(
+				new UpdateCommand({
+					TableName: tableName,
+					Key: {
+						PK: buildGamedayPK(eventId),
+						SK: buildMetadataSK(),
+					},
+					UpdateExpression:
+						"SET isRunning = :running, startedAt = :startedAt, UpdatedAt = :now",
+					ExpressionAttributeValues: {
+						":running": true,
+						":startedAt": now,
+						":now": now,
+						":alreadyRunning": true,
+					},
+					ConditionExpression:
+						"attribute_exists(PK) AND isRunning <> :alreadyRunning",
+					ReturnValues: "ALL_NEW",
+				}),
+			);
+
+			if (!result.Attributes) {
+				return null;
+			}
+
+			return toGameState(result.Attributes as GameStateItem);
+		} catch (error) {
+			if (error instanceof ConditionalCheckFailedException) {
+				throw new GameAlreadyExistsError(eventId);
 			}
 			throw error;
 		}
@@ -919,7 +958,10 @@ export class GamedayRepository {
 		return allItems;
 	}
 
-	async getAttack(eventId: string, slug: string): Promise<Attack | null> {
+	async getAttack(
+		eventId: string,
+		attackIdentifier: string,
+	): Promise<Attack | null> {
 		const client = getDocClient();
 		const tableName = getTableName();
 
@@ -928,46 +970,43 @@ export class GamedayRepository {
 				TableName: tableName,
 				Key: {
 					PK: buildGamedayPK(eventId),
-					SK: buildAttackSK(slug),
+					SK: buildAttackSK(attackIdentifier),
 				},
 			}),
 		);
 
-		if (!result.Item) {
-			return null;
+		if (result.Item) {
+			return toAttack(result.Item as Record<string, unknown>);
 		}
 
-		return toAttack(result.Item as Record<string, unknown>);
+		const catalog = await this.listAttackCatalog(eventId);
+		return (
+			catalog.find(
+				(attack) =>
+					attack.id === attackIdentifier || attack.slug === attackIdentifier,
+			) ?? null
+		);
 	}
 
 	async seedAttackCatalog(eventId: string, attacks: Attack[]): Promise<void> {
 		const client = getDocClient();
 		const tableName = getTableName();
 
-		// BatchWrite は最大25件ずつ
-		const chunks: Attack[][] = [];
-		for (let i = 0; i < attacks.length; i += 25) {
-			chunks.push(attacks.slice(i, i + 25));
-		}
-
-		for (const chunk of chunks) {
-			await client.send(
-				new BatchWriteCommand({
-					RequestItems: {
-						[tableName]: chunk.map((attack) => ({
-							PutRequest: {
-								Item: {
-									PK: buildGamedayPK(eventId),
-									SK: buildAttackSK(attack.slug),
-									EntityType: "ATTACK",
-									...attack,
-								},
-							},
-						})),
-					},
-				}),
-			);
-		}
+		await Promise.all(
+			attacks.map((attack) =>
+				client.send(
+					new PutCommand({
+						TableName: tableName,
+						Item: {
+							PK: buildGamedayPK(eventId),
+							SK: buildAttackSK(attack.slug),
+							EntityType: "ATTACK",
+							...attack,
+						},
+					}),
+				),
+			),
+		);
 	}
 
 	// === 攻撃購入 ===

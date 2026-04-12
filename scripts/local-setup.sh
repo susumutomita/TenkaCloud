@@ -24,12 +24,24 @@ export AWS_SECRET_ACCESS_KEY=test
 export AWS_DEFAULT_REGION=ap-northeast-1
 
 EMULATOR_ENDPOINT=http://localhost:4566
+DYNAMODB_ENDPOINT="${DYNAMODB_ENDPOINT:-http://localhost:8000}"
 NAME_PREFIX=tenkacloud-local
 TABLE_NAME=TenkaCloud-local
 EVENT_BUS_NAME=${NAME_PREFIX}-tenant-events
 
 aws_cmd() {
   aws --endpoint-url="$EMULATOR_ENDPOINT" "$@"
+}
+
+dynamodb_cmd() {
+  aws --endpoint-url="$DYNAMODB_ENDPOINT" "$@"
+}
+
+ensure_bun_dependencies() {
+  if [ -d node_modules ]; then
+    return
+  fi
+  bun install
 }
 
 # エミュレータの準備状態をチェック
@@ -48,33 +60,23 @@ check_emulator_ready() {
   esac
 }
 
+check_dynamodb_ready() {
+  dynamodb_cmd dynamodb list-tables >/dev/null 2>&1
+}
+
 check_infrastructure_deployed() {
-  aws_cmd dynamodb describe-table --table-name "$TABLE_NAME" >/dev/null 2>&1
+  dynamodb_cmd dynamodb describe-table --table-name "$TABLE_NAME" >/dev/null 2>&1
 }
 
 echo "🚀 TenkaCloud Local Environment Setup"
 echo "======================================"
 echo "☁️  エミュレータ: $CLOUD_EMULATOR"
 
-# 既に起動済みかチェック
-if check_emulator_ready && check_infrastructure_deployed; then
-  echo ""
-  echo "✅ $CLOUD_EMULATOR は既に起動しており、インフラもデプロイ済みです"
-  echo ""
-  echo "Endpoints:"
-  echo "  - Emulator:    $EMULATOR_ENDPOINT"
-  echo "  - DynamoDB:    $EMULATOR_ENDPOINT"
-  echo "  - S3:          $EMULATOR_ENDPOINT"
-  echo ""
-  echo "💡 再デプロイが必要な場合は、まず make stop を実行してください"
-  exit 0
-fi
-
 # 1. エミュレータ起動
 echo ""
 echo "📦 Starting $CLOUD_EMULATOR..."
 cd "$PROJECT_ROOT"
-COMPOSE_PROFILES="$CLOUD_EMULATOR" docker compose up -d
+COMPOSE_PROFILES="$CLOUD_EMULATOR" docker compose up -d "$CLOUD_EMULATOR" dynamodb-local
 
 # エミュレータが起動するまで待機
 echo "⏳ Waiting for $CLOUD_EMULATOR to be ready..."
@@ -92,25 +94,38 @@ until check_emulator_ready; do
 done
 echo "✅ $CLOUD_EMULATOR is ready!"
 
+echo "⏳ Waiting for DynamoDB Local to be ready..."
+RETRY_COUNT=0
+until check_dynamodb_ready; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+    echo "❌ DynamoDB Local did not start within expected time"
+    exit 1
+  fi
+  sleep 2
+  echo "   Waiting for DynamoDB Local... ($RETRY_COUNT/$MAX_RETRIES)"
+done
+echo "✅ DynamoDB Local is ready!"
+
 # 2. Lambda をビルド
 echo ""
 echo "🔨 Building Provisioning Lambda (Control Plane)..."
 cd "$PROJECT_ROOT/backend/services/control-plane/provisioning"
-bun install
+ensure_bun_dependencies
 bun run deploy
 echo "✅ Provisioning Lambda built!"
 
 echo ""
 echo "🔨 Building Tenant Provisioner Lambda (Application Plane)..."
 cd "$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner"
-bun install
+ensure_bun_dependencies
 bun run deploy
 echo "✅ Tenant Provisioner Lambda built!"
 
 echo ""
 echo "🔨 Building Provisioning Completion Lambda (Control Plane)..."
 cd "$PROJECT_ROOT/backend/services/control-plane/provisioning-completion"
-bun install
+ensure_bun_dependencies
 bun run deploy
 echo "✅ Provisioning Completion Lambda built!"
 
@@ -120,7 +135,7 @@ echo "🏗  Setting up infrastructure via AWS CLI..."
 
 # --- DynamoDB ---
 echo "📦 DynamoDB テーブルを作成中..."
-aws_cmd dynamodb create-table \
+dynamodb_cmd dynamodb create-table \
   --table-name "$TABLE_NAME" \
   --attribute-definitions \
     AttributeName=PK,AttributeType=S \
@@ -151,7 +166,7 @@ SEED_START="2026-04-01T09:00:00Z"
 SEED_END="2026-12-31T18:00:00Z"
 
 # Event シード（dev-tenant の GameDay イベント）
-aws_cmd dynamodb put-item \
+dynamodb_cmd dynamodb put-item \
   --table-name "$TABLE_NAME" \
   --item '{
     "PK":              {"S": "EVENT#'"$SEED_EVENT_ID"'"},
@@ -184,7 +199,7 @@ aws_cmd dynamodb put-item \
   2>/dev/null && echo "  イベントシード完了" || echo "  イベントシードはスキップ（既存）"
 
 # GameDay 状態シード（gameday-service 用）
-aws_cmd dynamodb put-item \
+dynamodb_cmd dynamodb put-item \
   --table-name "$TABLE_NAME" \
   --item '{
     "PK":             {"S": "GAMEDAY#'"$SEED_EVENT_ID"'"},
@@ -236,12 +251,17 @@ aws_cmd lambda create-function \
   --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning/lambda.zip" \
   --timeout 60 \
   --memory-size 256 \
-  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DYNAMODB_TABLE=$TABLE_NAME}" \
+  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
   2>/dev/null || \
 aws_cmd lambda update-function-code \
   --function-name ${NAME_PREFIX}-provisioning \
   --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning/lambda.zip" \
   2>/dev/null || echo "  Provisioning Lambda 登録スキップ（エミュレータ未対応）"
+
+aws_cmd lambda update-function-configuration \
+  --function-name ${NAME_PREFIX}-provisioning \
+  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
+  2>/dev/null || echo "  Provisioning Lambda 環境変数更新スキップ（エミュレータ未対応）"
 
 # Tenant Provisioner Lambda (Application Plane)
 aws_cmd lambda create-function \
@@ -252,12 +272,17 @@ aws_cmd lambda create-function \
   --zip-file fileb://"$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner/lambda.zip" \
   --timeout 120 \
   --memory-size 256 \
-  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DATA_BUCKET_NAME=${NAME_PREFIX}-data}" \
+  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DATA_BUCKET_NAME=${NAME_PREFIX}-data,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
   2>/dev/null || \
 aws_cmd lambda update-function-code \
   --function-name ${NAME_PREFIX}-tenant-provisioner \
   --zip-file fileb://"$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner/lambda.zip" \
   2>/dev/null || echo "  Tenant Provisioner Lambda 登録スキップ（エミュレータ未対応）"
+
+aws_cmd lambda update-function-configuration \
+  --function-name ${NAME_PREFIX}-tenant-provisioner \
+  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DATA_BUCKET_NAME=${NAME_PREFIX}-data,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
+  2>/dev/null || echo "  Tenant Provisioner Lambda 環境変数更新スキップ（エミュレータ未対応）"
 
 # Provisioning Completion Lambda (Control Plane)
 aws_cmd lambda create-function \
@@ -268,12 +293,17 @@ aws_cmd lambda create-function \
   --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning-completion/lambda.zip" \
   --timeout 30 \
   --memory-size 128 \
-  --environment "Variables={DYNAMODB_TABLE=$TABLE_NAME}" \
+  --environment "Variables={DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
   2>/dev/null || \
 aws_cmd lambda update-function-code \
   --function-name ${NAME_PREFIX}-provisioning-completion \
   --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning-completion/lambda.zip" \
   2>/dev/null || echo "  Provisioning Completion Lambda 登録スキップ（エミュレータ未対応）"
+
+aws_cmd lambda update-function-configuration \
+  --function-name ${NAME_PREFIX}-provisioning-completion \
+  --environment "Variables={DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
+  2>/dev/null || echo "  Provisioning Completion Lambda 環境変数更新スキップ（エミュレータ未対応）"
 
 echo "✅ Lambda 完了"
 
@@ -314,7 +344,7 @@ echo "✅ EventBridge ルール完了"
 
 # --- DynamoDB Stream → Provisioning Lambda ---
 echo "🔁 DynamoDB Stream トリガーを設定中..."
-STREAM_ARN=$(aws_cmd dynamodb describe-table \
+STREAM_ARN=$(dynamodb_cmd dynamodb describe-table \
   --table-name "$TABLE_NAME" \
   --query 'Table.LatestStreamArn' \
   --output text 2>/dev/null || echo "")
@@ -337,7 +367,7 @@ echo "🔍 デプロイ確認..."
 
 echo ""
 echo "DynamoDB Tables:"
-aws_cmd dynamodb list-tables
+dynamodb_cmd dynamodb list-tables
 
 echo ""
 echo "Lambda Functions:"
@@ -358,7 +388,7 @@ echo ""
 echo "Emulator: $CLOUD_EMULATOR"
 echo "Endpoints:"
 echo "  - Emulator:    $EMULATOR_ENDPOINT"
-echo "  - DynamoDB:    $EMULATOR_ENDPOINT"
+echo "  - DynamoDB:    $DYNAMODB_ENDPOINT"
 echo "  - S3:          $EMULATOR_ENDPOINT"
 echo ""
 echo "Architecture:"

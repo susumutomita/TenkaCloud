@@ -18,12 +18,27 @@ export async function GET(request: NextRequest) {
 
   const session = await auth();
   const userId = session?.user?.email ?? 'anonymous';
+  const shouldForwardDevIdentity =
+    process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production';
 
   try {
     const gamedayUrl = getGamedayApiUrl();
     const response = await fetch(
       `${gamedayUrl}/teams/my-membership?eventId=${encodeURIComponent(eventId)}`,
-      { headers: { 'Content-Type': 'application/json' } },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(shouldForwardDevIdentity
+            ? {
+                'X-TenkaCloud-Dev-User-Id': userId,
+                'X-TenkaCloud-Dev-Tenant-Id': session?.tenantId ?? 'dev-tenant',
+                'X-TenkaCloud-Dev-Roles': (
+                  session?.roles ?? ['participant']
+                ).join(','),
+              }
+            : {}),
+        },
+      },
     );
     const data = await response.json();
     return Response.json(data, { status: response.status });

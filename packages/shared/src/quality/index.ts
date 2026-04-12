@@ -11,6 +11,13 @@ export {
   hasArchitectureFindingsAtOrAboveSeverity,
   shouldAnalyzeArchitectureFile,
 } from './architecture-harness';
+export {
+  buildOnePassSummary,
+  createOnePassReport,
+  formatOnePassReportAsMarkdown,
+  getOnePassOverallStatus,
+  hasOnePassIssues,
+} from './one-pass-harness';
 export type {
   DebtFinding,
   DebtHotspot,
@@ -24,3 +31,10 @@ export type {
   ArchitectureReport,
   ArchitectureSeverity,
 } from './architecture-harness';
+export type {
+  OnePassReport,
+  OnePassStepResult,
+  OnePassStepStatus,
+  OnePassSummary,
+  OnePassTarget,
+} from './one-pass-harness';

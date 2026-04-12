@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { detectLocale, I18nProvider, resolveMessage, useI18n } from '../i18n';
+import { createLocalStorageMock } from './test-helpers';
 
 const mockReplace = vi.fn();
 let mockPathname = '/dashboard';
@@ -35,6 +36,10 @@ describe('i18n', () => {
     mockReplace.mockReset();
     mockPathname = '/dashboard';
     mockSearchParams = null;
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: createLocalStorageMock(),
+    });
     window.localStorage.clear();
     document.documentElement.lang = 'en';
     vi.stubGlobal('navigator', {

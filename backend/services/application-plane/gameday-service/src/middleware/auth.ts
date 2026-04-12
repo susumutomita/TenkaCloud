@@ -8,6 +8,31 @@ export interface AuthContext {
 	roles: string[];
 }
 
+const DEV_USER_ID_HEADER = "x-tenkacloud-dev-user-id";
+const DEV_TENANT_ID_HEADER = "x-tenkacloud-dev-tenant-id";
+const DEV_ROLES_HEADER = "x-tenkacloud-dev-roles";
+
+function sanitizeDevIdentity(
+	value: string | undefined,
+	fallback: string,
+	maxLength = 128,
+): string {
+	if (!value) {
+		return fallback;
+	}
+
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return fallback;
+	}
+
+	const sanitized = trimmed
+		.replace(/[^A-Za-z0-9@._:/+=,-]/g, "-")
+		.slice(0, maxLength);
+
+	return sanitized || fallback;
+}
+
 declare module "hono" {
 	interface ContextVariableMap {
 		auth: AuthContext;
@@ -48,11 +73,24 @@ if (authSkipEnabled && typeof console !== "undefined") {
 }
 /* v8 ignore stop */
 
-const mockAuth: AuthContext = {
-	userId: "dev-user",
-	tenantId: "dev-tenant",
-	roles: parseAuthSkipRoles(process.env.AUTH_SKIP_ROLES),
-};
+function createMockAuth(
+	headers?: {
+		[DEV_USER_ID_HEADER]?: string;
+		[DEV_TENANT_ID_HEADER]?: string;
+		[DEV_ROLES_HEADER]?: string;
+	},
+): AuthContext {
+	return {
+		userId: sanitizeDevIdentity(headers?.[DEV_USER_ID_HEADER], "dev-user"),
+		tenantId: sanitizeDevIdentity(
+			headers?.[DEV_TENANT_ID_HEADER],
+			"dev-tenant",
+		),
+		roles: parseAuthSkipRoles(
+			headers?.[DEV_ROLES_HEADER] ?? process.env.AUTH_SKIP_ROLES,
+		),
+	};
+}
 
 const JWKS_URI =
 	process.env.JWKS_URI ??
@@ -72,7 +110,16 @@ async function getJWKS() {
 export const authMiddleware = createMiddleware(async (c, next) => {
 	// AUTH_SKIP=1: 開発用にJWT検証をバイパス
 	if (authSkipEnabled) {
-		c.set("auth", mockAuth);
+		c.set(
+			"auth",
+			createMockAuth({
+				"x-tenkacloud-dev-user-id": c.req.header("X-TenkaCloud-Dev-User-Id"),
+				"x-tenkacloud-dev-tenant-id": c.req.header(
+					"X-TenkaCloud-Dev-Tenant-Id",
+				),
+				"x-tenkacloud-dev-roles": c.req.header("X-TenkaCloud-Dev-Roles"),
+			}),
+		);
 		await next();
 		return;
 	}

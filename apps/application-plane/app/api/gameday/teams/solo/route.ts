@@ -25,12 +25,25 @@ export async function POST(request: Request) {
   const body = parseResult.data;
   const session = await auth();
   const userId = session?.user?.email ?? 'anonymous';
+  const shouldForwardDevIdentity =
+    process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production';
 
   try {
     const gamedayUrl = getGamedayApiUrl();
     const response = await fetch(`${gamedayUrl}/teams/solo`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(shouldForwardDevIdentity
+          ? {
+              'X-TenkaCloud-Dev-User-Id': userId,
+              'X-TenkaCloud-Dev-Tenant-Id': session?.tenantId ?? 'dev-tenant',
+              'X-TenkaCloud-Dev-Roles': (
+                session?.roles ?? ['participant']
+              ).join(','),
+            }
+          : {}),
+      },
       body: JSON.stringify(body),
     });
     const data = await response.json();

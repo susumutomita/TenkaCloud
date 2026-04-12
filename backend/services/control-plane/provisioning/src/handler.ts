@@ -25,8 +25,16 @@ import {
   type TenantOnboardingDetail,
 } from '@tenkacloud/events';
 
-const eventBridge = new EventBridgeClient({});
-const dynamoClient = new DynamoDBClient({});
+const eventBridge = new EventBridgeClient({
+  ...(process.env.AWS_ENDPOINT_URL
+    ? { endpoint: process.env.AWS_ENDPOINT_URL }
+    : {}),
+});
+const dynamoClient = new DynamoDBClient({
+  ...(process.env.DYNAMODB_ENDPOINT
+    ? { endpoint: process.env.DYNAMODB_ENDPOINT }
+    : {}),
+});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? 'default';
@@ -197,7 +205,6 @@ async function publishEvent(
         Source: EventSource.CONTROL_PLANE,
         DetailType: detailType,
         Detail: JSON.stringify(detail),
-        Time: new Date(),
       },
     ],
   });
