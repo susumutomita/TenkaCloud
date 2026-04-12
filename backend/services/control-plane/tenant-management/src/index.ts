@@ -191,7 +191,7 @@ app.get(
 );
 }
 
-const port = 13004;
+const port = Number.parseInt(process.env.PORT ?? '13004', 10);
 
 // Only log when not in test environment
 if (process.env.NODE_ENV !== 'test') {

@@ -12,10 +12,8 @@ vi.mock("../repositories/prisma-client", () => ({
 	prisma: createMockPrisma(),
 }));
 
-import {
-	PrismaProblemRepository,
-	PrismaMarketplaceRepository,
-} from "../repositories/problem-repository";
+import { PrismaProblemRepository } from "../repositories/problem-repository";
+import { PrismaMarketplaceRepository } from "../repositories/marketplace-repository";
 import { prisma } from "../repositories/prisma-client";
 
 describe("PrismaProblemRepository", () => {

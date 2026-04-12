@@ -47,6 +47,13 @@ export interface IProblemRepository {
 	findById(id: string): Promise<Problem | null>;
 
 	/**
+	 * 外部IDによる問題の取得
+	 * @param externalId 外部ID
+	 * @returns 問題（存在しない場合は null）
+	 */
+	findByExternalId(externalId: string): Promise<Problem | null>;
+
+	/**
 	 * 問題一覧の取得
 	 * @param options フィルターオプション
 	 * @returns 問題一覧
@@ -167,6 +174,14 @@ export class InMemoryProblemRepository implements IProblemRepository {
 
 	async findById(id: string): Promise<Problem | null> {
 		return this.problems.get(id) || null;
+	}
+
+	async findByExternalId(externalId: string): Promise<Problem | null> {
+		return (
+			Array.from(this.problems.values()).find(
+				(p) => p.id === externalId,
+			) ?? null
+		);
 	}
 
 	async findAll(options?: ProblemFilterOptions): Promise<Problem[]> {

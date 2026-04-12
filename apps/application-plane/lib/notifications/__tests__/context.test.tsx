@@ -29,7 +29,7 @@ describe('NotificationProvider', () => {
     expect(result.current.unreadCount).toBe(0);
   });
 
-  it('通知を追加できるべき', () => {
+  it('通知を追加するとリストに1件追加されるべき', () => {
     const { result } = renderHook(() => useNotifications(), {
       wrapper: createWrapper(),
     });
@@ -44,13 +44,44 @@ describe('NotificationProvider', () => {
     });
 
     expect(result.current.notifications).toHaveLength(1);
-    expect(result.current.notifications[0].title).toBe('攻撃を受けています');
-    expect(result.current.notifications[0].message).toBe(
-      'チームAから攻撃を受けました',
-    );
-    expect(result.current.notifications[0].type).toBe('attack_received');
-    expect(result.current.notifications[0].severity).toBe('error');
+    const n = result.current.notifications[0];
+    expect(n.title).toBe('攻撃を受けています');
+    expect(n.message).toBe('チームAから攻撃を受けました');
+    expect(n.type).toBe('attack_received');
+    expect(n.severity).toBe('error');
+  });
+
+  it('追加した通知はデフォルトで未読であるべき', () => {
+    const { result } = renderHook(() => useNotifications(), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      result.current.addNotification({
+        type: 'attack_received',
+        title: '攻撃を受けています',
+        message: 'チームAから攻撃を受けました',
+        severity: 'error',
+      });
+    });
+
     expect(result.current.notifications[0].read).toBe(false);
+  });
+
+  it('追加した通知にはIDとタイムスタンプが割り当てられるべき', () => {
+    const { result } = renderHook(() => useNotifications(), {
+      wrapper: createWrapper(),
+    });
+
+    act(() => {
+      result.current.addNotification({
+        type: 'attack_received',
+        title: '攻撃を受けています',
+        message: 'チームAから攻撃を受けました',
+        severity: 'error',
+      });
+    });
+
     expect(result.current.notifications[0].id).toBeDefined();
     expect(result.current.notifications[0].timestamp).toBeDefined();
   });

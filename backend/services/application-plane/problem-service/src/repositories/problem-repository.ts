@@ -4,33 +4,35 @@
  * PostgreSQL を使用した問題リポジトリ実装
  */
 
-import type {
-	Problem as PrismaProblem,
-	ProblemType as PrismaProblemType,
-	ProblemCategory as PrismaProblemCategory,
-	DifficultyLevel as PrismaDifficultyLevel,
-	CloudProvider as PrismaCloudProvider,
-	TemplateType as PrismaTemplateType,
-	MarketplaceListing,
-} from "@prisma/client";
 import { prisma as _prisma } from "./prisma-client";
 import type {
 	IProblemRepository,
-	IMarketplaceRepository,
 	ProblemFilterOptions,
 } from "../problems/repository";
+import { DynamoProblemRepository } from "./dynamo-problem-repository";
 import type {
 	Problem,
-	ProblemType,
-	ProblemCategory,
-	DifficultyLevel,
 	CloudProvider,
-	DeploymentTemplate,
-	DeploymentTemplateType,
-	MarketplaceProblem,
-	MarketplaceSearchQuery,
-	MarketplaceSearchResult,
 } from "../types";
+import {
+	toProblem,
+	toPrismaType,
+	toPrismaCategory,
+	toPrismaDifficulty,
+	toPrismaCloudProvider,
+	toPrismaTemplateType,
+} from "./problem-mapper";
+
+function shouldUseDynamoProblemRepository(): boolean {
+	switch (process.env.PROBLEM_REPOSITORY_DRIVER) {
+		case "dynamodb":
+			return true;
+		case "prisma":
+			return false;
+		default:
+			return process.env.NODE_ENV !== "test" && !process.env.DATABASE_URL;
+	}
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getPrisma(): any {
@@ -43,159 +45,22 @@ function getPrisma(): any {
 }
 
 /**
- * Prisma Problem を内部型に変換
- */
-function toProblem(
-	prismaProblem: PrismaProblem & {
-		templates?: {
-			provider: string;
-			type: string;
-			path: string | null;
-			content: string | null;
-			parameters: unknown;
-		}[];
-		regions?: { provider: string; regions: string[] }[];
-		criteria?: {
-			name: string;
-			description: string | null;
-			weight: number;
-			maxPoints: number;
-		}[];
-	},
-): Problem {
-	// テンプレートをプロバイダーごとにグループ化
-	const templatesMap: Partial<Record<CloudProvider, DeploymentTemplate>> = {};
-	prismaProblem.templates?.forEach((t) => {
-		const provider = t.provider.toLowerCase() as CloudProvider;
-		templatesMap[provider] = {
-			type: t.type as DeploymentTemplateType,
-			path: t.path ?? undefined,
-			content: t.content ?? undefined,
-			parameters: t.parameters as Record<string, string> | undefined,
-		};
-	});
-
-	// リージョンをプロバイダーごとにグループ化
-	const regionsMap: Partial<Record<CloudProvider, string[]>> = {};
-	prismaProblem.regions?.forEach((r) => {
-		const provider = r.provider.toLowerCase() as CloudProvider;
-		regionsMap[provider] = r.regions;
-	});
-
-	return {
-		id: prismaProblem.id,
-		title: prismaProblem.title,
-		type: prismaProblem.type.toLowerCase() as ProblemType,
-		category: prismaProblem.category.toLowerCase() as ProblemCategory,
-		difficulty: prismaProblem.difficulty.toLowerCase() as DifficultyLevel,
-		description: {
-			overview: prismaProblem.overview,
-			objectives: prismaProblem.objectives,
-			hints: prismaProblem.hints,
-			prerequisites: prismaProblem.prerequisites,
-			estimatedTime: prismaProblem.estimatedTimeMinutes ?? undefined,
-		},
-		metadata: {
-			author: prismaProblem.author,
-			version: prismaProblem.version,
-			createdAt: prismaProblem.createdAt.toISOString(),
-			updatedAt: prismaProblem.updatedAt.toISOString(),
-			tags: prismaProblem.tags,
-			license: prismaProblem.license ?? undefined,
-		},
-		deployment: {
-			providers: prismaProblem.providers.map(
-				(p) => p.toLowerCase() as CloudProvider,
-			),
-			timeout: prismaProblem.deploymentTimeoutMinutes,
-			templates: templatesMap,
-			regions: regionsMap,
-		},
-		scoring: {
-			type: prismaProblem.scoringType.toLowerCase() as
-				| "lambda"
-				| "container"
-				| "api"
-				| "manual",
-			path: prismaProblem.scoringPath,
-			timeoutMinutes: prismaProblem.scoringTimeoutMinutes,
-			intervalMinutes: prismaProblem.scoringIntervalMinutes ?? undefined,
-			criteria:
-				prismaProblem.criteria?.map((c) => ({
-					name: c.name,
-					description: c.description ?? "",
-					weight: c.weight,
-					maxPoints: c.maxPoints,
-				})) || [],
-		},
-	};
-}
-
-/**
- * 内部型を Prisma 型に変換
- */
-function toPrismaType(type: ProblemType): PrismaProblemType {
-	const map: Record<ProblemType, PrismaProblemType> = {
-		gameday: "GAMEDAY",
-		jam: "JAM",
-	};
-	return map[type];
-}
-
-function toPrismaCategory(category: ProblemCategory): PrismaProblemCategory {
-	const map: Record<ProblemCategory, PrismaProblemCategory> = {
-		architecture: "ARCHITECTURE",
-		security: "SECURITY",
-		cost: "COST",
-		performance: "PERFORMANCE",
-		reliability: "RELIABILITY",
-		operations: "OPERATIONS",
-	};
-	return map[category];
-}
-
-function toPrismaDifficulty(
-	difficulty: DifficultyLevel,
-): PrismaDifficultyLevel {
-	const map: Record<DifficultyLevel, PrismaDifficultyLevel> = {
-		easy: "EASY",
-		medium: "MEDIUM",
-		hard: "HARD",
-		expert: "EXPERT",
-	};
-	return map[difficulty];
-}
-
-function toPrismaCloudProvider(provider: CloudProvider): PrismaCloudProvider {
-	const map: Record<CloudProvider, PrismaCloudProvider> = {
-		aws: "AWS",
-		gcp: "GCP",
-		azure: "AZURE",
-		local: "LOCAL",
-	};
-	return map[provider];
-}
-
-function toPrismaTemplateType(
-	type: DeploymentTemplateType | undefined,
-): PrismaTemplateType {
-	const map: Record<DeploymentTemplateType, PrismaTemplateType> = {
-		cloudformation: "CLOUDFORMATION",
-		sam: "SAM",
-		cdk: "CDK",
-		terraform: "TERRAFORM",
-		"deployment-manager": "DEPLOYMENT_MANAGER",
-		arm: "ARM",
-		"docker-compose": "DOCKER_COMPOSE",
-	};
-	return map[type ?? "cloudformation"] ?? "CLOUDFORMATION";
-}
-
-/**
  * Prisma Problem Repository 実装
  */
 export class PrismaProblemRepository implements IProblemRepository {
+	private readonly delegate: IProblemRepository | null;
+
+	constructor() {
+		this.delegate = shouldUseDynamoProblemRepository()
+			? new DynamoProblemRepository()
+			: null;
+	}
+
 	async create(problem: Problem): Promise<Problem> {
+		if (this.delegate) {
+			return this.delegate.create(problem);
+		}
+
 		const created = await getPrisma().problem.create({
 			data: {
 				externalId: problem.id,
@@ -262,6 +127,10 @@ export class PrismaProblemRepository implements IProblemRepository {
 	}
 
 	async update(id: string, updates: Partial<Problem>): Promise<Problem> {
+		if (this.delegate) {
+			return this.delegate.update(id, updates);
+		}
+
 		const data: Record<string, unknown> = {};
 
 		if (updates.title) data.title = updates.title;
@@ -301,12 +170,20 @@ export class PrismaProblemRepository implements IProblemRepository {
 	}
 
 	async delete(id: string): Promise<void> {
+		if (this.delegate) {
+			return this.delegate.delete(id);
+		}
+
 		await getPrisma().problem.delete({
 			where: { id },
 		});
 	}
 
 	async findById(id: string): Promise<Problem | null> {
+		if (this.delegate) {
+			return this.delegate.findById(id);
+		}
+
 		const problem = await getPrisma().problem.findUnique({
 			where: { id },
 			include: {
@@ -320,6 +197,10 @@ export class PrismaProblemRepository implements IProblemRepository {
 	}
 
 	async findByExternalId(externalId: string): Promise<Problem | null> {
+		if (this.delegate) {
+			return this.delegate.findByExternalId(externalId);
+		}
+
 		const problem = await getPrisma().problem.findUnique({
 			where: { externalId },
 			include: {
@@ -333,6 +214,10 @@ export class PrismaProblemRepository implements IProblemRepository {
 	}
 
 	async findAll(options?: ProblemFilterOptions): Promise<Problem[]> {
+		if (this.delegate) {
+			return this.delegate.findAll(options);
+		}
+
 		const where: Record<string, unknown> = {};
 
 		if (options?.type) {
@@ -367,6 +252,10 @@ export class PrismaProblemRepository implements IProblemRepository {
 	}
 
 	async count(options?: ProblemFilterOptions): Promise<number> {
+		if (this.delegate) {
+			return this.delegate.count(options);
+		}
+
 		const where: Record<string, unknown> = {};
 
 		if (options?.type) {
@@ -383,254 +272,14 @@ export class PrismaProblemRepository implements IProblemRepository {
 	}
 
 	async exists(id: string): Promise<boolean> {
+		if (this.delegate) {
+			return this.delegate.exists(id);
+		}
+
 		const count = await getPrisma().problem.count({
 			where: { id },
 		});
 		return count > 0;
-	}
-}
-
-/**
- * Prisma Marketplace Repository 実装
- */
-export class PrismaMarketplaceRepository implements IMarketplaceRepository {
-	async publish(problemId: string): Promise<MarketplaceProblem> {
-		const problem = await getPrisma().problem.findUnique({
-			where: { id: problemId },
-			include: {
-				templates: true,
-				regions: true,
-				criteria: true,
-			},
-		});
-
-		if (!problem) {
-			throw new Error(`Problem with id '${problemId}' not found`);
-		}
-
-		const listing = await getPrisma().marketplaceListing.upsert({
-			where: { problemId },
-			update: {},
-			create: {
-				problemId,
-				publisherId: problem.author,
-				publisherName: problem.author,
-				isVerified: false,
-				isFeatured: false,
-			},
-			include: {
-				problem: {
-					include: {
-						templates: true,
-						regions: true,
-						criteria: true,
-					},
-				},
-				reviews: true,
-			},
-		});
-
-		return this.toMarketplaceProblem(listing);
-	}
-
-	async unpublish(marketplaceId: string): Promise<void> {
-		await getPrisma().marketplaceListing.delete({
-			where: { id: marketplaceId },
-		});
-	}
-
-	async search(
-		query: MarketplaceSearchQuery,
-	): Promise<MarketplaceSearchResult> {
-		const where: Record<string, unknown> = {};
-
-		if (query.query) {
-			where.problem = {
-				OR: [
-					{ title: { contains: query.query, mode: "insensitive" } },
-					{ overview: { contains: query.query, mode: "insensitive" } },
-					{ tags: { hasSome: [query.query.toLowerCase()] } },
-				],
-			};
-		}
-		if (query.type) {
-			where.problem = {
-				...(where.problem as object),
-				type: toPrismaType(query.type),
-			};
-		}
-		if (query.category) {
-			where.problem = {
-				...(where.problem as object),
-				category: toPrismaCategory(query.category),
-			};
-		}
-		if (query.difficulty) {
-			where.problem = {
-				...(where.problem as object),
-				difficulty: toPrismaDifficulty(query.difficulty),
-			};
-		}
-		if (query.provider) {
-			where.problem = {
-				...(where.problem as object),
-				providers: { has: toPrismaCloudProvider(query.provider) },
-			};
-		}
-
-		let orderBy: Record<string, "asc" | "desc"> = { downloadCount: "desc" };
-		switch (query.sortBy) {
-			case "rating":
-				orderBy = { averageRating: "desc" };
-				break;
-			case "downloads":
-				orderBy = { downloadCount: "desc" };
-				break;
-			case "newest":
-				orderBy = { publishedAt: "desc" };
-				break;
-		}
-
-		const page = query.page || 1;
-		const limit = query.limit || 20;
-		const skip = (page - 1) * limit;
-
-		const p = getPrisma();
-		const [listings, total] = await Promise.all([
-			p.marketplaceListing.findMany({
-				where,
-				include: {
-					problem: {
-						include: {
-							templates: true,
-							regions: true,
-							criteria: true,
-						},
-					},
-					reviews: true,
-				},
-				orderBy,
-				skip,
-				take: limit,
-			}),
-			p.marketplaceListing.count({ where }),
-		]);
-
-		return {
-			problems: listings.map(this.toMarketplaceProblem),
-			total,
-			page,
-			limit,
-			hasMore: skip + limit < total,
-		};
-	}
-
-	async findById(marketplaceId: string): Promise<MarketplaceProblem | null> {
-		const listing = await getPrisma().marketplaceListing.findUnique({
-			where: { id: marketplaceId },
-			include: {
-				problem: {
-					include: {
-						templates: true,
-						regions: true,
-						criteria: true,
-					},
-				},
-				reviews: true,
-			},
-		});
-
-		return listing ? this.toMarketplaceProblem(listing) : null;
-	}
-
-	async incrementDownloads(marketplaceId: string): Promise<void> {
-		await getPrisma().marketplaceListing.update({
-			where: { id: marketplaceId },
-			data: {
-				downloadCount: { increment: 1 },
-			},
-		});
-	}
-
-	async addReview(
-		marketplaceId: string,
-		review: {
-			userId: string;
-			userName: string;
-			rating: number;
-			comment: string;
-		},
-	): Promise<void> {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		await getPrisma().$transaction(async (tx: any) => {
-			await tx.marketplaceReview.create({
-				data: {
-					listingId: marketplaceId,
-					userId: review.userId,
-					userName: review.userName,
-					rating: review.rating,
-					comment: review.comment,
-				},
-			});
-
-			const reviews = await tx.marketplaceReview.findMany({
-				where: { listingId: marketplaceId },
-			});
-
-			const avgRating =
-				reviews.reduce(
-					(sum: number, r: { rating: number }) => sum + r.rating,
-					0,
-				) / reviews.length;
-
-			await tx.marketplaceListing.update({
-				where: { id: marketplaceId },
-				data: {
-					averageRating: avgRating,
-					reviewCount: reviews.length,
-				},
-			});
-		});
-	}
-
-	private toMarketplaceProblem(
-		listing: MarketplaceListing & {
-			problem: PrismaProblem & {
-				templates?: {
-					provider: string;
-					type: string;
-					path: string;
-					parameters: unknown;
-				}[];
-				regions?: { provider: string; regions: string[] }[];
-				criteria?: {
-					name: string;
-					description: string | null;
-					weight: number;
-					maxPoints: number;
-				}[];
-			};
-			reviews?: { rating: number }[];
-		},
-	): MarketplaceProblem {
-		const problem = toProblem(listing.problem);
-		return {
-			...problem,
-			marketplaceId: listing.id,
-			status: "published",
-			publishedAt: listing.publishedAt,
-			downloadCount: listing.downloadCount,
-			rating: listing.averageRating,
-			reviews:
-				listing.reviews?.map((r) => ({
-					id: "review",
-					userId: "",
-					userName: "",
-					rating: r.rating,
-					comment: "",
-					createdAt: new Date(),
-				})) || [],
-		};
 	}
 }
 
