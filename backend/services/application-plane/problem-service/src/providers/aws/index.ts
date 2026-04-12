@@ -247,8 +247,7 @@ export class AWSCloudProvider implements ICloudProvider {
 		} catch (error) {
 			if (
 				error instanceof Error &&
-				(error.message.includes("does not exist") ||
-					error.message.includes("does not exist"))
+				error.message.includes("does not exist")
 			) {
 				return null;
 			}

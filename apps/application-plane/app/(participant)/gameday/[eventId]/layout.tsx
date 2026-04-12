@@ -262,8 +262,8 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                 },
               ]}
               i18nStrings={{
-                overflowMenuTriggerText: 'その他',
-                overflowMenuTitleText: 'すべて',
+                overflowMenuTriggerText: locale === 'ja' ? 'その他' : 'More',
+                overflowMenuTitleText: locale === 'ja' ? 'すべて' : 'All',
               }}
             />
             {notifOpen && (

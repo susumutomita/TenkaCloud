@@ -89,17 +89,22 @@ app.get(
   }),
   async (c) => {
     try {
-      const [totalTenants, listResult] = await Promise.all([
-        tenantRepository.count(),
-        tenantRepository.list({ limit: 100 }),
-      ]);
+      // Paginate through all tenants so counters and totalTenants use the same scope
+      const allTenants: Awaited<ReturnType<typeof tenantRepository.list>>['tenants'] = [];
+      let lastKey: Record<string, unknown> | undefined;
+      do {
+        const page = await tenantRepository.list({ limit: 500, lastKey });
+        allTenants.push(...page.tenants);
+        lastKey = page.lastKey;
+      } while (lastKey);
 
+    const totalTenants = allTenants.length;
     let activeTenants = 0;
     let failedCount = 0;
     let inProgressCount = 0;
     let completedCount = 0;
     let pendingCount = 0;
-    for (const t of listResult.tenants) {
+    for (const t of allTenants) {
       if (t.status === 'ACTIVE') activeTenants++;
       if (t.provisioningStatus === 'FAILED') failedCount++;
       else if (t.provisioningStatus === 'IN_PROGRESS') inProgressCount++;
