@@ -27,6 +27,16 @@ vi.mock('@/lib/api/gameday', () => ({
   getLeaderboard: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/lib/notifications', () => ({
+  useNotifications: () => ({
+    notifications: [],
+    unreadCount: 0,
+    markAsRead: vi.fn(),
+    markAllRead: vi.fn(),
+    clearAll: vi.fn(),
+  }),
+}));
+
 vi.mock('@/components/notifications/notification-panel', () => ({
   NotificationPanel: () => <div data-testid="notification-panel" />,
 }));

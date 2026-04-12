@@ -2,6 +2,13 @@
  * Notification Panel
  *
  * Cloudscape Flashbar による通知表示、ベルアイコン + ドロップダウンパネル
+ *
+ * Usage A (self-contained): <NotificationPanel />
+ *   Renders its own bell trigger and manages open/close state internally.
+ *
+ * Usage B (controlled): <NotificationPanel isOpen={open} onClose={handleClose} />
+ *   Renders only the dropdown panel; caller owns the trigger and open state.
+ *   Use this when the bell lives inside a Cloudscape TopNavigation utility.
  */
 
 'use client';
@@ -16,6 +23,13 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNotifications } from '@/lib/notifications';
 import type { Notification, NotificationSeverity } from '@/lib/notifications';
+
+interface NotificationPanelProps {
+  /** Controlled mode: panel open state managed by the caller. */
+  isOpen?: boolean;
+  /** Controlled mode: called when the panel should close (outside click). */
+  onClose?: () => void;
+}
 
 function mapSeverityToFlashType(
   severity: NotificationSeverity,
@@ -40,32 +54,39 @@ function formatTimestamp(timestamp: string): string {
   });
 }
 
-export function NotificationPanel() {
+export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
   const { notifications, unreadCount, markAsRead, markAllRead, clearAll } =
     useNotifications();
 
-  const [isOpen, setIsOpen] = useState(false);
+  const controlled = isOpen !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const panelOpen = controlled ? isOpen : internalOpen;
+
   const panelRef = useRef<HTMLDivElement>(null);
 
   const handleToggle = useCallback(() => {
-    setIsOpen((prev) => !prev);
+    setInternalOpen((prev) => !prev);
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!panelOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       if (
         panelRef.current &&
         !panelRef.current.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        if (controlled) {
+          onClose?.();
+        } else {
+          setInternalOpen(false);
+        }
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [panelOpen, controlled, onClose]);
 
   const flashItems: FlashbarProps.MessageDefinition[] = useMemo(
     () =>
@@ -88,6 +109,71 @@ export function NotificationPanel() {
     [notifications, markAsRead],
   );
 
+  const dropdown = panelOpen ? (
+    <div
+      data-testid="notification-dropdown"
+      style={{
+        width: '420px',
+        maxHeight: '500px',
+        overflowY: 'auto',
+        background: 'var(--color-background-container-content)',
+        border: '1px solid var(--color-border-divider-default)',
+        borderRadius: '8px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+      }}
+    >
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--color-border-divider-default)',
+        }}
+      >
+        <Header
+          variant="h3"
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={markAllRead}
+                disabled={unreadCount === 0}
+              >
+                すべて既読
+              </Button>
+              <Button
+                variant="link"
+                onClick={clearAll}
+                disabled={notifications.length === 0}
+              >
+                すべて削除
+              </Button>
+            </SpaceBetween>
+          }
+        >
+          通知
+        </Header>
+      </div>
+      <div style={{ padding: '8px' }}>
+        {notifications.length === 0 ? (
+          <Box textAlign="center" padding="l" color="text-body-secondary">
+            通知はありません
+          </Box>
+        ) : (
+          <Flashbar items={flashItems} />
+        )}
+      </div>
+    </div>
+  ) : null;
+
+  /* Controlled mode: only render the dropdown (no trigger button). */
+  if (controlled) {
+    return (
+      <div ref={panelRef} data-testid="notification-panel">
+        {dropdown}
+      </div>
+    );
+  }
+
+  /* Self-contained mode: render bell trigger + dropdown. */
   return (
     <div
       ref={panelRef}
@@ -126,62 +212,9 @@ export function NotificationPanel() {
         {unreadCount > 0 && <Badge color="red">{`${unreadCount}`}</Badge>}
       </button>
 
-      {isOpen && (
-        <div
-          data-testid="notification-dropdown"
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: '100%',
-            width: '420px',
-            maxHeight: '500px',
-            overflowY: 'auto',
-            zIndex: 1000,
-            background: 'var(--color-background-container-content)',
-            border: '1px solid var(--color-border-divider-default)',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          }}
-        >
-          <div
-            style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--color-border-divider-default)',
-            }}
-          >
-            <Header
-              variant="h3"
-              actions={
-                <SpaceBetween direction="horizontal" size="xs">
-                  <Button
-                    variant="link"
-                    onClick={markAllRead}
-                    disabled={unreadCount === 0}
-                  >
-                    すべて既読
-                  </Button>
-                  <Button
-                    variant="link"
-                    onClick={clearAll}
-                    disabled={notifications.length === 0}
-                  >
-                    すべて削除
-                  </Button>
-                </SpaceBetween>
-              }
-            >
-              通知
-            </Header>
-          </div>
-          <div style={{ padding: '8px' }}>
-            {notifications.length === 0 ? (
-              <Box textAlign="center" padding="l" color="text-body-secondary">
-                通知はありません
-              </Box>
-            ) : (
-              <Flashbar items={flashItems} />
-            )}
-          </div>
+      {dropdown && (
+        <div style={{ position: 'absolute', right: 0, top: '100%' }}>
+          {dropdown}
         </div>
       )}
     </div>
