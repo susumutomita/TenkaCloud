@@ -1,5 +1,9 @@
 # TenkaCloud フルプラットフォーム完成 設計書
 
+> Historical Plan
+> この文書は 2026-02-09 時点の設計計画です。現行仕様の正本ではありません。現在のアーキテクチャ境界は [`docs/architecture/harness.md`](../architecture/harness.md) と [`docs/architecture/architecture.md`](../architecture/architecture.md) を参照してください。
+> 特に `EKS`, `ECS`, `RDS`, `NAT Gateway` を Control Plane / tenant Application Plane の前提にする記述は、現行の `INVARIANT_SERVERLESS_ONLY` では採用しません。
+
 ## 概要
 
 TenkaCloud のメインパス（テナント作成→ Application Plane 自動プロビジョニング→問題デプロイ→バトル→自動採点→リーダーボード）を完成させ、100 問の構築型問題を登録する。

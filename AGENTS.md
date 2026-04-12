@@ -12,14 +12,18 @@ make start      # 全サービス起動（Docker + UI + Backend 11 サービス�
 ## 品質ゲート
 
 ```bash
+bun scripts/architecture-harness.ts --staged --fail-on=error
 make before-commit   # lint, format, typecheck, test (99％+ coverage), build
 ```
 
 **これが通らない限りタスクは未完了。** 失敗したらコードを修正する（設定ファイルを変えない）。
 
+アーキテクチャ原則の正本は [`docs/architecture/harness.md`](./docs/architecture/harness.md) です。`Codex` と `Claude Code` のどちらでも、この script を通らない変更は未完了です。
+
 大きい変更や新機能の前後では、次も実行する。
 
 ```bash
+bun scripts/architecture-harness.ts --staged --fail-on=error
 bun scripts/ai-improvement-loop.ts --write --fail-on=high
 ```
 
@@ -123,6 +127,8 @@ vi.mock("@tenkacloud/dynamodb", () => ({
 ### ハーネス優先
 
 - 先に壊れるテストや検出ルールを書く
+- 先に [`docs/architecture/harness.md`](./docs/architecture/harness.md) の invariant を確認する
+- `tenant 作成 -> provisioning -> app endpoint -> event -> competitor account -> problem deploy -> participant join -> attack / defense / vote / aws-console` の one-pass を完了条件にする
 - 1 テストケースに `expect` を詰め込みすぎない（アサーションルーレット禁止）
 - route handler で fallback を重複実装しない
 - UI から直接 `fetch` や `process.env.*API_URL` を読まない

@@ -1,6 +1,6 @@
 # TenkaCloud Quick Start
 
-この手順は、ローカル開発を最短で始めるための正本です。
+この手順は、ローカル開発を最短で始めるための正本です。アーキテクチャ不変条件は [architecture/harness.md](./architecture/harness.md) を参照してください。
 
 ## 前提
 
@@ -79,6 +79,21 @@ bun run dev
 ```
 
 ## 動作確認
+
+### one-pass の最小確認
+
+ローカルで「一部ページが開く」だけでは完了扱いにしません。最低限、次の one-pass を確認します。
+
+1. Control Plane で tenant を作成する
+2. provisioning を開始し、tenant status が進むことを確認する
+3. tenant の Application Plane に到達する
+4. event を作成する
+5. competitor account を登録する
+6. problem を deploy する
+7. participant として event に参加する
+8. `attack / defense / vote / aws-console` が実リソース前提で動くことを確認する
+
+この one-pass は `docs/architecture/harness.md` の `ONE_PASS_LOCAL` と同じです。
 
 ### tenant-management
 

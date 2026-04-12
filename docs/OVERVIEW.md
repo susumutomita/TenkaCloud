@@ -1,6 +1,6 @@
 # TenkaCloud 概要
 
-この文書は、TenkaCloud の責務分割と文書の入口を短く把握するための概要です。詳細な手順は [QUICKSTART.md](./QUICKSTART.md)、設計判断は [architecture/architecture.md](./architecture/architecture.md) を参照してください。
+この文書は、TenkaCloud の責務分割と文書の入口を短く把握するための概要です。詳細な手順は [QUICKSTART.md](./QUICKSTART.md)、設計判断は [architecture/architecture.md](./architecture/architecture.md)、不変条件は [architecture/harness.md](./architecture/harness.md) を参照してください。
 
 ## 何を作っているか
 
@@ -15,7 +15,9 @@ TenkaCloud は、クラウド競技イベントを常設化するための OSS �
 - テナント管理
 - 設定管理
 - 共有 API への導線
-- 今後の監査、プロビジョニング、全体運用
+- 監査、プロビジョニング要求、全体運用
+
+Control Plane は tenant manager です。tenant runtime や problem runtime を直接ホストしません。
 
 実体は以下のとおりです。
 
@@ -30,6 +32,10 @@ TenkaCloud は、クラウド競技イベントを常設化するための OSS �
 - Battle セッション
 - 問題閲覧と挑戦
 - ランキング、プロフィール
+- tenant admin UI
+- competitor AWS account への問題デプロイ
+
+Application Plane は tenant ごとに 1 つです。tenant は company 単位であり、department 単位では分けません。
 
 実体は以下のとおりです。
 
@@ -83,6 +89,7 @@ TenkaCloud/
 
 - UI の仕様は `apps/*/app` とそのテストを優先して確認する
 - API の仕様は `backend/services/**/src` を優先して確認する
+- アーキテクチャ境界と one-pass 完了条件は `docs/architecture/harness.md` を優先する
 - 歴史的な計画や草案は `Plan.md` や `docs/plans/` に残るが、仕様の正本ではない
 
 ## 次に読む文書

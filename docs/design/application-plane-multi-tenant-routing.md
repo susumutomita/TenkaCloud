@@ -1,5 +1,9 @@
 # Application Plane マルチテナントルーティング設計書
 
+> Historical Design Note
+> この文書は管理者 UI と tenant 識別の初期設計メモです。現行仕様の正本ではありません。tenant 境界、problem runtime 境界、one-pass 完了条件は [`docs/architecture/harness.md`](../architecture/harness.md) を優先してください。
+> 特に「Challenge AWS デプロイ」は Application Plane から competitor AWS account へ `AssumeRole + ExternalId + CloudFormation` で行う前提で読み替えます。
+
 ## Overview
 
 Application Plane にマルチテナントルーティングと管理者機能を実装する。
