@@ -22,6 +22,7 @@ import {
 import type { GameState } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { NotificationPanel } from '@/components/notifications/notification-panel';
+import { useNotifications } from '@/lib/notifications';
 import { useI18n } from '@/lib/i18n';
 
 interface GamedayLayoutProps {
@@ -33,11 +34,13 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { eventId, teamId, teamName } = useGamedaySession();
+  const { unreadCount } = useNotifications();
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [score, setScore] = useState<number | undefined>();
   const [rank, setRank] = useState<number | undefined>();
   const [awsConsoleLoading, setAwsConsoleLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const basePath = `/gameday/${eventId}`;
 
@@ -210,6 +213,29 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                     ]
                   : []),
                 {
+                  type: 'button' as const,
+                  iconSvg: (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                  ),
+                  badge: unreadCount > 0,
+                  ariaLabel: `通知${unreadCount > 0 ? ` (${unreadCount}件の未読)` : ''}`,
+                  disableUtilityCollapse: true,
+                  onClick: () => setNotifOpen((prev) => !prev),
+                },
+                {
                   type: 'menu-dropdown' as const,
                   text: locale.toUpperCase(),
                   ariaLabel:
@@ -240,17 +266,21 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
                 overflowMenuTitleText: 'すべて',
               }}
             />
-            <div
-              style={{
-                position: 'absolute',
-                right: '320px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                zIndex: 1000,
-              }}
-            >
-              <NotificationPanel />
-            </div>
+            {notifOpen && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: '56px',
+                  right: '8px',
+                  zIndex: 2000,
+                }}
+              >
+                <NotificationPanel
+                  isOpen={notifOpen}
+                  onClose={() => setNotifOpen(false)}
+                />
+              </div>
+            )}
           </>
         ) : null}
       </div>
