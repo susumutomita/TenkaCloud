@@ -1,8 +1,7 @@
 /**
  * GameDay Layout
  *
- * Cloudscape Design System — AWS GameDay 風 AppLayout + SideNavigation
- * カスタムヘッダーに Score/Rank/Team 表示
+ * Cloudscape Design System — TopNavigation + AppLayout + SideNavigation
  */
 
 'use client';
@@ -10,8 +9,8 @@
 import AppLayout from '@cloudscape-design/components/app-layout';
 import SideNavigation from '@cloudscape-design/components/side-navigation';
 import type { SideNavigationProps } from '@cloudscape-design/components/side-navigation';
+import TopNavigation from '@cloudscape-design/components/top-navigation';
 import '@cloudscape-design/global-styles/index.css';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -38,9 +37,13 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
   const [score, setScore] = useState<number | undefined>();
   const [rank, setRank] = useState<number | undefined>();
   const [awsConsoleLoading, setAwsConsoleLoading] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const basePath = `/gameday/${eventId}`;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     if (!eventId || !teamId) return;
@@ -168,172 +171,111 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
       : `${t('gameday.rank')}: --`;
 
   return (
-    <>
-      <div id="gameday-top-nav">
-        <header className="sticky top-0 z-50 border-b-2 border-hn-accent/40 bg-surface-3/95 shadow-md backdrop-blur-sm">
-          <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
-            <div className="flex min-h-16 items-center gap-4 py-3">
-              <Link
-                href={basePath}
-                className="flex shrink-0 items-center space-x-3"
-                onClick={(e) => {
+    <div className="awsui-dark-mode">
+      <div id="gameday-top-nav" style={{ position: 'relative', minHeight: 72 }}>
+        {mounted ? (
+          <>
+            <TopNavigation
+              identity={{
+                href: basePath,
+                title: 'TenkaCloud',
+                onFollow: (e) => {
                   e.preventDefault();
                   router.push(basePath);
-                }}
-              >
-                <div className="w-8 h-8 bg-hn-accent rounded-lg flex items-center justify-center shadow-brutal-sm">
-                  <span className="text-surface-0 font-black text-lg">T</span>
-                </div>
-                <span className="font-bold text-xl text-text-primary">
-                  TenkaCloud
-                </span>
-                <span className="hidden text-sm font-medium text-text-secondary md:block">
-                  {t('gameday.title')}
-                </span>
-              </Link>
-
-              <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex">
-                <span className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
-                  Incident Drill
-                </span>
-                {gameState && (
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${gameState.isRunning ? 'bg-emerald-500 text-white' : 'bg-surface-2 text-text-secondary'}`}
-                  >
-                    {gameState.isRunning
-                      ? t('gameday.live')
-                      : t('gameday.stopped')}
-                  </span>
-                )}
-                {gameState?.scoreWeight === 'high' && (
-                  <span className="rounded-full bg-hn-accent px-3 py-1 text-xs font-bold text-white">
-                    2x SCORE
-                  </span>
-                )}
-                <div className="grid min-w-[220px] grid-cols-2 gap-2">
-                  <div className="rounded-2xl border border-border bg-surface-2 px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-                      {t('gameday.score')}
-                    </div>
-                    <div className="text-sm font-semibold text-text-primary">
-                      {scoreDisplay.replace(`${t('gameday.score')}: `, '')}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-surface-2 px-3 py-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-                      {t('gameday.rank')}
-                    </div>
-                    <div className="text-sm font-semibold text-text-primary">
-                      {rankDisplay.replace(`${t('gameday.rank')}: `, '')}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="ml-auto flex items-center gap-3">
-                <NotificationPanel />
-
-                <div className="hidden items-center gap-2 rounded-full border border-border bg-surface-2 px-3 py-1 sm:flex">
-                  <button
-                    type="button"
-                    className={`text-sm ${locale === 'ja' ? 'text-text-primary' : 'text-text-muted'}`}
-                    onClick={() => setLocale('ja')}
-                  >
-                    JA
-                  </button>
-                  <span className="text-text-muted">/</span>
-                  <button
-                    type="button"
-                    className={`text-sm ${locale === 'en' ? 'text-text-primary' : 'text-text-muted'}`}
-                    onClick={() => setLocale('en')}
-                  >
-                    EN
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="flex items-center space-x-2 rounded-full border border-border bg-surface-2 px-2 py-1.5 text-text-secondary transition-colors hover:text-text-primary"
-                    aria-expanded={isMenuOpen}
-                    aria-haspopup="true"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-hn-accent text-surface-0 font-medium">
-                      {(teamName || teamId || 'T').charAt(0).toUpperCase()}
-                    </div>
-                    <span className="hidden text-sm font-medium sm:block">
-                      {teamName || teamId || 'Team'}
-                    </span>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-
-                  {isMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-border bg-surface-elevated py-1 shadow-lg">
-                      <Link
-                        href="/events"
-                        className="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        {t('gameday.events')}
-                      </Link>
-                      <Link
-                        href={`/events/${eventId}`}
-                        className="block px-4 py-2 text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors"
-                        onClick={() => setIsMenuOpen(false)}
-                      >
-                        {t('gameday.eventDetail')}
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-      </div>
-      <div className="awsui-dark-mode">
-        <AppLayout
-          navigation={
-            <SideNavigation
-              header={{ text: t('gameday.title'), href: basePath }}
-              activeHref={activeHref}
-              items={navItems}
-              onFollow={(event) => {
-                event.preventDefault();
-                if (event.detail.href === `${basePath}/aws-console`) {
-                  openAwsConsole();
-                } else if (!event.detail.external) {
-                  router.push(event.detail.href);
-                }
+                },
+              }}
+              utilities={[
+                {
+                  type: 'button' as const,
+                  text: scoreDisplay,
+                  disableUtilityCollapse: true,
+                },
+                {
+                  type: 'button' as const,
+                  text: rankDisplay,
+                  disableUtilityCollapse: true,
+                },
+                ...(gameState?.isRunning
+                  ? [
+                      {
+                        type: 'button' as const,
+                        text: t('gameday.live'),
+                        disableUtilityCollapse: true,
+                      },
+                    ]
+                  : []),
+                {
+                  type: 'menu-dropdown' as const,
+                  text: locale.toUpperCase(),
+                  ariaLabel:
+                    locale === 'ja' ? '言語切り替え' : 'Switch language',
+                  items: [
+                    { id: 'ja', text: 'JA' },
+                    { id: 'en', text: 'EN' },
+                  ],
+                  onItemClick: (e) => setLocale(e.detail.id as 'ja' | 'en'),
+                },
+                {
+                  type: 'menu-dropdown' as const,
+                  text: teamName || teamId || 'Team',
+                  iconName: 'user-profile' as const,
+                  items: [
+                    { id: 'events', text: t('gameday.events') },
+                    { id: 'event-detail', text: t('gameday.eventDetail') },
+                  ],
+                  onItemClick: (e) => {
+                    if (e.detail.id === 'events') router.push('/events');
+                    if (e.detail.id === 'event-detail')
+                      router.push(`/events/${eventId}`);
+                  },
+                },
+              ]}
+              i18nStrings={{
+                overflowMenuTriggerText: 'その他',
+                overflowMenuTitleText: 'すべて',
               }}
             />
-          }
-          toolsHide
-          content={children}
-          headerSelector="#gameday-top-nav"
-          ariaLabels={{
-            navigation: t('gameday.menu'),
-            navigationClose:
-              locale === 'ja' ? 'ナビゲーションを閉じる' : 'Close navigation',
-            navigationToggle:
-              locale === 'ja' ? 'ナビゲーションを開く' : 'Open navigation',
-          }}
-        />
+            <div
+              style={{
+                position: 'absolute',
+                right: '200px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 1000,
+              }}
+            >
+              <NotificationPanel />
+            </div>
+          </>
+        ) : null}
       </div>
-    </>
+      <AppLayout
+        navigation={
+          <SideNavigation
+            header={{ text: t('gameday.title'), href: basePath }}
+            activeHref={activeHref}
+            items={navItems}
+            onFollow={(event) => {
+              event.preventDefault();
+              if (event.detail.href === `${basePath}/aws-console`) {
+                openAwsConsole();
+              } else if (!event.detail.external) {
+                router.push(event.detail.href);
+              }
+            }}
+          />
+        }
+        toolsHide
+        content={children}
+        headerSelector="#gameday-top-nav"
+        ariaLabels={{
+          navigation: t('gameday.menu'),
+          navigationClose:
+            locale === 'ja' ? 'ナビゲーションを閉じる' : 'Close navigation',
+          navigationToggle:
+            locale === 'ja' ? 'ナビゲーションを開く' : 'Open navigation',
+        }}
+      />
+    </div>
   );
 }

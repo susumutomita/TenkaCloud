@@ -1,5 +1,9 @@
 # テナントプラン切り替え機能 & 管理画面導線設計
 
+> Historical Design Note
+> この文書は tenant detail UI と plan 表示の設計メモです。現行仕様の正本ではありません。`専用環境` や `POOL → SILO 再プロビジョニング` の記述は、現在の `INVARIANT_SERVERLESS_ONLY` と `INVARIANT_ONE_APPLICATION_PLANE_PER_TENANT` を優先して再評価してください。
+> 現行の正本は [`docs/architecture/harness.md`](../architecture/harness.md) と [`docs/architecture/architecture.md`](../architecture/architecture.md) です。
+
 ## 概要
 
 テナントのプラン（Tier）切り替え機能と、各テナント専用の Application Plane への導線を設計する。

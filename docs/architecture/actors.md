@@ -4,6 +4,8 @@
 
 TenkaCloud は Control Plane と Application Plane の 2 層構造を持つマルチテナント SaaS です。問題はマーケットプレイス型で提供され、問題作成者が公開した問題をテナントが利用します。
 
+責務境界の正本は [`docs/architecture/harness.md`](./harness.md) です。特に `INVARIANT_TENANT_IS_COMPANY`, `INVARIANT_ONE_APPLICATION_PLANE_PER_TENANT`, `INVARIANT_PROBLEM_RUNTIME_IN_COMPETITOR_AWS_ACCOUNTS` を破る運用は採りません。
+
 ## アクター一覧
 
 | 層 | アクター | 説明 |
@@ -19,12 +21,7 @@ TenkaCloud は Control Plane と Application Plane の 2 層構造を持つマ�
 
 Control Plane は TenkaCloud プラットフォーム全体を管理する共有層です。テナント管理、問題マーケットプレイス、課金などのプラットフォーム機能を提供します。
 
-### テナントの種類
-
-| 種類 | 説明 | ユースケース |
-|------|------|-------------|
-| マルチテナント | 共有インフラ上で複数テナントが稼働 | 小〜中規模、コスト重視 |
-| 専用環境 | テナント専用のインフラを割り当て | 大規模、セキュリティ要件が高い |
+tenant は「各社」を表します。部署単位で tenant を増やしません。Control Plane は tenant manager であり、tenant runtime host ではありません。
 
 ### Platform Admin (プラットフォーム管理者)
 
@@ -33,7 +30,7 @@ TenkaCloud プラットフォーム全体を管理するスーパーユーザー
 **できること**
 
 - マルチテナント環境でテナントを作成する
-- 専用環境でテナントをプロビジョニングする
+- event-driven で tenant Application Plane のプロビジョニング要求を出す
 - テナントを停止・再開する
 - テナントを削除する
 - 全テナントの利用状況を確認する
@@ -64,6 +61,8 @@ TenkaCloud プラットフォーム全体を管理するスーパーユーザー
 
 Application Plane は各テナント固有のビジネスロジックを実行する層です。イベント管理、競技参加、スコアリングなどの機能を提供します。テナントごとに独立したデータを持ちます。
 
+Application Plane は tenant ごとに 1 つで、各社に対して 1 Plane を持ちます。問題 runtime は Application Plane ではなく competitor AWS account に作成します。
+
 ### Tenant Admin (テナント管理者)
 
 特定テナント内でイベント・参加者を管理する管理者です。
@@ -76,6 +75,7 @@ Application Plane は各テナント固有のビジネスロジックを実行�
 - マーケットプレイスから問題を検索・追加する
 - イベント内の問題順序を設定する
 - 問題をクラウド環境にデプロイする
+- competitor AWS account に `AssumeRole + ExternalId + CloudFormation` で問題を配備する
 - 問題環境を削除・リセットする
 - 参加者を招待・削除する
 - 参加者のロールを変更する

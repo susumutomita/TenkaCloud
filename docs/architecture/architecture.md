@@ -6,6 +6,8 @@
 
 TenkaCloud は、Control Plane と Application Plane を分離したマルチテナント構成を採用しています。
 
+この文書だけで原則を持たず、アーキテクチャ不変条件の正本は [`docs/architecture/harness.md`](./harness.md) とします。`Codex` と `Claude Code` のどちらが触っても、`bun scripts/architecture-harness.ts --staged --fail-on=error` を通らない変更は受け入れません。
+
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        TenkaCloud                           │
@@ -27,6 +29,17 @@ TenkaCloud は、Control Plane と Application Plane を分離したマルチテ
 
 ## 2. プレーンごとの責務
 
+## Architecture Invariants
+
+- `INVARIANT_SERVERLESS_ONLY`
+- `INVARIANT_TENANT_IS_COMPANY`
+- `INVARIANT_DEPARTMENT_IS_NOT_TENANT`
+- `INVARIANT_ONE_APPLICATION_PLANE_PER_TENANT`
+- `INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME`
+- `INVARIANT_PROBLEM_RUNTIME_IN_COMPETITOR_AWS_ACCOUNTS`
+- `ONE_PASS_LOCAL`
+- `ONE_PASS_AWS`
+
 ### Control Plane
 
 共有運用面を担います。
@@ -35,6 +48,9 @@ TenkaCloud は、Control Plane と Application Plane を分離したマルチテ
 - 運用設定
 - 共通管理 UI
 - 登録、プロビジョニング、ユーザー管理の導線
+- tenant provisioning request と監査
+
+Control Plane は tenant manager であり、tenant runtime host ではありません。tenant ごとの実行系 endpoint を直接抱え込まず、event-driven provisioning で tenant Application Plane を起動・追跡します。
 
 主要実体は以下のとおりです。
 
@@ -57,6 +73,10 @@ TenkaCloud は、Control Plane と Application Plane を分離したマルチテ
 - 問題管理
 - スコアリング
 - リーダーボード
+- tenant admin UI と participant UI
+- competitor AWS account への問題デプロイ
+
+Application Plane は tenant ごとに 1 つです。各社ごとに 1 Plane を持ち、部署ごとには分けません。
 
 主要実体は以下のとおりです。
 
@@ -114,6 +134,8 @@ Hono ベースのサービスが多く、ルートの `package.json` の `dev` �
 
 現行のローカル開発では DynamoDB 互換のローカルエミュレータを使用します。problem-service は Prisma を含みますが、リポジトリ全体の唯一のデータ前提としては固定していません。各サービスの実装を優先してください。
 
+Control Plane と Application Plane の正本アーキテクチャは serverless only です。tenant runtime や platform runtime に `ECS`, `EKS`, `RDS`, `NAT Gateway` を持ち込まない方針を採ります。
+
 ## 6. 認証
 
 - 本番相当: Auth0
@@ -154,3 +176,5 @@ Hono ベースのサービスが多く、ルートの `package.json` の `dev` �
 5. `Plan.md` と `docs/plans/*`
 
 `Plan.md` と `docs/plans/*` は履歴や構想が混ざるため、現在仕様の正本には使いません。
+
+アーキテクチャの境界やワンパス完了条件を判断するときは、必ず [`docs/architecture/harness.md`](./harness.md) を参照します。

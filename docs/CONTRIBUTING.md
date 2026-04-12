@@ -26,16 +26,20 @@ make start     # 全サービス起動
 1. Issue を確認し、ブランチを作成する
 2. **テストを先に書く**（TDD）
 3. 実装する
+4. `bun scripts/architecture-harness.ts --staged --fail-on=error` を通す
 4. `make before-commit` を通す
 5. PR を作成する
 
 ```bash
 git checkout -b feat/your-feature
 # テストを書く → 実装する → 繰り返す
+bun scripts/architecture-harness.ts --staged --fail-on=error
 make before-commit   # 必須。通らなければ PR を出さない
 git push -u origin HEAD
 gh pr create
 ```
+
+アーキテクチャ原則の正本は [`docs/architecture/harness.md`](./architecture/harness.md) です。`Codex` と `Claude Code` のどちらを使っても、repo 内のこのハーネスを優先します。
 
 ## 品質基準
 

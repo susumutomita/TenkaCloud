@@ -6,6 +6,8 @@
 
 タスク完了前に必ず `make before-commit` を実行。lint・format・typecheck・test（カバレッジ 99％+）・build がすべて通るまで未完了。失敗したら原因を特定してコードを修正する（設定ファイルを変更しない）。
 
+その前に `bun scripts/architecture-harness.ts --staged --fail-on=error` を通す。アーキテクチャ原則の正本は [`docs/architecture/harness.md`](./docs/architecture/harness.md) で、これは `Codex` と `Claude Code` の両方に共通です。
+
 ## コマンド体系
 
 ```bash
@@ -41,6 +43,12 @@ make help             # 全コマンド一覧
 ### PR
 
 小さい意味のある単位。PR 作成まで含めてタスク完了。`make before-commit` 通過が前提。
+
+### ハーネス優先
+
+- 仕様より先に [`docs/architecture/harness.md`](./docs/architecture/harness.md) の invariant を確認する
+- `tenant 作成 -> provisioning -> tenant app endpoint -> event 作成 -> competitor account 登録 -> problem deploy -> participant join -> attack / defense / vote / aws-console` の one-pass を完了条件にする
+- `local` と `AWS` の両方の受け入れ条件がない変更は未完了として扱う
 
 ## 禁止事項
 
@@ -84,5 +92,6 @@ DynamoDB シングルテーブル設計。PK/SK にテナント ID を含めて�
 - デザインシステム: [Cloudscape](https://cloudscape.design/components/)（全 UI コンポーネントはここから選択）
 - フロントエンドデザイン: `/skill frontend-design`
 - スペック・仕様書: `/skill spec`
+- アーキテクチャハーネス: `docs/architecture/harness.md`
 - アーキテクチャ決定記録: `docs/decisions/`
 - エージェント設定: @AGENTS.md

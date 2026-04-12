@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import GamedayLayout from '../layout';
 
@@ -25,6 +24,7 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
 vi.mock('@/lib/api/gameday', () => ({
   getParticipantGameStatus: vi.fn().mockResolvedValue(null),
   getTeamDashboard: vi.fn().mockResolvedValue(null),
+  getLeaderboard: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('@/components/notifications/notification-panel', () => ({
@@ -45,35 +45,34 @@ describe('GamedayLayout', () => {
     });
   });
 
-  it('ヘッダーが通常ページと同じスタイルを持つべき', async () => {
+  it('トップナビゲーションコンテナが表示されるべき', async () => {
     render(<GamedayLayout>content</GamedayLayout>);
     await waitFor(() => {
-      const header = document.querySelector('#gameday-top-nav header');
-      expect(header).toBeInTheDocument();
-      expect(header).toHaveClass('border-hn-accent/40');
+      expect(document.querySelector('#gameday-top-nav')).toBeInTheDocument();
     });
   });
 
   it('スコアとランクが表示されるべき', async () => {
     render(<GamedayLayout>content</GamedayLayout>);
     await waitFor(() => {
-      expect(screen.getByText('Score')).toBeInTheDocument();
-      expect(screen.getByText('Rank')).toBeInTheDocument();
+      expect(screen.getAllByText(/Score: /).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/Rank: /).length).toBeGreaterThanOrEqual(1);
     });
   });
 
   it('チーム名が表示されるべき', async () => {
     render(<GamedayLayout>content</GamedayLayout>);
     await waitFor(() => {
-      expect(screen.getByText('TeamAlpha')).toBeInTheDocument();
+      expect(screen.getAllByText('TeamAlpha').length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('JA/EN 言語切り替えが表示されるべき', async () => {
+  it('現在の言語が表示されるべき', async () => {
     render(<GamedayLayout>content</GamedayLayout>);
     await waitFor(() => {
-      expect(screen.getByText('JA')).toBeInTheDocument();
-      expect(screen.getByText('EN')).toBeInTheDocument();
+      // locale.toUpperCase() is shown as the dropdown trigger (JA or EN)
+      const localeItems = screen.getAllByText(/^(JA|EN)$/);
+      expect(localeItems.length).toBeGreaterThanOrEqual(1);
     });
   });
 

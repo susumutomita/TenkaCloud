@@ -1,3 +1,4 @@
 #!/usr/bin/env sh
+bun scripts/architecture-harness.ts --staged --fail-on=error
 bun scripts/ai-improvement-loop.ts --staged --fail-on=high
 make before-commit

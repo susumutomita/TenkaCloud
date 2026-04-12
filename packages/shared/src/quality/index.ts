@@ -4,6 +4,13 @@ export {
   hasFindingsAtOrAboveSeverity,
   shouldAnalyzeFile,
 } from './tech-debt-loop';
+export {
+  analyzeArchitecture,
+  formatArchitectureReportAsMarkdown,
+  getArchitectureHarnessAuthoritativePaths,
+  hasArchitectureFindingsAtOrAboveSeverity,
+  shouldAnalyzeArchitectureFile,
+} from './architecture-harness';
 export type {
   DebtFinding,
   DebtHotspot,
@@ -11,3 +18,9 @@ export type {
   ImprovementReport,
   RepositoryFile,
 } from './tech-debt-loop';
+export type {
+  ArchitectureFile,
+  ArchitectureFinding,
+  ArchitectureReport,
+  ArchitectureSeverity,
+} from './architecture-harness';
