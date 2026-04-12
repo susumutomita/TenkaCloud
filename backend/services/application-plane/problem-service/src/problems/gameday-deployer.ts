@@ -6,6 +6,7 @@
  */
 
 import { getAWSProvider } from "../providers/aws";
+import { getLocalProvider } from "../providers/local";
 import {
 	CompetitorAccountRepository,
 	type CompetitorAccountWithMeta,
@@ -61,17 +62,22 @@ const accountRepo = new CompetitorAccountRepository();
 
 export function getGameDayDeploymentValidationError(
 	problem: Pick<Problem, "type" | "deployment">,
+	provider: "aws" | "local" = "aws",
 ): string | null {
 	if (problem.type !== "gameday") {
 		return "Team deployment is only supported for GameDay problems";
 	}
 
-	if (!problem.deployment.providers.includes("aws")) {
-		return "Team deployment requires AWS deployment support";
+	if (provider !== "aws" && provider !== "local") {
+		return `Team deployment supports only aws/local providers, received: ${provider}`;
 	}
 
-	if (!problem.deployment.templates.aws) {
-		return "Team deployment requires an AWS deployment template";
+	if (!problem.deployment.providers.includes(provider)) {
+		return `Team deployment requires ${provider.toUpperCase()} deployment support`;
+	}
+
+	if (!problem.deployment.templates[provider]) {
+		return `Team deployment requires ${provider === "aws" ? "an" : "a"} ${provider.toUpperCase()} deployment template`;
 	}
 
 	return null;
@@ -87,14 +93,22 @@ export async function deployProblemToTeams(
 	eventId: string,
 	concurrency = 10,
 ): Promise<DeploymentJob[]> {
-	const validationError = getGameDayDeploymentValidationError(problem);
-	if (validationError) {
-		throw new Error(validationError);
-	}
-
 	const accounts = await accountRepo.findByEventId(eventId);
 	if (accounts.length === 0) {
 		return [];
+	}
+
+	for (const provider of new Set(accounts.map((account) => account.provider))) {
+		if (provider !== "aws" && provider !== "local") {
+			throw new Error(
+				`Team deployment supports only aws/local competitor accounts, received: ${provider}`,
+			);
+		}
+
+		const validationError = getGameDayDeploymentValidationError(problem, provider);
+		if (validationError) {
+			throw new Error(validationError);
+		}
 	}
 
 	// ジョブを作成
@@ -220,10 +234,13 @@ async function runSingleDeployment(
 
 	try {
 		const credentials = buildCredentials(account);
-		const awsProvider = getAWSProvider();
+		const provider =
+			account.provider === "local" ? getLocalProvider() : getAWSProvider();
+		const templateParameters =
+			problem.deployment.templates[account.provider]?.parameters ?? {};
 
 		// クレデンシャル検証
-		const valid = await awsProvider.validateCredentials(credentials);
+		const valid = await provider.validateCredentials(credentials);
 		if (!valid) {
 			await setStatus(job, "failed", {
 				error: `Invalid credentials for account ${account.accountId}`,
@@ -238,7 +255,7 @@ async function runSingleDeployment(
 			region: account.region,
 			parameters: {
 				TeamName: account.name,
-				...(problem.deployment.templates.aws?.parameters ?? {}),
+				...templateParameters,
 			},
 			tags: {
 				"tenkacloud:event-id": job.eventId,
@@ -250,7 +267,7 @@ async function runSingleDeployment(
 			rollbackOnFailure: true,
 		};
 
-		const result = await awsProvider.deployStack(problem, credentials, options);
+		const result = await provider.deployStack(problem, credentials, options);
 
 		if (result.success) {
 			await setStatus(job, "completed", { result });
@@ -279,7 +296,7 @@ async function setStatus(
 
 function buildCredentials(account: CompetitorAccountWithMeta): CloudCredentials {
 	return {
-		provider: "aws",
+		provider: account.provider,
 		region: account.region,
 		accountId: account.accountId,
 		roleArn: account.roleArn,

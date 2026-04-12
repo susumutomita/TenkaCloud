@@ -11,10 +11,8 @@ export {
 	addProblemToEvent,
 	removeProblemFromEvent,
 } from "./event-repository";
-export {
-	PrismaProblemRepository,
-	PrismaMarketplaceRepository,
-} from "./problem-repository";
+export { PrismaProblemRepository } from "./problem-repository";
+export { PrismaMarketplaceRepository } from "./marketplace-repository";
 export {
 	PrismaProblemTemplateRepository,
 	type IProblemTemplateRepository,
