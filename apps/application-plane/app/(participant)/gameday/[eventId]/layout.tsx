@@ -171,7 +171,12 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
       : `${t('gameday.rank')}: --`;
 
   return (
-    <div className="awsui-dark-mode">
+    <div
+      className="awsui-dark-mode"
+      style={{
+        background: 'var(--color-background-container-content-6u8rvp, #161d26)',
+      }}
+    >
       <div id="gameday-top-nav" style={{ position: 'relative', minHeight: 72 }}>
         {mounted ? (
           <>
@@ -238,7 +243,7 @@ export default function GamedayLayout({ children }: GamedayLayoutProps) {
             <div
               style={{
                 position: 'absolute',
-                right: '200px',
+                right: '320px',
                 top: '50%',
                 transform: 'translateY(-50%)',
                 zIndex: 1000,
