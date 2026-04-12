@@ -5,6 +5,7 @@
  */
 
 import { execFile } from "node:child_process";
+import { createServer } from "node:net";
 import * as nodePath from "node:path";
 import { promisify } from "node:util";
 import type {
@@ -44,7 +45,6 @@ export class LocalCloudProvider implements ICloudProvider {
 	readonly displayName = "Local Development";
 
 	private deployedStacks: Map<string, LocalStack> = new Map();
-	private nextPortOffset = 0;
 
 	/**
 	 * 認証情報の検証（ローカルでは常に成功）
@@ -62,6 +62,9 @@ export class LocalCloudProvider implements ICloudProvider {
 		options: DeployStackOptions,
 	): Promise<DeploymentResult> {
 		const startedAt = new Date();
+		let composePath = "";
+		let projectName = "";
+		let environment: Record<string, string> = {};
 
 		try {
 			const template = problem.deployment.templates.local;
@@ -71,12 +74,12 @@ export class LocalCloudProvider implements ICloudProvider {
 				);
 			}
 
-			const composePath = await resolveProblemAssetPath(template.path);
+			composePath = await resolveProblemAssetPath(template.path);
 			const problemRoot = nodePath.resolve(nodePath.dirname(composePath), "..");
-			const ports = this.allocatePorts();
+			const ports = await this.allocatePorts();
 			const stackId = `local-${options.stackName}`;
-			const projectName = this.getProjectName(options.stackName);
-			const environment = this.buildComposeEnvironment(
+			projectName = this.getProjectName(options.stackName);
+			environment = this.buildComposeEnvironment(
 				template.parameters ?? {},
 				options.parameters ?? {},
 				problemRoot,
@@ -87,6 +90,7 @@ export class LocalCloudProvider implements ICloudProvider {
 
 			if (!options.dryRun) {
 				await this.runDockerCompose("up", composePath, projectName, environment);
+				await this.waitForServicesReady(composePath, projectName, environment);
 			}
 
 			const stack: LocalStack = {
@@ -116,6 +120,19 @@ export class LocalCloudProvider implements ICloudProvider {
 				completedAt: new Date(),
 			};
 		} catch (error) {
+			if (composePath && projectName) {
+				try {
+					await this.runDockerCompose(
+						"down",
+						composePath,
+						projectName,
+						environment,
+					);
+				} catch {
+					// Cleanup failure should not hide the original error.
+				}
+			}
+
 			return {
 				success: false,
 				stackName: options.stackName,
@@ -353,22 +370,180 @@ export class LocalCloudProvider implements ICloudProvider {
 		}
 	}
 
+	private async waitForServicesReady(
+		composePath: string,
+		projectName: string,
+		environment: Record<string, string>,
+		timeoutMs = 30_000,
+	): Promise<void> {
+		const expectedServices = await this.getExpectedServices(
+			composePath,
+			projectName,
+			environment,
+		);
+		const deadline = Date.now() + timeoutMs;
+
+		while (Date.now() < deadline) {
+			const runningServices = await this.getComposeServicesByStatus(
+				composePath,
+				projectName,
+				environment,
+				"running",
+			);
+			const exitedServices = await this.getComposeServicesByStatus(
+				composePath,
+				projectName,
+				environment,
+				"exited",
+			);
+
+			if (exitedServices.length > 0) {
+				throw new Error(
+					`docker compose services exited unexpectedly: ${exitedServices.join(", ")}`,
+				);
+			}
+
+			if (expectedServices.every((service) => runningServices.includes(service))) {
+				return;
+			}
+
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+
+		throw new Error(
+			`docker compose services did not become ready: ${expectedServices.join(", ")}`,
+		);
+	}
+
+	private async getExpectedServices(
+		composePath: string,
+		projectName: string,
+		environment: Record<string, string>,
+	): Promise<string[]> {
+		const { stdout } = await execFileAsync(
+			"docker",
+			["compose", "-f", composePath, "-p", projectName, "config", "--services"],
+			{
+				env: {
+					...process.env,
+					...environment,
+				},
+			},
+		);
+		return stdout
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean);
+	}
+
+	private async getComposeServicesByStatus(
+		composePath: string,
+		projectName: string,
+		environment: Record<string, string>,
+		status: "running" | "exited",
+	): Promise<string[]> {
+		const { stdout } = await execFileAsync(
+			"docker",
+			[
+				"compose",
+				"-f",
+				composePath,
+				"-p",
+				projectName,
+				"ps",
+				"--services",
+				"--status",
+				status,
+			],
+			{
+				env: {
+					...process.env,
+					...environment,
+				},
+			},
+		);
+		return stdout
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean);
+	}
+
 	private sanitizeEnvironmentValue(value: string): string {
 		return value.replace(/[\r\n\x00-\x1F\x7F]/g, "");
 	}
 
-	private allocatePorts(): LocalPorts {
-		const offset = this.nextPortOffset;
-		this.nextPortOffset += 1;
+	private async allocatePorts(): Promise<LocalPorts> {
+		const reservedPorts = await this.listDockerPublishedPorts();
+		const frontendPort = await this.findAvailablePort(13080, reservedPorts);
+		reservedPorts.add(frontendPort);
+		const apiPort = await this.findAvailablePort(18080, reservedPorts);
+		reservedPorts.add(apiPort);
+		const dbPort = await this.findAvailablePort(3306, reservedPorts);
 		return {
-			apiPort: this.allocateHostPort(18080, offset),
-			frontendPort: this.allocateHostPort(13080, offset),
-			dbPort: this.allocateHostPort(3306, offset),
+			apiPort,
+			frontendPort,
+			dbPort,
 		};
 	}
 
-	private allocateHostPort(basePort: number, offset: number): number {
-		return basePort + offset * 10;
+	private async findAvailablePort(
+		basePort: number,
+		reservedPorts: Set<number> = new Set(),
+	): Promise<number> {
+		for (let offset = 0; offset < 100; offset += 1) {
+			const candidate = basePort + offset * 10;
+			if (
+				!reservedPorts.has(candidate) &&
+				(await this.isPortAvailable(candidate))
+			) {
+				return candidate;
+			}
+		}
+
+		throw new Error(`No available local port found for base port ${basePort}`);
+	}
+
+	private async listDockerPublishedPorts(): Promise<Set<number>> {
+		try {
+			const { stdout } = await execFileAsync("docker", [
+				"ps",
+				"--format",
+				"{{.Ports}}",
+			]);
+			const ports = new Set<number>();
+			for (const line of stdout.split("\n")) {
+				const matches = line.matchAll(/:(\d+)->/g);
+				for (const match of matches) {
+					const port = Number(match[1]);
+					if (Number.isFinite(port)) {
+						ports.add(port);
+					}
+				}
+			}
+			return ports;
+		} catch {
+			return new Set();
+		}
+	}
+
+	private async isPortAvailable(port: number): Promise<boolean> {
+		return new Promise((resolve) => {
+			const server = createServer();
+
+			server.once("error", (error: NodeJS.ErrnoException) => {
+				if (error.code === "EPERM") {
+					resolve(true);
+					return;
+				}
+				resolve(false);
+			});
+
+			server.once("listening", () => {
+				server.close(() => resolve(true));
+			});
+
+			server.listen(port, "127.0.0.1");
+		});
 	}
 
 	private getProjectName(stackName: string): string {

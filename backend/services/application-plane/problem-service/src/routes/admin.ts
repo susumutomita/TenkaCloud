@@ -307,6 +307,9 @@ adminRouter.use("*", async (c, next) => {
 	const authContext = await authenticateRequest({
 		authorization: c.req.header("Authorization"),
 		authorizationtoken: c.req.header("AuthorizationToken"),
+		"x-tenkacloud-dev-user-id": c.req.header("X-TenkaCloud-Dev-User-Id"),
+		"x-tenkacloud-dev-tenant-id": c.req.header("X-TenkaCloud-Dev-Tenant-Id"),
+		"x-tenkacloud-dev-roles": c.req.header("X-TenkaCloud-Dev-Roles"),
 	});
 
 	if (!authContext.isValid || !authContext.user) {
@@ -3120,9 +3123,21 @@ adminRouter.post(
 			return c.json({ error: "Problem not found" }, 404);
 		}
 
-		const validationError = getGameDayDeploymentValidationError(problem);
-		if (validationError) {
-			return c.json({ error: validationError }, 400);
+		const declaredValidationError =
+			(problem.deployment.providers.length > 0
+				? problem.deployment.providers
+				: ["aws"]
+			).reduce<string | null>(
+				(currentError, provider) =>
+					currentError ??
+					getGameDayDeploymentValidationError(
+						problem,
+						provider as "aws" | "local",
+					),
+				null,
+			);
+		if (declaredValidationError) {
+			return c.json({ error: declaredValidationError }, 400);
 		}
 
 		const accounts = await competitorAccountRepo.findByEventId(eventId);
@@ -3131,6 +3146,20 @@ adminRouter.post(
 				{ error: "No competitor accounts configured for this event" },
 				400,
 			);
+		}
+
+		const validationError =
+			[...new Set(accounts.map((account) => account.provider))].reduce<string | null>(
+				(currentError, provider) =>
+					currentError ??
+					getGameDayDeploymentValidationError(
+						problem,
+						provider as "aws" | "local",
+					),
+				null,
+			);
+		if (validationError) {
+			return c.json({ error: validationError }, 400);
 		}
 
 		try {

@@ -53,7 +53,8 @@ services:
       - "13004"
     environment:
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - AWS_ENDPOINT_URL=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -75,7 +76,7 @@ services:
     environment:
       - PORT=3010
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -97,7 +98,7 @@ services:
     environment:
       - PORT=3011
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -119,7 +120,7 @@ services:
     environment:
       - PORT=3012
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -141,7 +142,8 @@ services:
     environment:
       - PORT=3100
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - AWS_ENDPOINT_URL=http://cloud-emulator:4566
       - AWS_REGION=ap-northeast-1
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
@@ -164,7 +166,7 @@ services:
     environment:
       - PORT=3020
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
-      - DYNAMODB_ENDPOINT=http://cloud-emulator:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
       - AWS_REGION=ap-northeast-1
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001
     healthcheck:
@@ -230,6 +232,16 @@ services:
       tenkacloud:
         aliases:
           - cloud-emulator
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    networks:
+      tenkacloud:
+        aliases:
+          - dynamodb-local
 
   # Kumo - 71 AWS サービス対応の軽量エミュレータ（Go ベース）
   # https://github.com/sivchari/kumo

@@ -65,6 +65,7 @@ describe('TenantProvisioningPublisher', () => {
       isolationModel: mockTenant.isolationModel,
       region: mockTenant.region,
     });
+    expect(commandInput.Entries[0]).not.toHaveProperty('Time');
   });
 
   it('EventBridge が失敗した場合はエラーを投げるべき', async () => {
@@ -82,5 +83,24 @@ describe('TenantProvisioningPublisher', () => {
     await expect(publisher.publishTenantOnboarding(mockTenant)).rejects.toThrow(
       'Failed to publish tenant onboarding event: InternalFailure - event bus unavailable',
     );
+  });
+
+  it('inline モードではローカル provisioning runner を実行すべき', async () => {
+    const inlineRunner = vi.fn().mockResolvedValue(undefined);
+    const publisher = new TenantProvisioningPublisher({
+      deliveryMode: 'inline',
+      inlineRunner,
+    });
+
+    await expect(publisher.publishTenantOnboarding(mockTenant)).resolves.toBeUndefined();
+
+    expect(inlineRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: mockTenant.id,
+        tenantName: mockTenant.name,
+        slug: mockTenant.slug,
+      }),
+    );
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

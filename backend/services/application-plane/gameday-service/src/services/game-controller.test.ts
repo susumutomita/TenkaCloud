@@ -6,6 +6,7 @@ const { mockGamedayRepository } = vi.hoisted(() => ({
 	mockGamedayRepository: {
 		createGameState: vi.fn(),
 		initGameState: vi.fn(),
+		startExistingGame: vi.fn(),
 		getGameState: vi.fn(),
 		stopGame: vi.fn(),
 		toggleScoreWeight: vi.fn(),
@@ -35,6 +36,7 @@ import {
 	listAttackLogs,
 	seedAttackCatalog,
 	GameNotFoundError,
+	GameAlreadyExistsError,
 	CrossTenantAccessError,
 } from "./game-controller";
 
@@ -145,6 +147,27 @@ describe("ゲームコントローラーサービス", () => {
 				await startGame("event-1", TENANT_ID, 240);
 
 				expect(mockGamedayRepository.updateTeamScore).not.toHaveBeenCalled();
+			});
+
+			it("初期化済みで未開始のゲームを開始すべき", async () => {
+				const initializedState: GameState = {
+					...baseGameState,
+					isRunning: false,
+					startedAt: null,
+				};
+				mockGamedayRepository.createGameState.mockRejectedValue(
+					new GameAlreadyExistsError("event-1"),
+				);
+				mockGamedayRepository.getGameState.mockResolvedValue(initializedState);
+				mockGamedayRepository.startExistingGame.mockResolvedValue(baseGameState);
+				mockGamedayRepository.listTeams.mockResolvedValue([]);
+
+				const result = await startGame("event-1", TENANT_ID, 240);
+
+				expect(result).toEqual(baseGameState);
+				expect(mockGamedayRepository.startExistingGame).toHaveBeenCalledWith(
+					"event-1",
+				);
 			});
 		});
 	});

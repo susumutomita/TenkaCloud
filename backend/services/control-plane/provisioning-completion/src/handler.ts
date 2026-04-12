@@ -20,11 +20,12 @@ import type {
 
 // 環境変数
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE ?? 'TenkaCloud';
-const AWS_ENDPOINT_URL = process.env.AWS_ENDPOINT_URL;
+const DYNAMODB_ENDPOINT =
+  process.env.DYNAMODB_ENDPOINT ?? process.env.AWS_ENDPOINT_URL;
 
 // DynamoDB クライアント初期化
 const dynamoClient = new DynamoDBClient({
-  ...(AWS_ENDPOINT_URL && { endpoint: AWS_ENDPOINT_URL }),
+  ...(DYNAMODB_ENDPOINT && { endpoint: DYNAMODB_ENDPOINT }),
 });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 

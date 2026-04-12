@@ -1,6 +1,6 @@
-.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage test_e2e test_e2e_ui test_e2e_headed dev build
+.PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage test_e2e test_e2e_ui test_e2e_headed test_one_pass_local test_one_pass_aws dev build
 .PHONY: start-compose stop-compose stop stop-dev-servers restart status
-.PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-control-plane stop-infrastructure stop-control-plane restart-all
+.PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-one-pass-local start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
 .PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant init-db seed-data
 .PHONY: auth0-check-tfvars auth0-init auth0-plan auth0-apply auth0-output auth0-setup
@@ -177,6 +177,14 @@ test_e2e_headed:
 	@cd $(CONTROL_PLANE_DIR) && $(NLX) playwright install chromium --with-deps
 	@cd $(CONTROL_PLANE_DIR) && $(NR) test:e2e:headed
 
+test_one_pass_local:
+	@echo "🧪 one-pass local harness を実行中..."
+	$(BUN) scripts/one-pass.ts --target=local
+
+test_one_pass_aws:
+	@echo "🧪 one-pass aws harness を実行中..."
+	$(BUN) scripts/one-pass.ts --target=aws
+
 before_commit: lint_text format_check typecheck test_coverage build
 	@echo "✅ すべてのコミット前チェックが完了しました"
 
@@ -215,10 +223,10 @@ check-docker-hub:
 # 🚀 起動・停止（統合コマンド）
 # ========================================
 
-# make start: LocalStack + フロントエンド開発サーバーをすべて起動
+# make start: クラウドエミュレータ + DynamoDB Local + フロントエンド開発サーバーをすべて起動
 start: start-infrastructure-bg start-dev-servers
 
-# make start-infrastructure: エミュレータのみ起動
+# make start-infrastructure: エミュレータ + DynamoDB Local のみ起動
 start-infrastructure: start-local
 
 # バックグラウンドでエミュレータを起動し、準備完了を待つ
@@ -243,10 +251,11 @@ start-dev-servers: start-local
 	@echo "  - GameDay API:        http://localhost:3020/api/gameday"
 	@echo "  - Realtime WS:        ws://localhost:3013/ws"
 	@echo "  - Cloud Emulator:     http://localhost:4566"
+	@echo "  - DynamoDB Local:     http://localhost:8000"
 	@echo ""
 	@echo "💡 終了するには Ctrl+C を押してください"
 	@echo ""
-	DYNAMODB_ENDPOINT=$(EMULATOR_ENDPOINT) \
+	DYNAMODB_ENDPOINT=$(DYNAMODB_LOCAL_ENDPOINT) \
 	DYNAMODB_TABLE=$(LOCAL_TABLE) \
 	DYNAMODB_TABLE_NAME=$(LOCAL_TABLE) \
 	AWS_REGION=ap-northeast-1 \
@@ -255,6 +264,36 @@ start-dev-servers: start-local
 	TENANT_API_BASE_URL=http://localhost:13004/api \
 	AUTH_SECRET=local-dev-secret-do-not-use-in-production \
 	AUTH_SKIP=1 \
+	NEXT_PUBLIC_AUTH_SKIP=1 \
+	NEXT_PUBLIC_APPLICATION_PLANE_URL=http://localhost:13001 \
+	$(NR) dev
+
+start-one-pass-local: start-local
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "🧪 one-pass local 用の開発サーバーを起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 前提:"
+	@echo "  - provisioning publish を有効化"
+	@echo "  - dev identity header で admin / participant を切り替え"
+	@echo "  - shared Application Plane 上で one-pass blocker を可視化"
+	@echo ""
+	DYNAMODB_ENDPOINT=$(DYNAMODB_LOCAL_ENDPOINT) \
+	DYNAMODB_TABLE=$(LOCAL_TABLE) \
+	DYNAMODB_TABLE_NAME=$(LOCAL_TABLE) \
+	AWS_REGION=ap-northeast-1 \
+	AWS_ACCESS_KEY_ID=test \
+	AWS_SECRET_ACCESS_KEY=test \
+	AWS_ENDPOINT_URL=$(EMULATOR_ENDPOINT) \
+	EVENT_BUS_NAME=tenkacloud-local-tenant-events \
+	DATA_BUCKET_NAME=tenkacloud-local-data \
+	PROVISIONING_ENABLED=true \
+	PROVISIONING_DELIVERY_MODE=inline \
+	TENANT_API_BASE_URL=http://localhost:13004/api \
+	AUTH_SECRET=local-dev-secret-do-not-use-in-production \
+	AUTH_SKIP=1 \
+	AUTH_SKIP_ROLES=participant \
 	NEXT_PUBLIC_AUTH_SKIP=1 \
 	NEXT_PUBLIC_APPLICATION_PLANE_URL=http://localhost:13001 \
 	$(NR) dev
@@ -449,13 +488,14 @@ help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "🚀 起動・停止（統合コマンド）:"
-	@echo "  make start            LocalStack + フロントエンド開発サーバーをすべて起動"
-	@echo "  make start-infrastructure  LocalStack のみ起動（バックエンドのみ）"
+	@echo "  make start            クラウドエミュレータ + DynamoDB Local + フロントエンド開発サーバーをすべて起動"
+	@echo "  make start-one-pass-local  one-pass local 用の権限・provisioning 付きで起動"
+	@echo "  make start-infrastructure  クラウドエミュレータ + DynamoDB Local のみ起動（バックエンドのみ）"
 	@echo "  make stop             LocalStack を停止"
 	@echo "  make restart          サービスを再起動"
 	@echo "  make status           サービス状態を表示"
 	@echo ""
-	@echo "🧪 LocalStack テスト:"
+	@echo "🧪 ローカルエミュレータ テスト:"
 	@echo "  make test-tenant      テスト用テナントを作成（プロビジョニングフロー起動）"
 	@echo "  make logs-local       プロビジョニング Lambda のログを表示"
 	@echo ""
@@ -483,6 +523,7 @@ help:
 	@echo "  make test_e2e         E2E テストを実行（Playwright）"
 	@echo "  make test_e2e_ui      E2E テストを UI モードで実行"
 	@echo "  make test_e2e_headed  E2E テストを headed モードで実行"
+	@echo "  make test_one_pass_local  one-pass local harness を実行"
 	@echo ""
 	@echo "🏗  ビルド:"
 	@echo "  make dev              開発サーバーを起動 (Control Plane のみ)"
@@ -529,6 +570,7 @@ help:
 # エミュレータ選択: kumo（デフォルト）/ localstack / floci
 CLOUD_EMULATOR ?= kumo
 EMULATOR_ENDPOINT := http://localhost:4566
+DYNAMODB_LOCAL_ENDPOINT := http://localhost:8000
 LOCAL_TABLE := TenkaCloud-local
 LOCAL_LAMBDA := tenkacloud-local-provisioning
 

@@ -246,6 +246,12 @@ describe('プロビジョニング API', () => {
       mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
       mockTenantRepoFunctions.update.mockResolvedValueOnce({
         ...mockTenant,
+        provisioningStatus: 'IN_PROGRESS',
+        applicationDeploymentStatus: 'DEPLOYING',
+        provisioningError: null,
+      });
+      mockTenantRepoFunctions.update.mockResolvedValueOnce({
+        ...mockTenant,
         provisioningStatus: 'FAILED',
         applicationDeploymentStatus: 'FAILED',
         provisioningError: 'EventBridge publish failed: EventBridge unavailable',
@@ -259,7 +265,12 @@ describe('プロビジョニング API', () => {
       });
 
       expect(res.status).toBe(500);
-      expect(mockTenantRepoFunctions.update).toHaveBeenCalledTimes(1);
+      expect(mockTenantRepoFunctions.update).toHaveBeenCalledTimes(2);
+      expect(mockTenantRepoFunctions.update).toHaveBeenNthCalledWith(1, mockTenant.id, {
+        provisioningStatus: 'IN_PROGRESS',
+        applicationDeploymentStatus: 'DEPLOYING',
+        provisioningError: null,
+      });
       expect(mockTenantRepoFunctions.update).toHaveBeenCalledWith(mockTenant.id, {
         provisioningStatus: 'FAILED',
         applicationDeploymentStatus: 'FAILED',
@@ -285,7 +296,7 @@ describe('プロビジョニング API', () => {
       expect(body.tenantId).toBe(mockTenant.id);
       expect(body.provisioningStatus).toBe('COMPLETED');
       expect(body.applicationDeploymentStatus).toBe('NOT_DEPLOYED');
-      expect(body.provisionedResources).toEqual({ s3Prefix: 'tenants/test/' });
+      expect(body.provisionedResources).toBeUndefined();
       expect(body.provisionedAt).toBe('2024-01-02T00:00:00.000Z');
       expect(body.provisioningEnabled).toBe(false); // Disabled in test env
     });

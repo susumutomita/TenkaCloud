@@ -3,6 +3,7 @@ import * as nodePath from "node:path";
 
 const PROBLEM_REPO_CANDIDATES = [
 	process.env.PROBLEMS_DIR,
+	nodePath.resolve(process.cwd(), "../../../../problems"),
 	nodePath.resolve(process.cwd(), "problems"),
 	nodePath.resolve(process.cwd(), "../TenkaCloudChallenge/problems"),
 	nodePath.resolve(process.cwd(), "../../../../../TenkaCloudChallenge/problems"),

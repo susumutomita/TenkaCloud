@@ -33,6 +33,9 @@ playerRouter.use("*", async (c, next) => {
 	const authContext = await authenticateRequest({
 		authorization: c.req.header("Authorization"),
 		authorizationtoken: c.req.header("AuthorizationToken"),
+		"x-tenkacloud-dev-user-id": c.req.header("X-TenkaCloud-Dev-User-Id"),
+		"x-tenkacloud-dev-tenant-id": c.req.header("X-TenkaCloud-Dev-Tenant-Id"),
+		"x-tenkacloud-dev-roles": c.req.header("X-TenkaCloud-Dev-Roles"),
 	});
 
 	if (!authContext.isValid || !authContext.user) {

@@ -29,7 +29,8 @@ make start
 
 `make start` は以下をまとめて起動します。
 
-- Local emulator
+- Cloud emulator (`Kumo` / `LocalStack` / `Floci`)
+- `DynamoDB Local`
 - Control Plane UI
 - Application Plane UI
 - tenant-management
@@ -38,6 +39,14 @@ make start
 - battle-service
 - scoring-service
 - leaderboard-service
+
+one-pass を詰めるときは通常の `make start` ではなく、次を使います。
+
+```bash
+make start-one-pass-local
+```
+
+これは local provisioning publish を有効にし、dev identity header で admin / participant を切り替える one-pass 用の起動方法です。AWS 系 API は `http://localhost:4566`、DynamoDB は `http://localhost:8000` を使います。通常確認の `make start` より強い前提を持ちます。
 
 ### 3. ブラウザで確認する
 
@@ -49,7 +58,8 @@ make start
 - Tenant API: `http://localhost:13004/api/tenants`
 - Problem API: `http://localhost:3100/api`
 - GameDay API: `http://localhost:3020/api/gameday`
-- Local emulator: `http://localhost:4566`
+- Cloud emulator: `http://localhost:4566`
+- DynamoDB Local: `http://localhost:8000`
 
 ## 認証
 
@@ -84,16 +94,37 @@ bun run dev
 
 ローカルで「一部ページが開く」だけでは完了扱いにしません。最低限、次の one-pass を確認します。
 
-1. Control Plane で tenant を作成する
-2. provisioning を開始し、tenant status が進むことを確認する
-3. tenant の Application Plane に到達する
-4. event を作成する
-5. competitor account を登録する
-6. problem を deploy する
-7. participant として event に参加する
-8. `attack / defense / vote / aws-console` が実リソース前提で動くことを確認する
+1. `make start-one-pass-local` を実行する
+2. 別ターミナルで `make test_one_pass_local` を実行する
+3. tenant 作成、provisioning、Application Plane 到達、local provider での problem deploy、event 作成、competitor account 登録、participant join、`attack / defense / vote` が自動で通ることを確認する
+4. local の `aws-console` は fail-closed、AWS の成功系は [`docs/guides/one-pass-aws.md`](guides/one-pass-aws.md) の runbook で確認する
 
 この one-pass は `docs/architecture/harness.md` の `ONE_PASS_LOCAL` と同じです。
+
+### one-pass 用の起動
+
+通常の `make start` は日常開発用です。one-pass では admin 権限と provisioning backend を有効にした専用起動を使います。
+
+```bash
+make start-one-pass-local
+```
+
+このターゲットでは次を有効にします。
+
+- `PROVISIONING_ENABLED=true`
+- `AWS_ENDPOINT_URL=http://localhost:4566`
+- `DYNAMODB_ENDPOINT=http://localhost:8000`
+- `EVENT_BUS_NAME=tenkacloud-local-tenant-events`
+- `AUTH_SKIP_ROLES=participant`
+- admin / competitor への切り替えは dev identity header で行う
+
+実行コマンドは次です。
+
+```bash
+make test_one_pass_local
+```
+
+未実装の箇所は `BLOCKED` として表示され、終了コードは non-zero になります。これは partial success を完了扱いにしないためです。
 
 ### tenant-management
 
@@ -152,10 +183,11 @@ curl http://localhost:13004/health
 
 Control Plane から失敗する場合は `TENANT_API_BASE_URL=http://localhost:13004/api` が使われているか確認します。
 
-### Local emulator が起動しない
+### Cloud emulator または DynamoDB Local が起動しない
 
 ```bash
-docker compose logs localstack
+docker compose logs kumo
+docker compose logs dynamodb-local
 ```
 
 その後、必要なら以下を実行します。
@@ -175,6 +207,7 @@ make start
 - `3100`
 - `3020`
 - `4566`
+- `8000`
 
 競合プロセスは `lsof -i :13000` のように確認してください。
 

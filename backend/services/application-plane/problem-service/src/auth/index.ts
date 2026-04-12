@@ -23,7 +23,6 @@ const authSkipEnabled =
 // mock-access-token is only accepted when AUTH_SKIP=1 is explicitly set
 const localDevTokenEnabled = authSkipEnabled;
 const LOCAL_DEV_TOKEN = 'mock-access-token';
-const authSkipRoles = parseAuthSkipRoles(process.env.AUTH_SKIP_ROLES);
 
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
@@ -81,6 +80,31 @@ export interface AuthenticatedUser {
   roles: string[];
   teamId?: string;
   tenantId?: string;
+}
+
+const DEV_USER_ID_HEADER = "x-tenkacloud-dev-user-id";
+const DEV_TENANT_ID_HEADER = "x-tenkacloud-dev-tenant-id";
+const DEV_ROLES_HEADER = "x-tenkacloud-dev-roles";
+
+function sanitizeDevIdentity(
+	value: string | undefined,
+	fallback: string,
+	maxLength = 128,
+): string {
+	if (!value) {
+		return fallback;
+	}
+
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return fallback;
+	}
+
+	const sanitized = trimmed
+		.replace(/[^A-Za-z0-9@._:/+=,-]/g, "-")
+		.slice(0, maxLength);
+
+	return sanitized || fallback;
 }
 
 /**
@@ -157,13 +181,28 @@ export interface AuthContext {
 }
 
 /** AUTH_SKIP モードで使用するモックユーザーを生成（リクエスト間の状態共有を防止） */
-function createMockUser(): AuthenticatedUser {
+function createMockUser(
+	headers?: {
+		[DEV_USER_ID_HEADER]?: string;
+		[DEV_TENANT_ID_HEADER]?: string;
+		[DEV_ROLES_HEADER]?: string;
+	},
+): AuthenticatedUser {
+	const userId = sanitizeDevIdentity(headers?.[DEV_USER_ID_HEADER], "dev-user");
+	const tenantId = sanitizeDevIdentity(
+		headers?.[DEV_TENANT_ID_HEADER],
+		"dev-tenant",
+	);
+	const email = userId.includes("@") ? userId : `${userId}@localhost`;
+
 	return {
-		id: 'dev-user',
-		email: 'dev@localhost',
-		username: 'dev-user',
-		roles: authSkipRoles,
-		tenantId: 'dev-tenant',
+		id: userId,
+		email,
+		username: userId,
+		roles: parseAuthSkipRoles(
+			headers?.[DEV_ROLES_HEADER] ?? process.env.AUTH_SKIP_ROLES,
+		),
+		tenantId,
 	};
 }
 
@@ -176,11 +215,14 @@ function createMockUser(): AuthenticatedUser {
 export async function authenticateRequest(headers: {
   authorization?: string;
   authorizationtoken?: string;
+  [DEV_USER_ID_HEADER]?: string;
+  [DEV_TENANT_ID_HEADER]?: string;
+  [DEV_ROLES_HEADER]?: string;
   [key: string]: string | undefined;
 }): Promise<AuthContext> {
   if (authSkipEnabled) {
     return {
-      user: createMockUser(),
+      user: createMockUser(headers),
       token: LOCAL_DEV_TOKEN,
       isValid: true,
     };
@@ -201,7 +243,7 @@ export async function authenticateRequest(headers: {
 
   if (localDevTokenEnabled && token === LOCAL_DEV_TOKEN) {
     return {
-      user: createMockUser(),
+      user: createMockUser(headers),
       token,
       isValid: true,
     };

@@ -26,6 +26,7 @@ import { Auth0Provisioner } from '@tenkacloud/auth0';
 import type {
   ProvisionedResources,
   TenantOnboardingDetail,
+  TenantProvisionedDetail,
 } from '@tenkacloud/events';
 import { EventSource, EventDetailType } from '@tenkacloud/events';
 import { createTenantRole } from './iam-provisioner';
@@ -33,8 +34,12 @@ import { createTenantLogGroup } from './cloudwatch-provisioner';
 
 // 環境変数
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? 'default';
-const DATA_BUCKET_NAME = process.env.DATA_BUCKET_NAME ?? 'tenkacloud-data';
 const AWS_ENDPOINT_URL = process.env.AWS_ENDPOINT_URL;
+const DATA_BUCKET_NAME =
+  process.env.DATA_BUCKET_NAME ??
+  (AWS_ENDPOINT_URL?.includes('localhost')
+    ? 'tenkacloud-local-data'
+    : 'tenkacloud-data');
 
 // クライアント初期化
 const eventBridgeClient = new EventBridgeClient({
@@ -153,25 +158,14 @@ async function publishProvisionedEvent(
   console.log('Published TenantProvisioned event', { tenantId, status });
 }
 
-/**
- * Lambda ハンドラー
- */
-export async function handler(
-  event: EventBridgeEvent<'TenantOnboarding', TenantOnboardingDetail>,
-  _context: Context
-): Promise<void> {
-  console.log('Received TenantOnboarding event', {
-    tenantId: event.detail.tenantId,
-    tier: event.detail.tier,
-  });
-
-  const { tenantId, slug: tenantSlug, tier, tenantName } = event.detail;
+export async function provisionTenant(
+  detail: TenantOnboardingDetail,
+): Promise<TenantProvisionedDetail> {
+  const { tenantId, slug: tenantSlug, tier, tenantName } = detail;
 
   try {
     const resources: ProvisionedResources = {};
 
-    // 1. Auth0 Organization をプロビジョニング
-    // LocalStack 環境では自動的にスキップされる
     const auth0Result = await auth0Provisioner.createTenantOrganization(
       tenantSlug,
       tenantName,
@@ -183,20 +177,14 @@ export async function handler(
       organizationId: auth0Result.organizationId,
     });
 
-    // 2. S3 ストレージをプロビジョニング
-    // ティアに応じたモデルを選択
     if (tier === 'ENTERPRISE') {
-      // ENTERPRISE: Silo モデル（専用リソース）
       const siloResources = await provisionSiloResources(tenantId, tenantName);
       resources.s3Bucket = siloResources.s3Bucket;
     } else {
-      // FREE/PRO: Pool モデル（共有リソース）
       const poolResources = await provisionPoolResources(tenantId);
       resources.s3Prefix = poolResources.s3Prefix;
     }
 
-    // 3. IAM Role をプロビジョニング
-    // LocalStack 環境では自動的にダミー ARN を返す
     const iamResult = await createTenantRole(
       tenantId,
       tenantSlug,
@@ -209,7 +197,6 @@ export async function handler(
       roleName: iamResult.roleName,
     });
 
-    // 4. CloudWatch Logs をプロビジョニング
     const logsResult = await createTenantLogGroup(tenantId, tenantSlug, tier);
     resources.cloudwatchLogGroup = logsResult.logGroupName;
     console.log('CloudWatch Log Group created', {
@@ -218,25 +205,54 @@ export async function handler(
       retentionDays: logsResult.retentionDays,
     });
 
-    // 成功イベント発行
-    await publishProvisionedEvent(tenantId, 'COMPLETED', resources);
-
-    console.log('Tenant provisioning completed', {
+    return {
       tenantId,
-      tier,
-      provisionedResources: Object.keys(resources),
-    });
+      status: 'COMPLETED',
+      resources,
+      timestamp: new Date().toISOString(),
+    };
   } catch (error) {
     console.error('Tenant provisioning failed', { tenantId, error });
 
-    // 失敗イベント発行
-    await publishProvisionedEvent(
+    return {
       tenantId,
-      'FAILED',
-      {},
-      error instanceof Error ? error.message : 'Unknown error'
-    );
-
-    throw error;
+      status: 'FAILED',
+      resources: {},
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+    };
   }
+}
+
+/**
+ * Lambda ハンドラー
+ */
+export async function handler(
+  event: EventBridgeEvent<'TenantOnboarding', TenantOnboardingDetail>,
+  _context: Context
+): Promise<void> {
+  console.log('Received TenantOnboarding event', {
+    tenantId: event.detail.tenantId,
+    tier: event.detail.tier,
+  });
+
+  const result = await provisionTenant(event.detail);
+
+  await publishProvisionedEvent(
+    result.tenantId,
+    result.status,
+    result.resources ?? {},
+    result.error,
+  );
+
+  if (result.status === 'COMPLETED') {
+    console.log('Tenant provisioning completed', {
+      tenantId: result.tenantId,
+      tier: event.detail.tier,
+      provisionedResources: Object.keys(result.resources ?? {}),
+    });
+    return;
+  }
+
+  throw new Error(result.error ?? 'Unknown error');
 }

@@ -68,7 +68,7 @@ describe("auth モジュール", () => {
 			expect(result.isValid).toBe(true);
 			expect(result.user).not.toBeNull();
 			expect(result.user!.id).toBe("dev-user");
-			expect(result.user!.email).toBe("dev@localhost");
+			expect(result.user!.email).toBe("dev-user@localhost");
 			expect(result.user!.roles).toEqual(["competitor"]);
 			expect(result.token).toBe("mock-access-token");
 		});
@@ -94,6 +94,24 @@ describe("auth モジュール", () => {
 			const result = await authenticateRequest({});
 
 			expect(result.user?.roles).toEqual(["platform-admin", "competitor"]);
+		});
+
+		it("開発用ヘッダーでユーザーとテナントとロールを上書きできるべき", async () => {
+			process.env.AUTH_SKIP = "1";
+			process.env.NODE_ENV = "development";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({
+				"x-tenkacloud-dev-user-id": "tenant-admin@example.com",
+				"x-tenkacloud-dev-tenant-id": "tenant-acme",
+				"x-tenkacloud-dev-roles": "tenant-admin,participant",
+			});
+
+			expect(result.isValid).toBe(true);
+			expect(result.user?.id).toBe("tenant-admin@example.com");
+			expect(result.user?.email).toBe("tenant-admin@example.com");
+			expect(result.user?.tenantId).toBe("tenant-acme");
+			expect(result.user?.roles).toEqual(["tenant-admin", "participant"]);
 		});
 	});
 

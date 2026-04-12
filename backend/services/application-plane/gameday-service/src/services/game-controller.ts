@@ -82,11 +82,29 @@ export async function startGame(
 	tenantId: string,
 	durationMinutes: number,
 ): Promise<GameState> {
-	const game = await gamedayRepository.createGameState({
-		eventId,
-		tenantId,
-		durationMinutes,
-	});
+	let game: GameState;
+	try {
+		game = await gamedayRepository.createGameState({
+			eventId,
+			tenantId,
+			durationMinutes,
+		});
+	} catch (error) {
+		if (!(error instanceof GameAlreadyExistsError)) {
+			throw error;
+		}
+
+		const existingGame = await validateGameTenantAccess(eventId, tenantId);
+		if (existingGame.isRunning) {
+			throw error;
+		}
+
+		const startedGame = await gamedayRepository.startExistingGame(eventId);
+		if (!startedGame) {
+			throw new GameNotFoundError();
+		}
+		game = startedGame;
+	}
 
 	// ADR-003: ゲーム開始時に登録済みチームへ初期ポイントを付与
 	const teams = await gamedayRepository.listTeams(eventId);
