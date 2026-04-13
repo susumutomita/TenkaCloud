@@ -55,12 +55,58 @@ EventBridge バス (SBT が管理)
 
 SBT の `EventManager.createCustomEvent(detailType, source)` を使うことで、SBT が定義済みのテナントライフサイクルイベント以外の独自イベントも同一バスに登録できる。各 `CoreApplicationPlane` は `ScriptJob` を介して「どのイベントで何を実行するか」を差し替え可能な構造になっている。
 
-### 4. アプリ側との境界
+### 4. クロスアカウント権限引き受け
+
+問題デプロイのターゲットは TenkaCloud 管理アカウントとは**別のチーム用 AWS アカウント**になる。CodeBuild はデプロイ前に STS `AssumeRole` でそのアカウントの権限を引き受ける必要がある。
+
+```
+TenkaCloud 管理アカウント (CodeBuild)
+  │
+  └── sts:AssumeRole (ExternalId 付き)
+        ↓
+  チーム AWS アカウント
+    └── IAM Role: tenkacloud-problem-deploy-role
+          ├── Trust Policy: 管理アカウント ID からの AssumeRole を許可
+          └── Permission: CloudFormation, S3, EC2 等（問題に必要なリソース）
+```
+
+**イベント payload に含める情報:**
+
+```json
+{
+  "problemId": "...",
+  "teamId": "...",
+  "tenantId": "...",
+  "targetRoleArn": "arn:aws:iam::TEAM_ACCOUNT_ID:role/tenkacloud-problem-deploy-role",
+  "externalId": "eventId-accountId から自動生成"
+}
+```
+
+**CodeBuild スクリプトの流れ:**
+
+```bash
+# 1. クロスアカウントの権限を取得
+CREDS=$(aws sts assume-role \
+  --role-arn "$TARGET_ROLE_ARN" \
+  --role-session-name "tenkacloud-problem-deploy" \
+  --external-id "$EXTERNAL_ID")
+
+export AWS_ACCESS_KEY_ID=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+
+# 2. チームアカウントに問題スタックをデプロイ
+cdk deploy ProblemStack-$PROBLEM_ID-$TEAM_ID --require-approval never
+```
+
+`ExternalId` は ADR-009 の方針に従い `eventId + accountId` から生成し、不正な AssumeRole を防ぐ（Confused Deputy 対策）。
+
+### 5. アプリ側との境界
 
 | 層 | 担当 |
 |---|---|
-| `problem-service` | EventBridge に `problem.deploy.requested` を発行するだけ |
-| `ProblemDeployPlane` (CDK) | イベントを受けて CodeBuild でスタックをデプロイ |
+| `problem-service` | EventBridge に `problem.deploy.requested` を発行（`targetRoleArn` 含む） |
+| `ProblemDeployPlane` (CDK) | イベントを受けて CodeBuild でクロスアカウントデプロイを実行 |
 | `problem-service` | 完了イベント (`problem.deploy.completed`) を受けてステータス更新 |
 
 アプリコードはイベントを投げたら終わりにでき、インフラ側の実行基盤とアプリ側のビジネスロジックが疎結合になる。
