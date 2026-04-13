@@ -12,10 +12,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    auth0 = {
-      source  = "auth0/auth0"
-      version = "~> 1.0"
-    }
   }
 
   # For production, use remote backend (S3 + DynamoDB)
@@ -38,12 +34,6 @@ provider "aws" {
       ManagedBy   = "Terraform"
     }
   }
-}
-
-provider "auth0" {
-  domain        = var.auth0_domain
-  client_id     = var.auth0_client_id
-  client_secret = var.auth0_client_secret
 }
 
 # DynamoDB Module
@@ -89,17 +79,5 @@ module "provisioning_lambda" {
   }
 }
 
-# Auth0 Module
-module "auth0" {
-  source = "../../modules/auth0"
-
-  api_identifier = "https://api.dev.tenkacloud.com"
-
-  control_plane_callbacks   = ["http://localhost:13000/api/auth/callback/auth0"]
-  control_plane_logout_urls = ["http://localhost:13000"]
-  control_plane_web_origins = ["http://localhost:13000"]
-
-  application_plane_callbacks   = ["http://localhost:13001/api/auth/callback/auth0"]
-  application_plane_logout_urls = ["http://localhost:13001"]
-  application_plane_web_origins = ["http://localhost:13001"]
-}
+# Auth0 is configured separately in environments/auth0/
+# See infrastructure/terraform/environments/auth0/README.md

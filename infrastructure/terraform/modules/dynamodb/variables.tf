@@ -21,3 +21,15 @@ variable "enable_stream" {
   type        = bool
   default     = false
 }
+
+variable "read_capacity" {
+  description = "Provisioned read capacity units (minimum 1, free tier: 25/month)"
+  type        = number
+  default     = 1
+}
+
+variable "write_capacity" {
+  description = "Provisioned write capacity units (minimum 1, free tier: 25/month)"
+  type        = number
+  default     = 1
+}
