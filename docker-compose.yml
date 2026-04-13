@@ -166,6 +166,7 @@ services:
     environment:
       - PORT=3020
       - DYNAMODB_TABLE_NAME=TenkaCloud-dev
+      - DYNAMODB_TABLE=TenkaCloud-dev
       - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
       - AWS_REGION=ap-northeast-1
       - CORS_ORIGIN=http://localhost:3000,http://localhost:13001

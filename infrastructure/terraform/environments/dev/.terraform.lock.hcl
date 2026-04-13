@@ -1,28 +1,6 @@
 # This file is maintained automatically by "terraform init".
 # Manual edits may be lost in future updates.
 
-provider "registry.terraform.io/auth0/auth0" {
-  version     = "1.38.0"
-  constraints = "~> 1.0"
-  hashes = [
-    "h1:TKy+iImAlLCTpxwIdQrAZGGcRhEafTTKszBirJ6m6jg=",
-    "zh:0838aba891dc908ce19e429534a908d412ddc779cb45357512cb5ddc78f0cb29",
-    "zh:18dcb1e63de6bc5b37a821459bf3823fde6258b2231ab114f3aa35932427bde0",
-    "zh:2a7c437b8021195abdd7b58b458d1b5373daba214171416f9fad8f51d80a8622",
-    "zh:706113521eb7177f70e257914cb425a1f733208d475e279f510366c224c76f63",
-    "zh:73e948628f546904d4a6d0d7d9d7b420656259daf9c4918b0da0daa75e9d3dd3",
-    "zh:773ef4874e2aa03661462aa8b7bd33b9dc17b200fe9a71d624302fd4acd544d9",
-    "zh:7935b1954bc51977268f43724813831978dc4e3c9653e6990d28549e481a3c66",
-    "zh:82235a021b3084099484e6dc5727f3c8653aa7c69fe27f8a8d1ce4cbde2e0aaf",
-    "zh:8293618a6cfcc4c38dc7b9752bee12a4df6f4e18a03cfa26c2aa79d2abd87330",
-    "zh:85da46417fb141f15130dc9f7155b47c22dc46066646ef13f0376097500744c4",
-    "zh:bf218109b70772e0aadbbdafb398c6ed0ddbfd7c4d20c1b09003a56826cbae30",
-    "zh:bf2b2b32097600655eb02e378d9b905556e6d2d968d0f76f6192a2394f206e6e",
-    "zh:cc187c3014127493649d2b300fef5e7fd287b984f41854cd59c3e82423e834da",
-    "zh:e2818bd63cbc8f29b73e80c5b64cc9e9c373a881a9d01721ec046ca4d641bef3",
-  ]
-}
-
 provider "registry.terraform.io/hashicorp/aws" {
   version     = "5.100.0"
   constraints = "~> 5.0"

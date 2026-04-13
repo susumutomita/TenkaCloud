@@ -1,5 +1,5 @@
 .PHONY: help install install_ci setup_husky clean lint lint_text format format_check before_commit before-commit start test test_quick test_coverage test_e2e test_e2e_ui test_e2e_headed test_one_pass_local test_one_pass_aws dev build
-.PHONY: start-compose stop-compose stop stop-dev-servers restart status
+.PHONY: start-compose stop-compose stop stop-dev-servers restart status start-aws
 .PHONY: start-infrastructure start-infrastructure-bg start-dev-servers start-one-pass-local start-control-plane stop-infrastructure stop-control-plane restart-all
 .PHONY: check-docker check-docker-hub docker-build docker-run docker-stop docker-status
 .PHONY: start-local stop-local start-kumo start-localstack start-floci logs-local test-lambda test-tenant init-db seed-data
@@ -360,6 +360,29 @@ stop-compose:
 	@echo "🛑 Docker Compose サービスを停止しています..."
 	@docker compose down
 	@echo "✅ 停止しました"
+
+start-aws: check-docker
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "☁️  実 AWS に接続して TenkaCloud を起動します"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@if [ -z "$$AWS_SESSION_TOKEN" ]; then \
+		echo "❌ AWS クレデンシャルが未設定です。先に以下を実行してください:"; \
+		echo "   source scripts/aws-creds.sh"; \
+		exit 1; \
+	fi
+	@echo "✅ AWS クレデンシャル確認済み (account: $$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo 'unknown'))"
+	@docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --build
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✨ AWS モードで起動完了！"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "📋 アクセス先:"
+	@echo "  - Application Plane:  http://localhost:3000/"
+	@echo "  - Control Plane:      http://localhost:3000/control"
+	@echo "  - DynamoDB:           ap-northeast-1 (実 AWS)"
+	@echo "  - EventBridge:        tenkacloud-dev-tenant-events (実 AWS)"
+	@echo ""
 
 # 後方互換性
 start-all: start-compose

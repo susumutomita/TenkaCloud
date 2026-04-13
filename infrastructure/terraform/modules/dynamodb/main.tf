@@ -10,10 +10,12 @@
 # - EVENT#<id>  | SCORE#<team>#<prob>-> Score record
 
 resource "aws_dynamodb_table" "main" {
-  name         = var.table_name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+  name           = var.table_name
+  billing_mode   = "PROVISIONED"
+  read_capacity  = var.read_capacity
+  write_capacity = var.write_capacity
+  hash_key       = "PK"
+  range_key      = "SK"
 
   attribute {
     name = "PK"
@@ -52,6 +54,8 @@ resource "aws_dynamodb_table" "main" {
     hash_key        = "GSI1PK"
     range_key       = "GSI1SK"
     projection_type = "ALL"
+    read_capacity   = var.read_capacity
+    write_capacity  = var.write_capacity
   }
 
   # GSI2: Entity type index for listing
@@ -61,6 +65,8 @@ resource "aws_dynamodb_table" "main" {
     hash_key        = "EntityType"
     range_key       = "CreatedAt"
     projection_type = "ALL"
+    read_capacity   = var.read_capacity
+    write_capacity  = var.write_capacity
   }
 
   ttl {
