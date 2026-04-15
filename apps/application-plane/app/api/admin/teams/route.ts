@@ -14,6 +14,7 @@ import {
   forbiddenResponse,
   badRequestResponse,
   successResponse,
+  serviceUnavailableResponse,
   serverApiRequest,
 } from '@/lib/api/server';
 import type { TeamInfo } from '@/lib/api/types';
@@ -90,8 +91,8 @@ export async function GET(request: NextRequest) {
       error instanceof TypeError && /fetch failed/i.test(String(error));
 
     if (isAuthSkipUnauthorized || isNetworkError) {
-      console.warn('Admin teams fallback to empty dataset:', error);
-      return successResponse(emptyTeamList(page, pageSize));
+      console.error('Admin teams backend unreachable:', error);
+      return serviceUnavailableResponse('Failed to fetch teams');
     }
 
     console.error('Failed to fetch teams:', error);

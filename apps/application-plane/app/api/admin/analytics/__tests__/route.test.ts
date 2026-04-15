@@ -20,6 +20,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify({ error: msg }), { status: 403 }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  serviceUnavailableResponse: (msg = 'Service unavailable') =>
+    new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
+      status: 503,
+    }),
   successResponse: <T>(data: T, status = 200) =>
     new Response(JSON.stringify(data), { status }),
 }));
@@ -44,17 +48,9 @@ describe('Admin Analytics API', () => {
     const { GET } = await import('../route');
     const response = await GET();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
-      overview: {
-        totalEvents: 0,
-        totalParticipants: 0,
-        avgScore: 0,
-        completionRate: 0,
-      },
-      eventTimeline: [],
-      scoreDistribution: [],
-      teamComparison: [],
+      error: 'Failed to fetch analytics',
     });
   });
 

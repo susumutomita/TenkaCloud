@@ -20,6 +20,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify({ error: msg }), { status: 403 }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  serviceUnavailableResponse: (msg = 'Service unavailable') =>
+    new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
+      status: 503,
+    }),
   successResponse: <T>(data: T, status = 200) =>
     new Response(JSON.stringify(data), { status }),
 }));
@@ -141,7 +145,7 @@ describe('Admin Events API', () => {
       expect(data.error).toBe('API Error');
     });
 
-    it('AUTH_SKIP の Unauthorized は空一覧にフォールバックすべき', async () => {
+    it('AUTH_SKIP の Unauthorized は 503 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -156,17 +160,12 @@ describe('Admin Events API', () => {
       );
       const response = await GET(request);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       const data = await response.json();
-      expect(data).toEqual({
-        events: [],
-        total: 0,
-        page: 3,
-        pageSize: 25,
-      });
+      expect(data).toMatchObject({ error: 'Failed to fetch events' });
     });
 
-    it('network error は空一覧にフォールバックすべき', async () => {
+    it('network error は 503 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -179,14 +178,9 @@ describe('Admin Events API', () => {
       const request = new NextRequest('http://localhost/api/admin/events');
       const response = await GET(request);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       const data = await response.json();
-      expect(data).toEqual({
-        events: [],
-        total: 0,
-        page: 1,
-        pageSize: 10,
-      });
+      expect(data).toMatchObject({ error: 'Failed to fetch events' });
     });
   });
 
@@ -351,7 +345,7 @@ describe('Admin Events API', () => {
       expect(data).toEqual(createdEvent);
     });
 
-    it('network error 時は local dev store に作成して 201 を返すべき', async () => {
+    it('network error 時は 503 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -380,26 +374,9 @@ describe('Admin Events API', () => {
       });
       const response = await POST(request);
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(503);
       const data = await response.json();
-      expect(data).toEqual(
-        expect.objectContaining({
-          name: 'Local Event',
-          type: 'gameday',
-          cloudProvider: 'local',
-          regions: ['local'],
-        }),
-      );
-
-      const listResponse = await GET(
-        new NextRequest('http://localhost/api/admin/events'),
-      );
-      await expect(listResponse.json()).resolves.toEqual({
-        events: [expect.objectContaining({ name: 'Local Event' })],
-        total: 1,
-        page: 1,
-        pageSize: 10,
-      });
+      expect(data).toMatchObject({ error: 'Failed to create event' });
     });
   });
 });

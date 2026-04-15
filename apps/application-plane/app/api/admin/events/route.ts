@@ -15,6 +15,7 @@ import {
   forbiddenResponse,
   badRequestResponse,
   successResponse,
+  serviceUnavailableResponse,
   serverApiRequest,
 } from '@/lib/api/server';
 import type { ParticipantEvent, EventStatus } from '@/lib/api/types';
@@ -127,8 +128,8 @@ export async function GET(request: NextRequest) {
       error instanceof TypeError && /fetch failed/i.test(String(error));
 
     if (isAuthSkipUnauthorized || isNetworkError) {
-      console.warn('Admin events fallback to empty dataset:', error);
-      return successResponse(listDevEvents(page, pageSize, status));
+      console.error('Admin events backend unreachable:', error);
+      return serviceUnavailableResponse('Failed to fetch events');
     }
 
     console.error('Failed to fetch events:', error);
@@ -186,8 +187,8 @@ export async function POST(request: NextRequest) {
       error instanceof TypeError && /fetch failed/i.test(String(error));
 
     if (isAuthSkipUnauthorized || isNetworkError) {
-      console.warn('Admin events create fallback to local dev store:', error);
-      return successResponse(createDevEvent(body), 201);
+      console.error('Admin events create backend unreachable:', error);
+      return serviceUnavailableResponse('Failed to create event');
     }
 
     console.error('Failed to create event:', error);

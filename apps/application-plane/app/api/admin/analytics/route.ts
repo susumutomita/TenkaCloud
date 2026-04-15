@@ -11,6 +11,7 @@ import {
   forbiddenResponse,
   badRequestResponse,
   successResponse,
+  serviceUnavailableResponse,
   serverApiRequest,
 } from '@/lib/api/server';
 import type { AnalyticsData } from '@/lib/api/admin-analytics';
@@ -177,18 +178,8 @@ export async function GET() {
       error instanceof TypeError && /fetch failed/i.test(String(error));
 
     if (isAuthSkipUnauthorized || isNetworkError) {
-      console.warn('Analytics fallback to empty dataset:', error);
-      return successResponse({
-        overview: {
-          totalEvents: 0,
-          totalParticipants: 0,
-          avgScore: 0,
-          completionRate: 0,
-        },
-        eventTimeline: [],
-        scoreDistribution: [],
-        teamComparison: [],
-      } satisfies AnalyticsData);
+      console.error('Analytics backend unreachable:', error);
+      return serviceUnavailableResponse('Failed to fetch analytics');
     }
 
     console.error('Failed to fetch analytics:', error);

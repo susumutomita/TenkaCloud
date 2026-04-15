@@ -41,11 +41,17 @@ async function getJWKS() {
 	return jwks;
 }
 
+/* v8 ignore start -- Production safety guard */
+if (process.env.AUTH_SKIP === "1" && process.env.NODE_ENV === "production") {
+	throw new Error("AUTH_SKIP cannot be enabled in production");
+}
+/* v8 ignore stop */
+
+const authSkipEnabled =
+	process.env.AUTH_SKIP === "1" && process.env.NODE_ENV !== "production";
+
 export const authMiddleware = createMiddleware(async (c, next) => {
-	if (
-		process.env.AUTH_SKIP === "1" &&
-		(process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test")
-	) {
+	if (authSkipEnabled) {
 		c.set("auth", {
 			userId: "dev-user",
 			tenantId: "dev-tenant",

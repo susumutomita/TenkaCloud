@@ -14,6 +14,7 @@ import {
   forbiddenResponse,
   badRequestResponse,
   successResponse,
+  serviceUnavailableResponse,
   serverApiRequest,
 } from '@/lib/api/server';
 import type { ParticipantProfile } from '@/lib/api/types';
@@ -95,8 +96,8 @@ export async function GET(request: NextRequest) {
       error instanceof TypeError && /fetch failed/i.test(String(error));
 
     if (isAuthSkipUnauthorized || isNetworkError) {
-      console.warn('Admin participants fallback to empty dataset:', error);
-      return successResponse(emptyParticipantList(page, pageSize));
+      console.error('Admin participants backend unreachable:', error);
+      return serviceUnavailableResponse('Failed to fetch participants');
     }
 
     console.error('Failed to fetch participants:', error);

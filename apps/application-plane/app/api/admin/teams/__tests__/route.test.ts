@@ -19,6 +19,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify({ error: msg }), { status: 403 }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  serviceUnavailableResponse: (msg = 'Service unavailable') =>
+    new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
+      status: 503,
+    }),
   successResponse: <T>(data: T, status = 200) =>
     new Response(JSON.stringify(data), { status }),
 }));
@@ -61,7 +65,7 @@ describe('Admin Teams API', () => {
       await expect(response.json()).resolves.toEqual(mockTeams);
     });
 
-    it('AUTH_SKIP の Unauthorized は空一覧にフォールバックすべき', async () => {
+    it('AUTH_SKIP の Unauthorized は 503 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -76,16 +80,13 @@ describe('Admin Teams API', () => {
       );
       const response = await GET(request);
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({
-        teams: [],
-        total: 0,
-        page: 2,
-        pageSize: 25,
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Failed to fetch teams',
       });
     });
 
-    it('network error は空一覧にフォールバックすべき', async () => {
+    it('network error は 503 を返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -98,12 +99,9 @@ describe('Admin Teams API', () => {
       const request = new NextRequest('http://localhost/api/admin/teams');
       const response = await GET(request);
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({
-        teams: [],
-        total: 0,
-        page: 1,
-        pageSize: 10,
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Failed to fetch teams',
       });
     });
   });

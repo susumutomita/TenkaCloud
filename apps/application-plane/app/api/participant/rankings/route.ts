@@ -9,6 +9,7 @@ import { authSkipEnabled } from '@/auth';
 import {
   badRequestResponse,
   serverApiRequest,
+  serviceUnavailableResponse,
   successResponse,
 } from '@/lib/api/server';
 
@@ -38,19 +39,16 @@ export async function GET(request: NextRequest) {
       err instanceof TypeError && /fetch failed/i.test(String(err));
 
     if (isAuthSkipUnauthorized) {
-      console.warn(
-        'Participant rankings backend rejected AUTH_SKIP token. Returning empty rankings.',
+      console.error(
+        'Participant rankings backend rejected AUTH_SKIP token:',
         err,
       );
-      return successResponse({ rankings: [], total: 0 });
+      return serviceUnavailableResponse('Failed to fetch rankings');
     }
 
     if (isNetworkError) {
-      console.warn(
-        'Participant rankings backend unreachable. Returning empty rankings.',
-        err,
-      );
-      return successResponse({ rankings: [], total: 0 });
+      console.error('Participant rankings backend unreachable:', err);
+      return serviceUnavailableResponse('Failed to fetch rankings');
     }
 
     console.error('Failed to fetch participant rankings:', err);

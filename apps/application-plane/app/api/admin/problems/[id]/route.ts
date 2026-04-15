@@ -15,6 +15,7 @@ import {
   getAdminSession,
   serverApiRequest,
   successResponse,
+  serviceUnavailableResponse,
   unauthorizedResponse,
 } from '@/lib/api/server';
 import { authSkipEnabled } from '@/auth';
@@ -88,8 +89,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       error instanceof TypeError && /fetch failed/i.test(String(error));
 
     if (isAuthSkipUnauthorized || isNetworkError) {
-      console.warn('Problem detail fallback to stub problem:', error);
-      return successResponse(createFallbackProblem(id));
+      console.error('Problem detail backend unreachable:', error);
+      return serviceUnavailableResponse('Failed to fetch problem');
     }
 
     console.error('Failed to fetch problem:', error);

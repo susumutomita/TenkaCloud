@@ -16,6 +16,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify(data), { status }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  serviceUnavailableResponse: (msg = 'Service unavailable') =>
+    new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
+      status: 503,
+    }),
 }));
 
 describe('Participant Rankings API Proxy', () => {
@@ -46,7 +50,7 @@ describe('Participant Rankings API Proxy', () => {
     });
   });
 
-  it('network fetch failure の場合は空一覧を返すべき', async () => {
+  it('network fetch failure の場合は 503 を返すべき', async () => {
     mockServerApiRequest.mockRejectedValue(new TypeError('fetch failed'));
 
     const { GET } = await import('../route');
@@ -55,11 +59,13 @@ describe('Participant Rankings API Proxy', () => {
     );
     const response = await GET(request);
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ rankings: [], total: 0 });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Failed to fetch rankings',
+    });
   });
 
-  it('AUTH_SKIP 中に Unauthorized の場合は空一覧を返すべき', async () => {
+  it('AUTH_SKIP 中に Unauthorized の場合は 503 を返すべき', async () => {
     mockAuthSkipEnabled = true;
     mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
 
@@ -69,8 +75,10 @@ describe('Participant Rankings API Proxy', () => {
     );
     const response = await GET(request);
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ rankings: [], total: 0 });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Failed to fetch rankings',
+    });
   });
 
   it('通常の API エラーは 400 を返すべき', async () => {

@@ -21,6 +21,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify({ error: msg }), { status: 403 }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  serviceUnavailableResponse: (msg = 'Service unavailable') =>
+    new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
+      status: 503,
+    }),
   successResponse: <T>(data: T, status = 200) =>
     new Response(JSON.stringify(data), { status }),
 }));
@@ -38,7 +42,7 @@ describe('Admin Problems API', () => {
   });
 
   describe('GET /api/admin/problems', () => {
-    it('AUTH_SKIP 中の Unauthorized は空一覧を返すべき', async () => {
+    it('AUTH_SKIP 中の Unauthorized は 503 を返すべき', async () => {
       mockAuthSkipEnabled = true;
       mockGetAdminSession.mockResolvedValue(adminSession);
       mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
@@ -49,10 +53,9 @@ describe('Admin Problems API', () => {
       );
       const response = await GET(request);
 
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({
-        problems: [],
-        total: 0,
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Failed to fetch problems',
       });
     });
 
@@ -85,7 +88,7 @@ describe('Admin Problems API', () => {
   });
 
   describe('GET /api/admin/problems/[id]', () => {
-    it('AUTH_SKIP 中の Unauthorized は stub 問題を返すべき', async () => {
+    it('AUTH_SKIP 中の Unauthorized は 503 を返すべき', async () => {
       mockAuthSkipEnabled = true;
       mockGetAdminSession.mockResolvedValue(adminSession);
       mockServerApiRequest.mockRejectedValue(new Error('Unauthorized'));
@@ -96,10 +99,10 @@ describe('Admin Problems API', () => {
         params: Promise.resolve({ id: 'p1' }),
       });
 
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data.id).toBe('p1');
-      expect(data.deployment.providers).toContain('aws');
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Failed to fetch problem',
+      });
     });
 
     it('問題詳細を proxy できるべき', async () => {
