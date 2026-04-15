@@ -45,6 +45,13 @@ export function badRequestResponse(message = 'Bad Request') {
 }
 
 /**
+ * サービス利用不可レスポンス
+ */
+export function serviceUnavailableResponse(message = 'Service unavailable') {
+  return errorResponse(message, 503);
+}
+
+/**
  * 成功レスポンス
  */
 export function successResponse<T>(data: T, status = 200) {

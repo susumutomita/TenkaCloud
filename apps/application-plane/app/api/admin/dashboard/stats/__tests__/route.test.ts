@@ -14,6 +14,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify(data), { status }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  serviceUnavailableResponse: (msg = 'Service unavailable') =>
+    new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
+      status: 503,
+    }),
 }));
 
 describe('Admin Dashboard Stats API', () => {
@@ -62,7 +66,7 @@ describe('Admin Dashboard Stats API', () => {
     });
   });
 
-  it('upstream エラー時はゼロ値へフォールバックするべき', async () => {
+  it('upstream エラー時は 503 を返すべき', async () => {
     mockGetAdminSession.mockResolvedValue({
       roles: ['admin'],
     });
@@ -71,12 +75,9 @@ describe('Admin Dashboard Stats API', () => {
     const { GET } = await import('../route');
     const response = await GET();
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      activeEvents: 0,
-      totalParticipants: 0,
-      totalTeams: 0,
-      upcomingEvents: 0,
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Failed to fetch dashboard stats',
     });
   });
 });

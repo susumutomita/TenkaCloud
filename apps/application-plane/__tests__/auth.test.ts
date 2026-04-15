@@ -48,7 +48,7 @@ describe('Auth0 認証設定', () => {
       delete process.env.AUTH0_ISSUER;
     });
 
-    it('AUTH_SKIP=1 の場合、モックセッションを返すべき', async () => {
+    it('AUTH_SKIP=1 の場合、モックユーザー情報を返すべき', async () => {
       process.env.AUTH_SKIP = '1';
 
       const auth = await import('../auth');
@@ -57,9 +57,25 @@ describe('Auth0 認証設定', () => {
       expect(session).toBeDefined();
       expect(session?.user?.name).toBe('Dev User');
       expect(session?.user?.email).toBe('dev@example.com');
+    });
+
+    it('AUTH_SKIP=1 の場合、デフォルトロールとテナント情報を返すべき', async () => {
+      process.env.AUTH_SKIP = '1';
+
+      const auth = await import('../auth');
+      const session = await auth.auth();
+
       expect(session?.roles).toEqual(['participant']);
       expect(session?.tenantId).toBe('dev-tenant');
       expect(session?.teamId).toBe('team-alpha');
+    });
+
+    it('AUTH_SKIP=1 の場合、モックトークンを返すべき', async () => {
+      process.env.AUTH_SKIP = '1';
+
+      const auth = await import('../auth');
+      const session = await auth.auth();
+
       expect(session?.accessToken).toBe('mock-access-token');
       expect(session?.idToken).toBe('mock-id-token');
     });
@@ -259,7 +275,8 @@ describe('Auth0 認証設定', () => {
   });
 
   describe('Session コールバック', () => {
-    it('JWT からセッションにテナント情報を含めるべき', async () => {
+    // セッションコールバック用のヘルパー
+    async function callSessionCallback() {
       const NextAuth = (await import('next-auth')).default;
 
       await import('../auth');
@@ -292,7 +309,7 @@ describe('Auth0 認証設定', () => {
         userId: '1',
       };
 
-      const result = (await sessionCallback({
+      return (await sessionCallback({
         session,
         token,
         user: {
@@ -304,12 +321,27 @@ describe('Auth0 認証設定', () => {
         trigger: 'update',
         newSession: null,
       } as unknown as Parameters<typeof sessionCallback>[0])) as AnyRecord;
+    }
 
+    it('JWT からセッションにトークン情報を含めるべき', async () => {
+      const result = await callSessionCallback();
       expect(result.accessToken).toBe('test-access-token');
       expect(result.idToken).toBe('test-id-token');
+    });
+
+    it('JWT からセッションにロール情報を含めるべき', async () => {
+      const result = await callSessionCallback();
       expect(result.roles).toEqual(['participant']);
+    });
+
+    it('JWT からセッションにテナント・チーム情報を含めるべき', async () => {
+      const result = await callSessionCallback();
       expect(result.tenantId).toBe('tenant-123');
       expect(result.teamId).toBe('team-456');
+    });
+
+    it('JWT からセッションにユーザープロフィールを含めるべき', async () => {
+      const result = await callSessionCallback();
       expect(result.user?.email).toBe('test@example.com');
       expect(result.user?.name).toBe('Test User');
       expect(result.user?.image).toBe('https://example.com/avatar.png');

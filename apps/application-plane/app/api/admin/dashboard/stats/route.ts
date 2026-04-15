@@ -9,6 +9,7 @@ import {
   forbiddenResponse,
   getAdminSession,
   serverApiRequest,
+  serviceUnavailableResponse,
   successResponse,
   unauthorizedResponse,
 } from '@/lib/api/server';
@@ -85,7 +86,7 @@ export async function GET() {
       upcomingEvents,
     });
   } catch (error) {
-    console.warn('Admin dashboard stats fallback to empty values:', error);
-    return successResponse(EMPTY_STATS);
+    console.error('Failed to fetch dashboard stats:', error);
+    return serviceUnavailableResponse('Failed to fetch dashboard stats');
   }
 }
