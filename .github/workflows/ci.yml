@@ -62,3 +62,7 @@ jobs:
       - name: Build
         run: |
           make build
+
+      # Infrastructure (CDK) checks
+      - name: Infrastructure checks
+        run: make -C infrastructure install lint build test
