@@ -1,4 +1,4 @@
-.PHONY: install deploy deploy-control-plane deploy-application-plane deploy-problem destroy synth diff bootstrap build test lint format format-check static-analysis before-commit clean help
+.PHONY: install deploy deploy-control-plane deploy-application-plane deploy-problem destroy destroy-control-plane destroy-application-plane destroy-problem synth diff bootstrap build test lint format format-check static-analysis before-commit clean help
 
 ENV ?= development
 CDK := bun run cdk
@@ -49,6 +49,18 @@ deploy-problem: build
 #? destroy: Destroy all stacks
 destroy: build
 	$(CDK) destroy --all $(CDK_CONTEXT)
+
+#? destroy-control-plane: Destroy ControlPlane stack only
+destroy-control-plane: build
+	$(CDK) destroy ControlPlaneStack $(CDK_CONTEXT)
+
+#? destroy-application-plane: Destroy AppPlane stack only
+destroy-application-plane: build
+	$(CDK) destroy AppPlaneStack $(CDK_CONTEXT)
+
+#? destroy-problem: Destroy ProblemDeployPlane stack only
+destroy-problem: build
+	$(CDK) destroy ProblemDeployPlaneStack $(CDK_CONTEXT)
 
 #? synth: Synthesize CloudFormation templates
 synth: build
