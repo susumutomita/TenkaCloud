@@ -1,0 +1,30 @@
+{
+  "appName": "${APP_NAME:-TenkaCloud}",
+  "accountId": "${AWS_ACCOUNT_ID}",
+  "region": "${AWS_REGION:-ap-northeast-1}",
+  "environment": "development",
+  "controlPlaneConfig": {
+    "systemAdminEmail": "${SYSTEM_ADMIN_EMAIL}",
+    "systemAdminRoleName": "${SYSTEM_ADMIN_ROLE_NAME:-SystemAdmin}",
+    "enableAdvancedSecurityMode": false,
+    "setAPIGWScopes": false,
+    "disableAPILogging": true,
+    "apiThrottling": {
+      "rateLimit": 10,
+      "burstLimit": 5
+    }
+  },
+  "appPlaneConfig": {
+    "dynamoDbTablePrefix": "${APP_NAME:-TenkaCloud}",
+    "cfnStackPrefix": "tenant"
+  },
+  "problemDeployConfig": {
+    "targetRoleName": "tenkacloud-problem-deploy-role"
+  },
+  "dynamoDbConfig": {
+    "billingMode": "PROVISIONED",
+    "readCapacity": 1,
+    "writeCapacity": 1,
+    "pointInTimeRecovery": false
+  }
+}
