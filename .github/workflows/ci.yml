@@ -31,13 +31,10 @@ jobs:
         with:
           bun-version: "1.3.9"
 
-      # Supply Chain Security: Setup safe-chain before dependency installation
-      # Temporarily disabled to diagnose CI failures
-      # - name: Setup safe-chain
-      #   continue-on-error: true
-      #   run: |
-      #     npm i -g @aikidosec/safe-chain
-      #     safe-chain setup-ci
+      # Supply Chain Security: Safe Chain for malicious package detection
+      - name: Setup safe-chain
+        continue-on-error: true
+        run: bunx @aikidosec/safe-chain setup-ci
 
       # Supply Chain Security: Disable lifecycle scripts during install
       - name: Install packages via packages.json
