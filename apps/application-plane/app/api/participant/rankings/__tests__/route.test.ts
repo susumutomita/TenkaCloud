@@ -16,6 +16,10 @@ vi.mock('@/lib/api/server', () => ({
     new Response(JSON.stringify(data), { status }),
   badRequestResponse: (msg = 'Bad Request') =>
     new Response(JSON.stringify({ error: msg }), { status: 400 }),
+  isAuthSkipUnauthorizedError: (err: unknown) =>
+    mockAuthSkipEnabled &&
+    err instanceof Error &&
+    /^Unauthorized$/i.test(err.message),
   serviceUnavailableResponse: (msg = 'Service unavailable') =>
     new Response(JSON.stringify({ error: msg, statusCode: 503 }), {
       status: 503,

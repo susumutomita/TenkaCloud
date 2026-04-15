@@ -102,9 +102,11 @@ describe('Admin Analytics API', () => {
 
     expect(response.status).toBe(200);
     const data = await response.json();
-    expect(data.overview.totalEvents).toBe(2);
-    expect(data.overview.totalParticipants).toBe(5);
-    expect(data.overview.avgScore).toBe(70);
-    expect(data.overview.completionRate).toBe(50);
+    expect(data.overview).toEqual({
+      totalEvents: 2,
+      totalParticipants: 5,
+      avgScore: 70,
+      completionRate: 50,
+    });
   });
 });

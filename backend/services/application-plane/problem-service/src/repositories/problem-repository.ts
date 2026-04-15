@@ -9,7 +9,7 @@ import type {
 	IProblemRepository,
 	ProblemFilterOptions,
 } from "../problems/repository";
-import { DynamoProblemRepository } from "./dynamo-problem-repository";
+// DynamoProblemRepository is not yet implemented — tracked in issue #392
 import type {
 	Problem,
 	CloudProvider,
@@ -51,9 +51,8 @@ export class PrismaProblemRepository implements IProblemRepository {
 	private readonly delegate: IProblemRepository | null;
 
 	constructor() {
-		this.delegate = shouldUseDynamoProblemRepository()
-			? new DynamoProblemRepository()
-			: null;
+		// DynamoProblemRepository is not yet implemented; always use Prisma for now
+		this.delegate = null;
 	}
 
 	async create(problem: Problem): Promise<Problem> {
