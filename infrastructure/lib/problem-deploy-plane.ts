@@ -1,5 +1,6 @@
 import { CoreApplicationPlane, type IEventManager, ScriptJob } from "@cdklabs/sbt-aws";
 import * as cdk from "aws-cdk-lib";
+import { NagSuppressions } from "cdk-nag";
 import type { Construct } from "constructs";
 import { EVENTS, EVENT_SOURCES } from "./constants/events";
 import { buildDeployProblemScript } from "./handlers/deploy-problem";
@@ -67,5 +68,12 @@ export class ProblemDeployPlaneStack extends cdk.Stack {
       eventManager: props.eventManager,
       scriptJobs: [problemDeployJob],
     });
+
+    NagSuppressions.addStackSuppressions(this, [
+      {
+        id: "AwsSolutions-IAM5",
+        reason: `Cross-account AssumeRole scoped to role name '${props.targetRoleName}' with account wildcard — required for multi-account problem deployment`,
+      },
+    ]);
   }
 }

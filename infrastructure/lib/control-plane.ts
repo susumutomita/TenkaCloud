@@ -1,5 +1,6 @@
 import { CognitoAuth, ControlPlane, type IEventManager } from "@cdklabs/sbt-aws";
 import { Stack, type StackProps } from "aws-cdk-lib";
+import { NagSuppressions } from "cdk-nag";
 import type { Construct } from "constructs";
 
 export interface ControlPlaneStackProps extends StackProps {
@@ -34,5 +35,16 @@ export class ControlPlaneStack extends Stack {
 
     this.eventManager = controlPlane.eventManager;
     this.regApiGatewayUrl = controlPlane.controlPlaneAPIGatewayUrl;
+
+    NagSuppressions.addStackSuppressions(this, [
+      {
+        id: "AwsSolutions-L1",
+        reason: "Lambda runtimes are managed by @cdklabs/sbt-aws and cannot be overridden",
+      },
+      {
+        id: "AwsSolutions-IAM5",
+        reason: "Wildcard permissions in SBT ControlPlane are scoped to specific API paths (DELETE/PUT /tenants/*)",
+      },
+    ]);
   }
 }

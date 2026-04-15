@@ -6,6 +6,7 @@ import {
   type TenantLifecycleScriptJobProps,
 } from "@cdklabs/sbt-aws";
 import * as cdk from "aws-cdk-lib";
+import { NagSuppressions } from "cdk-nag";
 import type { Construct } from "constructs";
 import { buildProvisionScript } from "./handlers/provision";
 import { buildDeprovisionScript } from "./handlers/deprovision";
@@ -79,5 +80,12 @@ export class AppPlaneStack extends cdk.Stack {
       eventManager: props.eventManager,
       scriptJobs: [provisioningJob, deprovisioningJob],
     });
+
+    NagSuppressions.addStackSuppressions(this, [
+      {
+        id: "AwsSolutions-IAM5",
+        reason: `DynamoDB permissions scoped to table prefix '${props.dynamoDbTablePrefix}-*', CloudFormation permissions scoped to stack prefix '${props.cfnStackPrefix}-*'`,
+      },
+    ]);
   }
 }
