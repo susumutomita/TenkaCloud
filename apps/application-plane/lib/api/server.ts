@@ -52,6 +52,18 @@ export function serviceUnavailableResponse(message = 'Service unavailable') {
 }
 
 /**
+ * AUTH_SKIP による Unauthorized エラーかどうかを判定する。
+ * catch ブロックで AUTH_SKIP 判定を個別ルートに散らさないための共有ヘルパー。
+ */
+export function isAuthSkipUnauthorizedError(err: unknown): boolean {
+  return (
+    authSkipEnabled &&
+    err instanceof Error &&
+    /^Unauthorized$/i.test(err.message)
+  );
+}
+
+/**
  * 成功レスポンス
  */
 export function successResponse<T>(data: T, status = 200) {

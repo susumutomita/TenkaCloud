@@ -138,12 +138,16 @@ describe('Auth0 認証設定', () => {
     );
   });
 
-  it('handlers, signIn, signOut, auth がエクスポートされるべき', async () => {
+  it('handlers と auth がエクスポートされるべき', async () => {
     const auth = await import('../auth');
     expect(auth.handlers).toBeDefined();
+    expect(auth.auth).toBeDefined();
+  });
+
+  it('signIn と signOut がエクスポートされるべき', async () => {
+    const auth = await import('../auth');
     expect(auth.signIn).toBeDefined();
     expect(auth.signOut).toBeDefined();
-    expect(auth.auth).toBeDefined();
   });
 
   it('Auth0 プロバイダが環境変数から設定されるべき', async () => {
