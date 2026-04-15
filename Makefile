@@ -1,4 +1,4 @@
-.PHONY: install install_ci start stop restart status start-aws test test_quick test_e2e before-commit build seed help
+.PHONY: install install_ci start stop restart status start-aws test test_quick test_coverage test_e2e lint lint_text format format_check typecheck before-commit build seed help
 
 default: help
 
@@ -90,8 +90,21 @@ start-aws:
 
 ######## Quality ########
 
+#? lint_text: Run textlint on markdown
+lint_text:
+	@$(BUN) run lint_text
+
+#? format_check: Check code formatting
+format_check:
+	@$(BUN) run format_check
+
+#? typecheck: Run TypeScript type checking
+typecheck:
+	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) typecheck) || exit 1; done
+
 #? test: Run tests with coverage
 test:
+test_coverage: test
 	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) test:coverage) || exit 1; done
 
 #? test_quick: Run tests without coverage (fast)
