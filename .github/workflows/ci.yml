@@ -19,6 +19,15 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
+      # Supply chain security: SHA pinning
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+
+      # Supply chain security: Safe Chain for malicious package detection
+      - name: Setup safe-chain
+        run: |
+          npm i -g @aikidosec/safe-chain
+          safe-chain setup-ci
       - name: Check out the code
         # actions/checkout v4.3.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
