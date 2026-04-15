@@ -20,7 +20,7 @@ export class ControlPlaneStack extends Stack {
 
     const controlPlane = new ControlPlane(this, 'ControlPlane', {
       auth: cognitoAuth,
-      systemAdminEmail: props.systemAdminEmail ?? 'oyster880@gmail.com',
+      systemAdminEmail: props.systemAdminEmail,
       systemAdminRoleName: props.systemAdminRoleName ?? 'SystemAdmin',
       disableAPILogging: props.disableAPILogging ?? true,
     });
