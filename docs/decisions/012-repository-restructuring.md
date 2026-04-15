@@ -1,98 +1,143 @@
-# ADR-012: リポジトリ構造の再編
+# ADR-012: PoC からの再構築 — AWS SaaS Reference Architecture 準拠
 
 - **Status**: Accepted
-- **Date**: 2026-04-14
+- **Date**: 2026-04-15
 - **Deciders**: susumutomita
 
 ## Context
 
-リポジトリのディレクトリ構成に一貫性がなく、コードの所在がわかりにくい。
+PoC を通じて何を作るべきかが明確になりました。しかし現在のコードベースは以下の問題を抱えており、段階的リファクタリングよりも正しい構造で書き直す方が合理的です。
 
 ### 現状の問題
 
-1. **shared が 3 箇所に分散**: `packages/core`, `packages/shared`, `backend/services/shared` — 何をどこに置くべきか不明
-2. **`packages/core` がバックエンド専用**: `aws`, `scoring` はバックエンド関心事なのに `packages` にある
-3. **`packages/shared` がフロント専用**: `components` が入っているが名前から判別できない
-4. **深いネスト**: `backend/services/application-plane/problem-service/` — 4 階層
-5. **死んだコード**: `reference/`（SBT 参考実装）、`tmp/`、Terraform と CDK の共存
-6. **ドキュメントが 2 箇所**: `docs/` と `docs-site/`
-7. **Makefile の肥大化**: 起動ターゲット 9 個、停止ターゲット 7 個、DynamoDB 待機ループ 3 重複、`start-infrastructure` 二重定義
+1. **ディレクトリ構成に一貫性がない**: `apps/`, `backend/`, `packages/` がフラットに並び、粒度がバラバラ
+2. **shared が 3 箇所に分散**: `packages/core`, `packages/shared`, `backend/services/shared`
+3. **DynamoDB シングルテーブルを全サービスが共有**: 1 サービスのスキーマ変更が全体に影響し、独立デプロイが不可能
+4. **Makefile が 36 ターゲットに肥大化**: 重複定義、コピー&ペーストのループ、死んだターゲットが混在
+5. **死んだコード**: `reference/`, `tmp/`, Terraform と CDK の共存、空の provisioning Lambda
+6. **AI エージェントが局所最適で積み上げた**: Codex ブランチが構造を見ずにコードを足し続けた結果のスパゲティ
 
-### SBT への移行
+### 方針転換
 
-ADR-011 で SBT (`@cdklabs/sbt-aws`) を採用し、Control Plane / Application Plane のプレーン構造を採ることが決まった。ディレクトリ構成もこれに合わせる。
+PoC のコードを捨て、[AWS SaaS Reference Architecture (ECS)](https://github.com/aws-samples/saas-reference-architecture-ecs) と粒度を揃えた構造で再構築する。ビジネスロジック（Hono ハンドラ、React コンポーネント、テストコード）は移植する。
 
 ## Decision
 
-### 1. ディレクトリ構成をプレーンベースに再編する
+### 1. AWS SaaS Reference Architecture に準拠したディレクトリ構成
 
 ```
 tenkacloud/
-├── control-plane/
-│   ├── app/                          ← Next.js (旧 apps/control-plane)
-│   └── services/
-│       └── tenant-management/        ← 旧 backend/services/control-plane/tenant-management
+├── client/                               ← フロントエンド
+│   ├── AdminWeb/                         ← Control Plane UI (Next.js)
+│   └── Application/                      ← Application Plane UI (Next.js)
 │
-├── application-plane/
-│   ├── app/                          ← Next.js (旧 apps/application-plane)
-│   └── services/
-│       ├── problem-service/          ← 旧 backend/services/application-plane/problem-service
-│       ├── gameday-service/          ← 旧 backend/services/application-plane/gameday-service
-│       ├── battle-service/           ← 旧 backend/services/application-plane/battle-service
-│       ├── scoring-service/          ← 旧 backend/services/application-plane/scoring-service
-│       └── leaderboard-service/      ← 旧 backend/services/application-plane/leaderboard-service
+├── server/                               ← バックエンド + インフラ
+│   ├── application/
+│   │   ├── libs/                         ← サービス間共有ライブラリ
+│   │   │   ├── auth/                     ← 認証ヘルパー
+│   │   │   ├── events/                   ← EventBridge イベント型定義
+│   │   │   └── types/                    ← 共有型定義
+│   │   ├── microservices/                ← 各サービス（DB 独立）
+│   │   │   ├── tenant-management/
+│   │   │   ├── problem-service/
+│   │   │   ├── gameday-service/
+│   │   │   ├── battle-service/
+│   │   │   ├── scoring-service/
+│   │   │   └── leaderboard-service/
+│   │   └── reverseproxy/                ← nginx 設定
+│   ├── lib/                              ← CDK (SBT ControlPlane + ApplicationPlane)
+│   └── bin/                              ← CDK エントリポイント
 │
-├── packages/                         ← 共有ライブラリ（統合・再分類）
-│   ├── dynamodb/                     ← 旧 backend/services/shared/dynamodb
-│   ├── events/                       ← 旧 backend/services/shared/events
-│   ├── auth/                         ← 旧 backend/services/shared/auth0
-│   ├── cloud/                        ← 旧 backend/services/shared/cloud-abstraction
-│   ├── types/                        ← 旧 packages/core/types + packages/shared/types を統合
-│   ├── scoring/                      ← 旧 packages/core/scoring
-│   ├── quality/                      ← 旧 packages/shared/quality
-│   └── ui/                           ← 旧 packages/shared/components + packages/design-system を統合
-│
-├── infrastructure/
-│   ├── cdk/                          ← SBT CDK スタック（旧 infrastructure/cdk）
-│   └── nginx/                        ← リバースプロキシ設定
-│
-├── problems/                         ← GameDay 問題テンプレート
-│   └── gameday/
-│
-├── docs/                             ← ドキュメント（docs-site を統合）
-│   ├── architecture/
-│   ├── decisions/
-│   └── guides/
-│
-└── scripts/                          ← ビルド・開発スクリプト
+├── scripts/                              ← ビルド・開発スクリプト
+├── problems/                             ← GameDay 問題テンプレート
+└── docs/                                 ← ドキュメント
 ```
 
-### 2. 削除するもの
+### 2. サービスごとに DB を独立させる
 
-| 対象 | 理由 |
-|---|---|
-| `reference/` | SBT 参考実装。必要時に GitHub から参照すればよい |
-| `tmp/` | 一時ファイル。`.gitignore` に追加 |
-| `infrastructure/terraform/` | CDK + SBT に一本化（ADR-011） |
-| `docs-site/` | `docs/` に統合 |
-| `backend/services/control-plane/provisioning/` | SBT の ApplicationPlane が担う |
-| `backend/services/control-plane/provisioning-completion/` | 同上 |
-| `backend/services/application-plane/tenant-provisioner/` | 同上 |
-| `packages/core/` | `packages/types`, `packages/scoring` に分解 |
-| `packages/shared/` | `packages/ui`, `packages/quality`, `packages/types` に分解 |
-| `packages/design-system/` | `packages/ui` に統合 |
-| `backend/services/shared/` | `packages/` に昇格 |
+PoC ではシングルテーブル `TenkaCloud-dev` を全サービスが共有していた。再構築ではサービスごとに DynamoDB テーブルを持ち、独立してデプロイ可能にする。
 
-### 3. Makefile を必要最小限に絞る
+```
+microservices/
+├── tenant-management/
+│   ├── src/
+│   ├── Dockerfile
+│   └── cdk/                ← このサービスの DynamoDB テーブル定義
+│       └── table.ts        ← TenkaCloud-TenantManagement
+│
+├── problem-service/
+│   ├── src/
+│   ├── Dockerfile
+│   └── cdk/
+│       └── table.ts        ← TenkaCloud-Problems
+│
+├── gameday-service/
+│   ├── src/
+│   ├── Dockerfile
+│   └── cdk/
+│       └── table.ts        ← TenkaCloud-GameDay
+│
+├── battle-service/
+│   └── ...                 ← TenkaCloud-Battle
+├── scoring-service/
+│   └── ...                 ← TenkaCloud-Scoring
+└── leaderboard-service/
+    └── ...                 ← TenkaCloud-Leaderboard
+```
 
-**Before (36 ターゲット)**:
-start, start-compose, start-infrastructure, start-infrastructure-bg, start-dev-servers, start-local, start-one-pass-local, start-aws, start-all, start-kumo, start-localstack, start-floci, stop, stop-compose, stop-local, stop-dev-servers, stop-all, stop-control-plane, stop-infrastructure, restart, restart-all, docker-build, docker-run, docker-stop, check-docker, check-docker-hub, docker-status, ...
+**各サービスの DB 責務:**
 
-**After (14 ターゲット)**:
+| サービス | テーブル | PK/SK パターン |
+|---|---|---|
+| tenant-management | TenkaCloud-Tenants | `TENANT#{id}` / `METADATA`, `USER#{id}` |
+| problem-service | TenkaCloud-Problems | `PROBLEM#{id}` / `METADATA`, `EVENT#{id}` |
+| gameday-service | TenkaCloud-GameDay | `GAMEDAY#{eventId}` / `TEAM#{id}`, `PARTICIPANT#{id}` |
+| battle-service | TenkaCloud-Battle | `BATTLE#{id}` / `ROUND#{id}` |
+| scoring-service | TenkaCloud-Scoring | `SCORE#{teamId}` / `PROBLEM#{id}` |
+| leaderboard-service | TenkaCloud-Leaderboard | `LEADERBOARD#{eventId}` / `RANK#{position}` |
+
+**サービス間のデータ参照はイベント駆動または API 呼び出しで行う。DB を直接参照しない。**
+
+### 3. 独立デプロイ
+
+各サービスは以下を自己完結で持つ。
+
+```
+microservices/problem-service/
+├── src/                    ← ビジネスロジック
+│   ├── routes/
+│   ├── services/
+│   ├── repositories/       ← このサービス専用の DynamoDB アクセス
+│   └── index.ts
+├── __tests__/
+├── cdk/                    ← このサービスの CDK スタック（テーブル + IAM）
+├── Dockerfile
+├── package.json
+└── tsconfig.json
+```
+
+デプロイは `cdk deploy ProblemServiceStack` のようにサービス単位で行える。他のサービスに影響しない。
+
+### 4. サービス間通信
+
+```
+tenant-management
+  → EventBridge: tenant.created
+        ↓
+problem-service, gameday-service (イベント受信)
+
+gameday-service
+  → HTTP: GET /api/problems/{id} → problem-service
+  → EventBridge: problem.deploy.requested → ProblemDeployPlane
+```
+
+DB を共有しないため、サービス間の結合はイベントと API のみ。
+
+### 5. Makefile を必要最小限に絞る
 
 ```makefile
 # === 開発 ===
-make start              # ローカル全起動（エミュレータ + DynamoDB + dev サーバー）
+make start              # ローカル全起動
 make start-aws          # 実 AWS 接続モード
 make stop               # 全停止
 make status             # サービス状態表示
@@ -115,54 +160,63 @@ make build              # プロダクションビルド
 make help               # ヘルプ
 ```
 
-削除するターゲットは以下の通り。
-- `start-compose`, `start-all`, `stop-all`, `restart-all` — `start` / `stop` に統合
-- `start-infrastructure`, `start-infrastructure-bg`, `stop-infrastructure` — `start` に統合
-- `start-dev-servers`, `stop-dev-servers` — `start` に統合
-- `start-kumo`, `start-localstack`, `start-floci` — `CLOUD_EMULATOR=xxx make start` で切り替え
-- `start-one-pass-local` — `make start` のオプション化
-- `docker-build`, `docker-run`, `docker-stop` — `start-compose` に統合済みで不要
-- `check-docker-hub` — 過剰
-- `auth0-*` (5 個) — CDK に移行
-- `setup-dynamodb` — `start` に統合
+### 6. 捨てるものと持っていくもの
 
-### 4. 移行手順
+**捨てるもの（構造）:**
 
-破壊的な一括変更ではなく、以下の順序で段階的に実行する。
+| 対象 | 理由 |
+|---|---|
+| ディレクトリ構成全体 | 一貫性がなく修正するより作り直す方が早い |
+| DynamoDB シングルテーブル設計 | サービスごとにテーブルを分離する |
+| Makefile | 36 ターゲットの積み上げを整理するより書き直す方が早い |
+| Terraform | CDK + SBT に置き換え |
+| provisioning Lambda | SBT ApplicationPlane が担う |
+| docker-compose 群 | 構造変更後に合わせて書き直し |
+| 3 箇所の shared | `server/application/libs/` に集約して作り直し |
+| CI ワークフロー | パスが全部変わるので書き直し |
+| `reference/`, `tmp/`, `docs-site/` | 不要 |
 
-**Phase 1: 削除（リスク低）**
-1. `reference/`, `tmp/` を削除
-2. `docs-site/` を `docs/` に統合
-3. 死んだ provisioning Lambda コード（`provisioning/`, `provisioning-completion/`, `tenant-provisioner/`）を削除
-4. `infrastructure/terraform/` を削除（CDK に移行済み）
+**持っていくもの（ロジック）:**
 
-**Phase 2: packages 統合（リスク中）**
-1. `backend/services/shared/*` を `packages/*` に移動
-2. `packages/core/` を分解して `packages/types`, `packages/scoring` に
-3. `packages/shared/` を分解して `packages/ui`, `packages/quality` に
-4. `packages/design-system/` を `packages/ui` に統合
-5. 全 import パスを更新
+| 対象 | 理由 |
+|---|---|
+| Hono サービスのハンドラ・ルーティング | ビジネスロジックは動いている |
+| React コンポーネント (Cloudscape) | UI は動いている |
+| テストコード | 1000+ テスト、99％+ カバレッジ |
+| ADR (011, 012) | 設計判断はそのまま有効 |
+| PK/SK パターンの設計知見 | テーブルは分離するがパターン自体は流用可能 |
 
-**Phase 3: プレーン構造化（リスク高）**
-1. `apps/control-plane/` → `control-plane/app/`
-2. `apps/application-plane/` → `application-plane/app/`
-3. `backend/services/control-plane/*` → `control-plane/services/*`
-4. `backend/services/application-plane/*` → `application-plane/services/*`
-5. Dockerfile, docker-compose.yml, CI ワークフローの全パス更新
+### 7. 移行手順
 
-**Phase 4: Makefile 整理**
-1. 重複ターゲットを統合
-2. DynamoDB 待機ループを共通関数化
-3. 死んだターゲット（auth0-*, docker-*）を削除
-4. ヘルプを更新
+```
+1. 新しいブランチ (v2) を空の正しい構造で作る
+   client/ + server/ + scripts/ + docs/ + problems/
+
+2. server/application/libs/ を先に移植（auth, events, types）
+
+3. サービスを 1 つずつ移植
+   - DB を分離（専用テーブル定義 + リポジトリ層の書き換え）
+   - テストを一緒に移植
+   - 移植するたびに make before-commit を通す
+
+4. client/ を移植（AdminWeb, Application）
+
+5. server/lib/ に SBT スタックを構築（インフラ担当）
+
+6. Makefile, docker-compose, CI を新構造で書き直す
+
+7. 旧ディレクトリを削除
+```
 
 ## Consequences
 
-- **Good**: ディレクトリ構成が SBT のプレーンモデルと一致し、「どこに何があるか」が自明になる。shared の分散が解消される。Makefile が半分以下になる。
-- **Bad**: Phase 3 は全ファイルの import パス、Dockerfile、CI 設定に影響するため、一時的に大きな差分が出る。段階的にやっても各 Phase 内では一括変更が必要。
-- **Tradeoff**: Git blame の履歴が切れる。`git log --follow` で追えるが、コードレビューは diff が大きくなる。
+- **Good**: AWS SaaS Reference Architecture と同じ粒度になり、構造が自明になる。サービスが DB ごと独立するため、個別にデプロイ・スケール・修正できる。サービス間の結合がイベントと API に限定されるため、変更の影響範囲が明確になる。
+- **Good**: PoC で検証済みのビジネスロジックとテストを移植するため、「何を作るか」の不確実性がない。
+- **Bad**: 全コードの移植作業が発生する。テーブル分離に伴いリポジトリ層の書き換えが必要。サービス間の結合データ（例: gameday-service が problem のデータを参照するケース）を API / イベントに置き換える設計作業が追加で必要。
+- **Tradeoff**: Git の履歴は実質リセットになる。PoC の Git blame は失われるが、ADR と移植元のコミットで追跡可能。
 
 ## References
 
+- [AWS SaaS Reference Architecture (ECS)](https://github.com/aws-samples/saas-reference-architecture-ecs)
 - [ADR-011: SBT Control Plane と二層 Application Plane 構成](./011-sbt-control-plane-and-two-layer-application-plane.md)
 - [@cdklabs/sbt-aws](https://github.com/awslabs/sbt-aws)
