@@ -34,6 +34,8 @@ const JWKS_URL =
   process.env.JWKS_URI ?? `https://${AUTH0_DOMAIN}/.well-known/jwks.json`;
 const JWT_ISSUER =
   process.env.JWT_ISSUER ?? `https://${AUTH0_DOMAIN}/`;
+const JWT_AUDIENCE =
+  process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE ?? AUTH0_AUDIENCE;
 
 // Lazy initialization of JWKS to avoid startup failures
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -199,9 +201,8 @@ export async function authMiddleware(c: Context, next: Next) {
     const verifyOptions: JWTVerifyOptions = {
       issuer: JWT_ISSUER,
     };
-    const audience = process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE ?? AUTH0_AUDIENCE;
-    if (audience) {
-      verifyOptions.audience = audience;
+    if (JWT_AUDIENCE) {
+      verifyOptions.audience = JWT_AUDIENCE;
     }
 
     const { payload } = await jwtVerify(
@@ -337,9 +338,8 @@ export async function optionalAuth(c: Context, next: Next) {
     const verifyOptions: JWTVerifyOptions = {
       issuer: JWT_ISSUER,
     };
-    const optAudience = process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE ?? AUTH0_AUDIENCE;
-    if (optAudience) {
-      verifyOptions.audience = optAudience;
+    if (JWT_AUDIENCE) {
+      verifyOptions.audience = JWT_AUDIENCE;
     }
 
     const { payload } = await jwtVerify(

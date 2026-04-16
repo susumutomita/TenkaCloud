@@ -49,6 +49,7 @@ const JWT_ISSUER = process.env.JWT_ISSUER || KEYCLOAK_ISSUER;
 const JwtClaimsSchema = z.object({
   sub: z.string().optional(),
   'custom:tenant_id': z.string().min(1).optional(),
+  tenant_id: z.string().min(1).optional(),
   tenantId: z.string().min(1).optional(),
   'cognito:groups': z.array(z.string()).min(1).optional(),
   realm_access: z.object({ roles: z.array(z.string()) }).optional(),
@@ -127,11 +128,8 @@ function sanitizeDevIdentity(
 }
 
 /**
- * JWT トークンを検証してユーザー情報を取得
- *
- * Cognito と Keycloak 両方のクレーム形式をサポート。
- * - tenant_id: `custom:tenant_id` (Cognito) -> `tenantId` (Keycloak)
- * - roles: `cognito:groups` (Cognito) -> `realm_access.roles` (Keycloak)
+ * Cognito: custom:tenant_id -> cognito:groups
+ * Keycloak: tenantId / tenant_id -> realm_access.roles
  */
 export async function verifyToken(
   token: string
@@ -143,14 +141,16 @@ export async function verifyToken(
 
     const jwtPayload = payload as unknown as JWTPayload;
     const parsed = JwtClaimsSchema.safeParse(payload);
-    const claims = parsed.success ? parsed.data : {};
+    const claims = parsed.success ? parsed.data : (payload as Record<string, unknown>);
 
     const tenantId =
-      (claims['custom:tenant_id'] ?? claims.tenantId) ??
-      (jwtPayload['custom:tenant_id'] ?? jwtPayload.tenantId);
+      (claims['custom:tenant_id'] as string | undefined) ??
+      (claims['tenant_id'] as string | undefined) ??
+      (claims['tenantId'] as string | undefined);
     const roles =
-      (claims['cognito:groups'] ?? claims.realm_access?.roles) ??
-      (jwtPayload['cognito:groups'] ?? jwtPayload.realm_access?.roles ?? []);
+      (claims['cognito:groups'] as string[] | undefined) ??
+      (claims['realm_access'] as { roles?: string[] } | undefined)?.roles ??
+      [];
 
     return {
       id: jwtPayload.sub,
