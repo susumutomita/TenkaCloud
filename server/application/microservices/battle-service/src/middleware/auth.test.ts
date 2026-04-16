@@ -198,4 +198,48 @@ describe('認証ミドルウェア', () => {
     const body = await res.json();
     expect(body.auth.roles).toEqual([]);
   });
+
+  it('Cognito の custom:tenant_id からテナント ID を抽出すべき', async () => {
+    const mockPayload = {
+      sub: 'user-cognito',
+      'custom:tenant_id': 'cognito-tenant-789',
+      'cognito:groups': ['admin'],
+    };
+
+    vi.mocked(jose.createRemoteJWKSet).mockReturnValue(vi.fn() as never);
+    vi.mocked(jose.jwtVerify).mockResolvedValue({
+      payload: mockPayload,
+      protectedHeader: { alg: 'RS256' },
+    } as never);
+
+    const res = await app.request('/test', {
+      headers: { Authorization: 'Bearer cognito-token' },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.auth.tenantId).toBe('cognito-tenant-789');
+  });
+
+  it('Cognito の cognito:groups からロールを取得すべき', async () => {
+    const mockPayload = {
+      sub: 'user-cognito',
+      'custom:tenant_id': 'cognito-tenant-789',
+      'cognito:groups': ['tenant-admin', 'participant'],
+    };
+
+    vi.mocked(jose.createRemoteJWKSet).mockReturnValue(vi.fn() as never);
+    vi.mocked(jose.jwtVerify).mockResolvedValue({
+      payload: mockPayload,
+      protectedHeader: { alg: 'RS256' },
+    } as never);
+
+    const res = await app.request('/test', {
+      headers: { Authorization: 'Bearer cognito-token' },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.auth.roles).toEqual(['tenant-admin', 'participant']);
+  });
 });

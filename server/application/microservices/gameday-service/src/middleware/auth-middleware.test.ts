@@ -326,6 +326,69 @@ describe("authMiddleware", () => {
 			);
 		});
 
+		it("Cognito の custom:tenant_id からテナント ID を抽出すべき", async () => {
+			const jose = await import("jose");
+			vi.mocked(jose.jwtVerify).mockResolvedValue({
+				payload: {
+					sub: "cognito-user-1",
+					"custom:tenant_id": "cognito-tenant-abc",
+					"cognito:groups": ["participant"],
+					iss: "https://cognito-idp.ap-northeast-1.amazonaws.com/pool-id",
+					aud: "",
+					iat: 0,
+					exp: 0,
+				},
+				protectedHeader: { alg: "RS256" },
+				key: {} as CryptoKey,
+			});
+
+			const { authMiddleware } = await import("./auth");
+
+			const app = new Hono();
+			app.use("/*", authMiddleware);
+			app.get("/test", (c) => c.json(c.get("auth")));
+
+			const res = await app.request("/test", {
+				headers: { Authorization: "Bearer cognito-token" },
+			});
+			expect(res.status).toBe(StatusCodes.OK);
+
+			const body = await res.json();
+			expect(body.userId).toBe("cognito-user-1");
+			expect(body.tenantId).toBe("cognito-tenant-abc");
+		});
+
+		it("Cognito の cognito:groups からロールを取得すべき", async () => {
+			const jose = await import("jose");
+			vi.mocked(jose.jwtVerify).mockResolvedValue({
+				payload: {
+					sub: "cognito-user-2",
+					"custom:tenant_id": "cognito-tenant-xyz",
+					"cognito:groups": ["admin", "organizer"],
+					iss: "https://cognito-idp.ap-northeast-1.amazonaws.com/pool-id",
+					aud: "",
+					iat: 0,
+					exp: 0,
+				},
+				protectedHeader: { alg: "RS256" },
+				key: {} as CryptoKey,
+			});
+
+			const { authMiddleware } = await import("./auth");
+
+			const app = new Hono();
+			app.use("/*", authMiddleware);
+			app.get("/test", (c) => c.json(c.get("auth")));
+
+			const res = await app.request("/test", {
+				headers: { Authorization: "Bearer cognito-token" },
+			});
+			expect(res.status).toBe(StatusCodes.OK);
+
+			const body = await res.json();
+			expect(body.roles).toEqual(["admin", "organizer"]);
+		});
+
 		it("realm_access がない場合は空のロール配列を設定すべき", async () => {
 			const jose = await import("jose");
 			vi.mocked(jose.jwtVerify).mockResolvedValue({

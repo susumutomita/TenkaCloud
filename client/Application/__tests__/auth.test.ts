@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { NextAuthConfig } from 'next-auth';
 
-// Mock next-auth
 vi.mock('next-auth', () => ({
   default: vi.fn((config) => ({
     handlers: { GET: vi.fn(), POST: vi.fn() },
@@ -11,11 +10,11 @@ vi.mock('next-auth', () => ({
   })),
 }));
 
-vi.mock('next-auth/providers/auth0', () => ({
+vi.mock('next-auth/providers/cognito', () => ({
   default: vi.fn((options) => ({
-    id: 'auth0',
-    name: 'Auth0',
-    type: 'oauth',
+    id: 'cognito',
+    name: 'Cognito',
+    type: 'oidc',
     ...options,
   })),
 }));
@@ -28,21 +27,30 @@ vi.mock('@/lib/auth/is-auth-skip-enabled', () => ({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
 
-describe('Auth0 認証設定', () => {
+describe('Cognito 認証設定', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    process.env.AUTH0_CLIENT_ID = 'test-client-id';
-    process.env.AUTH0_CLIENT_SECRET = 'test-client-secret';
-    process.env.AUTH0_ISSUER = 'https://test.auth0.com';
+    process.env.COGNITO_CLIENT_ID = 'test-client-id';
+    process.env.COGNITO_CLIENT_SECRET = 'test-client-secret';
+    process.env.COGNITO_ISSUER =
+      'https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_test';
+    delete process.env.AUTH0_CLIENT_ID;
+    delete process.env.AUTH0_CLIENT_SECRET;
+    delete process.env.AUTH0_ISSUER;
     delete process.env.AUTH_SKIP;
     delete process.env.AUTH_SKIP_ROLES;
+    delete process.env.SKIP_PROVIDER_VALIDATION;
+    delete process.env.SKIP_AUTH0_VALIDATION;
   });
 
   describe('AUTH_SKIP モード', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetModules();
+      delete process.env.COGNITO_CLIENT_ID;
+      delete process.env.COGNITO_CLIENT_SECRET;
+      delete process.env.COGNITO_ISSUER;
       delete process.env.AUTH0_CLIENT_ID;
       delete process.env.AUTH0_CLIENT_SECRET;
       delete process.env.AUTH0_ISSUER;
@@ -90,21 +98,30 @@ describe('Auth0 認証設定', () => {
       expect(session?.roles).toEqual(['tenant-admin', 'participant']);
     });
 
-    it('AUTH_SKIP=1 の場合、Auth0 環境変数がなくてもエラーにならないべき', async () => {
+    it('AUTH_SKIP=1 の場合、Cognito 環境変数がなくてもエラーにならないべき', async () => {
       process.env.AUTH_SKIP = '1';
 
       await expect(import('../auth')).resolves.toBeDefined();
     });
 
-    it('AUTH_SKIP=1 の場合、モックセッションに tenantId/teamId が含まれないべき（Control Plane は全テナント管理者向け）', async () => {
+    it('AUTH_SKIP=1 の場合、モックセッションに tenantId/teamId が含まれるべき', async () => {
       process.env.AUTH_SKIP = '1';
 
       const auth = await import('../auth');
       const session = await auth.auth();
 
-      // Application Plane ではテナント/チーム情報をセッションに含む
-      expect(session?.tenantId).toBeDefined();
-      expect(session?.teamId).toBeDefined();
+      expect(session?.tenantId).toBe('dev-tenant');
+      expect(session?.teamId).toBe('team-alpha');
+    });
+
+    it('getSession() でもモックセッションを返すべき', async () => {
+      process.env.AUTH_SKIP = '1';
+
+      const auth = await import('../auth');
+      const session = await auth.getSession();
+
+      expect(session?.user?.name).toBe('Dev User');
+      expect(session?.tenantId).toBe('dev-tenant');
     });
   });
 
@@ -117,25 +134,55 @@ describe('Auth0 認証設定', () => {
         },
       }));
 
-      process.env.AUTH0_CLIENT_ID = 'test-client-id';
-      process.env.AUTH0_CLIENT_SECRET = 'test-client-secret';
-      process.env.AUTH0_ISSUER = 'https://test.auth0.com';
+      process.env.COGNITO_CLIENT_ID = 'test-client-id';
+      process.env.COGNITO_CLIENT_SECRET = 'test-client-secret';
+      process.env.COGNITO_ISSUER =
+        'https://cognito-idp.ap-northeast-1.amazonaws.com/test';
 
       const auth = await import('../auth');
-      // auth モジュールが正常にロードされ、Auth0 プロバイダが使用される
       expect(auth.handlers).toBeDefined();
       expect(auth.auth).toBeDefined();
     });
   });
 
   it('必須の環境変数が欠けている場合はエラーを投げるべき', async () => {
-    process.env.AUTH0_CLIENT_ID = '';
-    process.env.AUTH0_CLIENT_SECRET = '';
-    process.env.AUTH0_ISSUER = '';
+    process.env.COGNITO_CLIENT_ID = '';
+    process.env.COGNITO_CLIENT_SECRET = '';
+    process.env.COGNITO_ISSUER = '';
 
     await expect(import('../auth')).rejects.toThrow(
-      'Missing required Auth0 environment variables',
+      'Missing required auth environment variables',
     );
+  });
+
+  it('Auth0 環境変数へのフォールバックが動作すべき', async () => {
+    delete process.env.COGNITO_CLIENT_ID;
+    delete process.env.COGNITO_CLIENT_SECRET;
+    delete process.env.COGNITO_ISSUER;
+    process.env.AUTH0_CLIENT_ID = 'auth0-client-id';
+    process.env.AUTH0_CLIENT_SECRET = 'auth0-client-secret';
+    process.env.AUTH0_ISSUER = 'https://test.auth0.com';
+
+    const Cognito = (await import('next-auth/providers/cognito')).default;
+    await import('../auth');
+
+    expect(Cognito).toHaveBeenCalledWith({
+      clientId: 'auth0-client-id',
+      clientSecret: 'auth0-client-secret',
+      issuer: 'https://test.auth0.com',
+    });
+  });
+
+  it('SKIP_PROVIDER_VALIDATION=1 の場合、環境変数なしでもエラーにならないべき', async () => {
+    delete process.env.COGNITO_CLIENT_ID;
+    delete process.env.COGNITO_CLIENT_SECRET;
+    delete process.env.COGNITO_ISSUER;
+    delete process.env.AUTH0_CLIENT_ID;
+    delete process.env.AUTH0_CLIENT_SECRET;
+    delete process.env.AUTH0_ISSUER;
+    process.env.SKIP_PROVIDER_VALIDATION = '1';
+
+    await expect(import('../auth')).resolves.toBeDefined();
   });
 
   it('handlers と auth がエクスポートされるべき', async () => {
@@ -150,14 +197,22 @@ describe('Auth0 認証設定', () => {
     expect(auth.signOut).toBeDefined();
   });
 
-  it('Auth0 プロバイダが環境変数から設定されるべき', async () => {
-    const Auth0 = (await import('next-auth/providers/auth0')).default;
+  it('getSession() は AUTH_SKIP 無効時に nextAuth.auth() を呼ぶべき', async () => {
+    const auth = await import('../auth');
+    const session = await auth.getSession();
+    // nextAuth.auth is mocked to return undefined, so session should be falsy
+    expect(session).toBeUndefined();
+  });
+
+  it('Cognito プロバイダが環境変数から設定されるべき', async () => {
+    const Cognito = (await import('next-auth/providers/cognito')).default;
     await import('../auth');
 
-    expect(Auth0).toHaveBeenCalledWith({
+    expect(Cognito).toHaveBeenCalledWith({
       clientId: 'test-client-id',
       clientSecret: 'test-client-secret',
-      issuer: 'https://test.auth0.com',
+      issuer:
+        'https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_test',
     });
   });
 
@@ -190,7 +245,38 @@ describe('Auth0 認証設定', () => {
       expect(result.idToken).toBe('test-id-token');
     });
 
-    it('Auth0 カスタムクレームからロールとテナント情報を取得すべき', async () => {
+    it('Cognito の cognito:groups からロールを取得すべき', async () => {
+      const NextAuth = (await import('next-auth')).default;
+
+      await import('../auth');
+      const mockCall = vi.mocked(NextAuth).mock.calls[0][0] as NextAuthConfig;
+      const jwtCallback = mockCall.callbacks?.jwt;
+
+      if (!jwtCallback) throw new Error('JWT callback not defined');
+
+      const token = {};
+      const profile = {
+        'cognito:groups': ['participant', 'team_lead'],
+        'custom:tenant_id': 'tenant-cognito-123',
+        'custom:team_id': 'team-cognito-456',
+        email: 'test@example.com',
+        name: 'Test User',
+        picture: 'https://example.com/avatar.png',
+      };
+
+      const result = (await jwtCallback({
+        token,
+        profile,
+        user: { id: '1', name: 'Test', email: 'test@example.com' },
+        trigger: 'signIn',
+      } as Parameters<typeof jwtCallback>[0])) as AnyRecord;
+
+      expect(result.roles).toEqual(['participant', 'team_lead']);
+      expect(result.tenantId).toBe('tenant-cognito-123');
+      expect(result.teamId).toBe('team-cognito-456');
+    });
+
+    it('Auth0 カスタムクレームにフォールバックすべき', async () => {
       const NextAuth = (await import('next-auth')).default;
 
       await import('../auth');
@@ -219,9 +305,6 @@ describe('Auth0 認証設定', () => {
       expect(result.roles).toEqual(['participant', 'team_lead']);
       expect(result.tenantId).toBe('tenant-123');
       expect(result.teamId).toBe('team-456');
-      expect(result.email).toBe('test@example.com');
-      expect(result.name).toBe('Test User');
-      expect(result.picture).toBe('https://example.com/avatar.png');
     });
 
     it('カスタムクレームがない場合、フォールバックすべき', async () => {
@@ -252,6 +335,31 @@ describe('Auth0 認証設定', () => {
       expect(result.teamId).toBeNull();
     });
 
+    it('profile に email/name がない場合、token の既存値を維持すべき', async () => {
+      const NextAuth = (await import('next-auth')).default;
+
+      await import('../auth');
+      const mockCall = vi.mocked(NextAuth).mock.calls[0][0] as NextAuthConfig;
+      const jwtCallback = mockCall.callbacks?.jwt;
+
+      if (!jwtCallback) throw new Error('JWT callback not defined');
+
+      const token = { email: 'existing@example.com', name: 'Existing User' };
+      const profile = {
+        'cognito:groups': ['participant'],
+      };
+
+      const result = (await jwtCallback({
+        token,
+        profile,
+        user: { id: '1', name: 'Test', email: 'test@example.com' },
+        trigger: 'signIn',
+      } as Parameters<typeof jwtCallback>[0])) as AnyRecord;
+
+      expect(result.email).toBe('existing@example.com');
+      expect(result.name).toBe('Existing User');
+    });
+
     it('ロールが存在しない場合、空配列にフォールバックすべき', async () => {
       const NextAuth = (await import('next-auth')).default;
 
@@ -279,7 +387,6 @@ describe('Auth0 認証設定', () => {
   });
 
   describe('Session コールバック', () => {
-    // セッションコールバック用のヘルパー
     async function callSessionCallback() {
       const NextAuth = (await import('next-auth')).default;
 

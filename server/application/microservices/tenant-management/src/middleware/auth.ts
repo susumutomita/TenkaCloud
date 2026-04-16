@@ -1,5 +1,6 @@
 import type { Context, Next } from 'hono';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import type { JWTVerifyOptions } from 'jose';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('auth-middleware');
@@ -21,12 +22,18 @@ if (authSkipEnabled && typeof console !== 'undefined') {
   );
 }
 
-// Auth0 configuration
+// ── JWT / JWKS configuration ─────────────────────────
+// Primary: generic JWKS_URI / JWT_ISSUER (works with Cognito, Keycloak, etc.)
+// Fallback: Auth0-specific AUTH0_DOMAIN derivation
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN || 'dev-tenkacloud.auth0.com';
 const AUTH0_AUDIENCE =
   process.env.AUTH0_AUDIENCE || 'https://api.tenkacloud.com';
-const JWKS_URL = `https://${AUTH0_DOMAIN}/.well-known/jwks.json`;
 const AUTH0_NAMESPACE = 'https://tenkacloud.com';
+
+const JWKS_URL =
+  process.env.JWKS_URI ?? `https://${AUTH0_DOMAIN}/.well-known/jwks.json`;
+const JWT_ISSUER =
+  process.env.JWT_ISSUER ?? `https://${AUTH0_DOMAIN}/`;
 
 // Lazy initialization of JWKS to avoid startup failures
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -38,6 +45,28 @@ function getJWKS() {
   return jwksCache;
 }
 
+/**
+ * Sanitize dev header values to prevent header injection.
+ * Only allows alphanumeric, @, ., _, :, /, +, =, comma, hyphen.
+ */
+function sanitizeDevHeader(
+  value: string | undefined,
+  fallback: string,
+  maxLength = 128,
+): string {
+  if (!value) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const sanitized = trimmed
+    .replace(/[^A-Za-z0-9@._:/+=,-]/g, '-')
+    .slice(0, maxLength);
+  return sanitized || fallback;
+}
+
 // User roles enum
 export enum UserRole {
   PLATFORM_ADMIN = 'platform-admin',
@@ -45,7 +74,7 @@ export enum UserRole {
   USER = 'user',
 }
 
-// Auth0 JWT payload interface
+// JWT payload interface — supports both Auth0 and Cognito claims
 export interface JWTPayload {
   sub: string;
   email?: string;
@@ -53,7 +82,11 @@ export interface JWTPayload {
   nickname?: string;
   picture?: string;
   org_id?: string;
+  // Cognito claims
+  'cognito:groups'?: string[];
+  'custom:tenant_id'?: string;
   [key: `${typeof AUTH0_NAMESPACE}/${string}`]: unknown;
+  [key: string]: unknown;
 }
 
 // Authenticated user context
@@ -74,36 +107,74 @@ declare module 'hono' {
 }
 
 function extractRoles(payload: JWTPayload): string[] {
+  // 1. Cognito: cognito:groups
+  const cognitoGroups = payload['cognito:groups'];
+  if (Array.isArray(cognitoGroups) && cognitoGroups.length > 0) {
+    return cognitoGroups as string[];
+  }
+
+  // 2. Auth0: namespace/roles
   const rolesKey = `${AUTH0_NAMESPACE}/roles` as const;
   const roles = payload[rolesKey];
   if (Array.isArray(roles)) {
     return roles as string[];
   }
+
   return [];
 }
 
 function extractTenantId(payload: JWTPayload): string | undefined {
+  // 1. Cognito: custom:tenant_id
+  const cognitoTenantId = payload['custom:tenant_id'];
+  if (typeof cognitoTenantId === 'string' && cognitoTenantId) {
+    return cognitoTenantId;
+  }
+
+  // 2. Auth0: namespace/tenant_id
   const tenantKey = `${AUTH0_NAMESPACE}/tenant_id` as const;
   const tenantId = payload[tenantKey];
   if (typeof tenantId === 'string') {
     return tenantId;
   }
+
   return undefined;
 }
 
 /**
- * JWT authentication middleware for Auth0
- * Validates JWT token from Authorization header and attaches user info to context
+ * JWT authentication middleware supporting Auth0 and Cognito.
+ * Validates JWT token from Authorization header and attaches user info to context.
  */
 export async function authMiddleware(c: Context, next: Next) {
-  // AUTH_SKIP=1: 開発用に JWT 検証をバイパス
+  // AUTH_SKIP=1: 開発用に JWT 検証をバイパス（dev ヘッダーで上書き可能）
   if (authSkipEnabled) {
+    const devRolesRaw =
+      c.req.header('X-TenkaCloud-Dev-Roles') ??
+      process.env.AUTH_SKIP_ROLES;
+    const devRoles = devRolesRaw
+      ? devRolesRaw
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [UserRole.PLATFORM_ADMIN];
+
     const mockUser: AuthenticatedUser = {
-      id: 'dev-user',
-      email: 'dev@tenkacloud.local',
-      username: 'Dev Admin',
-      roles: [UserRole.PLATFORM_ADMIN],
-      tenantId: 'dev-tenant',
+      id: sanitizeDevHeader(
+        c.req.header('X-TenkaCloud-Dev-User-Id'),
+        'dev-user',
+      ),
+      email: sanitizeDevHeader(
+        c.req.header('X-TenkaCloud-Dev-Email'),
+        'dev@tenkacloud.local',
+      ),
+      username: sanitizeDevHeader(
+        c.req.header('X-TenkaCloud-Dev-Username'),
+        'Dev Admin',
+      ),
+      roles: devRoles,
+      tenantId: sanitizeDevHeader(
+        c.req.header('X-TenkaCloud-Dev-Tenant-Id'),
+        'dev-tenant',
+      ),
     };
     c.set('user', mockUser);
     await next();
@@ -125,10 +196,20 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, getJWKS(), {
-      issuer: `https://${AUTH0_DOMAIN}/`,
-      audience: AUTH0_AUDIENCE,
-    });
+    const verifyOptions: JWTVerifyOptions = {
+      issuer: JWT_ISSUER,
+    };
+    // Only enforce audience when explicitly configured
+    if (process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE) {
+      verifyOptions.audience =
+        process.env.JWT_AUDIENCE ?? AUTH0_AUDIENCE;
+    }
+
+    const { payload } = await jwtVerify(
+      token,
+      getJWKS(),
+      verifyOptions,
+    );
 
     const jwtPayload = payload as unknown as JWTPayload;
 
@@ -254,10 +335,19 @@ export async function optionalAuth(c: Context, next: Next) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, getJWKS(), {
-      issuer: `https://${AUTH0_DOMAIN}/`,
-      audience: AUTH0_AUDIENCE,
-    });
+    const verifyOptions: JWTVerifyOptions = {
+      issuer: JWT_ISSUER,
+    };
+    if (process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE) {
+      verifyOptions.audience =
+        process.env.JWT_AUDIENCE ?? AUTH0_AUDIENCE;
+    }
+
+    const { payload } = await jwtVerify(
+      token,
+      getJWKS(),
+      verifyOptions,
+    );
 
     const jwtPayload = payload as unknown as JWTPayload;
 

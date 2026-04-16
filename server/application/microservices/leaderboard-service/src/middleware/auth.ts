@@ -74,22 +74,30 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 			issuer: ISSUER,
 		});
 
-		const tenantId = (payload as Record<string, unknown>)["tenant_id"] as
-			| string
-			| undefined;
+		const tenantId =
+			((payload as Record<string, unknown>)["custom:tenant_id"] as
+				| string
+				| undefined) ??
+			((payload as Record<string, unknown>)["tenant_id"] as
+				| string
+				| undefined);
 		if (!tenantId) {
 			return c.json({ error: "テナント情報がありません" }, 403);
 		}
 
+		const cognitoGroups = (payload as Record<string, unknown>)[
+			"cognito:groups"
+		] as string[] | undefined;
+		const keycloakRoles = (
+			(payload as Record<string, unknown>)["realm_access"] as {
+				roles?: string[];
+			}
+		)?.roles;
+
 		c.set("auth", {
 			userId: payload.sub ?? "",
 			tenantId,
-			roles:
-				(
-					(payload as Record<string, unknown>)["realm_access"] as {
-						roles?: string[];
-					}
-				)?.roles ?? [],
+			roles: cognitoGroups ?? keycloakRoles ?? [],
 		});
 
 		await next();
