@@ -4,7 +4,7 @@ import LoginPage from '../page';
 
 // actions のモック
 vi.mock('../actions', () => ({
-  loginWithAuth0: vi.fn(),
+  loginWithProvider: vi.fn(),
 }));
 
 // Cloudscape コンポーネントのモック
@@ -68,13 +68,13 @@ describe('LoginPage コンポーネント', () => {
   it('ログインボタンを表示すべき', () => {
     render(<LoginPage />);
     expect(
-      screen.getByRole('button', { name: 'Auth0 でログイン' }),
+      screen.getByRole('button', { name: 'ログイン' }),
     ).toBeInTheDocument();
   });
 
   it('認証説明テキストを表示すべき', () => {
     render(<LoginPage />);
-    expect(screen.getByText('認証には Auth0 を使用します')).toBeInTheDocument();
+    expect(screen.getByText('AWS Cognito で認証します')).toBeInTheDocument();
   });
 
   it('form 要素が存在すべき', () => {
@@ -84,7 +84,7 @@ describe('LoginPage コンポーネント', () => {
 
   it('ログインボタンのタイプが submit であるべき', () => {
     render(<LoginPage />);
-    const button = screen.getByRole('button', { name: 'Auth0 でログイン' });
+    const button = screen.getByRole('button', { name: 'ログイン' });
     expect(button).toHaveAttribute('type', 'submit');
   });
 });

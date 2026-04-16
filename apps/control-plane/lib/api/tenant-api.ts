@@ -153,6 +153,11 @@ export const tenantApi =
   sbtApiUrl
     ? createSbtTenantApi(
         /* istanbul ignore next */ sbtApiUrl,
-        /* istanbul ignore next */ async () => null,
+        /* istanbul ignore next */ async () => {
+          // Get Cognito ID token from NextAuth session for SBT API auth
+          const { getSession } = await import('@/auth');
+          const session = await getSession();
+          return session?.idToken ?? null;
+        },
       )
     : localTenantApi;
