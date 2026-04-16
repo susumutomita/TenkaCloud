@@ -5,7 +5,7 @@ services:
     ports:
       - "3000:80"
     volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./server/application/reverseproxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - control-plane
       - application-plane
@@ -26,7 +26,7 @@ services:
   control-plane:
     build:
       context: .
-      dockerfile: apps/control-plane/Dockerfile
+      dockerfile: client/AdminWeb/Dockerfile
     expose:
       - "13000"
     environment:
@@ -48,7 +48,7 @@ services:
   tenant-management:
     build:
       context: .
-      dockerfile: backend/services/control-plane/tenant-management/Dockerfile
+      dockerfile: server/application/microservices/tenant-management/Dockerfile
     expose:
       - "13004"
     environment:
@@ -73,7 +73,7 @@ services:
   battle-service:
     build:
       context: .
-      dockerfile: backend/services/application-plane/battle-service/Dockerfile
+      dockerfile: server/application/microservices/battle-service/Dockerfile
     expose:
       - "3010"
     environment:
@@ -95,7 +95,7 @@ services:
   scoring-service:
     build:
       context: .
-      dockerfile: backend/services/application-plane/scoring-service/Dockerfile
+      dockerfile: server/application/microservices/scoring-service/Dockerfile
     expose:
       - "3011"
     environment:
@@ -117,7 +117,7 @@ services:
   leaderboard-service:
     build:
       context: .
-      dockerfile: backend/services/application-plane/leaderboard-service/Dockerfile
+      dockerfile: server/application/microservices/leaderboard-service/Dockerfile
     expose:
       - "3012"
     environment:
@@ -139,7 +139,7 @@ services:
   problem-service:
     build:
       context: .
-      dockerfile: backend/services/application-plane/problem-service/Dockerfile
+      dockerfile: server/application/microservices/problem-service/Dockerfile
     expose:
       - "3100"
     environment:
@@ -163,7 +163,7 @@ services:
   gameday-service:
     build:
       context: .
-      dockerfile: backend/services/application-plane/gameday-service/Dockerfile
+      dockerfile: server/application/microservices/gameday-service/Dockerfile
     expose:
       - "3020"
     environment:
@@ -184,7 +184,7 @@ services:
   application-plane:
     build:
       context: .
-      dockerfile: apps/application-plane/Dockerfile
+      dockerfile: client/Application/Dockerfile
     expose:
       - "13001"
     environment:
