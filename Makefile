@@ -72,8 +72,16 @@ start:
 
 #? stop: Stop all services
 stop:
-	@docker compose --profile localstack --profile kumo --profile floci stop 2>/dev/null || true
-	@lsof -ti:13000,13001,13004 2>/dev/null | xargs kill -9 2>/dev/null || true
+	@if docker info > /dev/null 2>&1; then \
+		docker compose --profile localstack --profile kumo --profile floci down; \
+	else \
+		echo "Docker is not running, skipping container shutdown"; \
+	fi
+	@PIDS=$$(lsof -ti:13000,13001,13004,3010,3011,3012,3020,3100 2>/dev/null); \
+	if [ -n "$$PIDS" ]; then \
+		echo "Killing dev server processes: $$PIDS"; \
+		echo "$$PIDS" | xargs kill -9; \
+	fi
 	@echo "Stopped."
 
 #? restart: Restart all services
@@ -104,8 +112,9 @@ typecheck:
 
 #? test: Run tests with coverage
 test:
-test_coverage: test
 	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) test:coverage) || exit 1; done
+
+test_coverage: test
 
 #? test_quick: Run tests without coverage (fast)
 test_quick:
