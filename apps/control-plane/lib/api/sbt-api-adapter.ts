@@ -8,23 +8,42 @@
 import type {
   CreateTenantInput,
   Tenant,
+  TenantTier,
   UpdateTenantInput,
 } from '@/types/tenant';
+import { TENANT_TIERS } from '@/types/tenant';
+import { z } from 'zod';
 import { TenantApiError } from './tenant-api';
 
-// SBT API response types
-interface SbtTenantRegistration {
-  tenantId: string;
-  tenantRegistrationId: string;
-  tenantName: string;
-  email: string;
-  tier: string;
-  tenantStatus: string;
-  registrationStatus?: string;
-}
+// Zod schemas for SBT API response validation
+const SbtTenantRegistrationSchema = z.object({
+  tenantId: z.string(),
+  tenantRegistrationId: z.string().optional(),
+  tenantName: z.string(),
+  email: z.string(),
+  tier: z.string().optional(),
+  tenantStatus: z.string(),
+  registrationStatus: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
 
-interface SbtTenantRegistrationListResponse {
-  data: SbtTenantRegistration[];
+const SbtTenantRegistrationListResponseSchema = z.object({
+  data: z.array(SbtTenantRegistrationSchema),
+});
+
+// SBT API response types (derived from Zod schemas)
+type SbtTenantRegistration = z.infer<typeof SbtTenantRegistrationSchema>;
+type SbtTenantRegistrationListResponse = z.infer<
+  typeof SbtTenantRegistrationListResponseSchema
+>;
+
+function parseTier(raw: string | undefined): TenantTier {
+  const upper = raw?.toUpperCase();
+  if (upper && (TENANT_TIERS as readonly string[]).includes(upper)) {
+    return upper as TenantTier;
+  }
+  return 'FREE';
 }
 
 function toTenant(reg: SbtTenantRegistration): Tenant {
@@ -33,7 +52,7 @@ function toTenant(reg: SbtTenantRegistration): Tenant {
     name: reg.tenantName,
     slug: reg.tenantName.toLowerCase().replace(/\s+/g, '-'),
     status: 'ACTIVE',
-    tier: (reg.tier?.toUpperCase() as Tenant['tier']) || 'FREE',
+    tier: parseTier(reg.tier),
     adminEmail: reg.email,
     region: 'ap-northeast-1',
     isolationModel: 'POOL',
@@ -44,8 +63,8 @@ function toTenant(reg: SbtTenantRegistration): Tenant {
         : reg.registrationStatus === 'In progress'
           ? 'IN_PROGRESS'
           : 'PENDING',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: reg.createdAt ?? '',
+    updatedAt: reg.updatedAt ?? '',
   };
 }
 
@@ -84,18 +103,28 @@ export function createSbtTenantApi(
 
   return {
     async listTenants(): Promise<Tenant[]> {
-      const response = await sbtFetch<SbtTenantRegistrationListResponse>(
-        '/tenant-registrations',
-      );
-      return response.data.map(toTenant);
+      const raw = await sbtFetch<unknown>('/tenant-registrations');
+      const parsed = SbtTenantRegistrationListResponseSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new TenantApiError(
+          502,
+          `Invalid SBT list response: ${parsed.error.message}`,
+        );
+      }
+      return parsed.data.data.map(toTenant);
     },
 
     async getTenant(id: string): Promise<Tenant | null> {
       try {
-        const reg = await sbtFetch<SbtTenantRegistration>(
-          `/tenant-registrations/${id}`,
-        );
-        return toTenant(reg);
+        const raw = await sbtFetch<unknown>(`/tenant-registrations/${id}`);
+        const parsed = SbtTenantRegistrationSchema.safeParse(raw);
+        if (!parsed.success) {
+          throw new TenantApiError(
+            502,
+            `Invalid SBT tenant response: ${parsed.error.message}`,
+          );
+        }
+        return toTenant(parsed.data);
       } catch (err) {
         if (err instanceof TenantApiError && err.status === 404) return null;
         throw err;
@@ -103,23 +132,29 @@ export function createSbtTenantApi(
     },
 
     async createTenant(input: CreateTenantInput): Promise<Tenant> {
-      const reg = await sbtFetch<{ data: SbtTenantRegistration }>(
-        '/tenant-registrations',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            tenantData: {
-              tenantName: input.name,
-              email: input.adminEmail,
-              tier: input.tier.toLowerCase(),
-            },
-            tenantRegistrationData: {
-              registrationStatus: 'In progress',
-            },
-          }),
-        },
-      );
-      return toTenant(reg.data);
+      const raw = await sbtFetch<unknown>('/tenant-registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          tenantData: {
+            tenantName: input.name,
+            email: input.adminEmail,
+            tier: input.tier.toLowerCase(),
+          },
+          tenantRegistrationData: {
+            registrationStatus: 'In progress',
+          },
+        }),
+      });
+      const parsed = z
+        .object({ data: SbtTenantRegistrationSchema })
+        .safeParse(raw);
+      if (!parsed.success) {
+        throw new TenantApiError(
+          502,
+          `Invalid SBT create response: ${parsed.error.message}`,
+        );
+      }
+      return toTenant(parsed.data.data);
     },
 
     async updateTenant(
@@ -127,14 +162,21 @@ export function createSbtTenantApi(
       input: UpdateTenantInput,
     ): Promise<Tenant | null> {
       try {
-        const reg = await sbtFetch<SbtTenantRegistration>(`/tenants/${id}`, {
+        const raw = await sbtFetch<unknown>(`/tenants/${id}`, {
           method: 'PUT',
           body: JSON.stringify({
             tenantName: input.name,
             tier: input.tier?.toLowerCase(),
           }),
         });
-        return toTenant(reg);
+        const parsed = SbtTenantRegistrationSchema.safeParse(raw);
+        if (!parsed.success) {
+          throw new TenantApiError(
+            502,
+            `Invalid SBT update response: ${parsed.error.message}`,
+          );
+        }
+        return toTenant(parsed.data);
       } catch (err) {
         if (err instanceof TenantApiError && err.status === 404) return null;
         throw err;
@@ -171,13 +213,20 @@ export function createSbtTenantApi(
       provisioningEnabled: boolean;
     } | null> {
       try {
-        const reg = await sbtFetch<SbtTenantRegistration>(
-          `/tenant-registrations/${id}`,
-        );
+        const raw = await sbtFetch<unknown>(`/tenant-registrations/${id}`);
+        const parsed = SbtTenantRegistrationSchema.safeParse(raw);
+        if (!parsed.success) {
+          throw new TenantApiError(
+            502,
+            `Invalid SBT provisioning response: ${parsed.error.message}`,
+          );
+        }
         return {
-          tenantId: reg.tenantId,
+          tenantId: parsed.data.tenantId,
           provisioningStatus:
-            reg.tenantStatus === 'created' ? 'COMPLETED' : 'IN_PROGRESS',
+            parsed.data.tenantStatus === 'created'
+              ? 'COMPLETED'
+              : 'IN_PROGRESS',
           provisioningEnabled: true,
         };
       } catch (err) {

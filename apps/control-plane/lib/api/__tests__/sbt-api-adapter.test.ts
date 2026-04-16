@@ -194,6 +194,8 @@ describe('SBT API Adapter', () => {
         ok: true,
         json: async () => ({
           tenantId: 't-1',
+          tenantName: 'Corp',
+          email: 'a@b.com',
           tenantStatus: 'created',
         }),
       });
@@ -208,6 +210,8 @@ describe('SBT API Adapter', () => {
         ok: true,
         json: async () => ({
           tenantId: 't-1',
+          tenantName: 'Corp',
+          email: 'a@b.com',
           tenantStatus: 'pending',
         }),
       });
@@ -335,6 +339,7 @@ describe('SBT API Adapter', () => {
               tenantId: 't-1',
               tenantName: 'Corp',
               email: 'a@b.com',
+              tier: 'UNKNOWN_TIER',
               tenantStatus: 'created',
             },
           ],
@@ -343,6 +348,108 @@ describe('SBT API Adapter', () => {
 
       const tenants = await api.listTenants();
       expect(tenants[0].tier).toBe('FREE');
+    });
+
+    it('SBT レスポンスの createdAt/updatedAt を使用すべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              tenantId: 't-1',
+              tenantName: 'Corp',
+              email: 'a@b.com',
+              tier: 'pro',
+              tenantStatus: 'created',
+              createdAt: '2024-01-01T00:00:00Z',
+              updatedAt: '2024-06-01T00:00:00Z',
+            },
+          ],
+        }),
+      });
+
+      const tenants = await api.listTenants();
+      expect(tenants[0].createdAt).toBe('2024-01-01T00:00:00Z');
+      expect(tenants[0].updatedAt).toBe('2024-06-01T00:00:00Z');
+    });
+
+    it('createdAt/updatedAt が未提供の場合は空文字にフォールバックすべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              tenantId: 't-1',
+              tenantName: 'Corp',
+              email: 'a@b.com',
+              tier: 'pro',
+              tenantStatus: 'created',
+            },
+          ],
+        }),
+      });
+
+      const tenants = await api.listTenants();
+      expect(tenants[0].createdAt).toBe('');
+      expect(tenants[0].updatedAt).toBe('');
+    });
+  });
+
+  describe('Zod バリデーション', () => {
+    it('listTenants で不正なレスポンスの場合 TenantApiError を投げるべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ invalid: 'response' }),
+      });
+
+      await expect(api.listTenants()).rejects.toThrow(TenantApiError);
+    });
+
+    it('getTenant で不正なレスポンスの場合 TenantApiError を投げるべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ invalid: 'response' }),
+      });
+
+      await expect(api.getTenant('t-1')).rejects.toThrow(TenantApiError);
+    });
+
+    it('createTenant で不正なレスポンスの場合 TenantApiError を投げるべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { invalid: 'response' } }),
+      });
+
+      await expect(
+        api.createTenant({
+          name: 'Corp',
+          slug: 'corp',
+          adminEmail: 'a@b.com',
+          tier: 'FREE',
+        }),
+      ).rejects.toThrow(TenantApiError);
+    });
+
+    it('updateTenant で不正なレスポンスの場合 TenantApiError を投げるべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ invalid: 'response' }),
+      });
+
+      await expect(api.updateTenant('t-1', { name: 'X' })).rejects.toThrow(
+        TenantApiError,
+      );
+    });
+
+    it('getProvisioningStatus で不正なレスポンスの場合 TenantApiError を投げるべき', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ invalid: 'response' }),
+      });
+
+      await expect(api.getProvisioningStatus('t-1')).rejects.toThrow(
+        TenantApiError,
+      );
     });
   });
 });

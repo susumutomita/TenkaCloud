@@ -7,7 +7,10 @@ import type {
 import { createSbtTenantApi } from './sbt-api-adapter';
 
 // SBT mode: when CONTROL_PLANE_API_URL is set, use SBT's API Gateway
-const sbtApiUrl = process.env.CONTROL_PLANE_API_URL;
+// Check both server-side and client-side env vars (NEXT_PUBLIC_ prefix for client)
+const sbtApiUrl =
+  process.env.CONTROL_PLANE_API_URL ||
+  process.env.NEXT_PUBLIC_CONTROL_PLANE_API_URL;
 
 // Local mode: use tenant-management service directly
 const isServer = typeof window === 'undefined';
