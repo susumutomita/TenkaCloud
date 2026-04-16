@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminProblem } from '@/lib/api/admin-types';
@@ -15,34 +15,29 @@ vi.mock('next-auth/react', () => ({
 }));
 vi.mock('@/lib/tenant', () => ({ useTenantOptional: () => null }));
 
-const mockGetProblems = vi.fn();
-const mockGetProblem = vi.fn();
-vi.mock('@/lib/api/admin-problems', () => ({
-  getProblems: (...args: unknown[]) => mockGetProblems(...args),
-  getProblem: (...args: unknown[]) => mockGetProblem(...args),
+const mocks = vi.hoisted(() => ({
+  getProblems: vi.fn(),
+  getProblem: vi.fn(),
 }));
+vi.mock('@/lib/api/admin-problems', () => mocks);
+const mockGetProblems = mocks.getProblems;
+const mockGetProblem = mocks.getProblem;
 
 const baseProblem: AdminProblem = {
   id: 'prob-1',
-  title: 'S3 \u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a',
+  title: 'S3 セキュリティ設定',
   type: 'gameday',
   category: 'security',
   difficulty: 'medium',
   description: {
-    overview:
-      'S3 \u30d0\u30b1\u30c3\u30c8\u306e\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u3092\u5f37\u5316\u3059\u308b\u554f\u984c\u3067\u3059',
-    objectives: [
-      '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u3092\u7121\u52b9\u5316',
-      '\u6697\u53f7\u5316\u3092\u6709\u52b9\u5316',
-    ],
-    hints: [
-      '\u30d0\u30b1\u30c3\u30c8\u30dd\u30ea\u30b7\u30fc\u3092\u78ba\u8a8d',
-    ],
-    prerequisites: ['AWS \u306e\u57fa\u672c\u77e5\u8b58'],
+    overview: 'S3 バケットのセキュリティを強化する問題です',
+    objectives: ['パブリックアクセスを無効化', '暗号化を有効化'],
+    hints: ['バケットポリシーを確認'],
+    prerequisites: ['AWS の基本知識'],
     estimatedTime: 45,
   },
   metadata: {
-    author: '\u30c6\u30b9\u30c8\u592a\u90ce',
+    author: 'テスト太郎',
     version: '1.0.0',
     tags: ['s3', 'security', 'encryption'],
     createdAt: '2026-01-01T00:00:00Z',
@@ -59,12 +54,12 @@ const baseProblem: AdminProblem = {
     timeoutMinutes: 5,
     criteria: [
       {
-        name: '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u7121\u52b9\u5316',
+        name: 'パブリックアクセス無効化',
         weight: 50,
         maxPoints: 50,
       },
       {
-        name: '\u6697\u53f7\u5316\u6709\u52b9\u5316',
+        name: '暗号化有効化',
         description: 'SSE-S3 or SSE-KMS',
         weight: 50,
         maxPoints: 50,
@@ -75,108 +70,86 @@ const baseProblem: AdminProblem = {
 };
 const problemsResponse = { problems: [baseProblem], total: 1 };
 
-describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30fc\u30b8', () => {
+describe('Admin マーケットプレイスページ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  async function waitForProblemCards() {
+  async function renderAndWait() {
+    await act(async () => {
+      render(<AdminMarketplacePage />);
+    });
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/S3 セキュリティ設定/)).toBeInTheDocument();
     });
   }
 
-  describe('\u30d7\u30ec\u30d3\u30e5\u30fc\u30e2\u30fc\u30c0\u30eb', () => {
-    it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30dc\u30bf\u30f3\u3092\u30af\u30ea\u30c3\u30af\u3059\u308b\u3068\u554f\u984c\u8a73\u7d30\u30e2\u30fc\u30c0\u30eb\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
+  describe('プレビューモーダル', () => {
+    it('プレビューボタンをクリックすると問題詳細モーダルを表示すべき', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
-      await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
-      );
+      await renderAndWait();
+      await user.click(screen.getByRole('button', { name: 'プレビュー' }));
       await waitFor(() => {
         expect(screen.getByText('1.0.0')).toBeInTheDocument();
       });
     });
 
-    it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30e2\u30fc\u30c0\u30eb\u306b\u63a1\u70b9\u57fa\u6e96\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
+    it('プレビューモーダルに採点基準を表示すべき', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
-      await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
-      );
+      await renderAndWait();
+      await user.click(screen.getByRole('button', { name: 'プレビュー' }));
       await waitFor(() => {
         expect(
-          screen.getByText(
-            '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u7121\u52b9\u5316',
-          ),
+          screen.getByText('パブリックアクセス無効化'),
         ).toBeInTheDocument();
       });
-      expect(
-        screen.getByText('\u6697\u53f7\u5316\u6709\u52b9\u5316'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('暗号化有効化')).toBeInTheDocument();
     });
 
-    it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30e2\u30fc\u30c0\u30eb\u306b\u30c7\u30d7\u30ed\u30a4\u60c5\u5831\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
+    it('プレビューモーダルにデプロイ情報を表示すべき', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
-      await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
-      );
+      await renderAndWait();
+      await user.click(screen.getByRole('button', { name: 'プレビュー' }));
       await waitFor(() => {
         expect(screen.getByText('cloudformation')).toBeInTheDocument();
       });
     });
 
-    it('getProblem \u3067\u30a8\u30e9\u30fc\u304c\u767a\u751f\u3057\u3066\u3082\u30e2\u30fc\u30c0\u30eb\u306f\u8868\u793a\u3059\u3079\u304d', async () => {
+    it('getProblem でエラーが発生してもモーダルは表示すべき', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockRejectedValue(new Error('Not found'));
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
-      await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
-      );
+      await renderAndWait();
+      await user.click(screen.getByRole('button', { name: 'プレビュー' }));
       await waitFor(() => {
         expect(
-          screen.getByText(
-            '\u554f\u984c\u8a73\u7d30\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
-          ),
+          screen.getByText('問題詳細の取得に失敗しました'),
         ).toBeInTheDocument();
       });
     });
 
-    it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30e2\u30fc\u30c0\u30eb\u306b\u76ee\u6a19\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
+    it('プレビューモーダルに目標を表示すべき', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       mockGetProblem.mockResolvedValue(baseProblem);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
-      await user.click(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
-      );
+      await renderAndWait();
+      await user.click(screen.getByRole('button', { name: 'プレビュー' }));
       await waitFor(() => {
         expect(
-          screen.getByText(
-            '\u30d1\u30d6\u30ea\u30c3\u30af\u30a2\u30af\u30bb\u30b9\u3092\u7121\u52b9\u5316',
-          ),
+          screen.getByText('パブリックアクセスを無効化'),
         ).toBeInTheDocument();
       });
     });
   });
 
-  describe('\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0\u30e2\u30fc\u30c0\u30eb', () => {
-    it('\u30a4\u30d9\u30f3\u30c8\u53d6\u5f97\u30a8\u30e9\u30fc\u6642\u306f\u30a8\u30e9\u30fc\u30e1\u30c3\u30bb\u30fc\u30b8\u3092\u8868\u793a\u3059\u3079\u304d', async () => {
+  describe('イベントに追加モーダル', () => {
+    it('イベント取得エラー時はエラーメッセージを表示すべき', async () => {
       const user = userEvent.setup();
       mockGetProblems.mockResolvedValue(problemsResponse);
       const mockFetch = vi.fn().mockResolvedValueOnce({
@@ -184,40 +157,35 @@ describe('Admin \u30de\u30fc\u30b1\u30c3\u30c8\u30d7\u30ec\u30a4\u30b9\u30da\u30
         json: async () => ({ error: 'Failed' }),
       });
       vi.stubGlobal('fetch', mockFetch);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
+      await renderAndWait();
       await user.click(
         screen.getByRole('button', {
-          name: '\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0',
+          name: 'イベントに追加',
         }),
       );
       await waitFor(() => {
         expect(
-          screen.getByText(
-            '\u30a4\u30d9\u30f3\u30c8\u4e00\u89a7\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f',
-          ),
+          screen.getByText('イベント一覧の取得に失敗しました'),
         ).toBeInTheDocument();
       });
     });
   });
 
-  describe('\u30dc\u30bf\u30f3\u306e\u72b6\u614b', () => {
-    it('\u30d7\u30ec\u30d3\u30e5\u30fc\u30dc\u30bf\u30f3\u304c\u6709\u52b9\u3067\u3042\u308b\u3079\u304d', async () => {
+  describe('ボタンの状態', () => {
+    it('プレビューボタンが有効であるべき', async () => {
       mockGetProblems.mockResolvedValue(problemsResponse);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
+      await renderAndWait();
       expect(
-        screen.getByRole('button', { name: '\u30d7\u30ec\u30d3\u30e5\u30fc' }),
+        screen.getByRole('button', { name: 'プレビュー' }),
       ).not.toBeDisabled();
     });
 
-    it('\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0\u30dc\u30bf\u30f3\u304c\u6709\u52b9\u3067\u3042\u308b\u3079\u304d', async () => {
+    it('イベントに追加ボタンが有効であるべき', async () => {
       mockGetProblems.mockResolvedValue(problemsResponse);
-      render(<AdminMarketplacePage />);
-      await waitForProblemCards();
+      await renderAndWait();
       expect(
         screen.getByRole('button', {
-          name: '\u30a4\u30d9\u30f3\u30c8\u306b\u8ffd\u52a0',
+          name: 'イベントに追加',
         }),
       ).not.toBeDisabled();
     });

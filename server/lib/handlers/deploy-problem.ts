@@ -38,8 +38,8 @@ export async function deployProblem(
 
   const cfnClient = new CloudFormationClient({
     credentials: {
-      accessKeyId: creds.Credentials.AccessKeyId!,
-      secretAccessKey: creds.Credentials.SecretAccessKey!,
+      accessKeyId: creds.Credentials.AccessKeyId ?? "",
+      secretAccessKey: creds.Credentials.SecretAccessKey ?? "",
       sessionToken: creds.Credentials.SessionToken,
     },
   });
@@ -74,7 +74,7 @@ export async function deployProblem(
 export function buildDeployProblemScript(): string {
   return `
 set -euo pipefail
-log() { echo "[\$(date -u +%Y-%m-%dT%H:%M:%SZ)] \$*"; }
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
 log "=== Problem deployment started ==="
 log "problemId: \${problemId}, teamId: \${teamId}, tenantId: \${tenantId}"

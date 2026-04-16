@@ -33,7 +33,7 @@ export async function deprovisionTenant(
 export function buildDeprovisionScript(): string {
   return `
 set -euo pipefail
-log() { echo "[\$(date -u +%Y-%m-%dT%H:%M:%SZ)] \$*"; }
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
 log "=== Tenant deprovisioning started ==="
 log "tenantId: \${tenantId}"

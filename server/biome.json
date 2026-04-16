@@ -14,6 +14,6 @@
     "lineWidth": 120
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/cdk.out", "!**/dist", "!**/*.js", "!**/*.d.ts"]
+    "includes": ["**", "!**/node_modules", "!**/cdk.out", "!**/dist", "!**/*.js", "!**/*.d.ts", "!application"]
   }
 }

@@ -59,7 +59,7 @@ tenantsRoutes.get(
       const limitParam = parseInt(c.req.query('limit') || '50', 10);
       const limit = Math.min(
         MAX_LIMIT,
-        Math.max(1, isNaN(limitParam) ? 50 : limitParam)
+        Math.max(1, Number.isNaN(limitParam) ? 50 : limitParam)
       );
 
     // Get lastKey from query if provided

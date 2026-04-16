@@ -122,7 +122,7 @@ function parsePathInfo(
     (possibleId.match(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     ) ||
-      !isNaN(Number(possibleId)));
+      !Number.isNaN(Number(possibleId)));
 
   // Determine resource and resourceId based on whether last part is an ID
   const resourceId = isId ? possibleId : undefined;

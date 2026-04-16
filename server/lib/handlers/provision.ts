@@ -42,7 +42,7 @@ export async function provisionTenant(
 export function buildProvisionScript(): string {
   return `
 set -euo pipefail
-log() { echo "[\$(date -u +%Y-%m-%dT%H:%M:%SZ)] \$*"; }
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
 log "=== Tenant provisioning started ==="
 log "tenantId: \${tenantId}, tier: \${tier}"

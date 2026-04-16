@@ -153,7 +153,7 @@ settingsRoutes.get(
       const limitParam = parseInt(c.req.query('limit') || '10', 10);
       const limit = Math.min(
         50,
-        Math.max(1, isNaN(limitParam) ? 10 : limitParam)
+        Math.max(1, Number.isNaN(limitParam) ? 10 : limitParam)
       );
 
     // Fetch system-wide activities (tenantId is empty for system events)
