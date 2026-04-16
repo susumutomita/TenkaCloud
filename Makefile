@@ -15,8 +15,8 @@ endif
 export PATH := $(PROTO_BIN):$(MISE_BUN_BIN):$(PATH)
 
 NR := $(BUN)x nr
-CONTROL_PLANE_DIR := apps/control-plane
-APPLICATION_PLANE_DIR := apps/application-plane
+CONTROL_PLANE_DIR := client/AdminWeb
+APPLICATION_PLANE_DIR := client/Application
 FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR)
 
 # Emulator config
