@@ -33,7 +33,7 @@ const applicationStatusLabels: Record<ApplicationDeploymentStatus, string> = {
 
 const applicationStatusColors: Record<ApplicationDeploymentStatus, string> = {
   NOT_DEPLOYED:
-    'border border-amber-500/20 bg-amber-500/10 text-amber-800 dark:text-amber-300',
+    'border border-amber-600 bg-amber-50 text-amber-950 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300',
   DEPLOYING:
     'border border-sky-500/20 bg-sky-500/10 text-sky-800 dark:text-sky-300',
   DEPLOYED:
@@ -127,7 +127,7 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
         </dl>
 
         {applicationDeploymentStatus === 'NOT_DEPLOYED' ? (
-          <div className="mt-4 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+          <div className="mt-4 rounded-md border border-amber-600 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
             現在のプロビジョニングでは基盤リソースのみが作成されています。Application
             Plane bundle はまだ配備されていません。
           </div>

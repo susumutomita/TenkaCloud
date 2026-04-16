@@ -114,11 +114,26 @@ export async function serverApiRequest<T>(
 
   const url = `${API_BASE_URL}${endpoint}`;
 
+  // AUTH_SKIP mode: forward dev identity headers so backend services
+  // can authenticate without real JWT tokens
+  const devHeaders: Record<string, string> =
+    authSkipEnabled && session
+      ? {
+          'X-TenkaCloud-Dev-User-Id': session.user?.email ?? 'dev-user',
+          'X-TenkaCloud-Dev-Tenant-Id':
+            (session as { tenantId?: string }).tenantId ?? 'dev-tenant',
+          'X-TenkaCloud-Dev-Roles': (
+            (session as { roles?: string[] }).roles ?? []
+          ).join(','),
+        }
+      : {};
+
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(shouldForwardToken ? { Authorization: `Bearer ${token}` } : {}),
+      ...devHeaders,
       ...options.headers,
     },
   });

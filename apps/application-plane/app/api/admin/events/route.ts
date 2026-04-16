@@ -168,10 +168,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = parsedBody.data;
+  const body = {
+    ...parsedBody.data,
+    regions: parsedBody.data.regions ?? ['ap-northeast-1'],
+    scoringIntervalMinutes: 5,
+    maxParticipants: 100,
+  };
 
   try {
-    // バックエンド API を呼び出し
     const data = await serverApiRequest<ParticipantEvent>('/admin/events', {
       method: 'POST',
       body: JSON.stringify(body),
