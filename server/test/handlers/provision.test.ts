@@ -3,7 +3,7 @@ import { provisionTenant, type ProvisionInput } from "../../lib/handlers/provisi
 
 describe("provisionTenant", () => {
   const mockSend = vi.fn().mockResolvedValue({});
-  const mockClient = { send: mockSend } as any;
+  const mockClient = { send: mockSend } as unknown;
 
   const input: ProvisionInput = {
     tenantId: "tenant-123",

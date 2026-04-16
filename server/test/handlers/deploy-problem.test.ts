@@ -21,7 +21,7 @@ describe("deployProblem", () => {
 
   it("should throw when AssumeRole returns no credentials", async () => {
     const mockStsSend = vi.fn().mockResolvedValue({ Credentials: undefined });
-    const mockStsClient = { send: mockStsSend } as any;
+    const mockStsClient = { send: mockStsSend } as unknown;
 
     await expect(deployProblem(baseInput, mockStsClient)).rejects.toThrow("AssumeRole returned no credentials");
   });
@@ -34,7 +34,7 @@ describe("deployProblem", () => {
         SessionToken: "token",
       },
     });
-    const mockStsClient = { send: mockStsSend } as any;
+    const mockStsClient = { send: mockStsSend } as unknown;
 
     // Will fail on CreateStack since we can't easily mock the CFN client created internally,
     // but we can verify AssumeRole was called correctly
