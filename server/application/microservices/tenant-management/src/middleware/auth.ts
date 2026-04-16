@@ -199,10 +199,9 @@ export async function authMiddleware(c: Context, next: Next) {
     const verifyOptions: JWTVerifyOptions = {
       issuer: JWT_ISSUER,
     };
-    // Only enforce audience when explicitly configured
-    if (process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE) {
-      verifyOptions.audience =
-        process.env.JWT_AUDIENCE ?? AUTH0_AUDIENCE;
+    const audience = process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE ?? AUTH0_AUDIENCE;
+    if (audience) {
+      verifyOptions.audience = audience;
     }
 
     const { payload } = await jwtVerify(
@@ -338,9 +337,9 @@ export async function optionalAuth(c: Context, next: Next) {
     const verifyOptions: JWTVerifyOptions = {
       issuer: JWT_ISSUER,
     };
-    if (process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE) {
-      verifyOptions.audience =
-        process.env.JWT_AUDIENCE ?? AUTH0_AUDIENCE;
+    const optAudience = process.env.JWT_AUDIENCE ?? process.env.AUTH0_AUDIENCE ?? AUTH0_AUDIENCE;
+    if (optAudience) {
+      verifyOptions.audience = optAudience;
     }
 
     const { payload } = await jwtVerify(

@@ -24,6 +24,17 @@ vi.mock('@/lib/auth/is-auth-skip-enabled', () => ({
     process.env.AUTH_SKIP === '1' && process.env.NODE_ENV !== 'production',
 }));
 
+vi.mock('@/lib/auth/roles', () => ({
+  parseAuthSkipRoles: (envValue?: string) => {
+    if (!envValue) return ['participant'];
+    const roles = envValue
+      .split(',')
+      .map((role: string) => role.trim())
+      .filter(Boolean);
+    return roles.length > 0 ? roles : ['participant'];
+  },
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
 
@@ -198,10 +209,16 @@ describe('Cognito 認証設定', () => {
   });
 
   it('getSession() は AUTH_SKIP 無効時に nextAuth.auth() を呼ぶべき', async () => {
+    const NextAuth = (await import('next-auth')).default;
     const auth = await import('../auth');
+
     const session = await auth.getSession();
     // nextAuth.auth is mocked to return undefined, so session should be falsy
     expect(session).toBeUndefined();
+
+    // Verify that nextAuth.auth was actually called
+    const nextAuthInstance = vi.mocked(NextAuth).mock.results[0]?.value;
+    expect(nextAuthInstance.auth).toHaveBeenCalled();
   });
 
   it('Cognito プロバイダが環境変数から設定されるべき', async () => {

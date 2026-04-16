@@ -5,14 +5,18 @@ import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
 import { parseAuthSkipRoles } from '@/lib/auth/roles';
 
 const getEnv = (key: string) => process.env[key];
+/* istanbul ignore next -- production guard branches not testable in unit tests */
 const skipProviderValidation =
-  getEnv('SKIP_AUTH0_VALIDATION') === '1' ||
-  getEnv('SKIP_PROVIDER_VALIDATION') === '1';
+  process.env.NODE_ENV !== 'production' &&
+  (getEnv('SKIP_AUTH0_VALIDATION') === '1' ||
+    getEnv('SKIP_PROVIDER_VALIDATION') === '1');
+/* istanbul ignore next -- build phase only triggers during `next build` */
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 let authSkipEnabled: boolean;
 try {
   authSkipEnabled = isAuthSkipEnabled();
 } catch {
+  // Caught only when AUTH_SKIP=1 && NODE_ENV=production (e.g. local build).
   authSkipEnabled = false;
 }
 /* istanbul ignore next -- build phase only triggers during `next build` */

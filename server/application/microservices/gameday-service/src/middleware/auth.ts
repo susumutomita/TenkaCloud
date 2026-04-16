@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import { StatusCodes } from "http-status-codes";
 import * as jose from "jose";
+import { z } from "zod";
 
 export interface AuthContext {
 	userId: string;
@@ -98,6 +99,14 @@ const JWKS_URI =
 const ISSUER =
 	process.env.JWT_ISSUER ?? "http://localhost:8080/realms/tenkacloud";
 
+const JwtClaimsSchema = z.object({
+	sub: z.string().optional(),
+	"custom:tenant_id": z.string().min(1).optional(),
+	tenant_id: z.string().min(1).optional(),
+	"cognito:groups": z.array(z.string()).min(1).optional(),
+	realm_access: z.object({ roles: z.array(z.string()) }).optional(),
+}).passthrough();
+
 let jwks: jose.JWTVerifyGetKey | null = null;
 
 async function getJWKS() {
@@ -149,10 +158,12 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 			);
 		}
 
-		const typedPayload = payload as Record<string, unknown>;
+		const parsed = JwtClaimsSchema.safeParse(payload);
+		const claims = parsed.success ? parsed.data : (payload as Record<string, unknown>);
+
 		const tenantId =
-			(typedPayload["custom:tenant_id"] as string | undefined) ??
-			(typedPayload["tenant_id"] as string | undefined);
+			(claims["custom:tenant_id"] as string | undefined) ??
+			(claims["tenant_id"] as string | undefined);
 		if (!tenantId) {
 			return c.json(
 				{ error: "テナント情報がありません" },
@@ -160,15 +171,14 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 			);
 		}
 
-		const cognitoGroups = typedPayload["cognito:groups"] as
+		const cognitoGroups = claims["cognito:groups"] as
 			| string[]
 			| undefined;
-		const keycloakRoles = (
-			typedPayload["realm_access"] as { roles?: string[] } | undefined
-		)?.roles;
+		const realmAccess = claims["realm_access"] as { roles?: string[] } | undefined;
+		const keycloakRoles = realmAccess?.roles;
 
 		c.set("auth", {
-			userId: payload.sub,
+			userId: payload.sub as string,
 			tenantId,
 			roles: cognitoGroups ?? keycloakRoles ?? [],
 		});

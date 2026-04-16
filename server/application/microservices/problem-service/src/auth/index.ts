@@ -10,6 +10,7 @@
  */
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { z } from 'zod';
 import { parseAuthSkipRoles } from './auth-skip-roles';
 
 /* v8 ignore start -- Production safety guard */
@@ -44,6 +45,14 @@ const KEYCLOAK_ISSUER = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`;
 
 const JWKS_URL = process.env.JWKS_URI || KEYCLOAK_JWKS_URL;
 const JWT_ISSUER = process.env.JWT_ISSUER || KEYCLOAK_ISSUER;
+
+const JwtClaimsSchema = z.object({
+  sub: z.string().optional(),
+  'custom:tenant_id': z.string().min(1).optional(),
+  tenantId: z.string().min(1).optional(),
+  'cognito:groups': z.array(z.string()).min(1).optional(),
+  realm_access: z.object({ roles: z.array(z.string()) }).optional(),
+}).passthrough();
 
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
 
@@ -133,11 +142,15 @@ export async function verifyToken(
     });
 
     const jwtPayload = payload as unknown as JWTPayload;
+    const parsed = JwtClaimsSchema.safeParse(payload);
+    const claims = parsed.success ? parsed.data : {};
 
     const tenantId =
-      jwtPayload['custom:tenant_id'] ?? jwtPayload.tenantId;
+      (claims['custom:tenant_id'] ?? claims.tenantId) ??
+      (jwtPayload['custom:tenant_id'] ?? jwtPayload.tenantId);
     const roles =
-      jwtPayload['cognito:groups'] ?? jwtPayload.realm_access?.roles ?? [];
+      (claims['cognito:groups'] ?? claims.realm_access?.roles) ??
+      (jwtPayload['cognito:groups'] ?? jwtPayload.realm_access?.roles ?? []);
 
     return {
       id: jwtPayload.sub,

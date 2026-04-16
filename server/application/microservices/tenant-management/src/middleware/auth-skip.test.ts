@@ -23,6 +23,7 @@ describe('認証ミドルウェア — AUTH_SKIP モード', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    process.env.NODE_ENV = 'development';
     delete process.env.AUTH_SKIP;
     delete process.env.AUTH_SKIP_ROLES;
     delete process.env.AUTH0_DOMAIN;
