@@ -162,7 +162,7 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 		const claims = parsed.success ? parsed.data : (payload as Record<string, unknown>);
 
 		const tenantId =
-			(claims["custom:tenant_id"] as string | undefined) ??
+			(claims["custom:tenant_id"] as string | undefined) ||
 			(claims["tenant_id"] as string | undefined);
 		if (!tenantId) {
 			return c.json(
@@ -171,16 +171,16 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 			);
 		}
 
-		const cognitoGroups = claims["cognito:groups"] as
-			| string[]
-			| undefined;
-		const realmAccess = claims["realm_access"] as { roles?: string[] } | undefined;
-		const keycloakRoles = realmAccess?.roles;
+		const cognitoGroups = claims["cognito:groups"] as string[] | undefined;
+		const keycloakRoles = (claims["realm_access"] as { roles?: string[] } | undefined)?.roles;
 
 		c.set("auth", {
 			userId: payload.sub as string,
 			tenantId,
-			roles: cognitoGroups ?? keycloakRoles ?? [],
+			roles:
+				(cognitoGroups && cognitoGroups.length > 0 ? cognitoGroups : undefined) ??
+				(keycloakRoles && keycloakRoles.length > 0 ? keycloakRoles : undefined) ??
+				[],
 		});
 
 		await next();

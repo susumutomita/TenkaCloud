@@ -143,13 +143,16 @@ export async function verifyToken(
     const parsed = JwtClaimsSchema.safeParse(payload);
     const claims = parsed.success ? parsed.data : (payload as Record<string, unknown>);
 
-    const tenantId =
-      (claims['custom:tenant_id'] as string | undefined) ??
-      (claims['tenant_id'] as string | undefined) ??
+    const rawTenantId =
+      (claims['custom:tenant_id'] as string | undefined) ||
+      (claims['tenant_id'] as string | undefined) ||
       (claims['tenantId'] as string | undefined);
+    const tenantId = rawTenantId?.trim() || undefined;
+    const cognitoGroups = claims['cognito:groups'] as string[] | undefined;
+    const keycloakRoles = (claims['realm_access'] as { roles?: string[] } | undefined)?.roles;
     const roles =
-      (claims['cognito:groups'] as string[] | undefined) ??
-      (claims['realm_access'] as { roles?: string[] } | undefined)?.roles ??
+      (cognitoGroups && cognitoGroups.length > 0 ? cognitoGroups : undefined) ??
+      (keycloakRoles && keycloakRoles.length > 0 ? keycloakRoles : undefined) ??
       [];
 
     return {
