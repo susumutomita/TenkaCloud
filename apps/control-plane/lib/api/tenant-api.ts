@@ -4,10 +4,17 @@ import type {
   Tenant,
   UpdateTenantInput,
 } from '@/types/tenant';
+import { createSbtTenantApi } from './sbt-api-adapter';
 
-// Use NEXT_PUBLIC_TENANT_API_BASE_URL for client components, fall back to server-side env.
+// SBT mode: when CONTROL_PLANE_API_URL is set, use SBT's API Gateway
+// Check both server-side and client-side env vars (NEXT_PUBLIC_ prefix for client)
+const sbtApiUrl =
+  process.env.CONTROL_PLANE_API_URL ||
+  process.env.NEXT_PUBLIC_CONTROL_PLANE_API_URL;
+
+// Local mode: use tenant-management service directly
 const isServer = typeof window === 'undefined';
-const apiBaseUrl = isServer
+const localApiBaseUrl = isServer
   ? process.env.TENANT_API_BASE_URL || 'http://tenant-management:13004/api'
   : process.env.NEXT_PUBLIC_TENANT_API_BASE_URL || 'http://localhost:13004/api';
 
@@ -35,7 +42,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
         userMessage = json.message;
       }
     } catch {
-      // JSON パース失敗時はデフォルトメッセージを使用
+      // JSON parse failure: use default message
     }
     throw new TenantApiError(res.status, userMessage);
   }
@@ -54,15 +61,18 @@ type PaginatedResponse<T> = {
   };
 };
 
-export const tenantApi = {
+// Local tenant-management API (used when CONTROL_PLANE_API_URL is not set)
+const localTenantApi = {
   async listTenants(): Promise<Tenant[]> {
-    const res = await fetch(`${apiBaseUrl}/tenants`, { cache: 'no-store' });
+    const res = await fetch(`${localApiBaseUrl}/tenants`, {
+      cache: 'no-store',
+    });
     const response = await handleResponse<PaginatedResponse<Tenant>>(res);
     return response.data;
   },
 
   async getTenant(id: string): Promise<Tenant | null> {
-    const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
+    const res = await fetch(`${localApiBaseUrl}/tenants/${id}`, {
       cache: 'no-store',
     });
     if (res.status === StatusCodes.NOT_FOUND) return null;
@@ -70,7 +80,7 @@ export const tenantApi = {
   },
 
   async createTenant(input: CreateTenantInput): Promise<Tenant> {
-    const res = await fetch(`${apiBaseUrl}/tenants`, {
+    const res = await fetch(`${localApiBaseUrl}/tenants`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -82,7 +92,7 @@ export const tenantApi = {
     id: string,
     input: UpdateTenantInput,
   ): Promise<Tenant | null> {
-    const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
+    const res = await fetch(`${localApiBaseUrl}/tenants/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -92,7 +102,7 @@ export const tenantApi = {
   },
 
   async deleteTenant(id: string): Promise<boolean> {
-    const res = await fetch(`${apiBaseUrl}/tenants/${id}`, {
+    const res = await fetch(`${localApiBaseUrl}/tenants/${id}`, {
       method: 'DELETE',
     });
     if (res.status === StatusCodes.NOT_FOUND) return false;
@@ -105,7 +115,7 @@ export const tenantApi = {
     message: string;
     provisioningStatus: string;
   }> {
-    const res = await fetch(`${apiBaseUrl}/tenants/${id}/provision`, {
+    const res = await fetch(`${localApiBaseUrl}/tenants/${id}/provision`, {
       method: 'POST',
     });
     return handleResponse<{
@@ -124,7 +134,7 @@ export const tenantApi = {
     provisionedAt?: string | null;
     provisioningEnabled: boolean;
   } | null> {
-    const res = await fetch(`${apiBaseUrl}/tenants/${id}/provision`, {
+    const res = await fetch(`${localApiBaseUrl}/tenants/${id}/provision`, {
       cache: 'no-store',
     });
     if (res.status === StatusCodes.NOT_FOUND) return null;
@@ -139,3 +149,18 @@ export const tenantApi = {
     }>(res);
   },
 };
+
+// Both branches tested separately: sbt-api-adapter.test.ts and tenant-api.test.ts
+export const tenantApi =
+  /* istanbul ignore next */
+  sbtApiUrl
+    ? createSbtTenantApi(
+        /* istanbul ignore next */ sbtApiUrl,
+        /* istanbul ignore next */ async () => {
+          // Get Cognito ID token from NextAuth session for SBT API auth
+          const { getSession } = await import('@/auth');
+          const session = await getSession();
+          return session?.idToken ?? null;
+        },
+      )
+    : localTenantApi;

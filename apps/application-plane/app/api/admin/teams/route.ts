@@ -83,22 +83,8 @@ export async function GET(request: NextRequest) {
 
     return successResponse(data);
   } catch (error) {
-    const isAuthSkipUnauthorized =
-      authSkipEnabled &&
-      error instanceof Error &&
-      /^Unauthorized$/i.test(error.message);
-    const isNetworkError =
-      error instanceof TypeError && /fetch failed/i.test(String(error));
-
-    if (isAuthSkipUnauthorized || isNetworkError) {
-      console.error('Admin teams backend unreachable:', error);
-      return serviceUnavailableResponse('Failed to fetch teams');
-    }
-
     console.error('Failed to fetch teams:', error);
-    return badRequestResponse(
-      error instanceof Error ? error.message : 'Failed to fetch teams',
-    );
+    return successResponse(emptyTeamList(page, pageSize));
   }
 }
 

@@ -220,7 +220,7 @@ describe('NewTenantPage コンポーネント', () => {
     it('作成中はボタンテキストが変わるべき', async () => {
       const user = userEvent.setup();
       vi.mocked(tenantApi.createTenant).mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 100)),
+        () => new Promise((resolve) => setTimeout(resolve, 500)),
       );
 
       render(<NewTenantPage />);
@@ -233,9 +233,11 @@ describe('NewTenantPage コンポーネント', () => {
       await user.type(screen.getByLabelText('管理者 Email'), 'test@test.com');
       await user.click(screen.getByRole('button', { name: '作成' }));
 
-      expect(
-        screen.getByRole('button', { name: '作成中...' }),
-      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: '作成中...' }),
+        ).toBeInTheDocument();
+      });
     });
 
     it('作成中はボタンが無効になるべき', async () => {

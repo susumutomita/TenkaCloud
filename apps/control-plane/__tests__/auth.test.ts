@@ -11,10 +11,10 @@ vi.mock('next-auth', () => ({
   })),
 }));
 
-vi.mock('next-auth/providers/auth0', () => ({
+vi.mock('next-auth/providers/cognito', () => ({
   default: vi.fn((options) => ({
-    id: 'auth0',
-    name: 'Auth0',
+    id: 'cognito',
+    name: 'Cognito',
     type: 'oauth',
     ...options,
   })),
@@ -28,13 +28,14 @@ vi.mock('@/lib/auth/is-auth-skip-enabled', () => ({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = Record<string, any>;
 
-describe('Auth0 認証設定', () => {
+describe('Cognito 認証設定', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    process.env.AUTH0_CLIENT_ID = 'test-client-id';
-    process.env.AUTH0_CLIENT_SECRET = 'test-client-secret';
-    process.env.AUTH0_ISSUER = 'https://test.auth0.com';
+    process.env.COGNITO_CLIENT_ID = 'test-client-id';
+    process.env.COGNITO_CLIENT_SECRET = 'test-client-secret';
+    process.env.COGNITO_ISSUER =
+      'https://cognito-idp.ap-northeast-1.amazonaws.com/test-pool';
     delete process.env.AUTH_SKIP;
     delete process.env.SKIP_AUTH0_VALIDATION;
   });
@@ -43,9 +44,9 @@ describe('Auth0 認証設定', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetModules();
-      delete process.env.AUTH0_CLIENT_ID;
-      delete process.env.AUTH0_CLIENT_SECRET;
-      delete process.env.AUTH0_ISSUER;
+      delete process.env.COGNITO_CLIENT_ID;
+      delete process.env.COGNITO_CLIENT_SECRET;
+      delete process.env.COGNITO_ISSUER;
     });
 
     it('AUTH_SKIP=1 の場合、モックセッションを返すべき', async () => {
@@ -62,7 +63,7 @@ describe('Auth0 認証設定', () => {
       expect(session?.idToken).toBe('mock-id-token');
     });
 
-    it('AUTH_SKIP=1 の場合、Auth0 環境変数がなくてもエラーにならないべき', async () => {
+    it('AUTH_SKIP=1 の場合、Cognito 環境変数がなくてもエラーにならないべき', async () => {
       process.env.AUTH_SKIP = '1';
 
       await expect(import('../auth')).resolves.toBeDefined();
@@ -86,12 +87,12 @@ describe('Auth0 認証設定', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetModules();
-      delete process.env.AUTH0_CLIENT_ID;
-      delete process.env.AUTH0_CLIENT_SECRET;
-      delete process.env.AUTH0_ISSUER;
+      delete process.env.COGNITO_CLIENT_ID;
+      delete process.env.COGNITO_CLIENT_SECRET;
+      delete process.env.COGNITO_ISSUER;
     });
 
-    it('SKIP_AUTH0_VALIDATION=1 の場合、Auth0 環境変数がなくてもエラーにならないべき', async () => {
+    it('SKIP_AUTH0_VALIDATION=1 の場合、Cognito 環境変数がなくてもエラーにならないべき', async () => {
       process.env.SKIP_AUTH0_VALIDATION = '1';
 
       await expect(import('../auth')).resolves.toBeDefined();
@@ -99,12 +100,12 @@ describe('Auth0 認証設定', () => {
   });
 
   it('必須の環境変数が欠けている場合はエラーを投げるべき', async () => {
-    process.env.AUTH0_CLIENT_ID = '';
-    process.env.AUTH0_CLIENT_SECRET = '';
-    process.env.AUTH0_ISSUER = '';
+    process.env.COGNITO_CLIENT_ID = '';
+    process.env.COGNITO_CLIENT_SECRET = '';
+    process.env.COGNITO_ISSUER = '';
 
     await expect(import('../auth')).rejects.toThrow(
-      'Missing required Auth0 environment variables',
+      'Missing required auth environment variables',
     );
   });
 
@@ -116,14 +117,14 @@ describe('Auth0 認証設定', () => {
     expect(auth.auth).toBeDefined();
   });
 
-  it('Auth0 プロバイダが環境変数から設定されるべき', async () => {
-    const Auth0 = (await import('next-auth/providers/auth0')).default;
+  it('Cognito プロバイダが環境変数から設定されるべき', async () => {
+    const Cognito = (await import('next-auth/providers/cognito')).default;
     await import('../auth');
 
-    expect(Auth0).toHaveBeenCalledWith({
+    expect(Cognito).toHaveBeenCalledWith({
       clientId: 'test-client-id',
       clientSecret: 'test-client-secret',
-      issuer: 'https://test.auth0.com',
+      issuer: 'https://cognito-idp.ap-northeast-1.amazonaws.com/test-pool',
     });
   });
 
@@ -156,7 +157,7 @@ describe('Auth0 認証設定', () => {
       expect(result.idToken).toBe('test-id-token');
     });
 
-    it('Auth0 カスタムクレームからロールを取得すべき', async () => {
+    it('カスタムクレームからロールを取得すべき', async () => {
       const NextAuth = (await import('next-auth')).default;
 
       await import('../auth');

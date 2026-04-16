@@ -6,6 +6,13 @@
 
 import { prisma } from "../repositories";
 
+function requirePrisma() {
+	if (!prisma) {
+		throw new Error("Prisma is not available (DATABASE_URL not set). JAM dashboard features require PostgreSQL.");
+	}
+	return prisma;
+}
+
 /**
  * リーダーボードエントリの型
  */

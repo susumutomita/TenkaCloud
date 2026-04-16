@@ -9,7 +9,7 @@ import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import '@cloudscape-design/global-styles/index.css';
-import { loginWithAuth0 } from './actions';
+import { loginWithProvider } from './actions';
 
 export default function LoginPage() {
   return (
@@ -34,7 +34,7 @@ export default function LoginPage() {
           }
         >
           <SpaceBetween size="l">
-            <form action={loginWithAuth0}>
+            <form action={loginWithProvider}>
               <button
                 type="submit"
                 className="awsui-button awsui-button-variant-primary"
@@ -51,7 +51,7 @@ export default function LoginPage() {
                   color: 'var(--color-text-button-primary-default, #0f1b2d)',
                 }}
               >
-                Auth0 でログイン
+                ログイン
               </button>
             </form>
             <Box
@@ -59,7 +59,7 @@ export default function LoginPage() {
               color="text-body-secondary"
               fontSize="body-s"
             >
-              認証には Auth0 を使用します
+              AWS Cognito で認証します
             </Box>
           </SpaceBetween>
         </Container>

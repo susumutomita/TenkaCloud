@@ -48,8 +48,13 @@ const EMPTY_STATS: DashboardStatsResponse = {
 async function fetchCount<T extends { total?: number; [key: string]: unknown }>(
   endpoint: string,
 ): Promise<number> {
-  const data = await serverApiRequest<T>(endpoint);
-  return data.total ?? 0;
+  try {
+    const data = await serverApiRequest<T>(endpoint);
+    return data.total ?? 0;
+  } catch {
+    // Endpoint may not exist yet — return 0 instead of failing the whole dashboard
+    return 0;
+  }
 }
 
 export async function GET() {

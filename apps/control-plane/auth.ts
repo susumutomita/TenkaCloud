@@ -1,31 +1,25 @@
 import NextAuth from 'next-auth';
 import type { Session } from 'next-auth';
-import Auth0 from 'next-auth/providers/auth0';
+import Cognito from 'next-auth/providers/cognito';
 import { isAuthSkipEnabled } from '@/lib/auth/is-auth-skip-enabled';
 
 const getEnv = (key: string) => process.env[key];
-const skipAuth0Validation = getEnv('SKIP_AUTH0_VALIDATION') === '1';
-// During `next build`, NEXT_PHASE is set to 'phase-production-build'.
-// If AUTH_SKIP=1 is present in a local .env.local, isAuthSkipEnabled() will
-// throw because NODE_ENV=production, but it is harmless at build time.
+const skipProviderValidation =
+  getEnv('SKIP_AUTH0_VALIDATION') === '1' ||
+  getEnv('SKIP_PROVIDER_VALIDATION') === '1';
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 let authSkipEnabled: boolean;
 try {
   authSkipEnabled = isAuthSkipEnabled();
 } catch {
-  // Caught only when AUTH_SKIP=1 && NODE_ENV=production (e.g. local build).
-  // Treat as disabled but allow stubs so the build can succeed.
   authSkipEnabled = false;
 }
 const useStubAuth =
   authSkipEnabled || (isBuildPhase && process.env.AUTH_SKIP === '1');
 
 /**
- * モックセッション（AUTH_SKIP=1 の場合に使用）
- *
- * Control Plane は全テナントを管理する画面のため、
- * 特定の tenantId/teamId には紐付かない。
- * そのため、Application Plane と異なり tenantId/teamId を含まない。
+ * Mock session for AUTH_SKIP=1 (local development only).
+ * Control Plane manages all tenants, so no tenantId/teamId.
  */
 const mockSession: Session = {
   user: {
@@ -39,7 +33,6 @@ const mockSession: Session = {
   roles: ['admin'],
 };
 
-// AUTH_SKIP モードの警告
 /* v8 ignore start -- Development-only warning */
 if (authSkipEnabled && typeof console !== 'undefined') {
   console.warn(
@@ -51,57 +44,62 @@ if (authSkipEnabled && typeof console !== 'undefined') {
 }
 /* v8 ignore stop */
 
-// Auth0 設定のバリデーション
-const auth0Config = {
+// Cognito configuration (falls back to Auth0 env vars for backward compatibility)
+const cognitoConfig = {
   clientId:
+    getEnv('COGNITO_CLIENT_ID') ??
     getEnv('AUTH0_CLIENT_ID') ??
-    (skipAuth0Validation || useStubAuth ? 'stub-client-id' : undefined),
+    (skipProviderValidation || useStubAuth ? 'stub-client-id' : undefined),
   clientSecret:
+    getEnv('COGNITO_CLIENT_SECRET') ??
     getEnv('AUTH0_CLIENT_SECRET') ??
-    (skipAuth0Validation || useStubAuth ? 'stub-client-secret' : undefined),
+    (skipProviderValidation || useStubAuth ? 'stub-client-secret' : undefined),
   issuer:
+    getEnv('COGNITO_ISSUER') ??
     getEnv('AUTH0_ISSUER') ??
-    (skipAuth0Validation || useStubAuth ? 'https://example.com' : undefined),
+    (skipProviderValidation || useStubAuth ? 'https://example.com' : undefined),
 };
 
 if (
-  !skipAuth0Validation &&
+  !skipProviderValidation &&
   !useStubAuth &&
-  (!auth0Config.clientId || !auth0Config.clientSecret || !auth0Config.issuer)
+  (!cognitoConfig.clientId ||
+    !cognitoConfig.clientSecret ||
+    !cognitoConfig.issuer)
 ) {
   throw new Error(
-    'Missing required Auth0 environment variables: AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_ISSUER',
+    'Missing required auth environment variables. Set COGNITO_CLIENT_ID, COGNITO_CLIENT_SECRET, COGNITO_ISSUER ' +
+      '(or legacy AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_ISSUER)',
   );
 }
 
 const nextAuth = NextAuth({
-  providers: [Auth0(auth0Config)],
+  providers: [Cognito(cognitoConfig)],
   callbacks: {
     async jwt({ token, account, profile }) {
-      // アクセストークンとリフレッシュトークンを JWT に保存
       if (account) {
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.idToken = account.id_token;
       }
 
-      // Auth0 のユーザー情報を JWT に保存
       if (profile) {
-        // Auth0 のカスタムクレームからロールを取得
-        const namespace = 'https://tenkacloud.com';
+        // Cognito custom attributes: custom:role, cognito:groups
+        // Also support Auth0-style namespace claims for backward compat
+        const cognitoGroups = profile['cognito:groups'] as string[] | undefined;
+        const auth0Roles = profile['https://tenkacloud.com/roles'] as
+          | string[]
+          | undefined;
         token.roles =
-          (profile[`${namespace}/roles`] as string[]) ||
-          (profile.roles as string[]) ||
-          [];
-        token.email = profile.email as string;
-        token.name = profile.name as string;
-        token.picture = profile.picture as string;
+          cognitoGroups ?? auth0Roles ?? (profile.roles as string[]) ?? [];
+        token.email = (profile.email as string) ?? token.email;
+        token.name = (profile.name as string) ?? token.name;
+        token.picture = (profile.picture as string) ?? token.picture;
       }
 
       return token;
     },
     async session({ session, token }) {
-      // JWT のトークン情報をセッションに含める
       session.accessToken = token.accessToken as string;
       session.idToken = token.idToken as string;
       session.roles = token.roles as string[];
@@ -124,23 +122,10 @@ const nextAuth = NextAuth({
 });
 
 export const { handlers, signIn, signOut } = nextAuth;
-
-/**
- * NextAuth の認証ミドルウェア
- *
- * ミドルウェアで使用する場合は常に nextAuth.auth を export する。
- * AUTH_SKIP のチェックは middleware.ts 側でランタイムに行う。
- */
 export const auth = nextAuth.auth;
+export { authSkipEnabled };
 
-/**
- * セッション取得関数（クライアント/サーバーコンポーネント用）
- *
- * AUTH_SKIP=1 の場合はモックセッションを返す。
- * この関数はランタイムで AUTH_SKIP を評価する。
- */
 export async function getSession(): Promise<Session | null> {
-  // ランタイムで AUTH_SKIP を評価
   if (process.env.AUTH_SKIP === '1') {
     return mockSession;
   }

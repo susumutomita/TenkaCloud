@@ -2,6 +2,9 @@
 
 import { signIn } from '@/auth';
 
-export async function loginWithAuth0() {
-  await signIn('auth0', { redirectTo: '/dashboard' });
+export async function loginWithProvider() {
+  await signIn('cognito', { redirectTo: '/dashboard' });
 }
+
+/** @deprecated Use loginWithProvider instead */
+export const loginWithAuth0 = loginWithProvider;

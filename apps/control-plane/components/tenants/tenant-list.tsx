@@ -168,7 +168,7 @@ export function TenantList({ tenants }: TenantListProps) {
           </TableHeader>
           <TableBody>
             {filteredTenants.map((tenant, index) => (
-              <TableRow key={tenant.id || `tenant-${index}`}>
+              <TableRow key={tenant.id}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <Link
@@ -249,7 +249,7 @@ export function TenantList({ tenants }: TenantListProps) {
               <CloudButton
                 variant="primary"
                 onClick={() => {
-                  if (deleteTarget) handleDelete(deleteTarget.id);
+                  handleDelete(deleteTarget!.id);
                 }}
                 loading={deletingId !== null}
               >

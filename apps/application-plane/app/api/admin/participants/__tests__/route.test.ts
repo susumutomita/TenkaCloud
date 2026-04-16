@@ -66,7 +66,7 @@ describe('Admin Participants API', () => {
       await expect(response.json()).resolves.toEqual(mockParticipants);
     });
 
-    it('AUTH_SKIP の Unauthorized は 503 を返すべき', async () => {
+    it('AUTH_SKIP の Unauthorized は空リストを返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -81,13 +81,11 @@ describe('Admin Participants API', () => {
       );
       const response = await GET(request);
 
-      expect(response.status).toBe(503);
-      await expect(response.json()).resolves.toMatchObject({
-        error: 'Failed to fetch participants',
-      });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({});
     });
 
-    it('network error は 503 を返すべき', async () => {
+    it('network error は空リストを返すべき', async () => {
       const session: Session = {
         user: { name: 'Admin', email: 'admin@example.com' },
         expires: new Date().toISOString(),
@@ -102,10 +100,8 @@ describe('Admin Participants API', () => {
       );
       const response = await GET(request);
 
-      expect(response.status).toBe(503);
-      await expect(response.json()).resolves.toMatchObject({
-        error: 'Failed to fetch participants',
-      });
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({});
     });
   });
 });

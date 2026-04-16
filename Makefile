@@ -65,7 +65,7 @@ start:
 	TENANT_API_BASE_URL=http://localhost:13004/api \
 	AUTH_SECRET=local-dev-secret-do-not-use-in-production \
 	AUTH_SKIP=1 \
-	AUTH_SKIP_ROLES=participant \
+	AUTH_SKIP_ROLES=competitor,platform-admin \
 	NEXT_PUBLIC_AUTH_SKIP=1 \
 	NEXT_PUBLIC_APPLICATION_PLANE_URL=http://localhost:13001 \
 	$(NR) dev

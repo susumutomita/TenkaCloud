@@ -52,7 +52,13 @@ export async function apiRequest<T>(
     const error = await response
       .json()
       .catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    const msg =
+      typeof error.error === 'string'
+        ? error.error
+        : typeof error.message === 'string'
+          ? error.message
+          : `HTTP error! status: ${response.status}`;
+    throw new Error(msg);
   }
 
   return response.json();
