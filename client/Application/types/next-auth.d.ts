@@ -2,8 +2,8 @@ import type { DefaultSession } from 'next-auth';
 
 declare module 'next-auth' {
   /**
-   * セッション型の拡張
-   * Auth0 からのトークン情報、ロール、テナント情報を含める
+   * Session type extension.
+   * Includes token info, roles, and tenant context from Cognito/Auth0.
    */
   interface Session {
     accessToken?: string;
@@ -18,9 +18,6 @@ declare module 'next-auth' {
     } & DefaultSession['user'];
   }
 
-  /**
-   * JWT トークン型の拡張
-   */
   interface JWT {
     accessToken?: string;
     refreshToken?: string;
@@ -34,13 +31,18 @@ declare module 'next-auth' {
   }
 
   /**
-   * Auth0 プロファイル型の拡張
+   * Profile type extension for Cognito and Auth0 claims.
    */
   interface Profile {
     roles?: string[];
     email?: string;
     name?: string;
     picture?: string;
+    // Cognito claims
+    'cognito:groups'?: string[];
+    'custom:tenant_id'?: string;
+    'custom:team_id'?: string;
+    // Auth0 legacy claims
     'https://tenkacloud.com/roles'?: string[];
     'https://tenkacloud.com/tenant_id'?: string;
     'https://tenkacloud.com/team_id'?: string;

@@ -58,7 +58,7 @@ describe("auth モジュール", () => {
 	});
 
 	describe("authenticateRequest - AUTH_SKIP モード", () => {
-		it("AUTH_SKIP=1 かつ development ではモックユーザーを返すべき", async () => {
+		it("AUTH_SKIP=1 かつ development では認証成功とモックユーザーを返すべき", async () => {
 			process.env.AUTH_SKIP = "1";
 			process.env.NODE_ENV = "development";
 
@@ -67,8 +67,26 @@ describe("auth モジュール", () => {
 
 			expect(result.isValid).toBe(true);
 			expect(result.user).not.toBeNull();
+		});
+
+		it("AUTH_SKIP=1 かつ development ではモックユーザーの id と email が既定値であるべき", async () => {
+			process.env.AUTH_SKIP = "1";
+			process.env.NODE_ENV = "development";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({});
+
 			expect(result.user!.id).toBe("dev-user");
 			expect(result.user!.email).toBe("dev-user@localhost");
+		});
+
+		it("AUTH_SKIP=1 かつ development ではモックユーザーのロールとトークンが既定値であるべき", async () => {
+			process.env.AUTH_SKIP = "1";
+			process.env.NODE_ENV = "development";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({});
+
 			expect(result.user!.roles).toEqual(["competitor"]);
 			expect(result.token).toBe("mock-access-token");
 		});
@@ -96,7 +114,7 @@ describe("auth モジュール", () => {
 			expect(result.user?.roles).toEqual(["platform-admin", "competitor"]);
 		});
 
-		it("開発用ヘッダーでユーザーとテナントとロールを上書きできるべき", async () => {
+		it("開発用ヘッダーでユーザー ID とメールを上書きできるべき", async () => {
 			process.env.AUTH_SKIP = "1";
 			process.env.NODE_ENV = "development";
 
@@ -110,6 +128,19 @@ describe("auth モジュール", () => {
 			expect(result.isValid).toBe(true);
 			expect(result.user?.id).toBe("tenant-admin@example.com");
 			expect(result.user?.email).toBe("tenant-admin@example.com");
+		});
+
+		it("開発用ヘッダーでテナント ID とロールを上書きできるべき", async () => {
+			process.env.AUTH_SKIP = "1";
+			process.env.NODE_ENV = "development";
+
+			const { authenticateRequest } = await import("../auth");
+			const result = await authenticateRequest({
+				"x-tenkacloud-dev-user-id": "tenant-admin@example.com",
+				"x-tenkacloud-dev-tenant-id": "tenant-acme",
+				"x-tenkacloud-dev-roles": "tenant-admin,participant",
+			});
+
 			expect(result.user?.tenantId).toBe("tenant-acme");
 			expect(result.user?.roles).toEqual(["tenant-admin", "participant"]);
 		});
@@ -213,6 +244,264 @@ describe("auth モジュール", () => {
 			expect(
 				hasAnyRole(user, [UserRole.PLATFORM_ADMIN, UserRole.ORGANIZER]),
 			).toBe(false);
+		});
+	});
+
+	describe("verifyToken - Cognito クレーム抽出", () => {
+		it("Cognito の custom:tenant_id からテナントIDを抽出すべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "cognito-user-123",
+						email: "user@example.com",
+						preferred_username: "cognitouser",
+						"custom:tenant_id": "tenant-from-cognito",
+						"cognito:groups": ["organizer", "competitor"],
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-cognito-token");
+
+			expect(user).not.toBeNull();
+			expect(user!.tenantId).toBe("tenant-from-cognito");
+		});
+
+		it("Cognito の cognito:groups からロールを抽出すべき（複数グループ）", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "cognito-user-123",
+						email: "user@example.com",
+						preferred_username: "cognitouser",
+						"custom:tenant_id": "tenant-from-cognito",
+						"cognito:groups": ["organizer", "competitor"],
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-cognito-token");
+
+			expect(user!.roles).toEqual(["organizer", "competitor"]);
+		});
+
+		it("Cognito クレームから sub, email, preferred_username を抽出すべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "cognito-user-123",
+						email: "user@example.com",
+						preferred_username: "cognitouser",
+						"custom:tenant_id": "tenant-from-cognito",
+						"cognito:groups": ["organizer", "competitor"],
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-cognito-token");
+
+			expect(user!.id).toBe("cognito-user-123");
+			expect(user!.email).toBe("user@example.com");
+			expect(user!.username).toBe("cognitouser");
+		});
+
+		it("Cognito の cognito:groups からロールを抽出すべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "cognito-user-456",
+						"cognito:groups": ["platform-admin"],
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-cognito-token");
+
+			expect(user).not.toBeNull();
+			expect(user!.roles).toEqual(["platform-admin"]);
+		});
+
+		it("Cognito クレームが Keycloak クレームより優先されるべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "dual-user",
+						"custom:tenant_id": "cognito-tenant",
+						tenantId: "keycloak-tenant",
+						"cognito:groups": ["competitor"],
+						realm_access: { roles: ["organizer"] },
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-token");
+
+			expect(user).not.toBeNull();
+			expect(user!.tenantId).toBe("cognito-tenant");
+			expect(user!.roles).toEqual(["competitor"]);
+		});
+
+		it("Cognito クレームがない場合は Keycloak クレームにフォールバックすべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "keycloak-user",
+						tenantId: "keycloak-tenant",
+						realm_access: { roles: ["organizer", "tenant-admin"] },
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-keycloak-token");
+
+			expect(user).not.toBeNull();
+			expect(user!.tenantId).toBe("keycloak-tenant");
+			expect(user!.roles).toEqual(["organizer", "tenant-admin"]);
+		});
+
+		it("両方のクレームがない場合は空ロールと undefined テナントを返すべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: {
+						sub: "minimal-user",
+					},
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			const user = await verifyToken("fake-token");
+
+			expect(user).not.toBeNull();
+			expect(user!.tenantId).toBeUndefined();
+			expect(user!.roles).toEqual([]);
+		});
+	});
+
+	describe("JWKS_URI / JWT_ISSUER 環境変数", () => {
+		it("JWKS_URI が設定されている場合はその URL を使用すべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+			process.env.JWKS_URI = "https://cognito-idp.ap-northeast-1.amazonaws.com/pool-id/.well-known/jwks.json";
+
+			const mockCreateRemoteJWKSet = vi.fn(() => vi.fn());
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: mockCreateRemoteJWKSet,
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: { sub: "test-user" },
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			await verifyToken("fake-token");
+
+			expect(mockCreateRemoteJWKSet).toHaveBeenCalledWith(
+				new URL("https://cognito-idp.ap-northeast-1.amazonaws.com/pool-id/.well-known/jwks.json"),
+			);
+		});
+
+		it("JWT_ISSUER が設定されている場合はその issuer を使用すべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+			process.env.JWT_ISSUER = "https://cognito-idp.ap-northeast-1.amazonaws.com/pool-id";
+
+			const mockJwtVerify = vi.fn().mockResolvedValue({
+				payload: { sub: "test-user" },
+			});
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: mockJwtVerify,
+			}));
+
+			const { verifyToken } = await import("../auth");
+			await verifyToken("fake-token");
+
+			expect(mockJwtVerify).toHaveBeenCalledWith(
+				"fake-token",
+				expect.any(Function),
+				{ issuer: "https://cognito-idp.ap-northeast-1.amazonaws.com/pool-id" },
+			);
+		});
+
+		it("JWKS_URI が未設定の場合は Keycloak パターンにフォールバックすべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+			delete process.env.JWKS_URI;
+			process.env.KEYCLOAK_URL = "http://keycloak.local:8080";
+			process.env.KEYCLOAK_REALM = "myrealm";
+
+			const mockCreateRemoteJWKSet = vi.fn(() => vi.fn());
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: mockCreateRemoteJWKSet,
+				jwtVerify: vi.fn().mockResolvedValue({
+					payload: { sub: "test-user" },
+				}),
+			}));
+
+			const { verifyToken } = await import("../auth");
+			await verifyToken("fake-token");
+
+			expect(mockCreateRemoteJWKSet).toHaveBeenCalledWith(
+				new URL("http://keycloak.local:8080/realms/myrealm/protocol/openid-connect/certs"),
+			);
+		});
+
+		it("JWT_ISSUER が未設定の場合は Keycloak パターンにフォールバックすべき", async () => {
+			process.env.AUTH_SKIP = "0";
+			process.env.NODE_ENV = "test";
+			delete process.env.JWT_ISSUER;
+			process.env.KEYCLOAK_URL = "http://keycloak.local:8080";
+			process.env.KEYCLOAK_REALM = "myrealm";
+
+			const mockJwtVerify = vi.fn().mockResolvedValue({
+				payload: { sub: "test-user" },
+			});
+			vi.doMock("jose", () => ({
+				createRemoteJWKSet: vi.fn(() => vi.fn()),
+				jwtVerify: mockJwtVerify,
+			}));
+
+			const { verifyToken } = await import("../auth");
+			await verifyToken("fake-token");
+
+			expect(mockJwtVerify).toHaveBeenCalledWith(
+				"fake-token",
+				expect.any(Function),
+				{ issuer: "http://keycloak.local:8080/realms/myrealm" },
+			);
 		});
 	});
 

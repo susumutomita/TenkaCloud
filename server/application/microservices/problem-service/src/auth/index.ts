@@ -1,13 +1,16 @@
 /**
  * 認証・認可システム
  *
- * control-plane の Keycloak 認証を再利用。
+ * Cognito JWT と Keycloak JWT の両方をサポート。
+ * JWKS_URI / JWT_ISSUER 環境変数で設定可能。
+ * 未設定の場合は Keycloak パターンにフォールバック。
  *
  * AUTH_SKIP モードでは JWT 検証をバイパスし、
  * モックユーザーを返す（ローカル開発用）。
  */
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { z } from 'zod';
 import { parseAuthSkipRoles } from './auth-skip-roles';
 
 /* v8 ignore start -- Production safety guard */
@@ -37,7 +40,20 @@ if (authSkipEnabled && typeof console !== 'undefined') {
 
 const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'tenkacloud';
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8080';
-const JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
+const KEYCLOAK_JWKS_URL = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs`;
+const KEYCLOAK_ISSUER = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`;
+
+const JWKS_URL = process.env.JWKS_URI || KEYCLOAK_JWKS_URL;
+const JWT_ISSUER = process.env.JWT_ISSUER || KEYCLOAK_ISSUER;
+
+const JwtClaimsSchema = z.object({
+  sub: z.string().optional(),
+  'custom:tenant_id': z.string().min(1).optional(),
+  tenant_id: z.string().min(1).optional(),
+  tenantId: z.string().min(1).optional(),
+  'cognito:groups': z.array(z.string()).min(1).optional(),
+  realm_access: z.object({ roles: z.array(z.string()) }).optional(),
+}).passthrough();
 
 let jwksCache: ReturnType<typeof createRemoteJWKSet> | null = null;
 
@@ -60,6 +76,7 @@ export interface JWTPayload {
   sub: string;
   email?: string;
   preferred_username?: string;
+  // Keycloak claims
   realm_access?: {
     roles: string[];
   };
@@ -68,7 +85,10 @@ export interface JWTPayload {
       roles: string[];
     };
   };
-  // TenkaCloud 拡張
+  // Cognito claims
+  'custom:tenant_id'?: string;
+  'cognito:groups'?: string[];
+  // TenkaCloud 拡張 (Keycloak)
   teamId?: string;
   tenantId?: string;
 }
@@ -108,25 +128,40 @@ function sanitizeDevIdentity(
 }
 
 /**
- * JWT トークンを検証してユーザー情報を取得
+ * Cognito: custom:tenant_id -> cognito:groups
+ * Keycloak: tenantId / tenant_id -> realm_access.roles
  */
 export async function verifyToken(
   token: string
 ): Promise<AuthenticatedUser | null> {
   try {
     const { payload } = await jwtVerify(token, getJWKS(), {
-      issuer: `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}`,
+      issuer: JWT_ISSUER,
     });
 
     const jwtPayload = payload as unknown as JWTPayload;
+    const parsed = JwtClaimsSchema.safeParse(payload);
+    const claims = parsed.success ? parsed.data : (payload as Record<string, unknown>);
+
+    const rawTenantId =
+      (claims['custom:tenant_id'] as string | undefined) ||
+      (claims['tenant_id'] as string | undefined) ||
+      (claims['tenantId'] as string | undefined);
+    const tenantId = rawTenantId?.trim() || undefined;
+    const cognitoGroups = claims['cognito:groups'] as string[] | undefined;
+    const keycloakRoles = (claims['realm_access'] as { roles?: string[] } | undefined)?.roles;
+    const roles =
+      (cognitoGroups && cognitoGroups.length > 0 ? cognitoGroups : undefined) ??
+      (keycloakRoles && keycloakRoles.length > 0 ? keycloakRoles : undefined) ??
+      [];
 
     return {
       id: jwtPayload.sub,
       email: jwtPayload.email || '',
       username: jwtPayload.preferred_username || '',
-      roles: jwtPayload.realm_access?.roles || [],
+      roles,
       teamId: jwtPayload.teamId,
-      tenantId: jwtPayload.tenantId,
+      tenantId,
     };
   } catch (error) {
     console.error('JWT verification failed:', error);
@@ -210,7 +245,7 @@ function createMockUser(
  * ヘッダーからトークンを抽出して認証
  *
  * AUTH_SKIP モード: モックユーザーを即座に返す（JWT 検証なし）
- * 通常モード: Keycloak の JWKS でトークンを検証
+ * 通常モード: JWKS_URI (Cognito/Keycloak) でトークンを検証
  */
 export async function authenticateRequest(headers: {
   authorization?: string;
