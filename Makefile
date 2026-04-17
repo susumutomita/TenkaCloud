@@ -145,6 +145,16 @@ build:
 		$(NR) build) || exit 1; \
 	done
 
+######## One-Pass E2E ########
+
+#? test_one_pass_local: Run one-pass E2E harness (requires make start)
+test_one_pass_local:
+	@$(BUN) scripts/one-pass.ts --target local --allow-blocked
+
+#? test_one_pass_local_strict: Run one-pass E2E harness (fails on blocked steps)
+test_one_pass_local_strict:
+	@$(BUN) scripts/one-pass.ts --target local
+
 ######## Data ########
 
 #? seed: Initialize DB tables and seed demo data
