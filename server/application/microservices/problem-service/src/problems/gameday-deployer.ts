@@ -5,6 +5,7 @@
  * ジョブ状態は DynamoDB で永続化する。
  */
 
+import type { ProblemDeployRequestedDetail } from "@tenkacloud/events";
 import { getAWSProvider } from "../providers/aws";
 import { getLocalProvider } from "../providers/local";
 import {
@@ -21,6 +22,7 @@ import type {
 	Problem,
 } from "../types";
 import type { DeployStackOptions } from "../providers/interface";
+import { ProblemDeployPublisher } from "./deploy-publisher";
 
 /** SSE サブスクライバー管理 (in-memory) */
 const subscribers = new Map<
@@ -59,6 +61,7 @@ export function subscribeToJob(
 
 const jobRepo = new GameDayDeploymentJobRepository();
 const accountRepo = new CompetitorAccountRepository();
+const deployPublisher = new ProblemDeployPublisher();
 
 export function getGameDayDeploymentValidationError(
 	problem: Pick<Problem, "type" | "deployment">,
@@ -125,7 +128,29 @@ export async function deployProblemToTeams(
 		jobs.push(job);
 	}
 
-	// 非同期で並列デプロイ開始（レスポンスを待たない）
+	// EventBridge モードの場合はイベントを publish（CDK ProblemDeployPlane が処理）
+	if (process.env.PROBLEM_DEPLOY_DELIVERY_MODE === "eventbridge") {
+		const templateUrl =
+			problem.deployment.templates.aws?.path ?? "";
+		for (const job of jobs) {
+			const account = accounts.find((a) => a.id === job.competitorAccountId);
+			if (!account) continue;
+
+			const detail: ProblemDeployRequestedDetail = {
+				problemId: problem.id,
+				teamId: account.id,
+				tenantId: eventId,
+				targetRoleArn: account.roleArn ?? "",
+				externalId: account.externalId ?? "",
+				templateUrl,
+				timestamp: new Date().toISOString(),
+			};
+			void deployPublisher.publishDeployRequested(detail);
+		}
+		return jobs;
+	}
+
+	// ローカル開発: 非同期で並列デプロイ開始（レスポンスを待たない）
 	void runDeployments(jobs, problem, accounts, concurrency);
 
 	return jobs;

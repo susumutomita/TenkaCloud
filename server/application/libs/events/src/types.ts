@@ -116,6 +116,31 @@ export interface TenantOffboardingDetail {
 }
 
 // =============================================================================
+// Problem Deployment Event Types
+// =============================================================================
+
+/**
+ * ProblemDeployRequested イベントの詳細
+ * GameDay 問題デプロイ時に problem-service が発火 → ProblemDeployPlane が処理
+ */
+export interface ProblemDeployRequestedDetail {
+  /** 問題 ID */
+  problemId: string;
+  /** チーム ID */
+  teamId: string;
+  /** テナント ID */
+  tenantId: string;
+  /** デプロイ先 IAM Role ARN（cross-account AssumeRole） */
+  targetRoleArn: string;
+  /** Confused Deputy 防止用 ExternalId */
+  externalId: string;
+  /** CloudFormation テンプレート URL */
+  templateUrl: string;
+  /** イベント発生時刻 (ISO 8601) */
+  timestamp: string;
+}
+
+// =============================================================================
 // Event Type Constants
 // =============================================================================
 
@@ -127,6 +152,7 @@ export const EventDetailType = {
   TENANT_PROVISIONED: 'TenantProvisioned',
   TENANT_UPDATED: 'TenantUpdated',
   TENANT_OFFBOARDING: 'TenantOffboarding',
+  PROBLEM_DEPLOY_REQUESTED: 'ProblemDeployRequested',
 } as const;
 
 export type EventDetailType =
@@ -138,6 +164,7 @@ export type EventDetailType =
 export const EventSource = {
   CONTROL_PLANE: 'tenkacloud.control-plane',
   APPLICATION_PLANE: 'tenkacloud.application-plane',
+  PROBLEM_SERVICE: 'tenkacloud.problem-service',
 } as const;
 
 export type EventSource = (typeof EventSource)[keyof typeof EventSource];
@@ -193,4 +220,5 @@ export type EventDetailMap = {
   TenantProvisioned: TenantProvisionedDetail;
   TenantUpdated: TenantUpdatedDetail;
   TenantOffboarding: TenantOffboardingDetail;
+  ProblemDeployRequested: ProblemDeployRequestedDetail;
 };
