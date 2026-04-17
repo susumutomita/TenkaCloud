@@ -3163,7 +3163,7 @@ adminRouter.post(
 		}
 
 		try {
-			const jobs = await deployProblemToTeams(problem, eventId);
+			const jobs = await deployProblemToTeams(problem, eventId, event.tenantId);
 			return c.json({ jobs }, 202);
 		} catch (error) {
 			logger.error({ error }, "Failed to deploy problem to teams");

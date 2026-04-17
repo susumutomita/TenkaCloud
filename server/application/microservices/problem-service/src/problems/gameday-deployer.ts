@@ -94,6 +94,7 @@ export function getGameDayDeploymentValidationError(
 export async function deployProblemToTeams(
 	problem: Problem,
 	eventId: string,
+	tenantId?: string,
 	concurrency = 10,
 ): Promise<DeploymentJob[]> {
 	const accounts = await accountRepo.findByEventId(eventId);
@@ -146,7 +147,7 @@ export async function deployProblemToTeams(
 			const detail: ProblemDeployRequestedDetail = {
 				problemId: problem.id,
 				teamId: account.id,
-				tenantId: eventId,
+				tenantId: tenantId ?? eventId,
 				targetRoleArn: account.roleArn,
 				externalId: account.externalId,
 				templateUrl,
@@ -154,6 +155,7 @@ export async function deployProblemToTeams(
 			};
 			try {
 				await deployPublisher.publishDeployRequested(detail);
+				await jobRepo.updateStatus(eventId, problem.id, job.id, "in_progress");
 			} catch (error) {
 				await jobRepo.updateStatus(eventId, problem.id, job.id, "failed", {
 					error: error instanceof Error ? error.message : "EventBridge publish failed",
