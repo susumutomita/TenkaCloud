@@ -136,16 +136,29 @@ export async function deployProblemToTeams(
 			const account = accounts.find((a) => a.id === job.competitorAccountId);
 			if (!account) continue;
 
+			if (!account.roleArn || !account.externalId) {
+				await jobRepo.updateStatus(eventId, problem.id, job.id, "failed", {
+					error: `Missing roleArn or externalId for account ${account.id}`,
+				});
+				continue;
+			}
+
 			const detail: ProblemDeployRequestedDetail = {
 				problemId: problem.id,
 				teamId: account.id,
 				tenantId: eventId,
-				targetRoleArn: account.roleArn ?? "",
-				externalId: account.externalId ?? "",
+				targetRoleArn: account.roleArn,
+				externalId: account.externalId,
 				templateUrl,
 				timestamp: new Date().toISOString(),
 			};
-			void deployPublisher.publishDeployRequested(detail);
+			try {
+				await deployPublisher.publishDeployRequested(detail);
+			} catch (error) {
+				await jobRepo.updateStatus(eventId, problem.id, job.id, "failed", {
+					error: error instanceof Error ? error.message : "EventBridge publish failed",
+				});
+			}
 		}
 		return jobs;
 	}
