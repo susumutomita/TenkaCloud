@@ -62,11 +62,15 @@ export const authMiddleware = createMiddleware(async (c, next) => {
       return c.json({ error: 'テナント情報がありません' }, 403);
     }
 
+    if (!payload.sub) {
+      return c.json({ error: 'トークンに sub がありません' }, 401);
+    }
+
     const cognitoGroups = claims['cognito:groups'] as string[] | undefined;
     const keycloakRoles = (claims['realm_access'] as { roles?: string[] } | undefined)?.roles;
 
     c.set('auth', {
-      userId: (payload.sub as string) ?? '',
+      userId: payload.sub,
       tenantId,
       roles:
         (cognitoGroups && cognitoGroups.length > 0 ? cognitoGroups : undefined) ??
