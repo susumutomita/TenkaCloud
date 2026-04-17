@@ -168,6 +168,11 @@ const messages = {
       refreshesEvery30Seconds: '30秒ごとに自動更新',
       teams: 'teams',
       tutorial: 'ルール',
+      deploymentNotReady:
+        '環境のデプロイがまだ完了していません。管理者にお問い合わせください。',
+      deploymentInProgress: '環境をデプロイ中です。しばらくお待ちください。',
+      deploymentFailed:
+        '環境のデプロイに失敗しました。管理者にお問い合わせください。',
     },
     events: {
       title: 'イベント一覧',
@@ -442,6 +447,12 @@ const messages = {
       refreshesEvery30Seconds: 'Refreshes every 30 seconds',
       teams: 'teams',
       tutorial: 'Rules',
+      deploymentNotReady:
+        'The environment deployment has not been completed yet. Please contact your administrator.',
+      deploymentInProgress:
+        'The environment is being deployed. Please wait a moment.',
+      deploymentFailed:
+        'The environment deployment has failed. Please contact your administrator.',
     },
     events: {
       title: 'Events',

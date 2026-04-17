@@ -18,6 +18,7 @@ import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getActiveDefense, purchaseHint, reportFix } from '@/lib/api/gameday';
 import type { AttackLog } from '@/lib/api/gameday-types';
+import { useDeploymentStatus } from '@/lib/hooks/use-deployment-status';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
 import { useNotifications } from '@/lib/notifications';
@@ -25,6 +26,11 @@ import { useNotifications } from '@/lib/notifications';
 export default function DefensePage() {
   const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
+  const {
+    isReady,
+    isChecking,
+    status: deploymentStatus,
+  } = useDeploymentStatus(eventId);
   const { addNotification } = useNotifications();
   const [attacks, setAttacks] = useState<AttackLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +104,7 @@ export default function DefensePage() {
     }
   };
 
-  if (loading) {
+  if (loading || isChecking) {
     return (
       <Box textAlign="center" padding="xxl">
         <Spinner size="large" />
@@ -113,6 +119,32 @@ export default function DefensePage() {
           <SpaceBetween size="m">
             <StatusIndicator type="error">{error.message}</StatusIndicator>
             <Button onClick={fetchData}>{t('common.retry')}</Button>
+          </SpaceBetween>
+        </Box>
+      </Container>
+    );
+  }
+
+  if (!isReady && deploymentStatus) {
+    const message =
+      deploymentStatus.status === 'in_progress'
+        ? t('gameday.deploymentInProgress')
+        : deploymentStatus.status === 'failed'
+          ? t('gameday.deploymentFailed')
+          : t('gameday.deploymentNotReady');
+    return (
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <SpaceBetween size="m">
+            <StatusIndicator
+              type={
+                deploymentStatus.status === 'in_progress'
+                  ? 'in-progress'
+                  : 'warning'
+              }
+            >
+              {message}
+            </StatusIndicator>
           </SpaceBetween>
         </Box>
       </Container>

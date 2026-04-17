@@ -29,12 +29,18 @@ import {
   purchaseAttack,
 } from '@/lib/api/gameday';
 import type { Attack, AttackLog, CooldownError } from '@/lib/api/gameday-types';
+import { useDeploymentStatus } from '@/lib/hooks/use-deployment-status';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
 
 export default function AttackPage() {
   const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
+  const {
+    isReady,
+    isChecking,
+    status: deploymentStatus,
+  } = useDeploymentStatus(eventId);
   const [catalog, setCatalog] = useState<Attack[]>([]);
   const [history, setHistory] = useState<AttackLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +127,7 @@ export default function AttackPage() {
     }
   };
 
-  if (loading) {
+  if (loading || isChecking) {
     return (
       <Box textAlign="center" padding="xxl">
         <Spinner size="large" />
@@ -136,6 +142,32 @@ export default function AttackPage() {
           <SpaceBetween size="m">
             <StatusIndicator type="error">{error.message}</StatusIndicator>
             <Button onClick={fetchData}>{t('common.retry')}</Button>
+          </SpaceBetween>
+        </Box>
+      </Container>
+    );
+  }
+
+  if (!isReady && deploymentStatus) {
+    const message =
+      deploymentStatus.status === 'in_progress'
+        ? t('gameday.deploymentInProgress')
+        : deploymentStatus.status === 'failed'
+          ? t('gameday.deploymentFailed')
+          : t('gameday.deploymentNotReady');
+    return (
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <SpaceBetween size="m">
+            <StatusIndicator
+              type={
+                deploymentStatus.status === 'in_progress'
+                  ? 'in-progress'
+                  : 'warning'
+              }
+            >
+              {message}
+            </StatusIndicator>
           </SpaceBetween>
         </Box>
       </Container>

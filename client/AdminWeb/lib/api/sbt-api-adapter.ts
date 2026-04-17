@@ -210,6 +210,7 @@ export function createSbtTenantApi(
     async getProvisioningStatus(id: string): Promise<{
       tenantId: string;
       provisioningStatus: string;
+      applicationPlaneEndpoint?: string;
       provisioningEnabled: boolean;
     } | null> {
       try {

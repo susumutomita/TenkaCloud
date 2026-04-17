@@ -18,6 +18,17 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
   }),
 }));
 
+const mockDeploymentResult = {
+  isReady: true,
+  isChecking: false,
+  status: { deployed: true, status: 'completed' },
+  checkError: null,
+};
+
+vi.mock('@/lib/hooks/use-deployment-status', () => ({
+  useDeploymentStatus: () => mockDeploymentResult,
+}));
+
 const mockGetAttackCatalog = vi.fn();
 const mockGetAttackHistory = vi.fn();
 const mockGetParticipantTeams = vi.fn();
@@ -67,6 +78,10 @@ describe('AttackPage', () => {
         { teamId: 'team-2', teamName: 'TeamBeta' },
       ],
     });
+    mockDeploymentResult.isReady = true;
+    mockDeploymentResult.isChecking = false;
+    mockDeploymentResult.status = { deployed: true, status: 'completed' };
+    mockDeploymentResult.checkError = null;
   });
 
   it('ローディング中は攻撃カタログを表示しないべき', () => {
@@ -129,5 +144,39 @@ describe('AttackPage', () => {
 
     // Purchase button shows cost
     expect(screen.getByText(/Purchase.*100 pts/)).toBeInTheDocument();
+  });
+
+  it('デプロイ未完了時に警告メッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'pending',
+    };
+    render(<AttackPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment deployment has not been completed yet. Please contact your administrator.',
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイ中に進捗メッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'in_progress',
+    };
+    render(<AttackPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment is being deployed. Please wait a moment.',
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

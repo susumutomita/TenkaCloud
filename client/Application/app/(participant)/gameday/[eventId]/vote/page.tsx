@@ -13,6 +13,7 @@ import {
   submitVote,
 } from '@/lib/api/gameday';
 import type { Team, Vote } from '@/lib/api/gameday-types';
+import { useDeploymentStatus } from '@/lib/hooks/use-deployment-status';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
 
@@ -23,6 +24,11 @@ interface VoteCandidate extends Team {
 export default function VotePage() {
   const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
+  const {
+    isReady,
+    isChecking,
+    status: deploymentStatus,
+  } = useDeploymentStatus(eventId);
   const [teams, setTeams] = useState<Team[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,7 +115,7 @@ export default function VotePage() {
     ? (voteCandidates.find((team) => team.teamId === votedTeamId) ?? null)
     : null;
 
-  if (loading) {
+  if (loading || isChecking) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-hn-accent" />
@@ -129,6 +135,29 @@ export default function VotePage() {
           >
             {t('common.retry')}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isReady && deploymentStatus) {
+    const message =
+      deploymentStatus.status === 'in_progress'
+        ? t('gameday.deploymentInProgress')
+        : deploymentStatus.status === 'failed'
+          ? t('gameday.deploymentFailed')
+          : t('gameday.deploymentNotReady');
+    return (
+      <div className="rounded-[28px] border border-amber-500/30 bg-amber-500/10 p-8">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="text-amber-400">
+            {deploymentStatus.status === 'in_progress' ? (
+              <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : (
+              <span className="text-2xl">!</span>
+            )}
+          </div>
+          <p className="text-sm text-amber-200">{message}</p>
         </div>
       </div>
     );
