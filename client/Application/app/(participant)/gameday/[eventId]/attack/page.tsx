@@ -29,18 +29,13 @@ import {
   purchaseAttack,
 } from '@/lib/api/gameday';
 import type { Attack, AttackLog, CooldownError } from '@/lib/api/gameday-types';
-import { useDeploymentStatus } from '@/lib/hooks/use-deployment-status';
+import { DeploymentGate } from '@/components/gameday/deployment-gate';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
 
 export default function AttackPage() {
   const { t, locale } = useI18n();
   const { eventId, teamId } = useGamedaySession();
-  const {
-    isReady,
-    isChecking,
-    status: deploymentStatus,
-  } = useDeploymentStatus(eventId);
   const [catalog, setCatalog] = useState<Attack[]>([]);
   const [history, setHistory] = useState<AttackLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +122,7 @@ export default function AttackPage() {
     }
   };
 
-  if (loading || isChecking) {
+  if (loading) {
     return (
       <Box textAlign="center" padding="xxl">
         <Spinner size="large" />
@@ -148,32 +143,6 @@ export default function AttackPage() {
     );
   }
 
-  if (!isReady && deploymentStatus) {
-    const message =
-      deploymentStatus.status === 'in_progress'
-        ? t('gameday.deploymentInProgress')
-        : deploymentStatus.status === 'failed'
-          ? t('gameday.deploymentFailed')
-          : t('gameday.deploymentNotReady');
-    return (
-      <Container>
-        <Box textAlign="center" padding="xl">
-          <SpaceBetween size="m">
-            <StatusIndicator
-              type={
-                deploymentStatus.status === 'in_progress'
-                  ? 'in-progress'
-                  : 'warning'
-              }
-            >
-              {message}
-            </StatusIndicator>
-          </SpaceBetween>
-        </Box>
-      </Container>
-    );
-  }
-
   const formatTime = (timestamp: string) =>
     new Date(timestamp).toLocaleTimeString(
       locale === 'ja' ? 'ja-JP' : 'en-US',
@@ -184,159 +153,165 @@ export default function AttackPage() {
     );
 
   return (
-    <SpaceBetween size="l">
-      <Header variant="h1" description={t('gameday.attackDescription')}>
-        {t('gameday.attackStation')}
-      </Header>
+    <DeploymentGate eventId={eventId}>
+      <SpaceBetween size="l">
+        <Header variant="h1" description={t('gameday.attackDescription')}>
+          {t('gameday.attackStation')}
+        </Header>
 
-      <Container
-        header={<Header variant="h2">{t('gameday.targetSelection')}</Header>}
-      >
-        <FormField label={t('common.targetTeam')}>
-          <Select
-            selectedOption={selectedTarget}
-            onChange={({ detail }) => setSelectedTarget(detail.selectedOption)}
-            options={teamOptions}
-            placeholder={t('common.selectTeam')}
-            filteringType="auto"
-          />
-        </FormField>
-      </Container>
+        <Container
+          header={<Header variant="h2">{t('gameday.targetSelection')}</Header>}
+        >
+          <FormField label={t('common.targetTeam')}>
+            <Select
+              selectedOption={selectedTarget}
+              onChange={({ detail }) =>
+                setSelectedTarget(detail.selectedOption)
+              }
+              options={teamOptions}
+              placeholder={t('common.selectTeam')}
+              filteringType="auto"
+            />
+          </FormField>
+        </Container>
 
-      <Cards
-        header={
-          <Header counter={`(${catalog.length})`}>
-            {t('gameday.attackName')}
-          </Header>
-        }
-        items={catalog}
-        cardsPerRow={[
-          { cards: 1 },
-          { minWidth: 400, cards: 2 },
-          { minWidth: 700, cards: 3 },
-        ]}
-        cardDefinition={{
-          header: (attack) => attack.name,
-          sections: [
-            {
-              id: 'type',
-              content: (attack) => (
-                <Badge
-                  color={attack.attackType === 'vulnerability' ? 'red' : 'blue'}
-                >
-                  {attack.attackType === 'vulnerability'
-                    ? t('gameday.vulnerability')
-                    : t('gameday.chaos')}
-                </Badge>
-              ),
-            },
-            {
-              id: 'desc',
-              header: locale === 'ja' ? '説明' : 'Description',
-              content: (attack) => (
-                <Box color="text-body-secondary">{attack.description}</Box>
-              ),
-            },
-            {
-              id: 'stats',
-              content: (attack) => (
-                <SpaceBetween direction="horizontal" size="l">
-                  <Box variant="small">
-                    {t('gameday.cost')}: <b>{attack.purchaseCost}</b>
-                  </Box>
-                  <Box variant="small">
-                    {t('gameday.damage')}: <b>{attack.damage}</b>
-                  </Box>
-                  <Box variant="small">
-                    {t('gameday.reward')}: <b>{attack.reward}</b>
-                  </Box>
-                </SpaceBetween>
-              ),
-            },
-            {
-              id: 'action',
-              content: (attack) => {
-                const purchased = purchasedIds.has(attack.id);
-                const onCooldown =
-                  cooldowns[attack.id] && Date.now() < cooldowns[attack.id];
-
-                return purchased ? (
-                  <Button
-                    variant="primary"
-                    fullWidth
-                    onClick={() => handleExecute(attack.id)}
-                    loading={executing[attack.id]}
-                    disabled={!selectedTarget?.value || Boolean(onCooldown)}
+        <Cards
+          header={
+            <Header counter={`(${catalog.length})`}>
+              {t('gameday.attackName')}
+            </Header>
+          }
+          items={catalog}
+          cardsPerRow={[
+            { cards: 1 },
+            { minWidth: 400, cards: 2 },
+            { minWidth: 700, cards: 3 },
+          ]}
+          cardDefinition={{
+            header: (attack) => attack.name,
+            sections: [
+              {
+                id: 'type',
+                content: (attack) => (
+                  <Badge
+                    color={
+                      attack.attackType === 'vulnerability' ? 'red' : 'blue'
+                    }
                   >
-                    {onCooldown
-                      ? `${t('gameday.cooldown')}...`
-                      : t('gameday.execute')}
-                  </Button>
-                ) : (
-                  <Button
-                    fullWidth
-                    onClick={() => handlePurchase(attack.id)}
-                    loading={purchasing[attack.id]}
-                  >
-                    {t('gameday.purchase')} ({attack.purchaseCost} pts)
-                  </Button>
-                );
+                    {attack.attackType === 'vulnerability'
+                      ? t('gameday.vulnerability')
+                      : t('gameday.chaos')}
+                  </Badge>
+                ),
               },
-            },
-          ],
-        }}
-        empty={t('common.noData')}
-      />
+              {
+                id: 'desc',
+                header: locale === 'ja' ? '説明' : 'Description',
+                content: (attack) => (
+                  <Box color="text-body-secondary">{attack.description}</Box>
+                ),
+              },
+              {
+                id: 'stats',
+                content: (attack) => (
+                  <SpaceBetween direction="horizontal" size="l">
+                    <Box variant="small">
+                      {t('gameday.cost')}: <b>{attack.purchaseCost}</b>
+                    </Box>
+                    <Box variant="small">
+                      {t('gameday.damage')}: <b>{attack.damage}</b>
+                    </Box>
+                    <Box variant="small">
+                      {t('gameday.reward')}: <b>{attack.reward}</b>
+                    </Box>
+                  </SpaceBetween>
+                ),
+              },
+              {
+                id: 'action',
+                content: (attack) => {
+                  const purchased = purchasedIds.has(attack.id);
+                  const onCooldown =
+                    cooldowns[attack.id] && Date.now() < cooldowns[attack.id];
 
-      <Table
-        header={
-          <Header counter={`(${history.length})`}>
-            {t('gameday.attackHistory')}
-          </Header>
-        }
-        items={history}
-        columnDefinitions={[
-          {
-            id: 'time',
-            header: t('gameday.time'),
-            cell: (log) => formatTime(log.createdAt),
-            width: 100,
-          },
-          {
-            id: 'attack',
-            header: t('gameday.attackName'),
-            cell: (log) => <Box variant="code">{log.attackSlug}</Box>,
-          },
-          {
-            id: 'target',
-            header: t('gameday.target'),
-            cell: (log) => log.defenderTeamId,
-          },
-          {
-            id: 'result',
-            header: t('gameday.result'),
-            cell: (log) => (
-              <StatusIndicator type={log.success ? 'success' : 'error'}>
-                {log.success ? t('gameday.success') : t('gameday.failed')}
-              </StatusIndicator>
-            ),
-            width: 120,
-          },
-          {
-            id: 'reward',
-            header: t('gameday.reward'),
-            cell: (log) =>
-              log.success ? (
-                <Box color="text-status-success">+{log.reward}</Box>
-              ) : (
-                '0'
+                  return purchased ? (
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      onClick={() => handleExecute(attack.id)}
+                      loading={executing[attack.id]}
+                      disabled={!selectedTarget?.value || Boolean(onCooldown)}
+                    >
+                      {onCooldown
+                        ? `${t('gameday.cooldown')}...`
+                        : t('gameday.execute')}
+                    </Button>
+                  ) : (
+                    <Button
+                      fullWidth
+                      onClick={() => handlePurchase(attack.id)}
+                      loading={purchasing[attack.id]}
+                    >
+                      {t('gameday.purchase')} ({attack.purchaseCost} pts)
+                    </Button>
+                  );
+                },
+              },
+            ],
+          }}
+          empty={t('common.noData')}
+        />
+
+        <Table
+          header={
+            <Header counter={`(${history.length})`}>
+              {t('gameday.attackHistory')}
+            </Header>
+          }
+          items={history}
+          columnDefinitions={[
+            {
+              id: 'time',
+              header: t('gameday.time'),
+              cell: (log) => formatTime(log.createdAt),
+              width: 100,
+            },
+            {
+              id: 'attack',
+              header: t('gameday.attackName'),
+              cell: (log) => <Box variant="code">{log.attackSlug}</Box>,
+            },
+            {
+              id: 'target',
+              header: t('gameday.target'),
+              cell: (log) => log.defenderTeamId,
+            },
+            {
+              id: 'result',
+              header: t('gameday.result'),
+              cell: (log) => (
+                <StatusIndicator type={log.success ? 'success' : 'error'}>
+                  {log.success ? t('gameday.success') : t('gameday.failed')}
+                </StatusIndicator>
               ),
-            width: 100,
-          },
-        ]}
-        empty={t('gameday.noAttackHistory')}
-        sortingDisabled
-      />
-    </SpaceBetween>
+              width: 120,
+            },
+            {
+              id: 'reward',
+              header: t('gameday.reward'),
+              cell: (log) =>
+                log.success ? (
+                  <Box color="text-status-success">+{log.reward}</Box>
+                ) : (
+                  '0'
+                ),
+              width: 100,
+            },
+          ]}
+          empty={t('gameday.noAttackHistory')}
+          sortingDisabled
+        />
+      </SpaceBetween>
+    </DeploymentGate>
   );
 }

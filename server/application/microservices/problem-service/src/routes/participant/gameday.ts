@@ -371,7 +371,10 @@ gamedayRoutes.get(
 		const { eventId } = c.req.param();
 
 		try {
-			const result = await getEventWithProblems(eventId);
+			const [result, accounts] = await Promise.all([
+				getEventWithProblems(eventId),
+				competitorAccountRepo.findByEventId(eventId),
+			]);
 			if (!result || result.event.tenantId !== user.tenantId) {
 				return c.json({ error: "Event not found", deployed: false }, 404);
 			}
@@ -380,8 +383,6 @@ gamedayRoutes.get(
 			if (eventProblems.length === 0) {
 				return c.json({ deployed: false, status: "no_problems", error: null });
 			}
-
-			const accounts = await competitorAccountRepo.findByEventId(eventId);
 			const teamId = user.teamId;
 
 			// 各 problem のジョブ状態を集約
@@ -395,9 +396,10 @@ gamedayRoutes.get(
 					if (teamAccount) {
 						const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
 						if (teamJob) {
+							const normalizedStatus = teamJob.status.toLowerCase();
 							return c.json({
-								deployed: teamJob.status === "completed",
-								status: teamJob.status,
+								deployed: normalizedStatus === "completed",
+								status: normalizedStatus,
 								outputs: teamJob.result?.outputs ?? null,
 								roleArn: teamAccount.roleArn ?? null,
 								externalId: teamAccount.externalId ?? null,
@@ -410,12 +412,12 @@ gamedayRoutes.get(
 				}
 
 				// completed なジョブを探す
-				const completedJob = jobs.find((j) => j.status === "completed");
+				const completedJob = jobs.find((j) => j.status.toLowerCase() === "completed");
 				if (completedJob) {
 					const account = accounts.find((a) => a.id === completedJob.competitorAccountId);
 					return c.json({
 						deployed: true,
-						status: completedJob.status,
+						status: completedJob.status.toLowerCase(),
 						outputs: completedJob.result?.outputs ?? null,
 						roleArn: account?.roleArn ?? null,
 						externalId: account?.externalId ?? null,
@@ -452,7 +454,10 @@ gamedayRoutes.get(
 		const { eventId, problemId } = c.req.param();
 
 		try {
-			const jobs = await gamedayJobRepo.findByEventAndProblem(eventId, problemId);
+			const [jobs, accounts] = await Promise.all([
+				gamedayJobRepo.findByEventAndProblem(eventId, problemId),
+				competitorAccountRepo.findByEventId(eventId),
+			]);
 			if (jobs.length === 0) {
 				return c.json({
 					error: "No deployment found for this event and problem",
@@ -461,7 +466,6 @@ gamedayRoutes.get(
 			}
 
 			// ユーザーのチーム ID で紐づく competitor account を探す
-			const accounts = await competitorAccountRepo.findByEventId(eventId);
 			const teamId = user.teamId;
 
 			// チーム ID がある場合、そのチームの competitor account に紐づくジョブを返す
@@ -470,9 +474,10 @@ gamedayRoutes.get(
 				if (teamAccount) {
 					const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
 					if (teamJob) {
+						const normalizedStatus = teamJob.status.toLowerCase();
 						return c.json({
-							deployed: teamJob.status === "completed",
-							status: teamJob.status,
+							deployed: normalizedStatus === "completed",
+							status: normalizedStatus,
 							outputs: teamJob.result?.outputs ?? null,
 							roleArn: teamAccount.roleArn ?? null,
 							externalId: teamAccount.externalId ?? null,
@@ -485,12 +490,12 @@ gamedayRoutes.get(
 			}
 
 			// チーム ID がないか見つからない場合は、最初の completed ジョブを返す
-			const completedJob = jobs.find((j) => j.status === "completed");
+			const completedJob = jobs.find((j) => j.status.toLowerCase() === "completed");
 			if (completedJob) {
 				const account = accounts.find((a) => a.id === completedJob.competitorAccountId);
 				return c.json({
 					deployed: true,
-					status: completedJob.status,
+					status: completedJob.status.toLowerCase(),
 					outputs: completedJob.result?.outputs ?? null,
 					roleArn: account?.roleArn ?? null,
 					externalId: account?.externalId ?? null,
@@ -505,7 +510,7 @@ gamedayRoutes.get(
 			const latestAccount = accounts.find((a) => a.id === latestJob.competitorAccountId);
 			return c.json({
 				deployed: false,
-				status: latestJob.status,
+				status: latestJob.status.toLowerCase(),
 				outputs: null,
 				roleArn: latestAccount?.roleArn ?? null,
 				externalId: latestAccount?.externalId ?? null,

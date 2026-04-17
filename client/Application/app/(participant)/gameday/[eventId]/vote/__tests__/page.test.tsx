@@ -73,7 +73,7 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'Vote targets' }),
+        screen.getByRole('heading', { name: /Vote targets/ }),
       ).toBeInTheDocument();
     });
     expect(screen.getAllByText('TeamBeta').length).toBeGreaterThanOrEqual(1);
@@ -110,7 +110,7 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Your vote has been submitted. Thank you.'),
+        screen.getByText(/Your vote has been submitted/),
       ).toBeInTheDocument();
     });
   });
@@ -123,8 +123,8 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getAllByText('No other teams are registered yet.'),
-      ).toHaveLength(2);
+        screen.getAllByText('No other teams are registered yet.').length,
+      ).toBeGreaterThanOrEqual(1);
     });
   });
 

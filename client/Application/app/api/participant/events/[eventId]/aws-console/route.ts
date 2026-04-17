@@ -8,60 +8,23 @@
 
 import { auth } from '@/auth';
 import { stsFederation } from '@/lib/aws';
-import { getProblemServiceUrl } from '@/lib/api/backend-urls';
-import { getAuthToken } from '@/lib/auth/get-auth-token';
-
-interface DeploymentStatusResponse {
-  deployed: boolean;
-  status: string;
-  outputs: Record<string, string> | null;
-  roleArn: string | null;
-  externalId: string | null;
-  competitorAccountId: string | null;
-  region: string | null;
-  error: string | null;
-}
+import { serverApiRequest } from '@/lib/api/server';
+import type { DeploymentStatus } from '@/lib/api/gameday-types';
 
 /**
  * デプロイメントレコードから roleArn を取得する
+ *
+ * イベント全体のデプロイメント状態を 1 回の API 呼び出しで取得する。
  */
 async function fetchRoleArnFromDeployment(
   eventId: string,
 ): Promise<string | null> {
   try {
-    const baseUrl = getProblemServiceUrl();
-    const token = await getAuthToken();
-
-    // イベントの全 problem のデプロイ状態を確認
-    // まずイベント情報を取得して problemId を特定する
-    const eventRes = await fetch(`${baseUrl}/participant/events/${eventId}`, {
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (!eventRes.ok) return null;
-
-    const eventData = (await eventRes.json()) as {
-      problems?: { problemId: string }[];
-    };
-    if (!eventData.problems?.length) return null;
-
-    // 最初の problem のデプロイ状態を取得
-    for (const problem of eventData.problems) {
-      const statusRes = await fetch(
-        `${baseUrl}/participant/events/${eventId}/problems/${problem.problemId}/deployments/status`,
-        {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        },
-      );
-      if (!statusRes.ok) continue;
-
-      const status = (await statusRes.json()) as DeploymentStatusResponse;
-      if (status.deployed && status.roleArn) {
-        return status.roleArn;
-      }
+    const result = await serverApiRequest<DeploymentStatus>(
+      `/participant/events/${eventId}/deployments/status`,
+    );
+    if (result.deployed && result.roleArn) {
+      return result.roleArn;
     }
   } catch {
     // デプロイメントレコードからの取得失敗は無視してフォールバック

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Session } from 'next-auth';
 
 // Mock auth
@@ -17,19 +17,11 @@ vi.mock('@/lib/aws', () => ({
   },
 }));
 
-// Mock backend-urls
-vi.mock('@/lib/api/backend-urls', () => ({
-  getProblemServiceUrl: () => 'http://localhost:3100/api',
+// Mock serverApiRequest
+const mockServerApiRequest = vi.fn();
+vi.mock('@/lib/api/server', () => ({
+  serverApiRequest: (...args: unknown[]) => mockServerApiRequest(...args),
 }));
-
-// Mock getAuthToken
-vi.mock('@/lib/auth/get-auth-token', () => ({
-  getAuthToken: vi.fn().mockResolvedValue('mock-token'),
-}));
-
-// Mock global fetch for deployment status requests
-const originalFetch = globalThis.fetch;
-const mockFetch = vi.fn();
 
 describe('AWS Console Federation API', () => {
   const makeParams = (eventId: string) => ({
@@ -40,18 +32,8 @@ describe('AWS Console Federation API', () => {
     vi.clearAllMocks();
     // 環境変数をクリア
     delete process.env.AWS_PARTICIPANT_ROLE_ARN;
-    // fetchRoleArnFromDeployment uses fetch internally
-    globalThis.fetch = mockFetch;
     // Default: deployment fetch fails (so it falls back to env vars)
-    mockFetch.mockResolvedValue({
-      ok: false,
-      status: 404,
-      json: async () => ({ error: 'Not found' }),
-    });
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+    mockServerApiRequest.mockRejectedValue(new Error('Not found'));
   });
 
   it('未認証の場合は 401 を返すべき', async () => {
@@ -252,25 +234,10 @@ describe('AWS Console Federation API', () => {
     process.env.AWS_PARTICIPANT_ROLE_ARN =
       'arn:aws:iam::123456789012:role/FallbackRole';
 
-    // deployment status fetch succeeds with roleArn
-    let callCount = 0;
-    mockFetch.mockImplementation(async (url: string) => {
-      callCount++;
-      if (callCount === 1) {
-        // event detail
-        return {
-          ok: true,
-          json: async () => ({ problems: [{ problemId: 'prob-1' }] }),
-        };
-      }
-      // deployment status
-      return {
-        ok: true,
-        json: async () => ({
-          deployed: true,
-          roleArn: 'arn:aws:iam::999999999999:role/DeploymentRole',
-        }),
-      };
+    // serverApiRequest returns deployment status with roleArn
+    mockServerApiRequest.mockResolvedValue({
+      deployed: true,
+      roleArn: 'arn:aws:iam::999999999999:role/DeploymentRole',
     });
 
     const expiresAt = new Date(Date.now() + 3600000);
@@ -284,6 +251,11 @@ describe('AWS Console Federation API', () => {
       'http://localhost/api/participant/events/evt-1/aws-console',
     );
     await GET(request, await makeParams('evt-1'));
+
+    // serverApiRequest がイベント全体のデプロイメントステータスを呼ぶ
+    expect(mockServerApiRequest).toHaveBeenCalledWith(
+      '/participant/events/evt-1/deployments/status',
+    );
 
     // デプロイメントレコードの roleArn が使われる
     expect(mockGenerateParticipantConsoleUrl).toHaveBeenCalledWith(
