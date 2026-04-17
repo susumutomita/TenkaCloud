@@ -406,6 +406,7 @@ describe("Admin Routes", () => {
 			expect(deployProblemToTeams).toHaveBeenCalledWith(
 				expect.objectContaining({ id: "problem-1" }),
 				"event-1",
+				undefined,
 			);
 		});
 
