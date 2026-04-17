@@ -1806,7 +1806,7 @@ describe('Participant Routes', () => {
       mockCompetitorAccountFindByEventId.mockResolvedValue([
         {
           id: 'acct-1',
-          name: 'other-team',
+          name: 'team-1',
           accountId: '123456789012',
           region: 'ap-northeast-1',
         },
@@ -1820,6 +1820,39 @@ describe('Participant Routes', () => {
       expect(body.deployed).toBe(false);
       expect(body.status).toBe('failed');
       expect(body.error).toBe('Stack creation failed');
+    });
+
+    it('他チームのデプロイデータにアクセスできないべき', async () => {
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([
+        {
+          id: 'job-1',
+          eventId: 'event-1',
+          problemId: 'prob-1',
+          competitorAccountId: 'acct-other',
+          status: 'completed',
+          result: { outputs: { Secret: 'should-not-see' } },
+        },
+      ]);
+      mockCompetitorAccountFindByEventId.mockResolvedValue([
+        {
+          id: 'acct-other',
+          name: 'other-team',
+          accountId: '999999999999',
+          roleArn: 'arn:aws:iam::999999999999:role/OtherRole',
+          externalId: 'secret-ext-id',
+          region: 'us-east-1',
+        },
+      ]);
+
+      const res = await app.request(
+        '/api/participant/events/event-1/problems/prob-1/deployments/status',
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(false);
+      expect(body.status).toBe('pending');
+      expect(body.roleArn).toBeUndefined();
+      expect(body.externalId).toBeUndefined();
     });
   });
 });

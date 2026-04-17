@@ -385,45 +385,31 @@ gamedayRoutes.get(
 			}
 			const teamId = user.teamId;
 
-			// 各 problem のジョブ状態を集約
+			// チーム ID がない場合はデータを返さない（cross-team leak 防止）
+			if (!teamId) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			const teamAccount = accounts.find((a) => a.name === teamId || a.id === teamId);
+			if (!teamAccount) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			// 自チームのジョブのみ検索
 			for (const ep of eventProblems) {
 				const jobs = await gamedayJobRepo.findByEventAndProblem(eventId, ep.problemId);
-				if (jobs.length === 0) continue;
-
-				// チーム ID がある場合、対応する competitor account のジョブを探す
-				if (teamId) {
-					const teamAccount = accounts.find((a) => a.name === teamId || a.id === teamId);
-					if (teamAccount) {
-						const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
-						if (teamJob) {
-							const normalizedStatus = teamJob.status.toLowerCase();
-							return c.json({
-								deployed: normalizedStatus === "completed",
-								status: normalizedStatus,
-								outputs: teamJob.result?.outputs ?? null,
-								roleArn: teamAccount.roleArn ?? null,
-								externalId: teamAccount.externalId ?? null,
-								competitorAccountId: teamAccount.accountId,
-								region: teamAccount.region,
-								error: teamJob.error ?? null,
-							});
-						}
-					}
-				}
-
-				// completed なジョブを探す
-				const completedJob = jobs.find((j) => j.status.toLowerCase() === "completed");
-				if (completedJob) {
-					const account = accounts.find((a) => a.id === completedJob.competitorAccountId);
+				const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
+				if (teamJob) {
+					const normalizedStatus = teamJob.status.toLowerCase();
 					return c.json({
-						deployed: true,
-						status: completedJob.status.toLowerCase(),
-						outputs: completedJob.result?.outputs ?? null,
-						roleArn: account?.roleArn ?? null,
-						externalId: account?.externalId ?? null,
-						competitorAccountId: account?.accountId ?? null,
-						region: account?.region ?? null,
-						error: null,
+						deployed: normalizedStatus === "completed",
+						status: normalizedStatus,
+						outputs: teamJob.result?.outputs ?? null,
+						roleArn: teamAccount.roleArn ?? null,
+						externalId: teamAccount.externalId ?? null,
+						competitorAccountId: teamAccount.accountId,
+						region: teamAccount.region,
+						error: teamJob.error ?? null,
 					});
 				}
 			}
@@ -454,10 +440,16 @@ gamedayRoutes.get(
 		const { eventId, problemId } = c.req.param();
 
 		try {
-			const [jobs, accounts] = await Promise.all([
+			// テナント分離: イベントが自テナントに属するか確認
+			const [eventResult, jobs, accounts] = await Promise.all([
+				getEventWithProblems(eventId),
 				gamedayJobRepo.findByEventAndProblem(eventId, problemId),
 				competitorAccountRepo.findByEventId(eventId),
 			]);
+			if (!eventResult || eventResult.event.tenantId !== user.tenantId) {
+				return c.json({ error: "Event not found", deployed: false }, 404);
+			}
+
 			if (jobs.length === 0) {
 				return c.json({
 					error: "No deployment found for this event and problem",
@@ -465,58 +457,33 @@ gamedayRoutes.get(
 				}, 404);
 			}
 
-			// ユーザーのチーム ID で紐づく competitor account を探す
+			// チーム ID がない場合はデータを返さない（cross-team leak 防止）
 			const teamId = user.teamId;
-
-			// チーム ID がある場合、そのチームの competitor account に紐づくジョブを返す
-			if (teamId) {
-				const teamAccount = accounts.find((a) => a.name === teamId || a.id === teamId);
-				if (teamAccount) {
-					const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
-					if (teamJob) {
-						const normalizedStatus = teamJob.status.toLowerCase();
-						return c.json({
-							deployed: normalizedStatus === "completed",
-							status: normalizedStatus,
-							outputs: teamJob.result?.outputs ?? null,
-							roleArn: teamAccount.roleArn ?? null,
-							externalId: teamAccount.externalId ?? null,
-							competitorAccountId: teamAccount.accountId,
-							region: teamAccount.region,
-							error: teamJob.error ?? null,
-						});
-					}
-				}
+			if (!teamId) {
+				return c.json({ deployed: false, status: "pending", error: null });
 			}
 
-			// チーム ID がないか見つからない場合は、最初の completed ジョブを返す
-			const completedJob = jobs.find((j) => j.status.toLowerCase() === "completed");
-			if (completedJob) {
-				const account = accounts.find((a) => a.id === completedJob.competitorAccountId);
-				return c.json({
-					deployed: true,
-					status: completedJob.status.toLowerCase(),
-					outputs: completedJob.result?.outputs ?? null,
-					roleArn: account?.roleArn ?? null,
-					externalId: account?.externalId ?? null,
-					competitorAccountId: account?.accountId ?? null,
-					region: account?.region ?? null,
-					error: null,
-				});
+			const teamAccount = accounts.find((a) => a.name === teamId || a.id === teamId);
+			if (!teamAccount) {
+				return c.json({ deployed: false, status: "pending", error: null });
 			}
 
-			// 全ジョブが未完了の場合
-			const latestJob = jobs[0];
-			const latestAccount = accounts.find((a) => a.id === latestJob.competitorAccountId);
+			// 自チームのジョブのみ返す
+			const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
+			if (!teamJob) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			const normalizedStatus = teamJob.status.toLowerCase();
 			return c.json({
-				deployed: false,
-				status: latestJob.status.toLowerCase(),
-				outputs: null,
-				roleArn: latestAccount?.roleArn ?? null,
-				externalId: latestAccount?.externalId ?? null,
-				competitorAccountId: latestAccount?.accountId ?? null,
-				region: latestAccount?.region ?? null,
-				error: latestJob.error ?? null,
+				deployed: normalizedStatus === "completed",
+				status: normalizedStatus,
+				outputs: teamJob.result?.outputs ?? null,
+				roleArn: teamAccount.roleArn ?? null,
+				externalId: teamAccount.externalId ?? null,
+				competitorAccountId: teamAccount.accountId,
+				region: teamAccount.region,
+				error: teamJob.error ?? null,
 			});
 		} catch (error) {
 			logger.error({ error }, "Failed to fetch deployment status");
