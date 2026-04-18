@@ -26,8 +26,9 @@ async function fetchRoleArnFromDeployment(
     if (result.deployed && result.roleArn) {
       return result.roleArn;
     }
-  } catch {
+  } catch (error) {
     // デプロイメントレコードからの取得失敗は無視してフォールバック
+    console.warn('Failed to fetch deployment roleArn:', error);
   }
   return null;
 }

@@ -42,6 +42,14 @@ const applicationStatusColors: Record<ApplicationDeploymentStatus, string> = {
     'border border-rose-500/20 bg-rose-500/10 text-rose-800 dark:text-rose-300',
 };
 
+function isSafeUrl(url: string): boolean {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 interface ProvisioningCardProps {
   tenant: Tenant;
 }
@@ -106,14 +114,20 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
               </span>
               {applicationDeploymentStatus === 'DEPLOYED' &&
               tenant.applicationPlaneEndpoint ? (
-                <a
-                  href={tenant.applicationPlaneEndpoint}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-sky-600 underline hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-200"
-                >
-                  {tenant.applicationPlaneEndpoint}
-                </a>
+                isSafeUrl(tenant.applicationPlaneEndpoint) ? (
+                  <a
+                    href={tenant.applicationPlaneEndpoint}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-sky-600 underline hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-200"
+                  >
+                    {tenant.applicationPlaneEndpoint}
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {tenant.applicationPlaneEndpoint}
+                  </span>
+                )
               ) : null}
             </dd>
           </div>

@@ -135,6 +135,21 @@ describe('ProvisioningCard コンポーネント', () => {
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
+    it('安全でない URL スキームの applicationPlaneEndpoint はリンクではなくテキストで表示すべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            applicationDeploymentStatus: 'DEPLOYED',
+            applicationPlaneEndpoint: 'javascript:alert(1)',
+          })}
+        />,
+      );
+      expect(
+        screen.queryByRole('link', { name: 'javascript:alert(1)' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument();
+    });
+
     it('未デプロイ状態では applicationPlaneEndpoint リンクを表示しないべき', () => {
       render(
         <ProvisioningCard

@@ -56,9 +56,8 @@ export function useDeploymentStatus(
         setCheckError(
           err instanceof Error ? err : new Error('Failed to check deployment'),
         );
-        // エラー時は fail-open: ネットワークエラー等でデプロイチェックが失敗しても
-        // ページ表示は許可する（gameday-service 側で実際の操作を制御する）
-        setIsReady(true);
+        // エラー時は fail-closed: デプロイチェックが失敗した場合は安全側に倒す
+        setIsReady(false);
       } finally {
         if (!cancelled) setIsChecking(false);
       }

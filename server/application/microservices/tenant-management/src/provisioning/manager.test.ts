@@ -135,10 +135,10 @@ describe('ProvisioningManager', () => {
   });
 
   it('プロビジョニング失敗時は FAILED ステータスに更新すべき', async () => {
-    mockUpdateProvisioningStatus.mockRejectedValueOnce(undefined);
-    mockUpdateProvisioningStatus
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
+    // 1st call: IN_PROGRESS update succeeds
+    mockUpdateProvisioningStatus.mockResolvedValueOnce(undefined);
+    // 2nd call: FAILED update succeeds
+    mockUpdateProvisioningStatus.mockResolvedValueOnce(undefined);
 
     // Make createRealm throw to trigger failure path
     const { KeycloakProvisioner } = await import('./keycloak');
@@ -155,6 +155,12 @@ describe('ProvisioningManager', () => {
     const manager = new ProvisioningManager();
     await manager.provisionTenant(mockTenant);
 
+    // First call sets IN_PROGRESS
+    expect(mockUpdateProvisioningStatus).toHaveBeenCalledWith(
+      mockTenant.id,
+      'IN_PROGRESS',
+    );
+    // Second call sets FAILED after createRealm throws
     expect(mockUpdateProvisioningStatus).toHaveBeenCalledWith(
       mockTenant.id,
       'FAILED',

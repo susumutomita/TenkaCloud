@@ -17,7 +17,7 @@ export function resolveApplicationPlaneEndpoint(slug: string): string {
     return `${baseUrl}?tenant=${encodeURIComponent(slug)}`;
   }
   if (process.env.NODE_ENV === 'production') {
-    return `https://${encodeURIComponent(slug)}.tenka.cloud`;
+    return `https://${slug}.tenka.cloud`;
   }
   return `http://localhost:13001?tenant=${encodeURIComponent(slug)}`;
 }
