@@ -107,27 +107,26 @@ until check_dynamodb_ready; do
 done
 echo "✅ DynamoDB Local is ready!"
 
-# 2. Lambda をビルド
-echo ""
-echo "🔨 Building Provisioning Lambda (Control Plane)..."
-cd "$PROJECT_ROOT/backend/services/control-plane/provisioning"
-ensure_bun_dependencies
-bun run deploy
-echo "✅ Provisioning Lambda built!"
-
-echo ""
-echo "🔨 Building Tenant Provisioner Lambda (Application Plane)..."
-cd "$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner"
-ensure_bun_dependencies
-bun run deploy
-echo "✅ Tenant Provisioner Lambda built!"
-
-echo ""
-echo "🔨 Building Provisioning Completion Lambda (Control Plane)..."
-cd "$PROJECT_ROOT/backend/services/control-plane/provisioning-completion"
-ensure_bun_dependencies
-bun run deploy
-echo "✅ Provisioning Completion Lambda built!"
+# 2. Lambda ビルド（inline モードではスキップ）
+# PROVISIONING_DELIVERY_MODE=inline の場合、Lambda は不要
+# （tenant-management が直接 provisioning を実行する）
+if [ "${PROVISIONING_DELIVERY_MODE:-inline}" != "inline" ]; then
+  echo ""
+  echo "🔨 Building Lambda functions..."
+  for svc in \
+    "$PROJECT_ROOT/server/application/microservices/tenant-management" \
+  ; do
+    if [ -d "$svc" ]; then
+      cd "$svc"
+      ensure_bun_dependencies
+      echo "  ✅ $(basename "$svc")"
+    fi
+  done
+  cd "$PROJECT_ROOT"
+else
+  echo ""
+  echo "⏭  Lambda ビルドスキップ（PROVISIONING_DELIVERY_MODE=inline）"
+fi
 
 # 3. AWS CLI でリソースを作成（Terraform 不使用）
 echo ""
@@ -238,127 +237,13 @@ echo "🚌 EventBridge イベントバスを作成中..."
 aws_cmd events create-event-bus --name "$EVENT_BUS_NAME" 2>/dev/null || echo "  バス '$EVENT_BUS_NAME' は既に存在します"
 echo "✅ EventBridge バス完了"
 
-# --- Lambda ---
-echo "⚡ Lambda 関数を登録中..."
-DUMMY_ROLE="arn:aws:iam::000000000000:role/dummy-lambda-role"
-
-# Provisioning Lambda (Control Plane)
-aws_cmd lambda create-function \
-  --function-name ${NAME_PREFIX}-provisioning \
-  --runtime nodejs20.x \
-  --role "$DUMMY_ROLE" \
-  --handler index.handler \
-  --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning/lambda.zip" \
-  --timeout 60 \
-  --memory-size 256 \
-  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
-  2>/dev/null || \
-aws_cmd lambda update-function-code \
-  --function-name ${NAME_PREFIX}-provisioning \
-  --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning/lambda.zip" \
-  2>/dev/null || echo "  Provisioning Lambda 登録スキップ（エミュレータ未対応）"
-
-aws_cmd lambda update-function-configuration \
-  --function-name ${NAME_PREFIX}-provisioning \
-  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
-  2>/dev/null || echo "  Provisioning Lambda 環境変数更新スキップ（エミュレータ未対応）"
-
-# Tenant Provisioner Lambda (Application Plane)
-aws_cmd lambda create-function \
-  --function-name ${NAME_PREFIX}-tenant-provisioner \
-  --runtime nodejs20.x \
-  --role "$DUMMY_ROLE" \
-  --handler handler.handler \
-  --zip-file fileb://"$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner/lambda.zip" \
-  --timeout 120 \
-  --memory-size 256 \
-  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DATA_BUCKET_NAME=${NAME_PREFIX}-data,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
-  2>/dev/null || \
-aws_cmd lambda update-function-code \
-  --function-name ${NAME_PREFIX}-tenant-provisioner \
-  --zip-file fileb://"$PROJECT_ROOT/backend/services/application-plane/tenant-provisioner/lambda.zip" \
-  2>/dev/null || echo "  Tenant Provisioner Lambda 登録スキップ（エミュレータ未対応）"
-
-aws_cmd lambda update-function-configuration \
-  --function-name ${NAME_PREFIX}-tenant-provisioner \
-  --environment "Variables={EVENT_BUS_NAME=$EVENT_BUS_NAME,DATA_BUCKET_NAME=${NAME_PREFIX}-data,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
-  2>/dev/null || echo "  Tenant Provisioner Lambda 環境変数更新スキップ（エミュレータ未対応）"
-
-# Provisioning Completion Lambda (Control Plane)
-aws_cmd lambda create-function \
-  --function-name ${NAME_PREFIX}-provisioning-completion \
-  --runtime nodejs20.x \
-  --role "$DUMMY_ROLE" \
-  --handler handler.handler \
-  --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning-completion/lambda.zip" \
-  --timeout 30 \
-  --memory-size 128 \
-  --environment "Variables={DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
-  2>/dev/null || \
-aws_cmd lambda update-function-code \
-  --function-name ${NAME_PREFIX}-provisioning-completion \
-  --zip-file fileb://"$PROJECT_ROOT/backend/services/control-plane/provisioning-completion/lambda.zip" \
-  2>/dev/null || echo "  Provisioning Completion Lambda 登録スキップ（エミュレータ未対応）"
-
-aws_cmd lambda update-function-configuration \
-  --function-name ${NAME_PREFIX}-provisioning-completion \
-  --environment "Variables={DYNAMODB_TABLE=$TABLE_NAME,DYNAMODB_ENDPOINT=$DYNAMODB_ENDPOINT,AWS_ENDPOINT_URL=$EMULATOR_ENDPOINT}" \
-  2>/dev/null || echo "  Provisioning Completion Lambda 環境変数更新スキップ（エミュレータ未対応）"
-
-echo "✅ Lambda 完了"
-
-# --- EventBridge ルールと Lambda ターゲット ---
-echo "🔗 EventBridge ルールと Lambda ターゲットを設定中..."
-
-ACCOUNT_ID=000000000000
-REGION=ap-northeast-1
-LAMBDA_BASE="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function"
-
-# TenantOnboarding → tenant-provisioner
-aws_cmd events put-rule \
-  --name ${NAME_PREFIX}-tenant-onboarding \
-  --event-bus-name "$EVENT_BUS_NAME" \
-  --event-pattern '{"source":["tenkacloud.control-plane"],"detail-type":["TenantOnboarding"]}' \
-  2>/dev/null || echo "  ルール tenant-onboarding は既に存在します"
-
-aws_cmd events put-targets \
-  --rule ${NAME_PREFIX}-tenant-onboarding \
-  --event-bus-name "$EVENT_BUS_NAME" \
-  --targets "Id=tenant-provisioner,Arn=${LAMBDA_BASE}/${NAME_PREFIX}-tenant-provisioner" \
-  2>/dev/null || echo "  ターゲット tenant-provisioner は既に存在します"
-
-# TenantProvisioned → provisioning-completion
-aws_cmd events put-rule \
-  --name ${NAME_PREFIX}-tenant-provisioned \
-  --event-bus-name "$EVENT_BUS_NAME" \
-  --event-pattern '{"source":["tenkacloud.application-plane"],"detail-type":["TenantProvisioned"]}' \
-  2>/dev/null || echo "  ルール tenant-provisioned は既に存在します"
-
-aws_cmd events put-targets \
-  --rule ${NAME_PREFIX}-tenant-provisioned \
-  --event-bus-name "$EVENT_BUS_NAME" \
-  --targets "Id=provisioning-completion,Arn=${LAMBDA_BASE}/${NAME_PREFIX}-provisioning-completion" \
-  2>/dev/null || echo "  ターゲット provisioning-completion は既に存在します"
-
-echo "✅ EventBridge ルール完了"
-
-# --- DynamoDB Stream → Provisioning Lambda ---
-echo "🔁 DynamoDB Stream トリガーを設定中..."
-STREAM_ARN=$(dynamodb_cmd dynamodb describe-table \
-  --table-name "$TABLE_NAME" \
-  --query 'Table.LatestStreamArn' \
-  --output text 2>/dev/null || echo "")
-
-if [ -n "$STREAM_ARN" ] && [ "$STREAM_ARN" != "None" ] && [ "$STREAM_ARN" != "null" ]; then
-  aws_cmd lambda create-event-source-mapping \
-    --event-source-arn "$STREAM_ARN" \
-    --function-name ${NAME_PREFIX}-provisioning \
-    --starting-position LATEST \
-    --batch-size 10 \
-    2>/dev/null || echo "  Stream トリガーは既に存在するかエミュレータ未対応"
-  echo "✅ DynamoDB Stream トリガー完了"
+# --- Lambda / EventBridge ルール ---
+# inline モードではスキップ（tenant-management が直接処理）
+if [ "${PROVISIONING_DELIVERY_MODE:-inline}" != "inline" ]; then
+  echo "⚡ Lambda 関数と EventBridge ルールを登録中..."
+  echo "  ⚠️  eventbridge モード: CDK デプロイが必要です (cd server && make deploy)"
 else
-  echo "  ⚠️  DynamoDB Stream ARN が取得できません（エミュレータ未対応の可能性）"
+  echo "⏭  Lambda/EventBridge 登録スキップ（inline モード）"
 fi
 
 # 4. 確認
