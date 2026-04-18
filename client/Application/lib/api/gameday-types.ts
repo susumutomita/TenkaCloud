@@ -123,3 +123,14 @@ export interface CooldownError {
   error: string;
   remainingSeconds: number;
 }
+
+export interface DeploymentStatus {
+  deployed: boolean;
+  status: string;
+  outputs: Record<string, string> | null;
+  roleArn: string | null;
+  externalId: string | null;
+  competitorAccountId: string | null;
+  region: string | null;
+  error: string | null;
+}

@@ -301,6 +301,36 @@ describe('プロビジョニング API', () => {
       expect(body.provisioningEnabled).toBe(false); // Disabled in test env
     });
 
+    it('applicationPlaneEndpoint をレスポンスに含めるべき', async () => {
+      const mockTenant = createMockTenant({
+        provisioningStatus: 'COMPLETED',
+        applicationDeploymentStatus: 'DEPLOYED',
+        applicationPlaneEndpoint: 'http://localhost:13001?tenant=test-organization',
+      });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.applicationPlaneEndpoint).toBe(
+        'http://localhost:13001?tenant=test-organization'
+      );
+    });
+
+    it('applicationPlaneEndpoint が未設定の場合は undefined を返すべき', async () => {
+      const mockTenant = createMockTenant({
+        provisioningStatus: 'PENDING',
+      });
+      mockTenantRepoFunctions.findById.mockResolvedValue(mockTenant);
+
+      const res = await app.request(`/api/tenants/${mockTenant.id}/provision`);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.applicationPlaneEndpoint).toBeUndefined();
+    });
+
     it('存在しないテナントで 404 エラーになるべき', async () => {
       mockTenantRepoFunctions.findById.mockResolvedValue(null);
 

@@ -129,6 +129,7 @@ const localTenantApi = {
     tenantId: string;
     provisioningStatus: string;
     applicationDeploymentStatus?: string;
+    applicationPlaneEndpoint?: string;
     provisionedResources?: unknown;
     provisioningError?: string | null;
     provisionedAt?: string | null;
@@ -142,6 +143,7 @@ const localTenantApi = {
       tenantId: string;
       provisioningStatus: string;
       applicationDeploymentStatus?: string;
+      applicationPlaneEndpoint?: string;
       provisionedResources?: unknown;
       provisioningError?: string | null;
       provisionedAt?: string | null;

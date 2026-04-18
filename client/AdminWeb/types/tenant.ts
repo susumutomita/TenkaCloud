@@ -157,6 +157,7 @@ export interface Tenant {
   computeType: ComputeType;
   provisioningStatus: ProvisioningStatus;
   applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  applicationPlaneEndpoint?: string;
   provisionedResources?: TenantProvisionedResources;
   provisioningError?: string;
   provisionedAt?: string;

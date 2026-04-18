@@ -18,6 +18,17 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
   }),
 }));
 
+const mockDeploymentResult = {
+  isReady: true,
+  isChecking: false,
+  status: { deployed: true, status: 'completed' },
+  checkError: null,
+};
+
+vi.mock('@/lib/hooks/use-deployment-status', () => ({
+  useDeploymentStatus: () => mockDeploymentResult,
+}));
+
 const mockGetActiveDefense = vi.fn();
 const mockPurchaseHint = vi.fn();
 const mockReportFix = vi.fn();
@@ -49,6 +60,10 @@ describe('DefensePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetActiveDefense.mockResolvedValue({ attacks: [] });
+    mockDeploymentResult.isReady = true;
+    mockDeploymentResult.isChecking = false;
+    mockDeploymentResult.status = { deployed: true, status: 'completed' };
+    mockDeploymentResult.checkError = null;
   });
 
   it('ローディング中は攻撃データを表示しないべき', () => {
@@ -114,6 +129,40 @@ describe('DefensePage', () => {
     await waitFor(() => {
       expect(
         screen.getByText('Refreshes every 10 seconds'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイ未完了時に警告メッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'pending',
+    };
+    render(<DefensePage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment deployment has not been completed yet. Please contact your administrator.',
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイ失敗時にエラーメッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'failed',
+    };
+    render(<DefensePage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment deployment has failed. Please contact your administrator.',
+        ),
       ).toBeInTheDocument();
     });
   });

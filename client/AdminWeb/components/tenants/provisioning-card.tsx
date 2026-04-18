@@ -42,6 +42,14 @@ const applicationStatusColors: Record<ApplicationDeploymentStatus, string> = {
     'border border-rose-500/20 bg-rose-500/10 text-rose-800 dark:text-rose-300',
 };
 
+function isSafeUrl(url: string): boolean {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 interface ProvisioningCardProps {
   tenant: Tenant;
 }
@@ -98,12 +106,29 @@ export function ProvisioningCard({ tenant }: ProvisioningCardProps) {
             <dt className="text-sm font-medium text-muted-foreground">
               Application Plane
             </dt>
-            <dd className="col-span-2">
+            <dd className="col-span-2 flex items-center gap-2">
               <span
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${applicationStatusColors[applicationDeploymentStatus]}`}
               >
                 {applicationStatusLabels[applicationDeploymentStatus]}
               </span>
+              {applicationDeploymentStatus === 'DEPLOYED' &&
+              tenant.applicationPlaneEndpoint ? (
+                isSafeUrl(tenant.applicationPlaneEndpoint) ? (
+                  <a
+                    href={tenant.applicationPlaneEndpoint}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-sky-600 underline hover:text-sky-800 dark:text-sky-400 dark:hover:text-sky-200"
+                  >
+                    {tenant.applicationPlaneEndpoint}
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {tenant.applicationPlaneEndpoint}
+                  </span>
+                )
+              ) : null}
             </dd>
           </div>
           <div className="grid grid-cols-3 items-center gap-4">

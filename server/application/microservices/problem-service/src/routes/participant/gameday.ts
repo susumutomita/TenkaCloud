@@ -18,10 +18,18 @@ import {
 import { getChallengeDetail } from "../../jam/challenge";
 import { openClue, validateAnswer } from "../../jam/scoring";
 import type { ScoringCriterion } from "../../types";
+import {
+	GameDayDeploymentJobRepository,
+} from "../../repositories/gameday-deployment-job-repository";
+import {
+	CompetitorAccountRepository,
+} from "../../repositories/competitor-account-repository";
 
 const logger = createLogger("participant-gameday");
 const gamedayRoutes = new Hono();
 const problemRepository = new PrismaProblemRepository();
+const gamedayJobRepo = new GameDayDeploymentJobRepository();
+const competitorAccountRepo = new CompetitorAccountRepository();
 
 /** JAMチャレンジ詳細を取得（クルー付き） */
 gamedayRoutes.get(
@@ -340,5 +348,148 @@ gamedayRoutes.post(
 		return c.json({ error: "Failed to leave team" }, 500);
 	}
 });
+
+// ====================
+// デプロイメント状態取得
+// ====================
+
+/** イベント全体のデプロイメント状態取得（参加者向け） */
+gamedayRoutes.get(
+	"/events/:eventId/deployments/status",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "イベント全体のデプロイメント状態取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "デプロイレコードが見つかりません" },
+		},
+	}),
+	async (c) => {
+		const user = c.get("user") as AuthenticatedUser;
+		const { eventId } = c.req.param();
+
+		try {
+			const [result, accounts] = await Promise.all([
+				getEventWithProblems(eventId),
+				competitorAccountRepo.findByEventId(eventId),
+			]);
+			if (!result || result.event.tenantId !== user.tenantId) {
+				return c.json({ error: "Event not found", deployed: false }, 404);
+			}
+
+			const { problems: eventProblems } = result;
+			if (eventProblems.length === 0) {
+				return c.json({ deployed: false, status: "no_problems", error: null });
+			}
+			const teamId = user.teamId;
+
+			// チーム ID がない場合はデータを返さない（cross-team leak 防止）
+			if (!teamId) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			const teamAccount = accounts.find((a) => a.name === teamId || a.id === teamId);
+			if (!teamAccount) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			// 自チームのジョブのみ検索
+			for (const ep of eventProblems) {
+				const jobs = await gamedayJobRepo.findByEventAndProblem(eventId, ep.problemId);
+				const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
+				if (teamJob) {
+					const normalizedStatus = teamJob.status.toLowerCase();
+					return c.json({
+						deployed: normalizedStatus === "completed",
+						status: normalizedStatus,
+						outputs: teamJob.result?.outputs ?? null,
+						roleArn: teamAccount.roleArn ?? null,
+						externalId: teamAccount.externalId ?? null,
+						competitorAccountId: teamAccount.accountId,
+						region: teamAccount.region,
+						error: teamJob.error ?? null,
+					});
+				}
+			}
+
+			return c.json({ deployed: false, status: "pending", error: null });
+		} catch (error) {
+			logger.error({ error }, "Failed to fetch event deployment status");
+			return c.json({ error: "Failed to fetch deployment status" }, 500);
+		}
+	},
+);
+
+/** 参加者向けデプロイメント状態取得 */
+gamedayRoutes.get(
+	"/events/:eventId/problems/:problemId/deployments/status",
+	describeRoute({
+		tags: ["Participant / Challenges"],
+		summary: "参加者向けデプロイメント状態取得",
+		responses: {
+			200: { description: "成功" },
+			401: { description: "認証エラー" },
+			403: { description: "権限エラー" },
+			404: { description: "デプロイレコードが見つかりません" },
+		},
+	}),
+	async (c) => {
+		const user = c.get("user") as AuthenticatedUser;
+		const { eventId, problemId } = c.req.param();
+
+		try {
+			// テナント分離: イベントが自テナントに属するか確認
+			const [eventResult, jobs, accounts] = await Promise.all([
+				getEventWithProblems(eventId),
+				gamedayJobRepo.findByEventAndProblem(eventId, problemId),
+				competitorAccountRepo.findByEventId(eventId),
+			]);
+			if (!eventResult || eventResult.event.tenantId !== user.tenantId) {
+				return c.json({ error: "Event not found", deployed: false }, 404);
+			}
+
+			if (jobs.length === 0) {
+				return c.json({
+					error: "No deployment found for this event and problem",
+					deployed: false,
+				}, 404);
+			}
+
+			// チーム ID がない場合はデータを返さない（cross-team leak 防止）
+			const teamId = user.teamId;
+			if (!teamId) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			const teamAccount = accounts.find((a) => a.name === teamId || a.id === teamId);
+			if (!teamAccount) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			// 自チームのジョブのみ返す
+			const teamJob = jobs.find((j) => j.competitorAccountId === teamAccount.id);
+			if (!teamJob) {
+				return c.json({ deployed: false, status: "pending", error: null });
+			}
+
+			const normalizedStatus = teamJob.status.toLowerCase();
+			return c.json({
+				deployed: normalizedStatus === "completed",
+				status: normalizedStatus,
+				outputs: teamJob.result?.outputs ?? null,
+				roleArn: teamAccount.roleArn ?? null,
+				externalId: teamAccount.externalId ?? null,
+				competitorAccountId: teamAccount.accountId,
+				region: teamAccount.region,
+				error: teamJob.error ?? null,
+			});
+		} catch (error) {
+			logger.error({ error }, "Failed to fetch deployment status");
+			return c.json({ error: "Failed to fetch deployment status" }, 500);
+		}
+	},
+);
 
 export { gamedayRoutes };

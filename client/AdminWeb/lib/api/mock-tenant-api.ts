@@ -151,6 +151,7 @@ export const mockTenantApi = {
     tenantId: string;
     provisioningStatus: string;
     applicationDeploymentStatus?: string;
+    applicationPlaneEndpoint?: string;
     provisioningEnabled: boolean;
   } | null> {
     await delay(300);
@@ -161,6 +162,7 @@ export const mockTenantApi = {
       provisioningStatus: tenant.provisioningStatus,
       applicationDeploymentStatus:
         tenant.applicationDeploymentStatus ?? 'NOT_DEPLOYED',
+      applicationPlaneEndpoint: tenant.applicationPlaneEndpoint,
       provisioningEnabled: true,
     };
   },

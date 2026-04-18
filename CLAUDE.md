@@ -4,9 +4,23 @@
 
 ## ゲート
 
-タスク完了前に必ず `make before-commit` を実行。lint・format・typecheck・test（カバレッジ 99％+）・build がすべて通るまで未完了。失敗したら原因を特定してコードを修正する（設定ファイルを変更しない）。
+### PR 作成前の必須チェック（この順序で実行）
 
-その前に `bun scripts/architecture-harness.ts --staged --fail-on=error` を通す。アーキテクチャ原則の正本は [`docs/architecture/harness.md`](./docs/architecture/harness.md) で、これは `Codex` と `Claude Code` の両方に共通です。
+1. `bun scripts/architecture-harness.ts --staged --fail-on=error`
+2. `make before-commit` — lint・format・typecheck・test（カバレッジ 99％+）・build
+3. `/review` — コードレビュー（品質・慣習・リスク）
+4. `/security-review` — セキュリティレビュー（認証・認可・インジェクション）
+5. `/simplify` — コード重複・品質・効率の最終チェック
+
+すべて通るまで未完了。失敗したら原因を特定してコードを修正する（設定ファイルを変更しない）。
+
+アーキテクチャ原則の正本は [`docs/architecture/harness.md`](./docs/architecture/harness.md) で、これは `Codex` と `Claude Code` の両方に共通です。
+
+### 作業順序
+
+新規機能を追加する前に、以下を先に実施する。
+1. **ドキュメント更新** — 変更に関連する docs/, ADR, CLAUDE.md を先に更新する。
+2. **リファクタリング** — 技術的負債（`bun scripts/ai-improvement-loop.ts --staged --fail-on=high` で検出）を先に解消する。
 
 ## コマンド体系
 

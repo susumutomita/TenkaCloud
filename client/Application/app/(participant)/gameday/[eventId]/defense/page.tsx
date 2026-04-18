@@ -18,6 +18,7 @@ import '@cloudscape-design/global-styles/index.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getActiveDefense, purchaseHint, reportFix } from '@/lib/api/gameday';
 import type { AttackLog } from '@/lib/api/gameday-types';
+import { DeploymentGate } from '@/components/gameday/deployment-gate';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
 import { useI18n } from '@/lib/i18n';
 import { useNotifications } from '@/lib/notifications';
@@ -133,100 +134,22 @@ export default function DefensePage() {
     );
 
   return (
-    <SpaceBetween size="l">
-      <Header variant="h1" description={t('gameday.defenseDescription')}>
-        {t('gameday.defenseTrench')}
-      </Header>
+    <DeploymentGate eventId={eventId}>
+      <SpaceBetween size="l">
+        <Header variant="h1" description={t('gameday.defenseDescription')}>
+          {t('gameday.defenseTrench')}
+        </Header>
 
-      <Table
-        header={
-          <Header
-            counter={`(${active.length})`}
-            description={t('gameday.defenseDescription')}
-          >
-            {t('gameday.underAttack')}
-          </Header>
-        }
-        items={active}
-        columnDefinitions={[
-          {
-            id: 'attack',
-            header: t('gameday.attackName'),
-            cell: (attack) => <Box variant="code">{attack.attackSlug}</Box>,
-          },
-          {
-            id: 'attacker',
-            header: t('gameday.attacker'),
-            cell: (attack) => attack.attackerTeamId,
-          },
-          {
-            id: 'damage',
-            header: t('gameday.damage'),
-            cell: (attack) => (
-              <Box color="text-status-error">{attack.damage}</Box>
-            ),
-            width: 100,
-          },
-          {
-            id: 'time',
-            header: t('gameday.time'),
-            cell: (attack) => formatTime(attack.createdAt),
-            width: 120,
-          },
-          {
-            id: 'hint',
-            header: t('gameday.hint'),
-            cell: (attack) =>
-              hints[attack.attackId] ? (
-                <StatusIndicator type="info">
-                  {hints[attack.attackId]}
-                </StatusIndicator>
-              ) : (
-                <Button
-                  variant="link"
-                  loading={hintLoading[attack.attackId]}
-                  onClick={() => handlePurchaseHint(attack.attackId)}
-                >
-                  {t('gameday.hint')}
-                </Button>
-              ),
-          },
-          {
-            id: 'fix',
-            header: t('gameday.reportFix'),
-            cell: (attack) => (
-              <Button
-                variant="primary"
-                loading={fixLoading[attack.attackSlug]}
-                onClick={() => handleReportFix(attack.attackSlug)}
-              >
-                {t('gameday.reportFix')}
-              </Button>
-            ),
-            width: 160,
-          },
-        ]}
-        empty={t('gameday.noActiveAttacks')}
-        sortingDisabled
-        footer={
-          <Box textAlign="center" color="text-body-secondary" fontSize="body-s">
-            <em>
-              {locale === 'ja'
-                ? '10秒ごとに自動更新'
-                : 'Refreshes every 10 seconds'}
-            </em>
-          </Box>
-        }
-      />
-
-      {neutralized.length > 0 ? (
         <Table
           header={
-            <Header counter={`(${neutralized.length})`}>
-              {t('gameday.fixed')}
+            <Header
+              counter={`(${active.length})`}
+              description={t('gameday.defenseDescription')}
+            >
+              {t('gameday.underAttack')}
             </Header>
           }
-          items={neutralized}
+          items={active}
           columnDefinitions={[
             {
               id: 'attack',
@@ -239,13 +162,12 @@ export default function DefensePage() {
               cell: (attack) => attack.attackerTeamId,
             },
             {
-              id: 'status',
-              header: t('gameday.result'),
-              cell: () => (
-                <StatusIndicator type="success">
-                  {t('gameday.mitigated')}
-                </StatusIndicator>
+              id: 'damage',
+              header: t('gameday.damage'),
+              cell: (attack) => (
+                <Box color="text-status-error">{attack.damage}</Box>
               ),
+              width: 100,
             },
             {
               id: 'time',
@@ -253,11 +175,96 @@ export default function DefensePage() {
               cell: (attack) => formatTime(attack.createdAt),
               width: 120,
             },
+            {
+              id: 'hint',
+              header: t('gameday.hint'),
+              cell: (attack) =>
+                hints[attack.attackId] ? (
+                  <StatusIndicator type="info">
+                    {hints[attack.attackId]}
+                  </StatusIndicator>
+                ) : (
+                  <Button
+                    variant="link"
+                    loading={hintLoading[attack.attackId]}
+                    onClick={() => handlePurchaseHint(attack.attackId)}
+                  >
+                    {t('gameday.hint')}
+                  </Button>
+                ),
+            },
+            {
+              id: 'fix',
+              header: t('gameday.reportFix'),
+              cell: (attack) => (
+                <Button
+                  variant="primary"
+                  loading={fixLoading[attack.attackSlug]}
+                  onClick={() => handleReportFix(attack.attackSlug)}
+                >
+                  {t('gameday.reportFix')}
+                </Button>
+              ),
+              width: 160,
+            },
           ]}
-          empty=""
+          empty={t('gameday.noActiveAttacks')}
           sortingDisabled
+          footer={
+            <Box
+              textAlign="center"
+              color="text-body-secondary"
+              fontSize="body-s"
+            >
+              <em>
+                {locale === 'ja'
+                  ? '10秒ごとに自動更新'
+                  : 'Refreshes every 10 seconds'}
+              </em>
+            </Box>
+          }
         />
-      ) : null}
-    </SpaceBetween>
+
+        {neutralized.length > 0 ? (
+          <Table
+            header={
+              <Header counter={`(${neutralized.length})`}>
+                {t('gameday.fixed')}
+              </Header>
+            }
+            items={neutralized}
+            columnDefinitions={[
+              {
+                id: 'attack',
+                header: t('gameday.attackName'),
+                cell: (attack) => <Box variant="code">{attack.attackSlug}</Box>,
+              },
+              {
+                id: 'attacker',
+                header: t('gameday.attacker'),
+                cell: (attack) => attack.attackerTeamId,
+              },
+              {
+                id: 'status',
+                header: t('gameday.result'),
+                cell: () => (
+                  <StatusIndicator type="success">
+                    {t('gameday.mitigated')}
+                  </StatusIndicator>
+                ),
+              },
+              {
+                id: 'time',
+                header: t('gameday.time'),
+                cell: (attack) => formatTime(attack.createdAt),
+                width: 120,
+              },
+            ]}
+            empty=""
+            sortingDisabled
+          />
+        ) : null}
+      </SpaceBetween>
+    </DeploymentGate>
   );
 }
