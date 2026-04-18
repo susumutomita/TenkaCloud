@@ -13,7 +13,6 @@ import TopNavigation from '@cloudscape-design/components/top-navigation';
 import '@cloudscape-design/global-styles/index.css';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { NotificationPanel } from '@/components/notifications/notification-panel';
 import { useTenantOptional } from '@/lib/tenant';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -56,59 +55,46 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     <div className="awsui-dark-mode">
       <div id="admin-top-nav" style={{ position: 'relative', minHeight: 72 }}>
         {mounted ? (
-          <>
-            <TopNavigation
-              identity={{
-                href: '/admin',
-                title: 'TenkaCloud',
-                onFollow: (e) => {
-                  e.preventDefault();
-                  router.push('/admin');
-                },
-              }}
-              utilities={[
-                ...(tenant?.slug
-                  ? [
-                      {
-                        type: 'button' as const,
-                        text: tenant.slug,
-                        disableUtilityCollapse: true,
-                      },
-                    ]
-                  : []),
-                {
-                  type: 'button' as const,
-                  text: '参加者画面へ',
-                  href: '/dashboard',
-                  variant: 'link' as const,
-                },
-                {
-                  type: 'menu-dropdown' as const,
-                  text: session?.user?.name || '管理者',
-                  iconName: 'user-profile' as const,
-                  items: [
-                    { id: 'settings', text: '設定' },
-                    { id: 'signout', text: 'サインアウト' },
-                  ],
-                },
-              ]}
-              i18nStrings={{
-                overflowMenuTriggerText: 'その他',
-                overflowMenuTitleText: 'すべて',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                right: '200px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                zIndex: 1000,
-              }}
-            >
-              <NotificationPanel />
-            </div>
-          </>
+          <TopNavigation
+            identity={{
+              href: '/admin',
+              title: 'TenkaCloud',
+              onFollow: (e) => {
+                e.preventDefault();
+                router.push('/admin');
+              },
+            }}
+            utilities={[
+              ...(tenant?.slug
+                ? [
+                    {
+                      type: 'button' as const,
+                      text: tenant.slug,
+                      disableUtilityCollapse: true,
+                    },
+                  ]
+                : []),
+              {
+                type: 'button' as const,
+                text: '参加者画面へ',
+                href: '/dashboard',
+                variant: 'link' as const,
+              },
+              {
+                type: 'menu-dropdown' as const,
+                text: session?.user?.name || '管理者',
+                iconName: 'user-profile' as const,
+                items: [
+                  { id: 'settings', text: '設定' },
+                  { id: 'signout', text: 'サインアウト' },
+                ],
+              },
+            ]}
+            i18nStrings={{
+              overflowMenuTriggerText: 'その他',
+              overflowMenuTitleText: 'すべて',
+            }}
+          />
         ) : null}
       </div>
       <AppLayout
