@@ -9,7 +9,7 @@ const mockDeploymentResult = {
     deployed: boolean;
     status: string;
   } | null,
-  checkError: null,
+  checkError: null as Error | null,
 };
 
 vi.mock('@/lib/hooks/use-deployment-status', () => ({
@@ -101,15 +101,16 @@ describe('DeploymentGate', () => {
     ).toBeInTheDocument();
   });
 
-  it('ステータスが null の場合は子要素を表示すべき', () => {
+  it('エラー時はブロックメッセージを表示すべき (fail-closed)', () => {
     mockDeploymentResult.isReady = false;
     mockDeploymentResult.status = null;
+    mockDeploymentResult.checkError = new Error('Network error');
     render(
       <DeploymentGate eventId="ev-1">
         <div>テストコンテンツ</div>
       </DeploymentGate>,
     );
 
-    expect(screen.getByText('テストコンテンツ')).toBeInTheDocument();
+    expect(screen.queryByText('テストコンテンツ')).not.toBeInTheDocument();
   });
 });

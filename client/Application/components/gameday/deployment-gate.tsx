@@ -22,13 +22,27 @@ interface DeploymentGateProps {
 
 export function DeploymentGate({ eventId, children }: DeploymentGateProps) {
   const { t } = useI18n();
-  const { isReady, isChecking, status } = useDeploymentStatus(eventId);
+  const { isReady, isChecking, status, checkError } =
+    useDeploymentStatus(eventId);
 
   if (isChecking) {
     return (
       <Box textAlign="center" padding="xxl">
         <Spinner size="large" />
       </Box>
+    );
+  }
+
+  // fail-closed: エラー時もブロック
+  if (checkError && !status) {
+    return (
+      <Container>
+        <Box textAlign="center" padding="xl">
+          <StatusIndicator type="error">
+            {t('gameday.deploymentNotReady')}
+          </StatusIndicator>
+        </Box>
+      </Container>
     );
   }
 
