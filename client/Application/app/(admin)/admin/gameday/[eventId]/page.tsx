@@ -33,6 +33,7 @@ import {
   getAttackLogs,
   getGameStatus,
   getTeams,
+  initGame,
   registerTeam,
   seedAttacks,
   startAuditor,
@@ -244,11 +245,43 @@ export default function AdminGamedayControlPage() {
   }
 
   if (error) {
+    const isGameNotFound =
+      error.includes('ゲームが見つかりません') ||
+      error.includes('Game not found');
     return (
       <Box textAlign="center" padding="l">
         <SpaceBetween size="m">
-          <StatusIndicator type="error">{error}</StatusIndicator>
-          <Button onClick={fetchData}>再読み込み</Button>
+          <StatusIndicator type={isGameNotFound ? 'info' : 'error'}>
+            {isGameNotFound
+              ? 'このイベントのゲームはまだ初期化されていません'
+              : error}
+          </StatusIndicator>
+          {isGameNotFound ? (
+            <Button
+              variant="primary"
+              loading={actionLoading}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  await initGame(eventId);
+                  setError(null);
+                  await fetchData();
+                } catch (e) {
+                  setError(
+                    e instanceof Error
+                      ? e.message
+                      : 'ゲーム初期化に失敗しました',
+                  );
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
+            >
+              ゲームを初期化
+            </Button>
+          ) : (
+            <Button onClick={fetchData}>再読み込み</Button>
+          )}
         </SpaceBetween>
       </Box>
     );
