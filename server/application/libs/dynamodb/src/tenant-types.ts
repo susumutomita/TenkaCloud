@@ -92,6 +92,7 @@ export interface TenantItem extends DynamoDBItem {
   computeType: ComputeType;
   provisioningStatus: ProvisioningStatus;
   applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  applicationPlaneEndpoint?: string;
   provisionedResources?: TenantProvisionedResources;
   provisioningError?: string | null;
   provisionedAt?: string;
@@ -135,6 +136,7 @@ export interface Tenant {
   computeType: ComputeType;
   provisioningStatus: ProvisioningStatus;
   applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  applicationPlaneEndpoint?: string;
   provisionedResources?: TenantProvisionedResources;
   provisioningError?: string | null;
   provisionedAt?: Date;
@@ -196,6 +198,7 @@ export interface UpdateTenantInput {
   isolationModel?: IsolationModel;
   provisioningStatus?: ProvisioningStatus;
   applicationDeploymentStatus?: ApplicationDeploymentStatus;
+  applicationPlaneEndpoint?: string;
   provisionedResources?: TenantProvisionedResources;
   provisioningError?: string | null;
   provisionedAt?: Date;

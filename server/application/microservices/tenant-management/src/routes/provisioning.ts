@@ -175,6 +175,7 @@ provisioningRoutes.get(
       provisioningStatus: tenant.provisioningStatus,
       applicationDeploymentStatus:
         tenant.applicationDeploymentStatus ?? 'NOT_DEPLOYED',
+      applicationPlaneEndpoint: tenant.applicationPlaneEndpoint,
       provisionedResources: isPlatformAdmin
         ? tenant.provisionedResources
         : undefined,

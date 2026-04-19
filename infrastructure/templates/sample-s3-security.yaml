@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GameDay Challenge - S3 Security Misconfiguration.
+  Creates an S3 bucket with intentionally weak security settings.
+  Participants must identify and fix the vulnerabilities.
+
+Parameters:
+  ProblemId:
+    Type: String
+    Description: Problem identifier
+  TeamId:
+    Type: String
+    Description: Team identifier
+  TenantId:
+    Type: String
+    Description: Tenant identifier
+
+Resources:
+  VulnerableBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "tc-challenge-${TeamId}-${ProblemId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      Tags:
+        - Key: TenantId
+          Value: !Ref TenantId
+        - Key: ProblemId
+          Value: !Ref ProblemId
+        - Key: TeamId
+          Value: !Ref TeamId
+        - Key: ManagedBy
+          Value: tenkacloud
+
+Outputs:
+  BucketName:
+    Description: Name of the vulnerable S3 bucket
+    Value: !Ref VulnerableBucket
+  BucketArn:
+    Description: ARN of the vulnerable S3 bucket
+    Value: !GetAtt VulnerableBucket.Arn

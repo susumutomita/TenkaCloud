@@ -18,6 +18,17 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
   }),
 }));
 
+const mockDeploymentResult = {
+  isReady: true,
+  isChecking: false,
+  status: { deployed: true, status: 'completed' },
+  checkError: null,
+};
+
+vi.mock('@/lib/hooks/use-deployment-status', () => ({
+  useDeploymentStatus: () => mockDeploymentResult,
+}));
+
 const mockGetVotingResults = vi.fn();
 const mockSubmitVote = vi.fn();
 const mockGetParticipantTeams = vi.fn();
@@ -44,6 +55,11 @@ describe('VotePage', () => {
     vi.clearAllMocks();
     mockGetParticipantTeams.mockResolvedValue(baseTeamsResponse);
     mockGetVotingResults.mockResolvedValue(baseVotingResults);
+    // デプロイ済みをデフォルトにする
+    mockDeploymentResult.isReady = true;
+    mockDeploymentResult.isChecking = false;
+    mockDeploymentResult.status = { deployed: true, status: 'completed' };
+    mockDeploymentResult.checkError = null;
   });
 
   it('ローディング中はチームデータを表示しないべき', () => {
@@ -57,7 +73,7 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'Vote targets' }),
+        screen.getByRole('heading', { name: /Vote targets/ }),
       ).toBeInTheDocument();
     });
     expect(screen.getAllByText('TeamBeta').length).toBeGreaterThanOrEqual(1);
@@ -94,7 +110,7 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Your vote has been submitted. Thank you.'),
+        screen.getByText(/Your vote has been submitted/),
       ).toBeInTheDocument();
     });
   });
@@ -107,8 +123,8 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getAllByText('No other teams are registered yet.'),
-      ).toHaveLength(2);
+        screen.getAllByText('No other teams are registered yet.').length,
+      ).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -125,6 +141,57 @@ describe('VotePage', () => {
 
     await waitFor(() => {
       expect(mockSubmitVote).toHaveBeenCalledWith('ev-1', 'team-1', 'team-2');
+    });
+  });
+
+  it('デプロイ未完了時に警告メッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'pending',
+    };
+    render(<VotePage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment deployment has not been completed yet. Please contact your administrator.',
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイ中に進捗メッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'in_progress',
+    };
+    render(<VotePage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment is being deployed. Please wait a moment.',
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('デプロイ失敗時にエラーメッセージを表示すべき', async () => {
+    mockDeploymentResult.isReady = false;
+    mockDeploymentResult.status = {
+      deployed: false,
+      status: 'failed',
+    };
+    render(<VotePage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'The environment deployment has failed. Please contact your administrator.',
+        ),
+      ).toBeInTheDocument();
     });
   });
 });

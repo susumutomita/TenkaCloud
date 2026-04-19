@@ -14,6 +14,8 @@ const {
   mockOpenClue,
   mockValidateAnswer,
   mockGetChallengeDetail,
+  mockGameDayJobFindByEventAndProblem,
+  mockCompetitorAccountFindByEventId,
 } = vi.hoisted(() => ({
   mockEventRepository: {
     findByTenant: vi.fn().mockResolvedValue([]),
@@ -49,6 +51,8 @@ const {
     success: false,
     error: 'Not found',
   }),
+  mockGameDayJobFindByEventAndProblem: vi.fn().mockResolvedValue([]),
+  mockCompetitorAccountFindByEventId: vi.fn().mockResolvedValue([]),
 }));
 
 // 依存関係をモック
@@ -93,6 +97,27 @@ vi.mock('../jam/scoring', () => ({
   openClue: (...args: unknown[]) => mockOpenClue(...args),
   validateAnswer: (...args: unknown[]) => mockValidateAnswer(...args),
 }));
+
+vi.mock('../repositories/gameday-deployment-job-repository', () => ({
+  GameDayDeploymentJobRepository: class {
+    findByEventAndProblem = mockGameDayJobFindByEventAndProblem;
+    findById = vi.fn().mockResolvedValue(null);
+    findActive = vi.fn().mockResolvedValue([]);
+    create = vi.fn();
+    updateStatus = vi.fn();
+  },
+}));
+
+vi.mock('../repositories/competitor-account-repository', () => {
+  class MockCompetitorAccountRepository {
+    findByEventId = mockCompetitorAccountFindByEventId;
+    findById = vi.fn().mockResolvedValue(null);
+    create = vi.fn();
+    updateStatus = vi.fn();
+    delete = vi.fn();
+  }
+  return { CompetitorAccountRepository: MockCompetitorAccountRepository };
+});
 
 import { authenticateRequest, hasRole } from '../auth';
 import { participantRouter } from '../routes/participant';
@@ -1611,6 +1636,223 @@ describe('Participant Routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.events).toEqual([]);
+    });
+  });
+
+  describe('GET /events/:eventId/deployments/status', () => {
+    beforeEach(() => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', teamId: 'team-1', roles: ['competitor'] },
+      });
+      vi.mocked(hasRole).mockReturnValue(true);
+    });
+
+    it('イベントが見つからない場合は 404 を返すべき', async () => {
+      vi.mocked(getEventWithProblems).mockResolvedValue(null);
+
+      const res = await app.request('/api/participant/events/event-1/deployments/status');
+      expect(res.status).toBe(404);
+    });
+
+    it('デプロイジョブが完了している場合は deployed: true を返すべき', async () => {
+      vi.mocked(getEventWithProblems).mockResolvedValue({
+        event: { id: 'event-1', tenantId: 'tenant-1', type: 'GAMEDAY' } as never,
+        problems: [{ problemId: 'prob-1', order: 1 }] as never,
+      });
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([
+        {
+          id: 'job-1',
+          eventId: 'event-1',
+          problemId: 'prob-1',
+          competitorAccountId: 'acct-1',
+          status: 'completed',
+          result: {
+            success: true,
+            outputs: { WebsiteUrl: 'https://example.com' },
+          },
+        },
+      ]);
+      mockCompetitorAccountFindByEventId.mockResolvedValue([
+        {
+          id: 'acct-1',
+          name: 'team-1',
+          accountId: '123456789012',
+          roleArn: 'arn:aws:iam::123456789012:role/TestRole',
+          externalId: 'ext-id-1',
+          region: 'ap-northeast-1',
+        },
+      ]);
+
+      const res = await app.request('/api/participant/events/event-1/deployments/status');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(true);
+      expect(body.outputs).toEqual({ WebsiteUrl: 'https://example.com' });
+      expect(body.roleArn).toBe('arn:aws:iam::123456789012:role/TestRole');
+    });
+
+    it('ジョブが未完了の場合は deployed: false を返すべき', async () => {
+      vi.mocked(getEventWithProblems).mockResolvedValue({
+        event: { id: 'event-1', tenantId: 'tenant-1', type: 'GAMEDAY' } as never,
+        problems: [{ problemId: 'prob-1', order: 1 }] as never,
+      });
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([
+        {
+          id: 'job-1',
+          eventId: 'event-1',
+          problemId: 'prob-1',
+          competitorAccountId: 'acct-1',
+          status: 'in_progress',
+          error: null,
+        },
+      ]);
+      mockCompetitorAccountFindByEventId.mockResolvedValue([
+        {
+          id: 'acct-1',
+          name: 'team-1',
+          accountId: '123456789012',
+          region: 'ap-northeast-1',
+        },
+      ]);
+
+      const res = await app.request('/api/participant/events/event-1/deployments/status');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(false);
+      expect(body.status).toBe('in_progress');
+    });
+
+    it('問題がない場合は deployed: false を返すべき', async () => {
+      vi.mocked(getEventWithProblems).mockResolvedValue({
+        event: { id: 'event-1', tenantId: 'tenant-1', type: 'GAMEDAY' } as never,
+        problems: [] as never,
+      });
+
+      const res = await app.request('/api/participant/events/event-1/deployments/status');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(false);
+      expect(body.status).toBe('no_problems');
+    });
+  });
+
+  describe('GET /events/:eventId/problems/:problemId/deployments/status', () => {
+    beforeEach(() => {
+      vi.mocked(authenticateRequest).mockResolvedValue({
+        isValid: true,
+        user: { id: 'user-1', tenantId: 'tenant-1', teamId: 'team-1', roles: ['competitor'] },
+      });
+      vi.mocked(hasRole).mockReturnValue(true);
+    });
+
+    it('デプロイジョブがない場合は 404 を返すべき', async () => {
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([]);
+
+      const res = await app.request(
+        '/api/participant/events/event-1/problems/prob-1/deployments/status',
+      );
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.deployed).toBe(false);
+    });
+
+    it('チームのデプロイが完了している場合は deployed: true を返すべき', async () => {
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([
+        {
+          id: 'job-1',
+          eventId: 'event-1',
+          problemId: 'prob-1',
+          competitorAccountId: 'acct-1',
+          status: 'completed',
+          result: {
+            success: true,
+            outputs: { ApiUrl: 'https://api.example.com' },
+          },
+        },
+      ]);
+      mockCompetitorAccountFindByEventId.mockResolvedValue([
+        {
+          id: 'acct-1',
+          name: 'team-1',
+          accountId: '123456789012',
+          roleArn: 'arn:aws:iam::123456789012:role/TeamRole',
+          externalId: 'ext-1',
+          region: 'ap-northeast-1',
+        },
+      ]);
+
+      const res = await app.request(
+        '/api/participant/events/event-1/problems/prob-1/deployments/status',
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(true);
+      expect(body.outputs).toEqual({ ApiUrl: 'https://api.example.com' });
+      expect(body.roleArn).toBe('arn:aws:iam::123456789012:role/TeamRole');
+    });
+
+    it('デプロイが失敗している場合はエラー情報を返すべき', async () => {
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([
+        {
+          id: 'job-1',
+          eventId: 'event-1',
+          problemId: 'prob-1',
+          competitorAccountId: 'acct-1',
+          status: 'failed',
+          error: 'Stack creation failed',
+        },
+      ]);
+      mockCompetitorAccountFindByEventId.mockResolvedValue([
+        {
+          id: 'acct-1',
+          name: 'team-1',
+          accountId: '123456789012',
+          region: 'ap-northeast-1',
+        },
+      ]);
+
+      const res = await app.request(
+        '/api/participant/events/event-1/problems/prob-1/deployments/status',
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(false);
+      expect(body.status).toBe('failed');
+      expect(body.error).toBe('Stack creation failed');
+    });
+
+    it('他チームのデプロイデータにアクセスできないべき', async () => {
+      mockGameDayJobFindByEventAndProblem.mockResolvedValue([
+        {
+          id: 'job-1',
+          eventId: 'event-1',
+          problemId: 'prob-1',
+          competitorAccountId: 'acct-other',
+          status: 'completed',
+          result: { outputs: { Secret: 'should-not-see' } },
+        },
+      ]);
+      mockCompetitorAccountFindByEventId.mockResolvedValue([
+        {
+          id: 'acct-other',
+          name: 'other-team',
+          accountId: '999999999999',
+          roleArn: 'arn:aws:iam::999999999999:role/OtherRole',
+          externalId: 'secret-ext-id',
+          region: 'us-east-1',
+        },
+      ]);
+
+      const res = await app.request(
+        '/api/participant/events/event-1/problems/prob-1/deployments/status',
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deployed).toBe(false);
+      expect(body.status).toBe('pending');
+      expect(body.roleArn).toBeUndefined();
+      expect(body.externalId).toBeUndefined();
     });
   });
 });

@@ -113,6 +113,60 @@ describe('ProvisioningCard コンポーネント', () => {
       ).not.toBeInTheDocument();
     });
 
+    it('デプロイ済みで applicationPlaneEndpoint がある場合はリンクを表示すべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            applicationDeploymentStatus: 'DEPLOYED',
+            applicationPlaneEndpoint:
+              'http://localhost:13001?tenant=test-tenant',
+          })}
+        />,
+      );
+      const link = screen.getByRole('link', {
+        name: 'http://localhost:13001?tenant=test-tenant',
+      });
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute(
+        'href',
+        'http://localhost:13001?tenant=test-tenant',
+      );
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('安全でない URL スキームの applicationPlaneEndpoint はリンクではなくテキストで表示すべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            applicationDeploymentStatus: 'DEPLOYED',
+            applicationPlaneEndpoint: 'javascript:alert(1)',
+          })}
+        />,
+      );
+      expect(
+        screen.queryByRole('link', { name: 'javascript:alert(1)' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText('javascript:alert(1)')).toBeInTheDocument();
+    });
+
+    it('未デプロイ状態では applicationPlaneEndpoint リンクを表示しないべき', () => {
+      render(
+        <ProvisioningCard
+          tenant={createMockTenant({
+            applicationDeploymentStatus: 'NOT_DEPLOYED',
+            applicationPlaneEndpoint:
+              'http://localhost:13001?tenant=test-tenant',
+          })}
+        />,
+      );
+      expect(
+        screen.queryByRole('link', {
+          name: 'http://localhost:13001?tenant=test-tenant',
+        }),
+      ).not.toBeInTheDocument();
+    });
+
     it('その他の作成済みリソースとエラーを表示すべき', () => {
       render(
         <ProvisioningCard

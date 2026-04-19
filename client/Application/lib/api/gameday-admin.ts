@@ -123,6 +123,18 @@ export function getGameStatus(eventId: string) {
   );
 }
 
+export function initGame(eventId: string, durationMinutes = 120) {
+  return withLocalFallback(
+    eventId,
+    () =>
+      adminRequest<GameState>('/game/init', {
+        method: 'POST',
+        body: JSON.stringify({ eventId, durationMinutes }),
+      }),
+    () => getLocalGameState(eventId),
+  );
+}
+
 // --- Score & Features ---
 
 export function toggleScoreWeight(eventId: string) {

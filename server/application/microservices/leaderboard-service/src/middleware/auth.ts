@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import * as jose from "jose";
+import { z } from "zod";
 
 export interface AuthContext {
 	userId: string;
@@ -18,6 +19,14 @@ const JWKS_URI =
 	"http://localhost:8080/realms/tenkacloud/protocol/openid-connect/certs";
 const ISSUER =
 	process.env.JWT_ISSUER ?? "http://localhost:8080/realms/tenkacloud";
+
+const JwtClaimsSchema = z.object({
+	sub: z.string().optional(),
+	"custom:tenant_id": z.string().min(1).optional(),
+	tenant_id: z.string().min(1).optional(),
+	"cognito:groups": z.array(z.string()).min(1).optional(),
+	realm_access: z.object({ roles: z.array(z.string()) }).optional(),
+}).passthrough();
 
 let jwks: jose.JWTVerifyGetKey | null = null;
 
@@ -74,22 +83,30 @@ export const authMiddleware = createMiddleware(async (c, next) => {
 			issuer: ISSUER,
 		});
 
-		const tenantId = (payload as Record<string, unknown>)["tenant_id"] as
-			| string
-			| undefined;
+		const parsed = JwtClaimsSchema.safeParse(payload);
+		const claims = parsed.success ? parsed.data : (payload as Record<string, unknown>);
+
+		const tenantId =
+			(claims["custom:tenant_id"] as string | undefined) ||
+			(claims["tenant_id"] as string | undefined);
 		if (!tenantId) {
 			return c.json({ error: "テナント情報がありません" }, 403);
 		}
 
+		if (!payload.sub) {
+			return c.json({ error: "トークンに sub がありません" }, 401);
+		}
+
+		const cognitoGroups = claims["cognito:groups"] as string[] | undefined;
+		const keycloakRoles = (claims["realm_access"] as { roles?: string[] } | undefined)?.roles;
+
 		c.set("auth", {
-			userId: payload.sub ?? "",
+			userId: payload.sub,
 			tenantId,
 			roles:
-				(
-					(payload as Record<string, unknown>)["realm_access"] as {
-						roles?: string[];
-					}
-				)?.roles ?? [],
+				(cognitoGroups && cognitoGroups.length > 0 ? cognitoGroups : undefined) ??
+				(keycloakRoles && keycloakRoles.length > 0 ? keycloakRoles : undefined) ??
+				[],
 		});
 
 		await next();

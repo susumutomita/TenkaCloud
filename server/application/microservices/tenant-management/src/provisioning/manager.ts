@@ -6,6 +6,22 @@ import type { Tenant } from '@tenkacloud/dynamodb';
 
 const logger = createLogger('provisioning-manager');
 
+/**
+ * Resolve the Application Plane URL for a tenant.
+ * - Local dev: http://localhost:13001?tenant={slug}
+ * - Production: https://{slug}.tenka.cloud (or APPLICATION_PLANE_BASE_URL)
+ */
+export function resolveApplicationPlaneEndpoint(slug: string): string {
+  const baseUrl = process.env.APPLICATION_PLANE_BASE_URL;
+  if (baseUrl) {
+    return `${baseUrl}?tenant=${encodeURIComponent(slug)}`;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return `https://${slug}.tenka.cloud`;
+  }
+  return `http://localhost:13001?tenant=${encodeURIComponent(slug)}`;
+}
+
 export class ProvisioningManager {
   private keycloakProvisioner: KeycloakProvisioner;
   private k8sProvisioner: KubernetesProvisioner;
@@ -37,9 +53,16 @@ export class ProvisioningManager {
       // Deploy Participant App (Base)
       await this.k8sProvisioner.deployParticipantApp(tenant.slug, namespace);
 
-      // 3. Update status to COMPLETED
+      // 3. Resolve Application Plane endpoint
+      const applicationPlaneEndpoint = resolveApplicationPlaneEndpoint(
+        tenant.slug,
+      );
+
+      // 4. Update status to COMPLETED
       await tenantRepository.update(tenant.id, {
         provisioningStatus: 'COMPLETED',
+        applicationDeploymentStatus: 'DEPLOYED',
+        applicationPlaneEndpoint,
         status: 'ACTIVE',
       });
 

@@ -3,7 +3,7 @@
  */
 
 import { getAuthToken } from '@/lib/auth/get-auth-token';
-import { getGamedayApiUrl } from '@/lib/api/backend-urls';
+import { getGamedayApiUrl, getProblemServiceUrl } from '@/lib/api/backend-urls';
 import { getLocalAttacks, isLocalGameDayEvent } from './gameday-local';
 import type {
   Alliance,
@@ -11,6 +11,7 @@ import type {
   AttackLog,
   AttackPurchase,
   AttackStats,
+  DeploymentStatus,
   GameState,
   HealthCheckResult,
   LeaderboardEntry,
@@ -260,4 +261,86 @@ export function updateTeamUrl(
     method: 'POST',
     body: JSON.stringify({ eventId, teamId, ...urls }),
   });
+}
+
+// --- Deployment Status ---
+
+const PROBLEM_SERVICE_URL = getProblemServiceUrl();
+
+const NOT_DEPLOYED_RESPONSE: DeploymentStatus = {
+  deployed: false,
+  status: 'not_found',
+  outputs: null,
+  roleArn: null,
+  externalId: null,
+  competitorAccountId: null,
+  region: null,
+  error: 'No deployment found',
+};
+
+/**
+ * 参加者向けデプロイメント状態取得（問題単位）
+ *
+ * problem-service の participant API を直接呼び出す
+ */
+export async function getDeploymentStatus(
+  eventId: string,
+  problemId: string,
+): Promise<DeploymentStatus> {
+  const token = await getAuthToken();
+  const url = `${PROBLEM_SERVICE_URL}/participant/events/${eventId}/problems/${problemId}/deployments/status`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return NOT_DEPLOYED_RESPONSE;
+    }
+    const body = await response
+      .json()
+      .catch(() => ({ error: 'Unknown error' }));
+    throw new Error(
+      (body as { error?: string }).error || `HTTP ${response.status}`,
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * 参加者向けデプロイメント状態取得（イベント全体）
+ *
+ * problem-service の participant API を直接呼び出す
+ */
+export async function getEventDeploymentStatus(
+  eventId: string,
+): Promise<DeploymentStatus> {
+  const token = await getAuthToken();
+  const url = `${PROBLEM_SERVICE_URL}/participant/events/${eventId}/deployments/status`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return NOT_DEPLOYED_RESPONSE;
+    }
+    const body = await response
+      .json()
+      .catch(() => ({ error: 'Unknown error' }));
+    throw new Error(
+      (body as { error?: string }).error || `HTTP ${response.status}`,
+    );
+  }
+
+  return response.json();
 }

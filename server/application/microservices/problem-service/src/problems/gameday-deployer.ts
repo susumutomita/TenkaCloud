@@ -5,6 +5,7 @@
  * ジョブ状態は DynamoDB で永続化する。
  */
 
+import type { ProblemDeployRequestedDetail } from "@tenkacloud/events";
 import { getAWSProvider } from "../providers/aws";
 import { getLocalProvider } from "../providers/local";
 import {
@@ -21,6 +22,7 @@ import type {
 	Problem,
 } from "../types";
 import type { DeployStackOptions } from "../providers/interface";
+import { ProblemDeployPublisher } from "./deploy-publisher";
 
 /** SSE サブスクライバー管理 (in-memory) */
 const subscribers = new Map<
@@ -59,6 +61,7 @@ export function subscribeToJob(
 
 const jobRepo = new GameDayDeploymentJobRepository();
 const accountRepo = new CompetitorAccountRepository();
+const deployPublisher = new ProblemDeployPublisher();
 
 export function getGameDayDeploymentValidationError(
 	problem: Pick<Problem, "type" | "deployment">,
@@ -91,6 +94,7 @@ export function getGameDayDeploymentValidationError(
 export async function deployProblemToTeams(
 	problem: Problem,
 	eventId: string,
+	tenantId?: string,
 	concurrency = 10,
 ): Promise<DeploymentJob[]> {
 	const accounts = await accountRepo.findByEventId(eventId);
@@ -125,7 +129,43 @@ export async function deployProblemToTeams(
 		jobs.push(job);
 	}
 
-	// 非同期で並列デプロイ開始（レスポンスを待たない）
+	// EventBridge モードの場合はイベントを publish（CDK ProblemDeployPlane が処理）
+	if (process.env.PROBLEM_DEPLOY_DELIVERY_MODE === "eventbridge") {
+		const templateUrl =
+			problem.deployment.templates.aws?.path ?? "";
+		for (const job of jobs) {
+			const account = accounts.find((a) => a.id === job.competitorAccountId);
+			if (!account) continue;
+
+			if (!account.roleArn || !account.externalId) {
+				await jobRepo.updateStatus(eventId, problem.id, job.id, "failed", {
+					error: `Missing roleArn or externalId for account ${account.id}`,
+				});
+				continue;
+			}
+
+			const detail: ProblemDeployRequestedDetail = {
+				problemId: problem.id,
+				teamId: account.id,
+				tenantId: tenantId ?? eventId,
+				targetRoleArn: account.roleArn,
+				externalId: account.externalId,
+				templateUrl,
+				timestamp: new Date().toISOString(),
+			};
+			try {
+				await deployPublisher.publishDeployRequested(detail);
+				await jobRepo.updateStatus(eventId, problem.id, job.id, "in_progress");
+			} catch (error) {
+				await jobRepo.updateStatus(eventId, problem.id, job.id, "failed", {
+					error: error instanceof Error ? error.message : "EventBridge publish failed",
+				});
+			}
+		}
+		return jobs;
+	}
+
+	// ローカル開発: 非同期で並列デプロイ開始（レスポンスを待たない）
 	void runDeployments(jobs, problem, accounts, concurrency);
 
 	return jobs;

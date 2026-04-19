@@ -17,6 +17,12 @@ vi.mock('@/lib/aws', () => ({
   },
 }));
 
+// Mock serverApiRequest
+const mockServerApiRequest = vi.fn();
+vi.mock('@/lib/api/server', () => ({
+  serverApiRequest: (...args: unknown[]) => mockServerApiRequest(...args),
+}));
+
 describe('AWS Console Federation API', () => {
   const makeParams = (eventId: string) => ({
     params: Promise.resolve({ eventId }),
@@ -26,6 +32,8 @@ describe('AWS Console Federation API', () => {
     vi.clearAllMocks();
     // 環境変数をクリア
     delete process.env.AWS_PARTICIPANT_ROLE_ARN;
+    // Default: deployment fetch fails (so it falls back to env vars)
+    mockServerApiRequest.mockRejectedValue(new Error('Not found'));
   });
 
   it('未認証の場合は 401 を返すべき', async () => {
@@ -60,9 +68,7 @@ describe('AWS Console Federation API', () => {
 
     expect(response.status).toBe(404);
     const data = await response.json();
-    expect(data.error).toBe(
-      'AWS Console access is not configured for this event',
-    );
+    expect(data.error).toContain('not configured');
   });
 
   it('Federation URL を正常に返すべき', async () => {
@@ -212,6 +218,51 @@ describe('AWS Console Federation API', () => {
       'test@example.com',
       'evt-1-no-team',
       'arn:aws:iam::123456789012:role/ParticipantRole',
+    );
+  });
+
+  it('デプロイメントレコードから roleArn を優先的に使用すべき', async () => {
+    const session: Session = {
+      user: { name: 'Test User', email: 'test@example.com' },
+      expires: new Date(Date.now() + 86400000).toISOString(),
+      roles: ['participant'],
+      tenantId: 'tenant-1',
+      teamId: 'team-1',
+    };
+    mockAuth.mockResolvedValue(session);
+    // 環境変数にもセット（フォールバック）
+    process.env.AWS_PARTICIPANT_ROLE_ARN =
+      'arn:aws:iam::123456789012:role/FallbackRole';
+
+    // serverApiRequest returns deployment status with roleArn
+    mockServerApiRequest.mockResolvedValue({
+      deployed: true,
+      roleArn: 'arn:aws:iam::999999999999:role/DeploymentRole',
+    });
+
+    const expiresAt = new Date(Date.now() + 3600000);
+    mockGenerateParticipantConsoleUrl.mockResolvedValue({
+      url: 'https://signin.aws.amazon.com/federation?Action=login',
+      expiresAt,
+    });
+
+    const { GET } = await import('../route');
+    const request = new Request(
+      'http://localhost/api/participant/events/evt-1/aws-console',
+    );
+    await GET(request, await makeParams('evt-1'));
+
+    // serverApiRequest がイベント全体のデプロイメントステータスを呼ぶ
+    expect(mockServerApiRequest).toHaveBeenCalledWith(
+      '/participant/events/evt-1/deployments/status',
+    );
+
+    // デプロイメントレコードの roleArn が使われる
+    expect(mockGenerateParticipantConsoleUrl).toHaveBeenCalledWith(
+      'tenant-1',
+      'test@example.com',
+      'evt-1-team-1',
+      'arn:aws:iam::999999999999:role/DeploymentRole',
     );
   });
 });

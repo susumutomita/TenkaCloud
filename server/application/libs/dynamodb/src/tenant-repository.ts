@@ -89,6 +89,7 @@ function toDomain(item: TenantItem): Tenant {
     computeType: item.computeType,
     provisioningStatus: item.provisioningStatus,
     applicationDeploymentStatus: item.applicationDeploymentStatus,
+    applicationPlaneEndpoint: item.applicationPlaneEndpoint,
     provisionedResources: item.provisionedResources,
     provisioningError: item.provisioningError,
     provisionedAt: item.provisionedAt ? new Date(item.provisionedAt) : undefined,
@@ -274,6 +275,16 @@ export class TenantRepository {
         'applicationDeploymentStatus';
       expressionValues[':applicationDeploymentStatus'] =
         input.applicationDeploymentStatus;
+    }
+
+    if (input.applicationPlaneEndpoint !== undefined) {
+      updateExpressions.push(
+        '#applicationPlaneEndpoint = :applicationPlaneEndpoint',
+      );
+      expressionNames['#applicationPlaneEndpoint'] =
+        'applicationPlaneEndpoint';
+      expressionValues[':applicationPlaneEndpoint'] =
+        input.applicationPlaneEndpoint;
     }
 
     if (input.provisionedResources !== undefined) {
