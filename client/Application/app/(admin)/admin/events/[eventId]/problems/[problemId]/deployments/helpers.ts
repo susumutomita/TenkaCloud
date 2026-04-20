@@ -95,6 +95,30 @@ export function hasActiveJobs(jobs: DeploymentJob[]): boolean {
   );
 }
 
+/**
+ * Shallow compare two job lists on the fields the UI renders. Lets the polling
+ * loop skip a setState (and the table re-render) when nothing actually changed.
+ */
+export function jobsEqual(a: DeploymentJob[], b: DeploymentJob[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.status !== y.status ||
+      x.stackName !== y.stackName ||
+      x.error !== y.error ||
+      x.retryCount !== y.retryCount ||
+      x.completedAt !== y.completedAt
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function fetchAccounts(
   eventId: string,
 ): Promise<{ accounts: CompetitorAccount[] }> {

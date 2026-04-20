@@ -32,6 +32,7 @@ import {
   mapJobStatus,
   statusLabel,
   hasActiveJobs,
+  jobsEqual,
   fetchAccounts,
   createAccount,
   deleteAccount,
@@ -88,7 +89,7 @@ export default function GameDayDeploymentsPage() {
   const refreshJobs = useCallback(async () => {
     try {
       const data = await fetchJobs(eventId, problemId);
-      setJobs(data.jobs);
+      setJobs((prev) => (jobsEqual(prev, data.jobs) ? prev : data.jobs));
     } catch (e) {
       console.error('Failed to refresh jobs', e);
     }

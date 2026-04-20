@@ -198,9 +198,17 @@ NODE_EXIT=\${NODE_EXIT:-0}
 PAYLOAD="$(cat "$OUTPUT_FILE" 2>/dev/null || echo '{}')"
 rm -f "$OUTPUT_FILE"
 
-export stackName=$(node -e "try { console.log(JSON.parse(process.argv[1]).stackName || '') } catch (_) { console.log('') }" "$PAYLOAD")
-export stackId=$(node -e "try { console.log(JSON.parse(process.argv[1]).stackId || '') } catch (_) { console.log('') }" "$PAYLOAD")
-export errorReason=$(node -e "try { console.log(JSON.parse(process.argv[1]).errorReason || '') } catch (_) { console.log('') }" "$PAYLOAD")
+# One node call emits three shell-safe assignments so embedded newlines/quotes
+# in CFn error messages don't break the eval.
+eval "$(node -e "
+  let p = {};
+  try { p = JSON.parse(process.argv[1]); } catch (_) {}
+  const q = v => \\"'\\" + String(v || '').replace(/'/g, \\"'\\\\\\\\''\\") + \\"'\\";
+  console.log('stackName=' + q(p.stackName));
+  console.log('stackId=' + q(p.stackId));
+  console.log('errorReason=' + q(p.errorReason));
+" "$PAYLOAD")"
+export stackName stackId errorReason
 
 if [ "$NODE_EXIT" -ne 0 ]; then
   log "ERROR: Stack creation did not reach CREATE_COMPLETE (exit=$NODE_EXIT)"

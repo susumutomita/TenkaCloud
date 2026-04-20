@@ -82,11 +82,8 @@ internalDeployEventsRoutes.post(
 		}
 
 		const tenantData = payload.detail.jobOutput?.tenantData;
-		const directStatus = payload.detail.jobOutput?.deployStatus;
 		const isFailedEvent =
-			detailType === EventDetailType.PROBLEM_DEPLOY_FAILED ||
-			directStatus === "failed" ||
-			tenantData?.deployStatus === "failed";
+			detailType === EventDetailType.PROBLEM_DEPLOY_FAILED;
 
 		try {
 			if (isFailedEvent) {
@@ -130,7 +127,10 @@ internalDeployEventsRoutes.post(
 			}
 			return c.json({ ok: true }, 200);
 		} catch (error) {
-			logger.error({ error, deploymentKey: payload.detail.deploymentKey }, "Failed to update deployment job status");
+			logger.error(
+				{ error, deploymentKey: payload.detail.deploymentKey },
+				"Failed to update deployment job status",
+			);
 			return c.json({ error: "Failed to update job status" }, 500);
 		}
 	},
