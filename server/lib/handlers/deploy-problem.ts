@@ -2,6 +2,7 @@ import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import {
   CloudFormationClient,
   CreateStackCommand,
+  DescribeStacksCommand,
   waitUntilStackCreateComplete,
 } from "@aws-sdk/client-cloudformation";
 
@@ -20,6 +21,7 @@ export interface DeployProblemOutput {
   stackName?: string;
   stackId?: string;
   errorReason?: string;
+  outputs?: Record<string, string>;
 }
 
 const STACK_WAIT_MAX_SECONDS = 60 * 60; // CFn は最大 60 分で足切り
@@ -88,10 +90,21 @@ export async function deployProblem(
     };
   }
 
+  const describe = await cfnClient.send(
+    new DescribeStacksCommand({ StackName: stackName }),
+  );
+  const outputs: Record<string, string> = {};
+  for (const o of describe.Stacks?.[0]?.Outputs ?? []) {
+    if (o.OutputKey && o.OutputValue) {
+      outputs[o.OutputKey] = o.OutputValue;
+    }
+  }
+
   return {
     deployStatus: "completed",
     stackName,
     stackId: createResult.StackId,
+    outputs,
   };
 }
 
@@ -114,6 +127,7 @@ if [ -z "\${templateUrl:-}" ]; then
   export stackName=""
   export stackId=""
   export errorReason=""
+  export stackOutputs="{}"
   exit 0
 fi
 
@@ -124,6 +138,7 @@ const { STSClient, AssumeRoleCommand } = require('@aws-sdk/client-sts');
 const {
   CloudFormationClient,
   CreateStackCommand,
+  DescribeStacksCommand,
   waitUntilStackCreateComplete,
 } = require('@aws-sdk/client-cloudformation');
 const fs = require('fs');
@@ -180,7 +195,12 @@ async function main() {
     process.exit(2);
   }
 
-  fs.writeFileSync(outputFile, JSON.stringify({ stackName, stackId }));
+  const describe = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+  const outputs = {};
+  for (const o of (describe.Stacks && describe.Stacks[0] && describe.Stacks[0].Outputs) || []) {
+    if (o.OutputKey && o.OutputValue) outputs[o.OutputKey] = o.OutputValue;
+  }
+  fs.writeFileSync(outputFile, JSON.stringify({ stackName, stackId, outputs }));
 }
 
 main().catch(e => {
@@ -196,19 +216,20 @@ main().catch(e => {
 
 NODE_EXIT=\${NODE_EXIT:-0}
 PAYLOAD="$(cat "$OUTPUT_FILE" 2>/dev/null || echo '{}')"
-rm -f "$OUTPUT_FILE"
+# Leave "$OUTPUT_FILE" behind; the CodeBuild container is ephemeral.
 
-# One node call emits three shell-safe assignments so embedded newlines/quotes
-# in CFn error messages don't break the eval.
+# One node call emits four shell-safe assignments so embedded newlines/quotes
+# in CFn error messages don't break the eval. stackOutputs is a JSON string.
 eval "$(node -e "
   let p = {};
   try { p = JSON.parse(process.argv[1]); } catch (_) {}
-  const q = v => \\"'\\" + String(v || '').replace(/'/g, \\"'\\\\\\\\''\\") + \\"'\\";
+  const q = v => \\"'\\" + String(v == null ? '' : v).replace(/'/g, \\"'\\\\\\\\''\\") + \\"'\\";
   console.log('stackName=' + q(p.stackName));
   console.log('stackId=' + q(p.stackId));
   console.log('errorReason=' + q(p.errorReason));
+  console.log('stackOutputs=' + q(JSON.stringify(p.outputs || {})));
 " "$PAYLOAD")"
-export stackName stackId errorReason
+export stackName stackId errorReason stackOutputs
 
 if [ "$NODE_EXIT" -ne 0 ]; then
   log "ERROR: Stack creation did not reach CREATE_COMPLETE (exit=$NODE_EXIT)"

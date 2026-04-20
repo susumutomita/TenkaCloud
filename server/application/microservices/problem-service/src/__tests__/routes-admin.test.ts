@@ -428,7 +428,7 @@ describe("Admin Routes", () => {
 			expect(deployProblemToTeams).not.toHaveBeenCalled();
 		});
 
-		it("AWS テンプレートがない問題は拒否すべき", async () => {
+		it("AWS アカウントに対して AWS テンプレートがない問題は拒否すべき", async () => {
 			mockEventRepository.findById.mockResolvedValueOnce({
 				id: "event-1",
 				type: "gameday",
@@ -442,6 +442,15 @@ describe("Admin Routes", () => {
 					regions: { aws: ["ap-northeast-1"] },
 				},
 			});
+			mockCompetitorAccountFindByEventId.mockResolvedValueOnce([
+				{
+					id: "acc-1",
+					eventId: "event-1",
+					provider: "aws",
+					accountId: "123456789012",
+					region: "ap-northeast-1",
+				},
+			]);
 
 			const res = await app.request(
 				"/api/admin/events/event-1/problems/problem-1/deploy",

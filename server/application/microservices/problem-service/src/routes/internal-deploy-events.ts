@@ -38,19 +38,40 @@ const eventBridgePayloadSchema = z.object({
 		deploymentKey: z.string().min(1),
 		jobOutput: z
 			.object({
+				// Failed path: SBT's jobFailureStatus is flat, so deployStatus lives here.
 				deployStatus: z.enum(["completed", "failed"]).optional(),
+				// Success path: script exports populate tenantData.
 				tenantData: z
 					.object({
 						deployStatus: z.enum(["completed", "failed"]).optional(),
 						stackName: z.string().optional(),
 						stackId: z.string().optional(),
 						errorReason: z.string().optional(),
+						// Stack CFn Outputs serialized as JSON (exported by deploy-problem.sh).
+						stackOutputs: z.string().optional(),
 					})
 					.optional(),
 			})
 			.optional(),
 	}),
 });
+
+function parseStackOutputs(raw: string | undefined): Record<string, string> {
+	if (!raw) return {};
+	try {
+		const parsed = JSON.parse(raw);
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+			const safe: Record<string, string> = {};
+			for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+				if (typeof v === "string") safe[k] = v;
+			}
+			return safe;
+		}
+	} catch {
+		// Invalid JSON from the script is non-fatal — persist nothing instead of failing the job.
+	}
+	return {};
+}
 
 function authenticate(token: string | undefined): boolean {
 	const expected = process.env.INTERNAL_EVENT_TOKEN;
@@ -118,7 +139,7 @@ internalDeployEventsRoutes.post(
 							success: true,
 							stackName: tenantData?.stackName,
 							stackId: tenantData?.stackId,
-							outputs: {},
+							outputs: parseStackOutputs(tenantData?.stackOutputs),
 							startedAt: new Date(),
 							completedAt: new Date(),
 						},

@@ -161,23 +161,26 @@ export interface ProblemDeployOutcomeTenantData {
 }
 
 /**
- * ProblemDeployPlane からの成功イベントの detail
+ * 成功イベント detail — SBT が tenantData でラップして返す。
+ * tenantRegistrationData には CFn の Outputs を入れる。
  */
 export interface ProblemDeployCompletedDetail {
-  /** SBT jobIdentifierKey で指定した複合キー。gameday-deployer が詰めた deploymentKey を復元 */
   deploymentKey: string;
   jobOutput: {
     tenantData: ProblemDeployOutcomeTenantData;
-    tenantRegistrationData: Record<string, string>;
+    tenantRegistrationData?: Record<string, string>;
   };
 }
 
 /**
- * ProblemDeployPlane からの失敗イベントの detail
+ * 失敗イベント detail — SBT の jobFailureStatus 制約で flat な形状になる。
+ * 判別は detail-type を使うこと。
  */
 export interface ProblemDeployFailedDetail {
   deploymentKey: string;
-  jobOutput: { deployStatus: "failed" };
+  jobOutput: {
+    deployStatus: "failed";
+  };
 }
 
 // =============================================================================

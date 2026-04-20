@@ -18,6 +18,15 @@ import {
   errorResponse,
 } from './routes/shared';
 
+if (
+  process.env.NODE_ENV === 'production' &&
+  !process.env.DYNAMODB_TABLE_NAME
+) {
+  throw new Error(
+    'DYNAMODB_TABLE_NAME must be set in production — refusing to fall back to TenkaCloud-dev.',
+  );
+}
+
 initDynamoDB({
   tableName: process.env.DYNAMODB_TABLE_NAME ?? 'TenkaCloud-dev',
   endpoint: process.env.DYNAMODB_ENDPOINT,

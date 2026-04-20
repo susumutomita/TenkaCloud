@@ -91,7 +91,8 @@ export function hasActiveJobs(jobs: DeploymentJob[]): boolean {
     (j) =>
       j.status === 'pending' ||
       j.status === 'queued' ||
-      j.status === 'in_progress',
+      j.status === 'in_progress' ||
+      j.status === 'rollback_in_progress',
   );
 }
 

@@ -83,6 +83,82 @@ describe("POST /deploy-events", () => {
 		expect(mockUpdateStatus).not.toHaveBeenCalled();
 	});
 
+	it("completed イベントの stackOutputs を JSON パースして outputs に保存すべき", async () => {
+		const app = await getApp();
+
+		const res = await app.request("/api/internal/deploy-events", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-TenkaCloud-Internal-Token": "test-token",
+			},
+			body: JSON.stringify({
+				"detail-type": "problem.deploy.completed",
+				detail: {
+					deploymentKey: "event-1:problem-1:job-1",
+					jobOutput: {
+						tenantData: {
+							deployStatus: "completed",
+							stackName: "tc-team01",
+							stackOutputs: JSON.stringify({
+								Endpoint: "https://x.example",
+								BucketName: "bkt-1",
+							}),
+						},
+					},
+				},
+			}),
+		});
+
+		expect(res.status).toBe(200);
+		expect(mockUpdateStatus).toHaveBeenCalledWith(
+			"event-1",
+			"problem-1",
+			"job-1",
+			"completed",
+			expect.objectContaining({
+				result: expect.objectContaining({
+					outputs: { Endpoint: "https://x.example", BucketName: "bkt-1" },
+				}),
+			}),
+		);
+	});
+
+	it("不正な stackOutputs JSON は空の outputs に fallback すべき", async () => {
+		const app = await getApp();
+
+		const res = await app.request("/api/internal/deploy-events", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-TenkaCloud-Internal-Token": "test-token",
+			},
+			body: JSON.stringify({
+				"detail-type": "problem.deploy.completed",
+				detail: {
+					deploymentKey: "event-1:problem-1:job-1",
+					jobOutput: {
+						tenantData: {
+							deployStatus: "completed",
+							stackOutputs: "not-json",
+						},
+					},
+				},
+			}),
+		});
+
+		expect(res.status).toBe(200);
+		expect(mockUpdateStatus).toHaveBeenCalledWith(
+			"event-1",
+			"problem-1",
+			"job-1",
+			"completed",
+			expect.objectContaining({
+				result: expect.objectContaining({ outputs: {} }),
+			}),
+		);
+	});
+
 	it("completed イベントで job を completed に更新すべき", async () => {
 		const app = await getApp();
 

@@ -59,6 +59,17 @@ gamedayDeployRoutes.post(
 		const eventId = c.req.param("eventId");
 		const data = c.req.valid("json");
 
+		const event = await eventRepository.findById(eventId);
+		if (!event) {
+			return c.json({ error: "Event not found" }, 404);
+		}
+		if (event.type !== "gameday") {
+			return c.json(
+				{ error: "Competitor accounts can only be added to GameDay events" },
+				400,
+			);
+		}
+
 		try {
 			const account = await competitorAccountRepo.create({
 				eventId,
@@ -164,22 +175,10 @@ gamedayDeployRoutes.post(
 			return c.json({ error: "Problem not found" }, 404);
 		}
 
-		const declaredValidationError =
-			(problem.deployment.providers.length > 0
-				? problem.deployment.providers
-				: ["aws"]
-			).reduce<string | null>(
-				(currentError, provider) =>
-					currentError ??
-					getGameDayDeploymentValidationError(
-						problem,
-						provider as "aws" | "local",
-					),
-				null,
-			);
-		if (declaredValidationError) {
-			return c.json({ error: declaredValidationError }, 400);
-		}
+		// NOTE: redundant pre-check on problem.deployment.providers was removed —
+		// the per-account-provider validation below covers the providers that will
+		// actually be deployed to, and the pre-check rejected problems that
+		// declared extra providers (e.g. "gcp") even when all accounts were AWS.
 
 		const accounts = await competitorAccountRepo.findByEventId(eventId);
 		if (accounts.length === 0) {

@@ -43,6 +43,9 @@ export class ProblemDeployPlaneStack extends cdk.Stack {
       // success and failure outgoing events can be mapped back to a single
       // DeploymentJob row in DynamoDB without scans.
       jobIdentifierKey: "deploymentKey",
+      // SBT restricts jobFailureStatus to flat { string: string }, so the
+      // failure event's jobOutput is NOT wrapped in tenantData. Consumers
+      // must use detail-type (not payload shape) to distinguish success/fail.
       jobFailureStatus: { deployStatus: "failed" },
       permissions: buildMultiPolicy({
         actions: ["sts:AssumeRole"],
@@ -66,7 +69,13 @@ export class ProblemDeployPlaneStack extends cdk.Stack {
         "templateUrl",
       ],
       environmentVariablesToOutgoingEvent: {
-        tenantData: ["deployStatus", "stackName", "stackId", "errorReason"],
+        tenantData: [
+          "deployStatus",
+          "stackName",
+          "stackId",
+          "errorReason",
+          "stackOutputs",
+        ],
       },
       scriptEnvironmentVariables: { APP_NAME: props.appName },
       eventManager: props.eventManager,
