@@ -102,6 +102,10 @@ start-aws:
 lint_text:
 	@$(BUN) run lint_text
 
+#? format: Auto-format all code
+format:
+	@$(BUN) run format
+
 #? format_check: Check code formatting
 format_check:
 	@$(BUN) run format_check
