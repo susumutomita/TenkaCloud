@@ -44,9 +44,12 @@ const makeDetail = (
 	problemId: "problem-1",
 	teamId: "team-1",
 	tenantId: "tenant-1",
+	eventId: "event-1",
+	jobId: "job-1",
 	targetRoleArn: "arn:aws:iam::123456789012:role/DeployRole",
 	externalId: "ext-id-123",
 	templateUrl: "https://s3.amazonaws.com/bucket/template.yaml",
+	deploymentKey: "event-1:problem-1:job-1",
 	timestamp: "2026-01-01T00:00:00.000Z",
 	...overrides,
 });
@@ -61,35 +64,47 @@ describe("ProblemDeployPublisher", () => {
 	});
 
 	describe("EventBridge モード", () => {
-		it("EventBridge モードでイベントを publish すべき", async () => {
+		async function callPublish() {
 			const { ProblemDeployPublisher } = await import("../deploy-publisher");
-
 			mocks.mockSend.mockResolvedValueOnce({
 				FailedEntryCount: 0,
 				Entries: [{ EventId: "evt-1" }],
 			});
-
 			const publisher = new ProblemDeployPublisher({
 				deliveryMode: "eventbridge",
 				eventBusName: "test-bus",
 			});
+			await publisher.publishDeployRequested(makeDetail());
+			return mocks.mockSend.mock.calls[0][0].input.Entries[0];
+		}
 
-			const detail = makeDetail();
-			await publisher.publishDeployRequested(detail);
-
+		it("EventBridge に 1 回だけ publish すべき", async () => {
+			await callPublish();
 			expect(mocks.mockSend).toHaveBeenCalledOnce();
+		});
 
-			const command = mocks.mockSend.mock.calls[0][0];
-			const entry = command.input.Entries[0];
-
+		it("entry の EventBusName が指定値になるべき", async () => {
+			const entry = await callPublish();
 			expect(entry.EventBusName).toBe("test-bus");
+		});
+
+		it("entry の Source と DetailType が正しいべき", async () => {
+			const entry = await callPublish();
 			expect(entry.Source).toBe("tenkacloud.problem-service");
 			expect(entry.DetailType).toBe("ProblemDeployRequested");
+		});
 
+		it("detail に problemId / teamId / tenantId が含まれるべき", async () => {
+			const entry = await callPublish();
 			const parsed = JSON.parse(entry.Detail);
 			expect(parsed.problemId).toBe("problem-1");
 			expect(parsed.teamId).toBe("team-1");
 			expect(parsed.tenantId).toBe("tenant-1");
+		});
+
+		it("detail に targetRoleArn が含まれるべき", async () => {
+			const entry = await callPublish();
+			const parsed = JSON.parse(entry.Detail);
 			expect(parsed.targetRoleArn).toBe(
 				"arn:aws:iam::123456789012:role/DeployRole",
 			);
@@ -147,6 +162,8 @@ describe("ProblemDeployPublisher", () => {
 				templateUrl: "https://s3.amazonaws.com/bucket/template.yaml",
 				appName: "tenkacloud",
 			});
+			// Note: inline runner doesn't forward eventId/jobId/deploymentKey because
+			// deployProblem() reconstructs the stack name without them.
 		});
 
 		it("inline モードでデプロイ失敗時にエラーを投げるべき", async () => {

@@ -12,6 +12,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { adminRouter } from "./admin";
 import { playerRouter } from "./player";
 import { participantRouter } from "./participant";
+import { internalDeployEventsRoutes } from "./internal-deploy-events";
 
 const app = new Hono();
 
@@ -64,6 +65,10 @@ app.route("/api/player", playerRouter);
 
 // 参加者API: /api/participant/*
 app.route("/api/participant", participantRouter);
+
+// 内部API: EventBridge API Destination から呼ばれる
+// /api/internal/deploy-events
+app.route("/api/internal", internalDeployEventsRoutes);
 
 // OpenAPI スペック
 app.get(

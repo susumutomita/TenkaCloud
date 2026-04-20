@@ -1,5 +1,9 @@
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { CloudFormationClient, CreateStackCommand } from "@aws-sdk/client-cloudformation";
+import {
+  CloudFormationClient,
+  CreateStackCommand,
+  waitUntilStackCreateComplete,
+} from "@aws-sdk/client-cloudformation";
 
 export interface DeployProblemInput {
   problemId: string;
@@ -12,8 +16,13 @@ export interface DeployProblemInput {
 }
 
 export interface DeployProblemOutput {
-  deployStatus: string;
+  deployStatus: "completed" | "failed";
+  stackName?: string;
+  stackId?: string;
+  errorReason?: string;
 }
+
+const STACK_WAIT_MAX_SECONDS = 60 * 60; // CFn は最大 60 分で足切り
 
 export async function deployProblem(
   input: DeployProblemInput,
@@ -47,7 +56,7 @@ export async function deployProblem(
   const appNameLower = input.appName.toLowerCase();
   const stackName = `${appNameLower}-problem-${input.problemId}-team-${input.teamId}`;
 
-  await cfnClient.send(
+  const createResult = await cfnClient.send(
     new CreateStackCommand({
       StackName: stackName,
       TemplateURL: input.templateUrl,
@@ -65,11 +74,31 @@ export async function deployProblem(
     }),
   );
 
-  return { deployStatus: "completed" };
+  try {
+    await waitUntilStackCreateComplete(
+      { client: cfnClient, maxWaitTime: STACK_WAIT_MAX_SECONDS },
+      { StackName: stackName },
+    );
+  } catch (error) {
+    return {
+      deployStatus: "failed",
+      stackName,
+      stackId: createResult.StackId,
+      errorReason: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  return {
+    deployStatus: "completed",
+    stackName,
+    stackId: createResult.StackId,
+  };
 }
 
 /**
  * Generate a bash script that calls this handler via Node.js in CodeBuild.
+ * Exits 1 on stack failure so the ScriptJob emits problem.deploy.failed.
+ * Exports deployStatus / stackName / stackId / errorReason for outgoing event tenantData.
  */
 export function buildDeployProblemScript(): string {
   return `
@@ -77,17 +106,29 @@ set -euo pipefail
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"; }
 
 log "=== Problem deployment started ==="
-log "problemId: \${problemId}, teamId: \${teamId}, tenantId: \${tenantId}"
+log "problemId: \${problemId}, teamId: \${teamId}, tenantId: \${tenantId}, deploymentKey: \${deploymentKey:-none}"
 
 if [ -z "\${templateUrl:-}" ]; then
   log "WARN: templateUrl not set, skipping deployment"
   export deployStatus="completed"
+  export stackName=""
+  export stackId=""
+  export errorReason=""
   exit 0
 fi
 
+OUTPUT_FILE="$(mktemp)"
+
 node -e "
 const { STSClient, AssumeRoleCommand } = require('@aws-sdk/client-sts');
-const { CloudFormationClient, CreateStackCommand } = require('@aws-sdk/client-cloudformation');
+const {
+  CloudFormationClient,
+  CreateStackCommand,
+  waitUntilStackCreateComplete,
+} = require('@aws-sdk/client-cloudformation');
+const fs = require('fs');
+
+const outputFile = process.argv[1];
 
 async function main() {
   const sts = new STSClient({});
@@ -108,7 +149,7 @@ async function main() {
   const appName = (process.env.APP_NAME || 'tenkacloud').toLowerCase();
   const stackName = appName + '-problem-' + process.env.problemId + '-team-' + process.env.teamId;
 
-  await cfn.send(new CreateStackCommand({
+  const create = await cfn.send(new CreateStackCommand({
     StackName: stackName,
     TemplateURL: process.env.templateUrl,
     Parameters: [
@@ -124,13 +165,50 @@ async function main() {
     Capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
   }));
 
-  console.log('Stack creation initiated: ' + stackName);
+  const stackId = create.StackId || '';
+  console.log('Stack creation initiated: ' + stackName + ' (' + stackId + ')');
+
+  try {
+    await waitUntilStackCreateComplete(
+      { client: cfn, maxWaitTime: ${STACK_WAIT_MAX_SECONDS} },
+      { StackName: stackName },
+    );
+  } catch (e) {
+    fs.writeFileSync(outputFile, JSON.stringify({
+      stackName, stackId, errorReason: e && e.message ? e.message : String(e),
+    }));
+    process.exit(2);
+  }
+
+  fs.writeFileSync(outputFile, JSON.stringify({ stackName, stackId }));
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
-"
+main().catch(e => {
+  console.error(e);
+  fs.writeFileSync(outputFile, JSON.stringify({
+    stackName: '',
+    stackId: '',
+    errorReason: e && e.message ? e.message : String(e),
+  }));
+  process.exit(1);
+});
+" "$OUTPUT_FILE" || NODE_EXIT=$?
+
+NODE_EXIT=\${NODE_EXIT:-0}
+PAYLOAD="$(cat "$OUTPUT_FILE" 2>/dev/null || echo '{}')"
+rm -f "$OUTPUT_FILE"
+
+export stackName=$(node -e "try { console.log(JSON.parse(process.argv[1]).stackName || '') } catch (_) { console.log('') }" "$PAYLOAD")
+export stackId=$(node -e "try { console.log(JSON.parse(process.argv[1]).stackId || '') } catch (_) { console.log('') }" "$PAYLOAD")
+export errorReason=$(node -e "try { console.log(JSON.parse(process.argv[1]).errorReason || '') } catch (_) { console.log('') }" "$PAYLOAD")
+
+if [ "$NODE_EXIT" -ne 0 ]; then
+  log "ERROR: Stack creation did not reach CREATE_COMPLETE (exit=$NODE_EXIT)"
+  export deployStatus="failed"
+  exit 1
+fi
 
 export deployStatus="completed"
-log "=== Problem deployment completed ==="
+log "=== Problem deployment completed: $stackName ==="
 `;
 }

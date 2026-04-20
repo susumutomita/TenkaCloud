@@ -266,19 +266,6 @@ describe("gameday-deployer", () => {
 		});
 	});
 
-	describe("subscribeToJob", () => {
-		it("コールバックをサブスクライブしてアンサブスクライブできるべき", async () => {
-			const { subscribeToJob } = await import("../problems/gameday-deployer");
-
-			const callback = vi.fn();
-			const unsub = subscribeToJob("job-test-id", callback);
-
-			expect(typeof unsub).toBe("function");
-			// アンサブスクライブが例外を投げないべき
-			expect(() => unsub()).not.toThrow();
-		});
-	});
-
 	describe("deployProblemToTeams", () => {
 		it("アカウントがない場合は空配列を返すべき", async () => {
 			mockFindByEventId.mockResolvedValueOnce([]);

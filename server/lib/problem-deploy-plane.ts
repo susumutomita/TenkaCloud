@@ -39,7 +39,10 @@ export class ProblemDeployPlaneStack extends cdk.Stack {
     );
 
     const problemDeployJob = new ScriptJob(this, "ProblemDeployJob", {
-      jobIdentifierKey: "problemId",
+      // deploymentKey = `${eventId}:${problemId}:${jobId}` (compound) so both
+      // success and failure outgoing events can be mapped back to a single
+      // DeploymentJob row in DynamoDB without scans.
+      jobIdentifierKey: "deploymentKey",
       jobFailureStatus: { deployStatus: "failed" },
       permissions: buildMultiPolicy({
         actions: ["sts:AssumeRole"],
@@ -55,11 +58,16 @@ export class ProblemDeployPlaneStack extends cdk.Stack {
         "problemId",
         "teamId",
         "tenantId",
+        "eventId",
+        "jobId",
+        "deploymentKey",
         "targetRoleArn",
         "externalId",
         "templateUrl",
       ],
-      environmentVariablesToOutgoingEvent: { tenantData: ["deployStatus"] },
+      environmentVariablesToOutgoingEvent: {
+        tenantData: ["deployStatus", "stackName", "stackId", "errorReason"],
+      },
       scriptEnvironmentVariables: { APP_NAME: props.appName },
       eventManager: props.eventManager,
     });

@@ -126,18 +126,58 @@ export interface TenantOffboardingDetail {
 export interface ProblemDeployRequestedDetail {
   /** 問題 ID */
   problemId: string;
-  /** チーム ID */
+  /** チーム ID (= competitor account id) */
   teamId: string;
   /** テナント ID */
   tenantId: string;
+  /** イベント ID（DynamoDB PK 復元用） */
+  eventId: string;
+  /** Deployment Job ID（DynamoDB SK 復元用） */
+  jobId: string;
   /** デプロイ先 IAM Role ARN（cross-account AssumeRole） */
   targetRoleArn: string;
   /** Confused Deputy 防止用 ExternalId */
   externalId: string;
   /** CloudFormation テンプレート URL */
   templateUrl: string;
+  /**
+   * Complete/Failed イベントを DynamoDB の Job にマップし直すための複合キー
+   * `${eventId}:${problemId}:${jobId}` 形式
+   */
+  deploymentKey: string;
   /** イベント発生時刻 (ISO 8601) */
   timestamp: string;
+}
+
+/**
+ * ProblemDeployCompleted / Failed イベントの tenantData payload
+ * SBT ScriptJob が環境変数から outgoing event に差し込む
+ */
+export interface ProblemDeployOutcomeTenantData {
+  deployStatus: "completed" | "failed";
+  stackName?: string;
+  stackId?: string;
+  errorReason?: string;
+}
+
+/**
+ * ProblemDeployPlane からの成功イベントの detail
+ */
+export interface ProblemDeployCompletedDetail {
+  /** SBT jobIdentifierKey で指定した複合キー。gameday-deployer が詰めた deploymentKey を復元 */
+  deploymentKey: string;
+  jobOutput: {
+    tenantData: ProblemDeployOutcomeTenantData;
+    tenantRegistrationData: Record<string, string>;
+  };
+}
+
+/**
+ * ProblemDeployPlane からの失敗イベントの detail
+ */
+export interface ProblemDeployFailedDetail {
+  deploymentKey: string;
+  jobOutput: { deployStatus: "failed" };
 }
 
 // =============================================================================
@@ -153,6 +193,8 @@ export const EventDetailType = {
   TENANT_UPDATED: 'TenantUpdated',
   TENANT_OFFBOARDING: 'TenantOffboarding',
   PROBLEM_DEPLOY_REQUESTED: 'ProblemDeployRequested',
+  PROBLEM_DEPLOY_COMPLETED: 'problem.deploy.completed',
+  PROBLEM_DEPLOY_FAILED: 'problem.deploy.failed',
 } as const;
 
 export type EventDetailType =
@@ -165,6 +207,7 @@ export const EventSource = {
   CONTROL_PLANE: 'tenkacloud.control-plane',
   APPLICATION_PLANE: 'tenkacloud.application-plane',
   PROBLEM_SERVICE: 'tenkacloud.problem-service',
+  PROBLEM_DEPLOY_PLANE: 'tenkacloud.problem-deploy-plane',
 } as const;
 
 export type EventSource = (typeof EventSource)[keyof typeof EventSource];
@@ -221,4 +264,32 @@ export type EventDetailMap = {
   TenantUpdated: TenantUpdatedDetail;
   TenantOffboarding: TenantOffboardingDetail;
   ProblemDeployRequested: ProblemDeployRequestedDetail;
+  "problem.deploy.completed": ProblemDeployCompletedDetail;
+  "problem.deploy.failed": ProblemDeployFailedDetail;
 };
+
+// =============================================================================
+// Deployment Key Helpers
+// =============================================================================
+
+/**
+ * composite deployment key encode / decode
+ * Requested/Completed/Failed イベント間で DynamoDB の Job を特定するために使う
+ */
+export function encodeDeploymentKey(
+  eventId: string,
+  problemId: string,
+  jobId: string,
+): string {
+  return `${eventId}:${problemId}:${jobId}`;
+}
+
+export function decodeDeploymentKey(
+  deploymentKey: string,
+): { eventId: string; problemId: string; jobId: string } | null {
+  const parts = deploymentKey.split(":");
+  if (parts.length !== 3 || parts.some((p) => p.length === 0)) {
+    return null;
+  }
+  return { eventId: parts[0], problemId: parts[1], jobId: parts[2] };
+}

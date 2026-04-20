@@ -26,179 +26,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AdminProblem } from '@/lib/api/admin-types';
 import { getProblem } from '@/lib/api/admin-problems';
 import { getGameDayTeamDeploymentIssue } from '../../../../../../../../lib/api/gameday-team-deploy';
-
-// ============================================================
-// Types
-// ============================================================
-
-interface CompetitorAccount {
-  id: string;
-  name: string;
-  provider: string;
-  accountId: string;
-  region: string;
-  roleArn?: string;
-  externalId?: string;
-  status: string;
-}
-
-interface DeploymentJob {
-  id: string;
-  eventId: string;
-  problemId: string;
-  competitorAccountId: string;
-  teamName?: string;
-  awsAccountId?: string;
-  provider: string;
-  region: string;
-  status: string;
-  stackName?: string;
-  stackId?: string;
-  error?: string;
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  retryCount: number;
-}
-
-// ============================================================
-// Helpers
-// ============================================================
-
-type StatusType =
-  | 'success'
-  | 'error'
-  | 'warning'
-  | 'info'
-  | 'loading'
-  | 'stopped'
-  | 'in-progress'
-  | 'pending';
-
-function mapJobStatus(status: string): StatusType {
-  switch (status) {
-    case 'completed':
-      return 'success';
-    case 'failed':
-    case 'rolled_back':
-      return 'error';
-    case 'in_progress':
-      return 'in-progress';
-    case 'rollback_in_progress':
-      return 'warning';
-    case 'pending':
-    case 'queued':
-      return 'pending';
-    case 'cancelled':
-      return 'stopped';
-    default:
-      return 'info';
-  }
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case 'completed':
-      return 'Complete';
-    case 'failed':
-      return 'Failed';
-    case 'in_progress':
-      return 'In Progress';
-    case 'rollback_in_progress':
-      return 'Rolling Back';
-    case 'rolled_back':
-      return 'Rolled Back';
-    case 'pending':
-      return 'Pending';
-    case 'queued':
-      return 'Queued';
-    case 'cancelled':
-      return 'Cancelled';
-    default:
-      return status;
-  }
-}
-
-function hasActiveJobs(jobs: DeploymentJob[]): boolean {
-  return jobs.some(
-    (j) =>
-      j.status === 'pending' ||
-      j.status === 'queued' ||
-      j.status === 'in_progress',
-  );
-}
-
-// ============================================================
-// API helpers
-// ============================================================
-
-async function fetchAccounts(
-  eventId: string,
-): Promise<{ accounts: CompetitorAccount[] }> {
-  const res = await fetch(`/api/admin/events/${eventId}/competitor-accounts`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function createAccount(
-  eventId: string,
-  data: Omit<CompetitorAccount, 'id' | 'status'>,
-): Promise<CompetitorAccount> {
-  const res = await fetch(`/api/admin/events/${eventId}/competitor-accounts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function deleteAccount(
-  eventId: string,
-  accountId: string,
-): Promise<void> {
-  const res = await fetch(
-    `/api/admin/events/${eventId}/competitor-accounts/${accountId}`,
-    { method: 'DELETE' },
-  );
-  if (!res.ok) throw new Error(await res.text());
-}
-
-async function fetchJobs(
-  eventId: string,
-  problemId: string,
-): Promise<{ jobs: DeploymentJob[] }> {
-  const res = await fetch(
-    `/api/admin/events/${eventId}/problems/${problemId}/deployments`,
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function startDeploy(
-  eventId: string,
-  problemId: string,
-): Promise<{ jobs: DeploymentJob[] }> {
-  const res = await fetch(
-    `/api/admin/events/${eventId}/problems/${problemId}/deploy`,
-    { method: 'POST' },
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-
-async function retryJobApi(
-  eventId: string,
-  problemId: string,
-  jobId: string,
-): Promise<{ job: DeploymentJob }> {
-  const res = await fetch(
-    `/api/admin/events/${eventId}/problems/${problemId}/deployments/${jobId}/retry`,
-    { method: 'POST' },
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
+import {
+  type CompetitorAccount,
+  type DeploymentJob,
+  mapJobStatus,
+  statusLabel,
+  hasActiveJobs,
+  fetchAccounts,
+  createAccount,
+  deleteAccount,
+  fetchJobs,
+  startDeploy,
+  retryJobApi,
+} from './helpers';
 
 // ============================================================
 // Page
@@ -234,7 +74,6 @@ export default function GameDayDeploymentsPage() {
   const [addAccountError, setAddAccountError] = useState('');
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sseRef = useRef<EventSource | null>(null);
   const teamDeployIssue = problem
     ? getGameDayTeamDeploymentIssue(problem)
     : null;
@@ -295,53 +134,22 @@ export default function GameDayDeploymentsPage() {
     }
   }, []);
 
-  // SSE 接続
-  useEffect(() => {
-    const es = new EventSource(
-      `/api/admin/events/${eventId}/problems/${problemId}/deployments/stream`,
-    );
-    sseRef.current = es;
-
-    es.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as
-        | { type: 'snapshot'; jobs: DeploymentJob[] }
-        | { type: 'update'; job: DeploymentJob };
-
-      if (payload.type === 'snapshot') {
-        setJobs(payload.jobs);
-        setJobsLoading(false);
-      } else {
-        setJobs((prev) =>
-          prev.map((j) => (j.id === payload.job.id ? payload.job : j)),
-        );
-      }
-    };
-
-    es.onerror = () => {
-      es.close();
-      // SSE 失敗時はポーリングにフォールバック
-      startPolling();
-    };
-
-    return () => {
-      es.close();
-      stopPolling();
-    };
-  }, [eventId, problemId, startPolling, stopPolling]);
-
   // ---- Initial load ----
 
   useEffect(() => {
     refreshProblem();
     refreshAccounts();
-    // SSE が失敗する前の初期データ取得
     fetchJobs(eventId, problemId)
       .then((d) => {
         setJobs(d.jobs);
         setJobsLoading(false);
       })
       .catch(() => setJobsLoading(false));
-  }, [eventId, problemId, refreshAccounts, refreshProblem]);
+
+    return () => {
+      stopPolling();
+    };
+  }, [eventId, problemId, refreshAccounts, refreshProblem, stopPolling]);
 
   // アクティブジョブがなければポーリングを止める
   useEffect(() => {
