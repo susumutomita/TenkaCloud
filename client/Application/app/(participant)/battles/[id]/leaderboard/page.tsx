@@ -1,14 +1,14 @@
 /**
  * Leaderboard Page
  *
- * リーダーボードページ - SSE でリアルタイム更新
+ * 5 秒ごとにポーリングしてリーダーボードを更新。
  */
 
 'use client';
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/layout';
 import {
   Badge,
@@ -21,13 +21,12 @@ import {
   getErrorType,
 } from '@/components/ui';
 import { getEventDetails, getLeaderboard } from '@/lib/api/events';
+import { useIntervalPolling } from '@/lib/hooks/use-interval-polling';
 import type {
   EventDetails,
   Leaderboard,
   LeaderboardEntry,
 } from '@/lib/api/types';
-
-const API_BASE_URL = '/api';
 
 function getRankStyle(rank: number) {
   switch (rank) {
@@ -60,70 +59,36 @@ export default function BattleLeaderboardPage() {
   const battleId = params.id as string;
 
   const [battle, setBattle] = useState<EventDetails | null>(null);
-  const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [sseConnected, setSseConnected] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const connectSSE = useCallback(() => {
-    const url = `${API_BASE_URL}/participant/events/${battleId}/leaderboard/stream`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onopen = () => {
-      setSseConnected(true);
-    };
-
-    es.addEventListener('leaderboard-update', (event) => {
-      try {
-        const data = JSON.parse(event.data) as Leaderboard;
-        setLeaderboard(data);
-      } catch {
-        // ignore parse errors
-      }
-    });
-
-    es.onerror = () => {
-      setSseConnected(false);
-      es.close();
-      setTimeout(() => {
-        connectSSE();
-      }, 5000);
-    };
-
-    return es;
-  }, [battleId]);
+  const fetchLeaderboard = useCallback(
+    () => getLeaderboard(battleId),
+    [battleId],
+  );
+  const { data: leaderboard, connected: polling } =
+    useIntervalPolling<Leaderboard>(fetchLeaderboard);
 
   useEffect(() => {
-    async function fetchData() {
+    let cancelled = false;
+    (async () => {
       try {
-        setLoading(true);
-        const [battleData, leaderboardData] = await Promise.all([
-          getEventDetails(battleId),
-          getLeaderboard(battleId),
-        ]);
-        setBattle(battleData);
-        setLeaderboard(leaderboardData);
+        const battleData = await getEventDetails(battleId);
+        if (!cancelled) setBattle(battleData);
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err : new Error('読み込みに失敗しました'),
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    fetchData();
-  }, [battleId]);
-
-  // SSE connection
-  useEffect(() => {
-    const es = connectSSE();
+    })();
     return () => {
-      es.close();
+      cancelled = true;
     };
-  }, [connectSSE]);
+  }, [battleId]);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -134,7 +99,7 @@ export default function BattleLeaderboardPage() {
     });
   };
 
-  if (loading) {
+  if (loading || (!leaderboard && !error)) {
     return (
       <div className="min-h-screen bg-surface-0">
         <Header />
@@ -208,9 +173,9 @@ export default function BattleLeaderboardPage() {
                 凍結中
               </Badge>
             )}
-            {sseConnected ? (
+            {polling ? (
               <Badge variant="success" size="sm" dot>
-                リアルタイム
+                更新中
               </Badge>
             ) : (
               <Badge variant="default" size="sm" dot>

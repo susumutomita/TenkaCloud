@@ -23,7 +23,7 @@ import {
 import { getAttackStats } from '@/lib/api/gameday';
 import type { AttackStats, LeaderboardEntry } from '@/lib/api/gameday-types';
 import { useGamedaySession } from '@/lib/hooks/use-gameday-session';
-import { useLeaderboardSSE } from '@/lib/hooks/use-leaderboard-sse';
+import { useLeaderboardPolling } from '@/lib/hooks/use-leaderboard-polling';
 
 interface BoardItemData {
   title: string;
@@ -133,7 +133,7 @@ function AttackStatsTable({ stats }: { stats: AttackStats[] }) {
 
 export default function ScoreboardPage() {
   const { eventId, teamId } = useGamedaySession();
-  const { data: sseData, error: sseError } = useLeaderboardSSE(eventId);
+  const { data: pollData, error: pollError } = useLeaderboardPolling(eventId);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [attackStats, setAttackStats] = useState<AttackStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,11 +143,10 @@ export default function ScoreboardPage() {
     [],
   );
 
-  // SSE からリーダーボードデータを反映
   useEffect(() => {
-    if (sseData) {
+    if (pollData) {
       setLeaderboard(
-        sseData.entries.map((entry) => ({
+        pollData.entries.map((entry) => ({
           ...entry,
           attacksLaunched: 0,
           attacksReceived: 0,
@@ -157,14 +156,14 @@ export default function ScoreboardPage() {
       setBlackout(false);
       setLoading(false);
     }
-  }, [sseData]);
+  }, [pollData]);
 
   useEffect(() => {
-    if (sseError) {
-      setError(new Error(sseError));
+    if (pollError) {
+      setError(new Error(pollError));
       setLoading(false);
     }
-  }, [sseError]);
+  }, [pollError]);
 
   // 攻撃統計はポーリングで取得（攻撃ログの集計は leaderboard-service にない）
   const fetchAttackStats = useCallback(async () => {

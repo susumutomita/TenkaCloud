@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { battleRepository } from "../lib/dynamodb";
 import { getLeaderboard } from "../services/leaderboard";
@@ -43,44 +42,7 @@ leaderboardRoutes.get("/api/leaderboards/:battleId", async (c) => {
 	}
 });
 
-const SSE_INTERVAL_MS = 3000;
-
-leaderboardRoutes.get("/api/leaderboards/:battleId/stream", async (c) => {
-	const auth = c.get("auth");
-	const battleId = c.req.param("battleId");
-
-	return streamSSE(c, async (stream) => {
-		let running = true;
-
-		stream.onAbort(/* istanbul ignore next */ () => {
-			running = false;
-		});
-
-		while (running) {
-			const result = await getLeaderboard(
-				battleId,
-				auth.tenantId,
-				battleRepository,
-			);
-
-			if (!result) {
-				await stream.writeSSE({
-					event: "error",
-					data: JSON.stringify({ error: "バトルが見つかりません" }),
-				});
-				break;
-			}
-
-			await stream.writeSSE({
-				event: "leaderboard",
-				data: JSON.stringify(result),
-			});
-
-			if (result.status === "FINISHED" || result.status === "ARCHIVED") {
-				break;
-			}
-
-			await stream.sleep(SSE_INTERVAL_MS);
-		}
-	});
-});
+// `/api/leaderboards/:battleId/stream` (SSE) was removed. Clients now poll
+// the non-streaming endpoint above at whatever interval they choose. Rationale:
+// Lambda cannot cheaply hold long-lived SSE connections and in-memory subscriber
+// state does not survive horizontal scale-out.

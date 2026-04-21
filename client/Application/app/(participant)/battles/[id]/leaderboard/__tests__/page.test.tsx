@@ -21,20 +21,7 @@ vi.mock('@/lib/api/events', () => ({
   getLeaderboard: (...args: unknown[]) => mockGetLeaderboard(...args),
 }));
 
-// Mock EventSource
-class MockEventSource {
-  url: string;
-  onopen: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  close = vi.fn();
-  addEventListener = vi.fn();
-
-  constructor(url: string) {
-    this.url = url;
-  }
-}
-
-vi.stubGlobal('EventSource', MockEventSource);
+// SSE was removed; the page uses polling now. No EventSource stub needed.
 
 const battleData = {
   id: 'battle-1',
@@ -192,12 +179,12 @@ describe('リーダーボードページ', () => {
     });
   });
 
-  it('SSE 接続状態が表示されるべき', async () => {
+  it('ポーリング中は更新中バッジが表示されるべき', async () => {
     mockGetEventDetails.mockResolvedValue(battleData);
     mockGetLeaderboard.mockResolvedValue(leaderboardData);
     render(<BattleLeaderboardPage />);
     await waitFor(() => {
-      expect(screen.getByText('オフライン')).toBeInTheDocument();
+      expect(screen.getByText('更新中')).toBeInTheDocument();
     });
   });
 

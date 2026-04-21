@@ -1,14 +1,14 @@
 /**
  * Scores Page
  *
- * 自分のスコア表示ページ - SSE でリアルタイム更新
+ * 5 秒ごとにポーリングして自分のスコアを更新。
  */
 
 'use client';
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/layout';
 import {
   Badge,
@@ -22,9 +22,8 @@ import {
   ScoreProgress,
 } from '@/components/ui';
 import { getEventDetails, getMyRanking } from '@/lib/api/events';
+import { useIntervalPolling } from '@/lib/hooks/use-interval-polling';
 import type { EventDetails } from '@/lib/api/types';
-
-const API_BASE_URL = '/api';
 
 interface MyScore {
   rank: number;
@@ -37,73 +36,33 @@ export default function ScoresPage() {
   const battleId = params.id as string;
 
   const [battle, setBattle] = useState<EventDetails | null>(null);
-  const [myScore, setMyScore] = useState<MyScore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [sseConnected, setSseConnected] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
-  const connectSSE = useCallback(() => {
-    const url = `${API_BASE_URL}/participant/events/${battleId}/scores/stream`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onopen = () => {
-      setSseConnected(true);
-    };
-
-    es.addEventListener('score-update', (event) => {
-      try {
-        const data = JSON.parse(event.data) as MyScore;
-        setMyScore(data);
-      } catch {
-        // ignore parse errors
-      }
-    });
-
-    es.onerror = () => {
-      setSseConnected(false);
-      es.close();
-      // Reconnect after 5 seconds
-      setTimeout(() => {
-        connectSSE();
-      }, 5000);
-    };
-
-    return es;
-  }, [battleId]);
+  const fetchMyScore = useCallback(() => getMyRanking(battleId), [battleId]);
+  const { data: myScore, connected: polling } =
+    useIntervalPolling<MyScore>(fetchMyScore);
 
   useEffect(() => {
-    async function fetchData() {
+    let cancelled = false;
+    (async () => {
       try {
-        setLoading(true);
-        const [battleData, ranking] = await Promise.all([
-          getEventDetails(battleId),
-          getMyRanking(battleId),
-        ]);
-        setBattle(battleData);
-        if (ranking) {
-          setMyScore(ranking);
-        }
+        const battleData = await getEventDetails(battleId);
+        if (!cancelled) setBattle(battleData);
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err : new Error('読み込みに失敗しました'),
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    fetchData();
-  }, [battleId]);
-
-  // SSE connection
-  useEffect(() => {
-    const es = connectSSE();
+    })();
     return () => {
-      es.close();
+      cancelled = true;
     };
-  }, [connectSSE]);
+  }, [battleId]);
 
   if (loading) {
     return (
@@ -168,9 +127,9 @@ export default function ScoresPage() {
             <p className="text-text-secondary mt-1">{battle.name}</p>
           </div>
           <div className="flex items-center gap-3">
-            {sseConnected ? (
+            {polling ? (
               <Badge variant="success" size="sm" dot>
-                リアルタイム
+                更新中
               </Badge>
             ) : (
               <Badge variant="default" size="sm" dot>

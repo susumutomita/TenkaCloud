@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
 import {
 	getGameDayLeaderboard,
 	DynamoDBGameDayLeaderboardRepository,
@@ -29,43 +28,5 @@ gamedayLeaderboardRoutes.get(
 	},
 );
 
-const SSE_INTERVAL_MS = 3000;
-
-gamedayLeaderboardRoutes.get(
-	"/api/leaderboards/gameday/:eventId/stream",
-	async (c) => {
-		const eventId = c.req.param("eventId");
-
-		return streamSSE(c, async (stream) => {
-			let running = true;
-
-			stream.onAbort(/* istanbul ignore next */ () => {
-				running = false;
-			});
-
-			while (running) {
-				try {
-					const result = await getGameDayLeaderboard(eventId, repository);
-
-					await stream.writeSSE({
-						event: "leaderboard",
-						data: JSON.stringify(result),
-					});
-
-					await stream.sleep(SSE_INTERVAL_MS);
-				} catch (error) {
-					await stream.writeSSE({
-						event: "error",
-						data: JSON.stringify({
-							error:
-								error instanceof Error
-									? error.message
-									: "GameDayリーダーボードの取得に失敗しました",
-						}),
-					});
-					break;
-				}
-			}
-		});
-	},
-);
+// `/api/leaderboards/gameday/:eventId/stream` (SSE) was removed. See
+// leaderboard.ts for the rationale; clients poll the non-streaming endpoint.
