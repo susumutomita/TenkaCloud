@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/layout';
 import {
   Badge,
@@ -21,13 +21,12 @@ import {
   getErrorType,
 } from '@/components/ui';
 import { getEventDetails, getLeaderboard } from '@/lib/api/events';
+import { useIntervalPolling } from '@/lib/hooks/use-interval-polling';
 import type {
   EventDetails,
   Leaderboard,
   LeaderboardEntry,
 } from '@/lib/api/types';
-
-const POLL_INTERVAL_MS = 5000;
 
 function getRankStyle(rank: number) {
   switch (rank) {
@@ -60,54 +59,36 @@ export default function BattleLeaderboardPage() {
   const battleId = params.id as string;
 
   const [battle, setBattle] = useState<EventDetails | null>(null);
-  const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [polling, setPolling] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const refreshLeaderboard = useCallback(async () => {
-    try {
-      const data = await getLeaderboard(battleId);
-      setLeaderboard(data);
-      setPolling(true);
-    } catch {
-      setPolling(false);
-    }
-  }, [battleId]);
+  const fetchLeaderboard = useCallback(
+    () => getLeaderboard(battleId),
+    [battleId],
+  );
+  const { data: leaderboard, connected: polling } =
+    useIntervalPolling<Leaderboard>(fetchLeaderboard);
 
   useEffect(() => {
-    async function fetchData() {
+    let cancelled = false;
+    (async () => {
       try {
-        setLoading(true);
-        const [battleData, leaderboardData] = await Promise.all([
-          getEventDetails(battleId),
-          getLeaderboard(battleId),
-        ]);
-        setBattle(battleData);
-        setLeaderboard(leaderboardData);
-        setPolling(true);
+        const battleData = await getEventDetails(battleId);
+        if (!cancelled) setBattle(battleData);
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err : new Error('読み込みに失敗しました'),
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    fetchData();
-  }, [battleId]);
-
-  useEffect(() => {
-    pollRef.current = setInterval(refreshLeaderboard, POLL_INTERVAL_MS);
+    })();
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      cancelled = true;
     };
-  }, [refreshLeaderboard]);
+  }, [battleId]);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -118,7 +99,7 @@ export default function BattleLeaderboardPage() {
     });
   };
 
-  if (loading) {
+  if (loading || (!leaderboard && !error)) {
     return (
       <div className="min-h-screen bg-surface-0">
         <Header />

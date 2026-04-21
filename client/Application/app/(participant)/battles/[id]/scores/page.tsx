@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/layout';
 import {
   Badge,
@@ -22,9 +22,8 @@ import {
   ScoreProgress,
 } from '@/components/ui';
 import { getEventDetails, getMyRanking } from '@/lib/api/events';
+import { useIntervalPolling } from '@/lib/hooks/use-interval-polling';
 import type { EventDetails } from '@/lib/api/types';
-
-const POLL_INTERVAL_MS = 5000;
 
 interface MyScore {
   rank: number;
@@ -37,56 +36,33 @@ export default function ScoresPage() {
   const battleId = params.id as string;
 
   const [battle, setBattle] = useState<EventDetails | null>(null);
-  const [myScore, setMyScore] = useState<MyScore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [polling, setPolling] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const refreshMyScore = useCallback(async () => {
-    try {
-      const ranking = await getMyRanking(battleId);
-      if (ranking) setMyScore(ranking);
-      setPolling(true);
-    } catch {
-      setPolling(false);
-    }
-  }, [battleId]);
+  const fetchMyScore = useCallback(() => getMyRanking(battleId), [battleId]);
+  const { data: myScore, connected: polling } =
+    useIntervalPolling<MyScore>(fetchMyScore);
 
   useEffect(() => {
-    async function fetchData() {
+    let cancelled = false;
+    (async () => {
       try {
-        setLoading(true);
-        const [battleData, ranking] = await Promise.all([
-          getEventDetails(battleId),
-          getMyRanking(battleId),
-        ]);
-        setBattle(battleData);
-        if (ranking) {
-          setMyScore(ranking);
-        }
-        setPolling(true);
+        const battleData = await getEventDetails(battleId);
+        if (!cancelled) setBattle(battleData);
       } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error('読み込みに失敗しました'),
-        );
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err : new Error('読み込みに失敗しました'),
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
-
-    fetchData();
-  }, [battleId]);
-
-  useEffect(() => {
-    pollRef.current = setInterval(refreshMyScore, POLL_INTERVAL_MS);
+    })();
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      cancelled = true;
     };
-  }, [refreshMyScore]);
+  }, [battleId]);
 
   if (loading) {
     return (
