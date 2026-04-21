@@ -18,6 +18,7 @@ import { dashboardRoutes } from "./admin-dashboard";
 import { templateRoutes } from "./admin-templates";
 import { aiRoutes } from "./admin-ai";
 import { deployRoutes } from "./admin-deploy";
+import { gamedayDeployRoutes } from "./admin-gameday-deploy";
 
 const adminRouter = createAdminRouter();
 
@@ -31,5 +32,6 @@ adminRouter.route("/", dashboardRoutes);
 adminRouter.route("/", templateRoutes);
 adminRouter.route("/", aiRoutes);
 adminRouter.route("/", deployRoutes);
+adminRouter.route("/", gamedayDeployRoutes);
 
 export { adminRouter };

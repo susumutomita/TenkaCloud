@@ -1,36 +1,10 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
+import { app } from "./app";
 import { createLogger } from "./lib/logger";
-import { healthRoutes } from "./api/health";
-import { adminRoutes } from "./api/admin";
-import { participantRoutes } from "./api/participant";
-import { authMiddleware, requireAdmin } from "./middleware/auth";
 import { auditorService } from "./services/auditor-service";
-import { getAllowedOrigins } from "./lib/cors";
 
 const logger = createLogger("gameday-service");
-const app = new Hono();
 
-// CORS設定
-app.use(
-	"/*",
-	cors({
-		origin: getAllowedOrigins(process.env.CORS_ORIGIN),
-		credentials: true,
-	}),
-);
-
-// 認証を適用
-app.use("/api/gameday/*", authMiddleware);
-app.use("/api/gameday/admin/*", requireAdmin);
-
-// ルート登録
-app.route("/", healthRoutes);
-app.route("/api/gameday/admin", adminRoutes);
-app.route("/api/gameday", participantRoutes);
-
-// PORT バリデーション
 const parsePort = (value: string | undefined): number => {
 	const defaultPort = 3020;
 	if (!value) return defaultPort;
@@ -58,7 +32,6 @@ const server = serve(
 	},
 );
 
-// グレースフルシャットダウン
 const shutdown = () => {
 	logger.info("シャットダウンを開始します");
 	auditorService.stop();

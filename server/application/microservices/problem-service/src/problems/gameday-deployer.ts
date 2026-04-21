@@ -5,7 +5,10 @@
  * ジョブ状態は DynamoDB で永続化する。
  */
 
-import type { ProblemDeployRequestedDetail } from "@tenkacloud/events";
+import {
+	encodeDeploymentKey,
+	type ProblemDeployRequestedDetail,
+} from "@tenkacloud/events";
 import { getAWSProvider } from "../providers/aws";
 import { getLocalProvider } from "../providers/local";
 import {
@@ -23,37 +26,6 @@ import type {
 } from "../types";
 import type { DeployStackOptions } from "../providers/interface";
 import { ProblemDeployPublisher } from "./deploy-publisher";
-
-/** SSE サブスクライバー管理 (in-memory) */
-const subscribers = new Map<
-	string,
-	Set<(job: DeploymentJob) => void>
->();
-
-function notifySubscribers(jobId: string, job: DeploymentJob): void {
-	const subs = subscribers.get(jobId);
-	if (!subs) return;
-	for (const cb of subs) {
-		try {
-			cb(job);
-		} catch {
-			// コールバックエラーは無視
-		}
-	}
-}
-
-export function subscribeToJob(
-	jobId: string,
-	cb: (job: DeploymentJob) => void,
-): () => void {
-	if (!subscribers.has(jobId)) {
-		subscribers.set(jobId, new Set());
-	}
-	subscribers.get(jobId)!.add(cb);
-	return () => {
-		subscribers.get(jobId)?.delete(cb);
-	};
-}
 
 // ============================================================
 // Core
@@ -148,9 +120,12 @@ export async function deployProblemToTeams(
 				problemId: problem.id,
 				teamId: account.id,
 				tenantId: tenantId ?? eventId,
+				eventId,
+				jobId: job.id,
 				targetRoleArn: account.roleArn,
 				externalId: account.externalId,
 				templateUrl,
+				deploymentKey: encodeDeploymentKey(eventId, problem.id, job.id),
 				timestamp: new Date().toISOString(),
 			};
 			try {
@@ -330,8 +305,6 @@ async function setStatus(
 	},
 ): Promise<void> {
 	await jobRepo.updateStatus(job.eventId, job.problemId, job.id, status, opts);
-	const updated = await jobRepo.findById(job.eventId, job.problemId, job.id);
-	if (updated) notifySubscribers(job.id, updated);
 }
 
 function buildCredentials(account: CompetitorAccountWithMeta): CloudCredentials {

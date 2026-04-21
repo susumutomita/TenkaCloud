@@ -1,33 +1,9 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
+import { app } from "./app";
 import { createLogger } from "./lib/logger";
-import { healthRoutes } from "./api/health";
-import { leaderboardRoutes } from "./api/leaderboard";
-import { gamedayLeaderboardRoutes } from "./api/gameday-leaderboard";
-import { authMiddleware } from "./middleware/auth";
 
 const logger = createLogger("leaderboard-service");
-const app = new Hono();
 
-// CORS設定
-app.use(
-	"/*",
-	cors({
-		origin: process.env.CORS_ORIGIN?.split(",") ?? ["http://localhost:13000"],
-		credentials: true,
-	}),
-);
-
-// リーダーボードルートに認証を適用
-app.use("/api/leaderboards/*", authMiddleware);
-
-// ルート登録
-app.route("/", healthRoutes);
-app.route("/", leaderboardRoutes);
-app.route("/", gamedayLeaderboardRoutes);
-
-// PORT バリデーション
 const parsePort = (value: string | undefined): number => {
 	const defaultPort = 3012;
 	if (!value) return defaultPort;
@@ -55,7 +31,6 @@ const server = serve(
 	},
 );
 
-// グレースフルシャットダウン
 const shutdown = () => {
 	logger.info("シャットダウンを開始します");
 	server.close(() => {
