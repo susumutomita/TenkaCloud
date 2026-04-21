@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Competitor Deploy Role.
+  Creates the IAM Role that TenkaCloud assumes cross-account in order to
+  deploy GameDay problem CloudFormation stacks into this AWS account.
+
+  Deploy this template once per competitor account, hand the Role ARN and
+  External ID back to the TenkaCloud admin, and they become selectable as
+  a competitor account for problem deployment.
+
+Parameters:
+  TenkaCloudManagementAccountId:
+    Type: String
+    Description: >
+      AWS account ID of the TenkaCloud management account (the one running
+      the ProblemDeployPlane CodeBuild job). Ask your event organizer for
+      this value.
+    AllowedPattern: "^[0-9]{12}$"
+    ConstraintDescription: Must be a 12-digit AWS account ID.
+
+  ExternalId:
+    Type: String
+    Description: >
+      Shared secret produced by TenkaCloud when you register this account
+      for an event (format: tc-<eventId>-<accountId>). Ask your event
+      organizer for the exact value. Prevents the Confused Deputy problem.
+    MinLength: 8
+    MaxLength: 1224
+    AllowedPattern: "^[A-Za-z0-9+=,.@:/_-]+$"
+
+  RoleName:
+    Type: String
+    Default: TenkaCloudDeployRole
+    Description: >
+      IAM Role name. Keep the default unless your organization requires a
+      different naming scheme — the TenkaCloud UI expects this name.
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: "^[a-zA-Z_+=,.@-][a-zA-Z0-9_+=,.@-]{0,63}$"
+
+  PermissionMode:
+    Type: String
+    Default: Admin
+    AllowedValues:
+      - Admin
+      - PowerUser
+    Description: >
+      Admin: AdministratorAccess managed policy (required for most GameDay
+      problems — they create IAM roles, VPCs, etc.).
+      PowerUser: PowerUserAccess + limited IAM. Tighter but some problem
+      templates will fail. Use only if you understand the risk.
+
+Conditions:
+  UseAdmin: !Equals [!Ref PermissionMode, Admin]
+
+Resources:
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: >
+        Cross-account deploy role assumed by TenkaCloud to create GameDay
+        problem stacks. Revoke by deleting this CloudFormation stack.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudManagementAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      ManagedPolicyArns:
+        - !If
+          - UseAdmin
+          - arn:aws:iam::aws:policy/AdministratorAccess
+          - arn:aws:iam::aws:policy/PowerUserAccess
+      Policies:
+        - !If
+          - UseAdmin
+          - !Ref AWS::NoValue
+          - PolicyName: IamForCloudFormation
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - iam:CreateRole
+                    - iam:DeleteRole
+                    - iam:GetRole
+                    - iam:PassRole
+                    - iam:AttachRolePolicy
+                    - iam:DetachRolePolicy
+                    - iam:PutRolePolicy
+                    - iam:DeleteRolePolicy
+                    - iam:GetRolePolicy
+                    - iam:ListRolePolicies
+                    - iam:ListAttachedRolePolicies
+                    - iam:TagRole
+                    - iam:UntagRole
+                    - iam:CreateInstanceProfile
+                    - iam:DeleteInstanceProfile
+                    - iam:GetInstanceProfile
+                    - iam:AddRoleToInstanceProfile
+                    - iam:RemoveRoleFromInstanceProfile
+                  Resource: "*"
+      Tags:
+        - Key: ManagedBy
+          Value: tenkacloud
+        - Key: Purpose
+          Value: competitor-deploy-role
+
+Outputs:
+  RoleArn:
+    Description: ARN to register in the TenkaCloud admin UI.
+    Value: !GetAtt DeployRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+  ExternalId:
+    Description: External ID (repeat back to the admin so they can confirm).
+    Value: !Ref ExternalId
+  AccountId:
+    Description: This competitor AWS account ID.
+    Value: !Ref AWS::AccountId

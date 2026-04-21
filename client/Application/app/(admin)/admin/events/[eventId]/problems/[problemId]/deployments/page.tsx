@@ -501,6 +501,17 @@ export default function GameDayDeploymentsPage() {
         <Form>
           <SpaceBetween size="m">
             {addAccountError && <Alert type="error">{addAccountError}</Alert>}
+            <Alert type="info">
+              Role ARN / External ID は競技者側で{' '}
+              <a
+                href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/guides/COMPETITOR_ONBOARDING_GUIDE.md"
+                target="_blank"
+                rel="noreferrer"
+              >
+                競技者オンボーディング手順
+              </a>{' '}
+              に従って IAM Role を作成してから入手してください。
+            </Alert>
             <FormField label="チーム名" constraintText="必須">
               <Input
                 value={newAccount.name}
@@ -533,7 +544,7 @@ export default function GameDayDeploymentsPage() {
             </FormField>
             <FormField
               label="Role ARN"
-              description="AssumeRole で使用する IAM ロール ARN（省略時は環境変数の認証情報を使用）"
+              description="AssumeRole で使用する IAM ロール ARN。AWS 本番デプロイには必須（空欄だと deploy ジョブが即失敗します）"
             >
               <Input
                 value={newAccount.roleArn}
@@ -545,7 +556,7 @@ export default function GameDayDeploymentsPage() {
             </FormField>
             <FormField
               label="External ID"
-              description="未入力時は event / account から安全な値を自動生成します"
+              description="未入力時は event / account から tc-<eventId>-<accountId> を自動生成します。競技者にこの値を伝えて Role セットアップに使ってもらいます"
             >
               <Input
                 value={newAccount.externalId}
