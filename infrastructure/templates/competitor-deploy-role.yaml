@@ -61,6 +61,9 @@ Resources:
       Description: >
         Cross-account deploy role assumed by TenkaCloud to create GameDay
         problem stacks. Revoke by deleting this CloudFormation stack.
+      # 60 minutes matches TenkaCloud's CFn create-complete waiter timeout
+      # (STACK_WAIT_MAX_SECONDS in deploy-problem.ts). A longer session is not
+      # useful — if a stack cannot create in 60 minutes, the deploy job fails.
       MaxSessionDuration: 3600
       AssumeRolePolicyDocument:
         Version: "2012-10-17"

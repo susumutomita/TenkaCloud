@@ -95,9 +95,9 @@ aws cloudformation wait stack-delete-complete --stack-name tenkacloud-deploy-rol
 - External ID が一致していない可能性がある。主催者に問い合わせて再確認する。
 - あるいは `TenkaCloudManagementAccountId` が違う。
 
-**「Missing roleArn or externalId for account」で即失敗**
+**「Missing roleArn or externalId for account &lt;id&gt;」で即失敗**
 
-- 競技アカウントが Role ARN 付きで登録されていない。主催者が「競技アカウント追加」時に Role ARN 欄を空欄にしていた可能性があるため、再登録してもらう。
+- 競技アカウントが Role ARN 付きで登録されていない。主催者が「競技アカウント追加」時に Role ARN 欄を空欄にしていた可能性があるため、再登録してもらう。`<id>` はデプロイジョブが参照した competitor account ID。
 
 **CloudFormation の CREATE_FAILED**
 

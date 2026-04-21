@@ -506,7 +506,7 @@ export default function GameDayDeploymentsPage() {
               <a
                 href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/guides/COMPETITOR_ONBOARDING_GUIDE.md"
                 target="_blank"
-                rel="noreferrer"
+                rel="noreferrer noopener"
               >
                 競技者オンボーディング手順
               </a>{' '}
