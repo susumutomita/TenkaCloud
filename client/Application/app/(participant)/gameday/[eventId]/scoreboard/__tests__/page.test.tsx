@@ -18,10 +18,11 @@ vi.mock('@/lib/hooks/use-gameday-session', () => ({
   }),
 }));
 
-const mockUseLeaderboardSSE = vi.fn();
+const mockUseLeaderboardPolling = vi.fn();
 
-vi.mock('@/lib/hooks/use-leaderboard-sse', () => ({
-  useLeaderboardSSE: (...args: unknown[]) => mockUseLeaderboardSSE(...args),
+vi.mock('@/lib/hooks/use-leaderboard-polling', () => ({
+  useLeaderboardPolling: (...args: unknown[]) =>
+    mockUseLeaderboardPolling(...args),
 }));
 
 const mockGetAttackStats = vi.fn();
@@ -30,7 +31,7 @@ vi.mock('@/lib/api/gameday', () => ({
   getAttackStats: (...args: unknown[]) => mockGetAttackStats(...args),
 }));
 
-const baseSSEData = {
+const basePollData = {
   eventId: 'ev-1',
   entries: [
     {
@@ -60,16 +61,16 @@ const baseAttackStats = [
 describe('ScoreboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseLeaderboardSSE.mockReturnValue({
-      data: baseSSEData,
+    mockUseLeaderboardPolling.mockReturnValue({
+      data: basePollData,
       error: null,
       connected: true,
     });
     mockGetAttackStats.mockResolvedValue({ stats: baseAttackStats });
   });
 
-  it('SSEデータ未受信時はリーダーボードデータを表示しないべき', () => {
-    mockUseLeaderboardSSE.mockReturnValue({
+  it('ポーリングデータ未受信時はリーダーボードデータを表示しないべき', () => {
+    mockUseLeaderboardPolling.mockReturnValue({
       data: null,
       error: null,
       connected: false,
@@ -104,8 +105,8 @@ describe('ScoreboardPage', () => {
     });
   });
 
-  it('SSEエラー時にエラー状態を表示すべき', async () => {
-    mockUseLeaderboardSSE.mockReturnValue({
+  it('ポーリングエラー時にエラー状態を表示すべき', async () => {
+    mockUseLeaderboardPolling.mockReturnValue({
       data: null,
       error: 'Server error',
       connected: false,

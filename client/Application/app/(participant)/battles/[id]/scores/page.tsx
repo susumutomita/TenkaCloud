@@ -1,7 +1,7 @@
 /**
  * Scores Page
  *
- * 自分のスコア表示ページ - SSE でリアルタイム更新
+ * 5 秒ごとにポーリングして自分のスコアを更新。
  */
 
 'use client';
@@ -24,7 +24,7 @@ import {
 import { getEventDetails, getMyRanking } from '@/lib/api/events';
 import type { EventDetails } from '@/lib/api/types';
 
-const API_BASE_URL = '/api';
+const POLL_INTERVAL_MS = 5000;
 
 interface MyScore {
   rank: number;
@@ -40,37 +40,17 @@ export default function ScoresPage() {
   const [myScore, setMyScore] = useState<MyScore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [sseConnected, setSseConnected] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [polling, setPolling] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const connectSSE = useCallback(() => {
-    const url = `${API_BASE_URL}/participant/events/${battleId}/scores/stream`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onopen = () => {
-      setSseConnected(true);
-    };
-
-    es.addEventListener('score-update', (event) => {
-      try {
-        const data = JSON.parse(event.data) as MyScore;
-        setMyScore(data);
-      } catch {
-        // ignore parse errors
-      }
-    });
-
-    es.onerror = () => {
-      setSseConnected(false);
-      es.close();
-      // Reconnect after 5 seconds
-      setTimeout(() => {
-        connectSSE();
-      }, 5000);
-    };
-
-    return es;
+  const refreshMyScore = useCallback(async () => {
+    try {
+      const ranking = await getMyRanking(battleId);
+      if (ranking) setMyScore(ranking);
+      setPolling(true);
+    } catch {
+      setPolling(false);
+    }
   }, [battleId]);
 
   useEffect(() => {
@@ -85,6 +65,7 @@ export default function ScoresPage() {
         if (ranking) {
           setMyScore(ranking);
         }
+        setPolling(true);
       } catch (err) {
         setError(
           err instanceof Error ? err : new Error('読み込みに失敗しました'),
@@ -97,13 +78,15 @@ export default function ScoresPage() {
     fetchData();
   }, [battleId]);
 
-  // SSE connection
   useEffect(() => {
-    const es = connectSSE();
+    pollRef.current = setInterval(refreshMyScore, POLL_INTERVAL_MS);
     return () => {
-      es.close();
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
-  }, [connectSSE]);
+  }, [refreshMyScore]);
 
   if (loading) {
     return (
@@ -168,9 +151,9 @@ export default function ScoresPage() {
             <p className="text-text-secondary mt-1">{battle.name}</p>
           </div>
           <div className="flex items-center gap-3">
-            {sseConnected ? (
+            {polling ? (
               <Badge variant="success" size="sm" dot>
-                リアルタイム
+                更新中
               </Badge>
             ) : (
               <Badge variant="default" size="sm" dot>

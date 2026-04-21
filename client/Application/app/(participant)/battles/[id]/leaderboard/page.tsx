@@ -1,7 +1,7 @@
 /**
  * Leaderboard Page
  *
- * リーダーボードページ - SSE でリアルタイム更新
+ * 5 秒ごとにポーリングしてリーダーボードを更新。
  */
 
 'use client';
@@ -27,7 +27,7 @@ import type {
   LeaderboardEntry,
 } from '@/lib/api/types';
 
-const API_BASE_URL = '/api';
+const POLL_INTERVAL_MS = 5000;
 
 function getRankStyle(rank: number) {
   switch (rank) {
@@ -63,36 +63,17 @@ export default function BattleLeaderboardPage() {
   const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [sseConnected, setSseConnected] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [polling, setPolling] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const connectSSE = useCallback(() => {
-    const url = `${API_BASE_URL}/participant/events/${battleId}/leaderboard/stream`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onopen = () => {
-      setSseConnected(true);
-    };
-
-    es.addEventListener('leaderboard-update', (event) => {
-      try {
-        const data = JSON.parse(event.data) as Leaderboard;
-        setLeaderboard(data);
-      } catch {
-        // ignore parse errors
-      }
-    });
-
-    es.onerror = () => {
-      setSseConnected(false);
-      es.close();
-      setTimeout(() => {
-        connectSSE();
-      }, 5000);
-    };
-
-    return es;
+  const refreshLeaderboard = useCallback(async () => {
+    try {
+      const data = await getLeaderboard(battleId);
+      setLeaderboard(data);
+      setPolling(true);
+    } catch {
+      setPolling(false);
+    }
   }, [battleId]);
 
   useEffect(() => {
@@ -105,6 +86,7 @@ export default function BattleLeaderboardPage() {
         ]);
         setBattle(battleData);
         setLeaderboard(leaderboardData);
+        setPolling(true);
       } catch (err) {
         setError(
           err instanceof Error ? err : new Error('読み込みに失敗しました'),
@@ -117,13 +99,15 @@ export default function BattleLeaderboardPage() {
     fetchData();
   }, [battleId]);
 
-  // SSE connection
   useEffect(() => {
-    const es = connectSSE();
+    pollRef.current = setInterval(refreshLeaderboard, POLL_INTERVAL_MS);
     return () => {
-      es.close();
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
-  }, [connectSSE]);
+  }, [refreshLeaderboard]);
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -208,9 +192,9 @@ export default function BattleLeaderboardPage() {
                 凍結中
               </Badge>
             )}
-            {sseConnected ? (
+            {polling ? (
               <Badge variant="success" size="sm" dot>
-                リアルタイム
+                更新中
               </Badge>
             ) : (
               <Badge variant="default" size="sm" dot>
