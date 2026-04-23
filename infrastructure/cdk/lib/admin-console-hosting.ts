@@ -27,10 +27,10 @@ export interface AdminConsoleHostingStackProps extends cdk.StackProps {
  * ⚠️ ARCHITECTURE MISMATCH: TenkaCloud の AdminWeb は `output: 'standalone'` で
  *    `/api/auth/[...nextauth]` 等の API routes を持つため、pure S3+CloudFront
  *    では動かない (server runtime が必要)。本 stack はリファレンス実装として残しているが、
- *    実運用では以下のいずれかへの移行が必要:
+ *    実運用では serverless 前提を守るため以下のいずれかへ移行する:
  *      - OpenNext で Lambda@Edge / Lambda にデプロイ
  *      - AWS Amplify Hosting (Next.js SSR サポート)
- *      - ECS/Fargate に standalone server を載せる
+ *    INVARIANT_SERVERLESS_ONLY を守るため、常駐 compute (コンテナオーケストレータ系) は選択肢から除外する。
  *    詳細は ADR-013 参照。
  *
  * 既存設計 (Vite/SPA 想定で残してある部分):

@@ -13,7 +13,7 @@ ADR-011 で SBT (`@cdklabs/sbt-aws`) を Control Plane の正本に決めた。�
 - アダプタが期待していたエンドポイント `/tenant-registrations` は SBT v0.3.9 には存在しない。実際は `/tenants` 一系統である。
 - POST 時の payload は `{ tenantData: {...}, tenantRegistrationData: {...} }` のネスト型ではなく、`{ tenantName, email, tier, tenantStatus }` のフラット型である。
 - `tenantStatus` の取りうる値は `"In progress" | "Complete" | "Deleted"` で、`"created"` というステータスは存在しない。
-- `tier` は `basic | standard | premium | platinum` の 4 値で（SBT 公式 reference と `server/bin/cdk.ts` の `apiKeySSMParameterNames` に一致）、UI 側の `FREE | PRO | ENTERPRISE` から双方向にマッピングする必要がある。
+- `tier` は `basic | standard | premium | platinum` の 4 値で（SBT 公式 reference と `infrastructure/cdk/bin/cdk.ts` の `apiKeySSMParameterNames` に一致）、UI 側の `FREE | PRO | ENTERPRISE` から双方向にマッピングする必要がある。
 - list と get の両方で、サーバは `{ data: [...] }` で包んで返すケースと配列・単体オブジェクトを直接返すケースがあり、両対応が必要。
 
 これらは ProtoShip 側の `apps/admin-console/test/tenants.test.ts` で SBT 互換性として固定した仕様であり、TenkaCloud に持ち込む。
@@ -71,7 +71,7 @@ ADR-011 で SBT (`@cdklabs/sbt-aws`) を Control Plane の正本に決めた。�
 | `PRO` | `standard` |
 | `ENTERPRISE` | `premium` |
 
-SBT の `platinum` は `ENTERPRISE` に丸める（UI に platinum 区別の概念がないため）。tier 名は `server/bin/cdk.ts` の `apiKeySSMParameterNames` と一致させること。
+SBT の `platinum` は `ENTERPRISE` に丸める（UI に platinum 区別の概念がないため）。tier 名は `infrastructure/cdk/bin/cdk.ts` の `apiKeySSMParameterNames` と一致させること。
 
 ### 6. delete は soft delete
 

@@ -17,7 +17,7 @@ import type {
 import { z } from 'zod';
 import { TenantApiError } from './tenant-api';
 
-// SBT v0.3.9 tier values: basic / standard / premium / platinum (server/bin/cdk.ts の
+// SBT v0.3.9 tier values: basic / standard / premium / platinum (infrastructure/cdk/bin/cdk.ts の
 // apiKeySSMParameterNames と一致させる)。platinum は UI 側に区別がないため
 // ENTERPRISE に丸める (UI からは送出しない、受信時のみ畳み込む)。
 const TIER_TO_SBT: Record<TenantTier, string> = {

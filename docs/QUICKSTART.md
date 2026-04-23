@@ -79,12 +79,12 @@ make dev-app   # Application Plane のみ
 バックエンドを個別に触る場合の例は以下のとおりです。
 
 ```bash
-cd backend/services/control-plane/tenant-management
+cd server/microservices/tenant-management
 bun run dev
 ```
 
 ```bash
-cd backend/services/application-plane/problem-service
+cd server/microservices/problem-service
 bun run dev
 ```
 

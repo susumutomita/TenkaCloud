@@ -65,4 +65,4 @@ jobs:
 
       # Infrastructure (CDK) checks
       - name: Infrastructure checks
-        run: make -C server install lint build test
+        run: make -C infrastructure/cdk install lint build test
