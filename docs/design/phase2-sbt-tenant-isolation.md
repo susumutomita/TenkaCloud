@@ -1,5 +1,21 @@
 # Phase 2: SBT パターンによるテナント分離設計
 
+> **Status: Superseded (履歴文書)**
+>
+> 本文書は SBT 採用前の Phase 2 検討メモで、以下の点で現状と乖離している:
+>
+> - Terraform 前提 (`infrastructure/terraform/modules/*`) — ADR-011 で **CDK + SBT に一本化** され、Terraform は廃止。CDK は `infrastructure/cdk/` 配下 (ADR-014 で `server/` から移動)。
+> - 個別 Lambda 前提 (`backend/services/{control-plane,application-plane}/{provisioning,provisioning-completion,tenant-provisioner}`) — SBT が提供する EventBridge と `server/microservices/tenant-management/src/provisioning/publisher.ts` への集約で代替済み。
+> - SBT wire format (エンドポイントとペイロード形状) は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md) を正本とする。
+>
+> 現在の正本:
+>
+> - アーキテクチャ: [`docs/architecture/architecture.md`](../architecture/architecture.md)
+> - SBT 構成: [ADR-011](../decisions/011-sbt-control-plane-and-two-layer-application-plane.md), [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md)
+> - リポジトリ構造: [ADR-014](../decisions/014-repository-layout-cdk-out-of-server.md)
+>
+> 以下は当時の検討記録として残す (鵜呑みにしないこと)。
+
 ## 概要
 
 AWS SaaS Builder Toolkit (SBT) のパターンを TenkaCloud に適用し、マルチテナント分離を実現する。
