@@ -13,15 +13,17 @@ TenkaCloud は、Control Plane と Application Plane を分離したマルチテ
 │                        TenkaCloud                           │
 ├─────────────────────────────────────────────────────────────┤
 │ Control Plane                                               │
-│ - apps/control-plane                                        │
-│ - backend/services/control-plane/*                          │
+│ - client/AdminWeb (Next.js, basePath=/control)              │
+│ - server/microservices/tenant-management                    │
+│ - infrastructure/cdk (SBT 0.3.9 ベース)                     │
 │                                                             │
 │ Application Plane                                           │
-│ - apps/application-plane                                    │
-│ - backend/services/application-plane/*                      │
+│ - client/Application (Next.js)                              │
+│ - server/microservices/{problem,gameday,battle,             │
+│                         scoring,leaderboard}-service        │
 ├─────────────────────────────────────────────────────────────┤
 │ Shared                                                      │
-│ - backend/services/shared/*                                 │
+│ - server/libs/*                                             │
 │ - packages/*                                                │
 │ - problems/*                                                │
 └─────────────────────────────────────────────────────────────┘
@@ -54,15 +56,11 @@ Control Plane は tenant manager であり、tenant runtime host ではありま
 
 主要実体は以下のとおりです。
 
-- UI: `apps/control-plane`
-- Services:
-  - `backend/services/control-plane/tenant-management`
-  - `backend/services/control-plane/registration`
-  - `backend/services/control-plane/provisioning`
-  - `backend/services/control-plane/provisioning-completion`
-  - `backend/services/control-plane/user-management`
-  - `backend/services/control-plane/system-management`
-  - `backend/services/control-plane/deployment-management`
+- UI: `client/AdminWeb` (Next.js, `basePath=/control`)
+- Services: `server/microservices/tenant-management`
+- Infra: `infrastructure/cdk` (SBT 0.3.9 ベースの Cognito + EventBridge + tenant CRUD Lambda)
+
+> 旧構造で `backend/services/control-plane/{registration, provisioning, provisioning-completion, user-management, system-management, deployment-management}` として独立 Lambda に分かれていた責務は、SBT 移行 (ADR-013) と再構成 (ADR-014) を経て、SBT が提供する Cognito UserPool と EventBridge ルール、および `tenant-management` 内の provisioning publisher (`server/microservices/tenant-management/src/provisioning/publisher.ts`) に集約された。Lambda 単位での分割は廃止。
 
 ### Application Plane
 
@@ -80,25 +78,27 @@ Application Plane は tenant ごとに 1 つです。各社ごとに 1 Plane を
 
 主要実体は以下のとおりです。
 
-- UI: `apps/application-plane`
+- UI: `client/Application` (Next.js)
 - Services:
-  - `backend/services/application-plane/problem-service`
-  - `backend/services/application-plane/gameday-service`
-  - `backend/services/application-plane/battle-service`
-  - `backend/services/application-plane/scoring-service`
-  - `backend/services/application-plane/leaderboard-service`
-  - `backend/services/application-plane/tenant-provisioner`
+  - `server/microservices/problem-service`
+  - `server/microservices/gameday-service`
+  - `server/microservices/battle-service`
+  - `server/microservices/scoring-service`
+  - `server/microservices/leaderboard-service`
+- tenant プロビジョニング実行: `infrastructure/cdk/lib/{bootstrap-template,tenant-template,tenant-pipeline}/` 配下の SBT スタック (旧 `backend/services/application-plane/tenant-provisioner` の Lambda は廃止)
+- realtime 系 (旧 `realtime-service` Lambda) は polling ベースに切り替え済み (PR #412 / `INVARIANT_POLLING_OVER_SSE` メモリ参照)
 
 ## 3. UI 構成
 
-### `apps/control-plane`
+### `client/AdminWeb`
 
-- Next.js 16
+- Next.js 16 (`output: 'standalone'`, `basePath=/control`)
 - ポート `13000`
-- 主に `/control` 配下でプラットフォーム管理を提供
-- ローカルでは `AUTH_SKIP=1` で確認可能
+- 主に `/control/dashboard/*` 配下でプラットフォーム管理を提供
+- 認証は NextAuth v5 + Cognito (本番) / `AUTH_SKIP=1` (ローカル)
+- SBT API は `lib/api/sbt-api-adapter.ts` 経由 (詳細は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md))
 
-### `apps/application-plane`
+### `client/Application`
 
 - Next.js 16
 - ポート `13001`
@@ -124,11 +124,11 @@ Hono ベースのサービスが多く、ルートの `package.json` の `dev` �
 
 ### 共有コード
 
-- `backend/services/shared/dynamodb`
-- `backend/services/shared/events`
-- `backend/services/shared/auth0`
-- `packages/shared`
-- `packages/design-system`
+- `server/libs/dynamodb` — DynamoDB クライアント、リポジトリ層、tenant context / isolation middleware
+- `server/libs/events` — EventBridge 型定義 (TenantOnboarding / Provisioned / Updated / Offboarding)
+- `server/libs/auth` — JWT 検証、JWKS、role 抽出 (NextAuth v5 / Cognito / Auth0 互換)
+- `packages/shared` — quality harness 検出ロジックなどのプラットフォーム共有
+- `packages/design-system` — UI コンポーネント (Cloudscape ラッパー)
 
 ### データストア
 
@@ -169,10 +169,10 @@ Control Plane と Application Plane の正本アーキテクチャは serverless
 
 仕様を把握するときの優先順位は以下のとおりです。
 
-1. `apps/*` と `backend/services/*` の実装
+1. `client/{AdminWeb,Application}/` と `server/microservices/*/src/` の実装
 2. この文書
 3. `docs/QUICKSTART.md`
-4. `docs/decisions/*`
+4. `docs/decisions/*` (特に最新の ADR-013 / ADR-014)
 5. `Plan.md` と `docs/plans/*`
 
 `Plan.md` と `docs/plans/*` は履歴や構想が混ざるため、現在仕様の正本には使いません。
