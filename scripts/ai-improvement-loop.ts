@@ -97,26 +97,50 @@ async function collectRepositoryFiles(root: string): Promise<RepositoryFile[]> {
 }
 
 async function collectStagedFiles(root: string): Promise<RepositoryFile[]> {
+  // Pure rename (R100、内容変更なし) は新規負債ではないので除外する。
+  // 同 PR で巨大な既存ファイルを単純移動しただけで loop が失敗するのを防ぐ。
+  const renameThreshold = '90';
   const output = execFileSync(
     'git',
-    ['diff', '--cached', '--name-only', '--diff-filter=ACMR'],
+    [
+      'diff',
+      '--cached',
+      '--name-status',
+      `--find-renames=${renameThreshold}%`,
+      '--diff-filter=ACMR',
+    ],
     {
       cwd: root,
       encoding: 'utf8',
     }
   );
 
-  const candidates = output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((filePath) => shouldAnalyzeFile(filePath));
+  const candidates: string[] = [];
+  for (const rawLine of output.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const parts = line.split('\t');
+    const status = parts[0];
+    if (!status) continue;
+    if (status.startsWith('R')) {
+      // R100 は内容無変更、それより低い類似度は内容変更ありなので新規パス側を analyze
+      const similarity = Number.parseInt(status.slice(1), 10);
+      if (similarity >= 100) continue;
+      const newPath = parts[2];
+      if (newPath) candidates.push(newPath);
+      continue;
+    }
+    const filePath = parts[1];
+    if (filePath) candidates.push(filePath);
+  }
 
   const files = await Promise.all(
-    candidates.map(async (filePath) => ({
-      path: filePath,
-      content: await readFile(path.join(root, filePath), 'utf8'),
-    }))
+    candidates
+      .filter((filePath) => shouldAnalyzeFile(filePath))
+      .map(async (filePath) => ({
+        path: filePath,
+        content: await readFile(path.join(root, filePath), 'utf8'),
+      }))
   );
 
   return files;

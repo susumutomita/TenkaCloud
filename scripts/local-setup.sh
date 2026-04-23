@@ -114,7 +114,7 @@ if [ "${PROVISIONING_DELIVERY_MODE:-inline}" != "inline" ]; then
   echo ""
   echo "🔨 Building Lambda functions..."
   for svc in \
-    "$PROJECT_ROOT/server/application/microservices/tenant-management" \
+    "$PROJECT_ROOT/server/microservices/tenant-management" \
   ; do
     if [ -d "$svc" ]; then
       cd "$svc"
@@ -241,7 +241,7 @@ echo "✅ EventBridge バス完了"
 # inline モードではスキップ（tenant-management が直接処理）
 if [ "${PROVISIONING_DELIVERY_MODE:-inline}" != "inline" ]; then
   echo "⚡ Lambda 関数と EventBridge ルールを登録中..."
-  echo "  ⚠️  eventbridge モード: CDK デプロイが必要です (cd server && make deploy)"
+  echo "  ⚠️  eventbridge モード: CDK デプロイが必要です (cd infrastructure/cdk && make deploy)"
 else
   echo "⏭  Lambda/EventBridge 登録スキップ（inline モード）"
 fi

@@ -10,11 +10,11 @@ COPY . .
 # Install dependencies
 RUN bun install --frozen-lockfile
 
-WORKDIR /app/backend/services/application-plane/scoring-service
+WORKDIR /app/server/microservices/gameday-service
 
 # Build the application
 RUN bun run build
 
-EXPOSE 3011
+EXPOSE 3020
 
 CMD ["bun", "run", "start"]

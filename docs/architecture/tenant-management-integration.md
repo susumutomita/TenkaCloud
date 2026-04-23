@@ -35,7 +35,7 @@ TENANT_API_BASE_URL=http://localhost:13004/api
 NEXT_PUBLIC_TENANT_API_BASE_URL=http://localhost:13004/api
 ```
 
-### Tenant Management (`backend/services/control-plane/tenant-management`)
+### Tenant Management (`server/microservices/tenant-management`)
 
 ```bash
 DYNAMODB_TABLE_NAME=TenkaCloud-dev    # テーブル名
@@ -167,7 +167,7 @@ docker compose up localstack -d
 
 **方法 A: ローカル実行（推奨）**
 ```bash
-cd backend/services/control-plane/tenant-management
+cd server/microservices/tenant-management
 DYNAMODB_TABLE_NAME=TenkaCloud-dev \
 DYNAMODB_ENDPOINT=http://localhost:4566 \
 AWS_REGION=ap-northeast-1 \
@@ -244,6 +244,6 @@ docker compose up localstack -d
 |---------|------|
 | `apps/control-plane/lib/api/tenant-api.ts` | API クライアント |
 | `apps/control-plane/app/dashboard/tenants/page.tsx` | テナント管理画面 |
-| `backend/services/control-plane/tenant-management/src/index.ts` | API サーバー |
-| `backend/services/control-plane/tenant-management/src/lib/dynamodb.ts` | DynamoDB 設定 |
+| `server/microservices/tenant-management/src/index.ts` | API サーバー |
+| `server/microservices/tenant-management/src/lib/dynamodb.ts` | DynamoDB 設定 |
 | `docker-compose.yml` | サービス定義 |

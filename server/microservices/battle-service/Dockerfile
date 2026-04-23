@@ -10,14 +10,11 @@ COPY . .
 # Install dependencies
 RUN bun install --frozen-lockfile
 
-WORKDIR /app/backend/services/application-plane/problem-service
+WORKDIR /app/server/microservices/battle-service
 
-# Generate Prisma client
-RUN bunx prisma generate
-
-# Build the application (TypeScript compiler)
+# Build the application
 RUN bun run build
 
-EXPOSE 3100
+EXPOSE 3010
 
 CMD ["bun", "run", "start"]

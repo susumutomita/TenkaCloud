@@ -45,22 +45,22 @@ else
 fi
 
 # CodeBuild 内の update-tenant.sh / provision-tenant.sh は zip 内に `cdk/` と `scripts/` が
-# あることを想定するため、TenkaCloud のリポジトリ構造 (server/ / scripts/) を zip 用に
-# `server` → `cdk` リネームした staging に並べてから zip する。
+# あることを想定するため、TenkaCloud のリポジトリ構造 (infrastructure/cdk/ / scripts/) を zip 用に
+# staging に並べてから zip する (ADR-014 で CDK は infrastructure/cdk/ に移動済み)。
 STAGING=$(mktemp -d)
 trap "rm -rf '$STAGING'" EXIT
 
 cd ..  # TenkaCloud root へ
 echo "Staging source.zip at ${STAGING}..."
-# server (CDK) → cdk にリネーム、scripts はそのまま
-cp -R server "${STAGING}/cdk"
+# infrastructure/cdk → cdk にリネーム、scripts はそのまま
+cp -R infrastructure/cdk "${STAGING}/cdk"
 cp -R scripts "${STAGING}/scripts"
 
 # node_modules / cdk.out / dist を完全に排除 (CodeBuild の npm install が EEXIST で失敗するため)
 find "${STAGING}" -type d \( -name node_modules -o -name cdk.out -o -name dist \) -prune -exec rm -rf {} +
 find "${STAGING}" -name ".DS_Store" -delete
 
-# TenkaCloud ルートの絶対パスを記憶して最後に server/ に戻る
+# TenkaCloud ルートの絶対パスを記憶して最後に infrastructure/cdk/ に戻る
 TENKACLOUD_ROOT="$(pwd)"
 
 cd "${STAGING}"
@@ -68,7 +68,7 @@ zip -rq "${CDK_SOURCE_NAME}" .
 export CDK_PARAM_COMMIT_ID=$(aws s3api put-object --bucket "${CDK_PARAM_S3_BUCKET_NAME}" --key "source.zip" --body "./${CDK_SOURCE_NAME}" --output text)
 echo "Source code uploaded to S3 (layout: cdk/, scripts/)."
 
-cd "${TENKACLOUD_ROOT}/server"
+cd "${TENKACLOUD_ROOT}/infrastructure/cdk"
 
 # JSII_DEPRECATED=quiet: SBT 内部の aws-cdk-lib deprecation warning を抑制 (CFT には影響なし)
 export JSII_DEPRECATED=quiet
@@ -125,7 +125,7 @@ echo "  → dist/ generated"
 
 # AdminConsoleHostingStack deploy: backend outputs を CDK_PARAM_* env に渡す
 # (stack が runtime-config.json に書いて S3 に配置する)
-cd "${TENKACLOUD_ROOT}/server"
+cd "${TENKACLOUD_ROOT}/infrastructure/cdk"
 export CDK_PARAM_CONTROL_PLANE_API_URL="${API_URL}"
 export CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN="${COGNITO_DOMAIN}"
 export CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID="${CLIENT_ID}"

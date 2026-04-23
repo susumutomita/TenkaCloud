@@ -6,8 +6,9 @@ TenkaCloud は、クラウド技術者向けの OSS 競技プラットフォー�
 
 - `apps/control-plane`: プラットフォーム管理 UI。テナント管理、設定、運用導線を担当
 - `apps/application-plane`: テナント向け UI。GameDay / Battle / ランキング / プロフィールを担当
-- `backend/services/control-plane/*`: テナント管理、登録、プロビジョニングなどの共有サービス
-- `backend/services/application-plane/*`: problem / gameday / battle / scoring / leaderboard などの競技サービス
+- `server/microservices/*`: Hono ベースのマイクロサービス群 (tenant-management / problem-service / gameday-service / battle-service / scoring-service / leaderboard-service)
+- `server/libs/*`: DynamoDB クライアント、イベント型、認証など共有ライブラリ
+- `infrastructure/cdk/`: SBT 0.3.9 ベースの CDK スタック (詳細は [ADR-014](docs/decisions/014-repository-layout-cdk-out-of-server.md))
 - `problems/`: 問題データとドキュメント
 
 ローカル開発は `Auth0` と `AUTH_SKIP=1` の両方を前提にできます。`Keycloak` / `Cognito` / `frontend/` 構成を前提にした記述は正本から外します。

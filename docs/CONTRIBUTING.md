@@ -110,16 +110,18 @@ test(gameday-service): カバレッジを 99% 以上に改善
 
 ```
 TenkaCloud/
-├── apps/
-│   ├── control-plane/         # テナント管理 UI (Next.js, :13000)
-│   └── application-plane/     # GameDay/Battle UI (Next.js, :13001)
-├── backend/services/
-│   ├── shared/                # DynamoDB, イベント型, 認証
-│   ├── control-plane/         # テナント管理, プロビジョニング
-│   └── application-plane/     # problem, gameday, battle, scoring, leaderboard
-├── packages/                  # 共有ライブラリ
+├── client/
+│   ├── AdminWeb/              # Control Plane UI (Next.js, :13000, basePath=/control)
+│   └── Application/           # Application Plane UI (Next.js, :13001)
+├── server/
+│   ├── microservices/         # Hono backend (problem/gameday/battle/scoring/leaderboard/tenant-management)
+│   ├── libs/                  # 共有ライブラリ (DynamoDB, events, auth)
+│   └── reverseproxy/          # ローカル用 nginx
+├── infrastructure/
+│   ├── cdk/                   # SBT 0.3.9 ベース CDK (ADR-014)
+│   └── templates/             # CFn テンプレート
+├── packages/                  # 共有ライブラリ (quality harness 等)
 ├── docs/decisions/            # ADR（アーキテクチャ決定記録）
-├── infrastructure/            # IaC（Terraform, Auth0）
 └── Makefile                   # 開発コマンド（`make help` で一覧）
 ```
 

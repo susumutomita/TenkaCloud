@@ -9,7 +9,7 @@ set -eo pipefail
 #
 # 前提:
 #   - aws CLI がログイン済み
-#   - server/environments/${ENV}/.env が存在し SYSTEM_ADMIN_EMAIL を持つ
+#   - infrastructure/cdk/environments/${ENV}/.env が存在し SYSTEM_ADMIN_EMAIL を持つ
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -37,7 +37,8 @@ empty_versioned_bucket() {
 
 TENKACLOUD_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV="${ENV:-development}"
-ENV_FILE="${TENKACLOUD_ROOT}/server/environments/${ENV}/.env"
+ENV_FILE="${TENKACLOUD_ROOT}/infrastructure/cdk/environments/${ENV}/.env"
+# (旧パス: server/environments/<env>/.env、ADR-014 で移動)
 
 if [[ -f "${ENV_FILE}" ]]; then
   set -a
@@ -64,7 +65,7 @@ export CDK_SOURCE_NAME="source.zip"
 export CDK_PARAM_COMMIT_ID="destroy"
 export JSII_DEPRECATED="quiet"
 
-cd "${TENKACLOUD_ROOT}/server"
+cd "${TENKACLOUD_ROOT}/infrastructure/cdk"
 if [[ ! -d node_modules ]]; then
   log "bun install..."
   bun install

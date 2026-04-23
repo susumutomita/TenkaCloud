@@ -97,33 +97,29 @@ A permanent battle arena where cloud warriors from around the world gather to ho
 
 ```text
 TenkaCloud/
-├── apps/                              # Frontend
-│   ├── control-plane/                 # Platform admin UI (Next.js 16)
-│   └── application-plane/             # Participant & tenant UI (Next.js 16)
+├── client/                            # Frontend (Next.js 16)
+│   ├── AdminWeb/                      # Control Plane UI (basePath=/control)
+│   └── Application/                   # Participant & tenant UI
 │
-├── backend/services/                  # Backend (Microservices)
-│   ├── control-plane/                 # Shared platform services
-│   │   ├── tenant-management/         # Tenant CRUD (Hono + DynamoDB)
-│   │   ├── registration/              # Tenant registration
-│   │   ├── provisioning/              # Resource provisioning
-│   │   └── user-management/           # User management
-│   │
-│   ├── application-plane/             # Tenant-specific services
-│   │   ├── problem-service/           # Problem management & AI generation
+├── server/                            # Backend (Hono microservices)
+│   ├── microservices/
+│   │   ├── tenant-management/         # Tenant CRUD
+│   │   ├── problem-service/           # Problem management
+│   │   ├── gameday-service/           # GameDay state
 │   │   ├── battle-service/            # Battle sessions
 │   │   ├── scoring-service/           # Scoring system
 │   │   └── leaderboard-service/       # Rankings
-│   │
-│   └── shared/                        # Shared libraries
-│       ├── dynamodb/                  # DynamoDB repository layer
-│       └── cloud-abstraction/         # Multi-cloud abstraction
+│   ├── libs/                          # DynamoDB repository, events, auth
+│   └── reverseproxy/                  # Local-dev nginx
 │
 ├── packages/                          # Shared npm packages
 │   ├── core/                          # Core logic
 │   ├── shared/                        # Type definitions & utilities
 │   └── design-system/                 # UI component library
 │
-├── infrastructure/terraform/          # IaC (Terraform)
+├── infrastructure/
+│   ├── cdk/                           # SBT 0.3.9 based CDK stacks (ADR-014)
+│   └── templates/                     # CFn templates (competitor IAM Role, etc.)
 ├── docs/                              # Documentation
 └── Makefile                           # Development commands
 ```

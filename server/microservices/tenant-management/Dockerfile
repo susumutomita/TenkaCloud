@@ -10,11 +10,11 @@ COPY . .
 # Install dependencies
 RUN bun install --frozen-lockfile
 
-WORKDIR /app/backend/services/application-plane/leaderboard-service
+WORKDIR /app/server/microservices/tenant-management
 
 # Build the application
 RUN bun run build
 
-EXPOSE 3012
+EXPOSE 13004
 
 CMD ["bun", "run", "start"]
