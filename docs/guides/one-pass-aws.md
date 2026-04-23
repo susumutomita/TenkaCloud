@@ -13,8 +13,8 @@
 
 ## 手順
 
-1. Control Plane で tenant を作成する
-2. provisioning を開始し、`provisioningStatus=COMPLETED` と tenant runtime descriptor を確認する
+1. Control Plane で tenant を作成する（SBT API Gateway へ `POST /tenants` フラット payload。詳細は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md)）
+2. provisioning を開始し、SBT が返す `tenantStatus="Complete"`（UI 上は `provisioningStatus=COMPLETED`）と tenant runtime descriptor を確認する
 3. tenant ごとの Application Plane endpoint に到達できることを確認する
 4. Application Plane admin で event を作成し `active` にする
 5. competitor account を event に登録する

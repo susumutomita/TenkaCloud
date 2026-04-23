@@ -2,6 +2,8 @@
 
 Control Plane と Tenant Management Service 間の統合仕様を定義します。
 
+> **モード分岐**: `CONTROL_PLANE_API_URL` (または `NEXT_PUBLIC_CONTROL_PLANE_API_URL`) が設定されているとき、Admin UI は本ドキュメントの local Hono API ではなく **SBT v0.3.9 の `/tenants` API** を直接叩く。SBT モードの wire format は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md) を正本とする。
+
 ## 概要
 
 | 項目 | 値 |

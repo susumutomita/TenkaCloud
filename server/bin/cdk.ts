@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-import * as cdk from "aws-cdk-lib/core";
-import * as dotenv from "dotenv";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createLogger, format, transports, type Logger } from "winston";
-import { processConfigFile, parseConfig, validateConfig } from "../lib/utils/config-loader";
-import type { Config } from "../lib/config/config-interface";
-import { ControlPlaneStack } from "../lib/control-plane";
-import { AppPlaneStack } from "../lib/app-plane";
-import { ProblemDeployPlaneStack } from "../lib/problem-deploy-plane";
-import { AwsSolutionsChecks } from "cdk-nag";
+import * as cdk from "aws-cdk-lib";
+import * as dotenv from "dotenv";
+import { type Logger, createLogger, format, transports } from "winston";
+import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
+import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
+import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
+import { ControlPlaneStack } from "../lib/control-plane-stack";
+import { getEnv } from "../lib/helper-functions";
+import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
+import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
 
 const logger: Logger = createLogger({
   level: "info",
@@ -21,85 +22,139 @@ const logger: Logger = createLogger({
   transports: [new transports.Console()],
 });
 
-/**
- * Load environment variables from .env file if present.
- */
-function loadEnvironmentVariables(envFilePath: string): void {
-  if (fs.existsSync(envFilePath)) {
-    dotenv.config({ path: envFilePath });
-    logger.info(`Loaded environment variables from ${envFilePath}`);
-  } else {
-    logger.warn(`.env file not found at ${envFilePath}. Using process.env only.`);
-  }
+// TenkaCloud の env 読み込み。`server/environments/<env>/.env` がある場合だけ load。
+// install.sh が直接 export してくる CDK_PARAM_* は既に process.env にあり上書き不要。
+const environment = process.env.CDK_PARAM_ENVIRONMENT ?? "development";
+const envFilePath = path.resolve(__dirname, `../environments/${environment}/.env`);
+if (fs.existsSync(envFilePath)) {
+  dotenv.config({ path: envFilePath });
+  logger.info(`Loaded env from ${envFilePath}`);
+} else {
+  logger.warn(`.env file not found at ${envFilePath}; using process.env only`);
 }
 
-function main(): void {
-  const app = new cdk.App();
+const app = new cdk.App();
 
-  // Determine environment from CDK context (default: development)
-  const environment = app.node.tryGetContext("environment") ?? "development";
-  logger.info(`Deploying environment: ${environment}`);
-
-  // Resolve environment directory
-  const envDir = path.resolve(__dirname, `../environments/${environment}`);
-  logger.info(`Environment directory: ${envDir}`);
-
-  // Load .env
-  const envFilePath = path.resolve(envDir, ".env");
-  loadEnvironmentVariables(envFilePath);
-
-  // Load, parse, and validate config.json
-  const configPath = path.resolve(envDir, "config.json");
-  let config: Config;
-  try {
-    const configContent = processConfigFile(configPath, process.env, logger);
-    config = parseConfig(configContent, logger);
-    validateConfig(config, logger);
-  } catch (error) {
-    logger.error(`Config error: ${(error as Error).message}`);
-    process.exit(1);
-  }
-
-  const env = {
-    account: config.accountId,
-    region: config.region,
-  };
-  logger.info(`Target: account=${env.account}, region=${env.region}`);
-
-  // 1. Control Plane: Tenant management API + Cognito auth + EventBridge bus
-  logger.info("Initializing ControlPlaneStack...");
-  const controlPlaneStack = new ControlPlaneStack(app, "ControlPlaneStack", {
-    env,
-    systemAdminEmail: config.controlPlaneConfig.systemAdminEmail,
-    systemAdminRoleName: config.controlPlaneConfig.systemAdminRoleName,
-    enableAdvancedSecurityMode: config.controlPlaneConfig.enableAdvancedSecurityMode,
-    setAPIGWScopes: config.controlPlaneConfig.setAPIGWScopes,
-    disableAPILogging: config.controlPlaneConfig.disableAPILogging,
-  });
-
-  // 2. Application Plane Layer 1: Tenant provisioning (onboarding / offboarding)
-  logger.info("Initializing AppPlaneStack...");
-  new AppPlaneStack(app, "AppPlaneStack", {
-    env,
-    eventManager: controlPlaneStack.eventManager,
-    appName: config.appName,
-    dynamoDbTablePrefix: config.appPlaneConfig.dynamoDbTablePrefix,
-    cfnStackPrefix: config.appPlaneConfig.cfnStackPrefix,
-  });
-
-  // 3. Application Plane Layer 2: Problem deployment engine (custom event-driven)
-  logger.info("Initializing ProblemDeployPlaneStack...");
-  new ProblemDeployPlaneStack(app, "ProblemDeployPlaneStack", {
-    env,
-    eventManager: controlPlaneStack.eventManager,
-    appName: config.appName,
-    targetRoleName: config.problemDeployConfig.targetRoleName,
-  });
-
-  // Enable cdk-nag AWS Solutions checks on all stacks
-  cdk.Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
-
-  logger.info("CDK app initialized successfully (cdk-nag enabled)");
+// required input parameters
+if (!process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL) {
+  throw new Error("Please provide system admin email via CDK_PARAM_SYSTEM_ADMIN_EMAIL");
 }
 
-main();
+if (!process.env.CDK_PARAM_TENANT_ID) {
+  logger.info('Tenant ID is empty, a default tenant id "pooled" will be assigned');
+}
+
+const pooledId = "pooled";
+
+const systemAdminEmail = process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
+const tenantId = process.env.CDK_PARAM_TENANT_ID || pooledId;
+const s3SourceBucket = getEnv("CDK_PARAM_S3_BUCKET_NAME");
+const sourceZip = getEnv("CDK_SOURCE_NAME");
+const commitId = getEnv("CDK_PARAM_COMMIT_ID");
+
+if (!process.env.CDK_PARAM_IDP_NAME) {
+  process.env.CDK_PARAM_IDP_NAME = "COGNITO";
+}
+if (!process.env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME) {
+  process.env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME = "SystemAdmin";
+}
+
+// default values for optional input parameters
+const defaultStageName = "prod";
+const defaultLambdaReserveConcurrency = "1";
+const defaultLambdaCanaryDeploymentPreference = "True";
+const defaultApiKeyPlatinumTierParameter = "88b43c36-802e-11eb-af35-38f9d35b2c15-test2";
+const defaultApiKeyPremiumTierParameter = "6db2bdc2-6d96-11eb-a56f-38f9d33cfd0f-test2";
+const defaultApiKeyStandardTierParameter = "b1c735d8-6d96-11eb-a28b-38f9d33cfd0f-test2";
+const defaultApiKeyBasicTierParameter = "daae9784-6d96-11eb-a28b-38f9d33cfd0f-test2";
+
+// optional input parameters
+const stageName = process.env.CDK_PARAM_STAGE_NAME || defaultStageName;
+const lambdaReserveConcurrency = Number(
+  process.env.CDK_PARAM_LAMBDA_RESERVE_CONCURRENCY || defaultLambdaReserveConcurrency,
+);
+const lambdaCanaryDeploymentPreference =
+  process.env.CDK_PARAM_LAMBDA_CANARY_DEPLOYMENT_PREFERENCE || defaultLambdaCanaryDeploymentPreference;
+const apiKeyPlatinumTierParameter =
+  process.env.CDK_PARAM_API_KEY_PLATINUM_TIER_PARAMETER || defaultApiKeyPlatinumTierParameter;
+const apiKeyPremiumTierParameter =
+  process.env.CDK_PARAM_API_KEY_PREMIUM_TIER_PARAMETER || defaultApiKeyPremiumTierParameter;
+const apiKeyStandardTierParameter =
+  process.env.CDK_PARAM_API_KEY_STANDARD_TIER_PARAMETER || defaultApiKeyStandardTierParameter;
+const apiKeyBasicTierParameter = process.env.CDK_PARAM_API_KEY_BASIC_TIER_PARAMETER || defaultApiKeyBasicTierParameter;
+const isPooledDeploy = tenantId === pooledId;
+
+logger.info(`Deploying environment=${environment} tenantId=${tenantId} (pooled=${isPooledDeploy})`);
+
+// parameter names to facilitate sharing api keys
+// between the bootstrap template and the tenant template stack(s).
+// SBT の tier 値 (basic/standard/premium/platinum) と一致させること。詳細は
+// docs/decisions/013-sbt-control-plane-onboarding-wire-format.md。
+const apiKeySSMParameterNames = {
+  basic: { keyId: "apiKeyBasicTierKeyId", value: "apiKeyBasicTierValue" },
+  standard: { keyId: "apiKeyStandardTierKeyId", value: "apiKeyStandardTierValue" },
+  premium: { keyId: "apiKeyPremiumTierKeyId", value: "apiKeyPremiumTierValue" },
+  platinum: { keyId: "apiKeyPlatinumTierKeyId", value: "apiKeyPlatinumTierValue" },
+};
+
+const controlPlaneStack = new ControlPlaneStack(app, "ControlPlaneStack", {
+  systemAdminEmail,
+});
+
+// DynamoDB プロビジョンドキャパシティ。未指定時は dev 想定で 1/1。
+// 本番でスケール要求が上がったら env var で override する。
+const dynamoReadCapacity = Number(process.env.CDK_PARAM_DYNAMODB_READ_CAPACITY ?? "1");
+const dynamoWriteCapacity = Number(process.env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY ?? "1");
+
+const bootstrapTemplateStack = new BootstrapTemplateStack(app, "tenkacloud-bootstrap-stack", {
+  systemAdminEmail,
+  eventBusArn: controlPlaneStack.eventBusArn,
+  apiKeyPlatinumTierParameter,
+  apiKeyPremiumTierParameter,
+  apiKeyStandardTierParameter,
+  apiKeyBasicTierParameter,
+  apiKeySSMParameterNames,
+  tenantMappingTableReadCapacity: dynamoReadCapacity,
+  tenantMappingTableWriteCapacity: dynamoWriteCapacity,
+});
+cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
+
+const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-template-${tenantId}`, {
+  tenantId,
+  stageName,
+  lambdaReserveConcurrency,
+  lambdaCanaryDeploymentPreference,
+  isPooledDeploy,
+  ApiKeySSMParameterNames: apiKeySSMParameterNames,
+  tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
+  commitId,
+});
+
+tenantTemplateStack.addDependency(bootstrapTemplateStack);
+cdk.Tags.of(tenantTemplateStack).add("TenantId", tenantId);
+cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(isPooledDeploy));
+cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
+
+const tenkaCloudPipeline = new ServerlessSaaSPipeline(app, "TenkaCloudPipeline", {
+  tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
+  s3SourceBucket,
+  sourceZip,
+});
+cdk.Aspects.of(tenkaCloudPipeline).add(new DestroyPolicySetter());
+
+// AdminConsoleHostingStack: client/AdminWeb (Next.js) を CloudFront+S3 で配信する想定。
+// ⚠️ TenkaCloud の AdminWeb は `output: 'standalone'` + API routes (NextAuth 等) を持つため
+//    pure S3+CloudFront には収まらない。詳細は admin-console-hosting.ts のヘッダコメント参照。
+// 3-phase deploy の phase 2 で deploy される (install.sh が backend outputs を env として渡す)。
+const adminConsoleApiUrl = process.env.CDK_PARAM_CONTROL_PLANE_API_URL;
+const adminConsoleCognitoDomain = process.env.CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN;
+const adminConsoleUserClientId = process.env.CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID;
+
+if (adminConsoleApiUrl && adminConsoleCognitoDomain && adminConsoleUserClientId) {
+  const adminConsoleHosting = new AdminConsoleHostingStack(app, "AdminConsoleHostingStack", {
+    apiUrl: adminConsoleApiUrl,
+    cognitoDomain: adminConsoleCognitoDomain,
+    userClientId: adminConsoleUserClientId,
+  });
+  cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());
+}

@@ -16,6 +16,8 @@
   Control Plane は tenant manager であり、tenant runtime host ではない。
 - `INVARIANT_PROBLEM_RUNTIME_IN_COMPETITOR_AWS_ACCOUNTS`
   問題の runtime と課金対象リソースは competitor AWS accounts にのみ作る。
+- `INVARIANT_SBT_ONBOARDING_WIRE_FORMAT`
+  Control Plane onboarding は SBT v0.3.9 の wire format に従う。エンドポイントは `/tenants` 一系統、作成 payload は `{ tenantName, email, tier, tenantStatus: "In progress" }` フラット、`tenantStatus` は `"In progress" | "Complete" | "Deleted"`。詳細は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md)。
 
 ## One-Pass Acceptance
 
