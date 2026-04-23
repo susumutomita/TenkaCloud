@@ -73,17 +73,32 @@ bun scripts/ai-improvement-loop.ts --write --fail-on=high
 
 ```
 TenkaCloud/
-├── apps/
-│   ├── control-plane/         # テナント管理 UI (Next.js, :13000)
-│   └── application-plane/     # GameDay/Battle UI (Next.js, :13001)
-├── backend/services/
-│   ├── shared/                # DynamoDB クライアント, イベント型, 認証
-│   ├── control-plane/         # テナント管理, プロビジョニング
-│   └── application-plane/     # problem, gameday, battle, scoring, leaderboard
-├── packages/                  # 共有ライブラリ
-├── docs/decisions/            # ADR（アーキテクチャ決定記録）
-└── infrastructure/            # IaC
+├── client/
+│   ├── AdminWeb/              # Control Plane UI (Next.js 16, :13000, basePath=/control)
+│   └── Application/           # Application Plane UI (Next.js 16, :13001)
+├── server/
+│   ├── application/
+│   │   ├── microservices/     # Hono backend services
+│   │   │   ├── problem-service       :3100  # イベント・問題管理
+│   │   │   ├── gameday-service       :3020  # GameDay ゲーム状態
+│   │   │   ├── leaderboard-service   :3012  # スコア集計・SSE 配信
+│   │   │   ├── battle-service        :3010  # バトル管理
+│   │   │   ├── scoring-service       :3011  # 採点パイプライン
+│   │   │   └── tenant-management     :13004 # テナント CRUD
+│   │   ├── libs/              # DynamoDB クライアント, イベント型, 認証共有
+│   │   └── reverseproxy/      # ローカル開発用リバースプロキシ
+│   ├── lib/                   # CDK スタック (ADR-013: SBT 0.3.9 ベース)
+│   ├── bin/cdk.ts             # CDK エントリ
+│   └── test/                  # CDK スモークテスト
+├── packages/                  # 共有ライブラリ (quality harness 検出ロジック等)
+├── docs/architecture/harness.md  # アーキテクチャ invariant 正本
+├── docs/decisions/            # ADR (000-template.md, 001..013)
+├── infrastructure/templates/  # 補助 IaC (CFn テンプレート, competitor IAM Role 等)
+├── scripts/                   # CDK orchestration (install/cleanup/provision-tenant.sh) + harness 等
+└── problems/                  # GameDay/JAM 問題セット
 ```
+
+> 旧 `apps/` および `backend/services/` パスは廃止 (PR #414 / restructure #398 で `client/`, `server/application/microservices/` に移行済み)。`backend/services/` 配下に残る `node_modules` / `dist` / `lambda.zip` は build artifact のみで、ソースは `server/application/microservices/` を見ること。
 
 ### サービス間通信
 
