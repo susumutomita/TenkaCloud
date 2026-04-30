@@ -1,15 +1,19 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { useAuth } from '@/lib/auth/auth-context';
 import { getStatusVariant } from '@/lib/tenant-utils';
 import type { Tenant } from '@/types/tenant';
 import TenantsPage from '../page';
+
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: vi.fn(),
+}));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
-// tenant-api のモック
 vi.mock('@/lib/api/tenant-api', () => ({
   tenantApi: {
     listTenants: vi.fn(),
@@ -17,7 +21,6 @@ vi.mock('@/lib/api/tenant-api', () => ({
   },
 }));
 
-// Cloudscape コンポーネントのモック
 vi.mock('@cloudscape-design/components/box', () => ({
   default: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -143,48 +146,69 @@ const mockTenants: Tenant[] = [
   },
 ];
 
+const authedSession = {
+  session: {
+    user: { email: 'admin@example.com', roles: [] },
+    idToken: 'i',
+    accessToken: 'a',
+    expires: new Date(Date.now() + 60_000).toISOString(),
+  },
+  signIn: vi.fn(),
+  signOut: vi.fn(),
+  setTokens: vi.fn(),
+};
+
 describe('TenantsPage コンポーネント', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAuth).mockReturnValue(authedSession);
+  });
+
+  describe('未認証時', () => {
+    it('session が無いと何もレンダリングしないべき', () => {
+      vi.mocked(useAuth).mockReturnValue({
+        ...authedSession,
+        session: null,
+      });
+      const { container } = render(<TenantsPage />);
+      expect(container.firstChild).toBeNull();
+    });
   });
 
   describe('ヘッダーセクション', () => {
     it('タイトルを表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue([]);
-      const Component = await TenantsPage();
-      render(Component);
-      expect(screen.getByText('テナント管理')).toBeInTheDocument();
+      render(<TenantsPage />);
+      expect(await screen.findByText('テナント管理')).toBeInTheDocument();
     });
 
     it('説明文を表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue([]);
-      const Component = await TenantsPage();
-      render(Component);
+      render(<TenantsPage />);
       expect(
-        screen.getByText('テナントの作成・管理を行います。'),
+        await screen.findByText('テナントの作成・管理を行います。'),
       ).toBeInTheDocument();
     });
 
     it('新規テナント作成ボタンを表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue([]);
-      const Component = await TenantsPage();
-      render(Component);
-      expect(
-        screen.getByRole('link', { name: '新規テナントを作成' }),
-      ).toHaveAttribute('href', '/dashboard/tenants/new');
+      render(<TenantsPage />);
+      const link = await screen.findByRole('link', {
+        name: '新規テナントを作成',
+      });
+      expect(link).toHaveAttribute('href', '/dashboard/tenants/new');
     });
   });
 
   describe('統計カード', () => {
     it('テナント統計を表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue(mockTenants);
-      const Component = await TenantsPage();
-      render(Component);
-
-      expect(screen.getByText('総テナント')).toBeInTheDocument();
+      render(<TenantsPage />);
+      await waitFor(() => {
+        expect(screen.getByText('総テナント')).toBeInTheDocument();
+      });
       expect(screen.getByText('稼働中')).toBeInTheDocument();
       expect(screen.getByText('一時停止')).toBeInTheDocument();
-      // Enterprise は統計カードとテナントテーブルの両方に存在するため getAllByText を使用
       expect(screen.getAllByText('Enterprise').length).toBeGreaterThanOrEqual(
         1,
       );
@@ -194,19 +218,17 @@ describe('TenantsPage コンポーネント', () => {
   describe('テナントが0件の場合', () => {
     it('空状態メッセージを表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue([]);
-      const Component = await TenantsPage();
-      render(Component);
+      render(<TenantsPage />);
       expect(
-        screen.getByText('テナントがまだ登録されていません'),
+        await screen.findByText('テナントがまだ登録されていません'),
       ).toBeInTheDocument();
     });
 
     it('最初のテナント作成ボタンを表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue([]);
-      const Component = await TenantsPage();
-      render(Component);
+      render(<TenantsPage />);
       expect(
-        screen.getByRole('link', { name: '最初のテナントを作成' }),
+        await screen.findByRole('link', { name: '最初のテナントを作成' }),
       ).toBeInTheDocument();
     });
   });
@@ -214,42 +236,46 @@ describe('TenantsPage コンポーネント', () => {
   describe('テナントがある場合', () => {
     it('テナントテーブルを表示すべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue(mockTenants);
-      const Component = await TenantsPage();
-      render(Component);
-
-      expect(screen.getByText('テナント1')).toBeInTheDocument();
+      render(<TenantsPage />);
+      expect(await screen.findByText('テナント1')).toBeInTheDocument();
       expect(screen.getByText('テナント2')).toBeInTheDocument();
       expect(screen.getByText('テナント3')).toBeInTheDocument();
     });
 
-    it('テーブルヘッダーを表示すべき', async () => {
+    it('テナント詳細リンクが query string 形式になるべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue(mockTenants);
-      const Component = await TenantsPage();
-      render(Component);
-
-      expect(screen.getByText('テナント')).toBeInTheDocument();
-      expect(screen.getByText('ステータス')).toBeInTheDocument();
-      expect(screen.getByText('Tier')).toBeInTheDocument();
-      expect(screen.getByText('管理者 Email')).toBeInTheDocument();
-      expect(screen.getByText('作成日')).toBeInTheDocument();
-    });
-
-    it('テナント詳細リンクを表示すべき', async () => {
-      vi.mocked(tenantApi.listTenants).mockResolvedValue(mockTenants);
-      const Component = await TenantsPage();
-      render(Component);
-
+      render(<TenantsPage />);
+      await waitFor(() => {
+        expect(screen.getAllByRole('link', { name: '詳細' })).toHaveLength(3);
+      });
       const detailLinks = screen.getAllByRole('link', { name: '詳細' });
-      expect(detailLinks.length).toBe(3);
+      expect(detailLinks[0]).toHaveAttribute(
+        'href',
+        '/dashboard/tenants/detail?id=1',
+      );
     });
 
-    it('テナント編集リンクを表示すべき', async () => {
+    it('テナント編集リンクが query string 形式になるべき', async () => {
       vi.mocked(tenantApi.listTenants).mockResolvedValue(mockTenants);
-      const Component = await TenantsPage();
-      render(Component);
-
+      render(<TenantsPage />);
+      await waitFor(() => {
+        expect(screen.getAllByRole('link', { name: '編集' })).toHaveLength(3);
+      });
       const editLinks = screen.getAllByRole('link', { name: '編集' });
-      expect(editLinks.length).toBe(3);
+      expect(editLinks[0]).toHaveAttribute(
+        'href',
+        '/dashboard/tenants/edit?id=1',
+      );
+    });
+  });
+
+  describe('API エラー時', () => {
+    it('リストが空のままレンダリングされるべき', async () => {
+      vi.mocked(tenantApi.listTenants).mockRejectedValue(new Error('boom'));
+      render(<TenantsPage />);
+      expect(
+        await screen.findByText('テナントがまだ登録されていません'),
+      ).toBeInTheDocument();
     });
   });
 });

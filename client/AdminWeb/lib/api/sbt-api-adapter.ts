@@ -7,6 +7,7 @@
  * Wire format正本: docs/decisions/013-sbt-control-plane-onboarding-wire-format.md
  */
 
+import { z } from 'zod';
 import type {
   CreateTenantInput,
   ProvisioningStatus,
@@ -14,7 +15,6 @@ import type {
   TenantTier,
   UpdateTenantInput,
 } from '@/types/tenant';
-import { z } from 'zod';
 import { TenantApiError } from './tenant-api';
 
 // SBT v0.3.9 tier values: basic / standard / premium / platinum (infrastructure/cdk/bin/cdk.ts の

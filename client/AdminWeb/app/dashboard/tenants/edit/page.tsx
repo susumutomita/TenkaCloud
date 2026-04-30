@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { useAuth } from '@/lib/auth/auth-context';
 import { submitTenantUpdate } from '@/lib/tenant-utils';
 import type { Tenant, TenantTier } from '@/types/tenant';
 import {
@@ -13,13 +14,19 @@ import {
   TENANT_TIERS,
 } from '@/types/tenant';
 
-export default function EditTenantPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function EditTenantPage() {
+  return (
+    <Suspense fallback={<div className="p-6">読み込み中...</div>}>
+      <EditTenantInner />
+    </Suspense>
+  );
+}
+
+function EditTenantInner() {
+  const { session } = useAuth();
   const router = useRouter();
-  const [id, setId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [formData, setFormData] = useState({
@@ -29,29 +36,10 @@ export default function EditTenantPage({
     status: 'ACTIVE' as Tenant['status'],
   });
 
-  // Next.js 15 では params が Promise で渡ってくるため、クライアント側で解決する
   useEffect(() => {
-    let active = true;
-    params
-      .then(({ id }) => {
-        if (!active) return;
-        setId(id);
-      })
-      .catch((error) => {
-        console.error('Failed to resolve params:', error);
-        alert('パラメータの取得に失敗しました');
-        setIsFetching(false);
-      });
+    if (!session || !id) return;
 
-    return () => {
-      active = false;
-    };
-  }, [params]);
-
-  useEffect(() => {
-    if (!id) return;
-
-    const fetchTenant = async () => {
+    void (async () => {
       try {
         const tenant = await tenantApi.getTenant(id);
         if (tenant) {
@@ -65,42 +53,34 @@ export default function EditTenantPage({
           alert('テナントが見つかりません');
           router.push('/dashboard/tenants');
         }
-      } catch (error) {
-        console.error('Failed to fetch tenant:', error);
+      } catch {
         alert('テナント情報の取得に失敗しました');
       } finally {
         setIsFetching(false);
       }
-    };
-
-    fetchTenant();
-    // router オブジェクトはレンダーごとに新しくなる場合があるため依存配列には含めない
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, router.push]);
+    })();
+  }, [session, id, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!id) return;
     setIsLoading(true);
 
-    const success = await submitTenantUpdate(
+    await submitTenantUpdate(
       id,
       formData,
       () => {
-        router.push(`/dashboard/tenants/${id}`);
-        router.refresh();
+        router.push(`/dashboard/tenants/detail?id=${encodeURIComponent(id)}`);
       },
       () => {
         alert('テナント更新に失敗しました');
       },
     );
 
-    if (!success && id) {
-      // エラーケース（id が有効だが更新に失敗した場合）は onError で処理済み
-    }
-
     setIsLoading(false);
   };
 
+  if (!session) return null;
   if (!id || isFetching) {
     return <div className="p-6">読み込み中...</div>;
   }
@@ -220,7 +200,7 @@ export default function EditTenantPage({
               {isLoading ? '更新中...' : '更新'}
             </button>
             <Link
-              href={`/dashboard/tenants/${id}`}
+              href={`/dashboard/tenants/detail?id=${encodeURIComponent(id)}`}
               className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
             >
               キャンセル

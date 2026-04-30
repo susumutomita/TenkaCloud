@@ -1,21 +1,23 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { usePathname, useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAuth } from '@/lib/auth/auth-context';
 import DashboardLayout from '../layout';
 
-// next-auth/react のモック
-vi.mock('next-auth/react', () => ({
-  signOut: vi.fn(),
+const signOutMock = vi.fn();
+
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: vi.fn(),
 }));
 
-// next/navigation のモック
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(),
   useRouter: vi.fn(() => ({
     push: mockPush,
+    replace: mockReplace,
   })),
 }));
 
@@ -137,6 +139,17 @@ describe('DashboardLayout コンポーネント', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(usePathname).mockReturnValue('/dashboard');
+    vi.mocked(useAuth).mockReturnValue({
+      session: {
+        user: { email: 'test@example.com', name: 'Test', roles: [] },
+        idToken: 'idt',
+        accessToken: 'at',
+        expires: new Date(Date.now() + 60_000).toISOString(),
+      },
+      signIn: vi.fn(),
+      signOut: signOutMock,
+      setTokens: vi.fn(),
+    });
   });
 
   it('children を正しくレンダリングすべき', () => {
@@ -209,7 +222,8 @@ describe('DashboardLayout コンポーネント', () => {
       </DashboardLayout>,
     );
     await user.click(screen.getByText('ログアウト'));
-    expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
+    expect(signOutMock).toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith('/login');
   });
 
   it('設定をクリックしても signOut が呼ばれないべき', async () => {
@@ -224,8 +238,9 @@ describe('DashboardLayout コンポーネント', () => {
     const topNavSettingsButton = settingsButtons.find(
       (el) => el.closest('[data-testid="top-navigation"]') !== null,
     );
-    await user.click(topNavSettingsButton!);
-    expect(signOut).not.toHaveBeenCalled();
+    if (!topNavSettingsButton) throw new Error('button not found');
+    await user.click(topNavSettingsButton);
+    expect(signOutMock).not.toHaveBeenCalled();
   });
 
   it('未対応メニューをクリックしても遷移もログアウトも行わないべき', async () => {
@@ -239,7 +254,7 @@ describe('DashboardLayout コンポーネント', () => {
     await user.click(screen.getByRole('button', { name: '不明なメニュー' }));
 
     expect(mockPush).not.toHaveBeenCalled();
-    expect(signOut).not.toHaveBeenCalled();
+    expect(signOutMock).not.toHaveBeenCalled();
   });
 
   it('テナント管理パスではテナント管理リンクがアクティブになるべき', () => {
@@ -266,6 +281,21 @@ describe('DashboardLayout コンポーネント', () => {
       'data-active-href',
       '/control/dashboard',
     );
+  });
+
+  it('未認証 (session=null) なら /login へ replace すべき', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      session: null,
+      signIn: vi.fn(),
+      signOut: signOutMock,
+      setTokens: vi.fn(),
+    });
+    render(
+      <DashboardLayout>
+        <div>テスト</div>
+      </DashboardLayout>,
+    );
+    expect(mockReplace).toHaveBeenCalledWith('/login');
   });
 
   it('類似パスでは前方一致で誤ってアクティブにしないべき', () => {

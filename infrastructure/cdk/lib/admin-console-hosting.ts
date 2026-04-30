@@ -2,6 +2,9 @@ import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import {
   Distribution,
+  Function as CfFunction,
+  FunctionCode,
+  FunctionEventType,
   HttpVersion,
   OriginAccessIdentity,
   PriceClass,
@@ -22,21 +25,15 @@ export interface AdminConsoleHostingStackProps extends cdk.StackProps {
 }
 
 /**
- * client/AdminWeb (Next.js) を CloudFront + S3 で配信する stack。
+ * client/AdminWeb (Next.js static export) を CloudFront + S3 で配信する stack。
  *
- * ⚠️ ARCHITECTURE MISMATCH: TenkaCloud の AdminWeb は `output: 'standalone'` で
- *    `/api/auth/[...nextauth]` 等の API routes を持つため、pure S3+CloudFront
- *    では動かない (server runtime が必要)。本 stack はリファレンス実装として残しているが、
- *    実運用では serverless 前提を守るため以下のいずれかへ移行する:
- *      - OpenNext で Lambda@Edge / Lambda にデプロイ
- *      - AWS Amplify Hosting (Next.js SSR サポート)
- *    INVARIANT_SERVERLESS_ONLY を守るため、常駐 compute (コンテナオーケストレータ系) は選択肢から除外する。
- *    詳細は ADR-013 参照。
- *
- * 既存設計 (Vite/SPA 想定で残してある部分):
- * - dist/ は install.sh が host 側で build
+ * 設計 (ProtoShip ref パターン):
+ * - AdminWeb は `output: 'export'` で静的書き出し → `dist/`
+ * - 認証は browser-side Cognito PKCE (NextAuth は廃止、ADR 修正予定)
  * - URL 系 (API / Cognito) は build artifact に焼かず、`runtime-config.json` として別途
  *   S3 にアップロード → AdminWeb は起動時に `/runtime-config.json` を fetch して URL を解決
+ * - dist/ ディレクトリは install.sh が host 側で build (bun workspace の symlink 問題回避)
+ * - SPA fallback: CloudFront errorResponse 404→/index.html で client-side routing に委譲
  *
  * 3-phase deploy の phase 2:
  *   1. ControlPlaneStack が立っている
@@ -61,15 +58,43 @@ export class AdminConsoleHostingStack extends cdk.Stack {
     const oai = new OriginAccessIdentity(this, "OAI");
     bucket.grantRead(oai);
 
+    // Next.js static export は dist/login.html, dist/dashboard.html, dist/callback.html を生成する
+    // (trailingSlash:false)。CloudFront の生 URI は /login のように拡張子無しで来るので、S3 が
+    // そのキーを持たず 404 になる。errorResponses で /index.html にフォールバックすると home
+    // ページの HTML が返されてしまい、Callback ページが読み込まれずログインがループする。
+    // CloudFront Function でパスに `.html` を補完して、各ルートが正しい HTML をロードできるようにする。
+    const urlRewriter = new CfFunction(this, "UrlRewriter", {
+      code: FunctionCode.fromInline(`
+function handler(event) {
+  var req = event.request;
+  var uri = req.uri;
+  if (uri.endsWith('/')) {
+    req.uri = uri + 'index.html';
+  } else if (uri.lastIndexOf('.') < uri.lastIndexOf('/')) {
+    req.uri = uri + '.html';
+  }
+  return req;
+}
+      `),
+    });
+
     const distribution = new Distribution(this, "Distribution", {
       defaultBehavior: {
         origin: new S3Origin(bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        functionAssociations: [
+          {
+            function: urlRewriter,
+            eventType: FunctionEventType.VIEWER_REQUEST,
+          },
+        ],
       },
       defaultRootObject: "index.html",
       httpVersion: HttpVersion.HTTP2,
       priceClass: PriceClass.PRICE_CLASS_100,
       errorResponses: [
+        // 真に存在しないパスへの fallback。url rewriter で .html 補完しても 404 になる場合は
+        // SPA を起動するため index.html を返す (404 ページ用)。
         { httpStatus: 403, responseHttpStatus: 200, responsePagePath: "/index.html" },
         { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
       ],
@@ -77,11 +102,8 @@ export class AdminConsoleHostingStack extends cdk.Stack {
 
     this.distributionDomainName = distribution.distributionDomainName;
 
-    // 1) dist/ をアップロード (URL 非依存の静的ファイル)
-    // ⚠️ 上記コメント参照 — Next.js standalone との不整合は未解決。
-    //    install.sh で `client/AdminWeb` の build artifact を `client/AdminWeb/dist/` に
-    //    出力する暫定運用を想定。
-    const distDir = path.join(__dirname, "..", "..", "client", "AdminWeb", "dist");
+    // 1) dist/ をアップロード (URL 非依存の静的ファイル)。install.sh が host build する。
+    const distDir = path.resolve(__dirname, "..", "..", "..", "client", "AdminWeb", "dist");
     new BucketDeployment(this, "SiteDeployment", {
       sources: [Source.asset(distDir)],
       destinationBucket: bucket,

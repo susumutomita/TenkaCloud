@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT-0
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as codepipeline from "aws-cdk-lib/aws-codepipeline";
@@ -37,7 +38,8 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
       actions: ["s3:*Object"],
       resources: [`${artifactsBucket.bucketArn}/*`],
     });
-    const srcPath = `${process.cwd()}/../src`;
+    const scriptsDir = path.resolve(__dirname, "../../../../scripts");
+    const srcPath = path.resolve(__dirname, "../../src");
     const lambdaFunctionPrep = new lambda.Function(this, "prep-deploy", {
       handler: "lambda-prepare-deploy.lambda_handler",
       runtime: lambda.Runtime.PYTHON_3_9,
@@ -101,7 +103,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
             commands: ["npm install -g aws-cdk"],
           },
           build: {
-            commands: [fs.readFileSync("../scripts/update-tenant.sh", "utf8")],
+            commands: [fs.readFileSync(path.join(scriptsDir, "update-tenant.sh"), "utf8")],
           },
         },
       }),

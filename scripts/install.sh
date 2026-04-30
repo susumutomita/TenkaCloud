@@ -92,14 +92,12 @@ bunx cdk deploy \
   --require-approval never --concurrency 4
 
 # ============================================================================
-# Phase 2: AdminWeb build + hosting deploy
-#   - Phase 1 の outputs を env に入れて client/AdminWeb を host 側で build
-#     (bun workspace の node_modules 内シンボリックリンクが docker cp で壊れるので
-#      host build → dist/ を S3 アップロードする形)
-#   - AdminConsoleHostingStack を deploy (S3 + CloudFront)
-#   ⚠️ AdminWeb は Next.js standalone のため pure S3+CloudFront には不適合。
-#      暫定的にビルド後 dist/ を出力する想定だが、最終的には OpenNext (Lambda)
-#      または Amplify Hosting への移行が必要 (ADR-013 参照)。
+# Phase 2: AdminWeb (Next.js static export) build + hosting deploy
+#
+# AdminWeb は Next.js `output: 'export'` で静的書き出しした `dist/` を S3 + CloudFront
+# で配信する (ProtoShip パターン)。NextAuth は捨てて browser-side Cognito PKCE に
+# 置き換えてあるため server runtime 不要。URL は build に焼かず runtime-config.json
+# 経由で配信する (admin-console-hosting.ts が CloudFront に配置する)。
 # ============================================================================
 echo ""
 echo "=============================================="
@@ -118,9 +116,10 @@ echo "  Cognito Domain: ${COGNITO_DOMAIN}"
 # AdminWeb を host で build。URL は build に焼かない (runtime-config.json 経由で
 # CDK が CloudFront に配置する)。dev ローカル開発では .env.local が効くので触らない。
 cd "${TENKACLOUD_ROOT}/client/AdminWeb"
-echo "  client/AdminWeb: bun install + next build (URL 非依存)"
+echo "  client/AdminWeb: bun install + next build (static export, URL 非依存)"
 bun install
-bun run build
+# Cloud では CloudFront ルート配信のため basePath を外す (local dev の nginx だけ /control を使う)。
+NEXT_PUBLIC_BASE_PATH= bun run build
 echo "  → dist/ generated"
 
 # AdminConsoleHostingStack deploy: backend outputs を CDK_PARAM_* env に渡す
@@ -154,5 +153,5 @@ echo ""
 echo "Admin Console URL: ${ADMIN_CONSOLE_URL}"
 echo ""
 echo "1. SystemAdmin 初回招待メール (${CDK_PARAM_SYSTEM_ADMIN_EMAIL}) が届いてるはずなので開く"
-echo "2. ${ADMIN_CONSOLE_URL}/control にブラウザで access (basePath=/control)"
-echo "3. ログイン → /control/dashboard/tenants/new で tenant 作成 → 招待メールが飛ぶ"
+echo "2. ${ADMIN_CONSOLE_URL} にブラウザで access (cloud は basePath なし、ルート配信)"
+echo "3. ログイン → /dashboard/tenants/new で tenant 作成 → 招待メールが飛ぶ"

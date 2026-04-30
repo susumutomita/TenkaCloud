@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
-import { tenantApi, TenantApiError } from '@/lib/api/tenant-api';
+import { TenantApiError, tenantApi } from '@/lib/api/tenant-api';
 import type { TenantTier } from '@/types/tenant';
 import { TENANT_TIER_LABELS, TENANT_TIERS } from '@/types/tenant';
 

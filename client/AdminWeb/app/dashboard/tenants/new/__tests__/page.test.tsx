@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { tenantApi, TenantApiError } from '@/lib/api/tenant-api';
+import { TenantApiError, tenantApi } from '@/lib/api/tenant-api';
 import NewTenantPage from '../page';
 
 // tenant-api のモック

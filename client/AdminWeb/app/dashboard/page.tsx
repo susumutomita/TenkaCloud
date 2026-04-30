@@ -1,8 +1,4 @@
-/**
- * Dashboard Page
- *
- * Cloudscape Design System — Container + ColumnLayout
- */
+'use client';
 
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
@@ -13,41 +9,16 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import '@cloudscape-design/global-styles/index.css';
 import NextLink from 'next/link';
-import { redirect } from 'next/navigation';
-import { getSession } from '@/auth';
+import { useEffect, useState } from 'react';
 import { fetchActivities } from '@/lib/api/activities-api';
 import {
   fetchServiceConnections,
-  summarizeServiceConnections,
   type ServiceConnection,
+  summarizeServiceConnections,
 } from '@/lib/api/service-health';
-import { fetchDashboardStats, type DashboardStats } from '@/lib/api/stats-api';
+import { type DashboardStats, fetchDashboardStats } from '@/lib/api/stats-api';
+import { useAuth } from '@/lib/auth/auth-context';
 import type { Activity } from '@/types/activity';
-
-async function getStats(): Promise<DashboardStats | null> {
-  try {
-    return await fetchDashboardStats();
-  } catch {
-    return null;
-  }
-}
-
-async function getActivities(): Promise<Activity[]> {
-  try {
-    const result = await fetchActivities(5);
-    return result.data;
-  } catch {
-    return [];
-  }
-}
-
-async function getServiceConnections(): Promise<ServiceConnection[]> {
-  try {
-    return await fetchServiceConnections();
-  } catch {
-    return [];
-  }
-}
 
 function formatActivityMessage(activity: Activity): string {
   const actionLabels: Record<string, string> = {
@@ -91,18 +62,37 @@ function formatRelativeTime(timestamp: string): string {
   return date.toLocaleDateString('ja-JP');
 }
 
-export default async function DashboardPage() {
-  const session = await getSession();
+export default function DashboardPage() {
+  const { session } = useAuth();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [serviceConnections, setServiceConnections] = useState<
+    ServiceConnection[]
+  >([]);
 
-  if (!session?.user) {
-    redirect('/login');
-  }
+  useEffect(() => {
+    if (!session) return;
+    void (async () => {
+      const [statsResult, activitiesResult, connectionsResult] =
+        await Promise.allSettled([
+          fetchDashboardStats(),
+          fetchActivities(5),
+          fetchServiceConnections(),
+        ]);
+      setStats(statsResult.status === 'fulfilled' ? statsResult.value : null);
+      setActivities(
+        activitiesResult.status === 'fulfilled'
+          ? activitiesResult.value.data
+          : [],
+      );
+      setServiceConnections(
+        connectionsResult.status === 'fulfilled' ? connectionsResult.value : [],
+      );
+    })();
+  }, [session]);
 
-  const [stats, activities, serviceConnections] = await Promise.all([
-    getStats(),
-    getActivities(),
-    getServiceConnections(),
-  ]);
+  if (!session) return null;
+
   const serviceStatus = summarizeServiceConnections(serviceConnections);
 
   return (

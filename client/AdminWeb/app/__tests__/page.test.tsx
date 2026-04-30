@@ -1,57 +1,62 @@
-import { redirect } from 'next/navigation';
-import type { Session } from 'next-auth';
-import type { Mock } from 'vitest';
+import { render } from '@testing-library/react';
+import { useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSession } from '@/auth';
+import { useAuth } from '@/lib/auth/auth-context';
 import HomePage from '../page';
 
-// getSession のモック
-vi.mock('@/auth', () => ({
-  getSession: vi.fn(),
+const replaceMock = vi.fn();
+
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: vi.fn(),
 }));
 
-// next/navigation のモック
 vi.mock('next/navigation', () => ({
-  redirect: vi.fn(),
+  useRouter: vi.fn(),
 }));
 
-// getSession を正しい型でモック
-const mockedGetSession = getSession as unknown as Mock<
-  () => Promise<Session | null>
->;
-
-describe('HomePage コンポーネント', () => {
+describe('HomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useRouter).mockReturnValue({
+      replace: replaceMock,
+    } as unknown as ReturnType<typeof useRouter>);
   });
 
-  it('認証済みユーザーは /dashboard へリダイレクトされるべき', async () => {
-    mockedGetSession.mockResolvedValue({
-      user: { name: 'Test User', email: 'test@example.com' },
-      expires: '',
+  it('session が undefined のうちは redirect しないべき', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      session: undefined,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      setTokens: vi.fn(),
     });
-
-    await HomePage();
-
-    expect(redirect).toHaveBeenCalledWith('/dashboard');
+    render(<HomePage />);
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
-  it('未認証ユーザーは /login へリダイレクトされるべき', async () => {
-    mockedGetSession.mockResolvedValue(null);
-
-    await HomePage();
-
-    expect(redirect).toHaveBeenCalledWith('/login');
-  });
-
-  it('session が存在するが user がない場合は /login へリダイレクトされるべき', async () => {
-    mockedGetSession.mockResolvedValue({
-      user: undefined as unknown as Session['user'],
-      expires: '',
+  it('session が null なら /login へ遷移すべき', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      session: null,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      setTokens: vi.fn(),
     });
+    render(<HomePage />);
+    expect(replaceMock).toHaveBeenCalledWith('/login');
+  });
 
-    await HomePage();
-
-    expect(redirect).toHaveBeenCalledWith('/login');
+  it('session が認証済みなら /dashboard へ遷移すべき', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      session: {
+        user: { email: 'a@e.com', roles: [] },
+        idToken: 'i',
+        accessToken: 'a',
+        expires: new Date(Date.now() + 60_000).toISOString(),
+      },
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      setTokens: vi.fn(),
+    });
+    render(<HomePage />);
+    expect(replaceMock).toHaveBeenCalledWith('/dashboard');
   });
 });

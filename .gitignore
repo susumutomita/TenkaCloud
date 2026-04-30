@@ -78,6 +78,9 @@ web_modules/
 .next
 out
 
+# AWS CDK synth output
+cdk.out
+
 # Nuxt.js build / generate output
 .nuxt
 dist

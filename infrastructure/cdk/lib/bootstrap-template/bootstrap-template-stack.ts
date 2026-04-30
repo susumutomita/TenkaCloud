@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   BashJobRunner,
   type BashJobRunnerProps,
@@ -37,6 +38,7 @@ export class BootstrapTemplateStack extends Stack {
   constructor(scope: Construct, id: string, props: BootstrapTemplateStackProps) {
     super(scope, id, props);
 
+    const scriptsDir = path.resolve(__dirname, "../../../../scripts");
     const systemAdminEmail = props.systemAdminEmail;
     const eventBusArn = props.eventBusArn;
 
@@ -70,7 +72,7 @@ export class BootstrapTemplateStack extends Stack {
 }
 `),
       ),
-      script: fs.readFileSync("../scripts/provision-tenant.sh", "utf8"),
+      script: fs.readFileSync(path.join(scriptsDir, "provision-tenant.sh"), "utf8"),
       postScript: "",
       environmentStringVariablesFromIncomingEvent: ["tenantId", "tier", "tenantName", "email"],
       environmentVariablesToOutgoingEvent: [
@@ -108,7 +110,7 @@ export class BootstrapTemplateStack extends Stack {
 }
 `),
       ),
-      script: fs.readFileSync("../scripts/deprovision-tenant.sh", "utf8"),
+      script: fs.readFileSync(path.join(scriptsDir, "deprovision-tenant.sh"), "utf8"),
       environmentStringVariablesFromIncomingEvent: ["tenantId"],
       environmentVariablesToOutgoingEvent: ["tenantStatus"],
       outgoingEvent: DetailType.DEPROVISION_SUCCESS,

@@ -11,19 +11,21 @@ interface ControlPlaneStackProps extends cdk.StackProps {
 
 /**
  * AWS SaaS Reference Architecture の control-plane-stack.ts を TenkaCloud の
- * Next.js (NextAuth v5) Admin UI 向けに最小調整したもの。
- * 1. CORS allowOrigins に localhost:13000 (TenkaCloud 開発用 Next.js Control Plane) を追加
+ * Next.js static export + browser-side PKCE Admin UI 向けに調整したもの。
+ * 1. CORS allowOrigins に localhost:13000 (dev) と AdminWeb CloudFront URL を追加
  *    (ref は https://* のみで HTTP localhost は弾かれる)
  * 2. SBT 内蔵 UserPoolUserClient の callbackUrls / LogoutURLs を override し、
- *    Next.js の basePath=/control + NextAuth v5 Cognito provider の
- *    `/api/auth/callback/cognito` を許可する
- *    (ref は `http://localhost` プレースホルダ 1 個のみ)
+ *    PKCE callback `/callback` (cloud では root 配信、dev では basePath=/control 経由) を許可する
  */
 const LOCALHOST_CALLBACK_URLS = [
-  "http://localhost:13000/control/api/auth/callback/cognito", // client/AdminWeb (Next.js) NextAuth v5 + basePath
+  "http://localhost:13000/control/callback", // dev (nginx 経由 + basePath=/control)
+  "http://localhost:13000/callback", // dev (basePath なし、直アクセス)
 ];
 
-const LOCALHOST_LOGOUT_URLS = ["http://localhost:13000/control"];
+const LOCALHOST_LOGOUT_URLS = [
+  "http://localhost:13000/control/login",
+  "http://localhost:13000/login",
+];
 
 const LOCALHOST_CORS_ORIGINS = ["http://localhost:13000"];
 
@@ -43,9 +45,11 @@ export class ControlPlaneStack extends cdk.Stack {
     const adminConsoleOrigin = process.env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN;
     const extraCorsOrigins = adminConsoleOrigin ? [adminConsoleOrigin] : [];
     const extraCallbackUrls = adminConsoleOrigin
-      ? [`${adminConsoleOrigin}/control/api/auth/callback/cognito`]
+      ? [`${adminConsoleOrigin}/callback`]
       : [];
-    const extraLogoutUrls = adminConsoleOrigin ? [`${adminConsoleOrigin}/control`] : [];
+    const extraLogoutUrls = adminConsoleOrigin
+      ? [`${adminConsoleOrigin}/login`]
+      : [];
 
     const controlPlane = new ControlPlane(this, "ControlPlane", {
       auth: cognitoAuth,

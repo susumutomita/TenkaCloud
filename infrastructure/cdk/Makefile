@@ -1,6 +1,9 @@
 .PHONY: install deploy deploy-control-plane deploy-application-plane deploy-problem destroy destroy-control-plane destroy-application-plane destroy-problem synth diff bootstrap build test lint format format-check static-analysis before-commit clean help
 
 ENV ?= development
+TENKACLOUD_ROOT := $(abspath $(CURDIR)/../..)
+DEPLOY_ENV_FILE := $(TENKACLOUD_ROOT)/infrastructure/cdk/environments/$(ENV)/.env
+DEPLOY_SCRIPT := $(TENKACLOUD_ROOT)/scripts/install.sh
 CDK := bun run cdk
 CDK_CONTEXT := -c environment=$(ENV)
 
@@ -27,10 +30,19 @@ clean:
 
 ######## Deploy ########
 
-#? deploy: Deploy all stacks
-deploy: build
-	@echo "Deploying all stacks ($(ENV))..."
-	$(CDK) deploy --all $(CDK_CONTEXT) --require-approval broadening
+#? deploy: Deploy all stacks (delegates to scripts/install.sh)
+deploy:
+	@if [ ! -f "$(DEPLOY_ENV_FILE)" ]; then \
+		echo "ERROR: $(DEPLOY_ENV_FILE) not found"; \
+		exit 1; \
+	fi
+	@SYSTEM_ADMIN_EMAIL="$$(grep '^SYSTEM_ADMIN_EMAIL=' "$(DEPLOY_ENV_FILE)" | head -n 1 | cut -d= -f2-)"; \
+	if [ -z "$$SYSTEM_ADMIN_EMAIL" ]; then \
+		echo "ERROR: SYSTEM_ADMIN_EMAIL is missing in $(DEPLOY_ENV_FILE)"; \
+		exit 1; \
+	fi; \
+	export CDK_PARAM_ENVIRONMENT="$(ENV)"; \
+	cd "$(TENKACLOUD_ROOT)/scripts" && bash ./install.sh "$$SYSTEM_ADMIN_EMAIL"
 
 #? deploy-control-plane: Deploy ControlPlane stack only
 deploy-control-plane: build

@@ -1,8 +1,4 @@
-/**
- * Tenants Page
- *
- * Cloudscape Design System — Container + ColumnLayout + TenantList
- */
+'use client';
 
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
@@ -12,14 +8,31 @@ import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import '@cloudscape-design/global-styles/index.css';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { TenantList } from '@/components/tenants/tenant-list';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { useAuth } from '@/lib/auth/auth-context';
+import type { Tenant } from '@/types/tenant';
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'default-no-store';
+export default function TenantsPage() {
+  const { session } = useAuth();
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-export default async function TenantsPage() {
-  const tenants = await tenantApi.listTenants();
+  useEffect(() => {
+    if (!session) return;
+    void (async () => {
+      try {
+        setTenants(await tenantApi.listTenants());
+      } catch {
+        setTenants([]);
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, [session]);
+
+  if (!session) return null;
 
   const total = tenants.length;
   const activeCount = tenants.filter((t) => t.status === 'ACTIVE').length;
@@ -80,7 +93,13 @@ export default async function TenantsPage() {
           </Header>
         }
       >
-        <TenantList tenants={tenants} />
+        {loaded ? (
+          <TenantList tenants={tenants} />
+        ) : (
+          <Box textAlign="center" color="text-body-secondary">
+            読み込み中…
+          </Box>
+        )}
       </Container>
     </SpaceBetween>
   );

@@ -18,8 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { getStatusVariant } from '@/lib/tenant-utils';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { getStatusVariant } from '@/lib/tenant-utils';
 import type { Tenant, TenantStatus, TenantTier } from '@/types/tenant';
 import { TENANT_STATUS_LABELS, TENANT_TIER_LABELS } from '@/types/tenant';
 
@@ -167,12 +167,12 @@ export function TenantList({ tenants }: TenantListProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredTenants.map((tenant, index) => (
+            {filteredTenants.map((tenant) => (
               <TableRow key={tenant.id}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <Link
-                      href={`/dashboard/tenants/${tenant.id}`}
+                      href={`/dashboard/tenants/detail?id=${encodeURIComponent(tenant.id)}`}
                       className="font-semibold hover:underline"
                     >
                       {tenant.name}
@@ -198,12 +198,16 @@ export function TenantList({ tenants }: TenantListProps) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-2">
-                    <Link href={`/dashboard/tenants/${tenant.id}`}>
+                    <Link
+                      href={`/dashboard/tenants/detail?id=${encodeURIComponent(tenant.id)}`}
+                    >
                       <Button variant="ghost" size="sm">
                         詳細
                       </Button>
                     </Link>
-                    <Link href={`/dashboard/tenants/${tenant.id}/edit`}>
+                    <Link
+                      href={`/dashboard/tenants/edit?id=${encodeURIComponent(tenant.id)}`}
+                    >
                       <Button variant="ghost" size="sm">
                         編集
                       </Button>

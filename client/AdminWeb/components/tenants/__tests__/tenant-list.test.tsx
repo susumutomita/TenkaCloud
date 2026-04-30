@@ -338,7 +338,10 @@ describe('TenantList コンポーネント', () => {
 
       const detailLinks = screen.getAllByRole('link', { name: '詳細' });
       expect(detailLinks.length).toBe(3);
-      expect(detailLinks[0]).toHaveAttribute('href', '/dashboard/tenants/1');
+      expect(detailLinks[0]).toHaveAttribute(
+        'href',
+        '/dashboard/tenants/detail?id=1',
+      );
     });
 
     it('テナント編集リンクを表示すべき', () => {
@@ -346,7 +349,10 @@ describe('TenantList コンポーネント', () => {
 
       const editLinks = screen.getAllByRole('link', { name: '編集' });
       expect(editLinks.length).toBe(3);
-      expect(editLinks[0]).toHaveAttribute('href', '/dashboard/tenants/1/edit');
+      expect(editLinks[0]).toHaveAttribute(
+        'href',
+        '/dashboard/tenants/edit?id=1',
+      );
     });
 
     it('テナントIDを表示すべき', () => {

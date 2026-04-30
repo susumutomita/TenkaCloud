@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ThemeSync } from '@/components/theme-sync';
+import { AuthProvider } from '@/lib/auth/auth-context';
 import { getThemeBootstrapScript } from '@/lib/theme';
 import './globals.css';
 
@@ -23,7 +24,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: getThemeBootstrapScript() }}
         />
         <ThemeSync />
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

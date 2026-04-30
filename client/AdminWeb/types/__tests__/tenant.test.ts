@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type SupportLevel,
   TENANT_STATUS_LABELS,
   TENANT_STATUSES,
   TENANT_TIER_LABELS,
   TENANT_TIERS,
-  TIER_FEATURES,
-  type SupportLevel,
   type Tenant,
   type TenantStatus,
   type TenantTier,
+  TIER_FEATURES,
   type TierFeatures,
 } from '../tenant';
 

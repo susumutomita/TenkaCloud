@@ -2,8 +2,8 @@
 
 import { LayoutDashboard, LogOut, Settings, Users } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth/auth-context';
 
 const navigation = [
   { name: 'ダッシュボード', href: '/dashboard', icon: LayoutDashboard },
@@ -13,6 +13,8 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useAuth();
 
   return (
     <div className="flex h-screen w-64 flex-col bg-gray-900">
@@ -57,7 +59,10 @@ export function Sidebar() {
       <div className="border-t border-gray-800 p-4">
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={() => {
+            signOut();
+            router.push('/login');
+          }}
           className="group flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
         >
           <LogOut className="mr-3 h-5 w-5 flex-shrink-0 text-gray-400 group-hover:text-white" />
