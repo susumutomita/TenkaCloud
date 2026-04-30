@@ -21,6 +21,9 @@ CDK_ENV_EXPORTS = \
 	export CDK_PARAM_S3_BUCKET_NAME="$${CDK_PARAM_S3_BUCKET_NAME:-tenkacloud-cdk-placeholder}"; \
 	export CDK_SOURCE_NAME="$${CDK_SOURCE_NAME:-source.zip}"; \
 	export CDK_PARAM_COMMIT_ID="$${CDK_PARAM_COMMIT_ID:-placeholder}"; \
+	export CDK_PARAM_CONTROL_PLANE_API_URL="$${CDK_PARAM_CONTROL_PLANE_API_URL:-https://placeholder.example.com}"; \
+	export CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN="$${CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN:-https://placeholder.example.com}"; \
+	export CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID="$${CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID:-placeholder}"; \
 	export JSII_DEPRECATED=quiet
 
 default: help
