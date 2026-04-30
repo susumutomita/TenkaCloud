@@ -1,499 +1,308 @@
-import { StatusCodes } from 'http-status-codes';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  CreateTenantInput,
-  Tenant,
-  UpdateTenantInput,
-} from '@/types/tenant';
-import { tenantApi, TenantApiError } from '../tenant-api';
 
-// API base URL 環境変数のテスト
-describe('API Base URL の決定', () => {
-  it('サーバーサイドでは TENANT_API_BASE_URL を使用すべき', async () => {
-    // tenant-api.ts を再インポートして確認
-    // テスト環境では window が未定義なので、サーバーサイドとして扱われる
-    const module = await import('../tenant-api');
-    expect(module.tenantApi).toBeDefined();
+const fetchMock = vi.fn();
+
+beforeEach(() => {
+  fetchMock.mockReset();
+  vi.resetModules();
+  vi.stubGlobal('fetch', fetchMock);
+  process.env.NEXT_PUBLIC_TENANT_API_BASE_URL = 'http://localhost:13004/api';
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
+});
+
+describe('tenant-api (local fallback)', () => {
+  it('listTenants は paginated レスポンスから data を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ data: [{ id: 't1', name: 'A' }], pagination: {} }),
+        { status: 200 },
+      ),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    const tenants = await tenantApi.listTenants();
+    expect(tenants).toEqual([{ id: 't1', name: 'A' }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:13004/api/tenants',
+      expect.any(Object),
+    );
   });
 
-  it('クライアントサイドでは NEXT_PUBLIC_TENANT_API_BASE_URL を使用すべき', async () => {
-    vi.resetModules();
-    vi.stubGlobal('window', {});
-    process.env.NEXT_PUBLIC_TENANT_API_BASE_URL = 'http://client.example/api';
+  it('getTenant は 404 で null を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
+    const { tenantApi } = await import('../tenant-api');
+    expect(await tenantApi.getTenant('missing')).toBeNull();
+  });
 
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          data: [],
-          pagination: {
-            page: 1,
-            limit: 10,
-            total: 0,
-            totalPages: 0,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          },
-        }),
-    });
-
-    const { tenantApi: clientTenantApi } = await import('../tenant-api');
-    await clientTenantApi.listTenants();
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      'http://client.example/api/tenants',
-      {
-        cache: 'no-store',
-      },
+  it('getTenant は 200 で tenant を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 't1', name: 'A' }), { status: 200 }),
     );
+    const { tenantApi } = await import('../tenant-api');
+    expect(await tenantApi.getTenant('t1')).toEqual({ id: 't1', name: 'A' });
+  });
 
-    delete process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
-    vi.unstubAllGlobals();
-    vi.resetModules();
+  it('createTenant は POST すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 't1' }), { status: 200 }),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await tenantApi.createTenant({
+      name: 'A',
+      slug: 'a',
+      adminEmail: 'a@e.com',
+      tier: 'FREE',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:13004/api/tenants',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('updateTenant は PATCH すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 't1' }), { status: 200 }),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await tenantApi.updateTenant('t1', { name: 'B' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:13004/api/tenants/t1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+  });
+
+  it('updateTenant は 404 で null を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
+    const { tenantApi } = await import('../tenant-api');
+    expect(await tenantApi.updateTenant('missing', { name: 'B' })).toBeNull();
+  });
+
+  it('deleteTenant は 200 で true を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    const { tenantApi } = await import('../tenant-api');
+    expect(await tenantApi.deleteTenant('t1')).toBe(true);
+  });
+
+  it('deleteTenant は 404 で false を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
+    const { tenantApi } = await import('../tenant-api');
+    expect(await tenantApi.deleteTenant('missing')).toBe(false);
+  });
+
+  it('triggerProvisioning は POST すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          success: true,
+          message: 'ok',
+          provisioningStatus: 'IN_PROGRESS',
+        }),
+        { status: 200 },
+      ),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    const result = await tenantApi.triggerProvisioning('t1');
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:13004/api/tenants/t1/provision',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('getProvisioningStatus は 404 で null を返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
+    const { tenantApi } = await import('../tenant-api');
+    expect(await tenantApi.getProvisioningStatus('t1')).toBeNull();
+  });
+
+  it('TenantApiError は API エラーメッセージを伝搬すべき', async () => {
+    const { TenantApiError } = await import('../tenant-api');
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: '不正な入力' }), { status: 400 }),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await expect(
+      tenantApi.createTenant({
+        name: 'A',
+        slug: 'a',
+        adminEmail: 'a@e.com',
+        tier: 'FREE',
+      }),
+    ).rejects.toBeInstanceOf(TenantApiError);
+  });
+
+  it('error.message スタイルのエラーを userMessage に伝搬すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { message: '権限エラー' } }), {
+        status: 403,
+      }),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await expect(tenantApi.listTenants()).rejects.toMatchObject({
+      userMessage: '権限エラー',
+    });
+  });
+
+  it('error が文字列スタイルのエラーを userMessage に伝搬すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await expect(tenantApi.listTenants()).rejects.toMatchObject({
+      userMessage: 'forbidden',
+    });
+  });
+
+  it('JSON でないエラーレスポンスはデフォルトメッセージを使うべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('not json', { status: 500 }));
+    const { tenantApi } = await import('../tenant-api');
+    await expect(tenantApi.listTenants()).rejects.toMatchObject({
+      userMessage: 'APIリクエストに失敗しました',
+    });
+  });
+
+  it('error / message いずれも無い JSON はデフォルトメッセージを使うべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ otherField: 'x' }), { status: 500 }),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await expect(tenantApi.listTenants()).rejects.toMatchObject({
+      userMessage: 'APIリクエストに失敗しました',
+    });
+  });
+
+  it('getProvisioningStatus は 200 でデータを返すべき', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          tenantId: 't1',
+          provisioningStatus: 'COMPLETED',
+          provisioningEnabled: true,
+        }),
+        { status: 200 },
+      ),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    const result = await tenantApi.getProvisioningStatus('t1');
+    expect(result?.tenantId).toBe('t1');
+  });
+
+  it('複数回呼んでも resolveApi は 1 回しか初期化しないべき', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
+      ),
+    );
+    const { tenantApi } = await import('../tenant-api');
+    await tenantApi.listTenants();
+    await tenantApi.listTenants();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('同時呼び出しでも resolveApi は 1 回しか初期化しないべき', async () => {
+    let resolveFetch!: () => void;
+    const fetchPromise = new Promise<Response>((resolve) => {
+      resolveFetch = () =>
+        resolve(new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    });
+    fetchMock
+      .mockImplementationOnce(() => fetchPromise)
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ data: [] }), { status: 200 }),
+        ),
+      );
+
+    const { tenantApi } = await import('../tenant-api');
+    const p1 = tenantApi.listTenants();
+    const p2 = tenantApi.listTenants();
+    const p3 = tenantApi.listTenants();
+    resolveFetch();
+    await Promise.all([p1, p2, p3]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 
-// グローバル fetch のモック
-const mockFetch = vi.fn() as unknown as typeof fetch & ReturnType<typeof vi.fn>;
-global.fetch = mockFetch;
-
-const mockTenant: Tenant = {
-  id: '1',
-  name: 'テストテナント',
-  slug: 'test-tenant',
-  status: 'ACTIVE',
-  tier: 'FREE',
-  adminEmail: 'admin@example.com',
-  region: 'ap-northeast-1',
-  isolationModel: 'POOL',
-  computeType: 'SERVERLESS',
-  provisioningStatus: 'COMPLETED',
-  createdAt: '2024-01-01T00:00:00Z',
-  updatedAt: '2024-01-01T00:00:00Z',
-};
-
-describe('tenantApi', () => {
+describe('tenant-api (SBT runtime-config branch)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    fetchMock.mockReset();
+    vi.resetModules();
+    vi.stubGlobal('fetch', fetchMock);
+    delete process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('runtime-config が無いと throw すべき', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }));
+    const { tenantApi } = await import('../tenant-api');
+    await expect(tenantApi.listTenants()).rejects.toThrow(
+      /Runtime config not found/,
+    );
   });
 
-  describe('listTenants', () => {
-    it('テナント一覧を取得すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: [mockTenant],
-            pagination: {
-              page: 1,
-              limit: 10,
-              total: 1,
-              totalPages: 1,
-              hasNextPage: false,
-              hasPreviousPage: false,
-            },
-          }),
-      });
-
-      const tenants = await tenantApi.listTenants();
-
-      expect(tenants).toEqual([mockTenant]);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants'),
-        { cache: 'no-store' },
-      );
-    });
-
-    it('API エラー時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () =>
-          Promise.resolve(
+  it('runtime-config の SBT API を listTenants に使うべき', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/runtime-config.json') {
+        return Promise.resolve(
+          new Response(
             JSON.stringify({
-              error: { message: 'サーバーエラーが発生しました' },
+              apiUrl: 'https://sbt.example.com',
+              cognitoDomain: 'https://cognito.example.com',
+              userClientId: 'cid',
             }),
+            { status: 200 },
           ),
-      });
-
-      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.listTenants()).rejects.toThrow(
-        'サーバーエラーが発生しました',
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
       );
     });
 
-    it('トップレベル message 形式のエラーレスポンスを処理すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.BAD_REQUEST,
-        text: () =>
-          Promise.resolve(JSON.stringify({ message: 'バリデーションエラー' })),
-      });
+    const { tenantApi } = await import('../tenant-api');
+    await tenantApi.listTenants();
 
-      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.listTenants()).rejects.toThrow(
-        'バリデーションエラー',
-      );
-    });
-
-    it('error が文字列形式のエラーレスポンスを処理すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.BAD_REQUEST,
-        text: () =>
-          Promise.resolve(JSON.stringify({ error: 'Invalid tenant ID' })),
-      });
-
-      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.listTenants()).rejects.toThrow(
-        'Invalid tenant ID',
-      );
-    });
-
-    it('JSON エラーレスポンスに error.message も message もない場合はデフォルトメッセージを使用すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.BAD_REQUEST,
-        text: () => Promise.resolve(JSON.stringify({ code: 'UNKNOWN' })),
-      });
-
-      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.listTenants()).rejects.toThrow(
-        'APIリクエストに失敗しました',
-      );
-    });
-
-    it('非 JSON エラーレスポンスでデフォルトメッセージを使用すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () => Promise.resolve('Internal Server Error'),
-      });
-
-      await expect(tenantApi.listTenants()).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.listTenants()).rejects.toThrow(
-        'APIリクエストに失敗しました',
-      );
-    });
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).startsWith('https://sbt.example.com/tenants'),
+      ),
+    ).toBe(true);
   });
 
-  describe('getTenant', () => {
-    it('テナントを取得すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: StatusCodes.OK,
-        json: () => Promise.resolve(mockTenant),
-      });
-
-      const tenant = await tenantApi.getTenant('1');
-
-      expect(tenant).toEqual(mockTenant);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants/1'),
-        { cache: 'no-store' },
-      );
-    });
-
-    it('テナントが存在しない場合は null を返すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.NOT_FOUND,
-        text: () => Promise.resolve('Not Found'),
-      });
-
-      const tenant = await tenantApi.getTenant('not-found');
-
-      expect(tenant).toBeNull();
-    });
-
-    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () =>
-          Promise.resolve(
+  it('SBT 初期化中の同時呼び出しは inflight を共有すべき', async () => {
+    // runtime-config を deferred にして resolveApi の inflight 経路を踏ませる
+    let resolveConfig!: () => void;
+    const configPromise = new Promise<Response>((resolve) => {
+      resolveConfig = () =>
+        resolve(
+          new Response(
             JSON.stringify({
-              error: { message: 'サーバーエラーが発生しました' },
+              apiUrl: 'https://sbt.example.com',
+              cognitoDomain: 'https://cognito.example.com',
+              userClientId: 'cid',
             }),
+            { status: 200 },
           ),
-      });
-
-      await expect(tenantApi.getTenant('1')).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.getTenant('1')).rejects.toThrow(
-        'サーバーエラーが発生しました',
-      );
+        );
     });
-  });
-
-  describe('createTenant', () => {
-    it('テナントを作成すべき', async () => {
-      const input: CreateTenantInput = {
-        name: 'テストテナント',
-        slug: 'test-tenant',
-        adminEmail: 'admin@example.com',
-        tier: 'FREE',
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockTenant),
-      });
-
-      const tenant = await tenantApi.createTenant(input);
-
-      expect(tenant).toEqual(mockTenant);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants'),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        },
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/runtime-config.json') return configPromise;
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
       );
     });
 
-    it('作成失敗時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.BAD_REQUEST,
-        text: () =>
-          Promise.resolve(
-            JSON.stringify({ error: { message: 'バリデーションエラーです' } }),
-          ),
-      });
+    const { tenantApi } = await import('../tenant-api');
+    const p1 = tenantApi.listTenants();
+    const p2 = tenantApi.listTenants();
+    resolveConfig();
+    await Promise.all([p1, p2]);
 
-      await expect(
-        tenantApi.createTenant({
-          name: '',
-          slug: '',
-          adminEmail: 'invalid',
-          tier: 'FREE',
-        }),
-      ).rejects.toThrow(TenantApiError);
-      await expect(
-        tenantApi.createTenant({
-          name: '',
-          slug: '',
-          adminEmail: 'invalid',
-          tier: 'FREE',
-        }),
-      ).rejects.toThrow('バリデーションエラーです');
-    });
-  });
-
-  describe('updateTenant', () => {
-    it('テナントを更新すべき', async () => {
-      const input: UpdateTenantInput = {
-        name: '更新テナント',
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: StatusCodes.OK,
-        json: () => Promise.resolve({ ...mockTenant, name: '更新テナント' }),
-      });
-
-      const tenant = await tenantApi.updateTenant('1', input);
-
-      expect(tenant?.name).toBe('更新テナント');
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants/1'),
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        },
-      );
-    });
-
-    it('テナントが存在しない場合は null を返すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.NOT_FOUND,
-        text: () => Promise.resolve('Not Found'),
-      });
-
-      const tenant = await tenantApi.updateTenant('not-found', {
-        name: 'テスト',
-      });
-
-      expect(tenant).toBeNull();
-    });
-
-    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () =>
-          Promise.resolve(
-            JSON.stringify({
-              error: { message: 'サーバーエラーが発生しました' },
-            }),
-          ),
-      });
-
-      await expect(
-        tenantApi.updateTenant('1', { name: 'テスト' }),
-      ).rejects.toThrow(TenantApiError);
-      await expect(
-        tenantApi.updateTenant('1', { name: 'テスト' }),
-      ).rejects.toThrow('サーバーエラーが発生しました');
-    });
-  });
-
-  describe('deleteTenant', () => {
-    it('テナントを削除すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: StatusCodes.NO_CONTENT,
-        json: () => Promise.resolve({}),
-      });
-
-      const result = await tenantApi.deleteTenant('1');
-
-      expect(result).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants/1'),
-        { method: 'DELETE' },
-      );
-    });
-
-    it('テナントが存在しない場合は false を返すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.NOT_FOUND,
-        text: () => Promise.resolve('Not Found'),
-      });
-
-      const result = await tenantApi.deleteTenant('not-found');
-
-      expect(result).toBe(false);
-    });
-
-    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () =>
-          Promise.resolve(
-            JSON.stringify({
-              error: { message: 'サーバーエラーが発生しました' },
-            }),
-          ),
-      });
-
-      await expect(tenantApi.deleteTenant('1')).rejects.toThrow(TenantApiError);
-      await expect(tenantApi.deleteTenant('1')).rejects.toThrow(
-        'サーバーエラーが発生しました',
-      );
-    });
-  });
-
-  describe('triggerProvisioning', () => {
-    it('プロビジョニングを開始すべき', async () => {
-      const mockResponse = {
-        success: true,
-        message: 'Provisioning started',
-        provisioningStatus: 'IN_PROGRESS',
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      const result = await tenantApi.triggerProvisioning('1');
-
-      expect(result).toEqual(mockResponse);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants/1/provision'),
-        { method: 'POST' },
-      );
-    });
-
-    it('プロビジョニング開始失敗時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.BAD_REQUEST,
-        text: () =>
-          Promise.resolve(
-            JSON.stringify({
-              error: { message: 'プロビジョニングは許可されていません' },
-            }),
-          ),
-      });
-
-      await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
-        TenantApiError,
-      );
-      await expect(tenantApi.triggerProvisioning('1')).rejects.toThrow(
-        'プロビジョニングは許可されていません',
-      );
-    });
-  });
-
-  describe('getProvisioningStatus', () => {
-    it('プロビジョニングステータスを取得すべき', async () => {
-      const mockResponse = {
-        tenantId: '1',
-        provisioningStatus: 'COMPLETED',
-        applicationDeploymentStatus: 'NOT_DEPLOYED',
-        provisionedResources: {
-          s3Prefix: 'tenants/test-tenant/',
-        },
-        provisioningError: null,
-        provisionedAt: '2026-04-11T00:00:00.000Z',
-        provisioningEnabled: true,
-      };
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      const result = await tenantApi.getProvisioningStatus('1');
-
-      expect(result).toEqual(mockResponse);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/tenants/1/provision'),
-        { cache: 'no-store' },
-      );
-    });
-
-    it('テナントが存在しない場合は null を返すべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.NOT_FOUND,
-        text: () => Promise.resolve('Not Found'),
-      });
-
-      const result = await tenantApi.getProvisioningStatus('not-found');
-
-      expect(result).toBeNull();
-    });
-
-    it('404 以外のエラー時に TenantApiError をスローすべき', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: StatusCodes.INTERNAL_SERVER_ERROR,
-        text: () =>
-          Promise.resolve(
-            JSON.stringify({
-              error: { message: 'サーバーエラーが発生しました' },
-            }),
-          ),
-      });
-
-      await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
-        TenantApiError,
-      );
-      await expect(tenantApi.getProvisioningStatus('1')).rejects.toThrow(
-        'サーバーエラーが発生しました',
-      );
-    });
+    const configCalls = fetchMock.mock.calls.filter(
+      (c) => c[0] === '/runtime-config.json',
+    );
+    expect(configCalls).toHaveLength(1);
   });
 });

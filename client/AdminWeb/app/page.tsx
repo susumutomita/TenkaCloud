@@ -1,13 +1,17 @@
-import { redirect } from 'next/navigation';
-import { getSession } from '@/auth';
+'use client';
 
-export default async function HomePage() {
-  const session = await getSession();
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useAuth } from '@/lib/auth/auth-context';
 
-  // 認証済みユーザーはダッシュボードへ、未認証ユーザーはログインページへ
-  if (session?.user) {
-    redirect('/dashboard');
-  }
+export default function HomePage() {
+  const { session } = useAuth();
+  const router = useRouter();
 
-  redirect('/login');
+  useEffect(() => {
+    if (session === undefined) return;
+    router.replace(session ? '/dashboard' : '/login');
+  }, [session, router]);
+
+  return null;
 }

@@ -1,4 +1,5 @@
-export const CONTROL_PLANE_BASE_PATH = '/control';
+export const CONTROL_PLANE_BASE_PATH =
+  process.env.NEXT_PUBLIC_BASE_PATH ?? '/control';
 
 function isControlBasePath(path: string): boolean {
   return (

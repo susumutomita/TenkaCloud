@@ -1,24 +1,35 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAuth } from '@/lib/auth/auth-context';
 import { Sidebar } from '../sidebar';
 
-// next-auth/react のモック
-vi.mock('next-auth/react', () => ({
-  signOut: vi.fn(),
+const signOutMock = vi.fn();
+const routerPushMock = vi.fn();
+
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: vi.fn(),
 }));
 
-// next/navigation のモック
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(),
+  useRouter: vi.fn(),
 }));
 
 describe('Sidebar コンポーネント', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(usePathname).mockReturnValue('/dashboard');
+    vi.mocked(useRouter).mockReturnValue({
+      push: routerPushMock,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useAuth).mockReturnValue({
+      session: null,
+      signIn: vi.fn(),
+      signOut: signOutMock,
+      setTokens: vi.fn(),
+    });
   });
 
   describe('レンダリング', () => {
@@ -95,12 +106,13 @@ describe('Sidebar コンポーネント', () => {
   });
 
   describe('ログアウト', () => {
-    it('ログアウトボタンをクリックすると signOut が呼ばれるべき', async () => {
+    it('ログアウトボタンをクリックすると signOut + /login へ遷移すべき', async () => {
       const user = userEvent.setup();
       render(<Sidebar />);
 
       await user.click(screen.getByText('ログアウト'));
-      expect(signOut).toHaveBeenCalledWith({ callbackUrl: '/login' });
+      expect(signOutMock).toHaveBeenCalled();
+      expect(routerPushMock).toHaveBeenCalledWith('/login');
     });
   });
 

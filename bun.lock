@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "tenkacloud",
@@ -137,7 +138,7 @@
         "react-dom": "^19",
       },
     },
-    "server/application/libs/auth0": {
+    "server/libs/auth0": {
       "name": "@tenkacloud/auth0",
       "version": "1.0.0",
       "devDependencies": {
@@ -146,7 +147,7 @@
         "vitest": "^3.0.0",
       },
     },
-    "server/application/libs/dynamodb": {
+    "server/libs/dynamodb": {
       "name": "@tenkacloud/dynamodb",
       "version": "1.0.0",
       "dependencies": {
@@ -162,7 +163,7 @@
         "vitest": "^3.0.0",
       },
     },
-    "server/application/libs/events": {
+    "server/libs/events": {
       "name": "@tenkacloud/events",
       "version": "1.0.0",
       "devDependencies": {
@@ -171,7 +172,7 @@
         "vitest": "^3.0.0",
       },
     },
-    "server/application/microservices/battle-service": {
+    "server/microservices/battle-service": {
       "name": "@tenkacloud/battle-service",
       "version": "0.1.0",
       "dependencies": {
@@ -191,7 +192,7 @@
         "vitest": "^2.1.0",
       },
     },
-    "server/application/microservices/gameday-service": {
+    "server/microservices/gameday-service": {
       "name": "@tenkacloud/gameday-service",
       "version": "0.1.0",
       "dependencies": {
@@ -218,7 +219,7 @@
         "vitest": "^2.1.0",
       },
     },
-    "server/application/microservices/leaderboard-service": {
+    "server/microservices/leaderboard-service": {
       "name": "@tenkacloud/leaderboard-service",
       "version": "0.1.0",
       "dependencies": {
@@ -238,7 +239,7 @@
         "vitest": "^2.1.0",
       },
     },
-    "server/application/microservices/problem-service": {
+    "server/microservices/problem-service": {
       "name": "@tenkacloud/problem-management",
       "version": "0.1.0",
       "dependencies": {
@@ -283,7 +284,7 @@
         "@aws-sdk/client-sts",
       ],
     },
-    "server/application/microservices/scoring-service": {
+    "server/microservices/scoring-service": {
       "name": "@tenkacloud/scoring-service",
       "version": "0.1.0",
       "dependencies": {
@@ -305,7 +306,7 @@
         "vitest": "^2.1.0",
       },
     },
-    "server/application/microservices/tenant-management": {
+    "server/microservices/tenant-management": {
       "name": "@tenkacloud/tenant-management",
       "version": "0.1.0",
       "dependencies": {
@@ -1031,29 +1032,29 @@
 
     "@tailwindcss/postcss": ["@tailwindcss/postcss@4.1.17", "", { "dependencies": { "@alloc/quick-lru": "^5.2.0", "@tailwindcss/node": "4.1.17", "@tailwindcss/oxide": "4.1.17", "postcss": "^8.4.41", "tailwindcss": "4.1.17" } }, "sha512-+nKl9N9mN5uJ+M7dBOOCzINw94MPstNR/GtIhz1fpZysxL/4a+No64jCBD6CPN+bIHWFx3KWuu8XJRrj/572Dw=="],
 
-    "@tenkacloud/auth0": ["@tenkacloud/auth0@workspace:server/application/libs/auth0"],
+    "@tenkacloud/auth0": ["@tenkacloud/auth0@workspace:server/libs/auth0"],
 
-    "@tenkacloud/battle-service": ["@tenkacloud/battle-service@workspace:server/application/microservices/battle-service"],
+    "@tenkacloud/battle-service": ["@tenkacloud/battle-service@workspace:server/microservices/battle-service"],
 
     "@tenkacloud/core": ["@tenkacloud/core@workspace:packages/core"],
 
     "@tenkacloud/design-system": ["@tenkacloud/design-system@workspace:packages/design-system"],
 
-    "@tenkacloud/dynamodb": ["@tenkacloud/dynamodb@workspace:server/application/libs/dynamodb"],
+    "@tenkacloud/dynamodb": ["@tenkacloud/dynamodb@workspace:server/libs/dynamodb"],
 
-    "@tenkacloud/events": ["@tenkacloud/events@workspace:server/application/libs/events"],
+    "@tenkacloud/events": ["@tenkacloud/events@workspace:server/libs/events"],
 
-    "@tenkacloud/gameday-service": ["@tenkacloud/gameday-service@workspace:server/application/microservices/gameday-service"],
+    "@tenkacloud/gameday-service": ["@tenkacloud/gameday-service@workspace:server/microservices/gameday-service"],
 
-    "@tenkacloud/leaderboard-service": ["@tenkacloud/leaderboard-service@workspace:server/application/microservices/leaderboard-service"],
+    "@tenkacloud/leaderboard-service": ["@tenkacloud/leaderboard-service@workspace:server/microservices/leaderboard-service"],
 
-    "@tenkacloud/problem-management": ["@tenkacloud/problem-management@workspace:server/application/microservices/problem-service"],
+    "@tenkacloud/problem-management": ["@tenkacloud/problem-management@workspace:server/microservices/problem-service"],
 
-    "@tenkacloud/scoring-service": ["@tenkacloud/scoring-service@workspace:server/application/microservices/scoring-service"],
+    "@tenkacloud/scoring-service": ["@tenkacloud/scoring-service@workspace:server/microservices/scoring-service"],
 
     "@tenkacloud/shared": ["@tenkacloud/shared@workspace:packages/shared"],
 
-    "@tenkacloud/tenant-management": ["@tenkacloud/tenant-management@workspace:server/application/microservices/tenant-management"],
+    "@tenkacloud/tenant-management": ["@tenkacloud/tenant-management@workspace:server/microservices/tenant-management"],
 
     "@testing-library/dom": ["@testing-library/dom@10.4.1", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg=="],
 

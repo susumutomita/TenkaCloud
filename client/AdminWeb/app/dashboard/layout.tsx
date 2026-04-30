@@ -7,13 +7,13 @@
 'use client';
 
 import AppLayout from '@cloudscape-design/components/app-layout';
-import SideNavigation from '@cloudscape-design/components/side-navigation';
 import type { SideNavigationProps } from '@cloudscape-design/components/side-navigation';
+import SideNavigation from '@cloudscape-design/components/side-navigation';
 import TopNavigation from '@cloudscape-design/components/top-navigation';
 import '@cloudscape-design/global-styles/index.css';
 import { usePathname, useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { useAuth } from '@/lib/auth/auth-context';
 import { stripControlBasePath, withControlBasePath } from '@/lib/base-path';
 
 const navItems: Array<SideNavigationProps.Link & { appPath: string }> = [
@@ -40,12 +40,17 @@ const navItems: Array<SideNavigationProps.Link & { appPath: string }> = [
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { session, signOut } = useAuth();
   const [mounted, setMounted] = useState(false);
   const normalizedPath = stripControlBasePath(pathname);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (session === null) router.replace('/login');
+  }, [session, router]);
 
   const activeHref = navItems.find((item) => {
     if (item.appPath === '/dashboard') {
@@ -93,7 +98,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   return;
                 }
                 if (detail.id === 'signout') {
-                  signOut({ callbackUrl: '/login' });
+                  signOut();
+                  router.push('/login');
                 }
               },
             },

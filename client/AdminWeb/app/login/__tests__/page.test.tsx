@@ -1,13 +1,21 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { useRouter } from 'next/navigation';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAuth } from '@/lib/auth/auth-context';
 import LoginPage from '../page';
 
-// actions のモック
-vi.mock('../actions', () => ({
-  loginWithProvider: vi.fn(),
+const signInMock = vi.fn();
+const replaceMock = vi.fn();
+
+vi.mock('@/lib/auth/auth-context', () => ({
+  useAuth: vi.fn(),
 }));
 
-// Cloudscape コンポーネントのモック
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(),
+}));
+
 vi.mock('@cloudscape-design/components/box', () => ({
   default: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -53,6 +61,19 @@ vi.mock('@cloudscape-design/components/space-between', () => ({
 vi.mock('@cloudscape-design/global-styles/index.css', () => ({}));
 
 describe('LoginPage コンポーネント', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useRouter).mockReturnValue({
+      replace: replaceMock,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(useAuth).mockReturnValue({
+      session: null,
+      signIn: signInMock,
+      signOut: vi.fn(),
+      setTokens: vi.fn(),
+    });
+  });
+
   it('タイトルを表示すべき', () => {
     render(<LoginPage />);
     expect(screen.getByText('TenkaCloud Control Plane')).toBeInTheDocument();
@@ -77,14 +98,28 @@ describe('LoginPage コンポーネント', () => {
     expect(screen.getByText('AWS Cognito で認証します')).toBeInTheDocument();
   });
 
-  it('form 要素が存在すべき', () => {
-    const { container } = render(<LoginPage />);
-    expect(container.querySelector('form')).toBeInTheDocument();
+  it('ログインボタンクリックで signIn が呼ばれるべき', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    expect(signInMock).toHaveBeenCalled();
   });
 
-  it('ログインボタンのタイプが submit であるべき', () => {
+  it('既にログイン済みなら /dashboard へ replace すべき', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      session: {
+        user: { email: 'a@e.com', roles: [] },
+        idToken: 'i',
+        accessToken: 'a',
+        expires: new Date(Date.now() + 60_000).toISOString(),
+      },
+      signIn: signInMock,
+      signOut: vi.fn(),
+      setTokens: vi.fn(),
+    });
     render(<LoginPage />);
-    const button = screen.getByRole('button', { name: 'ログイン' });
-    expect(button).toHaveAttribute('type', 'submit');
+    expect(replaceMock).toHaveBeenCalledWith('/dashboard');
   });
 });

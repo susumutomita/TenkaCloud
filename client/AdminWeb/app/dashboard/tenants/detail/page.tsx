@@ -1,25 +1,54 @@
+'use client';
+
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { PlanCard } from '@/components/tenants/plan-card';
 import { ProvisioningCard } from '@/components/tenants/provisioning-card';
 import { TenantAccessCard } from '@/components/tenants/tenant-access-card';
 import { TenantActions } from '@/components/tenants/tenant-actions';
 import { tenantApi } from '@/lib/api/tenant-api';
+import { useAuth } from '@/lib/auth/auth-context';
+import type { Tenant } from '@/types/tenant';
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'default-no-store';
+export default function TenantDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-6">読み込み中...</div>}>
+      <TenantDetailInner />
+    </Suspense>
+  );
+}
 
-export default async function TenantDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const tenant = await tenantApi.getTenant(id);
+function TenantDetailInner() {
+  const { session } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const id = searchParams.get('id');
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
-  if (!tenant) {
-    notFound();
-  }
+  useEffect(() => {
+    if (!session || !id) return;
+    void (async () => {
+      try {
+        setTenant(await tenantApi.getTenant(id));
+      } catch {
+        setTenant(null);
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, [session, id]);
+
+  useEffect(() => {
+    if (loaded && !tenant) {
+      router.replace('/dashboard/tenants');
+    }
+  }, [loaded, tenant, router]);
+
+  if (!session) return null;
+  if (!id || !loaded) return <div className="p-6">読み込み中...</div>;
+  if (!tenant) return null;
 
   return (
     <div className="space-y-6">
@@ -39,7 +68,7 @@ export default async function TenantDetailPage({
           </Link>
           <TenantActions tenantId={tenant.id} />
           <Link
-            href={`/dashboard/tenants/${tenant.id}/edit`}
+            href={`/dashboard/tenants/edit?id=${encodeURIComponent(tenant.id)}`}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
           >
             編集
