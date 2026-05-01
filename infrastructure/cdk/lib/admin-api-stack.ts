@@ -115,7 +115,6 @@ export class AdminApiStack extends cdk.Stack {
         environment: {
           NODE_ENV: "production",
           DYNAMODB_TABLE_NAME: table.tableName,
-          AWS_REGION_OVERRIDE: this.region,
           // 各 service の auth middleware が JWT 検証に使う (Cognito issuer)
           JWKS_URI: `${props.jwtIssuer}/.well-known/jwks.json`,
           JWT_ISSUER: props.jwtIssuer,
