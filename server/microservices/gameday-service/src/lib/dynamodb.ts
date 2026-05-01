@@ -1,9 +1,14 @@
 import { initDynamoDB } from "@tenkacloud/dynamodb";
 import { GamedayRepository } from "../repositories/gameday-repository";
 
-const tableName = process.env.DYNAMODB_TABLE;
+// AdminApiStack injects DYNAMODB_TABLE_NAME on Lambda; docker-compose / Makefile set both
+// for back-compat with services that historically read DYNAMODB_TABLE.
+const tableName =
+	process.env.DYNAMODB_TABLE_NAME ?? process.env.DYNAMODB_TABLE;
 if (!tableName) {
-	throw new Error("DYNAMODB_TABLE 環境変数が設定されていません");
+	throw new Error(
+		"DYNAMODB_TABLE_NAME (or DYNAMODB_TABLE) 環境変数が設定されていません",
+	);
 }
 
 const region = process.env.AWS_REGION;
