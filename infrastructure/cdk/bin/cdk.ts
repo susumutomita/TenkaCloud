@@ -145,13 +145,22 @@ cdk.Aspects.of(tenkaCloudPipeline).add(new DestroyPolicySetter());
 
 // AdminApiStack: AdminWeb から各 microservice (Lambda) を呼び出す HTTP API Gateway。
 // Cognito JWT Authorizer + 各 Lambda 個別 IAM (DynamoDB R/W のみ) で service 間 invoke を防止。
-// build artifact (server/microservices/<svc>/dist/lambda/) が必要 — install.sh phase 1.5 で build される。
+// build artifact (server/microservices/<svc>/dist/lambda/) が必要 — install.sh phase 0 で build される。
 // build artifact 未生成時 (例: synth without build) は skip。
-const microservicesBuilt = fs.existsSync(
-  path.resolve(__dirname, "..", "..", "..", "server", "microservices", "tenant-management", "dist", "lambda"),
+const microserviceDirs = [
+  "tenant-management",
+  "problem-service",
+  "gameday-service",
+  "battle-service",
+  "scoring-service",
+  "leaderboard-service",
+];
+const microservicesRoot = path.resolve(__dirname, "..", "..", "..", "server", "microservices");
+const missingBundles = microserviceDirs.filter(
+  (svc) => !fs.existsSync(path.join(microservicesRoot, svc, "dist", "lambda")),
 );
 let adminApiStack: AdminApiStack | undefined;
-if (microservicesBuilt) {
+if (missingBundles.length === 0) {
   adminApiStack = new AdminApiStack(app, "AdminApiStack", {
     jwtIssuer: controlPlaneStack.jwtIssuer,
     jwtAudience: controlPlaneStack.jwtAudience,
@@ -163,7 +172,7 @@ if (microservicesBuilt) {
   cdk.Aspects.of(adminApiStack).add(new DestroyPolicySetter());
 } else {
   logger.warn(
-    "Skipping AdminApiStack: server/microservices/*/dist/lambda not found. Run 'bun scripts/build-microservices.ts' first.",
+    `Skipping AdminApiStack: dist/lambda missing for [${missingBundles.join(", ")}]. Run 'bash scripts/build-microservices-lambda.sh' first.`,
   );
 }
 
@@ -174,7 +183,7 @@ if (microservicesBuilt) {
 const adminConsoleApiUrl = process.env.CDK_PARAM_CONTROL_PLANE_API_URL;
 const adminConsoleCognitoDomain = process.env.CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN;
 const adminConsoleUserClientId = process.env.CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID;
-// AdminApiStack の URL — install.sh phase 1.5 deploy 後に export される。
+// AdminApiStack の URL — install.sh phase 1 deploy 後に export される。
 // 未設定でも AdminConsoleHosting は deploy 可能 (runtime-config に adminApiUrl が無い → AdminWeb は SBT API のみ使う)。
 const adminApiUrl = process.env.CDK_PARAM_ADMIN_API_URL;
 
