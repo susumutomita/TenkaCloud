@@ -26,6 +26,11 @@ interface ProblemDeployPublisherOptions {
   eventBridgeClient?: EventBridgeClient;
   eventBusName?: string;
   deliveryMode?: ProblemDeployDeliveryMode;
+  /**
+   * inline mode で実行する deploy flow。dev で LocalStack を使うときだけ caller が DI 想定。
+   * 指定が無いまま inline mode になった場合は実行時にエラー (PR #398/ADR-014 で旧 lib/handlers
+   * path が消えたため、default の dynamic import は撤去)。
+   */
   inlineRunner?: InlineDeployRunner;
 }
 
@@ -48,35 +53,11 @@ function resolveDeliveryMode(): ProblemDeployDeliveryMode {
   return 'eventbridge';
 }
 
-async function runInlineDeployFlow(
-  detail: ProblemDeployRequestedDetail,
-): Promise<void> {
-  const { deployProblem } = await import(
-    '../../../../../lib/handlers/deploy-problem.ts'
-  );
-
-  const result = await deployProblem({
-    problemId: detail.problemId,
-    teamId: detail.teamId,
-    tenantId: detail.tenantId,
-    targetRoleArn: detail.targetRoleArn,
-    externalId: detail.externalId,
-    templateUrl: detail.templateUrl,
-    appName: 'tenkacloud',
-  });
-
-  if (result.deployStatus !== 'completed') {
-    throw new Error(
-      `Problem deployment failed for problem ${detail.problemId} team ${detail.teamId}`,
-    );
-  }
-}
-
 export class ProblemDeployPublisher {
   private readonly eventBridgeClient: EventBridgeClient;
   private readonly eventBusName: string;
   private readonly deliveryMode: ProblemDeployDeliveryMode;
-  private readonly inlineRunner: InlineDeployRunner;
+  private readonly inlineRunner: InlineDeployRunner | undefined;
 
   constructor(options: ProblemDeployPublisherOptions = {}) {
     this.eventBridgeClient =
@@ -92,13 +73,18 @@ export class ProblemDeployPublisher {
       process.env.EVENT_BUS_NAME ??
       EventBusName.DEFAULT;
     this.deliveryMode = options.deliveryMode ?? resolveDeliveryMode();
-    this.inlineRunner = options.inlineRunner ?? runInlineDeployFlow;
+    this.inlineRunner = options.inlineRunner;
   }
 
   async publishDeployRequested(
     detail: ProblemDeployRequestedDetail,
   ): Promise<void> {
     if (this.deliveryMode === 'inline') {
+      if (!this.inlineRunner) {
+        throw new Error(
+          'inline delivery mode requires an inlineRunner option (dynamic import default was removed; provide a runner explicitly in dev setup).',
+        );
+      }
       await this.inlineRunner(detail);
       return;
     }

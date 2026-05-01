@@ -1,195 +1,74 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('Activities API', () => {
+const adminFetchMock = vi.fn();
+vi.mock('../admin-api-client', () => ({
+  adminFetch: adminFetchMock,
+}));
+
+describe('activities-api', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetModules();
   });
 
-  describe('サーバーサイド（window がない場合）', () => {
-    it('環境変数が未設定の場合はサーバーデフォルト URL を使用すべき', async () => {
-      vi.stubGlobal('window', undefined);
-      delete process.env.TENANT_API_BASE_URL;
+  it('tenant-management の /api/activities を limit 付きで呼び出すべき', async () => {
+    adminFetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [], pagination: {} }), {
+          status: 200,
+        }),
+      ),
+    );
 
-      const { fetchActivities } = await import('../activities-api');
+    const { fetchActivities } = await import('../activities-api');
+    await fetchActivities(25);
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: [],
-            pagination: { limit: 10, hasNextPage: false },
-          }),
-      });
-
-      await fetchActivities();
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://tenant-management:13004/api/activities?limit=10',
-        { cache: 'no-store' },
-      );
-
-      vi.unstubAllGlobals();
-    });
-
-    it('アクティビティを取得できるべき', async () => {
-      vi.stubGlobal('window', undefined);
-
-      const { fetchActivities } = await import('../activities-api');
-
-      const mockActivities = {
-        data: [
-          {
-            id: '01J123ABC',
-            action: 'CREATE',
-            resourceType: 'TENANT',
-            resourceId: '01J456DEF',
-            details: { name: 'Test Tenant' },
-            timestamp: '2025-01-01T00:00:00.000Z',
-          },
-        ],
-        pagination: {
-          limit: 10,
-          hasNextPage: false,
-        },
-      };
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockActivities),
-      });
-
-      const result = await fetchActivities();
-
-      expect(result).toEqual(mockActivities);
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/activities?limit=10'),
-        { cache: 'no-store' },
-      );
-
-      vi.unstubAllGlobals();
-    });
-
-    it('カスタム limit を指定できるべき', async () => {
-      vi.stubGlobal('window', undefined);
-
-      const { fetchActivities } = await import('../activities-api');
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: [],
-            pagination: { limit: 5, hasNextPage: false },
-          }),
-      });
-
-      await fetchActivities(5);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/activities?limit=5'),
-        { cache: 'no-store' },
-      );
-
-      vi.unstubAllGlobals();
-    });
-
-    it('APIエラー時に例外をスローすべき', async () => {
-      vi.stubGlobal('window', undefined);
-
-      const { fetchActivities } = await import('../activities-api');
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-      });
-
-      await expect(fetchActivities()).rejects.toThrow(
-        'Failed to fetch activities: 500',
-      );
-
-      vi.unstubAllGlobals();
-    });
-
-    it('環境変数が設定されている場合はそれを使用すべき', async () => {
-      vi.stubGlobal('window', undefined);
-      vi.stubEnv('TENANT_API_BASE_URL', 'http://custom-api:8080/api');
-
-      const { fetchActivities } = await import('../activities-api');
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: [],
-            pagination: { limit: 10, hasNextPage: false },
-          }),
-      });
-
-      await fetchActivities();
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://custom-api:8080/api/activities?limit=10',
-        { cache: 'no-store' },
-      );
-
-      vi.unstubAllGlobals();
-      vi.unstubAllEnvs();
-    });
+    expect(adminFetchMock).toHaveBeenCalledWith(
+      'tenant-management',
+      '/api/activities?limit=25',
+      { cache: 'no-store' },
+    );
   });
 
-  describe('クライアントサイド（window がある場合）', () => {
-    it('クライアント環境変数を使用すべき', async () => {
-      vi.stubGlobal('window', {});
-      vi.stubEnv(
-        'NEXT_PUBLIC_TENANT_API_BASE_URL',
-        'http://client-api:9000/api',
-      );
+  it('limit 未指定時は 10 を使うべき', async () => {
+    adminFetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ data: [], pagination: {} }), {
+          status: 200,
+        }),
+      ),
+    );
 
-      const { fetchActivities } = await import('../activities-api');
+    const { fetchActivities } = await import('../activities-api');
+    await fetchActivities();
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: [],
-            pagination: { limit: 10, hasNextPage: false },
-          }),
-      });
+    expect(adminFetchMock).toHaveBeenCalledWith(
+      'tenant-management',
+      '/api/activities?limit=10',
+      { cache: 'no-store' },
+    );
+  });
 
-      await fetchActivities();
+  it('レスポンスが ok でない場合は例外を投げるべき', async () => {
+    adminFetchMock.mockResolvedValueOnce(new Response('boom', { status: 500 }));
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://client-api:9000/api/activities?limit=10',
-        { cache: 'no-store' },
-      );
+    const { fetchActivities } = await import('../activities-api');
+    await expect(fetchActivities()).rejects.toThrow(
+      /Failed to fetch activities: 500/,
+    );
+  });
 
-      vi.unstubAllGlobals();
-      vi.unstubAllEnvs();
-    });
+  it('ok レスポンスを JSON でパースして返すべき', async () => {
+    const payload = {
+      data: [{ id: '1' }],
+      pagination: { total: 1 },
+    };
+    adminFetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(payload), { status: 200 })),
+    );
 
-    it('クライアント環境変数が未設定の場合はデフォルトを使用すべき', async () => {
-      vi.stubGlobal('window', {});
+    const { fetchActivities } = await import('../activities-api');
+    const result = await fetchActivities();
 
-      const { fetchActivities } = await import('../activities-api');
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            data: [],
-            pagination: { limit: 10, hasNextPage: false },
-          }),
-      });
-
-      await fetchActivities();
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:13004/api/activities?limit=10',
-        { cache: 'no-store' },
-      );
-
-      vi.unstubAllGlobals();
-    });
+    expect(result).toEqual(payload);
   });
 });

@@ -361,4 +361,122 @@ describe('service-health', () => {
 
     vi.unstubAllGlobals();
   });
+
+  describe('cloud (adminApiUrl 設定済み)', () => {
+    beforeEach(() => {
+      vi.doMock('@/lib/runtime-config', () => ({
+        loadConfig: vi.fn().mockResolvedValue({
+          adminApiUrl: 'https://admin.example.com',
+          apiBaseUrl: 'https://sbt.example.com',
+          cognitoDomain: 'https://cognito.example.com',
+          cognitoClientId: 'cid',
+          redirectUri: 'https://x/callback',
+          scope: 'openid',
+        }),
+      }));
+    });
+
+    it('cloud では adminFetch 経由で /<service>/health を呼ぶべき', async () => {
+      const adminFetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ status: 'ok', service: 'tenant-management' }),
+            { status: 200 },
+          ),
+        );
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(adminFetchMock).toHaveBeenCalledWith(
+        'tenant-management',
+        '/health',
+        expect.objectContaining({ skipAuth: true }),
+      );
+      expect(services.find((s) => s.id === 'tenant-management')?.status).toBe(
+        'connected',
+      );
+    });
+
+    it('cloud で payload.status が null なら unhealthy として扱うべき', async () => {
+      const adminFetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ status: null }), { status: 200 }),
+        ),
+      );
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(services.find((s) => s.id === 'tenant-management')).toMatchObject({
+        status: 'unreachable',
+        detail: 'unhealthy',
+      });
+    });
+
+    it('cloud で payload.status が unhealthy なら unreachable にすべき', async () => {
+      // Use mockImplementation so each call returns a fresh Response (Response
+      // bodies are single-read).
+      const adminFetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({ status: 'degraded', service: 'problem-service' }),
+            { status: 200 },
+          ),
+        ),
+      );
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(services.find((s) => s.id === 'problem-service')).toMatchObject({
+        status: 'unreachable',
+        detail: 'degraded',
+      });
+    });
+
+    it('cloud で 5xx を返したら unreachable にすべき', async () => {
+      const adminFetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response('err', { status: 500 }));
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(services.find((s) => s.id === 'problem-service')).toMatchObject({
+        status: 'unreachable',
+        detail: 'HTTP 500',
+      });
+    });
+
+    it('cloud で fetch 例外時に unreachable にすべき', async () => {
+      const adminFetchMock = vi.fn().mockRejectedValue(new Error('network'));
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(services.every((s) => s.status === 'unreachable')).toBe(true);
+      expect(services.find((s) => s.id === 'tenant-management')?.detail).toBe(
+        'network',
+      );
+    });
+
+    it('cloud で fetch が Error 以外で reject した場合は Unknown error にすべき', async () => {
+      const adminFetchMock = vi.fn().mockRejectedValue('boom');
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(services.find((s) => s.id === 'tenant-management')?.detail).toBe(
+        'Unknown error',
+      );
+    });
+  });
 });

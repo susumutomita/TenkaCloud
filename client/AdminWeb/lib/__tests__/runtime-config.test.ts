@@ -119,6 +119,44 @@ describe('runtime-config', () => {
     expect(config.cognitoDomain).toBe('https://dev.example.com');
   });
 
+  it('runtime-config の adminApiUrl を transparently 公開すべき', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            apiUrl: 'https://api.example.com',
+            cognitoDomain: 'https://cognito.example.com',
+            userClientId: 'cid',
+            adminApiUrl: 'https://admin-api.example.com/',
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const config = await loadConfig();
+
+    expect(config.adminApiUrl).toBe('https://admin-api.example.com');
+  });
+
+  it('dev fallback で NEXT_PUBLIC_ADMIN_API_BASE_URL を使うべき', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 404 })),
+    );
+    process.env.NEXT_PUBLIC_COGNITO_DOMAIN = 'https://dev.example.com';
+    process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID = 'cid';
+    process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.com';
+    process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL = 'http://localhost:13004';
+
+    const config = await loadConfig();
+
+    expect(config.adminApiUrl).toBe('http://localhost:13004');
+
+    delete process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL;
+  });
+
   it('NEXT_PUBLIC_COGNITO_SCOPE で scope を上書きできるべき', async () => {
     vi.stubGlobal(
       'fetch',

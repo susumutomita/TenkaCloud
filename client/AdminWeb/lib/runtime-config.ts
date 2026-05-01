@@ -13,12 +13,19 @@ export interface AppConfig {
   readonly redirectUri: string;
   readonly apiBaseUrl: string;
   readonly scope: string;
+  /**
+   * AdminApiStack の HTTP API Gateway URL (各 microservice のフロント、Cognito JWT 保護)。
+   * cloud deploy 時のみ存在 (runtime-config.json に adminApiUrl があれば伝播)。
+   * 未設定なら dev fallback (NEXT_PUBLIC_ADMIN_API_BASE_URL) を見る。
+   */
+  readonly adminApiUrl?: string;
 }
 
 interface RuntimeConfig {
   readonly apiUrl: string;
   readonly cognitoDomain: string;
   readonly userClientId: string;
+  readonly adminApiUrl?: string;
 }
 
 let cachedConfig: AppConfig | null = null;
@@ -34,6 +41,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       apiUrl: data.apiUrl,
       cognitoDomain: data.cognitoDomain,
       userClientId: data.userClientId,
+      ...(data.adminApiUrl ? { adminApiUrl: data.adminApiUrl } : {}),
     };
   } catch {
     return null;
@@ -54,12 +62,14 @@ function devFallback(): AppConfig | null {
   const clientId = env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
   const apiBaseUrl = env.NEXT_PUBLIC_API_BASE_URL;
   if (!cognitoDomain || !clientId || !apiBaseUrl) return null;
+  const adminApiUrl = env.NEXT_PUBLIC_ADMIN_API_BASE_URL;
   return {
     cognitoDomain,
     cognitoClientId: clientId,
     apiBaseUrl,
     redirectUri: resolveRedirectUri(),
     scope: resolveScope(),
+    ...(adminApiUrl ? { adminApiUrl } : {}),
   };
 }
 
@@ -76,6 +86,9 @@ export async function loadConfig(): Promise<AppConfig> {
         apiBaseUrl: runtime.apiUrl.replace(/\/$/, ''),
         redirectUri: resolveRedirectUri(),
         scope: resolveScope(),
+        ...(runtime.adminApiUrl
+          ? { adminApiUrl: runtime.adminApiUrl.replace(/\/$/, '') }
+          : {}),
       };
       return cachedConfig;
     }

@@ -1,3 +1,6 @@
+import { loadConfig } from '@/lib/runtime-config';
+import { adminFetch, type Microservice } from './admin-api-client';
+
 export type ServiceConnectionState = 'connected' | 'unreachable';
 
 export interface ServiceConnection {
@@ -9,7 +12,7 @@ export interface ServiceConnection {
 }
 
 interface ServiceHealthTarget {
-  id: string;
+  id: Microservice;
   name: string;
   envKey: string;
   localUrl: string;
@@ -103,70 +106,134 @@ export function resolveServiceHealthUrls(): ServiceConnection[] {
   });
 }
 
-function getCandidateUrls(target: ServiceHealthTarget): string[] {
-  const configuredUrl = process.env[target.envKey];
-  if (configuredUrl) {
-    return [configuredUrl];
-  }
+async function inspect(
+  url: string,
+  target: ServiceHealthTarget,
+): Promise<ServiceConnection | { detail: string }> {
+  try {
+    const response = await fetch(url, getFetchOptions());
+    if (!response.ok) {
+      return { detail: `HTTP ${response.status}` };
+    }
 
-  return preferLocalUrls()
-    ? [target.localUrl, target.dockerUrl]
-    : [target.dockerUrl, target.localUrl];
+    const payload = (await response.json().catch(() => null)) as {
+      status?: string;
+      service?: string;
+    } | null;
+
+    const reportedStatus = payload?.status;
+    const reportedService = payload?.service;
+    const isHealthy =
+      reportedStatus === undefined ||
+      reportedStatus === 'ok' ||
+      reportedStatus === 'healthy';
+
+    if (!isHealthy) {
+      return { detail: reportedStatus ?? 'unhealthy' };
+    }
+
+    return {
+      id: target.id,
+      name: target.name,
+      status: 'connected',
+      checkedUrl: url,
+      detail: reportedService || reportedStatus,
+    };
+  } catch (error) {
+    return { detail: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }
 
-async function checkServiceConnection(
+async function checkLocal(
   target: ServiceHealthTarget,
 ): Promise<ServiceConnection> {
+  const configuredUrl = process.env[target.envKey];
+  const candidates = configuredUrl
+    ? [configuredUrl]
+    : preferLocalUrls()
+      ? [target.localUrl, target.dockerUrl]
+      : [target.dockerUrl, target.localUrl];
+
   let lastDetail = 'ヘルスチェックに失敗しました';
-
-  for (const url of getCandidateUrls(target)) {
-    try {
-      const response = await fetch(url, getFetchOptions());
-      if (!response.ok) {
-        lastDetail = `HTTP ${response.status}`;
-        continue;
-      }
-
-      const payload = (await response.json().catch(() => null)) as {
-        status?: string;
-        service?: string;
-      } | null;
-
-      const reportedStatus = payload?.status;
-      const reportedService = payload?.service;
-      const isHealthy =
-        reportedStatus === undefined ||
-        reportedStatus === 'ok' ||
-        reportedStatus === 'healthy';
-
-      if (!isHealthy) {
-        lastDetail = reportedStatus ?? 'unhealthy';
-        continue;
-      }
-
-      return {
-        id: target.id,
-        name: target.name,
-        status: 'connected',
-        checkedUrl: url,
-        detail: reportedService || reportedStatus,
-      };
-    } catch (error) {
-      lastDetail = error instanceof Error ? error.message : 'Unknown error';
-    }
+  for (const url of candidates) {
+    const result = await inspect(url, target);
+    if ('status' in result) return result;
+    lastDetail = result.detail;
   }
 
   return {
     id: target.id,
     name: target.name,
     status: 'unreachable',
-    checkedUrl: getCandidateUrls(target)[0],
+    checkedUrl: candidates[0],
     detail: lastDetail,
   };
 }
 
+async function checkCloud(
+  target: ServiceHealthTarget,
+): Promise<ServiceConnection> {
+  const checkedUrl = `(admin-api)/${target.id}/health`;
+  const fail = (detail: string): ServiceConnection => ({
+    id: target.id,
+    name: target.name,
+    status: 'unreachable',
+    checkedUrl,
+    detail,
+  });
+
+  try {
+    const fetchOpts = getFetchOptions();
+    const res = await adminFetch(target.id, '/health', {
+      cache: fetchOpts.cache,
+      signal: fetchOpts.signal,
+      skipAuth: true,
+    });
+
+    if (!res.ok) return fail(`HTTP ${res.status}`);
+
+    const payload = (await res.json().catch(() => null)) as {
+      status?: string;
+      service?: string;
+    } | null;
+
+    const reportedStatus = payload?.status;
+    const isHealthy =
+      reportedStatus === undefined ||
+      reportedStatus === 'ok' ||
+      reportedStatus === 'healthy';
+    if (!isHealthy) return fail(reportedStatus ?? 'unhealthy');
+
+    return {
+      id: target.id,
+      name: target.name,
+      status: 'connected',
+      checkedUrl,
+      detail: payload?.service || reportedStatus,
+    };
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'Unknown error');
+  }
+}
+
 export async function fetchServiceConnections(): Promise<ServiceConnection[]> {
-  return Promise.all(SERVICE_HEALTH_TARGETS.map(checkServiceConnection));
+  // Resolve cloud-vs-local once for the whole batch instead of per-target — loadConfig
+  // memoizes via inflight promise but this avoids 6 simultaneous calls before the cache fills.
+  let useCloud = false;
+  try {
+    const config = await loadConfig();
+    useCloud = Boolean(config.adminApiUrl);
+  } catch (error) {
+    // runtime-config not available (dev without env) → local fallback. Surface the
+    // reason so cold-start failures aren't invisible.
+    console.warn(
+      'service-health: loadConfig failed, falling back to local URLs',
+      error,
+    );
+  }
+
+  const check = useCloud ? checkCloud : checkLocal;
+  return Promise.all(SERVICE_HEALTH_TARGETS.map(check));
 }
 
 export function summarizeServiceConnections(

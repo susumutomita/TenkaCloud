@@ -30,9 +30,8 @@ vi.mock("@aws-sdk/client-eventbridge", () => {
 	};
 });
 
-vi.mock("../../../../../../lib/handlers/deploy-problem.ts", () => ({
-	deployProblem: mocks.mockDeployProblem,
-}));
+// Note: dev-only inline mode previously dynamically imported lib/handlers/deploy-problem,
+// but that path is dead post-PR-#398. Tests now inject inlineRunner directly.
 
 // ============================================================
 // テストデータ
@@ -137,54 +136,7 @@ describe("ProblemDeployPublisher", () => {
 	});
 
 	describe("inline モード", () => {
-		it("inline モードでは deployProblem を直接呼ぶべき", async () => {
-			const { ProblemDeployPublisher } = await import("../deploy-publisher");
-
-			mocks.mockDeployProblem.mockResolvedValueOnce({
-				deployStatus: "completed",
-			});
-
-			const publisher = new ProblemDeployPublisher({
-				deliveryMode: "inline",
-			});
-
-			const detail = makeDetail();
-			await publisher.publishDeployRequested(detail);
-
-			expect(mocks.mockSend).not.toHaveBeenCalled();
-			expect(mocks.mockDeployProblem).toHaveBeenCalledOnce();
-			expect(mocks.mockDeployProblem).toHaveBeenCalledWith({
-				problemId: "problem-1",
-				teamId: "team-1",
-				tenantId: "tenant-1",
-				targetRoleArn: "arn:aws:iam::123456789012:role/DeployRole",
-				externalId: "ext-id-123",
-				templateUrl: "https://s3.amazonaws.com/bucket/template.yaml",
-				appName: "tenkacloud",
-			});
-			// Note: inline runner doesn't forward eventId/jobId/deploymentKey because
-			// deployProblem() reconstructs the stack name without them.
-		});
-
-		it("inline モードでデプロイ失敗時にエラーを投げるべき", async () => {
-			const { ProblemDeployPublisher } = await import("../deploy-publisher");
-
-			mocks.mockDeployProblem.mockResolvedValueOnce({
-				deployStatus: "failed",
-			});
-
-			const publisher = new ProblemDeployPublisher({
-				deliveryMode: "inline",
-			});
-
-			await expect(
-				publisher.publishDeployRequested(makeDetail()),
-			).rejects.toThrow(
-				"Problem deployment failed for problem problem-1 team team-1",
-			);
-		});
-
-		it("カスタム inlineRunner を使用できるべき", async () => {
+		it("inline モードで inlineRunner が DI されていれば呼ぶべき", async () => {
 			const { ProblemDeployPublisher } = await import("../deploy-publisher");
 
 			const customRunner = vi.fn().mockResolvedValue(undefined);
@@ -199,7 +151,40 @@ describe("ProblemDeployPublisher", () => {
 			expect(customRunner).toHaveBeenCalledOnce();
 			expect(customRunner).toHaveBeenCalledWith(detail);
 			expect(mocks.mockSend).not.toHaveBeenCalled();
-			expect(mocks.mockDeployProblem).not.toHaveBeenCalled();
+		});
+
+		it("inline モードで inlineRunner が DI されていなければエラーを投げるべき", async () => {
+			const { ProblemDeployPublisher } = await import("../deploy-publisher");
+
+			const publisher = new ProblemDeployPublisher({
+				deliveryMode: "inline",
+			});
+
+			await expect(
+				publisher.publishDeployRequested(makeDetail()),
+			).rejects.toThrow(/inline delivery mode requires an inlineRunner/);
+		});
+
+		it("inlineRunner が reject した場合はそれを伝播すべき", async () => {
+			const { ProblemDeployPublisher } = await import("../deploy-publisher");
+
+			const customRunner = vi
+				.fn()
+				.mockRejectedValue(
+					new Error(
+						"Problem deployment failed for problem problem-1 team team-1",
+					),
+				);
+			const publisher = new ProblemDeployPublisher({
+				deliveryMode: "inline",
+				inlineRunner: customRunner,
+			});
+
+			await expect(
+				publisher.publishDeployRequested(makeDetail()),
+			).rejects.toThrow(
+				"Problem deployment failed for problem problem-1 team team-1",
+			);
 		});
 	});
 });

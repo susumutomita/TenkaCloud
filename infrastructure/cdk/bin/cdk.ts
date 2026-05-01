@@ -4,6 +4,7 @@ import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import * as dotenv from "dotenv";
 import { type Logger, createLogger, format, transports } from "winston";
+import { AdminApiStack } from "../lib/admin-api-stack";
 import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
@@ -142,6 +143,39 @@ const tenkaCloudPipeline = new ServerlessSaaSPipeline(app, "TenkaCloudPipeline",
 });
 cdk.Aspects.of(tenkaCloudPipeline).add(new DestroyPolicySetter());
 
+// AdminApiStack: AdminWeb から各 microservice (Lambda) を呼び出す HTTP API Gateway。
+// Cognito JWT Authorizer + 各 Lambda 個別 IAM (DynamoDB R/W のみ) で service 間 invoke を防止。
+// build artifact (server/microservices/<svc>/dist/lambda/) が必要 — install.sh phase 0 で build される。
+// build artifact 未生成時 (例: synth without build) は skip。
+const microserviceDirs = [
+  "tenant-management",
+  "problem-service",
+  "gameday-service",
+  "battle-service",
+  "scoring-service",
+  "leaderboard-service",
+];
+const microservicesRoot = path.resolve(__dirname, "..", "..", "..", "server", "microservices");
+const missingBundles = microserviceDirs.filter(
+  (svc) => !fs.existsSync(path.join(microservicesRoot, svc, "dist", "lambda")),
+);
+let adminApiStack: AdminApiStack | undefined;
+if (missingBundles.length === 0) {
+  adminApiStack = new AdminApiStack(app, "AdminApiStack", {
+    jwtIssuer: controlPlaneStack.jwtIssuer,
+    jwtAudience: controlPlaneStack.jwtAudience,
+    adminConsoleOrigin: process.env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN,
+    dynamoReadCapacity: dynamoReadCapacity,
+    dynamoWriteCapacity: dynamoWriteCapacity,
+  });
+  adminApiStack.addDependency(controlPlaneStack);
+  cdk.Aspects.of(adminApiStack).add(new DestroyPolicySetter());
+} else {
+  logger.warn(
+    `Skipping AdminApiStack: dist/lambda missing for [${missingBundles.join(", ")}]. Run 'bash scripts/build-microservices-lambda.sh' first.`,
+  );
+}
+
 // AdminConsoleHostingStack: client/AdminWeb (Next.js) を CloudFront+S3 で配信する想定。
 // ⚠️ TenkaCloud の AdminWeb は `output: 'standalone'` + API routes (NextAuth 等) を持つため
 //    pure S3+CloudFront には収まらない。詳細は admin-console-hosting.ts のヘッダコメント参照。
@@ -149,12 +183,16 @@ cdk.Aspects.of(tenkaCloudPipeline).add(new DestroyPolicySetter());
 const adminConsoleApiUrl = process.env.CDK_PARAM_CONTROL_PLANE_API_URL;
 const adminConsoleCognitoDomain = process.env.CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN;
 const adminConsoleUserClientId = process.env.CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID;
+// AdminApiStack の URL — install.sh phase 1 deploy 後に export される。
+// 未設定でも AdminConsoleHosting は deploy 可能 (runtime-config に adminApiUrl が無い → AdminWeb は SBT API のみ使う)。
+const adminApiUrl = process.env.CDK_PARAM_ADMIN_API_URL;
 
 if (adminConsoleApiUrl && adminConsoleCognitoDomain && adminConsoleUserClientId) {
   const adminConsoleHosting = new AdminConsoleHostingStack(app, "AdminConsoleHostingStack", {
     apiUrl: adminConsoleApiUrl,
     cognitoDomain: adminConsoleCognitoDomain,
     userClientId: adminConsoleUserClientId,
+    adminApiUrl,
   });
   cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());
 }
