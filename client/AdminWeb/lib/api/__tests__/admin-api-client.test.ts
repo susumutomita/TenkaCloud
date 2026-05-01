@@ -22,6 +22,7 @@ const cloudConfig = {
 
 describe('admin-api-client', () => {
   const originalEnv = process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,6 +32,7 @@ describe('admin-api-client', () => {
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     if (originalEnv !== undefined) {
       process.env.NEXT_PUBLIC_TENANT_API_BASE_URL = originalEnv;
     } else {
@@ -97,6 +99,22 @@ describe('admin-api-client', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       'https://admin.example.com/battle/api/battles',
       expect.objectContaining({ headers: {} }),
+    );
+  });
+
+  it('caller の Authorization ヘッダーが JWT を上書きしないべき', async () => {
+    getCurrentIdTokenMock.mockResolvedValue('cognito-token');
+
+    const { adminFetch } = await import('../admin-api-client');
+    await adminFetch('tenant-management', '/api/stats', {
+      headers: { Authorization: 'Bearer attacker-controlled' },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://admin.example.com/tenant-management/api/stats',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer cognito-token' },
+      }),
     );
   });
 

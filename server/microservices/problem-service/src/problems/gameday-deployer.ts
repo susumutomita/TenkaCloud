@@ -33,7 +33,10 @@ import { ProblemDeployPublisher } from "./deploy-publisher";
 
 const jobRepo = new GameDayDeploymentJobRepository();
 const accountRepo = new CompetitorAccountRepository();
-const deployPublisher = new ProblemDeployPublisher();
+// Force eventbridge delivery: inline mode is opt-in DI for tests, never
+// auto-selected from env (that path lost its default runner when the broken
+// lib/handlers/deploy-problem import was removed).
+const deployPublisher = new ProblemDeployPublisher({ deliveryMode: "eventbridge" });
 
 export function getGameDayDeploymentValidationError(
 	problem: Pick<Problem, "type" | "deployment">,

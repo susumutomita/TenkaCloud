@@ -197,12 +197,19 @@ async function checkCloud(
       service?: string;
     } | null;
 
+    const reportedStatus = payload?.status;
+    const isHealthy =
+      reportedStatus === undefined ||
+      reportedStatus === 'ok' ||
+      reportedStatus === 'healthy';
+    if (!isHealthy) return fail(reportedStatus ?? 'unhealthy');
+
     return {
       id: target.id,
       name: target.name,
       status: 'connected',
       checkedUrl,
-      detail: payload?.service || payload?.status,
+      detail: payload?.service || reportedStatus,
     };
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Unknown error');
@@ -216,8 +223,13 @@ export async function fetchServiceConnections(): Promise<ServiceConnection[]> {
   try {
     const config = await loadConfig();
     useCloud = Boolean(config.adminApiUrl);
-  } catch {
-    // runtime-config not available (dev without env) → local fallback
+  } catch (error) {
+    // runtime-config not available (dev without env) → local fallback. Surface the
+    // reason so cold-start failures aren't invisible.
+    console.warn(
+      'service-health: loadConfig failed, falling back to local URLs',
+      error,
+    );
   }
 
   const check = useCloud ? checkCloud : checkLocal;

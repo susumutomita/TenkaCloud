@@ -23,7 +23,12 @@ function isProvisioningEnabled(): boolean {
 }
 
 function createProvisioningPublisher(): TenantProvisioningPublisher | null {
-  return isProvisioningEnabled() ? new TenantProvisioningPublisher() : null;
+  // Force eventbridge delivery: inline mode is opt-in DI for tests / future dev
+  // setups, never auto-selected from env (that path lost its default runner
+  // when the broken application-plane/tenant-provisioner import was removed).
+  return isProvisioningEnabled()
+    ? new TenantProvisioningPublisher({ deliveryMode: 'eventbridge' })
+    : null;
 }
 
 const provisioningRoutes = new Hono();

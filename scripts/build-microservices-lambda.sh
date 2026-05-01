@@ -30,12 +30,14 @@ build_one() {
   local svc="$1"
   local svc_dir="${ROOT_DIR}/server/microservices/${svc}"
   if [[ ! -f "${svc_dir}/src/lambda.ts" ]]; then
-    echo "SKIP ${svc}: no src/lambda.ts" >&2
-    return 0
+    # 6-service deployment model — missing entrypoint is a configuration error.
+    echo "ERROR ${svc}: src/lambda.ts not found at ${svc_dir}/src/lambda.ts" >&2
+    return 1
   fi
 
   echo "Building ${svc} → dist/lambda/lambda.js"
-  rm -rf "${svc_dir}/dist/lambda"
+  # Repo policy bans `rm` (環境破壊リスク, CLAUDE.md). dist/ is gitignored, use git clean.
+  git -C "${ROOT_DIR}" clean -fdxq -- "server/microservices/${svc}/dist/lambda" 2>/dev/null || true
   mkdir -p "${svc_dir}/dist/lambda"
 
   (

@@ -86,8 +86,9 @@ export async function adminFetch(
   return fetch(`${resolved.baseUrl}${path}`, {
     ...rest,
     headers: {
-      ...resolved.authHeader,
       ...headers,
+      // Spread auth last so callers can't accidentally override the JWT.
+      ...resolved.authHeader,
     },
   });
 }
