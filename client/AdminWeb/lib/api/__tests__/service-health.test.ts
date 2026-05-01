@@ -400,6 +400,23 @@ describe('service-health', () => {
       );
     });
 
+    it('cloud で payload.status が null なら unhealthy として扱うべき', async () => {
+      const adminFetchMock = vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ status: null }), { status: 200 }),
+        ),
+      );
+      vi.doMock('../admin-api-client', () => ({ adminFetch: adminFetchMock }));
+
+      const { fetchServiceConnections } = await import('../service-health');
+      const services = await fetchServiceConnections();
+
+      expect(services.find((s) => s.id === 'tenant-management')).toMatchObject({
+        status: 'unreachable',
+        detail: 'unhealthy',
+      });
+    });
+
     it('cloud で payload.status が unhealthy なら unreachable にすべき', async () => {
       // Use mockImplementation so each call returns a fresh Response (Response
       // bodies are single-read).
