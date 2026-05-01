@@ -79,29 +79,34 @@ while IFS= read -r bucket; do
   empty_versioned_bucket "$bucket"
 done < <(aws s3 ls 2>/dev/null | awk '{print $3}' | grep -E "$bucket_patterns" || true)
 
-# AdminConsoleHostingStack と AdminApiStack は bin/cdk.ts が build artifact
-# (client/AdminWeb/dist/, server/microservices/<svc>/dist/lambda/) を要求するため、
-# destroy 実行時に build が無いと synth が落ちる → cdk destroy できない。
-# CFN 直 delete で迂回する (CDK 管理対象でも CFN 単体で消せる)。
+# bin/cdk.ts は build artifact (client/AdminWeb/dist/,
+# server/microservices/<svc>/dist/lambda/) が無いと AdminConsoleHostingStack /
+# AdminApiStack を synth できない。destroy 時に再 build したくないので CFN 直 delete
+# で迂回する。両 stack は ControlPlaneStack に依存するだけで互いに依存しないので
+# 並列削除して合計 wait 時間 (各 5-15 分) を半減する。
 delete_stack_via_cfn() {
   local stack_name="$1"
-  if aws cloudformation describe-stacks --stack-name "$stack_name" >/dev/null 2>&1; then
-    log "deleting ${stack_name} via CloudFormation..."
-    aws cloudformation delete-stack --stack-name "$stack_name"
-    # wait は timeout / DELETE_FAILED の両方で non-zero。どちらも後段の cdk destroy --all が
-    # 再試行 + CFN エラーを surface するので、ここでは warn だけで先に進める。
-    aws cloudformation wait stack-delete-complete --stack-name "$stack_name" \
-      || log "  ${stack_name} stack-delete wait did not succeed; later steps will surface the cause"
-  else
+  if ! aws cloudformation describe-stacks --stack-name "$stack_name" >/dev/null 2>&1; then
     log "${stack_name} not found; skip"
+    return 0
   fi
+  log "deleting ${stack_name} via CloudFormation..."
+  aws cloudformation delete-stack --stack-name "$stack_name"
+  # wait は timeout / DELETE_FAILED の両方で non-zero。どちらも後段の cdk destroy --all が
+  # 再試行 + CFN エラーを surface するので、ここでは warn だけで先に進める。
+  aws cloudformation wait stack-delete-complete --stack-name "$stack_name" \
+    || log "  ${stack_name} stack-delete wait did not succeed; later steps will surface the cause"
 }
 
-# 順序: AdminConsoleHostingStack → AdminApiStack の順 (前者は ControlPlaneStack を、
-# 後者も ControlPlaneStack を cross-stack ref しているので、同 root に依存する。
-# 並列でも依存的には問題ないが、CFN 削除時の resource lock を避けるため逐次実行)。
-delete_stack_via_cfn AdminConsoleHostingStack
-delete_stack_via_cfn AdminApiStack
+PRE_DELETE_STACKS=(AdminConsoleHostingStack AdminApiStack)
+pre_delete_pids=()
+for stack in "${PRE_DELETE_STACKS[@]}"; do
+  delete_stack_via_cfn "$stack" &
+  pre_delete_pids+=("$!")
+done
+for pid in "${pre_delete_pids[@]}"; do
+  wait "$pid" || true  # 個別失敗は cdk destroy --all で再試行されるので継続
+done
 
 # 動的 tenant stack (pipeline 経由で provision された tenant 単位 stack) を先に destroy。
 # pooled は CDK app 内なので最後の cdk destroy --all で一緒に消える。

@@ -78,15 +78,11 @@ deploy-problem: build
 ######## Operations ########
 
 #? destroy: Destroy all stacks (delegates to scripts/cleanup.sh)
-# scripts/cleanup.sh は AdminConsoleHosting / AdminApi を CFN 直 delete で先に消し
-# (bin/cdk.ts が build artifact を要求して synth が落ちる問題を回避)、
-# 関連 S3 bucket を空にしてから cdk destroy --all を実行する。
-# 直接 `cdk destroy --all` を呼ばないこと: 非空 bucket / synth エラーで途中失敗する。
+# build artifact (dist/) 無しで `cdk destroy --all` を直叩きすると synth が落ちて
+# 途中失敗する。cleanup.sh が AdminConsoleHosting / AdminApi を CFN 直 delete
+# して回避し、関連 S3 bucket を空にしてから cdk destroy --all を呼ぶ。
+# .env 必須チェックは cleanup.sh 側が SYSTEM_ADMIN_EMAIL の有無で行う。
 destroy:
-	@if [ ! -f "$(DEPLOY_ENV_FILE)" ]; then \
-		echo "ERROR: $(DEPLOY_ENV_FILE) not found"; \
-		exit 1; \
-	fi
 	@ENV="$(ENV)" bash "$(TENKACLOUD_ROOT)/scripts/cleanup.sh"
 
 #? destroy-control-plane: Destroy ControlPlane stack only (個別; 通常は make destroy)
