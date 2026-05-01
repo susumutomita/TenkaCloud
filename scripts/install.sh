@@ -77,8 +77,22 @@ bun install
 bunx cdk bootstrap
 
 # ============================================================================
+# Phase 0: microservice Lambda bundle build
+#
+# AdminApiStack は server/microservices/<svc>/dist/lambda/ を asset として参照する。
+# Bun で各 service を 1 ファイル bundle する。bin/cdk.ts は dist/lambda が存在しないと
+# AdminApiStack を skip するので、必ず先に build する。
+# ============================================================================
+echo ""
+echo "=============================================="
+echo "Phase 0: Build microservice Lambda bundles"
+echo "=============================================="
+bash "${TENKACLOUD_ROOT}/scripts/build-microservices-lambda.sh"
+
+# ============================================================================
 # Phase 1: backend stacks — admin-console URL はまだ無いので CORS/callback は
-# localhost のみで deploy
+# localhost のみで deploy。AdminApiStack も ControlPlaneStack と一緒に deploy
+# (jwtIssuer/jwtAudience を cross-stack ref で受け取る)。
 # ============================================================================
 echo ""
 echo "=============================================="
@@ -89,6 +103,7 @@ bunx cdk deploy \
   tenkacloud-bootstrap-stack \
   tenkacloud-tenant-template-pooled \
   TenkaCloudPipeline \
+  AdminApiStack \
   --require-approval never --concurrency 4
 
 # ============================================================================
@@ -108,10 +123,12 @@ USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name ControlPlaneStack
 CLIENT_ID=$(aws cloudformation describe-stacks --stack-name ControlPlaneStack --query "Stacks[0].Outputs[?contains(OutputKey,'ControlPlaneIdpClientId')].OutputValue" --output text)
 COGNITO_DOMAIN_PREFIX=$(aws cognito-idp describe-user-pool --user-pool-id "${USER_POOL_ID}" --query "UserPool.Domain" --output text)
 COGNITO_DOMAIN="https://${COGNITO_DOMAIN_PREFIX}.auth.${REGION}.amazoncognito.com"
+ADMIN_API_URL=$(aws cloudformation describe-stacks --stack-name AdminApiStack --query "Stacks[0].Outputs[?OutputKey=='AdminApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
 
 echo "  API URL       : ${API_URL}"
 echo "  ClientId      : ${CLIENT_ID}"
 echo "  Cognito Domain: ${COGNITO_DOMAIN}"
+echo "  Admin API URL : ${ADMIN_API_URL:-<not deployed>}"
 
 # AdminWeb を host で build。URL は build に焼かない (runtime-config.json 経由で
 # CDK が CloudFront に配置する)。dev ローカル開発では .env.local が効くので触らない。
@@ -128,6 +145,9 @@ cd "${TENKACLOUD_ROOT}/infrastructure/cdk"
 export CDK_PARAM_CONTROL_PLANE_API_URL="${API_URL}"
 export CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN="${COGNITO_DOMAIN}"
 export CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID="${CLIENT_ID}"
+if [[ -n "${ADMIN_API_URL}" ]]; then
+  export CDK_PARAM_ADMIN_API_URL="${ADMIN_API_URL}"
+fi
 bunx cdk deploy AdminConsoleHostingStack --require-approval never
 
 # ============================================================================
@@ -140,7 +160,9 @@ echo "=============================================="
 ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name AdminConsoleHostingStack --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
 export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"
 echo "  CloudFront URL: ${ADMIN_CONSOLE_URL}"
-bunx cdk deploy ControlPlaneStack --require-approval never
+# AdminApiStack も再 deploy: CORS 許可 origin に CloudFront URL を追加するため。
+# (CDK_PARAM_ADMIN_CONSOLE_ORIGIN は既に export 済み)
+bunx cdk deploy ControlPlaneStack AdminApiStack --require-approval never --concurrency 2
 
 # ============================================================================
 # 完了

@@ -1,3 +1,6 @@
+import { loadConfig } from '@/lib/runtime-config';
+import { adminFetch, type Microservice } from './admin-api-client';
+
 export type ServiceConnectionState = 'connected' | 'unreachable';
 
 export interface ServiceConnection {
@@ -9,7 +12,7 @@ export interface ServiceConnection {
 }
 
 interface ServiceHealthTarget {
-  id: string;
+  id: Microservice;
   name: string;
   envKey: string;
   localUrl: string;
@@ -103,66 +106,129 @@ export function resolveServiceHealthUrls(): ServiceConnection[] {
   });
 }
 
-function getCandidateUrls(target: ServiceHealthTarget): string[] {
-  const configuredUrl = process.env[target.envKey];
-  if (configuredUrl) {
-    return [configuredUrl];
-  }
+async function inspect(
+  url: string,
+  target: ServiceHealthTarget,
+): Promise<ServiceConnection | { detail: string }> {
+  try {
+    const response = await fetch(url, getFetchOptions());
+    if (!response.ok) {
+      return { detail: `HTTP ${response.status}` };
+    }
 
-  return preferLocalUrls()
-    ? [target.localUrl, target.dockerUrl]
-    : [target.dockerUrl, target.localUrl];
+    const payload = (await response.json().catch(() => null)) as {
+      status?: string;
+      service?: string;
+    } | null;
+
+    const reportedStatus = payload?.status;
+    const reportedService = payload?.service;
+    const isHealthy =
+      reportedStatus === undefined ||
+      reportedStatus === 'ok' ||
+      reportedStatus === 'healthy';
+
+    if (!isHealthy) {
+      return { detail: reportedStatus ?? 'unhealthy' };
+    }
+
+    return {
+      id: target.id,
+      name: target.name,
+      status: 'connected',
+      checkedUrl: url,
+      detail: reportedService || reportedStatus,
+    };
+  } catch (error) {
+    return { detail: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }
 
-async function checkServiceConnection(
+async function checkLocal(
   target: ServiceHealthTarget,
 ): Promise<ServiceConnection> {
+  const configuredUrl = process.env[target.envKey];
+  const candidates = configuredUrl
+    ? [configuredUrl]
+    : preferLocalUrls()
+      ? [target.localUrl, target.dockerUrl]
+      : [target.dockerUrl, target.localUrl];
+
   let lastDetail = 'ヘルスチェックに失敗しました';
-
-  for (const url of getCandidateUrls(target)) {
-    try {
-      const response = await fetch(url, getFetchOptions());
-      if (!response.ok) {
-        lastDetail = `HTTP ${response.status}`;
-        continue;
-      }
-
-      const payload = (await response.json().catch(() => null)) as {
-        status?: string;
-        service?: string;
-      } | null;
-
-      const reportedStatus = payload?.status;
-      const reportedService = payload?.service;
-      const isHealthy =
-        reportedStatus === undefined ||
-        reportedStatus === 'ok' ||
-        reportedStatus === 'healthy';
-
-      if (!isHealthy) {
-        lastDetail = reportedStatus ?? 'unhealthy';
-        continue;
-      }
-
-      return {
-        id: target.id,
-        name: target.name,
-        status: 'connected',
-        checkedUrl: url,
-        detail: reportedService || reportedStatus,
-      };
-    } catch (error) {
-      lastDetail = error instanceof Error ? error.message : 'Unknown error';
-    }
+  for (const url of candidates) {
+    const result = await inspect(url, target);
+    if ('status' in result) return result;
+    lastDetail = result.detail;
   }
 
   return {
     id: target.id,
     name: target.name,
     status: 'unreachable',
-    checkedUrl: getCandidateUrls(target)[0],
+    checkedUrl: candidates[0],
     detail: lastDetail,
   };
+}
+
+async function checkCloud(
+  target: ServiceHealthTarget,
+): Promise<ServiceConnection> {
+  // cloud では admin API gateway 経由 (`/<service>/health`、auth 不要)。
+  try {
+    const fetchOpts = getFetchOptions();
+    const res = await adminFetch(target.id, '/health', {
+      cache: fetchOpts.cache,
+      signal: fetchOpts.signal,
+      skipAuth: true,
+    });
+
+    if (!res.ok) {
+      return {
+        id: target.id,
+        name: target.name,
+        status: 'unreachable',
+        checkedUrl: `(admin-api)/${target.id}/health`,
+        detail: `HTTP ${res.status}`,
+      };
+    }
+
+    const payload = (await res.json().catch(() => null)) as {
+      status?: string;
+      service?: string;
+    } | null;
+
+    return {
+      id: target.id,
+      name: target.name,
+      status: 'connected',
+      checkedUrl: `(admin-api)/${target.id}/health`,
+      detail: payload?.service || payload?.status,
+    };
+  } catch (error) {
+    return {
+      id: target.id,
+      name: target.name,
+      status: 'unreachable',
+      checkedUrl: `(admin-api)/${target.id}/health`,
+      detail: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+async function checkServiceConnection(
+  target: ServiceHealthTarget,
+): Promise<ServiceConnection> {
+  // 環境判定: cloud (runtime-config に adminApiUrl 有り) なら admin API 経由でチェック。
+  // dev / Docker は localhost を使う従来のロジック。
+  let useCloud = false;
+  try {
+    const config = await loadConfig();
+    useCloud = Boolean(config.adminApiUrl);
+  } catch {
+    // runtime-config 読めない (= dev で env も未設定) → local fallback
+  }
+
+  return useCloud ? checkCloud(target) : checkLocal(target);
 }
 
 export async function fetchServiceConnections(): Promise<ServiceConnection[]> {

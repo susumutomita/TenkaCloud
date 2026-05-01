@@ -22,16 +22,19 @@ const LOCALHOST_CALLBACK_URLS = [
   "http://localhost:13000/callback", // dev (basePath なし、直アクセス)
 ];
 
-const LOCALHOST_LOGOUT_URLS = [
-  "http://localhost:13000/control/login",
-  "http://localhost:13000/login",
-];
+const LOCALHOST_LOGOUT_URLS = ["http://localhost:13000/control/login", "http://localhost:13000/login"];
 
 const LOCALHOST_CORS_ORIGINS = ["http://localhost:13000"];
 
 export class ControlPlaneStack extends cdk.Stack {
   public readonly regApiGatewayUrl: string;
   public readonly eventBusArn: string;
+  /** Cognito UserPool issuer URL — AdminApiStack の HttpJwtAuthorizer / Hono auth middleware が利用 */
+  public readonly jwtIssuer: string;
+  /** Cognito UserPool client ID — JWT audience として API Gateway が検証 */
+  public readonly jwtAudience: string;
+  /** Cognito UserPool ID (debug/output 用) */
+  public readonly userPoolId: string;
 
   constructor(scope: Construct, id: string, props: ControlPlaneStackProps) {
     super(scope, id, props);
@@ -44,12 +47,8 @@ export class ControlPlaneStack extends cdk.Stack {
     // 最初の deploy 時は未設定、AdminConsoleHostingStack deploy 後に再 deploy で設定される。
     const adminConsoleOrigin = process.env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN;
     const extraCorsOrigins = adminConsoleOrigin ? [adminConsoleOrigin] : [];
-    const extraCallbackUrls = adminConsoleOrigin
-      ? [`${adminConsoleOrigin}/callback`]
-      : [];
-    const extraLogoutUrls = adminConsoleOrigin
-      ? [`${adminConsoleOrigin}/login`]
-      : [];
+    const extraCallbackUrls = adminConsoleOrigin ? [`${adminConsoleOrigin}/callback`] : [];
+    const extraLogoutUrls = adminConsoleOrigin ? [`${adminConsoleOrigin}/login`] : [];
 
     const controlPlane = new ControlPlane(this, "ControlPlane", {
       auth: cognitoAuth,
@@ -97,5 +96,10 @@ export class ControlPlaneStack extends cdk.Stack {
 
     this.eventBusArn = controlPlane.eventManager.busArn;
     this.regApiGatewayUrl = controlPlane.controlPlaneAPIGatewayUrl;
+    // Cognito refs to be consumed by AdminApiStack.
+    // jwtAudience は SBT の userClientId (PKCE flow で AdminWeb が使う client) と同じ。
+    this.jwtIssuer = cognitoAuth.jwtIssuer;
+    this.jwtAudience = cognitoAuth.userClientId;
+    this.userPoolId = cognitoAuth.userPool.userPoolId;
   }
 }

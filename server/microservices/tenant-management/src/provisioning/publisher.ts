@@ -20,6 +20,12 @@ interface TenantProvisioningPublisherOptions {
   eventBridgeClient?: EventBridgeClient;
   eventBusName?: string;
   deliveryMode?: TenantProvisioningDeliveryMode;
+  /**
+   * inline mode で実行する provisioning flow。dev 環境で LocalStack 等を使うときだけ
+   * caller が DI する想定。指定が無いまま inline mode になった場合は実行時にエラー。
+   * (PR #398/ADR-014 で旧 application-plane/tenant-provisioner 等の path が消えたため、
+   *  default の dynamic import は撤去した。)
+   */
   inlineRunner?: InlineProvisioningRunner;
 }
 
@@ -42,47 +48,11 @@ function resolveDeliveryMode(): TenantProvisioningDeliveryMode {
   return 'eventbridge';
 }
 
-async function runInlineProvisioningFlow(
-  detail: TenantOnboardingDetail,
-): Promise<void> {
-  if (!process.env.DATA_BUCKET_NAME && process.env.AWS_ENDPOINT_URL?.includes('localhost')) {
-    process.env.DATA_BUCKET_NAME = 'tenkacloud-local-data';
-  }
-
-  const [{ provisionTenant }, { handler: completionHandler }] = await Promise.all(
-    [
-      import('../../../../application-plane/tenant-provisioner/src/handler.ts'),
-      import('../../../../control-plane/provisioning-completion/src/handler.ts'),
-    ],
-  );
-
-  const provisionedDetail = await provisionTenant(detail);
-
-  await completionHandler(
-    {
-      version: '0',
-      id: crypto.randomUUID(),
-      'detail-type': EventDetailType.TENANT_PROVISIONED,
-      source: EventSource.APPLICATION_PLANE,
-      account: '000000000000',
-      time: provisionedDetail.timestamp,
-      region: detail.region,
-      resources: [],
-      detail: provisionedDetail,
-    },
-    {} as never,
-  );
-
-  if (provisionedDetail.status === 'FAILED') {
-    throw new Error(provisionedDetail.error ?? 'Tenant provisioning failed');
-  }
-}
-
 export class TenantProvisioningPublisher {
   private readonly eventBridgeClient: EventBridgeClient;
   private readonly eventBusName: string;
   private readonly deliveryMode: TenantProvisioningDeliveryMode;
-  private readonly inlineRunner: InlineProvisioningRunner;
+  private readonly inlineRunner: InlineProvisioningRunner | undefined;
 
   constructor(
     options: TenantProvisioningPublisherOptions = {},
@@ -96,7 +66,7 @@ export class TenantProvisioningPublisher {
       });
     this.eventBusName = options.eventBusName ?? process.env.EVENT_BUS_NAME ?? EventBusName.DEFAULT;
     this.deliveryMode = options.deliveryMode ?? resolveDeliveryMode();
-    this.inlineRunner = options.inlineRunner ?? runInlineProvisioningFlow;
+    this.inlineRunner = options.inlineRunner;
   }
 
   async publishTenantOnboarding(tenant: Tenant): Promise<void> {
@@ -112,6 +82,11 @@ export class TenantProvisioningPublisher {
     };
 
     if (this.deliveryMode === 'inline') {
+      if (!this.inlineRunner) {
+        throw new Error(
+          'inline delivery mode requires an inlineRunner option (dynamic import default was removed; provide a runner explicitly in dev setup).',
+        );
+      }
       await this.inlineRunner(detail);
       return;
     }

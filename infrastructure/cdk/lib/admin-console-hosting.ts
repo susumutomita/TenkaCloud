@@ -16,12 +16,17 @@ import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 
 export interface AdminConsoleHostingStackProps extends cdk.StackProps {
-  /** Control Plane API Gateway URL (末尾スラッシュ無し) */
+  /** SBT Control Plane API Gateway URL (末尾スラッシュ無し) — テナント CRUD */
   readonly apiUrl: string;
   /** Cognito UserPool domain (例: https://xxx.auth.<region>.amazoncognito.com) */
   readonly cognitoDomain: string;
   /** SBT 内蔵 UserPoolUserClient の client ID */
   readonly userClientId: string;
+  /**
+   * AdminApiStack の HTTP API Gateway URL (各 microservice のフロント、Cognito JWT 保護)。
+   * 未設定の場合、AdminWeb は SBT API のみ利用 (activities/stats 等は呼べない)。
+   */
+  readonly adminApiUrl?: string;
 }
 
 /**
@@ -113,11 +118,14 @@ function handler(event) {
 
     // 2) runtime-config.json を同 bucket のルートに配置
     // admin-console は起動時に `/runtime-config.json` を fetch して URL を解決する
-    const runtimeConfig = {
+    const runtimeConfig: Record<string, string> = {
       apiUrl: props.apiUrl.replace(/\/$/, ""),
       cognitoDomain: props.cognitoDomain,
       userClientId: props.userClientId,
     };
+    if (props.adminApiUrl) {
+      runtimeConfig.adminApiUrl = props.adminApiUrl.replace(/\/$/, "");
+    }
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", runtimeConfig)],
       destinationBucket: bucket,
