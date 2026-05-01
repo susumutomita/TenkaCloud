@@ -26,11 +26,12 @@ EXTERNAL_OPTS=(
   --external 'aws-sdk'
 )
 
-for svc in "${SERVICES[@]}"; do
-  svc_dir="${ROOT_DIR}/server/microservices/${svc}"
+build_one() {
+  local svc="$1"
+  local svc_dir="${ROOT_DIR}/server/microservices/${svc}"
   if [[ ! -f "${svc_dir}/src/lambda.ts" ]]; then
     echo "SKIP ${svc}: no src/lambda.ts" >&2
-    continue
+    return 0
   fi
 
   echo "Building ${svc} → dist/lambda/lambda.js"
@@ -45,6 +46,24 @@ for svc in "${SERVICES[@]}"; do
       --minify \
       "${EXTERNAL_OPTS[@]}"
   )
+}
+
+# Build in parallel — each bun build is independent.
+pids=()
+for svc in "${SERVICES[@]}"; do
+  build_one "${svc}" &
+  pids+=("$!")
 done
+
+# wait for all to finish; fail if any fails.
+status=0
+for pid in "${pids[@]}"; do
+  wait "${pid}" || status=$?
+done
+
+if [[ "${status}" -ne 0 ]]; then
+  echo "One or more Lambda builds failed (last exit=${status})" >&2
+  exit "${status}"
+fi
 
 echo "All Lambda bundles built."

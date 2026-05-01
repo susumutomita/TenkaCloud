@@ -173,7 +173,15 @@ async function checkLocal(
 async function checkCloud(
   target: ServiceHealthTarget,
 ): Promise<ServiceConnection> {
-  // cloud では admin API gateway 経由 (`/<service>/health`、auth 不要)。
+  const checkedUrl = `(admin-api)/${target.id}/health`;
+  const fail = (detail: string): ServiceConnection => ({
+    id: target.id,
+    name: target.name,
+    status: 'unreachable',
+    checkedUrl,
+    detail,
+  });
+
   try {
     const fetchOpts = getFetchOptions();
     const res = await adminFetch(target.id, '/health', {
@@ -182,15 +190,7 @@ async function checkCloud(
       skipAuth: true,
     });
 
-    if (!res.ok) {
-      return {
-        id: target.id,
-        name: target.name,
-        status: 'unreachable',
-        checkedUrl: `(admin-api)/${target.id}/health`,
-        detail: `HTTP ${res.status}`,
-      };
-    }
+    if (!res.ok) return fail(`HTTP ${res.status}`);
 
     const payload = (await res.json().catch(() => null)) as {
       status?: string;
@@ -201,38 +201,27 @@ async function checkCloud(
       id: target.id,
       name: target.name,
       status: 'connected',
-      checkedUrl: `(admin-api)/${target.id}/health`,
+      checkedUrl,
       detail: payload?.service || payload?.status,
     };
   } catch (error) {
-    return {
-      id: target.id,
-      name: target.name,
-      status: 'unreachable',
-      checkedUrl: `(admin-api)/${target.id}/health`,
-      detail: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return fail(error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
-async function checkServiceConnection(
-  target: ServiceHealthTarget,
-): Promise<ServiceConnection> {
-  // 環境判定: cloud (runtime-config に adminApiUrl 有り) なら admin API 経由でチェック。
-  // dev / Docker は localhost を使う従来のロジック。
+export async function fetchServiceConnections(): Promise<ServiceConnection[]> {
+  // Resolve cloud-vs-local once for the whole batch instead of per-target — loadConfig
+  // memoizes via inflight promise but this avoids 6 simultaneous calls before the cache fills.
   let useCloud = false;
   try {
     const config = await loadConfig();
     useCloud = Boolean(config.adminApiUrl);
   } catch {
-    // runtime-config 読めない (= dev で env も未設定) → local fallback
+    // runtime-config not available (dev without env) → local fallback
   }
 
-  return useCloud ? checkCloud(target) : checkLocal(target);
-}
-
-export async function fetchServiceConnections(): Promise<ServiceConnection[]> {
-  return Promise.all(SERVICE_HEALTH_TARGETS.map(checkServiceConnection));
+  const check = useCloud ? checkCloud : checkLocal;
+  return Promise.all(SERVICE_HEALTH_TARGETS.map(check));
 }
 
 export function summarizeServiceConnections(

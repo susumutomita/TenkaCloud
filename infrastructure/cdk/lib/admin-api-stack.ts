@@ -35,12 +35,9 @@ export interface AdminApiStackProps extends cdk.StackProps {
  * 4. **service 間通信は API Gateway 経由のみ** — 必要になったら IAM_AUTH route を別途追加。
  *
  * **deploy 前提**: 各 microservice の `dist/lambda/` (bun build した bundle) が存在すること。
- * install.sh が phase 1.5 で build する。
+ * install.sh が phase 0 で build する。
  */
 export class AdminApiStack extends cdk.Stack {
-  public readonly httpApiUrl: string;
-  public readonly tableName: string;
-
   constructor(scope: Construct, id: string, props: AdminApiStackProps) {
     super(scope, id, props);
 
@@ -64,7 +61,6 @@ export class AdminApiStack extends cdk.Stack {
       readCapacity: props.dynamoReadCapacity ?? 1,
       writeCapacity: props.dynamoWriteCapacity ?? 1,
     });
-    this.tableName = table.tableName;
 
     // ── HTTP API Gateway ──────────────────────────────────
     const allowedOrigins = ["http://localhost:13000"];
@@ -94,6 +90,8 @@ export class AdminApiStack extends cdk.Stack {
     });
 
     // ── Lambda 群 (microservice ごと) ──────────────────────
+    // path-prefix table is mirrored in client/AdminWeb/lib/api/admin-api-client.ts.
+    // Keep them in sync.
     const microservices = [
       { name: "tenant-management", pathPrefix: "/tenant-management" },
       { name: "problem-service", pathPrefix: "/problem" },
@@ -150,8 +148,6 @@ export class AdminApiStack extends cdk.Stack {
         value: fn.functionName,
       });
     }
-
-    this.httpApiUrl = httpApi.apiEndpoint;
 
     new cdk.CfnOutput(this, "AdminApiUrl", {
       value: httpApi.apiEndpoint,

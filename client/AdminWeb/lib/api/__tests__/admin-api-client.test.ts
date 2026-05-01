@@ -11,6 +11,15 @@ vi.mock('@/lib/auth/cognito-pkce', () => ({
   getCurrentIdToken: getCurrentIdTokenMock,
 }));
 
+const cloudConfig = {
+  adminApiUrl: 'https://admin.example.com',
+  apiBaseUrl: 'https://sbt.example.com',
+  cognitoDomain: 'https://cognito.example.com',
+  cognitoClientId: 'client-id',
+  redirectUri: 'https://app/callback',
+  scope: 'openid',
+};
+
 describe('admin-api-client', () => {
   const originalEnv = process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
 
@@ -18,6 +27,7 @@ describe('admin-api-client', () => {
     vi.clearAllMocks();
     delete process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
     global.fetch = vi.fn().mockResolvedValue(new Response('{}'));
+    loadConfigMock.mockResolvedValue(cloudConfig);
   });
 
   afterEach(() => {
@@ -29,14 +39,6 @@ describe('admin-api-client', () => {
   });
 
   it('cloud では adminApiUrl + path-prefix を使用してリクエストすべき', async () => {
-    loadConfigMock.mockResolvedValue({
-      adminApiUrl: 'https://admin.example.com',
-      apiBaseUrl: 'https://sbt.example.com',
-      cognitoDomain: 'https://cognito.example.com',
-      cognitoClientId: 'client-id',
-      redirectUri: 'https://app/callback',
-      scope: 'openid',
-    });
     getCurrentIdTokenMock.mockResolvedValue('id-token-abc');
 
     const { adminFetch } = await import('../admin-api-client');
@@ -51,15 +53,6 @@ describe('admin-api-client', () => {
   });
 
   it('skipAuth=true の場合は Authorization ヘッダーを付けないべき', async () => {
-    loadConfigMock.mockResolvedValue({
-      adminApiUrl: 'https://admin.example.com',
-      apiBaseUrl: 'https://sbt.example.com',
-      cognitoDomain: 'https://cognito.example.com',
-      cognitoClientId: 'client-id',
-      redirectUri: 'https://app/callback',
-      scope: 'openid',
-    });
-
     const { adminFetch } = await import('../admin-api-client');
     await adminFetch('problem-service', '/health', { skipAuth: true });
 
@@ -85,11 +78,8 @@ describe('admin-api-client', () => {
 
   it('runtime-config に adminApiUrl が無い場合はエラーを投げるべき', async () => {
     loadConfigMock.mockResolvedValue({
-      apiBaseUrl: 'https://sbt.example.com',
-      cognitoDomain: 'https://cognito.example.com',
-      cognitoClientId: 'client-id',
-      redirectUri: 'https://app/callback',
-      scope: 'openid',
+      ...cloudConfig,
+      adminApiUrl: undefined,
     });
 
     const { adminFetch } = await import('../admin-api-client');
@@ -99,14 +89,6 @@ describe('admin-api-client', () => {
   });
 
   it('Cognito token が無い場合は Authorization ヘッダーを付けないべき', async () => {
-    loadConfigMock.mockResolvedValue({
-      adminApiUrl: 'https://admin.example.com',
-      apiBaseUrl: 'https://sbt.example.com',
-      cognitoDomain: 'https://cognito.example.com',
-      cognitoClientId: 'client-id',
-      redirectUri: 'https://app/callback',
-      scope: 'openid',
-    });
     getCurrentIdTokenMock.mockResolvedValue(null);
 
     const { adminFetch } = await import('../admin-api-client');
@@ -119,14 +101,6 @@ describe('admin-api-client', () => {
   });
 
   it('追加の headers をマージすべき', async () => {
-    loadConfigMock.mockResolvedValue({
-      adminApiUrl: 'https://admin.example.com',
-      apiBaseUrl: 'https://sbt.example.com',
-      cognitoDomain: 'https://cognito.example.com',
-      cognitoClientId: 'client-id',
-      redirectUri: 'https://app/callback',
-      scope: 'openid',
-    });
     getCurrentIdTokenMock.mockResolvedValue('tok');
 
     const { adminFetch } = await import('../admin-api-client');

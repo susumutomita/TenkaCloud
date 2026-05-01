@@ -20,10 +20,19 @@ export type Microservice =
   | 'scoring-service'
   | 'leaderboard-service';
 
+// Mirror of the API Gateway path-prefix table in
+// infrastructure/cdk/lib/admin-api-stack.ts. Keep them in sync.
+const PATH_PREFIX: Record<Microservice, string> = {
+  'tenant-management': '/tenant-management',
+  'problem-service': '/problem',
+  'gameday-service': '/gameday',
+  'battle-service': '/battle',
+  'scoring-service': '/scoring',
+  'leaderboard-service': '/leaderboard',
+};
+
 interface Resolved {
-  /** 呼び出し先 microservice の base URL (path-prefix まで含む) */
   readonly baseUrl: string;
-  /** cloud 環境では Bearer token、dev では空文字 (auth-skip 前提) */
   readonly authHeader: Record<string, string>;
 }
 
@@ -31,8 +40,6 @@ async function resolve(
   service: Microservice,
   skipAuth: boolean,
 ): Promise<Resolved> {
-  // dev fallback: NEXT_PUBLIC_TENANT_API_BASE_URL 設定時はそのまま (tenant-management 想定)。
-  // 他 service の dev URL は service-health.ts と整合させる。
   const localTenantApi = process.env.NEXT_PUBLIC_TENANT_API_BASE_URL;
   if (localTenantApi && service === 'tenant-management') {
     return {
@@ -50,25 +57,14 @@ async function resolve(
     );
   }
 
-  const pathPrefix: Record<Microservice, string> = {
-    'tenant-management': '/tenant-management',
-    'problem-service': '/problem',
-    'gameday-service': '/gameday',
-    'battle-service': '/battle',
-    'scoring-service': '/scoring',
-    'leaderboard-service': '/leaderboard',
-  };
-
+  const baseUrl = `${config.adminApiUrl}${PATH_PREFIX[service]}`;
   if (skipAuth) {
-    return {
-      baseUrl: `${config.adminApiUrl}${pathPrefix[service]}`,
-      authHeader: {},
-    };
+    return { baseUrl, authHeader: {} };
   }
 
   const token = await getCurrentIdToken();
   return {
-    baseUrl: `${config.adminApiUrl}${pathPrefix[service]}`,
+    baseUrl,
     authHeader: token ? { Authorization: `Bearer ${token}` } : {},
   };
 }

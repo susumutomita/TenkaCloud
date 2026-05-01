@@ -1,12 +1,11 @@
 #!/bin/bash
 set -eo pipefail
-# TenkaCloud orchestration entry — 全部 AWS で動かす 3-phase deploy
+# TenkaCloud orchestration entry — 全部 AWS で動かす multi-phase deploy
 #
-# Phase 1: Backend stacks (ControlPlane + Bootstrap + TenantTemplate-pooled + Pipeline)
+# Phase 0: Build microservice Lambda bundles (bun build → dist/lambda/)
+# Phase 1: Backend stacks (ControlPlane + Bootstrap + TenantTemplate-pooled + Pipeline + AdminApi)
 # Phase 2: AdminConsoleHostingStack (client/AdminWeb を CloudFront+S3 配信)
-#          ⚠️ AdminWeb は Next.js standalone のため pure S3+CloudFront には収まらない。
-#             OpenNext on Lambda or AWS Amplify Hosting への移行検討中 (ADR-013 参照)。
-# Phase 3: ControlPlaneStack 再 deploy (CloudFront URL を callback/CORS に追加)
+# Phase 3: ControlPlaneStack + AdminApiStack 再 deploy (CloudFront URL を callback/CORS に追加)
 #
 # Usage:
 #   bash scripts/install.sh "admin@example.com"
