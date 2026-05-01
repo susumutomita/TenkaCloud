@@ -92,11 +92,13 @@ Application Plane は tenant ごとに 1 つです。各社ごとに 1 Plane を
 
 ### `client/AdminWeb`
 
-- Next.js 16 (`output: 'standalone'`, `basePath=/control`)
-- ポート `13000`
-- 主に `/control/dashboard/*` 配下でプラットフォーム管理を提供
-- 認証は NextAuth v5 + Cognito (本番) / `AUTH_SKIP=1` (ローカル)
-- SBT API は `lib/api/sbt-api-adapter.ts` 経由 (詳細は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md))
+- Next.js 16 (`output: 'export'` static export、cloud では CloudFront ルート配信、ローカル dev では `basePath=/control`)
+- ポート `13000` (ローカル)
+- 主に `/dashboard/*` 配下でプラットフォーム管理を提供
+- 認証は **browser-side Cognito PKCE** (本番) / `AUTH_SKIP=1` (ローカル)。NextAuth は PR #420 で撤去済み
+- 起動時に `/runtime-config.json` を fetch して URL (`apiUrl` / `cognitoDomain` / `userClientId` / `adminApiUrl`) を解決し、build artifact を環境非依存に保つ
+- SBT control plane API は `lib/api/sbt-api-adapter.ts` 経由でテナント CRUD (詳細は [ADR-013](../decisions/013-sbt-control-plane-onboarding-wire-format.md))
+- 各 microservice には `lib/api/admin-api-client.ts` の `adminFetch()` 経由でアクセスし、Cognito ID token を `Authorization: Bearer` で添付
 
 ### `client/Application`
 
@@ -109,16 +111,44 @@ Application Plane は tenant ごとに 1 つです。各社ごとに 1 Plane を
 
 主要サービスと想定ポートは以下のとおりです。
 
-| サービス | 役割 | ポート |
-|---|---|---|
-| tenant-management | テナント CRUD と状態管理 | `13004` |
-| problem-service | 問題・イベント関連 API | `3100` |
-| gameday-service | GameDay API | `3020` |
-| battle-service | Battle API | 実装依存 |
-| scoring-service | 採点処理 | 実装依存 |
-| leaderboard-service | ランキング API | 実装依存 |
+| サービス | 役割 | ローカルポート | Lambda 化 (PR #422) |
+|---|---|---|---|
+| tenant-management | テナント CRUD と状態管理 | `13004` | ✅ |
+| problem-service | 問題・イベント関連 API | `3100` | ✅ |
+| gameday-service | GameDay API | `3020` | ✅ |
+| battle-service | Battle API | `3010` | ✅ |
+| scoring-service | 採点処理 | `3011` | ✅ |
+| leaderboard-service | ランキング API | `3012` | ✅ |
 
-Hono ベースのサービスが多く、ルートの `package.json` の `dev` スクリプトから同時起動されます。
+各サービスは Hono で実装され、ローカル開発では `make start` から同時起動されます。AWS deploy では各サービスを `bun build src/lambda.ts --target node` で 1 ファイルに bundle し、`hono/aws-lambda` adapter 経由で Lambda 関数として動作します。
+
+### AdminApiStack (cloud)
+
+PR #422 で追加された `infrastructure/cdk/lib/admin-api-stack.ts` が、AdminWeb (CloudFront) から各 microservice (Lambda) への呼び出しを集約します。
+
+```text
+AdminWeb (CloudFront, static export)
+   │
+   │ adminFetch('tenant-management', '/api/stats', ...)
+   │  + Authorization: Bearer <Cognito id_token>
+   ▼
+HTTP API Gateway  ──Cognito JWT Authorizer──▶ Lambda
+   /tenant-management/{proxy+}                  各 service の lambda.handler
+   /problem/{proxy+}
+   /gameday/{proxy+}
+   /battle/{proxy+}
+   /scoring/{proxy+}
+   /leaderboard/{proxy+}
+```
+
+セキュリティ設計は以下のとおりです。
+
+1. **API Gateway Cognito JWT Authorizer** が Lambda 起動前に JWT を検証する。token 無し / 無効な request は Lambda に到達しない。`/health` のみ authorizer 無し (CloudWatch synthetics 用)。
+2. **各 Lambda は個別の IAM Role** を持ち、共有 DynamoDB テーブルの R/W のみ許可される。`lambda:InvokeFunction` 権限は一切付与しないため、service-to-service の直接 invoke は **不可能**。service 間で通信する必要が生じた場合は API Gateway 経由の HTTP 呼び出しか EventBridge を使う。
+3. **CORS** は AdminConsole CloudFront origin と localhost dev origin のみ許可 (`*` 不可、`allowCredentials: false`)。
+4. **Hono の auth-middleware** が application 層で再度 JWKS 検証する (defense-in-depth)。
+
+DynamoDB は ADR-007 の single-table design (PK/SK + GSI1)、PROVISIONED 1/1 (dev)。
 
 ## 5. データと共有層
 
@@ -126,9 +156,12 @@ Hono ベースのサービスが多く、ルートの `package.json` の `dev` �
 
 - `server/libs/dynamodb` — DynamoDB クライアント、リポジトリ層、tenant context / isolation middleware
 - `server/libs/events` — EventBridge 型定義 (TenantOnboarding / Provisioned / Updated / Offboarding)
-- `server/libs/auth` — JWT 検証、JWKS、role 抽出 (NextAuth v5 / Cognito / Auth0 互換)
+- `server/libs/cloud-abstraction` — local emulator (LocalStack/Kumo) と AWS 本番を隔てる薄いラッパ
 - `packages/shared` — quality harness 検出ロジックなどのプラットフォーム共有
+- `packages/core` — AWS / scoring 関連の純粋ロジック
 - `packages/design-system` — UI コンポーネント (Cloudscape ラッパー)
+
+> JWT 検証は各 microservice が個別に持つ `src/middleware/auth.ts` が `jose` で行います。共通化された `server/libs/auth` は無く、cloud では AdminApiStack が各 Lambda の env に `JWKS_URI` / `JWT_ISSUER` / `JWT_AUDIENCE` を注入します。
 
 ### データストア
 
@@ -138,14 +171,16 @@ Control Plane と Application Plane の正本アーキテクチャは serverless
 
 ## 6. 認証
 
-- 本番相当: Auth0
-- ローカル簡易確認: `AUTH_SKIP=1`
+- **本番**: AWS Cognito (SBT 0.3.9 が UserPool / Hosted UI を作成)
+  - AdminWeb は browser-side **PKCE flow** で `id_token` を取得し、`localStorage` に保持
+  - API Gateway の **Cognito JWT Authorizer** が Lambda 起動前に検証
+  - 各 Lambda の Hono `auth-middleware` も JWKS で再検証 (defense-in-depth)
+- **ローカル簡易確認**: `AUTH_SKIP=1` + `NEXT_PUBLIC_AUTH_SKIP=1` (本番ガード `NODE_ENV !== 'production'` 必須)
 
-以下は正本から外します。
+以下は正本から外します (履歴的に存在したが現行コードでは使わない)。
 
+- Auth0 / NextAuth.js — PR #420 で撤去
 - Keycloak 前提
-- Cognito 前提
-- NextAuth.js v4 前提の記述
 
 ## 7. ローカル実行モデル
 

@@ -25,7 +25,7 @@ Control Plane と Tenant Management Service 間の統合仕様を定義します
 
 ## 環境変数
 
-### Control Plane (`apps/control-plane/.env.local`)
+### Control Plane (`client/AdminWeb/.env.local`)
 
 ```bash
 # ローカル開発時（必須）
@@ -185,7 +185,7 @@ docker compose up tenant-management -d
 ### 3. Control Plane を起動
 
 ```bash
-cd apps/control-plane
+cd client/AdminWeb
 bun run dev
 ```
 
@@ -210,7 +210,7 @@ open http://localhost:13000/dashboard/tenants
 
 **解決策:**
 ```bash
-# apps/control-plane/.env.local に追加
+# client/AdminWeb/.env.local に追加
 TENANT_API_BASE_URL=http://localhost:13004/api
 ```
 
@@ -242,8 +242,8 @@ docker compose up localstack -d
 
 | ファイル | 説明 |
 |---------|------|
-| `apps/control-plane/lib/api/tenant-api.ts` | API クライアント |
-| `apps/control-plane/app/dashboard/tenants/page.tsx` | テナント管理画面 |
+| `client/AdminWeb/lib/api/tenant-api.ts` | API クライアント |
+| `client/AdminWeb/app/dashboard/tenants/page.tsx` | テナント管理画面 |
 | `server/microservices/tenant-management/src/index.ts` | API サーバー |
 | `server/microservices/tenant-management/src/lib/dynamodb.ts` | DynamoDB 設定 |
 | `docker-compose.yml` | サービス定義 |

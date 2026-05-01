@@ -98,7 +98,7 @@ DynamoDB シングルテーブル設計。PK/SK にテナント ID を含めて�
 | テスト | Vitest (Istanbul), Playwright (E2E) |
 | Lint/Format | Biome (フロント), Textlint (Markdown) |
 | パッケージ管理 | Bun, npm workspaces |
-| 認証 | NextAuth v5 + Auth0（開発時は AUTH_SKIP=1） |
+| 認証 | AWS Cognito + browser-side PKCE flow（開発時は AUTH_SKIP=1） |
 | CI | GitHub Actions |
 
 ## ポインター
