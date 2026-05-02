@@ -19,26 +19,30 @@ const deployRoutes = new Hono();
 // AWS デプロイメント
 // ====================
 
-// AWS クレデンシャルを環境変数から取得するヘルパー
-function getAWSCredentialsFromEnv(
+/**
+ * AWS クレデンシャルを呼び出し元の override → 環境変数 → SDK default chain の順で解決する。
+ *
+ * accountId / accessKeyId / secretAccessKey が未指定でも CloudCredentials を返す。
+ * undefined のフィールドは AWS SDK 側に渡らないので、SDK は default credential chain
+ * (`~/.aws/config` / `~/.aws/credentials`、SSO、container metadata、instance role 等)
+ * に fall back する。これによりローカル開発時に developer の AWS profile / SSO が
+ * そのまま使える。accountId は省略時 STS GetCallerIdentity から自動補完される
+ * (provider 内部でも参照は session name 用途のみなので best-effort)。
+ */
+function resolveAWSCredentials(
 	region: string,
 	overrides?: Partial<CloudCredentials>,
-): CloudCredentials | null {
-	const accessKeyId =
-		overrides?.accessKeyId || process.env.AWS_ACCESS_KEY_ID || "";
+): CloudCredentials {
+	const accessKeyId = overrides?.accessKeyId || process.env.AWS_ACCESS_KEY_ID;
 	const secretAccessKey =
-		overrides?.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY || "";
+		overrides?.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
 	const accountId = overrides?.accountId || process.env.AWS_ACCOUNT_ID || "";
-
-	if (!accessKeyId || !secretAccessKey || !accountId) {
-		return null;
-	}
 
 	return {
 		provider: "aws",
 		accountId,
-		accessKeyId,
-		secretAccessKey,
+		...(accessKeyId ? { accessKeyId } : {}),
+		...(secretAccessKey ? { secretAccessKey } : {}),
 		sessionToken: overrides?.sessionToken || process.env.AWS_SESSION_TOKEN,
 		roleArn: overrides?.roleArn || process.env.AWS_ROLE_ARN,
 		externalId: overrides?.externalId || process.env.AWS_EXTERNAL_ID,
@@ -82,16 +86,11 @@ async function validateDeploymentRequest(
 		};
 	}
 
-	const credentials = getAWSCredentialsFromEnv(region);
-	if (!credentials) {
-		return {
-			valid: false,
-			error: "AWS credentials not configured",
-			status: 400,
-		};
-	}
-
-	return { valid: true, credentials };
+	// 旧ロジックは AWS_ACCESS_KEY_ID 等の env が無いと早期 fail していたが、
+	// 現在は SDK default chain を信頼するので resolveAWSCredentials は常に
+	// non-null を返す。実際の認証可否は provider.validateCredentials が STS
+	// GetCallerIdentity で確認する。
+	return { valid: true, credentials: resolveAWSCredentials(region) };
 }
 
 // デプロイリクエストスキーマ
@@ -173,16 +172,7 @@ deployRoutes.post(
 		const credentials =
 			input.provider === "local"
 				? getLocalCredentials(input.region)
-				: getAWSCredentialsFromEnv(input.region, input.credentials);
-		if (!credentials) {
-			return c.json(
-				{
-					error:
-						"AWS credentials not configured. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_ACCOUNT_ID environment variables or provide them in the request.",
-				},
-				400,
-			);
-		}
+				: resolveAWSCredentials(input.region, input.credentials);
 
 		// スタック名の生成（UUID で一意性を保証）
 		const stackName =

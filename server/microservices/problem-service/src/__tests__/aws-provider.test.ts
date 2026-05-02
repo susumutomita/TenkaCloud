@@ -94,6 +94,45 @@ describe("AWSCloudProvider", () => {
 		vi.clearAllMocks();
 	});
 
+	it("accessKeyId / roleArn が無い場合でも SDK default chain で STS が成功すれば valid とすべき", async () => {
+		// SDK default chain (profile / SSO / instance role) を使うパス。AWS provider 内部
+		// では credentials = undefined のまま STS Client を作るため、SDK が自動で chain を
+		// 走る。ここでは STS GetCallerIdentity が成功する想定 = chain で creds が見つかった。
+		mocks.stsSend.mockResolvedValueOnce({
+			Account: "111122223333",
+			Arn: "arn:aws:iam::111122223333:user/dev",
+		});
+
+		const { AWSCloudProvider } = await import("../providers/aws");
+		const provider = new AWSCloudProvider();
+
+		const credentials = {
+			provider: "aws" as const,
+			accountId: "",
+			region: "ap-northeast-1",
+		};
+		const valid = await provider.validateCredentials(credentials);
+
+		expect(valid).toBe(true);
+		// 副作用: 空だった accountId が STS の応答で in-place に補完される。
+		expect(credentials.accountId).toBe("111122223333");
+	});
+
+	it("STS GetCallerIdentity が失敗した場合は invalid を返すべき", async () => {
+		mocks.stsSend.mockRejectedValueOnce(new Error("CredentialsProviderError"));
+
+		const { AWSCloudProvider } = await import("../providers/aws");
+		const provider = new AWSCloudProvider();
+
+		const valid = await provider.validateCredentials({
+			provider: "aws",
+			accountId: "",
+			region: "ap-northeast-1",
+		});
+
+		expect(valid).toBe(false);
+	});
+
 	it("roleArn がある場合は ExternalId 付きで AssumeRole して認証検証すべき", async () => {
 		mocks.stsSend
 			.mockResolvedValueOnce({
