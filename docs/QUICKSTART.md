@@ -10,8 +10,7 @@
 |---|---|
 | Docker Desktop | Local emulator の起動 |
 | Bun | パッケージ管理と開発実行 |
-| AWS CLI | エミュレータ確認用 |
-| Terraform | Auth0 セットアップ時のみ使用 |
+| AWS CLI | エミュレータ確認用 / cloud deploy 時 |
 
 ## 最短手順
 
@@ -63,9 +62,9 @@ make start-one-pass-local
 
 ## 認証
 
-ローカル開発では `make start` が `AUTH_SKIP=1` と `NEXT_PUBLIC_AUTH_SKIP=1` を注入します。UI と API の結線確認だけなら、追加設定なしで進められます。
+ローカル開発では `make start` が `AUTH_SKIP=1` と `NEXT_PUBLIC_AUTH_SKIP=1` を注入します。UI と API の結線確認だけなら追加設定不要です。
 
-Auth0 を使って本番相当で試す場合は [AUTH0_SETUP.md](./AUTH0_SETUP.md) を参照してください。
+本番 (AWS) は AWS Cognito + browser-side PKCE flow です。SBT 0.3.9 が UserPool を作成し、AdminWeb は起動時に `/runtime-config.json` を fetch して `cognitoDomain` / `userClientId` を解決します。詳細は [docs/architecture/architecture.md](./architecture/architecture.md) §6 を参照。
 
 ## 個別起動
 

@@ -115,7 +115,7 @@ TenkaCloud/
 │   └── Application/           # Application Plane UI (Next.js, :13001)
 ├── server/
 │   ├── microservices/         # Hono backend (problem/gameday/battle/scoring/leaderboard/tenant-management)
-│   ├── libs/                  # 共有ライブラリ (DynamoDB, events, auth)
+│   ├── libs/                  # 共有ライブラリ (DynamoDB, events, cloud-abstraction)
 │   └── reverseproxy/          # ローカル用 nginx
 ├── infrastructure/
 │   ├── cdk/                   # SBT 0.3.9 ベース CDK (ADR-014)

@@ -84,7 +84,7 @@ TenkaCloud/
 │   │   ├── battle-service        :3010  # バトル管理
 │   │   ├── scoring-service       :3011  # 採点パイプライン
 │   │   └── tenant-management     :13004 # テナント CRUD
-│   ├── libs/                  # DynamoDB クライアント, イベント型, 認証共有
+│   ├── libs/                  # DynamoDB クライアント, イベント型, cloud-abstraction
 │   └── reverseproxy/          # ローカル開発用リバースプロキシ
 ├── infrastructure/
 │   ├── cdk/                   # SBT 0.3.9 ベースの CDK スタック (ADR-013, ADR-014)
