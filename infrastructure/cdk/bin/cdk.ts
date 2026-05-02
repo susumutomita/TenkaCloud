@@ -9,6 +9,7 @@ import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
+import { ProblemDeployPipelineStack } from "../lib/problem-deploy-pipeline";
 import { getEnv } from "../lib/helper-functions";
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
 import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
@@ -175,6 +176,17 @@ if (missingBundles.length === 0) {
     `Skipping AdminApiStack: dist/lambda missing for [${missingBundles.join(", ")}]. Run 'bash scripts/build-microservices-lambda.sh' first.`,
   );
 }
+
+// ProblemDeployPipelineStack: GameDay の admin が UI から「全チームに problem を deploy」
+// 「失敗した team を retry (redeploy)」「event 終了で全 stack を teardown」を起動すると、
+// problem-service が SBT EventBus に ProblemDeployRequested を publish する。
+// 本 stack はそれを受けて CodeBuild project を起動し、各 team account に
+// AssumeRole + CFn deploy/delete する。SBT の BashJobRunner と同じ event-driven パターン。
+const problemDeployPipeline = new ProblemDeployPipelineStack(app, "ProblemDeployPipelineStack", {
+  eventBusArn: controlPlaneStack.eventBusArn,
+});
+problemDeployPipeline.addDependency(controlPlaneStack);
+cdk.Aspects.of(problemDeployPipeline).add(new DestroyPolicySetter());
 
 // AdminConsoleHostingStack: client/AdminWeb (Next.js) を CloudFront+S3 で配信する想定。
 // ⚠️ TenkaCloud の AdminWeb は `output: 'standalone'` + API routes (NextAuth 等) を持つため
