@@ -2001,7 +2001,10 @@ describe("Admin Routes", () => {
 				expect(body.error).toContain("AWS deployment template");
 			});
 
-			it("AWS クレデンシャルがない場合は 400 を返すべき", async () => {
+			it("env が無くても provider に委譲し、SDK chain で credentials が取れなければ 401 を返すべき", async () => {
+				// 旧仕様: env keys 必須 → 400 で reject
+				// 新仕様: SDK default chain (profile / SSO / instance role) も許可。
+				//        最終的な可否は validateCredentials の STS GetCallerIdentity で判定。
 				delete process.env.AWS_ACCESS_KEY_ID;
 				delete process.env.AWS_SECRET_ACCESS_KEY;
 				delete process.env.AWS_ACCOUNT_ID;
@@ -2009,6 +2012,7 @@ describe("Admin Routes", () => {
 				mockProblemRepository.findById.mockResolvedValueOnce(
 					mockProblemWithAWS,
 				);
+				mockAWSProvider.validateCredentials.mockResolvedValueOnce(false);
 
 				const res = await app.request("/api/admin/problems/problem-1/deploy", {
 					method: "POST",
@@ -2018,7 +2022,7 @@ describe("Admin Routes", () => {
 					}),
 				});
 
-				expect(res.status).toBe(400);
+				expect(res.status).toBe(401);
 				const body = await res.json();
 				expect(body.error).toContain("AWS credentials");
 			});

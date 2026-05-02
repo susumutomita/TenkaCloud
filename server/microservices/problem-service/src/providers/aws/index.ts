@@ -76,25 +76,30 @@ export class AWSCloudProvider implements ICloudProvider {
 	readonly displayName = "Amazon Web Services";
 
 	/**
-	 * 認証情報の検証
+	 * 認証情報の検証。
+	 *
+	 * accessKeyId / secretAccessKey / roleArn のいずれかが渡された場合はそれを使う。
+	 * 何も渡されていない場合は AWS SDK の default credential chain
+	 * (env / `~/.aws/credentials` / SSO / container metadata 等) に委譲する。
+	 * いずれの経路でも最終的な可否は STS GetCallerIdentity の成功で判定する。
+	 *
+	 * 副作用: 渡された credentials.accountId が空のとき、STS が返した値で
+	 * in-place に補完する (CFn stack tag や role session name に使うため)。
 	 */
 	async validateCredentials(credentials: CloudCredentials): Promise<boolean> {
 		if (credentials.provider !== "aws") {
 			return false;
 		}
 
-		// AssumeRole または直接認証情報のいずれかが必要
-		if (
-			!credentials.roleArn &&
-			(!credentials.accessKeyId || !credentials.secretAccessKey)
-		) {
-			return false;
-		}
-
 		try {
-			// STS GetCallerIdentity で認証を検証
 			const stsResponse = await this.callSTS(credentials, "GetCallerIdentity");
-			return !!stsResponse.Account;
+			if (!stsResponse.Account) {
+				return false;
+			}
+			if (!credentials.accountId) {
+				credentials.accountId = stsResponse.Account;
+			}
+			return true;
 		} catch (error) {
 			console.debug("[AWSCloudProvider] validateCredentials failed:", error);
 			return false;

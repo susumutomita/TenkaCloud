@@ -19,7 +19,6 @@ import {
   serverApiRequest,
 } from '@/lib/api/server';
 import type { ParticipantEvent, EventStatus } from '@/lib/api/types';
-import { createDevEvent, listDevEvents } from './dev-store';
 
 /**
  * Admin イベント一覧レスポンス型
