@@ -80,7 +80,7 @@ services:
   # Control Plane UI
   control-plane:
     build:
-      context: ./apps/control-plane
+      context: ./client/AdminWeb
     ports:
       - "13000:13000"
     environment:
@@ -92,7 +92,7 @@ services:
   # Application Plane UI
   application-plane:
     build:
-      context: ./apps/application-plane
+      context: ./client/Application
     ports:
       - "13001:13001"
     environment:
@@ -503,13 +503,13 @@ jobs:
           DYNAMODB_ENDPOINT: http://localhost:4566
 
       - name: Run E2E tests (Control Plane)
-        run: bun run --cwd apps/control-plane test:e2e
+        run: bun run --cwd client/AdminWeb test:e2e
         env:
           AUTH_SKIP: '1'
           DYNAMODB_ENDPOINT: http://localhost:4566
 
       - name: Run E2E tests (Application Plane)
-        run: bun run --cwd apps/application-plane test:e2e
+        run: bun run --cwd client/Application test:e2e
         env:
           AUTH_SKIP: '1'
           DYNAMODB_ENDPOINT: http://localhost:4566
@@ -561,10 +561,10 @@ bun run e2e:seed
 
 # 3. E2E テスト実行
 # Control Plane
-cd apps/control-plane && bun run test:e2e
+cd client/AdminWeb && bun run test:e2e
 
 # Application Plane
-cd apps/application-plane && bun run test:e2e
+cd client/Application && bun run test:e2e
 
 # UI モードで実行（デバッグ用）
 bun run test:e2e:ui
