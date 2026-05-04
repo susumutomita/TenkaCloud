@@ -29,7 +29,7 @@ Parameters:
 
   GitHubRepositoryId:
     Type: String
-    Default: maishu-kobo/TenkaCloud
+    Default: susumutomita/TenkaCloud
     Description: GitHub repository ID (format owner/repository)
 
   SourceBranchName:
