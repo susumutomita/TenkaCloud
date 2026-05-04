@@ -2,9 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
+import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus, Rule, RuleTargetInput } from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 
@@ -15,6 +17,12 @@ export interface ProblemDeployPipelineProps {
    * を listen する rule + 完了 event を publish する権限の grant に使う。
    */
   readonly eventBusArn: string;
+  /**
+   * GameDayDeploymentJob 行を持つ shared DynamoDB table。
+   * 完了 handler Lambda が UpdateItem する。AdminApiStack の controlPlaneTable
+   * を渡す想定 (cross-stack reference)。
+   */
+  readonly controlPlaneTable: ITable;
 }
 
 /**
@@ -165,6 +173,43 @@ export class ProblemDeployPipelineStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ProblemDeployCodeBuildProject", {
       value: project.projectName,
       description: "Name of the CodeBuild project that runs ProblemDeployRequested jobs.",
+    });
+
+    // ── Completion handler Lambda ──────────────────────────────
+    // CodeBuild script の emit_outcome が SBT EventBus に
+    // problem.deploy.completed / problem.deploy.failed を publish するので、
+    // それを subscribe して GameDayDeploymentJob 行を更新する。
+    // UI が job 一覧を polling しているので、これが届かないと永久に "in_progress"
+    // のまま残る。
+    const completionHandlerCodePath = path.resolve(__dirname, "..", "src");
+    const completionHandler = new LambdaFunction(this, "CompletionHandler", {
+      functionName: `tenkacloud-problem-deploy-completion-${this.region}`,
+      runtime: Runtime.NODEJS_20_X,
+      handler: "deploy-completion-handler.handler",
+      code: Code.fromAsset(completionHandlerCodePath, {
+        // path には他の Python lambda 等も入るので exclude で絞る。
+        exclude: ["*.py", "*.test.*", "**/*.test.*"],
+      }),
+      timeout: cdk.Duration.seconds(15),
+      logRetention: RetentionDays.ONE_WEEK,
+      environment: {
+        DYNAMODB_TABLE_NAME: props.controlPlaneTable.tableName,
+      },
+    });
+    props.controlPlaneTable.grantReadWriteData(completionHandler);
+
+    new Rule(this, "ProblemDeployCompletionRule", {
+      ruleName: `tenkacloud-problem-deploy-completion-${this.region}`,
+      eventBus,
+      eventPattern: {
+        source: ["tenkacloud.problem-service"],
+        detailType: ["problem.deploy.completed", "problem.deploy.failed"],
+      },
+      targets: [new targets.LambdaFunction(completionHandler)],
+    });
+
+    new cdk.CfnOutput(this, "ProblemDeployCompletionHandlerName", {
+      value: completionHandler.functionName,
     });
   }
 }
