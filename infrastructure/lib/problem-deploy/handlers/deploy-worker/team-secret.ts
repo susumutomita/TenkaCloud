@@ -1,16 +1,12 @@
 import { randomBytes } from "node:crypto";
 
 /**
- * 問題 CFn の `DbPassword` パラメータに渡すランダム値を生成する。
+ * 問題 CFn の `DbPassword` パラメータに渡す 144 bit のランダム値。
+ * base64url の 24 文字 (alphabet `A-Za-z0-9-_`) を返す。CFn の AllowedPattern
+ * (`^[A-Za-z0-9!@#$%^&*()_+\-=]+$`) のサブセットになるよう base64url を選ぶ。
  *
- * 18 byte (= 144 bits) の crypto-strong random を base64url で 24 文字に符号化する。
- * 出力アルファベットは `A-Za-z0-9-_` で、CFn 側 `DbPassword` の AllowedPattern
- * (`^[A-Za-z0-9!@#$%^&*()_+\-=]+$`) のサブセットになる。
- *
- * 旧実装は 62 文字アルファベットに `byte % 62` で写していたが、256 が 62 で割り切れない
- * ため modulo bias で前半 8 文字の出現確率が約 1.6% 高くなっていた (CodeQL
- * `js/biased-cryptographic-random` 指摘)。base64url は 6 bit ずつ取り出すので
- * 完全一様。
+ * `byte % alphabet.length` 方式は modulo bias が乗るため使わない。base64url は
+ * 6 bit ずつ取り出すので完全一様。
  */
 export function generateProblemSecret(): string {
   return randomBytes(18).toString("base64url");

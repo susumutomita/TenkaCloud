@@ -7,6 +7,11 @@ import type { IRole } from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import {
+  COMPETITOR_ROLE_NAME_DEFAULT,
+  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+  EVENT_SOURCE,
+} from "./handlers/shared/events";
 
 export interface DeployWorkerLambdaProps {
   readonly deploymentsTableName: string;
@@ -47,7 +52,7 @@ export class DeployWorkerLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTableName,
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         DEPLOY_EXTERNAL_ID: props.externalId,
-        COMPETITOR_ROLE_NAME: props.competitorRoleName ?? "TenkaCloud-CompetitorDeploy-Role",
+        COMPETITOR_ROLE_NAME: props.competitorRoleName ?? COMPETITOR_ROLE_NAME_DEFAULT,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -71,8 +76,8 @@ export class DeployWorkerLambda extends Construct {
       eventBus: props.eventBus,
       description: "Route tenkacloud.problem DeployRequested events to the worker Lambda.",
       eventPattern: {
-        source: ["tenkacloud.problem"],
-        detailType: ["DeployRequested"],
+        source: [EVENT_SOURCE],
+        detailType: [EVENT_DETAIL_TYPE_DEPLOY_REQUESTED],
       },
       targets: [new LambdaTarget(this.fn)],
     });

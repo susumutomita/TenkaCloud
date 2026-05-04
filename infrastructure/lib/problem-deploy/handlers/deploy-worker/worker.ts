@@ -4,7 +4,7 @@ import {
   type CreateStackInput,
 } from "@aws-sdk/client-cloudformation";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import {
   DynamoDBDocumentClient,
@@ -12,14 +12,15 @@ import {
   type UpdateCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
-import { generateProblemSecret } from "./team-secret.js";
-import { loadProblemTemplate } from "./templates.js";
 import {
+  COMPETITOR_ROLE_NAME_DEFAULT,
   type DeployRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_FAILED,
   EVENT_DETAIL_TYPE_DEPLOY_STARTED,
-  EVENT_SOURCE,
-} from "./types.js";
+  publishProblemEvent,
+} from "../shared/events.js";
+import { generateProblemSecret } from "./team-secret.js";
+import { loadProblemTemplate } from "./templates.js";
 
 export interface WorkerSharedResources {
   readonly tableName: string;
@@ -44,7 +45,7 @@ export interface AssumedCredentials {
 export function buildWorkerShared(): WorkerSharedResources {
   const tableName = getEnv("DEPLOYMENTS_TABLE_NAME");
   const eventBusName = getEnv("DEPLOY_EVENT_BUS_NAME");
-  const competitorRoleName = process.env.COMPETITOR_ROLE_NAME ?? "TenkaCloud-CompetitorDeploy-Role";
+  const competitorRoleName = process.env.COMPETITOR_ROLE_NAME ?? COMPETITOR_ROLE_NAME_DEFAULT;
   const externalId = getEnv("DEPLOY_EXTERNAL_ID");
   const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   const events = new EventBridgeClient({});
@@ -76,9 +77,11 @@ const ALLOWED_CIDR_DEFAULT = "0.0.0.0/0";
 /**
  * DeployRequested イベントを受けて、競技者アカウントへ問題 CFn を deploy する。
  *
- * 失敗 (AssumeRole / CreateStack / DDB) は throw して Lambda 全体を失敗扱いにする
- * (DLQ / EventBridge retry が拾える)。同時にベストエフォートで DDB を FAILED 更新 +
- * DeployFailed event を publish する。
+ * AssumeRole / CreateStack / DDB Update のいずれかが失敗したら throw して Lambda 全体を
+ * 失敗扱いにし (EventBridge retry / DLQ が拾える)、ベストエフォートで DDB FAILED 更新
+ * + DeployFailed event publish (markFailed)。
+ *
+ * 重複 deploy 防止 (同一 namePrefix の同時起動拒否) は別途 conditional put で追加する想定。
  */
 export async function handleDeployRequested(
   shared: WorkerSharedResources,
@@ -123,9 +126,42 @@ export async function handleDeployRequested(
     throw err;
   }
 
-  const updatedAt = new Date().toISOString();
-  const update: UpdateCommandInput = {
-    TableName: shared.tableName,
+  try {
+    await Promise.all([
+      shared.ddb.send(
+        new UpdateCommand(buildSuccessUpdate(shared.tableName, detail, stackId, dbPassword)),
+      ),
+      publishProblemEvent({
+        client: shared.events,
+        busName: shared.eventBusName,
+        detailType: EVENT_DETAIL_TYPE_DEPLOY_STARTED,
+        jobId: detail.jobId,
+        detail: {
+          jobId: detail.jobId,
+          tenantId: detail.tenantId,
+          stackId,
+          namePrefix: detail.namePrefix,
+          awsAccountId: detail.awsAccountId,
+          region: detail.region,
+        },
+      }),
+    ]);
+  } catch (err) {
+    // CFn は既に走り出している。DDB / EventBus の post-success 同期に失敗しても
+    // 状態が PENDING のままだと UI と乖離するので、failed 扱いに倒す + DLQ retry を効かせる。
+    await markFailed(shared, detail, "post_create_sync_failed", err);
+    throw err;
+  }
+}
+
+function buildSuccessUpdate(
+  tableName: string,
+  detail: DeployRequestedDetail,
+  stackId: string,
+  dbPassword: string,
+): UpdateCommandInput {
+  return {
+    TableName: tableName,
     Key: { PK: `DEPLOYMENT#${detail.jobId}`, SK: "META" },
     UpdateExpression:
       "SET #s = :status, stackId = :stackId, dbPassword = :dbPassword, updatedAt = :updatedAt",
@@ -134,31 +170,9 @@ export async function handleDeployRequested(
       ":status": "IN_PROGRESS",
       ":stackId": stackId,
       ":dbPassword": dbPassword,
-      ":updatedAt": updatedAt,
+      ":updatedAt": new Date().toISOString(),
     },
   };
-  await shared.ddb.send(new UpdateCommand(update));
-
-  await shared.events.send(
-    new PutEventsCommand({
-      Entries: [
-        {
-          EventBusName: shared.eventBusName,
-          Source: EVENT_SOURCE,
-          DetailType: EVENT_DETAIL_TYPE_DEPLOY_STARTED,
-          Detail: JSON.stringify({
-            jobId: detail.jobId,
-            tenantId: detail.tenantId,
-            stackId,
-            namePrefix: detail.namePrefix,
-            awsAccountId: detail.awsAccountId,
-            region: detail.region,
-          }),
-          Resources: [`tenkacloud:deployment:${detail.jobId}`],
-        },
-      ],
-    }),
-  );
 }
 
 async function assumeCompetitorRole(
@@ -192,9 +206,9 @@ async function markFailed(
   err: unknown,
 ): Promise<void> {
   const message = err instanceof Error ? err.message : String(err);
-  const updatedAt = new Date().toISOString();
-  try {
-    await shared.ddb.send(
+  // DDB / EventBridge の更新は独立。片方が失敗しても他方は走らせる。
+  const results = await Promise.allSettled([
+    shared.ddb.send(
       new UpdateCommand({
         TableName: shared.tableName,
         Key: { PK: `DEPLOYMENT#${detail.jobId}`, SK: "META" },
@@ -203,33 +217,29 @@ async function markFailed(
         ExpressionAttributeValues: {
           ":status": "FAILED",
           ":reason": `${reasonKey}: ${message}`.slice(0, 1024),
-          ":updatedAt": updatedAt,
+          ":updatedAt": new Date().toISOString(),
         },
       }),
-    );
-    await shared.events.send(
-      new PutEventsCommand({
-        Entries: [
-          {
-            EventBusName: shared.eventBusName,
-            Source: EVENT_SOURCE,
-            DetailType: EVENT_DETAIL_TYPE_DEPLOY_FAILED,
-            Detail: JSON.stringify({
-              jobId: detail.jobId,
-              tenantId: detail.tenantId,
-              reason: reasonKey,
-            }),
-            Resources: [`tenkacloud:deployment:${detail.jobId}`],
-          },
-        ],
-      }),
-    );
-  } catch (publishErr) {
-    console.error("[worker] markFailed publish failed", {
+    ),
+    publishProblemEvent({
+      client: shared.events,
+      busName: shared.eventBusName,
+      detailType: EVENT_DETAIL_TYPE_DEPLOY_FAILED,
       jobId: detail.jobId,
-      reasonKey,
-      message,
-      publishErr: publishErr instanceof Error ? publishErr.message : String(publishErr),
-    });
+      detail: {
+        jobId: detail.jobId,
+        tenantId: detail.tenantId,
+        reason: reasonKey,
+      },
+    }),
+  ]);
+  for (const r of results) {
+    if (r.status === "rejected") {
+      console.error("[worker] markFailed downstream failed", {
+        jobId: detail.jobId,
+        reasonKey,
+        err: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
+    }
   }
 }
