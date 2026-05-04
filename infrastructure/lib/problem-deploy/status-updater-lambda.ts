@@ -23,8 +23,8 @@ export interface StatusUpdaterLambdaProps {
 }
 
 /**
- * 30 秒ごとに走り、IN_PROGRESS な deployment の CFn StackStatus を polling して DDB と
- * EventBus に反映する Lambda。expiresAt を超えた non-terminal deployment は DeleteStack
+ * EventBridge schedule rule で起動し、non-terminal deployment の CFn StackStatus を
+ * polling して DDB と EventBus に反映する Lambda。expiresAt を超えた行は DeleteStack
  * で auto teardown する。
  */
 export class StatusUpdaterLambda extends Construct {

@@ -40,18 +40,8 @@ const IN_PROGRESS_STATUSES = new Set([
 ]);
 
 /**
- * CFn StackStatus → 内部 DeploymentStatus の遷移を計算する。
- *
- * 入力:
- *   - currentStatus: DDB に保存された現在の DeploymentStatus
- *   - cfnStack: DescribeStacks の結果 (StackStatus / StackStatusReason / Outputs)
- *
- * 出力:
- *   - kind="transition": 状態遷移すべき (DDB Update + Event publish)
- *   - kind="stable": 遷移なし (無視)
- *
- * StackStatus が認識できない場合は stable を返して既存状態を維持する (CFn が新しい
- * status を追加した時に worker が誤判定で FAILED に倒さないように)。
+ * 認識できない StackStatus は `stable` を返す (CFn が将来的に追加する新規 status を
+ * 既存ロジックが誤判定で FAILED に倒すのを防ぐ)。
  */
 export function resolveDeploymentStatus(
   currentStatus: DeploymentStatus,
@@ -76,17 +66,10 @@ export function resolveDeploymentStatus(
       failureReason: stackStatusReason ? `${cfnStatus}: ${stackStatusReason}` : cfnStatus,
     };
   }
-  if (IN_PROGRESS_STATUSES.has(cfnStatus)) {
-    // CFn 側でまだ進行中 (CREATE_IN_PROGRESS など) は in-flight 扱い、内部状態は維持
-    return { kind: "stable" };
-  }
+  if (IN_PROGRESS_STATUSES.has(cfnStatus)) return { kind: "stable" };
   return { kind: "stable" };
 }
 
-/**
- * CFn の Outputs (Array<Output>) を `OutputKey -> OutputValue` の JSON 文字列に直す。
- * UI / participant portal が parse して `FrontendUrl` などを取り出す想定。
- */
 export function serializeStackOutputs(outputs: Output[] | undefined): string {
   if (!outputs?.length) return "{}";
   const obj: Record<string, string> = {};

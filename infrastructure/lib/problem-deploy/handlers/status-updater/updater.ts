@@ -37,6 +37,12 @@ interface AssumedCredentials {
 
 const NON_TERMINAL_STATUSES = new Set<DeploymentStatus>(["PENDING", "IN_PROGRESS", "DELETING"]);
 
+const DETAIL_TYPE_BY_STATUS = {
+  COMPLETE: EVENT_DETAIL_TYPE_DEPLOY_COMPLETED,
+  DELETED: EVENT_DETAIL_TYPE_DEPLOY_DELETED,
+  FAILED: EVENT_DETAIL_TYPE_DEPLOY_FAILED,
+} as const satisfies Partial<Record<DeploymentStatus, string>>;
+
 export interface UpdaterSharedResources {
   readonly tableName: string;
   readonly eventBusName: string;
@@ -71,16 +77,6 @@ export function buildUpdaterShared(): UpdaterSharedResources {
   };
 }
 
-/**
- * 30 秒に 1 回起動する scheduled Lambda 本体。
- *
- * 1. DDB scan で non-terminal (PENDING/IN_PROGRESS/DELETING) 行を集める
- * 2. 各 row について並列で processOne を実行 (失敗は他に伝播させない)
- * 3. processOne:
- *    - expiresAt < now() && stackId あり && terminal でない → DeleteStack 起動 + DELETING に遷移
- *    - stackId なし (PENDING のまま CFn 未起動) → スキップ (Worker が拾う / 失敗時は markFailed 済)
- *    - その他 → DescribeStacks + status 解決 + 必要なら DDB Update + Event publish
- */
 export async function runStatusUpdate(shared: UpdaterSharedResources): Promise<void> {
   const items = await scanTracked(shared);
   await Promise.allSettled(items.map((item) => processOne(shared, item)));
@@ -289,13 +285,8 @@ async function publishForTransition(
   failureReason: string | undefined,
   stackOutputs: string | undefined,
 ): Promise<void> {
-  if (next === "IN_PROGRESS" || next === "DELETING") return;
-  const detailType =
-    next === "COMPLETE"
-      ? EVENT_DETAIL_TYPE_DEPLOY_COMPLETED
-      : next === "DELETED"
-        ? EVENT_DETAIL_TYPE_DEPLOY_DELETED
-        : EVENT_DETAIL_TYPE_DEPLOY_FAILED;
+  const detailType = DETAIL_TYPE_BY_STATUS[next as keyof typeof DETAIL_TYPE_BY_STATUS];
+  if (!detailType) return;
   try {
     await publishProblemEvent({
       client: shared.events,
