@@ -10,6 +10,7 @@ import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
 import { getEnv } from "../lib/helper-functions";
+import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
 import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
 import { loadConfig } from "../lib/utils/config-loader";
@@ -130,6 +131,16 @@ const controlPlaneStack = new ControlPlaneStack(app, "ControlPlaneStack", {
 // 既定値) なので Free Tier 枠 (25 RCU/WCU) を圧迫する。Aspect で全 CfnTable を
 // dynamoReadCapacity / dynamoWriteCapacity (default 1/1) に揃えて Free Tier に収める。
 cdk.Aspects.of(controlPlaneStack).add(
+  new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
+);
+
+// Problem deploy backend (PR-B): Deployments DDB + Worker IAM Role の土台のみ。
+// EventBridge Rule + Lambda は後段 PR で本 stack に追加する。
+const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
+  ...stackEnv,
+  eventBusArn: controlPlaneStack.eventBusArn,
+});
+cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
 );
 
