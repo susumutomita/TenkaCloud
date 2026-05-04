@@ -357,26 +357,26 @@ describe("ProblemDeployBackendStack", () => {
   describe("Participant Portal hosting", () => {
     beforeAll(() => ensurePortalPlaceholderDist());
 
-    it("enableParticipantPortal=false (default) なら CloudFront / S3 Bucket を 1 個も増やさないべき", () => {
+    it("participantPortal 未指定 (default) なら CloudFront / S3 Bucket を 1 個も増やさないべき", () => {
       const tpl = synth();
       tpl.resourceCountIs("AWS::CloudFront::Distribution", 0);
       tpl.resourceCountIs("AWS::S3::Bucket", 0);
     });
 
-    it("enableParticipantPortal=true で S3 Bucket / CloudFront Distribution / OAI を 1 セット作るべき", () => {
-      const tpl = synth({ enableParticipantPortal: true });
+    it("participantPortal 指定で S3 Bucket / CloudFront Distribution / OAI を 1 セット作るべき", () => {
+      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
       tpl.resourceCountIs("AWS::S3::Bucket", 1);
       tpl.resourceCountIs("AWS::CloudFront::Distribution", 1);
       tpl.resourceCountIs("AWS::CloudFront::CloudFrontOriginAccessIdentity", 1);
     });
 
-    it("enableParticipantPortal=true なら ParticipantPortalUrl Output を持つべき", () => {
-      const tpl = synth({ enableParticipantPortal: true });
+    it("participantPortal 指定なら ParticipantPortalUrl Output を持つべき", () => {
+      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
       tpl.hasOutput("ParticipantPortalUrl", {});
     });
 
     it("S3 Bucket は public access を完全に block すべき (Portal も同様)", () => {
-      const tpl = synth({ enableParticipantPortal: true });
+      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
       tpl.hasResourceProperties(
         "AWS::S3::Bucket",
         Match.objectLike({
@@ -391,7 +391,7 @@ describe("ProblemDeployBackendStack", () => {
     });
 
     it("CloudFront Distribution は HTTPS リダイレクトと SPA fallback (403/404 → /index.html 200) を持つべき", () => {
-      const tpl = synth({ enableParticipantPortal: true });
+      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
       tpl.hasResourceProperties(
         "AWS::CloudFront::Distribution",
         Match.objectLike({

@@ -10,6 +10,7 @@ import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
 import { getEnv } from "../lib/helper-functions";
+import type { ParticipantPortalMode } from "../lib/problem-deploy/participant-portal-hosting";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
 import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
@@ -156,13 +157,16 @@ const deployApiCorsOrigins = deployApiCorsOriginsRaw
       .filter((s) => s.length > 0)
   : undefined;
 const enableParticipantPortal = process.env.CDK_PARAM_ENABLE_PARTICIPANT_PORTAL === "true";
-const participantPortalEventTitle =
-  process.env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE || "TenkaCloud Battle";
-const participantPortalRuntimeConfig = enableParticipantPortal
+const participantPortalEventTitle = process.env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE;
+const participantPortal = enableParticipantPortal
   ? {
-      eventTitle: participantPortalEventTitle,
-      eventRegion: awsRegion ?? "ap-northeast-1",
-      mode: "dev-mock" as const,
+      runtimeConfig: participantPortalEventTitle
+        ? {
+            eventTitle: participantPortalEventTitle,
+            eventRegion: awsRegion ?? "ap-northeast-1",
+            mode: "dev-mock" satisfies ParticipantPortalMode,
+          }
+        : ("default-dev-mock" as const),
     }
   : undefined;
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
@@ -171,8 +175,7 @@ const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDep
   deployExternalId,
   deployApiCognito,
   deployApiCorsOrigins,
-  enableParticipantPortal,
-  participantPortalRuntimeConfig,
+  participantPortal,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),

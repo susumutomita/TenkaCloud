@@ -8,6 +8,7 @@ import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
 import { DeploymentsTable } from "./deployments-table";
 import {
+  DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
   type ParticipantPortalRuntimeConfig,
 } from "./participant-portal-hosting";
@@ -44,17 +45,15 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly deployApiCorsOrigins?: readonly string[];
   /**
-   * 競技者向け Participant Portal を S3 + CloudFront で配信するかのフラグ。
-   * `true` のとき `ParticipantPortalHosting` を作成、`runtimeConfig` で
-   * runtime-config.json を初期配置する。
+   * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
+   * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
+   * 無い段階では `runtimeConfig: "default-dev-mock"` を渡せば mode="dev-mock"
+   * のサンプル値で起動する (frontend 単体動作)。
+   * 未指定なら Portal Hosting を作らない。
    */
-  readonly enableParticipantPortal?: boolean;
-  /**
-   * Participant Portal の runtime-config.json に書き出す値。
-   * `enableParticipantPortal` が `true` のときのみ参照される。
-   * 未指定時は `mode="dev-mock"` のサンプル値が入る (Portal backend が無い段階用)。
-   */
-  readonly participantPortalRuntimeConfig?: ParticipantPortalRuntimeConfig;
+  readonly participantPortal?: {
+    readonly runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock";
+  };
 }
 
 /**
@@ -116,15 +115,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       this.deployApiGatewayUrl = apiGw.httpApi.apiEndpoint;
     }
 
-    if (props.enableParticipantPortal) {
+    if (props.participantPortal) {
       const portal = new ParticipantPortalHosting(this, "ParticipantPortal");
-      portal.deployRuntimeConfig(
-        props.participantPortalRuntimeConfig ?? {
-          eventTitle: "TenkaCloud Battle",
-          eventRegion: this.region,
-          mode: "dev-mock",
-        },
-      );
+      const runtimeConfig =
+        props.participantPortal.runtimeConfig === "default-dev-mock"
+          ? DEFAULT_DEV_MOCK_RUNTIME_CONFIG(this.region)
+          : props.participantPortal.runtimeConfig;
+      portal.deployRuntimeConfig(runtimeConfig);
       this.participantPortalUrl = portal.distributionUrl;
       new CfnOutput(this, "ParticipantPortalUrl", {
         value: portal.distributionUrl,

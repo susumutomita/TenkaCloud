@@ -16,7 +16,7 @@ export type ParticipantPortalMode = "dev-mock" | "backend";
 
 export interface ParticipantPortalRuntimeConfig {
   /**
-   * Portal backend (PR-H2 で立てる Lambda Function URL) の base URL。
+   * Portal backend (Lambda Function URL) の base URL。
    * mode="dev-mock" のときは frontend が呼ばないので空文字 OK。
    */
   readonly apiBaseUrl?: string;
@@ -24,10 +24,15 @@ export interface ParticipantPortalRuntimeConfig {
   readonly eventRegion: string;
   /**
    * "dev-mock": frontend 単体動作 (auth 偽装)。"backend": 実 backend を呼ぶ。
-   * Portal backend が無い段階では "dev-mock" に倒す。
    */
   readonly mode: ParticipantPortalMode;
 }
+
+const DEFAULT_DEV_MOCK_RUNTIME_CONFIG = (region: string): ParticipantPortalRuntimeConfig => ({
+  eventTitle: "TenkaCloud Battle",
+  eventRegion: region,
+  mode: "dev-mock",
+});
 
 /**
  * 競技者向け Participant Portal を S3 + CloudFront で配信する Construct。
@@ -35,9 +40,6 @@ export interface ParticipantPortalRuntimeConfig {
  * 構造は ApplicationAdminConsoleHosting と同等 (S3 private + OAI + CloudFront +
  * SPA fallback)。dist 供給は build pipeline (`bun run --cwd apps/participant-portal
  * build` が `apps/participant-portal/dist` に出力) が担当。
- *
- * runtime-config.json は portal backend (PR-H2) が確定してから
- * `deployRuntimeConfig()` で配置する。
  */
 export class ParticipantPortalHosting extends Construct {
   public readonly distributionDomainName: string;
@@ -86,14 +88,14 @@ export class ParticipantPortalHosting extends Construct {
     });
   }
 
-  deployRuntimeConfig(props: ParticipantPortalRuntimeConfig): void {
+  deployRuntimeConfig(config: ParticipantPortalRuntimeConfig): void {
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [
         Source.jsonData("runtime-config.json", {
-          apiBaseUrl: (props.apiBaseUrl ?? "").replace(/\/$/, ""),
-          eventTitle: props.eventTitle,
-          eventRegion: props.eventRegion,
-          mode: props.mode,
+          apiBaseUrl: (config.apiBaseUrl ?? "").replace(/\/$/, ""),
+          eventTitle: config.eventTitle,
+          eventRegion: config.eventRegion,
+          mode: config.mode,
         }),
       ],
       destinationBucket: this.bucket,
@@ -103,3 +105,5 @@ export class ParticipantPortalHosting extends Construct {
     });
   }
 }
+
+export { DEFAULT_DEV_MOCK_RUNTIME_CONFIG };
