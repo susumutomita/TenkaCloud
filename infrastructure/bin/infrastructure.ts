@@ -200,6 +200,7 @@ const tenantTemplateStack = new TenantTemplateStack(
     ApiKeySSMParameterNames: apiKeySSMParameterNames,
     tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
     commitId,
+    deployApiUrl: problemDeployBackendStack.deployApiGatewayUrl,
   },
 );
 

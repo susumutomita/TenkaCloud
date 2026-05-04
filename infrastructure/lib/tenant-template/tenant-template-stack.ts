@@ -33,6 +33,12 @@ interface TenantTemplateStackProps extends StackProps {
   tenantMappingTable: Table;
   commitId: string;
   waveNumber?: string;
+  /**
+   * ProblemDeployBackendStack の HTTP API URL (Cognito 認証付き)。
+   * runtime-config.json に書き出して application-admin-console が deploy API を
+   * 呼べるようにする。未指定なら空文字 → 既存の dev fallback で動作。
+   */
+  deployApiUrl?: string;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -97,6 +103,7 @@ export class TenantTemplateStack extends Stack {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: apiGateway.restApi.url,
+      deployApiUrl: props.deployApiUrl,
     });
 
     new AwsCustomResource(this, "CreateTenantMapping", {
