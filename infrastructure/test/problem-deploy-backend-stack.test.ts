@@ -70,9 +70,8 @@ describe("ProblemDeployBackendStack", () => {
       tpl.hasResource("AWS::DynamoDB::Table", { DeletionPolicy: "Retain" });
     });
 
-    it("DeployWorkerRole を 1 つ作り、lambda.amazonaws.com に assume させるべき", () => {
+    it("DeployWorkerRole は lambda.amazonaws.com に assume させるべき", () => {
       const tpl = synth();
-      tpl.resourceCountIs("AWS::IAM::Role", 1);
       tpl.hasResourceProperties(
         "AWS::IAM::Role",
         Match.objectLike({
@@ -167,6 +166,60 @@ describe("ProblemDeployBackendStack", () => {
       const tpl = synth();
       tpl.hasOutput("DeploymentsTableName", {});
       tpl.hasOutput("DeployWorkerRoleArn", {});
+      tpl.hasOutput("DeployApiUrl", {});
+    });
+
+    it("Deploy API Lambda を 1 つ作るべき (Node.js 20 / arm64)", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Architectures: ["arm64"],
+          Handler: "index.handler",
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
+              DEPLOY_EVENT_BUS_NAME: Match.anyValue(),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("Deploy API Lambda の Function URL は AWS_IAM 認証であるべき", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Url",
+        Match.objectLike({
+          AuthType: "AWS_IAM",
+        }),
+      );
+    });
+
+    it("Deploy API Lambda は DeployWorkerRole を execution role として再利用するべき", () => {
+      const tpl = synth();
+      // Worker Role は inlinePolicies で DDB / EventBridge / AssumeRole 権限を持つ。
+      // Lambda は自動生成 role を作らず Worker Role を流用するので、追加の AWS::IAM::Policy
+      // (DDB Put 権限のみの reduced policy) は新規作成されない。
+      tpl.hasResourceProperties(
+        "AWS::IAM::Role",
+        Match.objectLike({
+          Policies: Match.arrayWith([
+            Match.objectLike({
+              PolicyName: "DeploymentsTableAccess",
+              PolicyDocument: Match.objectLike({
+                Statement: Match.arrayWith([
+                  Match.objectLike({
+                    Effect: "Allow",
+                    Action: Match.arrayWith(["dynamodb:PutItem"]),
+                  }),
+                ]),
+              }),
+            }),
+          ]),
+        }),
+      );
     });
   });
 
