@@ -205,9 +205,6 @@ const tenantTemplateStack = new TenantTemplateStack(
 );
 
 tenantTemplateStack.addDependency(bootstrapTemplateStack);
-if (problemDeployBackendStack.deployApiGatewayUrl) {
-  tenantTemplateStack.addDependency(problemDeployBackendStack);
-}
 cdk.Tags.of(tenantTemplateStack).add("TenantId", tenantId);
 cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(isPooledDeploy));
 cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
