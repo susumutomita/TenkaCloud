@@ -8,13 +8,6 @@ export type TeardownOutcome =
   | { kind: "already_deleted" }
   | { kind: "race"; reason: "tenant_or_status_mismatch" };
 
-const TEARDOWNABLE_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
-  "PENDING",
-  "IN_PROGRESS",
-  "COMPLETE",
-  "FAILED",
-]);
-
 /**
  * 手動 teardown を要求する。新しく CFn DeleteStack を呼ぶ Lambda は作らず、
  * `expiresAt` を現在時刻に書き換えて既存の StatusUpdater (1 min) に拾わせる。
@@ -72,5 +65,3 @@ export async function requestTeardown(
   }
   return { kind: "accepted", previousStatus: status };
 }
-
-export { TEARDOWNABLE_STATUSES };

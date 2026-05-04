@@ -25,8 +25,6 @@ import {
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
 
-const DELETED_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
-
 const POLL_INTERVAL_MS = 5_000;
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
@@ -125,7 +123,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   if (!item) return null;
 
   const outputs = parseStackOutputs(item.stackOutputs);
-  const canDelete = !DELETED_STATUSES.has(item.status);
+  const canDelete = item.status !== "DELETING" && item.status !== "DELETED";
 
   return (
     <SpaceBetween size="l">
@@ -138,7 +136,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
             </Button>
             <Button
               variant="normal"
-              iconName="remove"
+              iconName="delete-marker"
               disabled={!canDelete}
               onClick={() => {
                 setDeleteError(null);
