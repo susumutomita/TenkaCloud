@@ -1,18 +1,18 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  TenkaCloud CD Pipeline.
+  tenkacloud CD Pipeline.
   Pipeline: Source (GitHub) → Manual Approval → Build (scripts/install.sh on CodeBuild)
 
 Parameters:
   PipelineName:
     Type: String
     Default: ''
-    Description: CodePipeline name (if empty, uses TenkaCloud-{Environment})
+    Description: CodePipeline name (if empty, uses tenkacloud-{Environment})
 
   CodeBuildProjectName:
     Type: String
     Default: ''
-    Description: CodeBuild project name (if empty, uses TenkaCloud-{Environment})
+    Description: CodeBuild project name (if empty, uses tenkacloud-{Environment})
 
   Environment:
     Type: String
@@ -29,7 +29,7 @@ Parameters:
 
   GitHubRepositoryId:
     Type: String
-    Default: susumutomita/TenkaCloud
+    Default: susumutomita/tenkacloud
     Description: GitHub repository ID (format owner/repository)
 
   SourceBranchName:
@@ -39,14 +39,9 @@ Parameters:
 
   SystemAdminEmail:
     Type: String
-    Description: TenkaCloud control-plane admin email (receives Cognito invitation on first deploy)
+    Description: tenkacloud control-plane admin email (receives Cognito invitation on first deploy)
     AllowedPattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
     ConstraintDescription: Must be a valid email address
-
-  BrokerEntraProfileId:
-    Type: String
-    Default: default
-    Description: Broker Entra profile ID (SSM path /TenkaCloud/broker-entra/profiles/{id}/graph-credentials must exist)
 
   CodeBuildTimeoutMinutes:
     Type: Number
@@ -66,7 +61,7 @@ Resources:
   ArtifactStoreBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub TenkaCloud-${Environment}-pipeline-artifacts-${AWS::AccountId}
+      BucketName: !Sub tenkacloud-${Environment}-pipeline-artifacts-${AWS::AccountId}
       VersioningConfiguration:
         Status: Enabled
       LifecycleConfiguration:
@@ -93,7 +88,7 @@ Resources:
       Name: !If
         - UseCodeBuildNameParam
         - !Ref CodeBuildProjectName
-        - !Sub TenkaCloud-${Environment}
+        - !Sub tenkacloud-${Environment}
       ServiceRole: !GetAtt CodeBuildRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -129,7 +124,7 @@ Resources:
       LogsConfig:
         CloudWatchLogs:
           Status: ENABLED
-          GroupName: !Sub /aws/codebuild/TenkaCloud-${Environment}
+          GroupName: !Sub /aws/codebuild/tenkacloud-${Environment}
       TimeoutInMinutes: !Ref CodeBuildTimeoutMinutes
 
   # =====================================
@@ -141,7 +136,7 @@ Resources:
       Name: !If
         - UsePipelineNameParam
         - !Ref PipelineName
-        - !Sub TenkaCloud-${Environment}
+        - !Sub tenkacloud-${Environment}
       RoleArn: !GetAtt CodePipelineRole.Arn
       PipelineType: V2
       ExecutionMode: QUEUED
@@ -211,13 +206,13 @@ Resources:
   # IAM Roles
   # =====================================
   # CodeBuild ロール: scripts/install.sh が触る AWS リソース全方位の権限が要る。
-  # TenkaCloud は Lambda + Cognito + DynamoDB + S3 + CloudFront + API Gateway +
+  # tenkacloud は Lambda + Cognito + DynamoDB + S3 + CloudFront + API Gateway +
   # Step Functions + EventBridge + CodeBuild (SBT pipeline) + SSM。
   # SBT 内部の cdk deploy が CDKToolkit 経由で sts:AssumeRole するので cdk-* role も必要。
   CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub TenkaCloud-${Environment}-codebuild-role
+      RoleName: !Sub tenkacloud-${Environment}-codebuild-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -237,8 +232,8 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/TenkaCloud-${Environment}
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/TenkaCloud-${Environment}:*
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/tenkacloud-${Environment}
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/tenkacloud-${Environment}:*
               # S3 Artifact Store
               - Effect: Allow
                 Action:
@@ -308,7 +303,7 @@ Resources:
                 Action:
                   - logs:*
                 Resource: '*'
-              # TenkaCloud コスト 0 原則: 秘匿値は SSM Parameter Store。
+              # tenkacloud コスト 0 原則: 秘匿値は SSM Parameter Store。
               # Secrets Manager は使わないので GetSecretValue 権限は付けない。
               - Effect: Allow
                 Action:
@@ -319,7 +314,7 @@ Resources:
                   - ssm:DeleteParameter
                   - ssm:AddTagsToResource
                 Resource:
-                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/tenkacloud/*
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -339,7 +334,7 @@ Resources:
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub TenkaCloud-${Environment}-pipeline-role
+      RoleName: !Sub tenkacloud-${Environment}-pipeline-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -378,8 +373,8 @@ Resources:
   PipelineNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub TenkaCloud-${Environment}-pipeline-notification
-      DisplayName: !Sub TenkaCloud ${Environment} Pipeline Notifications
+      TopicName: !Sub tenkacloud-${Environment}-pipeline-notification
+      DisplayName: !Sub tenkacloud ${Environment} Pipeline Notifications
 
   PipelineNotificationTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -402,7 +397,7 @@ Resources:
       - Pipeline
       - PipelineNotificationTopicPolicy
     Properties:
-      Name: !Sub TenkaCloud-${Environment}-pipeline-events
+      Name: !Sub tenkacloud-${Environment}-pipeline-events
       DetailType: FULL
       Resource: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
       EventTypeIds:
