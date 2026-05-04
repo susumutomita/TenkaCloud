@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../src/api/client";
 import {
   type DeployRequestBody,
+  deleteDeployment,
   getDeployment,
   listDeployments,
   startDeployment,
@@ -70,6 +71,20 @@ describe("startDeployment", () => {
       teamName: "t",
     });
     expect(calls[0]?.path).toBe("/problems/a%2Fb/deploy");
+  });
+});
+
+describe("deleteDeployment", () => {
+  it("DELETE /deployments/:jobId を呼ぶべき", async () => {
+    const { client, calls } = fakeClient(undefined);
+    await deleteDeployment(client, "01H");
+    expect(calls[0]).toEqual({ path: "/deployments/01H", method: "DELETE" });
+  });
+
+  it("jobId に特殊文字が来ても URL encode するべき", async () => {
+    const { client, calls } = fakeClient(undefined);
+    await deleteDeployment(client, "a/b");
+    expect(calls[0]?.path).toBe("/deployments/a%2Fb");
   });
 });
 

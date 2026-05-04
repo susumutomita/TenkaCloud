@@ -82,6 +82,10 @@ export function getDeployment(client: ApiClient, jobId: string): Promise<Deploym
   return client.get<DeploymentSummary>(`/deployments/${encodeURIComponent(jobId)}`);
 }
 
+export function deleteDeployment(client: ApiClient, jobId: string): Promise<void> {
+  return client.del(`/deployments/${encodeURIComponent(jobId)}`);
+}
+
 export interface ListDeploymentsParams {
   readonly limit?: number;
   readonly cursor?: string;

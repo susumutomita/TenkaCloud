@@ -321,7 +321,7 @@ describe("ProblemDeployBackendStack", () => {
       );
     });
 
-    it("HTTP API は POST /deploy / GET /deployments / GET /deployments/:jobId のルートを持つべき", () => {
+    it("HTTP API は POST deploy / GET list / GET detail / DELETE detail の全ルートを JWT 認可で持つべき", () => {
       const tpl = synth({
         deployApiCognito: { userPoolId: "ap-northeast-1_X", clientId: "c-1" },
       });
@@ -329,6 +329,7 @@ describe("ProblemDeployBackendStack", () => {
         "POST /problems/{problemId}/deploy",
         "GET /problems/{problemId}/deployments",
         "GET /deployments/{jobId}",
+        "DELETE /deployments/{jobId}",
       ];
       for (const routeKey of expectedRoutes) {
         tpl.hasResourceProperties(

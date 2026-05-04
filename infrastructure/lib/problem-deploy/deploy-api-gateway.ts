@@ -45,7 +45,12 @@ export class DeployApiGateway extends Construct {
       corsPreflight: {
         allowOrigins: [...props.corsAllowOrigins],
         allowHeaders: ["authorization", "content-type"],
-        allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.OPTIONS],
+        allowMethods: [
+          CorsHttpMethod.GET,
+          CorsHttpMethod.POST,
+          CorsHttpMethod.DELETE,
+          CorsHttpMethod.OPTIONS,
+        ],
       },
     });
 
@@ -54,7 +59,7 @@ export class DeployApiGateway extends Construct {
     const routes: Array<{ path: string; methods: HttpMethod[] }> = [
       { path: "/problems/{problemId}/deploy", methods: [HttpMethod.POST] },
       { path: "/problems/{problemId}/deployments", methods: [HttpMethod.GET] },
-      { path: "/deployments/{jobId}", methods: [HttpMethod.GET] },
+      { path: "/deployments/{jobId}", methods: [HttpMethod.GET, HttpMethod.DELETE] },
     ];
 
     for (const route of routes) {
