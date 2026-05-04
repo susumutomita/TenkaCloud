@@ -6,6 +6,7 @@ import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
 import { DeploymentsTable } from "./deployments-table";
+import { StatusUpdaterLambda } from "./status-updater-lambda";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   /**
@@ -61,6 +62,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
 
     new DeployWorkerLambda(this, "DeployWorker", {
+      deploymentsTableName: deployments.table.tableName,
+      eventBus,
+      executionRole: workerRole.role,
+      externalId: props.deployExternalId,
+      competitorRoleName: props.competitorRoleName,
+    });
+
+    new StatusUpdaterLambda(this, "StatusUpdater", {
       deploymentsTableName: deployments.table.tableName,
       eventBus,
       executionRole: workerRole.role,
