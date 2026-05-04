@@ -70,9 +70,8 @@ describe("ProblemDeployBackendStack", () => {
       tpl.hasResource("AWS::DynamoDB::Table", { DeletionPolicy: "Retain" });
     });
 
-    it("DeployWorkerRole を 1 つ作り、lambda.amazonaws.com に assume させるべき", () => {
+    it("DeployWorkerRole は lambda.amazonaws.com に assume させるべき", () => {
       const tpl = synth();
-      tpl.resourceCountIs("AWS::IAM::Role", 1);
       tpl.hasResourceProperties(
         "AWS::IAM::Role",
         Match.objectLike({
@@ -167,6 +166,57 @@ describe("ProblemDeployBackendStack", () => {
       const tpl = synth();
       tpl.hasOutput("DeploymentsTableName", {});
       tpl.hasOutput("DeployWorkerRoleArn", {});
+      tpl.hasOutput("DeployApiUrl", {});
+    });
+
+    it("Deploy API Lambda を 1 つ作るべき (Node.js 20 / arm64)", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Architectures: ["arm64"],
+          Handler: "index.handler",
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
+              DEPLOY_EVENT_BUS_NAME: Match.anyValue(),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("Deploy API Lambda の Function URL は AWS_IAM 認証であるべき", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Url",
+        Match.objectLike({
+          AuthType: "AWS_IAM",
+        }),
+      );
+    });
+
+    it("Deploy API Lambda は DDB Put / EventBridge PutEvents 権限を持つべき", () => {
+      const tpl = synth();
+      // NodejsFunction が自動生成する Role + addToRolePolicy が AWS::IAM::Policy を作る
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: Match.arrayWith(["dynamodb:PutItem"]),
+              }),
+              Match.objectLike({
+                Effect: "Allow",
+                Action: "events:PutEvents",
+              }),
+            ]),
+          }),
+        }),
+      );
     });
   });
 
