@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Competitor Bootstrap. 競技者 (= 問題 deploy 先) AWS アカウントが
+  事前に 1 回だけ deploy する。TenkaCloud control-plane の Deploy Lambda が
+  AssumeRole するための IAM Role を作る。trust は TenkaCloud アカウント ID +
+  ExternalId に限定し、Confused Deputy を防ぐ。
+
+# このスタックを deploy した後、出力された RoleArn を TenkaCloud の TenantAdmin に
+# 伝えると、TenkaCloud から問題 CFn を本アカウントへ deploy できるようになる。
+# スタック削除すると Role も消えるので、TenkaCloud からのアクセス権を一括撤回できる。
+
+Parameters:
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    ConstraintDescription: 12 桁の AWS アカウント ID。
+    Description: >
+      AssumeRole を許可する TenkaCloud control-plane の AWS アカウント ID。
+      TenkaCloud 運営者から事前に共有される。
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 128
+    AllowedPattern: "^[A-Za-z0-9_=,.@:/-]+$"
+    Description: >
+      AssumeRole 時に TenkaCloud から渡される External ID。Confused Deputy 攻撃を
+      防ぐためのテナント固有 secret。TenkaCloud 運営者から事前に共有される。
+  RoleName:
+    Type: String
+    Default: TenkaCloud-CompetitorDeploy-Role
+    AllowedPattern: "^[A-Za-z0-9_+=,.@-]{1,64}$"
+    Description: >
+      作成する IAM Role 名。TenkaCloud 側の deploy 設定とずれないよう default を使う想定。
+
+Resources:
+  # 問題 CFn が触るリソース全方位の権限を持つ Role。
+  # 各問題は VPC + EC2 + IAM (instance profile / role) + CFn 自身を作るため、
+  # この程度の広さがないと Create / Update / Delete どれかでこける。
+  # 最小権限化は問題テンプレが固まってから別途。
+  CompetitorDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: >-
+        TenkaCloud が問題 CFn (security-battle-royale 等) を本アカウントへ deploy するときに
+        AssumeRole される。trust = TenkaCloud account + ExternalId。
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowTenkaCloudControlPlaneToAssume
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      Policies:
+        - PolicyName: ProblemDeployPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudFormation 全般 (deploy / update / delete / describe)
+              - Sid: CloudFormationFull
+                Effect: Allow
+                Action:
+                  - cloudformation:*
+                Resource: "*"
+
+              # 問題 CFn が作る EC2 / VPC リソース
+              - Sid: Ec2Vpc
+                Effect: Allow
+                Action:
+                  - ec2:*
+                Resource: "*"
+
+              # SSM (AMI 解決 + Session Manager) + ParameterStore
+              - Sid: Ssm
+                Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                  - ssm:GetParametersByPath
+                  - ssm:DescribeParameters
+                Resource: "*"
+
+              # IAM (問題 CFn が instance profile / role を作る)
+              # 問題 CFn が作る role / policy のみ触れるよう Path / Name で絞る。
+              - Sid: IamForProblemRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:GetInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/tc-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/tc-*"
+
+              # 問題 CFn が S3 を使う場合の余地 (今は使ってないが将来用)
+              - Sid: S3ForProblemBuckets
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:GetBucket*
+                  - s3:PutBucket*
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - "arn:aws:s3:::tc-*"
+                  - "arn:aws:s3:::tc-*/*"
+
+              # CloudWatch Logs (UserData / 問題アプリの diag 用)
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DeleteLogGroup
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: "*"
+      Tags:
+        - Key: TenkaCloud:Purpose
+          Value: competitor-deploy
+        - Key: TenkaCloud:ManagedBy
+          Value: competitor-bootstrap.yaml
+
+Outputs:
+  RoleArn:
+    Description: >-
+      作成された Role の ARN。TenkaCloud 運営者にこの値を共有すると、TenkaCloud から
+      問題を本アカウントへ deploy できるようになる。
+    Value: !GetAtt CompetitorDeployRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+  AccountId:
+    Description: 競技者 AWS アカウント ID (UI に入力する値)。
+    Value: !Ref AWS::AccountId
+  RoleName:
+    Description: Role 名 (TenkaCloud 側 default と一致するか確認用)。
+    Value: !Ref RoleName
