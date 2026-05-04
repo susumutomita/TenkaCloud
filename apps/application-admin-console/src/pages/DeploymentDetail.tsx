@@ -17,12 +17,13 @@ import {
   type DeploymentStatus,
   type DeploymentSummary,
   getDeployment,
+  JOB_ID_RE,
+  parseStackOutputs,
   TERMINAL_STATUSES,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
 
 const POLL_INTERVAL_MS = 5_000;
-const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -33,57 +34,50 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
-function parseStackOutputs(json: string | undefined): Record<string, string> {
-  if (!json) return {};
-  try {
-    const parsed = JSON.parse(json);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const out: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === "string") out[k] = v;
-      }
-      return out;
-    }
-  } catch {
-    // 壊れた JSON は表示しない
-  }
-  return {};
-}
-
 export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const { jobId } = useParams<{ jobId: string }>();
   const apiClient = useDeployApiClient(config);
   const [item, setItem] = useState<DeploymentSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const stopPollingRef = useRef(false);
 
-  const fetchOnce = useCallback(async () => {
-    if (!apiClient || !jobId || !ULID_RE.test(jobId)) return;
-    setRefreshing(true);
-    try {
-      const fetched = await getDeployment(apiClient, jobId);
-      setItem(fetched);
-      setError(null);
-      if (TERMINAL_STATUSES.has(fetched.status)) stopPollingRef.current = true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRefreshing(false);
-    }
-  }, [apiClient, jobId]);
+  // showSpinner=true は手動再読み込みボタンからの呼び出し時のみ。auto polling は
+  // 5 秒ごとに spinner を点滅させずバックグラウンド更新する。
+  const fetchOnce = useCallback(
+    async ({ showSpinner }: { showSpinner: boolean } = { showSpinner: false }) => {
+      if (!apiClient || !jobId || !JOB_ID_RE.test(jobId)) return;
+      if (showSpinner) setManualRefreshing(true);
+      try {
+        const fetched = await getDeployment(apiClient, jobId);
+        setItem(fetched);
+        setError(null);
+        if (TERMINAL_STATUSES.has(fetched.status)) stopPollingRef.current = true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (showSpinner) setManualRefreshing(false);
+      }
+    },
+    [apiClient, jobId],
+  );
 
   useEffect(() => {
+    let cancelled = false;
     stopPollingRef.current = false;
-    void fetchOnce();
-    const interval = setInterval(() => {
-      if (stopPollingRef.current) return;
-      void fetchOnce();
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    const tick = async () => {
+      if (cancelled || stopPollingRef.current) return;
+      await fetchOnce();
+    };
+    void tick();
+    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [fetchOnce]);
 
-  if (!jobId || !ULID_RE.test(jobId)) {
+  if (!jobId || !JOB_ID_RE.test(jobId)) {
     return <Alert type="error">不正な Job ID です。</Alert>;
   }
 
@@ -112,7 +106,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       <Header
         variant="h1"
         actions={
-          <Button onClick={fetchOnce} loading={refreshing}>
+          <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
             再読み込み
           </Button>
         }

@@ -50,13 +50,13 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
 
   const accountIdInvalid = awsAccountId.length > 0 && !AWS_ACCOUNT_ID_RE.test(awsAccountId);
   const teamNameInvalid = teamName.length > 0 && !TEAM_NAME_RE.test(teamName);
+  const inputsLocked = response !== null || submitting;
   const canSubmit =
     !!apiClient &&
     !!region.value &&
     AWS_ACCOUNT_ID_RE.test(awsAccountId) &&
     TEAM_NAME_RE.test(teamName) &&
-    !submitting &&
-    response === null;
+    !inputsLocked;
 
   const handleSubmit = async () => {
     if (!canSubmit || !region.value || !apiClient) return;
@@ -178,7 +178,7 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
             <Select
               selectedOption={region}
               options={REGION_OPTIONS}
-              disabled={response !== null || submitting}
+              disabled={inputsLocked}
               onChange={({ detail }) => detail.selectedOption && setRegion(detail.selectedOption)}
             />
           </FormField>
@@ -193,7 +193,7 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
               type="text"
               inputMode="numeric"
               placeholder="123456789012"
-              disabled={response !== null || submitting}
+              disabled={inputsLocked}
               onChange={({ detail }) =>
                 setAwsAccountId(detail.value.replace(/\D/g, "").slice(0, 12))
               }
@@ -210,7 +210,7 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
             <Input
               value={teamName}
               placeholder="例: alpha-team"
-              disabled={response !== null || submitting}
+              disabled={inputsLocked}
               onChange={({ detail }) => setTeamName(detail.value)}
               invalid={teamNameInvalid}
             />

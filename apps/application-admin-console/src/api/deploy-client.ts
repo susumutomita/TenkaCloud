@@ -1,5 +1,24 @@
 import type { ApiClient } from "./client";
 
+export const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
+export function parseStackOutputs(json: string | undefined): Record<string, string> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string") out[k] = v;
+      }
+      return out;
+    }
+  } catch {
+    // stackOutputs は best-effort 表示。壊れた JSON でページを落とさない。
+  }
+  return {};
+}
+
 export type DeploymentStatus =
   | "PENDING"
   | "IN_PROGRESS"
