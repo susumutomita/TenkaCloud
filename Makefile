@@ -25,8 +25,9 @@ install_ci:    ; bun install --frozen-lockfile --ignore-scripts
 build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
-check:         install lint test
-before-commit: lint test
+validate-problems: ; bun run validate:problems
+check:         install lint test validate-problems
+before-commit: lint test validate-problems
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
