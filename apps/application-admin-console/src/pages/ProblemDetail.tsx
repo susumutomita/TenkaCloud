@@ -5,10 +5,10 @@ import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
-import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
+import { DeployFormModal } from "../components/DeployForm";
 import { findProblem } from "../data/problems";
 
 const DIFFICULTY_LABEL = {
@@ -120,22 +120,12 @@ export function ProblemDetailPage() {
         </SpaceBetween>
       </Container>
 
-      <Modal
+      <DeployFormModal
+        problemId={problem.id}
+        problemName={problem.name}
         visible={confirmingDeploy}
         onDismiss={() => setConfirmingDeploy(false)}
-        header="競技アカウントへデプロイ"
-        footer={
-          <Box float="right">
-            <Button onClick={() => setConfirmingDeploy(false)}>閉じる</Button>
-          </Box>
-        }
-      >
-        <Alert type="info" header="まだ実装されていません">
-          現在 Deploy backend (CloudFormation 起動 + ステータス追跡 + チームログインキー発行)
-          は実装中です。 完成すると、このボタンから問題を競技アカウントへ deploy し、参加者向けの
-          URL と チーム単位のログインキーが払い出される予定です。
-        </Alert>
-      </Modal>
+      />
     </SpaceBetween>
   );
 }
