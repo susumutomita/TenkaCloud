@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   startDeployment: vi.fn(),
   listDeployments: vi.fn(),
   getDeployment: vi.fn(),
+  requestTeardown: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", () => ({
@@ -20,6 +21,10 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", () => ({
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/list", () => ({
   listDeployments: mocks.listDeployments,
   getDeployment: mocks.getDeployment,
+}));
+
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/delete", () => ({
+  requestTeardown: mocks.requestTeardown,
 }));
 
 const { app } = await import("../../lib/problem-deploy/handlers/deploy-handler/index");
@@ -96,6 +101,57 @@ describe("GET /deployments/:jobId", () => {
   it("内部エラーは 500", async () => {
     mocks.getDeployment.mockRejectedValueOnce(new Error("boom"));
     const res = await app.request(`/deployments/${ULID}`);
+    expect(res.status).toBe(500);
+  });
+});
+
+describe("DELETE /deployments/:jobId", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("正常系: 202 と previousStatus を返すべき", async () => {
+    mocks.requestTeardown.mockResolvedValueOnce({
+      kind: "accepted",
+      previousStatus: "IN_PROGRESS",
+    });
+    const res = await app.request(`/deployments/${ULID}`, { method: "DELETE" });
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.status).toBe("accepted");
+    expect(body.previousStatus).toBe("IN_PROGRESS");
+  });
+
+  it("既に DELETING/DELETED なら 200 with already_deleted", async () => {
+    mocks.requestTeardown.mockResolvedValueOnce({ kind: "already_deleted" });
+    const res = await app.request(`/deployments/${ULID}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("already_deleted");
+  });
+
+  it("not_found は 404", async () => {
+    mocks.requestTeardown.mockResolvedValueOnce({ kind: "not_found" });
+    const res = await app.request(`/deployments/${ULID}`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
+
+  it("race は 409", async () => {
+    mocks.requestTeardown.mockResolvedValueOnce({
+      kind: "race",
+      reason: "tenant_or_status_mismatch",
+    });
+    const res = await app.request(`/deployments/${ULID}`, { method: "DELETE" });
+    expect(res.status).toBe(409);
+  });
+
+  it("不正な jobId は 400 (requestTeardown を呼ばない)", async () => {
+    const res = await app.request("/deployments/not-a-ulid", { method: "DELETE" });
+    expect(res.status).toBe(400);
+    expect(mocks.requestTeardown).not.toHaveBeenCalled();
+  });
+
+  it("内部エラーは 500", async () => {
+    mocks.requestTeardown.mockRejectedValueOnce(new Error("boom"));
+    const res = await app.request(`/deployments/${ULID}`, { method: "DELETE" });
     expect(res.status).toBe(500);
   });
 });

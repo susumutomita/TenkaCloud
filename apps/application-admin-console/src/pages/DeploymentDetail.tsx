@@ -5,6 +5,7 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
+import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import StatusIndicator, {
@@ -16,6 +17,7 @@ import { useDeployApiClient } from "../api/client";
 import {
   type DeploymentStatus,
   type DeploymentSummary,
+  deleteDeployment,
   getDeployment,
   JOB_ID_RE,
   parseStackOutputs,
@@ -40,6 +42,9 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const [item, setItem] = useState<DeploymentSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const stopPollingRef = useRef(false);
 
   // showSpinner=true は手動再読み込みボタンからの呼び出し時のみ。auto polling は
@@ -77,6 +82,24 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
     };
   }, [fetchOnce]);
 
+  const handleDelete = useCallback(async () => {
+    if (!apiClient || !jobId) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteDeployment(apiClient, jobId);
+      setDeleteModalOpen(false);
+      // DELETING / DELETE_COMPLETE 遷移は StatusUpdater (1 min) が反映する。
+      // 既存の polling が拾うので追加フェッチ不要、stop flag も解除して継続。
+      stopPollingRef.current = false;
+      await fetchOnce({ showSpinner: false });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  }, [apiClient, jobId, fetchOnce]);
+
   if (!jobId || !JOB_ID_RE.test(jobId)) {
     return <Alert type="error">不正な Job ID です。</Alert>;
   }
@@ -100,15 +123,29 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   if (!item) return null;
 
   const outputs = parseStackOutputs(item.stackOutputs);
+  const canDelete = item.status !== "DELETING" && item.status !== "DELETED";
 
   return (
     <SpaceBetween size="l">
       <Header
         variant="h1"
         actions={
-          <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
-            再読み込み
-          </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
+              再読み込み
+            </Button>
+            <Button
+              variant="normal"
+              iconName="delete-marker"
+              disabled={!canDelete}
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteModalOpen(true);
+              }}
+            >
+              削除
+            </Button>
+          </SpaceBetween>
         }
         description={`Job ID: ${item.jobId}`}
       >
@@ -165,6 +202,37 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
           />
         </Container>
       )}
+
+      <Modal
+        visible={deleteModalOpen}
+        onDismiss={() => setDeleteModalOpen(false)}
+        header={`「${item.teamName}」のデプロイを削除`}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setDeleteModalOpen(false)} disabled={deleting}>
+                キャンセル
+              </Button>
+              <Button variant="primary" loading={deleting} onClick={handleDelete}>
+                削除する
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>
+            競技アカウント (<code>{item.awsAccountId}</code> / {item.region}) で起動中の
+            CloudFormation Stack <code>{item.namePrefix}</code> を削除します。
+          </Box>
+          <Box variant="small" color="text-status-warning">
+            この操作は取り消せません。実際の削除は次の StatusUpdater 周期 (最大 1 分)
+            で実行されます。
+          </Box>
+          {deleteError && <Alert type="error">{deleteError}</Alert>}
+        </SpaceBetween>
+      </Modal>
     </SpaceBetween>
   );
 }
