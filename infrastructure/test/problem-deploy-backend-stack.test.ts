@@ -225,9 +225,9 @@ describe("ProblemDeployBackendStack", () => {
   });
 
   describe("DeployWorkerLambda + EventBridge Rule", () => {
-    it("Lambda 関数を 2 つ作るべき (API + Worker)", () => {
+    it("Lambda 関数を 3 つ作るべき (API + Worker + StatusUpdater)", () => {
       const tpl = synth();
-      tpl.resourceCountIs("AWS::Lambda::Function", 2);
+      tpl.resourceCountIs("AWS::Lambda::Function", 3);
     });
 
     it("Worker Lambda は DEPLOY_EXTERNAL_ID を env として持つべき", () => {
@@ -254,6 +254,16 @@ describe("ProblemDeployBackendStack", () => {
             source: ["tenkacloud.problem"],
             "detail-type": ["DeployRequested"],
           }),
+        }),
+      );
+    });
+
+    it("StatusUpdater には rate(1 minute) の schedule rule を立てるべき", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          ScheduleExpression: "rate(1 minute)",
         }),
       );
     });

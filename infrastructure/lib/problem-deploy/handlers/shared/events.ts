@@ -13,6 +13,8 @@ export const EVENT_SOURCE = "tenkacloud.problem" as const;
 export const EVENT_DETAIL_TYPE_DEPLOY_REQUESTED = "DeployRequested" as const;
 export const EVENT_DETAIL_TYPE_DEPLOY_STARTED = "DeployStarted" as const;
 export const EVENT_DETAIL_TYPE_DEPLOY_FAILED = "DeployFailed" as const;
+export const EVENT_DETAIL_TYPE_DEPLOY_COMPLETED = "DeployCompleted" as const;
+export const EVENT_DETAIL_TYPE_DEPLOY_DELETED = "DeployDeleted" as const;
 
 export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" as const;
 
