@@ -10,9 +10,28 @@ const config: AppConfig = {
   redirectUri: "http://localhost:5174/callback",
   scope: "openid email profile",
   tenantId: "tenant-test",
-  tenantName: "テスト事業部",
+  tenantName: "Shared Pooled Tenant", // ← intentionally placeholder; runtime should not display this
   apiBaseUrl: "https://api.example.com/prod",
 };
+
+function makeIdToken(claims: Record<string, string>): string {
+  // 日本語を含む claims を UTF-8 base64url で吐く (Cognito JWT 互換)。
+  const encode = (obj: object): string => {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin);
+  };
+  return `${encode({ alg: "RS256", typ: "JWT" })}.${encode(claims)}.signature`;
+}
+
+function loginAs(claims: Record<string, string>) {
+  const idToken = makeIdToken(claims);
+  sessionStorage.setItem(
+    "TenkaCloud.tokens",
+    JSON.stringify({ idToken, accessToken: "ac", expiresAt: Date.now() + 60_000 }),
+  );
+}
 
 function renderApp(initialPath: string) {
   return render(
@@ -40,31 +59,41 @@ describe("App", () => {
   });
 
   describe("有効な token を sessionStorage に持って / にアクセスしたとき", () => {
-    function loginAndRender() {
-      sessionStorage.setItem(
-        "TenkaCloud.tokens",
-        JSON.stringify({ idToken: "id", accessToken: "ac", expiresAt: Date.now() + 60_000 }),
-      );
+    it("JWT custom:tenantName を greeting に表示すべき", async () => {
+      loginAs({
+        email: "admin@example.com",
+        "custom:tenantId": "t-acme",
+        "custom:tenantName": "ACME 株式会社",
+        "custom:tenantTier": "BASIC",
+      });
       renderApp("/");
-    }
-
-    it("HomePage の H2 に config.tenantName を含む挨拶を表示すべき", async () => {
-      loginAndRender();
       expect(
-        await screen.findByRole("heading", { level: 2, name: `Hello, ${config.tenantName}.` }),
+        await screen.findByRole("heading", { level: 1, name: /ACME 株式会社 さん/ }),
       ).toBeInTheDocument();
     });
 
-    it("HomePage に「アプリを公開する」ボタン (primary) を表示すべき", async () => {
-      loginAndRender();
-      expect(await screen.findByRole("button", { name: "アプリを公開する" })).toBeInTheDocument();
+    it("custom:tenantName が無いときは custom:tenantId に fallback するべき", async () => {
+      loginAs({
+        email: "admin@example.com",
+        "custom:tenantId": "t-acme",
+        "custom:tenantTier": "BASIC",
+      });
+      renderApp("/");
+      expect(
+        await screen.findByRole("heading", { level: 1, name: /t-acme さん/ }),
+      ).toBeInTheDocument();
     });
 
-    it("システム内部 ID の tenantId は画面に直接表示しないべき", async () => {
-      loginAndRender();
-      // tenantName は表示されるが、tenantId (例: "tenant-test") は画面のどこにも出てはならない
-      expect(await screen.findByText(`Hello, ${config.tenantName}.`)).toBeInTheDocument();
-      expect(screen.queryByText(config.tenantId)).toBeNull();
+    it("config.tenantName の placeholder ('Shared Pooled Tenant') を画面に出してはいけない", async () => {
+      loginAs({
+        email: "admin@example.com",
+        "custom:tenantId": "t-acme",
+        "custom:tenantName": "ACME 株式会社",
+      });
+      renderApp("/");
+      // tenantName 表示が完了するまで待つ
+      await screen.findByRole("heading", { level: 1, name: /ACME 株式会社/ });
+      expect(screen.queryByText(/Shared Pooled Tenant/)).toBeNull();
     });
   });
 });

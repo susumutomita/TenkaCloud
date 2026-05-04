@@ -28,14 +28,14 @@ describe("createTenant", () => {
       post.mockResolvedValueOnce({
         data: {
           tenantId: "t-1",
-          tenantName: "品質管理部",
+          tenantName: "ACME 株式会社",
           email: "a@b.com",
           tier: "basic",
           tenantStatus: "In progress",
         },
       });
 
-      await createTenant(api, { tenantName: "品質管理部", email: "a@b.com", tier: "basic" });
+      await createTenant(api, { tenantName: "ACME 株式会社", email: "a@b.com", tier: "basic" });
 
       expect(post).toHaveBeenCalledOnce();
       const [path] = post.mock.calls[0];
@@ -47,18 +47,18 @@ describe("createTenant", () => {
       post.mockResolvedValueOnce({
         data: {
           tenantId: "t-1",
-          tenantName: "品質管理部",
+          tenantName: "ACME 株式会社",
           email: "a@b.com",
           tier: "basic",
           tenantStatus: "In progress",
         },
       });
 
-      await createTenant(api, { tenantName: "品質管理部", email: "a@b.com", tier: "basic" });
+      await createTenant(api, { tenantName: "ACME 株式会社", email: "a@b.com", tier: "basic" });
 
       const [, body] = post.mock.calls[0];
       expect(body).toEqual({
-        tenantName: "品質管理部",
+        tenantName: "ACME 株式会社",
         email: "a@b.com",
         tier: "basic",
         tenantStatus: "In progress",

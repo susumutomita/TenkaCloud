@@ -1,6 +1,6 @@
 # @TenkaCloud/application-admin-console
 
-テナント開発者向けの管理 UI (Layer 2B)。1 Tenant : 1 deploy。テナント開発者がバイブコーディングしたアプリを登録し、認証付き公開を管理するためのコンソール。
+TenkaCloud の TenantAdmin 向け管理コンソール (Application Plane)。Battle / Challenge の問題を競技アカウントへデプロイし、参加者に提供するための per-tenant コンソール。
 
 ## ローカル開発
 

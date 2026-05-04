@@ -14,9 +14,9 @@ import { createTenant, type Tier } from "../api/tenants";
 import type { AppConfig } from "../config";
 
 const TIERS = [
-  { value: "basic", label: "Basic" },
-  { value: "advanced", label: "Advanced" },
-  { value: "platinum", label: "Platinum (silo: per-tenant Cognito + Application Admin Console)" },
+  { value: "basic", label: "Basic — 共有環境 (Pooled)" },
+  { value: "advanced", label: "Advanced — 共有環境 (Pooled)" },
+  { value: "platinum", label: "Platinum — 専用環境 (Silo: 専用 Cognito / Application Console)" },
 ] as const satisfies readonly { value: Tier; label: string }[];
 
 export function TenantCreatePage({ config }: { config: AppConfig }) {
@@ -73,14 +73,20 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
               {error}
             </Alert>
           )}
-          <FormField label="テナント名" description="社内で識別する表示名">
+          <FormField
+            label="テナント名"
+            description="競技を主催する組織の表示名 (テナント分離単位として記録される)"
+          >
             <Input
               value={tenantName}
               onChange={({ detail }) => setTenantName(detail.value)}
-              placeholder="例: 品質管理部"
+              placeholder="例: ACME 株式会社"
             />
           </FormField>
-          <FormField label="管理者メール" description="初回 Cognito 招待メールの送信先">
+          <FormField
+            label="テナント管理者メール"
+            description="このテナントの管理者として、Cognito の招待メールを受け取るアドレス"
+          >
             <Input
               value={email}
               type="email"
@@ -88,7 +94,7 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
               placeholder="admin@example.com"
             />
           </FormField>
-          <FormField label="Tier">
+          <FormField label="プラン">
             <Select
               selectedOption={tier}
               options={TIERS}
