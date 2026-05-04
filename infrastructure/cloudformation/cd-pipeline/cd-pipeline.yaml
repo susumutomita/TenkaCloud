@@ -373,26 +373,17 @@ Resources:
       TopicName: !Sub tenkacloud-${Environment}-pipeline-notification
       DisplayName: !Sub tenkacloud ${Environment} Pipeline Notifications
 
-  PipelineNotificationTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowCodeStarNotifications
-            Effect: Allow
-            Principal:
-              Service: codestar-notifications.amazonaws.com
-            Action: sns:Publish
-            Resource: !Ref PipelineNotificationTopic
-      Topics:
-        - !Ref PipelineNotificationTopic
+  # SNS Topic Policy は意図的に置かない:
+  # AWS::CodeStarNotifications::NotificationRule は target SNS topic に対して
+  # 必要な sns:Publish 権限を自動で付与する (codestar-notifications.amazonaws.com
+  # service principal 経由)。明示的な TopicPolicy を別 resource として定義すると、
+  # IAM eventual consistency 起因の race condition で NotificationRule の create
+  # が "Invalid request" で落ちることがある。
 
   PipelineNotificationRule:
     Type: AWS::CodeStarNotifications::NotificationRule
     DependsOn:
       - Pipeline
-      - PipelineNotificationTopicPolicy
     Properties:
       Name: !Sub tenkacloud-${Environment}-pipeline-events
       DetailType: FULL
@@ -408,7 +399,6 @@ Resources:
       Targets:
         - TargetType: SNS
           TargetAddress: !Ref PipelineNotificationTopic
-      Status: ENABLED
 
 Outputs:
   PipelineName:
