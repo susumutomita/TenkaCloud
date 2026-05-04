@@ -2,15 +2,17 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { resolveTenantId } from "./auth.js";
+import { requestTeardown } from "./delete.js";
 import { buildContext, buildSharedResources, startDeployment } from "./deploy.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { DeployRequestSchema } from "./types.js";
 
 /**
  * Deploy API Lambda の Hono app。routes:
- *   POST /problems/:problemId/deploy
- *   GET  /problems/:problemId/deployments
- *   GET  /deployments/:jobId
+ *   POST   /problems/:problemId/deploy
+ *   GET    /problems/:problemId/deployments
+ *   GET    /deployments/:jobId
+ *   DELETE /deployments/:jobId
  *
  * Auth: 本番経路は API Gateway HTTP API + Cognito JWT authorizer で、tenantId は
  * JWT の `custom:tenantId` claim から取り出す。Function URL (AWS_IAM) は ops 用に
@@ -96,6 +98,24 @@ app.get("/deployments/:jobId", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] getDeployment failed", { jobId, message });
+    return c.json({ error: "internal_error" }, 500);
+  }
+});
+
+app.delete("/deployments/:jobId", async (c) => {
+  const jobId = c.req.param("jobId");
+  if (!jobId || !JOB_ID_RE.test(jobId)) {
+    return c.json({ error: "invalid jobId" }, 400);
+  }
+  try {
+    const outcome = await requestTeardown(shared, resolveTenantId(c), jobId, Date.now());
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, 404);
+    if (outcome.kind === "already_deleted") return c.json({ status: "already_deleted" }, 200);
+    if (outcome.kind === "race") return c.json({ error: "conflict" }, 409);
+    return c.json({ status: "accepted", previousStatus: outcome.previousStatus }, 202);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[deploy] requestTeardown failed", { jobId, message });
     return c.json({ error: "internal_error" }, 500);
   }
 });
