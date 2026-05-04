@@ -115,9 +115,6 @@ Resources:
           - Name: CDK_PARAM_SYSTEM_ADMIN_EMAIL
             Value: !Ref SystemAdminEmail
             Type: PLAINTEXT
-          - Name: BROKER_ENTRA_PROFILE_ID
-            Value: !Ref BrokerEntraProfileId
-            Type: PLAINTEXT
           - Name: JSII_DEPRECATED
             Value: quiet
             Type: PLAINTEXT
