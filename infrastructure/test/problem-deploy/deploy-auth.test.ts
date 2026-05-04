@@ -15,13 +15,10 @@ describe("extractTenantIdFromClaims", () => {
     expect(extractTenantIdFromClaims({ "custom:tenantId": "   " })).toBeUndefined();
   });
 
-  it("数値 / boolean は (Cognito 仕様外なので) 拒否", () => {
-    expect(
-      extractTenantIdFromClaims({ "custom:tenantId": 42 as unknown as string }),
-    ).toBeUndefined();
-    expect(
-      extractTenantIdFromClaims({ "custom:tenantId": true as unknown as string }),
-    ).toBeUndefined();
+  it("数値 / boolean / 配列は (string でないので) 拒否", () => {
+    expect(extractTenantIdFromClaims({ "custom:tenantId": 42 })).toBeUndefined();
+    expect(extractTenantIdFromClaims({ "custom:tenantId": true })).toBeUndefined();
+    expect(extractTenantIdFromClaims({ "custom:tenantId": ["tenant-acme"] })).toBeUndefined();
   });
 
   it("claims 自体が undefined なら undefined", () => {

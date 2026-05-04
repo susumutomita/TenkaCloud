@@ -2,7 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { CfnOutput } from "aws-cdk-lib";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { Construct } from "constructs";
-import { DeployApiGateway } from "./deploy-api-gateway";
+import { type DeployApiCognito, DeployApiGateway } from "./deploy-api-gateway";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
@@ -31,13 +31,9 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   readonly competitorRoleName?: string;
   /**
    * Deploy API HTTP API の手前に置く Cognito JWT authorizer 設定。
-   * `userPoolId` / `clientId` の両方が指定された場合のみ HTTP API を作成する。
-   * 単一テナント設定 (現状)。多テナントの custom authorizer 化は後続 PR。
+   * 指定された場合のみ HTTP API を作成する。単一 User Pool 信頼。
    */
-  readonly deployApiCognito?: {
-    readonly userPoolId: string;
-    readonly clientId: string;
-  };
+  readonly deployApiCognito?: DeployApiCognito;
   /**
    * HTTP API CORS で許可する origins。UI が CloudFront / localhost dev から
    * fetch するため必須。
@@ -96,8 +92,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
 
     if (props.deployApiCognito) {
       const apiGw = new DeployApiGateway(this, "DeployApiGateway", {
-        cognitoUserPoolId: props.deployApiCognito.userPoolId,
-        cognitoClientId: props.deployApiCognito.clientId,
+        cognito: props.deployApiCognito,
         deployHandler: deployApi.fn,
         corsAllowOrigins: props.deployApiCorsOrigins ?? ["*"],
       });

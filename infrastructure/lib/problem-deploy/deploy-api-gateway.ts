@@ -5,28 +5,24 @@ import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
+export interface DeployApiCognito {
+  readonly userPoolId: string;
+  readonly clientId: string;
+}
+
 export interface DeployApiGatewayProps {
-  /** Cognito User Pool ID (e.g. ap-northeast-1_AbCdEfGhI) */
-  readonly cognitoUserPoolId: string;
-  /** Cognito User Pool client ID — JWT audience として要求する */
-  readonly cognitoClientId: string;
-  /** 既存 Deploy API Lambda */
+  readonly cognito: DeployApiCognito;
   readonly deployHandler: IFunction;
-  /** CORS 許可 origins (UI が CloudFront / localhost から fetch してくる) */
+  /** UI が CloudFront / localhost dev から fetch するため必須。 */
   readonly corsAllowOrigins: readonly string[];
 }
 
 /**
  * Deploy API の認証付き公開エンドポイント。HTTP API + Cognito JWT authorizer で
- * `custom:tenantId` 付きの id_token を持っている caller のみ Lambda に到達する。
+ * `custom:tenantId` 付き id_token を持つ caller のみ Lambda に到達する。
  *
- * Function URL (AWS_IAM) は ops 用にそのまま残し、本 API Gateway は UI / 外部
- * 呼び出し用の主経路。tenantId は authorizer.jwt.claims["custom:tenantId"] から
- * Lambda 側で取り出す (`handlers/deploy-handler/auth.ts`)。
- *
- * **multi-tenant 化 defer**: 現在は単一 User Pool を信頼する。テナントごとに
- * Pool が分かれる本番形態では custom Lambda authorizer + tenant pool registry
- * (DDB) に置き換える。後続 PR で対応。
+ * 単一 User Pool を信頼する単純化。複数テナントが各自の Pool を使う構成では
+ * custom Lambda authorizer + tenant→pool registry に置き換える。
  */
 export class DeployApiGateway extends Construct {
   public readonly httpApi: HttpApi;
@@ -36,22 +32,20 @@ export class DeployApiGateway extends Construct {
     super(scope, id);
 
     const { region } = Stack.of(this);
-    const issuerUrl = `https://cognito-idp.${region}.amazonaws.com/${props.cognitoUserPoolId}`;
+    const issuerUrl = `https://cognito-idp.${region}.amazonaws.com/${props.cognito.userPoolId}`;
 
     this.authorizer = new HttpJwtAuthorizer("DeployJwtAuthorizer", issuerUrl, {
-      jwtAudience: [props.cognitoClientId],
+      jwtAudience: [props.cognito.clientId],
       identitySource: ["$request.header.Authorization"],
     });
 
     this.httpApi = new HttpApi(this, "HttpApi", {
       apiName: "TenkaCloud-DeployApi",
-      description: "Deploy API for problem deployment (POST/GET).",
+      description: "Deploy API for problem deployment.",
       corsPreflight: {
         allowOrigins: [...props.corsAllowOrigins],
         allowHeaders: ["authorization", "content-type"],
         allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.OPTIONS],
-        allowCredentials: false,
-        maxAge: undefined,
       },
     });
 

@@ -139,8 +139,8 @@ cdk.Aspects.of(controlPlaneStack).add(
 // 設定された ExternalId と一致させる必要がある。.env から渡す。
 //
 // `DEPLOY_USER_POOL_ID` / `DEPLOY_USER_POOL_CLIENT_ID` を両方渡すと UI 用の
-// HTTP API + Cognito JWT authorizer が立ち上がる (PR-F2)。tenant-template-stack
-// が払い出した値を `provision-tenant.sh` 経由で .env に転記する想定。
+// HTTP API + Cognito JWT authorizer が立ち上がる。tenant-template-stack が払い出した
+// 値を `provision-tenant.sh` 経由で .env に転記する想定。
 const deployExternalId = process.env.CDK_PARAM_DEPLOY_EXTERNAL_ID || "tenkacloud-dev-external-id";
 const deployUserPoolId = process.env.CDK_PARAM_DEPLOY_USER_POOL_ID;
 const deployUserPoolClientId = process.env.CDK_PARAM_DEPLOY_USER_POOL_CLIENT_ID;
