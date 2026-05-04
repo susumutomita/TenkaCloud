@@ -1,18 +1,10 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import type { AppConfig } from "../config";
+import { toAsciiSlug } from "../lib/slug";
 import { clearSession, loadSession, type ParticipantSession, saveSession } from "./storage";
 
 /**
- * チームログインキーを backend に渡してセッションを取る。
- *
- * 現状は backend (Lambda Function URL) が未実装なので mock validator を使う:
- *   - 任意の non-empty key を受け入れる
- *   - チーム名は key 先頭から切り出した英数字 slug
- *   - 期限は 4 時間
- *
- * 本物の backend が来たら fetch(`${config.apiBaseUrl}/login`, { teamLoginKey }) に差し替える。
- *
- * `config` は backend 連携で使うので参照する (現状は dev fallback URL を確認するだけ)。
+ * Mock auth for `mode === "dev-mock"`. Real backend swaps in here behind the same I/F.
  */
 async function exchangeKeyForSession(
   config: AppConfig,
@@ -23,30 +15,17 @@ async function exchangeKeyForSession(
     throw new Error("チームログインキーを入力してください");
   }
 
-  // dev mode: backend がまだ無いので、現在の apiBaseUrl が dev fallback の場合は mock を返す。
-  // 本物 backend に差し替えた後はここで fetch(`${config.apiBaseUrl}/login`, ...) する。
-  const isDev = config.apiBaseUrl.includes("dev-mock") || config.apiBaseUrl.includes("localhost");
-  if (!isDev) {
-    // 本物 backend が立ったらこの分岐に実装を入れる
+  if (config.mode !== "dev-mock") {
+    // TODO: backend 実装時にここで fetch(`${config.apiBaseUrl}/login`, ...) する
     throw new Error("backend が未実装のため、現状は dev モードでのみ login できます");
   }
 
-  // --- mock validator (TODO: 本物 backend に差し替え) ---
-  // teamLoginKey は japanese / unicode を含み得るので、ASCII slug に変換してから ID 化する
-  // (btoa は latin1 のみ対応で日本語が来ると DOMException を投げるため使わない)。
-  const slugSource =
-    trimmed
-      .normalize("NFKD")
-      .replace(/[^A-Za-z0-9]/g, "")
-      .toLowerCase()
-      .slice(0, 12) || "anon";
-  const fakeTeamId = `team-${slugSource}`;
-  const fakeTeamName = `Team ${trimmed.slice(0, 8)}`;
+  const slug = toAsciiSlug(trimmed);
   const now = Date.now();
   return {
-    sessionToken: `mock.${slugSource}.${now.toString(36)}.session`,
-    teamId: fakeTeamId,
-    teamName: fakeTeamName,
+    sessionToken: `mock.${slug}.${now.toString(36)}.session`,
+    teamId: `team-${slug}`,
+    teamName: `Team ${trimmed.slice(0, 8)}`,
     eventId: "mock-event-1",
     issuedAt: now,
     expiresAt: now + 4 * 60 * 60 * 1000,

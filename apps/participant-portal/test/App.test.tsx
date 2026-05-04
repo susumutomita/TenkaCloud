@@ -9,6 +9,7 @@ const config: AppConfig = {
   apiBaseUrl: "http://localhost:3199/dev-mock",
   eventTitle: "TenkaCloud Battle (test)",
   eventRegion: "ap-northeast-1",
+  mode: "dev-mock",
 };
 
 function renderApp(initialPath: string) {

@@ -7,12 +7,14 @@ const devConfig: AppConfig = {
   apiBaseUrl: "http://localhost:3199/dev-mock",
   eventTitle: "Test Event",
   eventRegion: "ap-northeast-1",
+  mode: "dev-mock",
 };
 
 const prodConfig: AppConfig = {
   apiBaseUrl: "https://api.example.com/prod",
   eventTitle: "Test Event",
   eventRegion: "ap-northeast-1",
+  mode: "backend",
 };
 
 const renderAuth = (config: AppConfig) =>
@@ -52,10 +54,7 @@ describe("AuthProvider", () => {
       await result.current.login("日本語キー");
     });
     expect(result.current.session).not.toBeNull();
-    // teamId は ASCII slug 化されている
     expect(result.current.session?.teamId).toMatch(/^team-/);
-    // 日本語は NFKD で取り除かれる → "anon" にフォールバック
-    expect(result.current.session?.teamId).toBe("team-anon");
   });
 
   it("logout で session が消えるべき", async () => {

@@ -33,6 +33,7 @@ export function LoginPage({ config }: { config: AppConfig }) {
       const message =
         err instanceof Error ? err.message : "サインインに失敗しました。もう一度お試しください。";
       setError(message);
+    } finally {
       setSubmitting(false);
     }
   };

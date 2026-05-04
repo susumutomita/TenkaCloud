@@ -17,12 +17,23 @@ describe("loadConfig", () => {
         apiBaseUrl: "https://api.example.com",
         eventTitle: "Real Event",
         eventRegion: "us-east-1",
+        mode: "backend",
       }),
     });
     const cfg = await loadConfig();
     expect(cfg.apiBaseUrl).toBe("https://api.example.com");
     expect(cfg.eventTitle).toBe("Real Event");
     expect(cfg.eventRegion).toBe("us-east-1");
+    expect(cfg.mode).toBe("backend");
+  });
+
+  it("mode が runtime-config に無いときは fallback の dev-mock になるべき", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ apiBaseUrl: "https://api.example.com" }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.mode).toBe("dev-mock");
   });
 
   it("一部キー欠落でも fallback で埋めるべき", async () => {

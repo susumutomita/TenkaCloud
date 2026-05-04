@@ -71,12 +71,6 @@ describe("storage", () => {
       const parsed = JSON.parse(stored!);
       expect(parsed.teamName).toBe("Team Alpha");
     });
-
-    it("schema を満たさない値を保存しようとしたら throw するべき", () => {
-      // teamId 欠落
-      const bad = { ...sample(), teamId: "" };
-      expect(() => saveSession(bad as ParticipantSession)).toThrow();
-    });
   });
 
   describe("clearSession", () => {

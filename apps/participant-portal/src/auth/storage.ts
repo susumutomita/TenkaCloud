@@ -14,7 +14,6 @@ import { z } from "zod";
 const STORAGE_KEY = "TenkaCloud.participant.session";
 
 export const ParticipantSessionSchema = z.object({
-  /** backend が返す不透明な session token (本物の backend ができるまでは mock 値)。 */
   sessionToken: z.string().min(1),
   teamId: z.string().min(1),
   teamName: z.string().min(1),
@@ -31,7 +30,6 @@ export function loadSession(): ParticipantSession | null {
   try {
     raw = sessionStorage.getItem(STORAGE_KEY);
   } catch {
-    // sessionStorage 利用不可 (private mode 等)
     return null;
   }
   if (!raw) return null;
@@ -40,37 +38,27 @@ export function loadSession(): ParticipantSession | null {
   try {
     parsedUnknown = JSON.parse(raw);
   } catch {
-    safeRemove();
+    clearSession();
     return null;
   }
 
   const result = ParticipantSessionSchema.safeParse(parsedUnknown);
-  if (!result.success) {
-    safeRemove();
-    return null;
-  }
-  if (result.data.expiresAt <= Date.now()) {
-    safeRemove();
+  if (!result.success || result.data.expiresAt <= Date.now()) {
+    clearSession();
     return null;
   }
   return result.data;
 }
 
 export function saveSession(session: ParticipantSession): void {
-  // 念のため schema 越しに通してから保存 (型整合性 + 余計フィールド除去)
-  const safe = ParticipantSessionSchema.parse(session);
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   } catch {
-    // 利用不可。次回 load で null になり再ログインが要求される。
+    // 利用不可。次回 load で null になり再ログインが要求される
   }
 }
 
 export function clearSession(): void {
-  safeRemove();
-}
-
-function safeRemove(): void {
   try {
     sessionStorage.removeItem(STORAGE_KEY);
   } catch {
