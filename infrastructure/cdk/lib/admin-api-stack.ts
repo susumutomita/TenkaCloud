@@ -38,6 +38,9 @@ export interface AdminApiStackProps extends cdk.StackProps {
  * install.sh が phase 0 で build する。
  */
 export class AdminApiStack extends cdk.Stack {
+  /** Shared DynamoDB table — exposed for cross-stack ref (ProblemDeployPipelineStack 等). */
+  public readonly controlPlaneTable: Table;
+
   constructor(scope: Construct, id: string, props: AdminApiStackProps) {
     super(scope, id, props);
 
@@ -54,6 +57,7 @@ export class AdminApiStack extends cdk.Stack {
       pointInTimeRecovery: true,
     });
     // GSI1: テナント別クエリ (AGENTS.md の DB 設計参照)
+    this.controlPlaneTable = table;
     table.addGlobalSecondaryIndex({
       indexName: "GSI1",
       partitionKey: { name: "GSI1PK", type: AttributeType.STRING },

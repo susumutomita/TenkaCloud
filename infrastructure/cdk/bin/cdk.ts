@@ -9,6 +9,7 @@ import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
+import { ProblemDeployPipelineStack } from "../lib/problem-deploy-pipeline";
 import { getEnv } from "../lib/helper-functions";
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
 import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
@@ -170,9 +171,22 @@ if (missingBundles.length === 0) {
   });
   adminApiStack.addDependency(controlPlaneStack);
   cdk.Aspects.of(adminApiStack).add(new DestroyPolicySetter());
+
+  // ProblemDeployPipelineStack: admin UI からの「全チームに problem を deploy」
+  // 「retry (redeploy)」「event 終了で teardown」を SBT EventBus 経由で受けて
+  // CodeBuild + 完了 handler Lambda で処理する。AdminApiStack の DDB table を
+  // 完了 handler が UpdateItem するので AdminApiStack 必須 (= microservice
+  // bundle 必須)。
+  const problemDeployPipeline = new ProblemDeployPipelineStack(app, "ProblemDeployPipelineStack", {
+    eventBusArn: controlPlaneStack.eventBusArn,
+    controlPlaneTable: adminApiStack.controlPlaneTable,
+  });
+  problemDeployPipeline.addDependency(controlPlaneStack);
+  problemDeployPipeline.addDependency(adminApiStack);
+  cdk.Aspects.of(problemDeployPipeline).add(new DestroyPolicySetter());
 } else {
   logger.warn(
-    `Skipping AdminApiStack: dist/lambda missing for [${missingBundles.join(", ")}]. Run 'bash scripts/build-microservices-lambda.sh' first.`,
+    `Skipping AdminApiStack & ProblemDeployPipelineStack: dist/lambda missing for [${missingBundles.join(", ")}]. Run 'bash scripts/build-microservices-lambda.sh' first.`,
   );
 }
 

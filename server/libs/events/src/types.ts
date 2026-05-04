@@ -123,6 +123,14 @@ export interface TenantOffboardingDetail {
  * ProblemDeployRequested イベントの詳細
  * GameDay 問題デプロイ時に problem-service が発火 → ProblemDeployPlane が処理
  */
+/**
+ * 問題デプロイのアクション種別。
+ * - deploy: 新規 CFn create-stack
+ * - redeploy: 失敗 stack を delete してから create (rollback / failed 状態の復旧)
+ * - teardown: イベント終了後に delete-stack (リソース解放)
+ */
+export type ProblemDeployAction = "deploy" | "redeploy" | "teardown";
+
 export interface ProblemDeployRequestedDetail {
   /** 問題 ID */
   problemId: string;
@@ -140,6 +148,11 @@ export interface ProblemDeployRequestedDetail {
   externalId: string;
   /** CloudFormation テンプレート URL */
   templateUrl: string;
+  /**
+   * 実行アクション。省略時は "deploy" 互換。
+   * CodeBuild の buildspec が $ACTION で分岐する。
+   */
+  action?: ProblemDeployAction;
   /**
    * Complete/Failed イベントを DynamoDB の Job にマップし直すための複合キー
    * `${eventId}:${problemId}:${jobId}` 形式
