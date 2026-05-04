@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tenkacloud.example/schemas/problem-metadata.json",
+  "title": "TenkaCloud Problem Metadata",
+  "description": "1 つの問題ディレクトリ (problems/<category>/<id>/) に置く metadata.json の構造を定義する。frontend カタログ表示と backend deploy パイプラインの両方が参照する正本。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "category",
+    "status",
+    "difficulty",
+    "estimatedDuration",
+    "shortDescription",
+    "description",
+    "tags",
+    "exposedPorts",
+    "learningGoals",
+    "cfnTemplate"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "IDE 補完のための JSON Schema 参照 (任意、validator は無視する)。"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$",
+      "description": "kebab-case の英小文字 ID。ディレクトリ名と一致させる。CFn stack 名の prefix に組み込まれる。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "UI 表示用の問題名 (人間可読、日本語可)。"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["Battle", "Challenge"],
+      "description": "問題カテゴリ。Battle = リアルタイム対戦、Challenge = 個別演習・常設チャレンジ。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "draft", "deprecated"],
+      "description": "公開ステータス。ready = 参加者向けデプロイ可能 / draft = 開発中 / deprecated = 廃止予定。"
+    },
+    "difficulty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "1=入門 / 2=初級 / 3=中級 / 4=上級 / 5=エキスパート。"
+    },
+    "estimatedDuration": {
+      "type": "string",
+      "description": "想定プレイ時間。UI 表示用の自由文字列 (例: '60〜90 分')。"
+    },
+    "shortDescription": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "カード表示用の 1 行サマリ (200 文字以内目安)。"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "詳細ページに表示する長文。改行を含む生テキスト。"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "description": "検索 / フィルタリング用の kebab-case タグ。"
+    },
+    "exposedPorts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["port", "name"],
+        "properties": {
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "name": { "type": "string", "minLength": 1 }
+        }
+      },
+      "description": "deploy 後に参加者へ払い出されるエンドポイントのポート / 用途名。"
+    },
+    "learningGoals": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "description": "問題作者が想定する学習目的の箇条書き。"
+    },
+    "cfnTemplate": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/-]+\\.(yaml|yml|json)$",
+      "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。"
+    }
+  }
+}

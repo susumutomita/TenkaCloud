@@ -1,181 +1,97 @@
-.PHONY: install install_ci start stop restart status start-aws test test_quick test_coverage test_e2e lint lint_text format format_check typecheck before-commit build seed help
+CDK      := cd infrastructure && JSII_DEPRECATED=quiet bun run cdk
+APPROVAL := --require-approval broadening
 
-default: help
+# SBT 0.3.9 内部が aws-cdk-lib の deprecated な `advancedSecurityMode` 等を使っているため、
+# cdk synth 時に大量の deprecation warning が出る。CFT 出力には影響しないので JSII_DEPRECATED=quiet
+# で抑制する。SBT upstream が新 API (standardThreatProtectionMode) に移行したら外す。
+export JSII_DEPRECATED := quiet
 
-# Bun binary resolution (prefer direct bin over proto shims)
-PROTO_BIN := $(HOME)/.proto/bin
-MISE_BUN_BIN := $(HOME)/.local/share/mise/installs/bun/1.2.20/bin
-ifeq ($(wildcard $(PROTO_BIN)/bun),$(PROTO_BIN)/bun)
-	BUN ?= $(PROTO_BIN)/bun
-else ifeq ($(wildcard $(MISE_BUN_BIN)/bun),$(MISE_BUN_BIN)/bun)
-	BUN ?= $(MISE_BUN_BIN)/bun
-else
-	BUN ?= bun
-endif
-export PATH := $(PROTO_BIN):$(MISE_BUN_BIN):$(PATH)
+.DEFAULT_GOAL := help
 
-NR := $(BUN)x nr
-CONTROL_PLANE_DIR := client/AdminWeb
-APPLICATION_PLANE_DIR := client/Application
-FRONTEND_APPS := $(CONTROL_PLANE_DIR) $(APPLICATION_PLANE_DIR)
+.PHONY: help install install_ci build typecheck test check before-commit beforecommit \
+        lint lint-md lint-text lint-format lint_md lint_text format_check \
+        fix fix-md fix-text fix-format format \
+        harness harness-test tech-debt \
+        env-check synth diff bootstrap \
+        deploy deploy-control-plane deploy-bootstrap destroy
 
-# Emulator config
-CLOUD_EMULATOR ?= kumo
-EMULATOR_ENDPOINT := http://localhost:4566
-DYNAMODB_LOCAL_ENDPOINT := http://localhost:8000
-LOCAL_TABLE := TenkaCloud-local
+help:
+	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
+	      /^[a-z][a-zA-Z0-9_-]*:/ && !/^help:/ {sub(/:.*/, ""); printf "  %s\n", $$0}' Makefile
 
-######## Setup ########
+# ===== Setup / Build =====
+install:       ; bun install
+install_ci:    ; bun install --frozen-lockfile --ignore-scripts
+build:         ; bun run build
+typecheck:     ; bun run typecheck
+test:          ; bun run test
+validate-problems: ; bun run validate:problems
+check:         install lint test validate-problems
+before-commit: lint test validate-problems
 
-#? install: Install all dependencies
-install:
-	@$(BUN) install
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(BUN) install) || exit 1; done
+# ===== Lint / Fix =====
+lint:   lint-md lint-text lint-format
+fix:    fix-md  fix-text  fix-format
+format: fix
 
-#? install_ci: Install dependencies for CI (frozen lockfile, no scripts)
-install_ci:
-	@$(BUN) run install:ci
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(BUN) install --frozen-lockfile --ignore-scripts) || exit 1; done
+lint-md:     ; bun run lint:md
+lint-text:   ; bun run lint:text
+lint-format: ; bun run lint:format
+fix-md:      ; bun run fix:md
+fix-text:    ; bun run fix:text
+fix-format:  ; bun run fix:format
 
-######## Development ########
+# CI が参照するアンダースコア別名
+lint_md:      lint-md
+lint_text:    lint-text
+format_check: lint-format
 
-#? start: Start everything (emulator + DynamoDB + all dev servers)
-start:
-	@docker --version > /dev/null 2>&1 || { echo "Docker is not running"; exit 1; }
-	@command -v aws >/dev/null 2>&1 || { echo "AWS CLI not installed: brew install awscli"; exit 1; }
-	@CLOUD_EMULATOR=$(CLOUD_EMULATOR) ./scripts/local-setup.sh
-	@echo ""
-	@echo "  Control Plane:      http://localhost:13000/control"
-	@echo "  Application Plane:  http://localhost:13001/"
-	@echo "  Tenant API:         http://localhost:13004/api/tenants"
-	@echo "  Cloud Emulator:     http://localhost:4566"
-	@echo "  DynamoDB Local:     http://localhost:8000"
-	@echo ""
-	@DYNAMODB_ENDPOINT=$(DYNAMODB_LOCAL_ENDPOINT) \
-	DYNAMODB_TABLE=$(LOCAL_TABLE) \
-	DYNAMODB_TABLE_NAME=$(LOCAL_TABLE) \
-	AWS_REGION=ap-northeast-1 \
-	AWS_ACCESS_KEY_ID=test \
-	AWS_SECRET_ACCESS_KEY=test \
-	AWS_ENDPOINT_URL=$(EMULATOR_ENDPOINT) \
-	EVENT_BUS_NAME=tenkacloud-local-tenant-events \
-	DATA_BUCKET_NAME=tenkacloud-local-data \
-	PROVISIONING_ENABLED=true \
-	PROVISIONING_DELIVERY_MODE=inline \
-	TENANT_API_BASE_URL=http://localhost:13004/api \
-	AUTH_SECRET=local-dev-secret-do-not-use-in-production \
-	AUTH_SKIP=1 \
-	AUTH_SKIP_ROLES=competitor,platform-admin \
-	NEXT_PUBLIC_AUTH_SKIP=1 \
-	NEXT_PUBLIC_APPLICATION_PLANE_URL=http://localhost:13001 \
-	$(NR) dev
+# ===== Harness =====
+HARNESS := bun run .claude/harness/bin
+harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
+harness-test: ; cd .claude/harness && bunx vitest run
+tech-debt:    ; $(HARNESS)/tech-debt.ts
 
-#? stop: Stop all services
-stop:
-	@if docker info > /dev/null 2>&1; then \
-		docker compose --profile localstack --profile kumo --profile floci down; \
-	else \
-		echo "Docker is not running, skipping container shutdown"; \
-	fi
-	@PIDS=$$(lsof -ti:13000,13001,13004,3010,3011,3012,3020,3100 2>/dev/null); \
-	if [ -n "$$PIDS" ]; then \
-		echo "Killing dev server processes: $$PIDS"; \
-		echo "$$PIDS" | xargs kill -9; \
-	fi
-	@echo "Stopped."
+# ===== CDK =====
+# 環境切替。make deploy ENV=production 等で上書き可能。デフォルトは development。
+ENV ?= development
+ENV_FILE := infrastructure/environments/$(ENV)/.env
 
-#? restart: Restart all services
-restart: stop start
+# infrastructure/environments/$(ENV)/.env を自動 load (無ければ warn)。
+# .env から SYSTEM_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION を読み、
+# install.sh / CDK が期待する環境変数名 (CDK_PARAM_*) にも export する。
+-include $(ENV_FILE)
+export
 
-#? status: Show service status
-status:
-	@docker compose ps 2>/dev/null || echo "No containers running"
+# synth/diff を Makefile 単体で通す時の placeholder (install.sh は deploy 時に上書きする)。
+CDK_PARAM_SYSTEM_ADMIN_EMAIL ?= $(SYSTEM_ADMIN_EMAIL)
+# fromBucketName は DNS 検証される (3-63 chars, lowercase) ので短い "NA" 等だと synth が落ちる。
+CDK_PARAM_S3_BUCKET_NAME ?= serverless-saas-placeholder
+CDK_SOURCE_NAME ?= source.zip
+CDK_PARAM_COMMIT_ID ?= placeholder
 
-#? start-aws: Start with real AWS (requires: source scripts/aws-creds.sh)
-start-aws:
-	@[ -n "$$AWS_SESSION_TOKEN" ] || { echo "Run: source scripts/aws-creds.sh"; exit 1; }
-	@docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --build
+env-check:
+	@[ -f "$(ENV_FILE)" ] || { \
+		echo "ERROR: $(ENV_FILE) が存在しません。"; \
+		echo "       cp infrastructure/environments/$(ENV)/.env.example infrastructure/environments/$(ENV)/.env"; \
+		echo "       してから必須値 (SYSTEM_ADMIN_EMAIL / AWS_ACCOUNT_ID) を埋めてください。"; \
+		exit 1; \
+	}
+	@[ -n "$${SYSTEM_ADMIN_EMAIL}" ] || { \
+		echo "ERROR: SYSTEM_ADMIN_EMAIL が $(ENV_FILE) にありません"; exit 1; \
+	}
 
-######## Quality ########
-
-#? lint_text: Run textlint on markdown
-lint_text:
-	@$(BUN) run lint_text
-
-#? format: Auto-format all code
-format:
-	@$(BUN) run format
-
-#? format_check: Check code formatting
-format_check:
-	@$(BUN) run format_check
-
-#? typecheck: Run TypeScript type checking
-typecheck:
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) typecheck) || exit 1; done
-
-#? test: Run tests with coverage
-test:
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) test:coverage) || exit 1; done
-
-test_coverage: test
-
-#? test_quick: Run tests without coverage (fast)
-test_quick:
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) test) || exit 1; done
-
-#? test_e2e: Run E2E tests (Playwright)
-test_e2e:
-	@cd $(CONTROL_PLANE_DIR) && $(BUN)x nlx playwright install chromium --with-deps && $(NR) test:e2e
-
-#? before-commit: Run all quality checks
-before-commit:
-	@$(BUN) run lint_text
-	@$(BUN) run format_check
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) typecheck) || exit 1; done
-	@for app in $(FRONTEND_APPS); do (cd $$app && $(NR) test:coverage) || exit 1; done
-	@for app in $(FRONTEND_APPS); do \
-		(cd $$app && NEXT_TELEMETRY_DISABLED=1 SKIP_AUTH0_VALIDATION=1 \
-		AUTH0_CLIENT_ID=dummy AUTH0_CLIENT_SECRET=dummy AUTH0_ISSUER=https://example.com \
-		$(NR) build) || exit 1; \
-	done
-	@echo "All checks passed."
-
-#? build: Production build
-build:
-	@for app in $(FRONTEND_APPS); do \
-		(cd $$app && NEXT_TELEMETRY_DISABLED=1 SKIP_AUTH0_VALIDATION=1 \
-		AUTH0_CLIENT_ID=dummy AUTH0_CLIENT_SECRET=dummy AUTH0_ISSUER=https://example.com \
-		$(NR) build) || exit 1; \
-	done
-
-######## One-Pass E2E ########
-
-#? test_one_pass_local: Run one-pass E2E harness (requires make start)
-test_one_pass_local:
-	@$(BUN) scripts/one-pass.ts --target local --allow-blocked
-
-#? test_one_pass_local_strict: Run one-pass E2E harness (fails on blocked steps)
-test_one_pass_local_strict:
-	@$(BUN) scripts/one-pass.ts --target local
-
-######## Data ########
-
-#? seed: Initialize DB tables and seed demo data
-seed:
-	@./scripts/init-dynamodb-tables.sh
-	@./scripts/seed-data.sh
-	@./scripts/gameday-seed.sh
-
-######## Help ########
-
-#? help: Show available commands
-help: Makefile
-	@echo ''
-	@echo 'Usage: make [target]'
-	@echo ''
-	@echo 'Targets:'
-	@sed -n 's/^#?//p' $< | column -t -s ':' | sort | sed -e 's/^/ /'
-	@echo ''
-	@echo 'Options:'
-	@echo '  CLOUD_EMULATOR=kumo|localstack|floci  (default: kumo)'
+synth:                build           ; $(CDK) synth
+diff:                 build           ; $(CDK) diff --all
+bootstrap:            env-check build ; $(CDK) bootstrap
+# ref の install.sh 準拠の orchestration:
+#   1. S3 source bucket (serverless-saas-${ACCOUNT_ID}-${REGION}) を作成
+#   2. infrastructure/ を source.zip にして S3 に upload
+#   3. cdk bootstrap + cdk deploy --all (ControlPlane + Bootstrap + Tenant-pooled)
+#   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
+deploy:               env-check
+	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
+# stack 単位の deploy (直接呼ぶ時用。source.zip + CDK_PARAM_COMMIT_ID を事前 export しておく前提)
+deploy-control-plane: env-check build ; $(CDK) deploy ControlPlaneStack $(APPROVAL)
+deploy-bootstrap:     env-check build ; $(CDK) deploy serverless-saas-ref-arch-bootstrap-stack $(APPROVAL)
+destroy:              env-check       ; bash scripts/cleanup.sh

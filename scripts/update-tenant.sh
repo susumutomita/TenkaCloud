@@ -15,7 +15,7 @@ export CDK_PARAM_TENANT_ID=$TENANT_ID
 export REGION=$AWS_REGION
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-${ACCOUNT_ID}-${REGION}"
+export CDK_PARAM_S3_BUCKET_NAME="serverless-saas-${ACCOUNT_ID}-${REGION}"
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 

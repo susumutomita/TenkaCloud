@@ -26,6 +26,7 @@ make before-commit   # lint, format, typecheck, test (99％+ coverage), build
 ### 作業順序（厳守）
 
 新規機能を追加する前に以下を実施する。
+
 1. **ドキュメント更新** — 関連する docs/, ADR, CLAUDE.md を先に更新する。
 2. **リファクタリング** — 技術的負債を先に解消する（`bun scripts/ai-improvement-loop.ts --staged --fail-on=high`）。
 

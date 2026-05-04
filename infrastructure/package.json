@@ -1,0 +1,44 @@
+{
+  "name": "@TenkaCloud/infrastructure",
+  "version": "0.1.0",
+  "bin": {
+    "cdk": "bin/infrastructure.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "watch": "tsc -w",
+    "synth": "cdk synth -c environment=${ENV:-development}",
+    "test": "vitest run",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-cloudformation": "^3.1030.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1040.0",
+    "@aws-sdk/client-dynamodb": "^3.1030.0",
+    "@aws-sdk/client-lambda": "^3.1040.0",
+    "@aws-sdk/client-ssm": "^3.1040.0",
+    "@aws-sdk/client-sts": "^3.1030.0",
+    "@aws-sdk/lib-dynamodb": "^3.1040.0",
+    "@biomejs/biome": "^2.4.12",
+    "@types/node": "^24.10.1",
+    "aws-cdk": "2.1118.0",
+    "cdk-nag": "^2.37.55",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.4"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-lambda-python-alpha": "^2.140.0-alpha.0",
+    "@cdklabs/sbt-aws": "0.3.9",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
+    "aws-cdk-lib": "^2.248.0",
+    "constructs": "^10.5.0",
+    "dotenv": "^17.4.2",
+    "winston": "^3.19.0"
+  }
+}
