@@ -12,6 +12,7 @@
     "typecheck": "bun run --filter @TenkaCloud/infrastructure typecheck && bun run --filter @TenkaCloud/admin-console typecheck && bun run --filter @TenkaCloud/application-admin-console typecheck",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
     "test": "bun run --filter @TenkaCloud/infrastructure test && bun run --filter @TenkaCloud/admin-console test && bun run --filter @TenkaCloud/application-admin-console test",
+    "validate:problems": "bun run scripts/validate-problems.ts",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist'",
     "lint:text": "textlint '**/*.md'",
     "lint:format": "biome check",

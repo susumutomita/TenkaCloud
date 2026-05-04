@@ -164,3 +164,4 @@ tmp
 # Vestige of pre-PR-#398 layout. ソースは server/microservices/ に移行済み。
 # working tree に残る node_modules/dist/lambda.zip は git 管理外 (本ディレクトリ自体を ignore)。
 backend/
+sampleimages/
