@@ -99,9 +99,14 @@ export class IdentityProvider extends Construct {
     });
     this.cognitoDomainUrl = `https://${domainPrefix}.auth.${stack.region}.amazoncognito.com`;
 
-    const writeAttributes = new aws_cognito.ClientAttributes()
-      .withStandardAttributes({ email: true })
-      .withCustomAttributes("tenantId", "userRole", "apiKey", "tenantTier");
+    // `custom:tenantId` / `userRole` / `apiKey` / `tenantTier` は admin (provision-tenant.sh
+    // が `admin-create-user` で初期化、必要なら `admin-update-user-attributes` で更新) のみ
+    // 書き換える。Client の `writeAttributes` から外すことで、ユーザの access_token から
+    // `UpdateUserAttributes` で `custom:tenantId` を別テナントに書き換えてクロステナント
+    // 操作する経路を塞ぐ (Deploy API の JWT authorizer が claim を信頼するため)。
+    const writeAttributes = new aws_cognito.ClientAttributes().withStandardAttributes({
+      email: true,
+    });
 
     this.tenantUserPoolClient = new aws_cognito.UserPoolClient(this, "tenantUserPoolClient", {
       userPool: this.tenantUserPool,

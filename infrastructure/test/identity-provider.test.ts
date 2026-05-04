@@ -79,5 +79,22 @@ describe("IdentityProvider", () => {
         "https://tenkacloud-development-tenant-1-123456789012.auth.ap-northeast-1.amazoncognito.com",
       );
     });
+
+    it("UserPoolClient の writeAttributes は custom:tenantId を含まないべき (cross-tenant rewrite 防止)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      const clients = template.findResources("AWS::Cognito::UserPoolClient");
+      const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
+      const blocked = ["custom:tenantId", "custom:userRole", "custom:apiKey", "custom:tenantTier"];
+      for (const attr of blocked) {
+        expect(writeAttrs).not.toContain(attr);
+      }
+    });
+
+    it("UserPoolClient の writeAttributes は email を含むべき (ユーザは自分の email を更新できる)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      const clients = template.findResources("AWS::Cognito::UserPoolClient");
+      const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
+      expect(writeAttrs).toContain("email");
+    });
   });
 });
