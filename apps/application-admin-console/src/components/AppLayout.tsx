@@ -7,14 +7,20 @@ import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 
 /**
- * application-admin-console の shell。TopNavigation にサインアウトボタンと
- * テナント名、SideNavigation に /（ホーム）と /apps（公開アプリ）を並べる。
+ * application-admin-console の shell。TopNavigation はサインアウトのみ、
+ * SideNavigation は今は「ホーム」だけ。今後の PR で「問題」「イベント」等が増える。
  *
- * TopNavigation の identity title に「Application Admin Console — <tenantName>」と
- * テナント名を入れて、複数テナントを行き来する人 (運営者) が画面の所属を即座に
- * 区別できるようにする。
+ * テナント名は build 時 config.tenantName が pooled stack だと "Shared Pooled Tenant"
+ * placeholder のまま漏れるので、ここでは表示しない。Home ページ側で JWT custom 属性
+ * (custom:tenantId / 将来 custom:tenantName) からユーザの所属テナントを描画する。
  */
-export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
+export function ShellLayout({
+  config: _config,
+  children,
+}: {
+  config: AppConfig;
+  children: ReactNode;
+}) {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -22,7 +28,7 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
   return (
     <>
       <TopNavigation
-        identity={{ href: "/", title: `Application Admin Console — ${config.tenantName}` }}
+        identity={{ href: "/", title: "TenkaCloud — Application Console" }}
         utilities={
           auth.tokens
             ? [
@@ -43,11 +49,7 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
           <SideNavigation
             activeHref={location.pathname}
             header={{ href: "/", text: "メニュー" }}
-            items={[
-              { type: "link", href: "/", text: "ホーム" },
-              { type: "link", href: "/apps", text: "公開アプリ" },
-              { type: "link", href: "/apps/new", text: "アプリを公開する" },
-            ]}
+            items={[{ type: "link", href: "/", text: "ホーム" }]}
             onFollow={(e) => {
               if (!e.detail.external) {
                 e.preventDefault();

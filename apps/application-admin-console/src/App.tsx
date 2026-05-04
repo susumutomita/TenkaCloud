@@ -3,8 +3,6 @@ import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
-import { AppNewPage } from "./pages/AppNew";
-import { AppsPage } from "./pages/Apps";
 import { CallbackPage } from "./pages/Callback";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
@@ -30,9 +28,7 @@ export function App({ config }: { config: AppConfig }) {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
-        <Route path="/" element={guarded(config, <HomePage config={config} />)} />
-        <Route path="/apps" element={guarded(config, <AppsPage config={config} />)} />
-        <Route path="/apps/new" element={guarded(config, <AppNewPage config={config} />)} />
+        <Route path="/" element={guarded(config, <HomePage />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
