@@ -6,6 +6,8 @@ import type { AppConfig } from "./config";
 import { CallbackPage } from "./pages/Callback";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
+import { ProblemDetailPage } from "./pages/ProblemDetail";
+import { ProblemsPage } from "./pages/Problems";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -29,6 +31,8 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
         <Route path="/" element={guarded(config, <HomePage />)} />
+        <Route path="/problems" element={guarded(config, <ProblemsPage />)} />
+        <Route path="/problems/:problemId" element={guarded(config, <ProblemDetailPage />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
