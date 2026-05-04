@@ -3,11 +3,6 @@
 クラウド技術者向けの OSS 競技プラットフォーム
 (AWS GameDay / JAM 形式の常設マルチテナント SaaS)。
 
-`apps/auth-proxy` `apps/sample` は ProtoShip 側専用なので TenkaCloud には
-取り込まない (TenkaCloud は GameDay / JAM の競技基盤としてだけ使う)。
-`infrastructure/` のうち auth-proxy / sample 依存箇所は Phase 2 で
-削除 / TenkaCloud 用に置換する。
-
 ## レイアウト
 
 ```text
@@ -27,10 +22,21 @@ docs/                           アーキテクチャ・ADR・運用ガイド
 - Bun
 - Docker (CDK BucketDeployment bundling)
 
+### ローカル動作確認
+
+```bash
+bun install
+bun run typecheck
+bun run test
+```
+
 ### AWS deploy
 
 ```bash
-make deploy
+cp infrastructure/environments/development/.env.example \
+   infrastructure/environments/development/.env
+# .env に SYSTEM_ADMIN_EMAIL を入れる
+make deploy ENV=development
 ```
 
 詳細は [docs/](./docs/)。
