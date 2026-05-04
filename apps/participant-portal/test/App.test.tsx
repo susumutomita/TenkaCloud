@@ -6,7 +6,7 @@ import { App } from "../src/App";
 import type { AppConfig } from "../src/config";
 
 const config: AppConfig = {
-  apiBaseUrl: "https://api.example.com",
+  apiBaseUrl: "http://localhost:3199/dev-mock",
   eventTitle: "TenkaCloud Battle (test)",
   eventRegion: "ap-northeast-1",
 };

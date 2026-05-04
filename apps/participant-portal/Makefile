@@ -25,9 +25,10 @@ preview:
 test:
 	bun run test
 
-#? clean: dist と node_modules を削除
+#? clean: git ignore 対象 (dist / node_modules / coverage 等) を削除
+# CLAUDE.md で `rm` は禁止のため、ignore 対象だけ消す `git clean -fdX` を使う。
 clean:
-	rm -rf dist node_modules
+	git clean -fdX
 
 #? help: 使えるターゲット一覧
 help: Makefile

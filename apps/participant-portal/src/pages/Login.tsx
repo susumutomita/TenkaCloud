@@ -30,7 +30,9 @@ export function LoginPage({ config }: { config: AppConfig }) {
       await auth.login(teamLoginKey);
       navigate("/");
     } catch (err) {
-      setError((err as Error).message);
+      const message =
+        err instanceof Error ? err.message : "サインインに失敗しました。もう一度お試しください。";
+      setError(message);
       setSubmitting(false);
     }
   };
