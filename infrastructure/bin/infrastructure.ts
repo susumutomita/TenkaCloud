@@ -134,11 +134,14 @@ cdk.Aspects.of(controlPlaneStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
 );
 
-// Problem deploy backend (PR-B): Deployments DDB + Worker IAM Role の土台のみ。
-// EventBridge Rule + Lambda は後段 PR で本 stack に追加する。
+// Problem deploy backend: Deployments DDB + IAM Role + Deploy API Lambda + Worker Lambda。
+// `DEPLOY_EXTERNAL_ID` は競技者 Bootstrap CFn (templates/competitor-bootstrap.yaml) で
+// 設定された ExternalId と一致させる必要がある。.env から渡す。
+const deployExternalId = process.env.CDK_PARAM_DEPLOY_EXTERNAL_ID || "tenkacloud-dev-external-id";
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
+  deployExternalId,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),

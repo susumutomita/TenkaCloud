@@ -3,6 +3,7 @@ import { CfnOutput } from "aws-cdk-lib";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { Construct } from "constructs";
 import { DeployApiLambda } from "./deploy-api-lambda";
+import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
 import { DeploymentsTable } from "./deployments-table";
 
@@ -16,6 +17,15 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * Cognito JWT authorizer 結線時に削除する。
    */
   readonly defaultTenantId?: string;
+  /**
+   * 競技者 Bootstrap CFn (PR-A) で運営者と共有された ExternalId。
+   * Worker Lambda が AssumeRole 時の sts:ExternalId として渡す。Confused Deputy 対策。
+   */
+  readonly deployExternalId: string;
+  /**
+   * 競技者側 IAM Role 名 (PR-A の default と一致させる)。省略時は規約通り。
+   */
+  readonly competitorRoleName?: string;
 }
 
 /**
@@ -24,8 +34,7 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
  * - Deployments テーブル (DDB)
  * - Deploy Worker IAM Role (cross-account AssumeRole + DDB + EventBus)
  * - Deploy API Lambda + Function URL (POST /problems/:id/deploy)
- *
- * EventBridge Rule + DeployWorker Lambda は別途追加する。
+ * - Deploy Worker Lambda + EventBridge Rule (DeployRequested → AssumeRole + CFn)
  */
 export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deploymentsTableName: string;
@@ -49,6 +58,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       eventBusName: eventBus.eventBusName,
       executionRole: workerRole.role,
       defaultTenantId: props.defaultTenantId,
+    });
+
+    new DeployWorkerLambda(this, "DeployWorker", {
+      deploymentsTableName: deployments.table.tableName,
+      eventBus,
+      executionRole: workerRole.role,
+      externalId: props.deployExternalId,
+      competitorRoleName: props.competitorRoleName,
     });
 
     this.deploymentsTableName = deployments.table.tableName;

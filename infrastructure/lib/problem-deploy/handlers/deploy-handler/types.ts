@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-/**
- * EventBridge constants. Producer (Deploy API Lambda) と Consumer (DeployWorker
- * Lambda) で同じシンボルを参照させ、文字列 drift を防ぐ。
- */
-export const EVENT_SOURCE = "tenkacloud.problem" as const;
-export const EVENT_DETAIL_TYPE_DEPLOY_REQUESTED = "DeployRequested" as const;
+export {
+  type DeployRequestedDetail,
+  DeployRequestedDetailSchema,
+  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+  EVENT_SOURCE,
+} from "../shared/events.js";
 
 export const DeploymentStatusSchema = z.enum([
   "PENDING",
@@ -82,13 +82,3 @@ export const DeployResponseSchema = z.object({
   expiresAt: z.number(),
 });
 export type DeployResponse = z.infer<typeof DeployResponseSchema>;
-
-export interface DeployRequestedDetail {
-  jobId: string;
-  problemId: string;
-  tenantId: string;
-  awsAccountId: string;
-  region: string;
-  teamName: string;
-  namePrefix: string;
-}

@@ -1,18 +1,16 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
+import {
+  type DeployRequestedDetail,
+  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+  publishProblemEvent,
+} from "../shared/events.js";
 import { buildStackPrefix } from "./naming.js";
 import { generateTeamLoginKey } from "./team-key.js";
-import {
-  type DeploymentItem,
-  type DeployRequest,
-  type DeployRequestedDetail,
-  type DeployResponse,
-  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
-  EVENT_SOURCE,
-} from "./types.js";
+import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
 
 export interface DeployContext {
   readonly tableName: string;
@@ -92,19 +90,13 @@ export async function startDeployment(
     teamName: item.teamName,
     namePrefix: item.namePrefix,
   };
-  await ctx.events.send(
-    new PutEventsCommand({
-      Entries: [
-        {
-          EventBusName: ctx.eventBusName,
-          Source: EVENT_SOURCE,
-          DetailType: EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
-          Detail: JSON.stringify(detail),
-          Resources: [`tenkacloud:deployment:${jobId}`],
-        },
-      ],
-    }),
-  );
+  await publishProblemEvent({
+    client: ctx.events,
+    busName: ctx.eventBusName,
+    detailType: EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+    jobId,
+    detail,
+  });
 
   return {
     jobId,

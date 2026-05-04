@@ -10,6 +10,7 @@ function synth(): Template {
   const stack = new ProblemDeployBackendStack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
     eventBusArn: FAKE_BUS_ARN,
+    deployExternalId: "ext-test",
   });
   return Template.fromStack(stack);
 }
@@ -223,16 +224,53 @@ describe("ProblemDeployBackendStack", () => {
     });
   });
 
+  describe("DeployWorkerLambda + EventBridge Rule", () => {
+    it("Lambda 関数を 2 つ作るべき (API + Worker)", () => {
+      const tpl = synth();
+      tpl.resourceCountIs("AWS::Lambda::Function", 2);
+    });
+
+    it("Worker Lambda は DEPLOY_EXTERNAL_ID を env として持つべき", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              DEPLOY_EXTERNAL_ID: "ext-test",
+              COMPETITOR_ROLE_NAME: "TenkaCloud-CompetitorDeploy-Role",
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("EventBridge Rule で tenkacloud.problem / DeployRequested を target にすべき", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          EventPattern: Match.objectLike({
+            source: ["tenkacloud.problem"],
+            "detail-type": ["DeployRequested"],
+          }),
+        }),
+      );
+    });
+  });
+
   describe("複数 stack を同居しても", () => {
     it("synth が衝突なく通るべき (ResourceName 自動生成)", () => {
       const app = new cdk.App();
       const a = new ProblemDeployBackendStack(app, "A", {
         env: { account: "123456789012", region: "ap-northeast-1" },
         eventBusArn: FAKE_BUS_ARN,
+        deployExternalId: "ext-a",
       });
       const b = new ProblemDeployBackendStack(app, "B", {
         env: { account: "123456789012", region: "ap-northeast-1" },
         eventBusArn: FAKE_BUS_ARN,
+        deployExternalId: "ext-b",
       });
       expect(() => Template.fromStack(a)).not.toThrow();
       expect(() => Template.fromStack(b)).not.toThrow();
