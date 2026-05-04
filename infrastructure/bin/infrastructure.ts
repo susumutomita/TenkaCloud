@@ -104,21 +104,6 @@ const dynamoWriteCapacity = Number(
 // 入れて衝突回避する (#83)。AdminConsoleHostingStack 用にも同じ値が要るので前倒しで定義。
 const awsRegion = process.env.CDK_PARAM_AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? "";
 const awsAccountId = process.env.CDK_PARAM_AWS_ACCOUNT_ID ?? process.env.CDK_DEFAULT_ACCOUNT ?? "";
-const pickEnv = (...names: string[]) =>
-  names.map((n) => process.env[n]).find((v) => v && v.length > 0);
-const brokerEntra = {
-  graphParameterName: pickEnv(
-    "CDK_PARAM_BROKER_ENTRA_GRAPH_PARAMETER_NAME",
-    "BROKER_ENTRA_GRAPH_PARAMETER_NAME",
-  ),
-  tenantConfigPrefix:
-    pickEnv("CDK_PARAM_BROKER_ENTRA_TENANT_CONFIG_PREFIX", "BROKER_ENTRA_TENANT_CONFIG_PREFIX") ??
-    "/TenkaCloud/tenants",
-  applicationTemplateId: pickEnv(
-    "CDK_PARAM_BROKER_ENTRA_APPLICATION_TEMPLATE_ID",
-    "BROKER_ENTRA_APPLICATION_TEMPLATE_ID",
-  ),
-};
 const isPooledDeploy = tenantId === pooledId;
 
 // parameter names to facilitate sharing api keys
@@ -182,10 +167,6 @@ const tenantTemplateStack = new TenantTemplateStack(
     ApiKeySSMParameterNames: apiKeySSMParameterNames,
     tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
     commitId,
-    brokerEntra,
-    appsTableBillingMode: dynamoBillingMode,
-    appsTableReadCapacity: isDynamoProvisioned ? dynamoReadCapacity : undefined,
-    appsTableWriteCapacity: isDynamoProvisioned ? dynamoWriteCapacity : undefined,
   },
 );
 

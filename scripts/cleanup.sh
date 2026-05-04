@@ -78,44 +78,10 @@ while IFS= read -r bucket; do
   empty_versioned_bucket "$bucket"
 done < <(aws s3 ls 2>/dev/null | awk '{print $3}' | grep -E "$bucket_patterns" || true)
 
-# ============================================================================
-# Orphan sweep: AppsApiHandler が runtime で lambda:CreateFunction した per-app
-# auth-proxy Lambda は CloudFormation 管理外なので cdk destroy では消えない。
-# テナント開発者が「公開する」で作った Lambda / Function URL / 付随 log group を
-# prefix で掃除する。命名規約は TenkaCloud-app-{tenantId}-{appId}-* (handler 側で
-# makeFunctionName() が 64 char に truncate する) なので prefix "TenkaCloud-app-"
-# で全件捕捉できる。
-# ============================================================================
-log "sweeping orphan per-app auth-proxy Lambdas (prefix 'TenkaCloud-app-')..."
-orphan_fns=$(aws lambda list-functions \
-  --query "Functions[?starts_with(FunctionName, 'TenkaCloud-app-')].FunctionName" \
-  --output text 2>/dev/null | tr '\t' '\n' || true)
-
-orphan_count=0
-for fn in $orphan_fns; do
-  [[ -z "$fn" ]] && continue
-  orphan_count=$((orphan_count + 1))
-  log "  deleting function: ${fn}"
-  aws lambda delete-function-url-config --function-name "$fn" >/dev/null 2>&1 || true
-  aws lambda delete-function --function-name "$fn" >/dev/null 2>&1 \
-    || log "    (already gone or still has dependency, continuing)"
-done
-log "  swept ${orphan_count} orphan Lambda(s)"
-
-log "sweeping orphan per-app Lambda log groups (/aws/lambda/TenkaCloud-app-*)..."
-orphan_log_groups=$(aws logs describe-log-groups \
-  --log-group-name-prefix "/aws/lambda/TenkaCloud-app-" \
-  --query "logGroups[].logGroupName" \
-  --output text 2>/dev/null | tr '\t' '\n' || true)
-
-log_count=0
-for g in $orphan_log_groups; do
-  [[ -z "$g" ]] && continue
-  log_count=$((log_count + 1))
-  log "  deleting log group: ${g}"
-  aws logs delete-log-group --log-group-name "$g" >/dev/null 2>&1 || true
-done
-log "  swept ${log_count} orphan log group(s)"
+# Note: ProtoShip 由来の per-app auth-proxy Lambda の orphan sweep は TenkaCloud
+# では不要 (auth-proxy 機能を撤去したため、`TenkaCloud-app-*` 命名の runtime
+# 生成 Lambda は存在しない)。GameDay deploy pipeline で生成される CFn stack は
+# CFn 管理下なので cdk destroy --all で消える。
 
 # AdminConsoleHostingStack は bin/infrastructure.ts が CDK_PARAM_CONTROL_PLANE_* と
 # apps/admin-console/dist/ を要求するため cdk destroy では synth が落ちる。CFN 直 delete で迂回。

@@ -72,15 +72,6 @@ echo "Building apps/application-admin-console (used by both pooled stack at host
 (cd "${TenkaCloud_ROOT}/apps/application-admin-console" && bun install && bun run build)
 echo "  → dist/ generated"
 
-# apps/auth-proxy を host build して Lambda bundle を用意する (#40-c / #63)。
-# TenantTemplateStack の ApiGateway construct が path.join(__dirname, "..", "..", "..",
-# "apps", "auth-proxy", "dist", "lambda") を Asset として CDK staging にアップロードする。
-# backend Lambda (AppsApiHandler) が lambda:CreateFunction の Code S3Bucket/S3Key として
-# 参照し、per-app auth-proxy Lambda を動的に作成する。
-echo "Building apps/auth-proxy (Lambda bundle)..."
-(cd "${TenkaCloud_ROOT}/apps/auth-proxy" && bun install && bun run build:lambda)
-echo "  → dist/lambda/lambda.js generated"
-
 echo "Staging source.zip at ${STAGING}..."
 # infrastructure → cdk にリネーム、src と scripts はそのまま
 cp -R infrastructure "${STAGING}/cdk"
@@ -93,14 +84,11 @@ find "${STAGING}" -type d \( -name node_modules -o -name cdk.out -o -name dist \
 find "${STAGING}" -type f \( -name ".env" -o -name ".env.local" \) -delete
 find "${STAGING}" -name ".DS_Store" -delete
 
-# 上の find は dist を 一括 prune するので、application-admin-console / auth-proxy の dist は
-# その後で個別に置き直す。CodeBuild の provision-tenant.sh が
-# `cd cdk` した後に Source.asset で `../apps/{application-admin-console,auth-proxy}/dist` を
-# 解決できる必要がある。
+# 上の find は dist を一括 prune するので、application-admin-console の dist は
+# その後で個別に置き直す。CodeBuild の provision-tenant.sh が `cd cdk` した後に
+# Source.asset で `../apps/application-admin-console/dist` を解決できる必要がある。
 mkdir -p "${STAGING}/apps/application-admin-console"
 cp -R "${TenkaCloud_ROOT}/apps/application-admin-console/dist" "${STAGING}/apps/application-admin-console/"
-mkdir -p "${STAGING}/apps/auth-proxy"
-cp -R "${TenkaCloud_ROOT}/apps/auth-proxy/dist" "${STAGING}/apps/auth-proxy/"
 
 cd "${STAGING}"
 zip -rq "${CDK_SOURCE_NAME}" .

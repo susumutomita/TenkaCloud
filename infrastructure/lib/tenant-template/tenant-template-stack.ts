@@ -1,5 +1,5 @@
 import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
-import type { BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
+import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import {
   AwsCustomResource,
@@ -8,7 +8,7 @@ import {
 } from "aws-cdk-lib/custom-resources";
 import type { Construct } from "constructs";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
-import { ApiGateway, type BrokerEntraProps } from "./api-gateway";
+import { ApiGateway } from "./api-gateway";
 import { ApplicationAdminConsoleHosting } from "./application-admin-console-hosting";
 import { IdentityProvider } from "./identity-provider";
 
@@ -22,37 +22,17 @@ interface TenantTemplateStackProps extends StackProps {
   /**
    * 画面表示用のテナント名 (admin-console から POST /tenants 時に入力された名前)。
    * runtime-config.json 経由で application-admin-console に渡し、HomePage 等で表示する。
-   * pooled stack (install.sh phase 1) では bin/infrastructure.ts が
-   * "Shared Pooled Tenant" を default として渡す。
    */
   tenantName: string;
   /**
    * 環境名 (development / staging / production など)。
    * Cognito UserPool domain prefix の region globally unique 制約を満たすために
-   * tenantId / accountId と組み合わせて使う。同 AWS account 内で env が異なる stack を
-   * 共存させる場合 (dev/staging 同居) にも domain 衝突を防ぐ。
+   * tenantId / accountId と組み合わせて使う。
    */
   environment: string;
   tenantMappingTable: Table;
   commitId: string;
   waveNumber?: string;
-  brokerEntra?: BrokerEntraProps;
-  /**
-   * AppsTable の billing mode。`PROVISIONED` (default) のときは
-   * `appsTableReadCapacity` / `appsTableWriteCapacity` を使う。
-   * `PAY_PER_REQUEST` のときは capacity 指定は無視される。
-   *
-   * 値は bin/infrastructure.ts が `environments/<env>/config.json` の
-   * `dynamoDbConfig.billingMode` から読み出す (jpki-api 互換 `${VAR:-default}` 構文)。
-   */
-  appsTableBillingMode?: BillingMode;
-  /**
-   * AppsTable の DynamoDB プロビジョンドキャパシティ (読込/書込)。
-   * `appsTableBillingMode = PROVISIONED` のときに使用。値は bin/infrastructure.ts で
-   * config.json + env から読むため fallback を Stack に置かない (default 発生源を単一箇所に閉じる)。
-   */
-  appsTableReadCapacity?: number;
-  appsTableWriteCapacity?: number;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -92,14 +72,6 @@ export class TenantTemplateStack extends Stack {
       tenantId: props.tenantId,
       isPooledDeploy: props.isPooledDeploy,
       idpDetails: identityProvider.identityDetails,
-      userPool: identityProvider.tenantUserPool,
-      userPoolClient: identityProvider.tenantUserPoolClient,
-      cognitoDomainUrl: identityProvider.cognitoDomainUrl,
-      brokerEntra: props.brokerEntra,
-      appsTableBillingMode: props.appsTableBillingMode,
-      appsTableReadCapacity: props.appsTableReadCapacity,
-      appsTableWriteCapacity: props.appsTableWriteCapacity,
-      // ApiGateway の props は required なので props 値をそのまま渡す (fallback なし)
       apiKeyBasicTier: {
         apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.basic.keyId),
         value: this.ssmLookup(props.ApiKeySSMParameterNames.basic.value),
@@ -175,11 +147,6 @@ export class TenantTemplateStack extends Stack {
 
     new CfnOutput(this, "ApiGatewayUrl", {
       value: apiGateway.restApi.url,
-    });
-
-    new CfnOutput(this, "AppsTableName", {
-      value: apiGateway.appsTable.tableName,
-      description: `テナント ${props.tenantId} のアプリ管理 DDB table 名`,
     });
 
     new CfnOutput(this, "TenantUserpoolId", {

@@ -18,14 +18,9 @@ interface ControlPlaneStackProps extends cdk.StackProps {
 const LOCALHOST_CALLBACK_URLS = [
   "http://localhost:5173/callback", // apps/admin-console vite dev
   "http://localhost:4173/callback", // apps/admin-console vite preview
-  "http://localhost:4180/callback", // apps/auth-proxy
 ];
 
-const LOCALHOST_LOGOUT_URLS = [
-  "http://localhost:5173/",
-  "http://localhost:4173/",
-  "http://localhost:4180/",
-];
+const LOCALHOST_LOGOUT_URLS = ["http://localhost:5173/", "http://localhost:4173/"];
 
 const LOCALHOST_CORS_ORIGINS = [
   "http://localhost:5173",

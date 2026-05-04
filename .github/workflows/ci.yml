@@ -29,7 +29,7 @@ jobs:
         # oven-sh/setup-bun v2.0.2
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
         with:
-          bun-version: "1.3.9"
+          bun-version: "1.3.11"
 
       # Supply Chain Security: Safe Chain for malicious package detection
       - name: Setup safe-chain
@@ -62,7 +62,3 @@ jobs:
       - name: Build
         run: |
           make build
-
-      # Infrastructure (CDK) checks
-      - name: Infrastructure checks
-        run: make -C infrastructure/cdk install lint build test
