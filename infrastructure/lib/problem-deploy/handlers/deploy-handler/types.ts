@@ -1,12 +1,26 @@
 import { z } from "zod";
 
 /**
- * POST /problems/:problemId/deploy のリクエスト body。
- *
- * UI 側 DeployFormModal が送る shape と一致させる。
- *
- * forward-compat: `accountGroupId` / `problemSetId` は将来の bulk deploy 機能で使う。
- * 現状は単発 deploy なので optional のまま受け付け、無視する。
+ * EventBridge constants. Producer (Deploy API Lambda) と Consumer (DeployWorker
+ * Lambda) で同じシンボルを参照させ、文字列 drift を防ぐ。
+ */
+export const EVENT_SOURCE = "tenkacloud.problem" as const;
+export const EVENT_DETAIL_TYPE_DEPLOY_REQUESTED = "DeployRequested" as const;
+
+export const DeploymentStatusSchema = z.enum([
+  "PENDING",
+  "IN_PROGRESS",
+  "COMPLETE",
+  "FAILED",
+  "DELETING",
+  "DELETED",
+]);
+export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
+
+/**
+ * `POST /problems/:problemId/deploy` のリクエスト body。UI 側 DeployFormModal と
+ * 一致させる。`accountGroupId` / `problemSetId` は bulk deploy 用の予約フィールドで、
+ * 現状は受け取って DDB に保存するのみ (worker 側では未使用)。
  */
 export const DeployRequestSchema = z.object({
   region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です"),
@@ -21,19 +35,11 @@ export const DeployRequestSchema = z.object({
 });
 export type DeployRequest = z.infer<typeof DeployRequestSchema>;
 
-export type DeploymentStatus =
-  | "PENDING"
-  | "IN_PROGRESS"
-  | "COMPLETE"
-  | "FAILED"
-  | "DELETING"
-  | "DELETED";
-
 /**
  * Deployments テーブルの行 (DocumentClient shape)。
  *
- * PK = `DEPLOYMENT#<jobId>` / SK = `META`
- * GSI1PK = `TENANT#<tenantId>` / GSI1SK = `<createdAt>` (ISO8601、テナント別ソート用)
+ *   PK     = `DEPLOYMENT#<jobId>` / SK = `META`
+ *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `<createdAt>` (ISO8601、テナント別ソート用)
  */
 export interface DeploymentItem {
   PK: string;
@@ -48,29 +54,29 @@ export interface DeploymentItem {
   region: string;
   teamName: string;
   namePrefix: string;
-  /** 短命キー (deploy 直後の API レスポンスで TenantAdmin に 1 度だけ表示する想定) */
+  /** 短命キー。API レスポンスで TenantAdmin に 1 度だけ露出し、以降は DDB 内に閉じる。 */
   teamLoginKey: string;
   status: DeploymentStatus;
 
-  /** PR-D 以降で worker が埋める */
+  /** worker (CFn 起動側) が埋める */
   stackId?: string;
-  /** PR-E 以降で StatusUpdater が CFn Outputs を JSON 文字列で書き戻す */
+  /** StatusUpdater が CFn Outputs を JSON 文字列で書き戻す */
   stackOutputs?: string;
   failureReason?: string;
 
   createdAt: string;
   updatedAt: string;
-  /** TTL 属性 (epoch seconds、auto-teardown 用) */
+  /** TTL 属性 (epoch seconds)。auto-teardown のキー。 */
   expiresAt: number;
 
-  /** forward-compat: 将来 bulk deploy 機能で使う */
+  /** Reserved for bulk deploy. */
   accountGroupId?: string;
   problemSetId?: string;
 }
 
 export const DeployResponseSchema = z.object({
   jobId: z.string(),
-  status: z.string(),
+  status: DeploymentStatusSchema,
   namePrefix: z.string(),
   teamLoginKey: z.string(),
   expiresAt: z.number(),

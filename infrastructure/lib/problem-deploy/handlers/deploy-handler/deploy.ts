@@ -2,13 +2,16 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
+import { getEnv } from "../../../helper-functions.js";
 import { buildStackPrefix } from "./naming.js";
 import { generateTeamLoginKey } from "./team-key.js";
-import type {
-  DeploymentItem,
-  DeployRequest,
-  DeployRequestedDetail,
-  DeployResponse,
+import {
+  type DeploymentItem,
+  type DeployRequest,
+  type DeployRequestedDetail,
+  type DeployResponse,
+  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+  EVENT_SOURCE,
 } from "./types.js";
 
 export interface DeployContext {
@@ -20,7 +23,7 @@ export interface DeployContext {
   readonly now: () => number;
   /** stack の自動 teardown までの猶予時間。default 8 時間。 */
   readonly ttlMs?: number;
-  /** caller (TenantAdmin JWT) の `custom:tenantId`。今は trust 前提、将来 authorizer から差し込む。 */
+  /** caller (TenantAdmin JWT) の `custom:tenantId`。 */
   readonly tenantId: string;
 }
 
@@ -30,17 +33,15 @@ export type DeployInvocation = DeployRequest & {
 
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 
+const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
+
 /**
  * 1 件の deploy job を起動する。
  *
- * 1. jobId (ULID) と teamLoginKey (32 byte b64url) を生成
- * 2. NamePrefix を計算 (UI と同じ規約: `tc-{problemSlug}-{teamSlug}`)
- * 3. Deployments DDB に PutItem (status=PENDING)
- * 4. EventBridge に `tenkacloud.problem.DeployRequested` を put (PR-D worker が拾う)
- * 5. caller に jobId / namePrefix / teamLoginKey を返す (teamLoginKey はこの 1 度だけ露出)
+ * DDB Put → EventBridge Publish の順序は失敗セマンティクスが要求する: PutEvents が
+ * 先にいくと、worker が DDB から読めない行を見にいく可能性がある。Promise.all 化しない。
  *
- * 失敗時は throw する (caller = ルートハンドラが 5xx に変換)。重複 deploy 防止 (同じ
- * NamePrefix の同時起動拒否) は Phase 2 で conditional put として追加する。
+ * 重複 deploy 防止 (同一 namePrefix の同時起動拒否) は別途 conditional put で追加する想定。
  */
 export async function startDeployment(
   ctx: DeployContext,
@@ -50,7 +51,7 @@ export async function startDeployment(
   const teamLoginKey = generateTeamLoginKey();
   const namePrefix = buildStackPrefix(request.problemId, request.teamName);
   const nowMs = ctx.now();
-  const expiresMs = nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS);
+  const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
   const createdAt = new Date(nowMs).toISOString();
 
   const item: DeploymentItem = {
@@ -70,8 +71,7 @@ export async function startDeployment(
     status: "PENDING",
     createdAt,
     updatedAt: createdAt,
-    // DynamoDB TTL は epoch seconds
-    expiresAt: Math.floor(expiresMs / 1000),
+    expiresAt,
     accountGroupId: request.accountGroupId,
     problemSetId: request.problemSetId,
   };
@@ -84,21 +84,21 @@ export async function startDeployment(
   );
 
   const detail: DeployRequestedDetail = {
-    jobId,
-    problemId: request.problemId,
-    tenantId: ctx.tenantId,
-    awsAccountId: request.awsAccountId,
-    region: request.region,
-    teamName: request.teamName,
-    namePrefix,
+    jobId: item.jobId,
+    problemId: item.problemId,
+    tenantId: item.tenantId,
+    awsAccountId: item.awsAccountId,
+    region: item.region,
+    teamName: item.teamName,
+    namePrefix: item.namePrefix,
   };
   await ctx.events.send(
     new PutEventsCommand({
       Entries: [
         {
           EventBusName: ctx.eventBusName,
-          Source: "tenkacloud.problem",
-          DetailType: "DeployRequested",
+          Source: EVENT_SOURCE,
+          DetailType: EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
           Detail: JSON.stringify(detail),
           Resources: [`tenkacloud:deployment:${jobId}`],
         },
@@ -116,25 +116,29 @@ export async function startDeployment(
 }
 
 /**
- * Lambda runtime で利用する default context。env vars 経由で table / bus 名を受け取る。
+ * Lambda module-scope で 1 度だけ build される shared resources。warm invoke で
+ * SDK client / env を再利用するため module scope に hoist する。
  */
-export function createDefaultContext(tenantId: string): DeployContext {
-  const tableName = required("DEPLOYMENTS_TABLE_NAME");
-  const eventBusName = required("DEPLOY_EVENT_BUS_NAME");
-  const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-  const events = new EventBridgeClient({});
+export interface DeploySharedResources {
+  readonly tableName: string;
+  readonly eventBusName: string;
+  readonly ddb: DynamoDBDocumentClient;
+  readonly events: EventBridgeClient;
+}
+
+export function buildSharedResources(): DeploySharedResources {
   return {
-    tableName,
-    eventBusName,
-    ddb,
-    events,
-    now: () => Date.now(),
-    tenantId,
+    tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
+    ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
+    events: new EventBridgeClient({}),
   };
 }
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`env var ${name} is not set`);
-  return value;
+export function buildContext(shared: DeploySharedResources, tenantId: string): DeployContext {
+  return {
+    ...shared,
+    tenantId,
+    now: () => Date.now(),
+  };
 }

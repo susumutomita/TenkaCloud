@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
-import * as iam from "aws-cdk-lib/aws-iam";
+import type { IRole } from "aws-cdk-lib/aws-iam";
 import {
   Architecture,
   type FunctionUrl,
@@ -13,30 +13,24 @@ import { Construct } from "constructs";
 
 export interface DeployApiLambdaProps {
   readonly deploymentsTableName: string;
-  readonly deploymentsTableArn: string;
   readonly eventBusName: string;
-  readonly eventBusArn: string;
   /**
-   * 暫定 (PR-C): `DEFAULT_TENANT_ID` env として handler に渡される。
-   * 将来 Cognito JWT authorizer に差し替える際、JWT claim から取り出す形に置き換える。
+   * Lambda が引き受ける execution role。`DeployWorkerRole` (DDB CRUD + EventBus
+   * PutEvents + cross-account AssumeRole) を流用して IAM 重複を避ける。
+   */
+  readonly executionRole: IRole;
+  /**
+   * tenantId として handler に渡す `DEFAULT_TENANT_ID` env。Cognito JWT authorizer
+   * 結線時に JWT claim ベースに差し替える。
    */
   readonly defaultTenantId?: string;
 }
 
 /**
- * 問題 deploy 起動用の HTTP API。
+ * 問題 deploy 起動用 Lambda + Function URL。AWS_IAM 認証で公開する。
  *
- * 構成:
- *   - NodejsFunction: lib/problem-deploy/handlers/deploy-handler/index.ts を esbuild で bundle
- *   - Lambda Function URL: AWS_IAM 認証 (PR-C 暫定)。本物の TenantAdmin 認証は後段 PR で
- *     API Gateway HTTP API + Cognito authorizer に差し替える
- *
- * 環境変数:
- *   DEPLOYMENTS_TABLE_NAME / DEPLOY_EVENT_BUS_NAME / DEFAULT_TENANT_ID
- *
- * IAM:
- *   - DDB: Deployments table の PutItem / Query (PR-C は Put のみ使う)
- *   - EventBridge: 与えられた event bus への PutEvents
+ * 認証は AWS_IAM (SigV4)。フロントエンド連携は API Gateway HTTP API + Cognito
+ * authorizer に差し替えてから行う。
  */
 export class DeployApiLambda extends Construct {
   public readonly fn: NodejsFunction;
@@ -52,6 +46,7 @@ export class DeployApiLambda extends Construct {
       handler: "handler",
       timeout: Duration.seconds(15),
       memorySize: 256,
+      role: props.executionRole,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTableName,
         DEPLOY_EVENT_BUS_NAME: props.eventBusName,
@@ -62,25 +57,10 @@ export class DeployApiLambda extends Construct {
         minify: true,
         target: "node20",
         sourceMap: true,
-        // aws-sdk v3 modules は Lambda runtime には同梱されないので bundle に含める。
+        // Lambda runtime は aws-sdk v2 のみ同梱、v3 (@aws-sdk/*) は bundle が必要
         externalModules: [],
       },
     });
-
-    this.fn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["dynamodb:PutItem", "dynamodb:Query", "dynamodb:GetItem"],
-        resources: [props.deploymentsTableArn, `${props.deploymentsTableArn}/index/*`],
-      }),
-    );
-    this.fn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["events:PutEvents"],
-        resources: [props.eventBusArn],
-      }),
-    );
 
     this.url = this.fn.addFunctionUrl({
       authType: FunctionUrlAuthType.AWS_IAM,

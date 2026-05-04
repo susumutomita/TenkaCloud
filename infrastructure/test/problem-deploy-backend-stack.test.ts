@@ -197,24 +197,27 @@ describe("ProblemDeployBackendStack", () => {
       );
     });
 
-    it("Deploy API Lambda は DDB Put / EventBridge PutEvents 権限を持つべき", () => {
+    it("Deploy API Lambda は DeployWorkerRole を execution role として再利用するべき", () => {
       const tpl = synth();
-      // NodejsFunction が自動生成する Role + addToRolePolicy が AWS::IAM::Policy を作る
+      // Worker Role は inlinePolicies で DDB / EventBridge / AssumeRole 権限を持つ。
+      // Lambda は自動生成 role を作らず Worker Role を流用するので、追加の AWS::IAM::Policy
+      // (DDB Put 権限のみの reduced policy) は新規作成されない。
       tpl.hasResourceProperties(
-        "AWS::IAM::Policy",
+        "AWS::IAM::Role",
         Match.objectLike({
-          PolicyDocument: Match.objectLike({
-            Statement: Match.arrayWith([
-              Match.objectLike({
-                Effect: "Allow",
-                Action: Match.arrayWith(["dynamodb:PutItem"]),
+          Policies: Match.arrayWith([
+            Match.objectLike({
+              PolicyName: "DeploymentsTableAccess",
+              PolicyDocument: Match.objectLike({
+                Statement: Match.arrayWith([
+                  Match.objectLike({
+                    Effect: "Allow",
+                    Action: Match.arrayWith(["dynamodb:PutItem"]),
+                  }),
+                ]),
               }),
-              Match.objectLike({
-                Effect: "Allow",
-                Action: "events:PutEvents",
-              }),
-            ]),
-          }),
+            }),
+          ]),
         }),
       );
     });

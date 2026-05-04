@@ -8,14 +8,12 @@ import { DeploymentsTable } from "./deployments-table";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   /**
-   * SBT ControlPlane の EventBus ARN。Deploy 系イベント (DeployRequested /
-   * DeployStarted / DeployCompleted / DeployFailed) を流す。後段 PR で
-   * EventBridge Rule を本 stack に追加する。
+   * SBT ControlPlane の EventBus ARN。Deploy 系イベントを流す。
    */
   readonly eventBusArn: string;
   /**
    * Deploy API Lambda が `DEFAULT_TENANT_ID` env として受け取るテナント ID。
-   * PR-C 暫定実装で、Cognito JWT authorizer 結線時に削除する。
+   * Cognito JWT authorizer 結線時に削除する。
    */
   readonly defaultTenantId?: string;
 }
@@ -23,11 +21,11 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
 /**
  * 問題 deploy backend のスタック。
  *
- * - Deployments テーブル (DDB) — PR-B
- * - Deploy Worker IAM Role — PR-B
- * - Deploy API Lambda + Function URL (POST /problems/:id/deploy) — PR-C
+ * - Deployments テーブル (DDB)
+ * - Deploy Worker IAM Role (cross-account AssumeRole + DDB + EventBus)
+ * - Deploy API Lambda + Function URL (POST /problems/:id/deploy)
  *
- * EventBridge Rule + DeployWorker Lambda は PR-D 以降で本 stack に追加する。
+ * EventBridge Rule + DeployWorker Lambda は別途追加する。
  */
 export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deploymentsTableName: string;
@@ -48,9 +46,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
 
     const deployApi = new DeployApiLambda(this, "DeployApi", {
       deploymentsTableName: deployments.table.tableName,
-      deploymentsTableArn: deployments.table.tableArn,
       eventBusName: eventBus.eventBusName,
-      eventBusArn: props.eventBusArn,
+      executionRole: workerRole.role,
       defaultTenantId: props.defaultTenantId,
     });
 
@@ -61,17 +58,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
 
     new CfnOutput(this, "DeploymentsTableName", {
       value: deployments.table.tableName,
-      description:
-        "Deploy ジョブを記録する DynamoDB テーブル名。後段 PR の Lambda が読み書きする。",
+      description: "Deploy ジョブを記録する DynamoDB テーブル名。",
     });
     new CfnOutput(this, "DeployWorkerRoleArn", {
       value: workerRole.role.roleArn,
-      description: "後段 PR で作成する Lambda が引き受ける IAM Role の ARN。",
+      description: "Deploy 系 Lambda が引き受ける IAM Role の ARN。",
     });
     new CfnOutput(this, "DeployApiUrl", {
       value: deployApi.url.url,
-      description:
-        "Deploy API Lambda の Function URL。AWS_IAM 認証 (PR-C 暫定)。frontend は SigV4 で叩く。",
+      description: "Deploy API Lambda の Function URL。AWS_IAM 認証。",
     });
   }
 }
