@@ -1,5 +1,7 @@
 {
-  "filters": {},
+  "filters": {
+    "comments": true
+  },
   "rules": {
     "preset-ja-spacing": {
       "ja-space-between-half-and-full-width": {
@@ -13,14 +15,11 @@
       "max-comma": false,
       "no-exclamation-question-mark": false
     },
-    "ja-no-abusage": true,
-    "ja-no-inappropriate-words": true,
     "@textlint-ja/preset-ai-writing": {
       "no-ai-list-formatting": false
     },
-    "no-double-negative-ja": true,
-    "no-dropping-the-ra": true,
     "spellcheck-tech-word": true,
-    "prefer-tari-tari": true
+    "no-mixed-zenkaku-and-hankaku-alphabet": true,
+    "no-mixed-zenkaku-and-hankaku-number": true
   }
 }
