@@ -2,11 +2,14 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { buildContext, buildSharedResources, startDeployment } from "./deploy.js";
+import { getDeployment, listDeployments } from "./list.js";
 import { DeployRequestSchema } from "./types.js";
 
 /**
- * Deploy API Lambda の Hono app。route:
+ * Deploy API Lambda の Hono app。routes:
  *   POST /problems/:problemId/deploy
+ *   GET  /problems/:problemId/deployments
+ *   GET  /deployments/:jobId
  *
  * Auth: Lambda Function URL AWS_IAM が一次 gate。tenantId は `DEFAULT_TENANT_ID`
  * env から取り出す (Cognito JWT authorizer 結線時に JWT claim から差し替え予定)。
@@ -14,6 +17,10 @@ import { DeployRequestSchema } from "./types.js";
 
 // problemId は metadata.json と整合する RFC 1035-ish の slug。両端は英数字、内側のみハイフン許容。
 const PROBLEM_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/; // ULID
+const LIST_LIMIT_MAX = 200;
+
+const resolveTenantId = (): string => process.env.DEFAULT_TENANT_ID ?? "unknown-tenant";
 
 // SDK clients / env を module scope で 1 度だけ build。warm invoke で connection pool 再利用。
 const shared = buildSharedResources();
@@ -40,8 +47,7 @@ app.post("/problems/:problemId/deploy", async (c) => {
     return c.json({ error: "validation failed", issues: parsed.error.issues }, 400);
   }
 
-  const tenantId = process.env.DEFAULT_TENANT_ID ?? "unknown-tenant";
-  const ctx = buildContext(shared, tenantId);
+  const ctx = buildContext(shared, resolveTenantId());
 
   try {
     const response = await startDeployment(ctx, { ...parsed.data, problemId });
@@ -49,6 +55,47 @@ app.post("/problems/:problemId/deploy", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] startDeployment failed", { problemId, message });
+    return c.json({ error: "internal_error" }, 500);
+  }
+});
+
+app.get("/problems/:problemId/deployments", async (c) => {
+  const problemId = c.req.param("problemId");
+  if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
+    return c.json({ error: "invalid problemId" }, 400);
+  }
+  const limitParam = c.req.query("limit");
+  const limit = limitParam !== undefined ? Number.parseInt(limitParam, 10) : undefined;
+  if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX)) {
+    return c.json({ error: "invalid limit" }, 400);
+  }
+  try {
+    const response = await listDeployments(shared, {
+      tenantId: resolveTenantId(),
+      problemId,
+      limit,
+      cursor: c.req.query("cursor"),
+    });
+    return c.json(response, 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[deploy] listDeployments failed", { problemId, message });
+    return c.json({ error: "internal_error" }, 500);
+  }
+});
+
+app.get("/deployments/:jobId", async (c) => {
+  const jobId = c.req.param("jobId");
+  if (!jobId || !JOB_ID_RE.test(jobId)) {
+    return c.json({ error: "invalid jobId" }, 400);
+  }
+  try {
+    const item = await getDeployment(shared, resolveTenantId(), jobId);
+    if (!item) return c.json({ error: "not_found" }, 404);
+    return c.json(item, 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[deploy] getDeployment failed", { jobId, message });
     return c.json({ error: "internal_error" }, 500);
   }
 });
