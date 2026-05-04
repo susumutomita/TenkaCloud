@@ -1,0 +1,15 @@
+// markdownlint-cli2 設定。
+// MD013 (line-length) と MD060 (table-column-style) は技術ドキュメント向けに
+// 過度に厳しいので外す。日本語のテキストは 80 char で折るのが不自然なケースが
+// 多く、テーブルもコンパクト形式を許容したい。MD040 (code block language) と
+// MD041 (first line h1) は警告で十分なので残す。
+{
+  "config": {
+    "MD013": false,
+    "MD060": false,
+    "MD040": false,
+    "MD041": false,
+    "MD003": false
+  },
+  "ignores": [".claude/**"]
+}

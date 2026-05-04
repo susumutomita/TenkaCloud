@@ -1,0 +1,12 @@
+*.js
+!jest.config.js
+# Lambda handler のソースは Asset として deploy する必要があるので除外しない。
+# `runtime/` は #76 で `handlers/` から rename された新パス。
+!lib/**/handlers/**/*.js
+!lib/**/runtime/**/*.js
+*.d.ts
+node_modules
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
