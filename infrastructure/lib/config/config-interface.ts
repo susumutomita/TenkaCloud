@@ -57,21 +57,6 @@ export interface ControlPlaneConfig {
    * default が入る。prod では CloudFront domain を env で指定する。
    */
   readonly allowedCorsOrigins?: readonly string[];
-  /** Default broker Entra profile applied when onboarding payload omits brokerEntraProfileId. */
-  readonly brokerEntra?: BrokerEntraConfig;
-}
-
-export interface BrokerEntraConfig {
-  /**
-   * Graph 認証情報 (JSON: TENANT_ID / CLIENT_ID / CLIENT_SECRET) を格納した SSM Parameter Store の
-   * SecureString パラメータ名。Secrets Manager は使わない (Standard Parameter Store は無料)。
-   * パラメータ自体は手動で作成しておく前提 (CDK でシークレット値を管理しない)。
-   */
-  readonly graphParameterName: string;
-  /**
-   * Entra applicationTemplate ID。省略時は Custom SAML (GraphClient 側のデフォルト)。
-   */
-  readonly applicationTemplateId?: string;
 }
 
 export interface BootstrapConfig {

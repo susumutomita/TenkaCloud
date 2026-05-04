@@ -115,13 +115,6 @@ for stack_name in $tenant_stacks; do
     || log "    skip (already gone or conflict)"
 done
 
-# cdk destroy で UserPool が消えると Cognito SAML IdP も連鎖で消えるが、broker 側
-# Entra テナントの per-tenant Enterprise Application (TenkaCloud *) は CDK 管理外なので
-# Graph DELETE で先に掃除する (best-effort, 失敗しても destroy は継続)。
-log "cleaning up per-tenant Enterprise Apps in broker Entra tenant..."
-bash "${TenkaCloud_ROOT}/scripts/cleanup-broker-entra-tenants.sh" \
-  || log "  (broker Entra cleanup failed; continuing anyway — manual cleanup may be needed)"
-
 log "cdk destroy --all (backend stacks)..."
 bunx cdk destroy --all --force || log "  (some stacks not destroyed; review AWS console)"
 

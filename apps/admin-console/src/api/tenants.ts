@@ -17,7 +17,6 @@ export interface Tenant {
   tenantName: string;
   email: string;
   tier: Tier;
-  brokerEntraProfileId?: string;
   tenantStatus: TenantStatus;
   isActive?: boolean;
   /**
@@ -46,8 +45,6 @@ export interface ParsedTenantConfig {
   provisioningProjectName?: string;
   provisioningRegion?: string;
   provisioningAccountId?: string;
-  brokerEntraProfileId?: string;
-  brokerEntraConfigParameter?: string;
 }
 
 export function parseTenantConfig(raw: string | undefined): ParsedTenantConfig {
@@ -92,7 +89,6 @@ export interface CreateTenantRequest {
   tenantName: string;
   email: string;
   tier: Tier;
-  brokerEntraProfileId?: string;
 }
 
 export async function listTenants(api: ApiClient): Promise<Tenant[]> {

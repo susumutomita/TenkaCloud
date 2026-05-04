@@ -50,20 +50,6 @@
           "type": "array",
           "items": { "type": "string", "format": "uri" },
           "minItems": 1
-        },
-        "brokerEntra": {
-          "type": "object",
-          "required": ["graphParameterName"],
-          "properties": {
-            "graphParameterName": {
-              "type": "string",
-              "pattern": "^/[A-Za-z0-9._/-]+$"
-            },
-            "applicationTemplateId": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
         }
       },
       "additionalProperties": false

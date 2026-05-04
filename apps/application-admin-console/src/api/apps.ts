@@ -13,17 +13,9 @@ export interface App {
   functionUrl?: string;
   functionArn?: string;
   functionName?: string;
-  authProvider?: "Cognito" | "CognitoSamlEntraBroker";
+  authProvider?: "Cognito";
   /** auth-proxy が JWT email の domain を照合する allowlist。空配列 = 全拒否。 */
   allowedEmailDomains?: string[];
-  brokerEntra?: {
-    providerName?: string;
-    enterpriseApplicationDisplayName?: string;
-    applicationObjectId?: string;
-    appId?: string;
-    servicePrincipalId?: string;
-    invitedUsers?: Array<{ email: string; status: string; userId?: string }>;
-  };
   createdAt?: string;
 }
 

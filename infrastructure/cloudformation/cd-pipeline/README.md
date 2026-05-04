@@ -40,18 +40,6 @@ CloudFormation投入前にAWS Consoleで手動作成する。
 5. **Status が `Available` になることを確認**
 6. Connection ARNを控える
 
-### 2. Broker Entra credentials を SSM に投入
-
-TenkaCloudはBroker Entra credentialsをSSM SecureStringで持つ (Secrets Managerは使わない)。
-パイプラインはSSMの既存値を読むので、ローカルで1度だけbootstrapする必要がある。
-
-```bash
-make bootstrap-broker-entra
-```
-
-これで `/TenkaCloud/broker-entra/profiles/default/graph-credentials` が作成される。
-非default profileを使う場合は `BROKER_ENTRA_PROFILE_ID` をCFnパラメータで指定する。
-
 > CDK Bootstrap (`cdk bootstrap`) はパイプライン側の `scripts/install.sh` が自動で叩くので、事前準備は不要。
 
 ## デプロイ
@@ -65,7 +53,6 @@ make bootstrap-broker-entra
 | `GitHubRepositoryId`      | -    | `owner/repo` 形式 (default: `maishu-kobo/TenkaCloud`)                |
 | `SourceBranchName`        | -    | 監視ブランチ (default: `main`)                                      |
 | `SystemAdminEmail`        | ○    | Cognito 初回招待メール送信先                                        |
-| `BrokerEntraProfileId`    | -    | Broker Entra profile ID (default: `default`)                        |
 | `PipelineName`            | -    | カスタムパイプライン名 (省略時: `TenkaCloud-{Environment}`)          |
 | `CodeBuildProjectName`    | -    | カスタム CodeBuild 名 (省略時: `TenkaCloud-{Environment}`)           |
 | `CodeBuildTimeoutMinutes` | -    | CodeBuild タイムアウト分 (default: 120 / max: 480)                  |

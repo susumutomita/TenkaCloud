@@ -94,11 +94,6 @@ export function AppsPage({ config }: { config: AppConfig }) {
             cell: (a) => <Badge color={STATUS_BADGE_COLOR[a.status] ?? "grey"}>{a.status}</Badge>,
           },
           {
-            id: "authProvider",
-            header: "認証",
-            cell: (a) => (a.authProvider === "CognitoSamlEntraBroker" ? "Entra SAML" : "Cognito"),
-          },
-          {
             id: "functionUrl",
             header: "公開 URL",
             cell: (a) =>

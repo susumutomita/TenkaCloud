@@ -88,23 +88,23 @@ describe("createApp", () => {
     const created: App = {
       tenantId: "t",
       appId: "a-3",
-      name: "SAML",
-      upstreamUrl: "https://saml.example.com",
+      name: "guest-app",
+      upstreamUrl: "https://guest.example.com",
       status: "active",
-      authProvider: "CognitoSamlEntraBroker",
+      authProvider: "Cognito",
     };
     post.mockResolvedValueOnce(created);
 
     await createApp(api, {
-      name: "SAML",
-      upstreamUrl: "https://saml.example.com",
+      name: "guest-app",
+      upstreamUrl: "https://guest.example.com",
       allowedEmailDomains: ["example.com"],
       guestEmails: ["guest@example.com"],
     });
 
     expect(post).toHaveBeenCalledWith("apps", {
-      name: "SAML",
-      upstreamUrl: "https://saml.example.com",
+      name: "guest-app",
+      upstreamUrl: "https://guest.example.com",
       allowedEmailDomains: ["example.com"],
       guestEmails: ["guest@example.com"],
     });

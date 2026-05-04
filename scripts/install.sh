@@ -25,14 +25,6 @@ fi
 export REGION=$(aws configure get region)
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-# shellcheck source=scripts/lib/broker-entra-env.sh
-source "${SCRIPT_DIR}/lib/broker-entra-env.sh"
-TenkaCloud_load_broker_entra_env
-
-# Broker Entra credentials are secret, so make deploy writes them directly to
-# SSM SecureString and never packages .env into source.zip.
-bash "${SCRIPT_DIR}/ensure-broker-entra-ssm.sh"
-
 # --- Source bucket 準備 (ref 準拠) ---
 export CDK_PARAM_S3_BUCKET_NAME="serverless-saas-${ACCOUNT_ID}-${REGION}"
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"

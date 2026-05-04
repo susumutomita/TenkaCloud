@@ -1,8 +1,5 @@
 #!/bin/bash -xe
 
-# `cd cdk` 前に絶対パスを確定する (BASH_SOURCE は invocation 時の相対パス)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 export CDK_PARAM_CONTROL_PLANE_SOURCE='sbt-control-plane-api'
 export CDK_PARAM_ONBOARDING_DETAIL_TYPE='Onboarding'
 export CDK_PARAM_PROVISIONING_DETAIL_TYPE=$CDK_PARAM_ONBOARDING_DETAIL_TYPE
@@ -14,9 +11,6 @@ export CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME="aws-saas-factory-ref-solution-serv
 export CDK_PARAM_LAMBDA_CANARY_DEPLOYMENT_PREFERENCE="true"
 export CDK_PARAM_SYSTEM_ADMIN_EMAIL="EMAIL"
 export CDK_PARAM_TENANT_ID=$TENANT_ID
-# shellcheck source=scripts/lib/broker-entra-env.sh
-source "${SCRIPT_DIR}/lib/broker-entra-env.sh"
-TenkaCloud_load_broker_entra_env
 
 export REGION=$AWS_REGION
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)

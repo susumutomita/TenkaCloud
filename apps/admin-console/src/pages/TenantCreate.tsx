@@ -26,13 +26,9 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
   const [tenantName, setTenantName] = useState("");
   const [email, setEmail] = useState("");
   const [tier, setTier] = useState<(typeof TIERS)[number]>(TIERS[0]);
-  const [brokerEntraProfileId, setBrokerEntraProfileId] = useState("default");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isSubmitDisabled =
-    tenantName.trim().length === 0 ||
-    email.trim().length === 0 ||
-    brokerEntraProfileId.trim().length === 0;
+  const isSubmitDisabled = tenantName.trim().length === 0 || email.trim().length === 0;
 
   const onSubmit = async () => {
     if (!api || isSubmitDisabled) return;
@@ -43,7 +39,6 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
         tenantName: tenantName.trim(),
         email: email.trim(),
         tier: tier.value,
-        brokerEntraProfileId: brokerEntraProfileId.trim(),
       });
       navigate("/tenants");
     } catch (err) {
@@ -98,16 +93,6 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
               selectedOption={tier}
               options={TIERS}
               onChange={({ detail }) => setTier(detail.selectedOption as (typeof TIERS)[number])}
-            />
-          </FormField>
-          <FormField
-            label="Broker Entra profile"
-            description="接続するブローカー Entra ID の登録済み profile ID"
-          >
-            <Input
-              value={brokerEntraProfileId}
-              onChange={({ detail }) => setBrokerEntraProfileId(detail.value)}
-              placeholder="default"
             />
           </FormField>
         </SpaceBetween>

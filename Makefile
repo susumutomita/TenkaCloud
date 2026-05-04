@@ -12,7 +12,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        env-check synth diff bootstrap bootstrap-broker-entra uninstall-broker-entra export-broker-entra-env \
+        env-check synth diff bootstrap \
         deploy deploy-control-plane deploy-bootstrap destroy
 
 help:
@@ -90,16 +90,6 @@ bootstrap:            env-check build ; $(CDK) bootstrap
 #   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
 deploy:               env-check
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
-# 初回 1 回だけ実行: broker Entra App registration を Azure に作成して
-# Graph credentials を SSM SecureString に保存する対話型 bootstrap。
-# 以後 make deploy は SSM の値を読むので .env に secret を書かなくて済む。
-bootstrap-broker-entra: env-check ; bash scripts/bootstrap-broker-entra.sh
-# bootstrap-broker-entra の逆操作。broker App registration + SP + SSM SecureString を消す。
-# 先に make destroy で per-tenant Enterprise App を掃除してから流すこと。
-uninstall-broker-entra: env-check ; bash scripts/uninstall-broker-entra.sh
-# SSM の broker creds を .env 形式 (BROKER_ENTRA_* prefix) で stdout に出す。
-# 別 AWS アカウントの deployer に渡したいときに使う (cross-account 引き渡し)。
-export-broker-entra-env: env-check ; @bash scripts/export-broker-entra-env.sh
 # stack 単位の deploy (直接呼ぶ時用。source.zip + CDK_PARAM_COMMIT_ID を事前 export しておく前提)
 deploy-control-plane: env-check build ; $(CDK) deploy ControlPlaneStack $(APPROVAL)
 deploy-bootstrap:     env-check build ; $(CDK) deploy serverless-saas-ref-arch-bootstrap-stack $(APPROVAL)

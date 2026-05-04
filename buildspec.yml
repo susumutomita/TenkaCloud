@@ -11,7 +11,6 @@ version: 0.2
 #   - aws/codebuild/amazonlinux-x86_64-standard:5.0 (Node.js 20 同梱)
 #   - PrivilegedMode: true (CDK BucketDeployment / Lambda asset bundling が docker を呼ぶ)
 #   - 環境変数 SYSTEM_ADMIN_EMAIL / CDK_PARAM_SYSTEM_ADMIN_EMAIL は cd-pipeline.yaml 側で注入
-#   - broker Entra Graph 資格情報は事前に make bootstrap-broker-entra で SSM SecureString に投入済
 
 env:
   variables:

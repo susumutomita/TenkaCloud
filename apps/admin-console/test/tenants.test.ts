@@ -82,29 +82,6 @@ describe("createTenant", () => {
       const [, body] = post.mock.calls[0] as [string, { tenantStatus: string }];
       expect(body.tenantStatus).toBe("In progress");
     });
-
-    it("brokerEntraProfileId が指定されたら onboarding body に含めるべき", async () => {
-      const { api, post } = buildApiMock();
-      post.mockResolvedValueOnce({
-        data: {
-          tenantId: "t-1",
-          tenantName: "X",
-          email: "a@b.com",
-          tier: "basic",
-          tenantStatus: "In progress",
-        },
-      });
-
-      await createTenant(api, {
-        tenantName: "X",
-        email: "a@b.com",
-        tier: "basic",
-        brokerEntraProfileId: "contoso",
-      });
-
-      const [, body] = post.mock.calls[0] as [string, { brokerEntraProfileId: string }];
-      expect(body.brokerEntraProfileId).toBe("contoso");
-    });
   });
 
   describe("サーバが data を返すとき", () => {

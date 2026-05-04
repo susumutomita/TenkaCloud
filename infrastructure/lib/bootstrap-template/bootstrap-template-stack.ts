@@ -84,20 +84,13 @@ export class BootstrapTemplateStack extends Stack {
       ),
       script: fs.readFileSync("../scripts/provision-tenant.sh", "utf8"),
       postScript: "",
-      environmentStringVariablesFromIncomingEvent: [
-        "tenantId",
-        "tier",
-        "tenantName",
-        "email",
-        "brokerEntraProfileId",
-      ],
+      environmentStringVariablesFromIncomingEvent: ["tenantId", "tier", "tenantName", "email"],
       environmentVariablesToOutgoingEvent: [
         "tenantConfig",
         "tenantStatus",
         "prices", // added so we don't lose it for targets beyond provisioning (ex. billing)
         "tenantName", // added so we don't lose it for targets beyond provisioning (ex. billing)
         "email", // added so we don't lose it for targets beyond provisioning (ex. billing)
-        "brokerEntraProfileId",
       ],
       scriptEnvironmentVariables: {
         // CDK_PARAM_SYSTEM_ADMIN_EMAIL is required because as part of deploying the bootstrap-template

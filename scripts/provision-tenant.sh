@@ -1,8 +1,5 @@
 #!/bin/bash -e
 
-# `cd cdk` 前に絶対パスを確定する (BASH_SOURCE は invocation 時の相対パス)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Install dependencies
 sudo yum update -y
 sudo yum install -y nodejs
@@ -43,30 +40,6 @@ export CDK_PARAM_TENANT_ID=$tenantId
 export CDK_PARAM_TENANT_NAME=$tenantName
 export TIER=$tier
 export TENANT_ADMIN_EMAIL=$email
-# SBT step function payload (brokerEntraProfileId) を env precedence で先に確定する
-export BROKER_ENTRA_PROFILE_ID="${brokerEntraProfileId:-${BROKER_ENTRA_PROFILE_ID:-default}}"
-# shellcheck source=scripts/lib/broker-entra-env.sh
-source "${SCRIPT_DIR}/lib/broker-entra-env.sh"
-TenkaCloud_load_broker_entra_env
-
-aws ssm get-parameter \
-  --name "$CDK_PARAM_BROKER_ENTRA_GRAPH_PARAMETER_NAME" \
-  --with-decryption >/dev/null
-
-TENANT_BROKER_CONFIG_PARAMETER="${CDK_PARAM_BROKER_ENTRA_TENANT_CONFIG_PREFIX}/${CDK_PARAM_TENANT_ID}/broker-entra/config"
-TENANT_BROKER_CONFIG=$(jq -cn \
-  --arg profileId "$BROKER_ENTRA_PROFILE_ID" \
-  --arg graphParameterName "$CDK_PARAM_BROKER_ENTRA_GRAPH_PARAMETER_NAME" \
-  --arg applicationTemplateId "$CDK_PARAM_BROKER_ENTRA_APPLICATION_TEMPLATE_ID" \
-  '{
-    profileId:$profileId,
-    graphParameterName:$graphParameterName
-  } + (if $applicationTemplateId == "" then {} else {applicationTemplateId:$applicationTemplateId} end)')
-aws ssm put-parameter \
-  --name "$TENANT_BROKER_CONFIG_PARAMETER" \
-  --type String \
-  --value "$TENANT_BROKER_CONFIG" \
-  --overwrite >/dev/null
 
 # Define variables
 TENANT_ADMIN_USERNAME="tenant-admin-$CDK_PARAM_TENANT_ID"
@@ -133,8 +106,6 @@ export tenantConfig=$(jq --arg SAAS_APP_USERPOOL_ID "$SAAS_APP_USERPOOL_ID" \
   --arg PROVISIONING_PROJECT_NAME "$PROVISIONING_PROJECT_NAME" \
   --arg PROVISIONING_REGION "$PROVISIONING_REGION" \
   --arg PROVISIONING_ACCOUNT_ID "$PROVISIONING_ACCOUNT_ID" \
-  --arg BROKER_ENTRA_PROFILE_ID "$BROKER_ENTRA_PROFILE_ID" \
-  --arg TENANT_BROKER_CONFIG_PARAMETER "$TENANT_BROKER_CONFIG_PARAMETER" \
   -n '{
     "userPoolId":$SAAS_APP_USERPOOL_ID,
     "appClientId":$SAAS_APP_CLIENT_ID,
@@ -143,8 +114,6 @@ export tenantConfig=$(jq --arg SAAS_APP_USERPOOL_ID "$SAAS_APP_USERPOOL_ID" \
     "provisioningBuildId":$PROVISIONING_BUILD_ID,
     "provisioningProjectName":$PROVISIONING_PROJECT_NAME,
     "provisioningRegion":$PROVISIONING_REGION,
-    "provisioningAccountId":$PROVISIONING_ACCOUNT_ID,
-    "brokerEntraProfileId":$BROKER_ENTRA_PROFILE_ID,
-    "brokerEntraConfigParameter":$TENANT_BROKER_CONFIG_PARAMETER
+    "provisioningAccountId":$PROVISIONING_ACCOUNT_ID
   }')
 export tenantStatus="Complete"
