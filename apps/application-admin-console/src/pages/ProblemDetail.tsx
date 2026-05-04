@@ -9,6 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { DeployFormModal } from "../components/DeployForm";
+import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
 
 const DIFFICULTY_LABEL = {
@@ -21,12 +22,9 @@ const DIFFICULTY_LABEL = {
 
 /**
  * 問題詳細ページ。manifest 由来のメタデータを表示し「競技アカウントへデプロイ」CTA を出す。
- *
- * MVP では Deploy ボタンは Modal で「未実装 (backend 待ち)」を案内する stub。
- * 後段 PR で /problems/:id/deploy backend を繋ぎ、ジョブ ID を払い出して
- * /deployments/:id へ遷移する流れに置き換える。
+ * Deploy ボタンは Modal を開き、HTTP API 経由で deploy job を起動する。
  */
-export function ProblemDetailPage() {
+export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
   const [confirmingDeploy, setConfirmingDeploy] = useState(false);
@@ -121,6 +119,7 @@ export function ProblemDetailPage() {
       </Container>
 
       <DeployFormModal
+        config={config}
         problemId={problem.id}
         problemName={problem.name}
         visible={confirmingDeploy}

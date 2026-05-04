@@ -8,11 +8,16 @@ export interface AppConfig {
   /** 画面表示用のテナント名 (admin-console での tenant 作成時に入力された名前)。 */
   readonly tenantName: string;
   /**
-   * テナント API の base URL (末尾スラッシュなし)。#40-d で追加。
+   * テナント API の base URL (末尾スラッシュなし)。
    * application-admin-console は /apps 等の操作を JWT 認証付きでここに送る。
    * dev fallback ではダミー URL になるので実 API 呼び出しは成立しない。
    */
   readonly apiBaseUrl: string;
+  /**
+   * Deploy API (HTTP API + Cognito JWT authorizer) の base URL。
+   * 問題 deploy / 状態取得用 (POST /problems/:id/deploy など)。
+   */
+  readonly deployApiBaseUrl: string;
 }
 
 /**
@@ -26,6 +31,7 @@ interface RuntimeConfig {
   readonly tenantId: string;
   readonly tenantName: string;
   readonly apiUrl: string;
+  readonly deployApiUrl: string;
 }
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
@@ -38,7 +44,8 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       !data.userClientId ||
       !data.tenantId ||
       !data.tenantName ||
-      !data.apiUrl
+      !data.apiUrl ||
+      !data.deployApiUrl
     )
       return null;
     return {
@@ -47,6 +54,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       tenantId: data.tenantId,
       tenantName: data.tenantName,
       apiUrl: data.apiUrl,
+      deployApiUrl: data.deployApiUrl,
     };
   } catch {
     return null;
@@ -57,6 +65,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
 const DEV_FALLBACK_TENANT_ID = "dev-local";
 const DEV_FALLBACK_TENANT_NAME = "Local Dev Tenant";
 const DEV_FALLBACK_API_BASE_URL = "http://localhost:3999";
+const DEV_FALLBACK_DEPLOY_API_BASE_URL = "http://localhost:3998";
 
 /**
  * 設定を解決する。URL は以下のいずれかから来る:
@@ -83,13 +92,14 @@ export async function loadConfig(
       tenantId: runtime.tenantId,
       tenantName: runtime.tenantName,
       apiBaseUrl: runtime.apiUrl,
+      deployApiBaseUrl: runtime.deployApiUrl,
       redirectUri,
       scope,
     };
   }
 
   // dev fallback: 認証用 URL は .env.local / import.meta.env から、テナント情報は
-  // ハードコード placeholder (dev-local / Local Dev Tenant / http://localhost:3999)。
+  // ハードコード placeholder (dev-local / Local Dev Tenant / http://localhost:399x)。
   const required = (key: string): string => {
     const value = env[key];
     if (!value) throw new Error(`Missing required env var: ${key}`);
@@ -100,7 +110,8 @@ export async function loadConfig(
     cognitoClientId: required("VITE_COGNITO_CLIENT_ID"),
     tenantId: DEV_FALLBACK_TENANT_ID,
     tenantName: DEV_FALLBACK_TENANT_NAME,
-    apiBaseUrl: DEV_FALLBACK_API_BASE_URL,
+    apiBaseUrl: env.VITE_API_BASE_URL ?? DEV_FALLBACK_API_BASE_URL,
+    deployApiBaseUrl: env.VITE_DEPLOY_API_BASE_URL ?? DEV_FALLBACK_DEPLOY_API_BASE_URL,
     redirectUri,
     scope,
   };

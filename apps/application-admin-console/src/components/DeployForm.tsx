@@ -8,19 +8,18 @@ import Modal from "@cloudscape-design/components/modal";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
+import { useNavigate } from "react-router";
+import { useDeployApiClient } from "../api/client";
+import { type DeployResponse, startDeployment } from "../api/deploy-client";
+import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { buildStackPrefix } from "../lib/resource-naming";
 
 const AWS_ACCOUNT_ID_RE = /^\d{12}$/;
 const TEAM_NAME_RE = /^[A-Za-z0-9 _-]{1,40}$/;
 
-export interface DeployFormValues {
-  region: string;
-  awsAccountId: string;
-  teamName: string;
-}
-
 interface Props {
+  config: AppConfig;
   problemId: string;
   problemName: string;
   visible: boolean;
@@ -33,113 +32,142 @@ const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
 }));
 
 /**
- * 問題を競技アカウントへデプロイする際の Form Modal。
- *
- * 入力:
- *   - region: AWS Region (deploy 先)
- *   - awsAccountId: 12 桁の AWS アカウント ID (deploy 先)
- *   - teamName: チーム名 (stack 名 + ログインキーラベルに使う)
- *
- * 送信:
- *   現状は backend 未実装なので、入力値を確認 Alert に表示して止める。
- *   backend 実装時には POST /problems/:id/deploy を呼び、ジョブ ID を返して
- *   /deployments/:jobId に遷移する。
- *
- * 認証モデル:
- *   参加者個別アカウントは作らず、各チームに 1 つの短命ログインキーを発行する。
- *   teamName が同じデプロイは別 stack として扱う (= 別チーム = 別キー)。
+ * `teamLoginKey` はレスポンスで 1 度だけ露出する短命キー。Modal 上で表示し
+ * 利用者が控えるまで閉じない (navigate も明示クリック後)。
  */
-export function DeployFormModal({ problemId, problemName, visible, onDismiss }: Props) {
+export function DeployFormModal({ config, problemId, problemName, visible, onDismiss }: Props) {
+  const apiClient = useDeployApiClient(config);
+  const navigate = useNavigate();
   const [region, setRegion] = useState<SelectProps.Option>({
     value: DEFAULT_AWS_REGION.code,
     label: DEFAULT_AWS_REGION.label,
   });
   const [awsAccountId, setAwsAccountId] = useState("");
   const [teamName, setTeamName] = useState("");
-  const [submitted, setSubmitted] = useState<DeployFormValues | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [response, setResponse] = useState<DeployResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const accountIdInvalid = awsAccountId.length > 0 && !AWS_ACCOUNT_ID_RE.test(awsAccountId);
   const teamNameInvalid = teamName.length > 0 && !TEAM_NAME_RE.test(teamName);
+  const inputsLocked = response !== null || submitting;
   const canSubmit =
-    !!region.value && AWS_ACCOUNT_ID_RE.test(awsAccountId) && TEAM_NAME_RE.test(teamName);
+    !!apiClient &&
+    !!region.value &&
+    AWS_ACCOUNT_ID_RE.test(awsAccountId) &&
+    TEAM_NAME_RE.test(teamName) &&
+    !inputsLocked;
 
-  const handleSubmit = () => {
-    if (!canSubmit || !region.value) return;
-    setSubmitted({
-      region: region.value,
-      awsAccountId,
-      teamName,
-    });
-    // backend 実装後は: POST /problems/:problemId/deploy ボディに上記を送り、
-    // ジョブ ID を受け取って navigate(`/deployments/${jobId}`)
+  const handleSubmit = async () => {
+    if (!canSubmit || !region.value || !apiClient) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await startDeployment(apiClient, problemId, {
+        region: region.value,
+        awsAccountId,
+        teamName,
+      });
+      setResponse(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const reset = () => {
-    setSubmitted(null);
+    setResponse(null);
+    setError(null);
+    setSubmitting(false);
     setAwsAccountId("");
     setTeamName("");
     setRegion({ value: DEFAULT_AWS_REGION.code, label: DEFAULT_AWS_REGION.label });
   };
 
+  const close = () => {
+    reset();
+    onDismiss();
+  };
+
+  const goToDetail = () => {
+    if (!response) return;
+    const jobId = response.jobId;
+    reset();
+    onDismiss();
+    navigate(`/deployments/${jobId}`);
+  };
+
   return (
     <Modal
       visible={visible}
-      onDismiss={() => {
-        reset();
-        onDismiss();
-      }}
+      onDismiss={close}
       header={`「${problemName}」を競技アカウントへデプロイ`}
       size="medium"
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
-            <Button
-              onClick={() => {
-                reset();
-                onDismiss();
-              }}
-            >
-              閉じる
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!canSubmit || submitted !== null}
-              onClick={handleSubmit}
-            >
-              デプロイを開始
-            </Button>
+            <Button onClick={close}>閉じる</Button>
+            {response ? (
+              <Button variant="primary" onClick={goToDetail}>
+                ジョブ詳細を見る
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                loading={submitting}
+                disabled={!canSubmit}
+                onClick={handleSubmit}
+              >
+                デプロイを開始
+              </Button>
+            )}
           </SpaceBetween>
         </Box>
       }
     >
       <Form>
         <SpaceBetween size="l">
-          {submitted ? (
-            <Alert type="warning" header="backend 未実装 — デプロイは送信されていません">
-              入力された値は次の通りです (実装完了後、これらが POST /problems/{problemId}
-              /deploy に送られ、CloudFormation 起動 + チームログインキー発行が走ります)。
-              <ul>
-                <li>Region: {submitted.region}</li>
-                <li>AWS Account ID: {submitted.awsAccountId}</li>
-                <li>Team Name: {submitted.teamName}</li>
-                <li>
-                  Stack 名 prefix: <code>{buildStackPrefix(problemId, submitted.teamName)}</code>
-                </li>
-              </ul>
+          {response ? (
+            <Alert type="success" header="デプロイ受付完了 — チームログインキーを控えてください">
+              <SpaceBetween size="s">
+                <Box>
+                  Job ID: <code>{response.jobId}</code>
+                </Box>
+                <Box>
+                  Stack 名 prefix: <code>{response.namePrefix}</code>
+                </Box>
+                <Box>
+                  チームログインキー (この画面でしか表示されません): <br />
+                  <Box variant="code" fontSize="heading-s">
+                    {response.teamLoginKey}
+                  </Box>
+                </Box>
+                <Box variant="small" color="text-status-warning">
+                  このキーは一度だけ表示されます。安全な場所に控えてからジョブ詳細に進んでください。
+                </Box>
+              </SpaceBetween>
             </Alert>
           ) : (
-            <Alert type="info" header="デプロイ contract">
-              入力された AWS アカウント / リージョンに問題スタックを CFn で展開し、Team Name
-              ごとに短命ログインキーを 1 つ発行します。参加者個別の Cognito ユーザは作成しません。
-              <br />
-              同一 (Account, Region)
-              に複数のチームのスタックを並べる運用を許容するため、各リソース名には
-              <code>
-                {" "}
-                tc-{"{problemId}"}-{"{teamName}"}{" "}
-              </code>
-              を共通 prefix として付与し、衝突を回避します。
-            </Alert>
+            <>
+              {error && (
+                <Alert type="error" header="デプロイ送信に失敗しました">
+                  {error}
+                </Alert>
+              )}
+              <Alert type="info" header="デプロイ contract">
+                入力された AWS アカウント / リージョンに問題スタックを CFn で展開し、Team Name
+                ごとに短命ログインキーを 1 つ発行します。参加者個別の Cognito ユーザは作成しません。
+                <br />
+                同一 (Account, Region)
+                に複数のチームのスタックを並べる運用を許容するため、各リソース名には
+                <code>
+                  {" "}
+                  tc-{"{problemId}"}-{"{teamName}"}{" "}
+                </code>
+                を共通 prefix として付与し、衝突を回避します。
+              </Alert>
+            </>
           )}
 
           <FormField
@@ -150,6 +178,7 @@ export function DeployFormModal({ problemId, problemName, visible, onDismiss }: 
             <Select
               selectedOption={region}
               options={REGION_OPTIONS}
+              disabled={inputsLocked}
               onChange={({ detail }) => detail.selectedOption && setRegion(detail.selectedOption)}
             />
           </FormField>
@@ -164,6 +193,7 @@ export function DeployFormModal({ problemId, problemName, visible, onDismiss }: 
               type="text"
               inputMode="numeric"
               placeholder="123456789012"
+              disabled={inputsLocked}
               onChange={({ detail }) =>
                 setAwsAccountId(detail.value.replace(/\D/g, "").slice(0, 12))
               }
@@ -180,12 +210,13 @@ export function DeployFormModal({ problemId, problemName, visible, onDismiss }: 
             <Input
               value={teamName}
               placeholder="例: alpha-team"
+              disabled={inputsLocked}
               onChange={({ detail }) => setTeamName(detail.value)}
               invalid={teamNameInvalid}
             />
           </FormField>
 
-          {teamName.length > 0 && !teamNameInvalid && (
+          {teamName.length > 0 && !teamNameInvalid && response === null && (
             <FormField
               label="生成される Stack 名 prefix (preview)"
               description="同一 (Account, Region) に複数チームのスタックが共存できるよう、リソース名はこの prefix で衝突回避します"
