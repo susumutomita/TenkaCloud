@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { CfnOutput } from "aws-cdk-lib";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { Construct } from "constructs";
+import { type DeployApiCognito, DeployApiGateway } from "./deploy-api-gateway";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
@@ -15,7 +16,8 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   readonly eventBusArn: string;
   /**
    * Deploy API Lambda が `DEFAULT_TENANT_ID` env として受け取るテナント ID。
-   * Cognito JWT authorizer 結線時に削除する。
+   * 本番経路 (HTTP API + Cognito) では JWT claim を使うので、ここは Function URL
+   * 直叩き経路 (ops / 開発) のフォールバック値。
    */
   readonly defaultTenantId?: string;
   /**
@@ -27,6 +29,16 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * 競技者側 IAM Role 名 (PR-A の default と一致させる)。省略時は規約通り。
    */
   readonly competitorRoleName?: string;
+  /**
+   * Deploy API HTTP API の手前に置く Cognito JWT authorizer 設定。
+   * 指定された場合のみ HTTP API を作成する。単一 User Pool 信頼。
+   */
+  readonly deployApiCognito?: DeployApiCognito;
+  /**
+   * HTTP API CORS で許可する origins。UI が CloudFront / localhost dev から
+   * fetch するため必須。
+   */
+  readonly deployApiCorsOrigins?: readonly string[];
 }
 
 /**
@@ -42,6 +54,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deploymentsTableArn: string;
   public readonly deployWorkerRoleArn: string;
   public readonly deployApiUrl: string;
+  public readonly deployApiGatewayUrl?: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -76,6 +89,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       externalId: props.deployExternalId,
       competitorRoleName: props.competitorRoleName,
     });
+
+    if (props.deployApiCognito) {
+      const apiGw = new DeployApiGateway(this, "DeployApiGateway", {
+        cognito: props.deployApiCognito,
+        deployHandler: deployApi.fn,
+        corsAllowOrigins: props.deployApiCorsOrigins ?? ["*"],
+      });
+      this.deployApiGatewayUrl = apiGw.httpApi.apiEndpoint;
+    }
 
     this.deploymentsTableName = deployments.table.tableName;
     this.deploymentsTableArn = deployments.table.tableArn;
