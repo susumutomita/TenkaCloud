@@ -155,12 +155,24 @@ const deployApiCorsOrigins = deployApiCorsOriginsRaw
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
   : undefined;
+const enableParticipantPortal = process.env.CDK_PARAM_ENABLE_PARTICIPANT_PORTAL === "true";
+const participantPortalEventTitle =
+  process.env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE || "TenkaCloud Battle";
+const participantPortalRuntimeConfig = enableParticipantPortal
+  ? {
+      eventTitle: participantPortalEventTitle,
+      eventRegion: awsRegion ?? "ap-northeast-1",
+      mode: "dev-mock" as const,
+    }
+  : undefined;
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
   deployExternalId,
   deployApiCognito,
   deployApiCorsOrigins,
+  enableParticipantPortal,
+  participantPortalRuntimeConfig,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),

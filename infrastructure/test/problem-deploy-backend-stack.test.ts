@@ -1,9 +1,29 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 
 const FAKE_BUS_ARN = "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus";
+
+const portalDistDir = path.join(__dirname, "..", "..", "apps", "participant-portal", "dist");
+
+/**
+ * ParticipantPortalHosting は Source.asset で apps/participant-portal/dist を
+ * 参照する。CI / クリーンクローン時に未 build のことがあるので、最小 placeholder
+ * を作って synth が通るようにする (実 build は install.sh / `bun run build` 経由で
+ * 上書きされる)。
+ */
+function ensurePortalPlaceholderDist() {
+  if (!fs.existsSync(portalDistDir)) {
+    fs.mkdirSync(portalDistDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(portalDistDir, "index.html"),
+      "<!doctype html><html><body>placeholder</body></html>",
+    );
+  }
+}
 
 function synth(
   overrides?: Partial<ConstructorParameters<typeof ProblemDeployBackendStack>[2]>,
@@ -328,6 +348,68 @@ describe("ProblemDeployBackendStack", () => {
         Match.objectLike({
           CorsConfiguration: Match.objectLike({
             AllowOrigins: ["http://localhost:5173", "https://example.com"],
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("Participant Portal hosting", () => {
+    beforeAll(() => ensurePortalPlaceholderDist());
+
+    it("enableParticipantPortal=false (default) なら CloudFront / S3 Bucket を 1 個も増やさないべき", () => {
+      const tpl = synth();
+      tpl.resourceCountIs("AWS::CloudFront::Distribution", 0);
+      tpl.resourceCountIs("AWS::S3::Bucket", 0);
+    });
+
+    it("enableParticipantPortal=true で S3 Bucket / CloudFront Distribution / OAI を 1 セット作るべき", () => {
+      const tpl = synth({ enableParticipantPortal: true });
+      tpl.resourceCountIs("AWS::S3::Bucket", 1);
+      tpl.resourceCountIs("AWS::CloudFront::Distribution", 1);
+      tpl.resourceCountIs("AWS::CloudFront::CloudFrontOriginAccessIdentity", 1);
+    });
+
+    it("enableParticipantPortal=true なら ParticipantPortalUrl Output を持つべき", () => {
+      const tpl = synth({ enableParticipantPortal: true });
+      tpl.hasOutput("ParticipantPortalUrl", {});
+    });
+
+    it("S3 Bucket は public access を完全に block すべき (Portal も同様)", () => {
+      const tpl = synth({ enableParticipantPortal: true });
+      tpl.hasResourceProperties(
+        "AWS::S3::Bucket",
+        Match.objectLike({
+          PublicAccessBlockConfiguration: {
+            BlockPublicAcls: true,
+            BlockPublicPolicy: true,
+            IgnorePublicAcls: true,
+            RestrictPublicBuckets: true,
+          },
+        }),
+      );
+    });
+
+    it("CloudFront Distribution は HTTPS リダイレクトと SPA fallback (403/404 → /index.html 200) を持つべき", () => {
+      const tpl = synth({ enableParticipantPortal: true });
+      tpl.hasResourceProperties(
+        "AWS::CloudFront::Distribution",
+        Match.objectLike({
+          DistributionConfig: Match.objectLike({
+            DefaultCacheBehavior: Match.objectLike({ ViewerProtocolPolicy: "redirect-to-https" }),
+            DefaultRootObject: "index.html",
+            CustomErrorResponses: Match.arrayWith([
+              Match.objectLike({
+                ErrorCode: 403,
+                ResponseCode: 200,
+                ResponsePagePath: "/index.html",
+              }),
+              Match.objectLike({
+                ErrorCode: 404,
+                ResponseCode: 200,
+                ResponsePagePath: "/index.html",
+              }),
+            ]),
           }),
         }),
       );

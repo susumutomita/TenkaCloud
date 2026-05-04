@@ -7,6 +7,10 @@ import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
 import { DeploymentsTable } from "./deployments-table";
+import {
+  ParticipantPortalHosting,
+  type ParticipantPortalRuntimeConfig,
+} from "./participant-portal-hosting";
 import { StatusUpdaterLambda } from "./status-updater-lambda";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
@@ -39,6 +43,18 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * fetch するため必須。
    */
   readonly deployApiCorsOrigins?: readonly string[];
+  /**
+   * 競技者向け Participant Portal を S3 + CloudFront で配信するかのフラグ。
+   * `true` のとき `ParticipantPortalHosting` を作成、`runtimeConfig` で
+   * runtime-config.json を初期配置する。
+   */
+  readonly enableParticipantPortal?: boolean;
+  /**
+   * Participant Portal の runtime-config.json に書き出す値。
+   * `enableParticipantPortal` が `true` のときのみ参照される。
+   * 未指定時は `mode="dev-mock"` のサンプル値が入る (Portal backend が無い段階用)。
+   */
+  readonly participantPortalRuntimeConfig?: ParticipantPortalRuntimeConfig;
 }
 
 /**
@@ -55,6 +71,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deployWorkerRoleArn: string;
   public readonly deployApiUrl: string;
   public readonly deployApiGatewayUrl?: string;
+  public readonly participantPortalUrl?: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -97,6 +114,22 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         corsAllowOrigins: props.deployApiCorsOrigins ?? ["*"],
       });
       this.deployApiGatewayUrl = apiGw.httpApi.apiEndpoint;
+    }
+
+    if (props.enableParticipantPortal) {
+      const portal = new ParticipantPortalHosting(this, "ParticipantPortal");
+      portal.deployRuntimeConfig(
+        props.participantPortalRuntimeConfig ?? {
+          eventTitle: "TenkaCloud Battle",
+          eventRegion: this.region,
+          mode: "dev-mock",
+        },
+      );
+      this.participantPortalUrl = portal.distributionUrl;
+      new CfnOutput(this, "ParticipantPortalUrl", {
+        value: portal.distributionUrl,
+        description: "Participant Portal CloudFront URL.",
+      });
     }
 
     this.deploymentsTableName = deployments.table.tableName;
