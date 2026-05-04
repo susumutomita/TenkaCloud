@@ -22,8 +22,8 @@
   },
   "keywords": [],
   "packageManager": "bun@1.3.11",
-  "author": "Susumu Tomita <your.email@example.com> (http://yourwebsite.com)",
-  "license": "ISC",
+  "author": "Susumu Tomita (https://susumutomita.netlify.app/)",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.6.1",
