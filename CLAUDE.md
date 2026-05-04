@@ -19,6 +19,7 @@
 ### 作業順序
 
 新規機能を追加する前に、以下を先に実施する。
+
 1. **ドキュメント更新** — 変更に関連する docs/, ADR, CLAUDE.md を先に更新する。
 2. **リファクタリング** — 技術的負債（`bun scripts/ai-improvement-loop.ts --staged --fail-on=high` で検出）を先に解消する。
 

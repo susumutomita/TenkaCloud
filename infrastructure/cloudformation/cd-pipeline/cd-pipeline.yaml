@@ -1,0 +1,444 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  TenkaCloud CD Pipeline.
+  Pipeline: Source (GitHub) → Manual Approval → Build (scripts/install.sh on CodeBuild)
+
+Parameters:
+  PipelineName:
+    Type: String
+    Default: ''
+    Description: CodePipeline name (if empty, uses TenkaCloud-{Environment})
+
+  CodeBuildProjectName:
+    Type: String
+    Default: ''
+    Description: CodeBuild project name (if empty, uses TenkaCloud-{Environment})
+
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: Deployment environment (selects infrastructure/environments/{env}/config.json)
+
+  GitHubConnectionArn:
+    Type: String
+    Description: ARN of manually created GitHub CodeStar Connection (must be AVAILABLE status)
+
+  GitHubRepositoryId:
+    Type: String
+    Default: maishu-kobo/TenkaCloud
+    Description: GitHub repository ID (format owner/repository)
+
+  SourceBranchName:
+    Type: String
+    Default: main
+    Description: Source branch name to monitor
+
+  SystemAdminEmail:
+    Type: String
+    Description: TenkaCloud control-plane admin email (receives Cognito invitation on first deploy)
+    AllowedPattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
+    ConstraintDescription: Must be a valid email address
+
+  BrokerEntraProfileId:
+    Type: String
+    Default: default
+    Description: Broker Entra profile ID (SSM path /TenkaCloud/broker-entra/profiles/{id}/graph-credentials must exist)
+
+  CodeBuildTimeoutMinutes:
+    Type: Number
+    Default: 120
+    MinValue: 5
+    MaxValue: 480
+    Description: CodeBuild project timeout in minutes (default 120 = 2 hours)
+
+Conditions:
+  UsePipelineNameParam: !Not [!Equals [!Ref PipelineName, '']]
+  UseCodeBuildNameParam: !Not [!Equals [!Ref CodeBuildProjectName, '']]
+
+Resources:
+  # =====================================
+  # S3 Artifact Store
+  # =====================================
+  ArtifactStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub TenkaCloud-${Environment}-pipeline-artifacts-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # =====================================
+  # CodeBuild Project
+  # =====================================
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !If
+        - UseCodeBuildNameParam
+        - !Ref CodeBuildProjectName
+        - !Sub TenkaCloud-${Environment}
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        # buildspec.yml from repository root
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        # CDK BucketDeployment / Lambda asset bundling uses Docker
+        PrivilegedMode: true
+        ImagePullCredentialsType: CODEBUILD
+        EnvironmentVariables:
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+            Type: PLAINTEXT
+          - Name: ENVIRONMENT
+            Value: !Ref Environment
+            Type: PLAINTEXT
+          - Name: SYSTEM_ADMIN_EMAIL
+            Value: !Ref SystemAdminEmail
+            Type: PLAINTEXT
+          - Name: CDK_PARAM_SYSTEM_ADMIN_EMAIL
+            Value: !Ref SystemAdminEmail
+            Type: PLAINTEXT
+          - Name: BROKER_ENTRA_PROFILE_ID
+            Value: !Ref BrokerEntraProfileId
+            Type: PLAINTEXT
+          - Name: JSII_DEPRECATED
+            Value: quiet
+            Type: PLAINTEXT
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub /aws/codebuild/TenkaCloud-${Environment}
+      TimeoutInMinutes: !Ref CodeBuildTimeoutMinutes
+
+  # =====================================
+  # CodePipeline
+  # =====================================
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !If
+        - UsePipelineNameParam
+        - !Ref PipelineName
+        - !Sub TenkaCloud-${Environment}
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      PipelineType: V2
+      ExecutionMode: QUEUED
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactStoreBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: !Ref GitHubConnectionArn
+                FullRepositoryId: !Ref GitHubRepositoryId
+                BranchName: !Ref SourceBranchName
+                DetectChanges: 'false'
+                OutputArtifactFormat: CODEBUILD_CLONE_REF
+              OutputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: 1
+              Namespace: SourceVariables
+              Region: !Ref AWS::Region
+          OnFailure:
+            Result: RETRY
+            RetryConfiguration:
+              RetryMode: ALL_ACTIONS
+
+        - Name: manual-approve
+          Actions:
+            - Name: manual-approve
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration: {}
+              RunOrder: 1
+              Region: !Ref AWS::Region
+
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              RunOrder: 1
+              Namespace: BuildVariables
+              Region: !Ref AWS::Region
+          OnFailure:
+            Result: RETRY
+            RetryConfiguration:
+              RetryMode: ALL_ACTIONS
+
+  # =====================================
+  # IAM Roles
+  # =====================================
+  # CodeBuild ロール: scripts/install.sh が触る AWS リソース全方位の権限が要る。
+  # TenkaCloud は Lambda + Cognito + DynamoDB + S3 + CloudFront + API Gateway +
+  # Step Functions + EventBridge + CodeBuild (SBT pipeline) + SSM。
+  # SBT 内部の cdk deploy が CDKToolkit 経由で sts:AssumeRole するので cdk-* role も必要。
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub TenkaCloud-${Environment}-codebuild-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # CloudWatch Logs (CodeBuild own logs)
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/TenkaCloud-${Environment}
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/TenkaCloud-${Environment}:*
+              # S3 Artifact Store
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource:
+                  - !Sub ${ArtifactStoreBucket.Arn}/*
+              # CodeStar Connection (for git clone)
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnectionArn
+              # CDK + SBT が触るサービス全方位 (内部で CFn / Lambda / Cognito 等を作る)
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - apigateway:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cognito-idp:*
+                  - cognito-identity:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cloudfront:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - states:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - events:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sns:*
+                  - sqs:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - codebuild:*
+                  - codepipeline:GetPipelineState
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: '*'
+              # TenkaCloud コスト 0 原則: 秘匿値は SSM Parameter Store。
+              # Secrets Manager は使わないので GetSecretValue 権限は付けない。
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:AddTagsToResource
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: '*'
+              # CDK Bootstrap roles (CDKToolkit stack)
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
+              - Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: '*'
+
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub TenkaCloud-${Environment}-pipeline-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                Resource:
+                  - !Sub ${ArtifactStoreBucket.Arn}
+                  - !Sub ${ArtifactStoreBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource:
+                  - !GetAtt CodeBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnectionArn
+
+  # =====================================
+  # SNS Topic for Pipeline Notifications
+  # =====================================
+  PipelineNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub TenkaCloud-${Environment}-pipeline-notification
+      DisplayName: !Sub TenkaCloud ${Environment} Pipeline Notifications
+
+  PipelineNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCodeStarNotifications
+            Effect: Allow
+            Principal:
+              Service: codestar-notifications.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref PipelineNotificationTopic
+      Topics:
+        - !Ref PipelineNotificationTopic
+
+  PipelineNotificationRule:
+    Type: AWS::CodeStarNotifications::NotificationRule
+    DependsOn:
+      - Pipeline
+      - PipelineNotificationTopicPolicy
+    Properties:
+      Name: !Sub TenkaCloud-${Environment}-pipeline-events
+      DetailType: FULL
+      Resource: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+      EventTypeIds:
+        - codepipeline-pipeline-pipeline-execution-started
+        - codepipeline-pipeline-pipeline-execution-succeeded
+        - codepipeline-pipeline-pipeline-execution-failed
+        - codepipeline-pipeline-pipeline-execution-canceled
+        - codepipeline-pipeline-manual-approval-needed
+        - codepipeline-pipeline-manual-approval-succeeded
+        - codepipeline-pipeline-manual-approval-failed
+      Targets:
+        - TargetType: SNS
+          TargetAddress: !Ref PipelineNotificationTopic
+      Status: ENABLED
+
+Outputs:
+  PipelineName:
+    Description: CodePipeline name
+    Value: !Ref Pipeline
+
+  PipelineArn:
+    Description: CodePipeline ARN
+    Value: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+
+  CodeBuildProjectName:
+    Description: CodeBuild project name
+    Value: !Ref CodeBuildProject
+
+  CodeBuildProjectArn:
+    Description: CodeBuild project ARN
+    Value: !GetAtt CodeBuildProject.Arn
+
+  ArtifactBucketName:
+    Description: S3 bucket for pipeline artifacts
+    Value: !Ref ArtifactStoreBucket
+
+  NotificationTopicArn:
+    Description: SNS topic ARN for pipeline notifications (subscribe email or AWS Chatbot manually)
+    Value: !Ref PipelineNotificationTopic

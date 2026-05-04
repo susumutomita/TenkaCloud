@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+# `cd cdk` 前に絶対パスを確定する (BASH_SOURCE は invocation 時の相対パス)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Install dependencies
 sudo yum update -y
 sudo yum install -y nodejs
@@ -19,7 +22,7 @@ export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "ACCOUNT_ID: ${ACCOUNT_ID}"
 
 # Download serverless reference solution from S3 bucket.
-export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-${ACCOUNT_ID}-${REGION}"
+export CDK_PARAM_S3_BUCKET_NAME="serverless-saas-${ACCOUNT_ID}-${REGION}"
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 
@@ -35,19 +38,47 @@ npm install
 
 # Parse tenant details from the input message from step function
 export CDK_PARAM_TENANT_ID=$tenantId
+# admin-console から POST /tenants 時に渡された tenantName。runtime-config.json
+# 経由で application-admin-console の画面表示に使う (#48)。
+export CDK_PARAM_TENANT_NAME=$tenantName
 export TIER=$tier
 export TENANT_ADMIN_EMAIL=$email
+# SBT step function payload (brokerEntraProfileId) を env precedence で先に確定する
+export BROKER_ENTRA_PROFILE_ID="${brokerEntraProfileId:-${BROKER_ENTRA_PROFILE_ID:-default}}"
+# shellcheck source=scripts/lib/broker-entra-env.sh
+source "${SCRIPT_DIR}/lib/broker-entra-env.sh"
+TenkaCloud_load_broker_entra_env
+
+aws ssm get-parameter \
+  --name "$CDK_PARAM_BROKER_ENTRA_GRAPH_PARAMETER_NAME" \
+  --with-decryption >/dev/null
+
+TENANT_BROKER_CONFIG_PARAMETER="${CDK_PARAM_BROKER_ENTRA_TENANT_CONFIG_PREFIX}/${CDK_PARAM_TENANT_ID}/broker-entra/config"
+TENANT_BROKER_CONFIG=$(jq -cn \
+  --arg profileId "$BROKER_ENTRA_PROFILE_ID" \
+  --arg graphParameterName "$CDK_PARAM_BROKER_ENTRA_GRAPH_PARAMETER_NAME" \
+  --arg applicationTemplateId "$CDK_PARAM_BROKER_ENTRA_APPLICATION_TEMPLATE_ID" \
+  '{
+    profileId:$profileId,
+    graphParameterName:$graphParameterName
+  } + (if $applicationTemplateId == "" then {} else {applicationTemplateId:$applicationTemplateId} end)')
+aws ssm put-parameter \
+  --name "$TENANT_BROKER_CONFIG_PARAMETER" \
+  --type String \
+  --value "$TENANT_BROKER_CONFIG" \
+  --overwrite >/dev/null
 
 # Define variables
 TENANT_ADMIN_USERNAME="tenant-admin-$CDK_PARAM_TENANT_ID"
-STACK_NAME="tenkacloud-tenant-template-pooled"
+STACK_NAME="serverless-saas-ref-arch-tenant-template-pooled"
 USER_POOL_OUTPUT_PARAM_NAME="TenantUserpoolId"
 API_GATEWAY_URL_OUTPUT_PARAM_NAME="ApiGatewayUrl"
 APP_CLIENT_ID_OUTPUT_PARAM_NAME="UserPoolClientId"
+APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME="ApplicationAdminConsoleUrl"
 
 # Deploy the tenant template for platinum tier(silo)
 if [[ $TIER == "PLATINUM" ]]; then
-  STACK_NAME="tenkacloud-tenant-template-$CDK_PARAM_TENANT_ID"
+  STACK_NAME="serverless-saas-ref-arch-tenant-template-$CDK_PARAM_TENANT_ID"
   export CDK_PARAM_CONTROL_PLANE_SOURCE='sbt-control-plane-api'
   export CDK_PARAM_ONBOARDING_DETAIL_TYPE='Onboarding'
   export CDK_PARAM_PROVISIONING_DETAIL_TYPE=$CDK_PARAM_ONBOARDING_DETAIL_TYPE
@@ -62,6 +93,11 @@ fi
 SAAS_APP_USERPOOL_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$USER_POOL_OUTPUT_PARAM_NAME'].OutputValue" --output text)
 SAAS_APP_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$APP_CLIENT_ID_OUTPUT_PARAM_NAME'].OutputValue" --output text)
 API_GATEWAY_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$API_GATEWAY_URL_OUTPUT_PARAM_NAME'].OutputValue" --output text)
+# silo (PLATINUM) は per-tenant stack の application-admin-console URL を fetch。
+# pooled tenant の場合、STACK_NAME は共有 pooled stack なので同じ shared URL を読む
+# (admin-console ではこの URL は表示しない方針 — pooled は install.sh の最終出力で
+# operator が確認する)。
+APPLICATION_ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME'].OutputValue" --output text)
 
 # Create tenant admin user
 aws cognito-idp admin-create-user \
@@ -81,9 +117,34 @@ aws cognito-idp admin-add-user-to-group \
   --username "$TENANT_ADMIN_USERNAME" \
   --group-name "$CDK_PARAM_TENANT_ID"
 
+# Capture CodeBuild build identification for provisioning log deep link (#57).
+# CODEBUILD_BUILD_ID = "{projectName}:{uuid}", AWS_REGION は CodeBuild が auto-set。
+PROVISIONING_BUILD_ID="${CODEBUILD_BUILD_ID:-unknown}"
+PROVISIONING_PROJECT_NAME=$(echo "$PROVISIONING_BUILD_ID" | cut -d: -f1)
+PROVISIONING_REGION="${AWS_REGION:-unknown}"
+PROVISIONING_ACCOUNT_ID="${ACCOUNT_ID:-unknown}"
+
 # Create JSON response of output parameters
 export tenantConfig=$(jq --arg SAAS_APP_USERPOOL_ID "$SAAS_APP_USERPOOL_ID" \
   --arg SAAS_APP_CLIENT_ID "$SAAS_APP_CLIENT_ID" \
   --arg API_GATEWAY_URL "$API_GATEWAY_URL" \
-  -n '{"userPoolId":$SAAS_APP_USERPOOL_ID,"appClientId":$SAAS_APP_CLIENT_ID,"apiGatewayUrl":$API_GATEWAY_URL}')
+  --arg APPLICATION_ADMIN_CONSOLE_URL "$APPLICATION_ADMIN_CONSOLE_URL" \
+  --arg PROVISIONING_BUILD_ID "$PROVISIONING_BUILD_ID" \
+  --arg PROVISIONING_PROJECT_NAME "$PROVISIONING_PROJECT_NAME" \
+  --arg PROVISIONING_REGION "$PROVISIONING_REGION" \
+  --arg PROVISIONING_ACCOUNT_ID "$PROVISIONING_ACCOUNT_ID" \
+  --arg BROKER_ENTRA_PROFILE_ID "$BROKER_ENTRA_PROFILE_ID" \
+  --arg TENANT_BROKER_CONFIG_PARAMETER "$TENANT_BROKER_CONFIG_PARAMETER" \
+  -n '{
+    "userPoolId":$SAAS_APP_USERPOOL_ID,
+    "appClientId":$SAAS_APP_CLIENT_ID,
+    "apiGatewayUrl":$API_GATEWAY_URL,
+    "applicationAdminConsoleUrl":$APPLICATION_ADMIN_CONSOLE_URL,
+    "provisioningBuildId":$PROVISIONING_BUILD_ID,
+    "provisioningProjectName":$PROVISIONING_PROJECT_NAME,
+    "provisioningRegion":$PROVISIONING_REGION,
+    "provisioningAccountId":$PROVISIONING_ACCOUNT_ID,
+    "brokerEntraProfileId":$BROKER_ENTRA_PROFILE_ID,
+    "brokerEntraConfigParameter":$TENANT_BROKER_CONFIG_PARAMETER
+  }')
 export tenantStatus="Complete"

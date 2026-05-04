@@ -11,3 +11,11 @@ docs/plans/
 docs/plans/**
 reference/
 reference/**
+.claude/
+.claude/**
+infrastructure/cdk.out/
+infrastructure/cdk.out/**
+infrastructure/cloudformation/
+infrastructure/cloudformation/**
+references/
+references/**

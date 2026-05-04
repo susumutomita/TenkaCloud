@@ -18,7 +18,7 @@ export CDK_PARAM_TENANT_ID=$tenantId
 export TIER=$tier
 
 # Define variables
-STACK_NAME="tenkacloud-tenant-template-pooled"
+STACK_NAME="serverless-saas-ref-arch-tenant-template-pooled"
 USER_POOL_OUTPUT_PARAM_NAME="TenantUserpoolId"
 PRODUCT_TABLE_OUTPUT_PARAM_NAME="ProductTableName"
 ORDER_TABLE_OUTPUT_PARAM_NAME="OrderTableName"

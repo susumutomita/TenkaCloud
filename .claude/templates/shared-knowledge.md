@@ -28,7 +28,7 @@ Explanation of the reasoning behind this approach.
 
 ## Gotchas / Edge Cases
 
-Things to watch out for:
+Things to watch out for
 -
 
 ## Related Topics

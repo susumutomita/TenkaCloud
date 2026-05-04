@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
-bun scripts/architecture-harness.ts --staged --fail-on=error
-bun scripts/ai-improvement-loop.ts --staged --fail-on=high
+# 旧 architecture-harness / ai-improvement-loop は ProtoShip 移行で撤去。
+# 移行完了後に新しい harness を再導入する (Phase 2 以降)。
 make before-commit

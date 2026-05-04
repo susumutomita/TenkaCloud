@@ -69,6 +69,7 @@ STACK_NAME={problem-name} ./scripts/deploy.sh
 ```bash
 aws cloudformation describe-stacks --stack-name {problem-name}
 ```
+
 ```
 
 ## Step 3: Create problem.yaml (JAM only)
@@ -106,12 +107,14 @@ scoring:
 ## Step 4: Create cloudformation/{name}.yaml
 
 Write a self-contained CloudFormation template that:
+
 - Provisions the infrastructure the player needs to **start** with (intentionally misconfigured / incomplete for JAM)
 - OR provisions the full competitive environment for GameDay
 - Uses `Parameters` for customization (e.g. `StackName`, `VpcId`)
 - Exports important values in `Outputs` for verification
 
 **JAM template pattern** (broken → player fixes it):
+
 ```yaml
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "{problem title} — starter environment with issues to fix"
@@ -131,11 +134,13 @@ Outputs:
 ```
 
 **GameDay template pattern** (full working environment, intentionally vulnerable):
+
 - Same as `security-battle-royale/cloudformation/team-stack.yaml` — provision EC2, RDS, S3, IAM per team
 
 ## Step 5: Create scripts/deploy.sh
 
 For JAM problems, use the standard template:
+
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -162,6 +167,7 @@ For GameDay problems, follow the pattern in `security-battle-royale/scripts/depl
 ## Step 6: Make deploy.sh executable
 
 Always run:
+
 ```bash
 chmod +x problems/{type}/{name}/scripts/deploy.sh
 ```
@@ -169,6 +175,7 @@ chmod +x problems/{type}/{name}/scripts/deploy.sh
 ## Quality Checklist
 
 Before finishing, verify:
+
 - [ ] `cloudformation/*.yaml` is valid YAML (no syntax errors)
 - [ ] CFn template has `AWSTemplateFormatVersion` and `Description`
 - [ ] All resources are tagged with meaningful tags
@@ -182,6 +189,7 @@ Before finishing, verify:
 User: "S3 バケットが公開設定になってる問題を作って、プレーヤーが適切なアクセス制限を設定する JAM 問題"
 
 You should create:
+
 - `problems/jam/s3-secure-bucket/README.md`
 - `problems/jam/s3-secure-bucket/problem.yaml`
 - `problems/jam/s3-secure-bucket/cloudformation/s3-secure-bucket.yaml` (with `BlockPublicAcls: false` etc.)

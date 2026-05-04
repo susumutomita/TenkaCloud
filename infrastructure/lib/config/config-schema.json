@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "appName",
+    "accountId",
+    "region",
+    "environment",
+    "controlPlaneConfig",
+    "bootstrapConfig"
+  ],
+  "properties": {
+    "appName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9-]{1,63}$"
+    },
+    "accountId": {
+      "type": "string",
+      "pattern": "^[0-9]{12}$"
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}-[a-z]+-[0-9]+$"
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["development", "staging", "production"]
+    },
+    "controlPlaneConfig": {
+      "type": "object",
+      "required": ["systemAdminEmail"],
+      "properties": {
+        "systemAdminEmail": { "type": "string", "format": "email" },
+        "systemAdminRoleName": { "type": "string", "default": "SystemAdmin" },
+        "enableAdvancedSecurityMode": { "type": "boolean", "default": true },
+        "setAPIGWScopes": { "type": "boolean", "default": true },
+        "disableAPILogging": { "type": "boolean", "default": false },
+        "primaryCallbackUrl": { "type": "string", "format": "uri" },
+        "additionalCallbackUrls": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" },
+          "minItems": 1
+        },
+        "additionalLogoutUrls": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" },
+          "minItems": 1
+        },
+        "allowedCorsOrigins": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" },
+          "minItems": 1
+        },
+        "brokerEntra": {
+          "type": "object",
+          "required": ["graphParameterName"],
+          "properties": {
+            "graphParameterName": {
+              "type": "string",
+              "pattern": "^/[A-Za-z0-9._/-]+$"
+            },
+            "applicationTemplateId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "bootstrapConfig": {
+      "type": "object",
+      "required": ["tenantCfnStackPrefix"],
+      "properties": {
+        "tenantCfnStackPrefix": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "dynamoDbConfig": {
+      "type": "object",
+      "required": ["billingMode"],
+      "properties": {
+        "billingMode": {
+          "type": "string",
+          "enum": ["PROVISIONED", "PAY_PER_REQUEST"]
+        },
+        "readCapacity": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "writeCapacity": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
