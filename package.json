@@ -8,10 +8,10 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "bun run --filter @TenkaCloud/infrastructure build && bun run --filter @TenkaCloud/admin-console build && bun run --filter @TenkaCloud/application-admin-console build",
-    "typecheck": "bun run --filter @TenkaCloud/infrastructure typecheck && bun run --filter @TenkaCloud/admin-console typecheck && bun run --filter @TenkaCloud/application-admin-console typecheck",
+    "build": "bun run --filter @TenkaCloud/infrastructure build && bun run --filter @TenkaCloud/admin-console build && bun run --filter @TenkaCloud/application-admin-console build && bun run --filter @TenkaCloud/participant-portal build",
+    "typecheck": "bun run --filter @TenkaCloud/infrastructure typecheck && bun run --filter @TenkaCloud/admin-console typecheck && bun run --filter @TenkaCloud/application-admin-console typecheck && bun run --filter @TenkaCloud/participant-portal typecheck",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
-    "test": "bun run --filter @TenkaCloud/infrastructure test && bun run --filter @TenkaCloud/admin-console test && bun run --filter @TenkaCloud/application-admin-console test",
+    "test": "bun run --filter @TenkaCloud/infrastructure test && bun run --filter @TenkaCloud/admin-console test && bun run --filter @TenkaCloud/application-admin-console test && bun run --filter @TenkaCloud/participant-portal test",
     "validate:problems": "bun run scripts/validate-problems.ts",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist'",
     "lint:text": "textlint '**/*.md'",
