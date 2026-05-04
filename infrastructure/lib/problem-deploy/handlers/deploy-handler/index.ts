@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
+import { resolveTenantId } from "./auth.js";
 import { buildContext, buildSharedResources, startDeployment } from "./deploy.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { DeployRequestSchema } from "./types.js";
@@ -11,16 +12,15 @@ import { DeployRequestSchema } from "./types.js";
  *   GET  /problems/:problemId/deployments
  *   GET  /deployments/:jobId
  *
- * Auth: Lambda Function URL AWS_IAM が一次 gate。tenantId は `DEFAULT_TENANT_ID`
- * env から取り出す (Cognito JWT authorizer 結線時に JWT claim から差し替え予定)。
+ * Auth: 本番経路は API Gateway HTTP API + Cognito JWT authorizer で、tenantId は
+ * JWT の `custom:tenantId` claim から取り出す。Function URL (AWS_IAM) は ops 用に
+ * 残しており、その経路では `DEFAULT_TENANT_ID` env にフォールバック。
  */
 
 // problemId は metadata.json と整合する RFC 1035-ish の slug。両端は英数字、内側のみハイフン許容。
 const PROBLEM_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/; // ULID
 const LIST_LIMIT_MAX = 200;
-
-const resolveTenantId = (): string => process.env.DEFAULT_TENANT_ID ?? "unknown-tenant";
 
 // SDK clients / env を module scope で 1 度だけ build。warm invoke で connection pool 再利用。
 const shared = buildSharedResources();
@@ -47,7 +47,7 @@ app.post("/problems/:problemId/deploy", async (c) => {
     return c.json({ error: "validation failed", issues: parsed.error.issues }, 400);
   }
 
-  const ctx = buildContext(shared, resolveTenantId());
+  const ctx = buildContext(shared, resolveTenantId(c));
 
   try {
     const response = await startDeployment(ctx, { ...parsed.data, problemId });
@@ -71,7 +71,7 @@ app.get("/problems/:problemId/deployments", async (c) => {
   }
   try {
     const response = await listDeployments(shared, {
-      tenantId: resolveTenantId(),
+      tenantId: resolveTenantId(c),
       problemId,
       limit,
       cursor: c.req.query("cursor"),
@@ -90,7 +90,7 @@ app.get("/deployments/:jobId", async (c) => {
     return c.json({ error: "invalid jobId" }, 400);
   }
   try {
-    const item = await getDeployment(shared, resolveTenantId(), jobId);
+    const item = await getDeployment(shared, resolveTenantId(c), jobId);
     if (!item) return c.json({ error: "not_found" }, 404);
     return c.json(item, 200);
   } catch (err) {

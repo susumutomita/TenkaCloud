@@ -137,11 +137,30 @@ cdk.Aspects.of(controlPlaneStack).add(
 // Problem deploy backend: Deployments DDB + IAM Role + Deploy API Lambda + Worker Lambda。
 // `DEPLOY_EXTERNAL_ID` は競技者 Bootstrap CFn (templates/competitor-bootstrap.yaml) で
 // 設定された ExternalId と一致させる必要がある。.env から渡す。
+//
+// `DEPLOY_USER_POOL_ID` / `DEPLOY_USER_POOL_CLIENT_ID` を両方渡すと UI 用の
+// HTTP API + Cognito JWT authorizer が立ち上がる (PR-F2)。tenant-template-stack
+// が払い出した値を `provision-tenant.sh` 経由で .env に転記する想定。
 const deployExternalId = process.env.CDK_PARAM_DEPLOY_EXTERNAL_ID || "tenkacloud-dev-external-id";
+const deployUserPoolId = process.env.CDK_PARAM_DEPLOY_USER_POOL_ID;
+const deployUserPoolClientId = process.env.CDK_PARAM_DEPLOY_USER_POOL_CLIENT_ID;
+const deployApiCognito =
+  deployUserPoolId && deployUserPoolClientId
+    ? { userPoolId: deployUserPoolId, clientId: deployUserPoolClientId }
+    : undefined;
+const deployApiCorsOriginsRaw = process.env.CDK_PARAM_DEPLOY_API_CORS_ORIGINS;
+const deployApiCorsOrigins = deployApiCorsOriginsRaw
+  ? deployApiCorsOriginsRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+  : undefined;
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
   deployExternalId,
+  deployApiCognito,
+  deployApiCorsOrigins,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),

@@ -5,12 +5,15 @@ import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-
 
 const FAKE_BUS_ARN = "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus";
 
-function synth(): Template {
+function synth(
+  overrides?: Partial<ConstructorParameters<typeof ProblemDeployBackendStack>[2]>,
+): Template {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
     eventBusArn: FAKE_BUS_ARN,
     deployExternalId: "ext-test",
+    ...overrides,
   });
   return Template.fromStack(stack);
 }
@@ -264,6 +267,68 @@ describe("ProblemDeployBackendStack", () => {
         "AWS::Events::Rule",
         Match.objectLike({
           ScheduleExpression: "rate(1 minute)",
+        }),
+      );
+    });
+  });
+
+  describe("HTTP API + Cognito JWT authorizer", () => {
+    it("deployApiCognito 未指定なら HTTP API は作らないべき", () => {
+      const tpl = synth();
+      tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
+      tpl.resourceCountIs("AWS::ApiGatewayV2::Authorizer", 0);
+    });
+
+    it("deployApiCognito 指定で HTTP API + JWT authorizer を作るべき", () => {
+      const tpl = synth({
+        deployApiCognito: {
+          userPoolId: "ap-northeast-1_TESTPOOL",
+          clientId: "test-client-id",
+        },
+        deployApiCorsOrigins: ["http://localhost:5173"],
+      });
+      tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
+      tpl.hasResourceProperties(
+        "AWS::ApiGatewayV2::Authorizer",
+        Match.objectLike({
+          AuthorizerType: "JWT",
+          IdentitySource: ["$request.header.Authorization"],
+          JwtConfiguration: Match.objectLike({
+            Audience: ["test-client-id"],
+            Issuer: "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_TESTPOOL",
+          }),
+        }),
+      );
+    });
+
+    it("HTTP API は POST /deploy / GET /deployments / GET /deployments/:jobId のルートを持つべき", () => {
+      const tpl = synth({
+        deployApiCognito: { userPoolId: "ap-northeast-1_X", clientId: "c-1" },
+      });
+      const expectedRoutes = [
+        "POST /problems/{problemId}/deploy",
+        "GET /problems/{problemId}/deployments",
+        "GET /deployments/{jobId}",
+      ];
+      for (const routeKey of expectedRoutes) {
+        tpl.hasResourceProperties(
+          "AWS::ApiGatewayV2::Route",
+          Match.objectLike({ RouteKey: routeKey, AuthorizationType: "JWT" }),
+        );
+      }
+    });
+
+    it("CORS allowOrigins は指定値を反映するべき", () => {
+      const tpl = synth({
+        deployApiCognito: { userPoolId: "ap-northeast-1_X", clientId: "c-1" },
+        deployApiCorsOrigins: ["http://localhost:5173", "https://example.com"],
+      });
+      tpl.hasResourceProperties(
+        "AWS::ApiGatewayV2::Api",
+        Match.objectLike({
+          CorsConfiguration: Match.objectLike({
+            AllowOrigins: ["http://localhost:5173", "https://example.com"],
+          }),
         }),
       );
     });
