@@ -100,7 +100,7 @@ describe("ApplicationAdminConsoleHosting", () => {
   });
 
   describe("deployRuntimeConfig() を呼び出したとき", () => {
-    function synthWithRuntimeConfig() {
+    function synthWithRuntimeConfig(deployApiUrl?: string) {
       const app = new cdk.App();
       const stack = new cdk.Stack(app, "TestStack");
       const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
@@ -112,19 +112,48 @@ describe("ApplicationAdminConsoleHosting", () => {
         tenantId: "tenant-1",
         tenantName: "DENSO 第一事業部",
         apiUrl: "https://abc.execute-api.ap-northeast-1.amazonaws.com/prod/",
+        deployApiUrl,
       });
-      return Template.fromStack(stack);
+      return { template: Template.fromStack(stack), stack };
+    }
+
+    function readRuntimeConfigJson(stack: cdk.Stack): Record<string, unknown> {
+      const synth = cdk.App.of(stack)?.synth();
+      if (!synth) throw new Error("synth output unavailable");
+      const assemblyDir = synth.directory;
+      const assets = fs
+        .readdirSync(assemblyDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && d.name.startsWith("asset."));
+      for (const asset of assets) {
+        const candidate = path.join(assemblyDir, asset.name, "runtime-config.json");
+        if (fs.existsSync(candidate)) {
+          return JSON.parse(fs.readFileSync(candidate, "utf-8")) as Record<string, unknown>;
+        }
+      }
+      throw new Error("runtime-config.json asset not found");
     }
 
     it("BucketDeployment Custom Resource が 2 個に増えるべき (dist と runtime-config)", () => {
-      const template = synthWithRuntimeConfig();
+      const { template } = synthWithRuntimeConfig();
       template.resourceCountIs("Custom::CDKBucketDeployment", 2);
     });
 
     it("CloudFront 既存 distribution が同じ Bucket に対して使われ続けるべき (新 Bucket を作らない)", () => {
-      const template = synthWithRuntimeConfig();
+      const { template } = synthWithRuntimeConfig();
       template.resourceCountIs("AWS::S3::Bucket", 1);
       template.resourceCountIs("AWS::CloudFront::Distribution", 1);
+    });
+
+    it("deployApiUrl 指定時は runtime-config.json に書き込むべき", () => {
+      const { stack } = synthWithRuntimeConfig("https://deploy.example.com/");
+      const json = readRuntimeConfigJson(stack);
+      expect(json.deployApiUrl).toBe("https://deploy.example.com");
+    });
+
+    it("deployApiUrl 未指定なら deployApiUrl は空文字 (frontend が dev fallback に倒れる)", () => {
+      const { stack } = synthWithRuntimeConfig();
+      const json = readRuntimeConfigJson(stack);
+      expect(json.deployApiUrl).toBe("");
     });
   });
 });
