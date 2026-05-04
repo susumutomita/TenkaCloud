@@ -38,9 +38,15 @@ interface RuntimeConfigProps {
   readonly tenantName: string;
   /**
    * application-admin-console が叩くテナント API (POST /apps 等) の base URL。
-   * ApiGateway.restApi.url (末尾スラッシュ有) から渡す。#40-d / #64 で追加。
+   * ApiGateway.restApi.url (末尾スラッシュ有) から渡す。
    */
   readonly apiUrl: string;
+  /**
+   * Deploy API (HTTP API + Cognito JWT authorizer) の base URL。
+   * ProblemDeployBackendStack の DeployApiGateway から渡す。未指定なら空文字 →
+   * frontend の dev fallback ("http://localhost:3998") に倒れる。
+   */
+  readonly deployApiUrl?: string;
 }
 
 /**
@@ -143,6 +149,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
           tenantId: props.tenantId,
           tenantName: props.tenantName,
           apiUrl: props.apiUrl.replace(/\/$/, ""),
+          deployApiUrl: (props.deployApiUrl ?? "").replace(/\/$/, ""),
         }),
       ],
       destinationBucket: this.bucket,

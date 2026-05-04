@@ -9,7 +9,7 @@ const env = {
 };
 
 describe("loadConfig", () => {
-  describe("/runtime-config.json が cognitoDomain / userClientId / tenantId / tenantName / apiUrl を全部返したとき", () => {
+  describe("/runtime-config.json が必須フィールドを全部返したとき", () => {
     async function loadWithFullRuntime() {
       vi.stubGlobal(
         "fetch",
@@ -22,6 +22,7 @@ describe("loadConfig", () => {
                 tenantId: "tenant-prod-1",
                 tenantName: "DENSO 第一事業部",
                 apiUrl: "https://prod-api.example.com/prod",
+                deployApiUrl: "https://prod-deploy.example.com",
               }),
               { status: 200 },
             ),
@@ -50,6 +51,12 @@ describe("loadConfig", () => {
     it("apiBaseUrl を runtime-config.apiUrl から取るべき (key が異なる)", async () => {
       expect((await loadWithFullRuntime()).apiBaseUrl).toBe("https://prod-api.example.com/prod");
     });
+
+    it("deployApiBaseUrl を runtime-config.deployApiUrl から取るべき", async () => {
+      expect((await loadWithFullRuntime()).deployApiBaseUrl).toBe(
+        "https://prod-deploy.example.com",
+      );
+    });
   });
 
   describe("/runtime-config.json が 404 を返したとき (dev fallback)", () => {
@@ -62,6 +69,7 @@ describe("loadConfig", () => {
       expect(config.tenantId).toBe("dev-local");
       expect(config.tenantName).toBe("Local Dev Tenant");
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
+      expect(config.deployApiBaseUrl).toBe("http://localhost:3998");
     });
   });
 
@@ -99,6 +107,7 @@ describe("loadConfig", () => {
               userClientId: "prod-client-id",
               tenantId: "tenant-prod-1",
               tenantName: "T",
+              deployApiUrl: "https://x",
             }),
             { status: 200 },
           ),
@@ -107,6 +116,27 @@ describe("loadConfig", () => {
 
       const config = await loadConfig(env);
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
+    });
+
+    it("deployApiUrl 欠け → env fallback に進むべき", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-cognito.example.com",
+              userClientId: "prod-client-id",
+              tenantId: "tenant-prod-1",
+              tenantName: "T",
+              apiUrl: "https://a",
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+
+      const config = await loadConfig(env);
+      expect(config.deployApiBaseUrl).toBe("http://localhost:3998");
     });
   });
 

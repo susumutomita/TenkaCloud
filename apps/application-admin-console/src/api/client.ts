@@ -13,8 +13,8 @@ export interface ApiClient {
   del(path: string): Promise<void>;
 }
 
-export function createApiClient(config: AppConfig, idToken: string): ApiClient {
-  const base = config.apiBaseUrl.endsWith("/") ? config.apiBaseUrl : `${config.apiBaseUrl}/`;
+export function createApiClient(baseUrl: string, idToken: string): ApiClient {
+  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
 
   const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const url = new URL(path.replace(/^\//, ""), base);
@@ -51,8 +51,16 @@ export function createApiClient(config: AppConfig, idToken: string): ApiClient {
 export function useApiClient(config: AppConfig): ApiClient | null {
   const auth = useAuth();
   return useMemo(
-    () => (auth.tokens ? createApiClient(config, auth.tokens.idToken) : null),
-    [auth.tokens, config],
+    () => (auth.tokens ? createApiClient(config.apiBaseUrl, auth.tokens.idToken) : null),
+    [auth.tokens, config.apiBaseUrl],
+  );
+}
+
+export function useDeployApiClient(config: AppConfig): ApiClient | null {
+  const auth = useAuth();
+  return useMemo(
+    () => (auth.tokens ? createApiClient(config.deployApiBaseUrl, auth.tokens.idToken) : null),
+    [auth.tokens, config.deployApiBaseUrl],
   );
 }
 

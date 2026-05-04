@@ -10,6 +10,7 @@ const config: AppConfig = {
   tenantId: "t-1",
   tenantName: "T1",
   apiBaseUrl: "https://api.example.com/prod",
+  deployApiBaseUrl: "https://deploy.example.com",
 };
 
 describe("createApiClient", () => {
@@ -22,7 +23,7 @@ describe("createApiClient", () => {
         .mockResolvedValue(new Response(JSON.stringify({ apps: [] }), { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const api = createApiClient(config, "TOKEN");
+      const api = createApiClient(config.apiBaseUrl, "TOKEN");
       await api.get("apps");
 
       const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
@@ -38,7 +39,7 @@ describe("createApiClient", () => {
         .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 201 }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const api = createApiClient(config, "TOKEN");
+      const api = createApiClient(config.apiBaseUrl, "TOKEN");
       await api.post("apps", { name: "x", upstreamUrl: "https://x.example.com" });
 
       const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
@@ -57,7 +58,7 @@ describe("createApiClient", () => {
           .fn()
           .mockImplementation(() => Promise.resolve(new Response("forbidden", { status: 403 }))),
       );
-      const api = createApiClient(config, "TOKEN");
+      const api = createApiClient(config.apiBaseUrl, "TOKEN");
 
       await expect(api.get("apps")).rejects.toBeInstanceOf(ApiError);
       await expect(api.get("apps")).rejects.toThrow(/403.*forbidden/);
@@ -71,8 +72,8 @@ describe("createApiClient", () => {
         .mockImplementation(() => Promise.resolve(new Response("{}", { status: 200 })));
       vi.stubGlobal("fetch", fetchMock);
 
-      const a = createApiClient({ ...config, apiBaseUrl: "https://api.example.com/prod" }, "T");
-      const b = createApiClient({ ...config, apiBaseUrl: "https://api.example.com/prod/" }, "T");
+      const a = createApiClient("https://api.example.com/prod", "T");
+      const b = createApiClient("https://api.example.com/prod/", "T");
       await a.get("apps");
       await b.get("apps");
 

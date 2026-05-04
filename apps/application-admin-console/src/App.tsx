@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { CallbackPage } from "./pages/Callback";
+import { DeploymentDetailPage } from "./pages/DeploymentDetail";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -32,7 +33,14 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/callback" element={<CallbackPage config={config} />} />
         <Route path="/" element={guarded(config, <HomePage />)} />
         <Route path="/problems" element={guarded(config, <ProblemsPage />)} />
-        <Route path="/problems/:problemId" element={guarded(config, <ProblemDetailPage />)} />
+        <Route
+          path="/problems/:problemId"
+          element={guarded(config, <ProblemDetailPage config={config} />)}
+        />
+        <Route
+          path="/deployments/:jobId"
+          element={guarded(config, <DeploymentDetailPage config={config} />)}
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
