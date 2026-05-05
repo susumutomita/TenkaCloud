@@ -1,11 +1,11 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { getPortalMe, PortalAuthError } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import { toAsciiSlug } from "../lib/slug";
 import { clearSession, loadSession, type ParticipantSession, saveSession } from "./storage";
 
-/**
- * Mock auth for `mode === "dev-mock"`. Real backend swaps in here behind the same I/F.
- */
+const DEFAULT_DEV_TTL_MS = 4 * 60 * 60 * 1000;
+
 async function exchangeKeyForSession(
   config: AppConfig,
   teamLoginKey: string,
@@ -15,9 +15,27 @@ async function exchangeKeyForSession(
     throw new Error("チームログインキーを入力してください");
   }
 
-  if (config.mode !== "dev-mock") {
-    // TODO: backend 実装時にここで fetch(`${config.apiBaseUrl}/login`, ...) する
-    throw new Error("backend が未実装のため、現状は dev モードでのみ login できます");
+  if (config.mode === "backend") {
+    // teamLoginKey 自体が bearer。backend が view を返したらそれを session 化する。
+    // sessionToken には teamLoginKey そのものを保管 (sessionStorage は same-origin
+    // 隔離されている前提) し、以降の polling でも同じキーを Authorization に乗せる。
+    let view: Awaited<ReturnType<typeof getPortalMe>>;
+    try {
+      view = await getPortalMe(config.apiBaseUrl, trimmed);
+    } catch (err) {
+      if (err instanceof PortalAuthError) throw err;
+      throw new Error(err instanceof Error ? err.message : "backend に接続できませんでした");
+    }
+    const now = Date.now();
+    return {
+      sessionToken: trimmed,
+      teamId: view.jobId,
+      teamName: view.teamName,
+      eventId: view.problemId,
+      issuedAt: now,
+      // backend の expiresAt は epoch seconds、storage は ms に揃える。
+      expiresAt: view.expiresAt > 0 ? view.expiresAt * 1000 : now + DEFAULT_DEV_TTL_MS,
+    };
   }
 
   const slug = toAsciiSlug(trimmed);
@@ -28,7 +46,7 @@ async function exchangeKeyForSession(
     teamName: `Team ${trimmed.slice(0, 8)}`,
     eventId: "mock-event-1",
     issuedAt: now,
-    expiresAt: now + 4 * 60 * 60 * 1000,
+    expiresAt: now + DEFAULT_DEV_TTL_MS,
   };
 }
 

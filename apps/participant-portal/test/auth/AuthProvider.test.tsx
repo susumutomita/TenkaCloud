@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "../../src/auth/AuthProvider";
 import type { AppConfig } from "../../src/config";
 
@@ -23,7 +23,10 @@ const renderAuth = (config: AppConfig) =>
   });
 
 describe("AuthProvider", () => {
-  afterEach(() => sessionStorage.clear());
+  afterEach(() => {
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
 
   it("初期状態は ready=true / session なしであるべき", () => {
     const { result } = renderAuth(devConfig);
@@ -69,10 +72,43 @@ describe("AuthProvider", () => {
     expect(result.current.session).toBeNull();
   });
 
-  it("prod config (= 本物 backend が必要) で login すると 'backend が未実装' で throw するべき", async () => {
+  it("backend mode: /portal/me を Bearer 付きで叩き session を構築するべき", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            jobId: "JOB1",
+            problemId: "p",
+            teamName: "Alpha",
+            region: "ap-northeast-1",
+            status: "COMPLETE",
+            stackOutputs: {},
+            expiresAt: 1_700_000_000,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
     const { result } = renderAuth(prodConfig);
     await act(async () => {
-      await expect(result.current.login("anything")).rejects.toThrow(/backend が未実装/);
+      await result.current.login("AbCdEfGhIjKlMnOpQrStUvWx");
+    });
+    expect(result.current.session).not.toBeNull();
+    expect(result.current.session?.teamId).toBe("JOB1");
+    expect(result.current.session?.teamName).toBe("Alpha");
+    expect(result.current.session?.eventId).toBe("p");
+    expect(result.current.session?.sessionToken).toBe("AbCdEfGhIjKlMnOpQrStUvWx");
+    expect(result.current.session?.expiresAt).toBe(1_700_000_000_000);
+  });
+
+  it("backend mode: 401 で PortalAuthError を throw、session は変わらないべき", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+    const { result } = renderAuth(prodConfig);
+    await act(async () => {
+      await expect(result.current.login("AbCdEfGhIjKlMnOpQrStUvWx")).rejects.toThrow(
+        /チームログインキーが無効/,
+      );
     });
     expect(result.current.session).toBeNull();
   });
