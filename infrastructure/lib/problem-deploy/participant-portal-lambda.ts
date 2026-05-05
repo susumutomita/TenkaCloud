@@ -1,6 +1,13 @@
 import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
-import { PolicyDocument, PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
+import type { ITable } from "aws-cdk-lib/aws-dynamodb";
+import {
+  ManagedPolicy,
+  PolicyDocument,
+  PolicyStatement,
+  Role,
+  ServicePrincipal,
+} from "aws-cdk-lib/aws-iam";
 import {
   Architecture,
   type FunctionUrl,
@@ -12,8 +19,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 
 export interface ParticipantPortalLambdaProps {
-  readonly deploymentsTableName: string;
-  readonly deploymentsTableArn: string;
+  readonly deploymentsTable: ITable;
 }
 
 /**
@@ -37,15 +43,16 @@ export class ParticipantPortalLambda extends Construct {
           statements: [
             new PolicyStatement({
               actions: ["dynamodb:Query"],
-              resources: [props.deploymentsTableArn, `${props.deploymentsTableArn}/index/GSI2`],
+              resources: [
+                props.deploymentsTable.tableArn,
+                `${props.deploymentsTable.tableArn}/index/GSI2`,
+              ],
             }),
           ],
         }),
       },
       managedPolicies: [
-        {
-          managedPolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-        },
+        ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
       ],
     });
 
@@ -58,10 +65,7 @@ export class ParticipantPortalLambda extends Construct {
       memorySize: 256,
       role,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTableName,
-        // Participant Lambda は EventBridge を使わないが、buildSharedResources が
-        // 同じヘルパで env を要求するためダミー値を渡す (本 Lambda からは publish しない)。
-        DEPLOY_EVENT_BUS_NAME: "unused-by-participant-handler",
+        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

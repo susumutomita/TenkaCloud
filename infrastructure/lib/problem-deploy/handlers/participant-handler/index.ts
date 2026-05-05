@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
-import { buildSharedResources } from "../deploy-handler/deploy.js";
 import { extractBearerToken } from "./auth.js";
 import { lookupByTeamLoginKey } from "./lookup.js";
+import { buildParticipantSharedResources } from "./shared.js";
 
 /**
  * Participant Portal backend Lambda の Hono app。routes:
@@ -14,13 +14,13 @@ import { lookupByTeamLoginKey } from "./lookup.js";
  * Lambda 内で検証する (Cognito を介さない)。teamLoginKey は POST /problems/:id/deploy
  * のレスポンスで 1 度だけ露出する 24 文字 base64url の短命キー。
  */
-const shared = buildSharedResources();
+const shared = buildParticipantSharedResources();
 const app = new Hono();
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
 
 app.get("/portal/me", async (c) => {
-  const token = extractBearerToken(c.req.header("authorization") ?? c.req.header("Authorization"));
+  const token = extractBearerToken(c.req.header("authorization"));
   if (!token) return c.json({ error: "unauthorized" }, 401);
   try {
     const view = await lookupByTeamLoginKey(shared, token);

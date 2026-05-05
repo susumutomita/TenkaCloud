@@ -4,12 +4,10 @@ const mocks = vi.hoisted(() => ({
   lookupByTeamLoginKey: vi.fn(),
 }));
 
-vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", () => ({
-  buildSharedResources: () => ({
+vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
+  buildParticipantSharedResources: () => ({
     tableName: "TestDeployments",
-    eventBusName: "test-bus",
     ddb: { send: vi.fn() },
-    events: { send: vi.fn() },
   }),
 }));
 

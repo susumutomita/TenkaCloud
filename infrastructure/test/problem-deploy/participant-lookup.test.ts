@@ -1,18 +1,16 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 import { lookupByTeamLoginKey } from "../../lib/problem-deploy/handlers/participant-handler/lookup";
+import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 
 function buildShared(): {
-  shared: DeploySharedResources;
+  shared: ParticipantSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
 } {
   const ddbSend = vi.fn();
-  const shared: DeploySharedResources = {
+  const shared: ParticipantSharedResources = {
     tableName: "TestDeployments",
-    eventBusName: "test-bus",
-    ddb: { send: ddbSend } as unknown as DeploySharedResources["ddb"],
-    events: {} as unknown as DeploySharedResources["events"],
+    ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
   };
   return { shared, ddbSend };
 }

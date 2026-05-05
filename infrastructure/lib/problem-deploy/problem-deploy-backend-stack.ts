@@ -119,8 +119,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
 
     if (props.participantPortal) {
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
-        deploymentsTableName: deployments.table.tableName,
-        deploymentsTableArn: deployments.table.tableArn,
+        deploymentsTable: deployments.table,
       });
       this.participantPortalApiUrl = portalLambda.url.url;
       new CfnOutput(this, "ParticipantPortalApiUrl", {

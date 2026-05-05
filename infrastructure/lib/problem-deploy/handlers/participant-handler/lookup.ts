@@ -1,36 +1,38 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploySharedResources } from "../deploy-handler/deploy.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
+import type { ParticipantSharedResources } from "./shared.js";
 
 /**
- * Participant UI に返す per-team 情報。internal な操作系 (tenantId / awsAccountId /
- * namePrefix / failureReason / 等) は意図的に除外する — チームには「何が動いているか」
- * を見せるが、運営側の構造は隠す。
+ * 競技者向け sanitized view。`DeploymentItem` から chosen フィールドのみを `Pick`
+ * で派生させることで、`DeploymentItem` に新規フィールドが増えたときに「明示的に
+ * include する / 除外する」判断を強制する (operator 内部情報の意図せぬ漏洩を防ぐ)。
+ *
+ * stackOutputs は DDB に JSON 文字列で入っているが、UI に返す前に object へ展開する。
  */
-export interface ParticipantView {
-  readonly jobId: string;
-  readonly problemId: string;
-  readonly teamName: string;
-  readonly region: string;
+export type ParticipantView = Pick<
+  DeploymentItem,
+  "jobId" | "problemId" | "teamName" | "region" | "expiresAt"
+> & {
   readonly status: DeploymentStatus;
-  /** 問題スタック Outputs を `OutputKey -> OutputValue` の object として展開 */
   readonly stackOutputs: Record<string, string>;
-  /** 失敗時 (status=FAILED) のみ。CFn StackStatusReason を string でそのまま返す */
   readonly failureReason?: string;
-  /** epoch seconds — TTL 切れ予定時刻。frontend がカウントダウン表示できるように。 */
-  readonly expiresAt: number;
-}
+};
+
+const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
 /**
  * teamLoginKey で GSI2 を Query して 1 件の deployment を返す。
  *
- * - 該当行が無い (key 不正 / 削除済 / GSI2PK 属性が removed) → undefined (401 相当)
- * - 該当行があっても status が DELETING / DELETED → undefined (認証失敗扱い)
- *   GSI2 sparse 化でも「将来 DELETED 行を残す」拡張 (audit log 等) に備える防御
+ * GSI2 は eventually consistent。直近に rotate / 削除された teamLoginKey は
+ * 最大数百ms 程度認証が通る可能性があるが、TTL ベースの teardown を 1 分間隔で
+ * 回す運用 (PR-E StatusUpdater) と整合する許容範囲。
+ *
+ * - 該当行が無い (key 不正 / GSI2PK 属性が削除された) → undefined (401 相当)
+ * - status が DELETING / DELETED → undefined (sparse 化が崩れた場合の防御)
  */
 export async function lookupByTeamLoginKey(
-  shared: DeploySharedResources,
+  shared: ParticipantSharedResources,
   teamLoginKey: string,
 ): Promise<ParticipantView | undefined> {
   const out = await shared.ddb.send(
@@ -42,11 +44,10 @@ export async function lookupByTeamLoginKey(
       Limit: 1,
     }),
   );
-  const items = (out.Items ?? []) as Partial<DeploymentItem>[];
-  const item = items[0];
+  const item = (out.Items?.[0] ?? undefined) as Partial<DeploymentItem> | undefined;
   if (!item) return undefined;
   const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (status === "DELETING" || status === "DELETED") return undefined;
+  if (DELETED_LIKE_STATUSES.has(status)) return undefined;
 
   return {
     jobId: String(item.jobId ?? ""),
