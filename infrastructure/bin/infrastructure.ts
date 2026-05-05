@@ -158,8 +158,8 @@ const participantPortal = enableParticipantPortal
 // MVP-1 hard-coded 問題カタログ。Phase 2 (ADR-003) で DDB ベース問題管理に置換予定。
 // problemId → problemDir (= scripts/deploy-battles.sh の引数 path)。
 const problemsCatalog: Record<string, string> = {
-  "hello-world": "problems/sample/hello-world",
-  "security-battle-royale": "problems/gameday/security-battle-royale",
+  "hello-world": "problems/challenges/hello-world",
+  "security-battle-royale": "problems/battles/security-battle-royale",
 };
 
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {

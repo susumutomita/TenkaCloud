@@ -12,7 +12,7 @@ function synthDefault(): Template {
     sourceBucketName: "test-source-bucket",
     sourceObjectKey: "source.zip",
     problemsCatalog: {
-      "hello-world": "problems/sample/hello-world",
+      "hello-world": "problems/challenges/hello-world",
     },
   });
   return Template.fromStack(stack);
@@ -64,7 +64,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
           Environment: Match.objectLike({
             Variables: Match.objectLike({
               BATTLE_PROBLEMS_CATALOG: JSON.stringify({
-                "hello-world": "problems/sample/hello-world",
+                "hello-world": "problems/challenges/hello-world",
               }),
             }),
           }),

@@ -38,6 +38,27 @@ export interface ProblemDetail extends ProblemSummary {
   learningGoals: readonly string[];
 }
 
+const HELLO_WORLD: ProblemDetail = {
+  id: "hello-world",
+  name: "Hello World (Sample)",
+  category: "Challenge",
+  status: "ready",
+  shortDescription:
+    "TenkaCloud デプロイ機構の smoke test 用サンプル問題。SSM Parameter を 1 つだけ作る無害なスタック。",
+  difficulty: 1,
+  estimatedDuration: "1 分",
+  tags: ["sample", "smoke-test", "ssm"],
+  exposedPorts: [{ port: 1, name: "(no public endpoint — SSM Parameter only)" }],
+  learningGoals: ["TenkaCloud のデプロイ機構が end-to-end で動くことを smoke test で確認する"],
+  description: [
+    "deploy-battles.sh / Step Functions などのデプロイ経路を smoke test するためのサンプル問題。",
+    "",
+    "本問題は SSM Parameter (`/{NamePrefix}/hello`) を 1 つ作るだけで、EC2 / VPC / 公開エンドポイント / 脆弱性のあるソフトウェアは一切含まない。コストはゼロ。",
+    "",
+    "通常の競技には使わず、開発者が `make deploy-battles BATTLES=problems/challenges/hello-world` で deploy 機構の正しさを確かめるためだけに用意している。UI からも同様の smoke test として deploy できる。",
+  ].join("\n"),
+};
+
 const SECURITY_BATTLE_ROYALE: ProblemDetail = {
   id: "security-battle-royale",
   name: "Security Battle Royale",
@@ -68,7 +89,7 @@ const SECURITY_BATTLE_ROYALE: ProblemDetail = {
   ].join("\n"),
 };
 
-export const PROBLEM_CATALOG: readonly ProblemDetail[] = [SECURITY_BATTLE_ROYALE];
+export const PROBLEM_CATALOG: readonly ProblemDetail[] = [HELLO_WORLD, SECURITY_BATTLE_ROYALE];
 
 export function findProblem(id: string): ProblemDetail | undefined {
   return PROBLEM_CATALOG.find((p) => p.id === id);

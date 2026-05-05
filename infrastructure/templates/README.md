@@ -77,4 +77,4 @@ aws cloudformation delete-stack --stack-name tenkacloud-competitor-bootstrap
 ## 関連
 
 - [`/problems/README.md`](../../problems/README.md) — 問題カタログ規約
-- [`/problems/gameday/security-battle-royale/template.yaml`](../../problems/gameday/security-battle-royale/template.yaml) — 実際に deploy される問題 CFn の例
+- [`/problems/battles/security-battle-royale/template.yaml`](../../problems/battles/security-battle-royale/template.yaml) — 実際に deploy される問題 CFn の例

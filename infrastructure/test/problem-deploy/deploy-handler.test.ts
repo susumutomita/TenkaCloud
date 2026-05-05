@@ -23,8 +23,8 @@ function buildContext(overrides: Partial<DeployContext> = {}): {
     ttlMs: 60_000,
     tenantId: "tenant-acme",
     problemsCatalog: {
-      "security-battle-royale": "problems/gameday/security-battle-royale",
-      "hello-world": "problems/sample/hello-world",
+      "security-battle-royale": "problems/battles/security-battle-royale",
+      "hello-world": "problems/challenges/hello-world",
     },
     ...overrides,
   };

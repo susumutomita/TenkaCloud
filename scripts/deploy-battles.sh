@@ -13,9 +13,9 @@
 #                 ため、固定値が必要なときは呼び出し側で `DB_PASSWORD=xxx make deploy-battles` を使う
 #
 # 例:
-#   bash scripts/deploy-battles.sh problems/sample/hello-world
-#   bash scripts/deploy-battles.sh problems/sample/hello-world problems/gameday/security-battle-royale
-#   TEAM_SLUG=alpha bash scripts/deploy-battles.sh problems/sample/hello-world
+#   bash scripts/deploy-battles.sh problems/challenges/hello-world
+#   bash scripts/deploy-battles.sh problems/challenges/hello-world problems/battles/security-battle-royale
+#   TEAM_SLUG=alpha bash scripts/deploy-battles.sh problems/challenges/hello-world
 #
 # CFn template の Parameter は metadata.json の `cfnParameters` で宣言する (= 問題作者が
 # 必要な値を渡す)。`NamePrefix` だけは script が自動注入する。`__RANDOM_PASSWORD__` を
@@ -45,7 +45,7 @@ esac
 
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 <problem-dir> [<problem-dir> ...]" >&2
-  echo "  e.g.: $0 problems/sample/hello-world" >&2
+  echo "  e.g.: $0 problems/challenges/hello-world" >&2
   exit 1
 fi
 

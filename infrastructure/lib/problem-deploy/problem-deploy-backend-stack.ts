@@ -33,7 +33,7 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   /** 同 zip の object key (default: `source.zip`)。 */
   readonly sourceObjectKey: string;
   /**
-   * `problemId → problemDir` の hard-coded 問題カタログ (MVP-1)。`problems/sample/hello-world` 等。
+   * `problemId → problemDir` の hard-coded 問題カタログ (MVP-1)。`problems/challenges/hello-world` 等。
    * tenant API Lambda の env に injected され、deploy 起動時に State Machine 入力の
    * `problemDir` を解決する。Phase 2 (ADR-003) で DDB catalog に置換。
    */

@@ -10,8 +10,8 @@
 #   WAIT_FOR_DELETE  "true" にすると DELETE_COMPLETE まで待機。default: "false" (非同期)
 #
 # 例:
-#   bash scripts/destroy-battles.sh problems/gameday/security-battle-royale
-#   WAIT_FOR_DELETE=true bash scripts/destroy-battles.sh problems/gameday/security-battle-royale
+#   bash scripts/destroy-battles.sh problems/battles/security-battle-royale
+#   WAIT_FOR_DELETE=true bash scripts/destroy-battles.sh problems/battles/security-battle-royale
 
 set -euo pipefail
 
