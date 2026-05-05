@@ -26,6 +26,12 @@ export interface DeploymentSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly expiresAt: number;
+  /**
+   * チーム共有ログインキー (短命 bearer)。`getDeployment` 経路 (= caller が own tenantId
+   * で TenantAdmin 認可済) では返す。`listDeployments` 経路では出さない (= 万が一
+   * UI が一覧画面でも誤露出しないよう、複数行スコープでは引かない)。
+   */
+  readonly teamLoginKey?: string;
 }
 
 export interface ListDeploymentsRequest {
@@ -44,9 +50,9 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 /**
- * `teamLoginKey` (短命 bearer) や `dbPassword` (CFn Parameter) など、リスト/詳細
- * 表示で出してはいけないフィールドを落とす。新しい sensitive フィールドが増えたら
- * ここに追加する。
+ * 一覧表示で安全に返せる minimal な shape。`teamLoginKey` のような短命 bearer は
+ * 出さない (= 一覧画面で誤露出しない)。`dbPassword` 等の CFn Parameter も同様。
+ * 新しい sensitive フィールドが増えたらここに追加する。
  */
 export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
   return {
@@ -65,6 +71,18 @@ export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
     createdAt: String(item.createdAt ?? ""),
     updatedAt: String(item.updatedAt ?? ""),
     expiresAt: Number(item.expiresAt ?? 0),
+  };
+}
+
+/**
+ * 詳細画面 (`getDeployment`) 専用の shape。`toSummary` に加えて `teamLoginKey` を含める。
+ * caller は own tenantId で TenantAdmin 認可済なので、operator が hand-off のため再取得
+ * できる必要がある。一覧 (`toSummary`) には含めず、誤露出経路を限定する。
+ */
+export function toDetail(item: Partial<DeploymentItem>): DeploymentSummary {
+  return {
+    ...toSummary(item),
+    teamLoginKey: typeof item.teamLoginKey === "string" ? item.teamLoginKey : undefined,
   };
 }
 
@@ -135,5 +153,5 @@ export async function getDeployment(
   const item = out.Item as Partial<DeploymentItem> | undefined;
   if (!item) return undefined;
   if (item.tenantId !== tenantId) return undefined;
-  return toSummary(item);
+  return toDetail(item);
 }

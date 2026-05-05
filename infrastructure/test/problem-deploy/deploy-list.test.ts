@@ -179,12 +179,22 @@ describe("getDeployment", () => {
     expect(out).toBeUndefined();
   });
 
-  it("teamLoginKey を返り値に含めないべき", async () => {
+  it("operator には teamLoginKey を含めて返すべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
     const out = await getDeployment(shared, "tenant-acme", "01HABC");
     expect(out).toBeDefined();
+    expect(out?.teamLoginKey).toBe("SECRET_LOGIN_KEY_DO_NOT_LEAK");
+  });
+
+  it("一覧では teamLoginKey を含めないべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const out = await listDeployments(shared, { tenantId: "tenant-acme" });
+    expect(out.items).toHaveLength(1);
     expect(JSON.stringify(out)).not.toContain("SECRET_LOGIN_KEY_DO_NOT_LEAK");
+    expect((out.items[0] as { teamLoginKey?: string }).teamLoginKey).toBeUndefined();
   });
 });

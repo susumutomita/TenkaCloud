@@ -8,14 +8,12 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import StatusIndicator, {
-  type StatusIndicatorProps,
-} from "@cloudscape-design/components/status-indicator";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useApiClient } from "../api/client";
 import {
-  type DeploymentStatus,
+  DEPLOYMENT_STATUS_INDICATOR,
   type DeploymentSummary,
   deleteDeployment,
   getDeployment,
@@ -26,15 +24,6 @@ import {
 import type { AppConfig } from "../config";
 
 const POLL_INTERVAL_MS = 5_000;
-
-const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
-  PENDING: "pending",
-  IN_PROGRESS: "in-progress",
-  COMPLETE: "success",
-  FAILED: "error",
-  DELETING: "in-progress",
-  DELETED: "stopped",
-};
 
 export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const { jobId } = useParams<{ jobId: string }>();
@@ -124,6 +113,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
 
   const outputs = parseStackOutputs(item.stackOutputs);
   const canDelete = item.status !== "DELETING" && item.status !== "DELETED";
+  const teamLoginKey = item.teamLoginKey;
 
   return (
     <SpaceBetween size="l">
@@ -154,7 +144,9 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
 
       <Container header={<Header variant="h2">ステータス</Header>}>
         <SpaceBetween size="m">
-          <StatusIndicator type={STATUS_TYPE[item.status]}>{item.status}</StatusIndicator>
+          <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
+            {item.status}
+          </StatusIndicator>
           {item.status === "FAILED" && item.failureReason && (
             <Alert type="error" header="失敗理由">
               {item.failureReason}
@@ -195,6 +187,39 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
           />
         </ColumnLayout>
       </Container>
+
+      {teamLoginKey && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              description="競技者にこのキーを渡してください。Participant Portal にログインするとこのチーム用の問題環境にアクセスできます。"
+            >
+              競技者 hand-off
+            </Header>
+          }
+        >
+          <KeyValuePairs
+            items={[
+              {
+                label: "チーム共有ログインキー",
+                value: (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Box variant="code">{teamLoginKey}</Box>
+                    <Button
+                      iconName="copy"
+                      ariaLabel="ログインキーをコピー"
+                      onClick={() => void navigator.clipboard?.writeText(teamLoginKey)}
+                    >
+                      コピー
+                    </Button>
+                  </SpaceBetween>
+                ),
+              },
+            ]}
+          />
+        </Container>
+      )}
 
       {Object.keys(outputs).length > 0 && (
         <Container header={<Header variant="h2">CloudFormation Outputs</Header>}>

@@ -52,6 +52,7 @@ export function ShellLayout({
             items={[
               { type: "link", href: "/", text: "ホーム" },
               { type: "link", href: "/problems", text: "問題カタログ" },
+              { type: "link", href: "/deployments", text: "デプロイ履歴" },
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {

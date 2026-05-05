@@ -86,9 +86,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       sourceObjectKey: props.sourceObjectKey,
     });
 
-    // Step Functions: CodeBuildStartBuild を `.sync` で起動。
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {
       codeBuildProject: codeBuild.project,
+      deploymentsTable: deployments.table,
     });
 
     // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。
