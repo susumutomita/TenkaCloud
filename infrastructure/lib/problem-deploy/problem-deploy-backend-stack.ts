@@ -3,7 +3,6 @@ import { CfnOutput } from "aws-cdk-lib";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
-import type { IStateMachine } from "aws-cdk-lib/aws-stepfunctions";
 import type { Construct } from "constructs";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project";
@@ -62,13 +61,8 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
  * `deployApiLambda` を `LambdaIntegration` で invoke する形に組む。
  */
 export class ProblemDeployBackendStack extends cdk.Stack {
-  public readonly deploymentsTableName: string;
-  public readonly deploymentsTableArn: string;
   /** tenant API から `LambdaIntegration` で invoke される Lambda。 */
   public readonly deployApiLambda: IFunction;
-  public readonly deployCreateStateMachine: IStateMachine;
-  public readonly participantPortalUrl?: string;
-  public readonly participantPortalApiUrl?: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -96,7 +90,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {
       codeBuildProject: codeBuild.project,
     });
-    this.deployCreateStateMachine = stateMachine.stateMachine;
 
     // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。
     new DeployEventRule(this, "DeployCreateRule", {
@@ -108,7 +101,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
         deploymentsTable: deployments.table,
       });
-      this.participantPortalApiUrl = portalLambda.url.url;
       new CfnOutput(this, "ParticipantPortalApiUrl", {
         value: portalLambda.url.url,
         description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
@@ -119,21 +111,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         props.participantPortal.runtimeConfig === "default-dev-mock"
           ? DEFAULT_DEV_MOCK_RUNTIME_CONFIG(this.region)
           : props.participantPortal.runtimeConfig;
-      const runtimeConfig: ParticipantPortalRuntimeConfig = {
+      portal.deployRuntimeConfig({
         ...baseConfig,
         apiBaseUrl: portalLambda.url.url,
         mode: "backend",
-      };
-      portal.deployRuntimeConfig(runtimeConfig);
-      this.participantPortalUrl = portal.distributionUrl;
+      });
       new CfnOutput(this, "ParticipantPortalUrl", {
         value: portal.distributionUrl,
         description: "Participant Portal CloudFront URL.",
       });
     }
-
-    this.deploymentsTableName = deployments.table.tableName;
-    this.deploymentsTableArn = deployments.table.tableArn;
 
     new CfnOutput(this, "DeploymentsTableName", {
       value: deployments.table.tableName,

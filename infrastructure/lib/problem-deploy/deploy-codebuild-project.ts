@@ -56,27 +56,22 @@ export class DeployCodeBuildProject extends Construct {
         // aws CLI と jq は Amazon Linux 2023 image に標準で含まれる。
       },
       environmentVariables: {
-        // Step Functions が environmentVariablesOverride で実行時に上書きする変数。
-        // ここでは default value を設定して、ローカルテストや手動起動でも壊れないようにする。
+        // Step Functions が environmentVariablesOverride で実行時に毎回上書きする。
+        // CodeBuild 側で必須宣言するため placeholder default を入れる。
         BATTLE_PROBLEM_DIR: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
-          value: "problems/challenges/hello-world",
+          value: "<unset-overridden-by-step-functions>",
         },
         TEAM_SLUG: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
-          value: "demo-team",
+          value: "<unset-overridden-by-step-functions>",
         },
       },
       buildSpec: BuildSpec.fromObject({
         version: "0.2",
         phases: {
-          install: {
-            commands: ["echo 'TenkaCloud deploy CodeBuild — running deploy-battles.sh'"],
-          },
           build: {
             commands: [
-              // source.zip は cdk/ scripts/ apps/ ... 構造で展開される (`install.sh`)。
-              // problems/ は本 PR で install.sh が同梱するように変更する。
               'echo "BATTLE_PROBLEM_DIR=$BATTLE_PROBLEM_DIR  TEAM_SLUG=$TEAM_SLUG  AWS_REGION=$AWS_REGION"',
               'bash scripts/deploy-battles.sh "$BATTLE_PROBLEM_DIR"',
             ],

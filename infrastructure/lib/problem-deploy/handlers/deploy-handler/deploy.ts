@@ -138,26 +138,38 @@ export interface DeploySharedResources {
 }
 
 export function buildSharedResources(): DeploySharedResources {
-  const catalogRaw = process.env.BATTLE_PROBLEMS_CATALOG ?? "{}";
-  let problemsCatalog: Record<string, string> = {};
-  try {
-    const parsed = JSON.parse(catalogRaw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === "string") problemsCatalog[k] = v;
-      }
-    }
-  } catch {
-    problemsCatalog = {};
-  }
-
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
-    problemsCatalog,
+    problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
   };
+}
+
+/**
+ * `BATTLE_PROBLEMS_CATALOG` env (JSON `{problemId: problemDir}`) を decode する。
+ * 不正な JSON / 不正な shape / 非 string value は drop し warn (operator が気づける)。
+ * Lambda cold start で 1 回だけ評価されるので overhead は無視できる。
+ */
+function parseProblemsCatalog(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.warn(
+      `[buildSharedResources] BATTLE_PROBLEMS_CATALOG parse failed (${(err as Error).message}). ` +
+        `tenant API will reject all problemId.`,
+    );
+    return {};
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const catalog: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === "string") catalog[k] = v;
+  }
+  return catalog;
 }
 
 export function buildContext(shared: DeploySharedResources, tenantId: string): DeployContext {
