@@ -68,7 +68,10 @@ describe("storage", () => {
       saveSession(sample());
       const stored = sessionStorage.getItem("TenkaCloud.participant.session");
       expect(stored).not.toBeNull();
-      const parsed = JSON.parse(stored!);
+      if (stored === null) {
+        throw new Error("session が保存されるべき");
+      }
+      const parsed = JSON.parse(stored);
       expect(parsed.teamName).toBe("Team Alpha");
     });
   });
