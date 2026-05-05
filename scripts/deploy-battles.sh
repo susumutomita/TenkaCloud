@@ -99,8 +99,12 @@ deploy_one() {
   local name_prefix
   name_prefix="$(build_name_prefix "${problem_dir}" "${TEAM_SLUG}")"
 
-  local -a parameter_overrides
-  mapfile -t parameter_overrides < <(build_parameter_overrides "${problem_dir}" "${name_prefix}")
+  # macOS 標準 bash 3.2 は `mapfile` (bash 4+) 未対応なので、while read で配列を埋める。
+  local -a parameter_overrides=()
+  local line
+  while IFS= read -r line; do
+    parameter_overrides+=("${line}")
+  done < <(build_parameter_overrides "${problem_dir}" "${name_prefix}")
 
   echo ""
   echo "=========================================="
