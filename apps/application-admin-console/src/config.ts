@@ -39,13 +39,17 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<RuntimeConfig>;
+    // 認証 + tenant + apiUrl がそろっていれば runtime-config を採用する。
+    // `deployApiUrl` は ProblemDeployBackendStack で HTTP API がまだ立っていない構成
+    // (CDK_PARAM_DEPLOY_USER_POOL_ID 未設定) では空文字で書き出されるため、ここで
+    // 必須にすると 「Cognito 設定はあるのに env fallback (= VITE_COGNITO_DOMAIN 要求)」
+    // に倒れて全体が起動不能になる。空のときは下流で dev fallback URL に倒す。
     if (
       !data.cognitoDomain ||
       !data.userClientId ||
       !data.tenantId ||
       !data.tenantName ||
-      !data.apiUrl ||
-      !data.deployApiUrl
+      !data.apiUrl
     )
       return null;
     return {
@@ -54,7 +58,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       tenantId: data.tenantId,
       tenantName: data.tenantName,
       apiUrl: data.apiUrl,
-      deployApiUrl: data.deployApiUrl,
+      deployApiUrl: data.deployApiUrl ?? "",
     };
   } catch {
     return null;
@@ -92,7 +96,10 @@ export async function loadConfig(
       tenantId: runtime.tenantId,
       tenantName: runtime.tenantName,
       apiBaseUrl: runtime.apiUrl,
-      deployApiBaseUrl: runtime.deployApiUrl,
+      // `deployApiUrl` は HTTP API 未配置時に空文字で来る。env / dev fallback に倒す
+      // ことで「全体は動くが deploy 機能だけ呼べない」状態 (= 部分 degrade) で起動する。
+      deployApiBaseUrl:
+        runtime.deployApiUrl || env.VITE_DEPLOY_API_BASE_URL || DEV_FALLBACK_DEPLOY_API_BASE_URL,
       redirectUri,
       scope,
     };

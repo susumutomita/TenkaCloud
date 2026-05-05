@@ -118,7 +118,31 @@ describe("loadConfig", () => {
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
     });
 
-    it("deployApiUrl 欠け → env fallback に進むべき", async () => {
+    it("deployApiUrl 欠け / 空文字 → 他フィールドの runtime-config は採用し、deployApiBaseUrl のみ dev fallback に倒すべき (HTTP API 未配置運用の degrade)", async () => {
+      for (const deployApiUrl of [undefined, ""]) {
+        const body: Record<string, unknown> = {
+          cognitoDomain: "https://prod-cognito.example.com",
+          userClientId: "prod-client-id",
+          tenantId: "tenant-prod-1",
+          tenantName: "T",
+          apiUrl: "https://a",
+        };
+        if (deployApiUrl !== undefined) body.deployApiUrl = deployApiUrl;
+        vi.stubGlobal(
+          "fetch",
+          vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200 })),
+        );
+
+        const config = await loadConfig(env);
+        // runtime-config の他フィールドは採用される (env fallback に倒れない)
+        expect(config.cognitoDomain).toBe("https://prod-cognito.example.com");
+        expect(config.tenantId).toBe("tenant-prod-1");
+        // deployApiBaseUrl だけ env / dev fallback に
+        expect(config.deployApiBaseUrl).toBe("http://localhost:3998");
+      }
+    });
+
+    it("deployApiUrl 空 + VITE_DEPLOY_API_BASE_URL があれば env を使うべき", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -129,14 +153,17 @@ describe("loadConfig", () => {
               tenantId: "tenant-prod-1",
               tenantName: "T",
               apiUrl: "https://a",
+              deployApiUrl: "",
             }),
             { status: 200 },
           ),
         ),
       );
-
-      const config = await loadConfig(env);
-      expect(config.deployApiBaseUrl).toBe("http://localhost:3998");
+      const config = await loadConfig({
+        ...env,
+        VITE_DEPLOY_API_BASE_URL: "https://override.example.com",
+      });
+      expect(config.deployApiBaseUrl).toBe("https://override.example.com");
     });
   });
 
