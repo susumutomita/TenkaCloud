@@ -18,7 +18,7 @@ import {
   startDeployment,
   UnknownProblemError,
 } from "./deploy.js";
-import { getDeployment, listAllTenantDeployments, listDeployments } from "./list.js";
+import { getDeployment, listDeployments } from "./list.js";
 import { DeployRequestSchema } from "./types.js";
 
 /**
@@ -40,6 +40,14 @@ const LIST_LIMIT_MAX = 200;
 
 // SDK clients / env を module scope で 1 度だけ build。warm invoke で connection pool 再利用。
 const shared = buildSharedResources();
+
+/** `?limit=` query を parse し、不正なら null + 400 レスポンスを返す。 */
+function parseLimit(value: string | undefined): { ok: true; limit: number | undefined } | null {
+  if (value === undefined) return { ok: true, limit: undefined };
+  const limit = Number.parseInt(value, 10);
+  if (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX) return null;
+  return { ok: true, limit };
+}
 
 const app = new Hono();
 
@@ -97,16 +105,13 @@ app.get("/problems/:problemId/deployments", async (c) => {
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
     return c.json({ error: "invalid problemId" }, HTTP_BAD_REQUEST);
   }
-  const limitParam = c.req.query("limit");
-  const limit = limitParam !== undefined ? Number.parseInt(limitParam, 10) : undefined;
-  if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX)) {
-    return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
-  }
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
   try {
     const response = await listDeployments(shared, {
       tenantId: resolveTenantId(c),
       problemId,
-      limit,
+      limit: parsedLimit.limit,
       cursor: c.req.query("cursor"),
     });
     return c.json(response, HTTP_OK);
@@ -118,21 +123,18 @@ app.get("/problems/:problemId/deployments", async (c) => {
 });
 
 app.get("/deployments", async (c) => {
-  const limitParam = c.req.query("limit");
-  const limit = limitParam !== undefined ? Number.parseInt(limitParam, 10) : undefined;
-  if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX)) {
-    return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
-  }
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
   try {
-    const response = await listAllTenantDeployments(shared, {
+    const response = await listDeployments(shared, {
       tenantId: resolveTenantId(c),
-      limit,
+      limit: parsedLimit.limit,
       cursor: c.req.query("cursor"),
     });
     return c.json(response, HTTP_OK);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[deploy] listAllTenantDeployments failed", { message });
+    console.error("[deploy] listDeployments(tenant-wide) failed", { message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

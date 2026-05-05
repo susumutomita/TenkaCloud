@@ -86,8 +86,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       sourceObjectKey: props.sourceObjectKey,
     });
 
-    // Step Functions: CodeBuildStartBuild を `.sync` で起動し、完了後に DDB row を
-    // status=COMPLETE / FAILED に書き換える。
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {
       codeBuildProject: codeBuild.project,
       deploymentsTable: deployments.table,

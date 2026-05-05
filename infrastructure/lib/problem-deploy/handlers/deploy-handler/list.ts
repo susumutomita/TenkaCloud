@@ -51,7 +51,7 @@ const MAX_LIMIT = 200;
 
 /**
  * 一覧表示で安全に返せる minimal な shape。`teamLoginKey` のような短命 bearer は
- * 出さない (= 一覧画面で誤露出しない sa)。`dbPassword` 等の CFn Parameter も同様。
+ * 出さない (= 一覧画面で誤露出しない)。`dbPassword` 等の CFn Parameter も同様。
  * 新しい sensitive フィールドが増えたらここに追加する。
  */
 export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
@@ -75,10 +75,9 @@ export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
 }
 
 /**
- * 詳細画面 (`getDeployment`) 専用の shape。`toSummary` に加えて `teamLoginKey` を
- * 含める。caller は own tenantId で TenantAdmin 認可済なので、operator が競技者に
- * hand-off するために 1 回見られる必要がある (毎回 polling で見えても OK — 一覧画面
- * では出さないので、deploy ごとに導線が分かれる)。
+ * 詳細画面 (`getDeployment`) 専用の shape。`toSummary` に加えて `teamLoginKey` を含める。
+ * caller は own tenantId で TenantAdmin 認可済なので、operator が hand-off のため再取得
+ * できる必要がある。一覧 (`toSummary`) には含めず、誤露出経路を限定する。
  */
 export function toDetail(item: Partial<DeploymentItem>): DeploymentSummary {
   return {
@@ -155,15 +154,4 @@ export async function getDeployment(
   if (!item) return undefined;
   if (item.tenantId !== tenantId) return undefined;
   return toDetail(item);
-}
-
-/**
- * 指定 tenant の Deployment 一覧を返す (problemId scope なし、tenant 内の全 deploy)。
- * サイドバーの「デプロイ履歴」用。挙動は `listDeployments` と同じだが problemId 未指定。
- */
-export async function listAllTenantDeployments(
-  shared: DeploySharedResources,
-  request: { tenantId: string; limit?: number; cursor?: string },
-): Promise<ListDeploymentsResponse> {
-  return listDeployments(shared, request);
 }

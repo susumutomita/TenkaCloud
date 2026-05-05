@@ -27,11 +27,10 @@ export interface DeployCreateStateMachineProps {
 }
 
 /**
- * 問題 deploy 起動を司る Step Functions State Machine (MVP-1)。
+ * 問題 deploy 起動を司る Step Functions State Machine。
  *
- * SBT `ScriptJob` 同型: EventBridge Rule から `DeployCreateRequested` event を受けて起動し、
- * `CodeBuildStartBuild` task (`RUN_JOB` integration pattern = `.sync`) で deploy script
- * の完了を待つ。完了後に DDB row の `status` を `COMPLETE` / `FAILED` に書き換える。
+ * SBT `ScriptJob` 同型: `CodeBuildStartBuild` task (`RUN_JOB` integration = `.sync`)
+ * で deploy script の完了を待ち、結果を DDB row に書き戻す。
  *
  * 入力 shape (event detail):
  *   {
@@ -44,10 +43,8 @@ export interface DeployCreateStateMachineProps {
  *     "awsAccountId": "123456789012"
  *   }
  *
- * MVP-1 では deploy 1 件 (single-shot) を扱う。Phase 2 で Distributed Map にして
- * 複数 (problem × account) を bulk 処理に拡張する。CFn Outputs / stackId の取り込み
- * は Step Functions の `CallAwsService` (`cloudformation:describeStacks`) で別 PR で
- * 追加する (要 stackOutputs 整形 = array → object 変換)。
+ * single-shot deploy のみ。Distributed Map による bulk 化と、
+ * `cloudformation:describeStacks` による stackOutputs / stackId の取り込みは Phase 2。
  */
 export class DeployCreateStateMachine extends Construct {
   public readonly stateMachine: StateMachine;
@@ -59,7 +56,6 @@ export class DeployCreateStateMachine extends Construct {
       retention: RetentionDays.ONE_WEEK,
     });
 
-    // CodeBuild を `.sync` で起動。完了まで待ち、失敗したら `MarkFailed` に分岐する。
     const startCodeBuild = new CodeBuildStartBuild(this, "StartDeployCodeBuild", {
       project: props.codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
@@ -67,29 +63,12 @@ export class DeployCreateStateMachine extends Construct {
         BATTLE_PROBLEM_DIR: { value: JsonPath.stringAt("$.detail.problemDir") },
         TEAM_SLUG: { value: JsonPath.stringAt("$.detail.teamSlug") },
       },
-      // CodeBuild の実行結果 ($) を resultPath に保持し、後続 task で `$.detail` を
-      // 参照できるようにする (= 入力を上書きしない)。
+      // 後続 task が `$.detail` を参照できるよう、CodeBuild 結果を sub-path に格納。
       resultPath: "$.codebuild",
     });
 
-    // Deployment 行を `status=COMPLETE` で書き換える。`stackOutputs` / `stackId` は
-    // 別 PR で `cloudformation:describeStacks` を経由して埋める。
-    const markSucceeded = this.markStatus({
-      id: "MarkSucceeded",
-      table: props.deploymentsTable,
-      status: "COMPLETE",
-    });
-
-    // 失敗経路: `$.error.Cause` から原因を抜いて `failureReason` に格納し、
-    // status=FAILED で書き換える。State Machine 自体は SUCCEEDED で抜ける (= deploy
-    // が失敗したことは Step Functions レイヤーでは「終わった」扱い、本体結果は
-    // DDB row で確認する)。
-    const markFailed = this.markStatus({
-      id: "MarkFailed",
-      table: props.deploymentsTable,
-      status: "FAILED",
-      includeFailureReason: true,
-    });
+    const markSucceeded = this.buildMarkSucceeded(props.deploymentsTable);
+    const markFailed = this.buildMarkFailed(props.deploymentsTable);
 
     startCodeBuild.addCatch(markFailed, { resultPath: "$.error" });
 
@@ -100,49 +79,53 @@ export class DeployCreateStateMachine extends Construct {
       tracingEnabled: true,
     });
 
-    // State Machine Role に DynamoUpdateItem 権限を付与 (DynamoUpdateItem task が
-    // CDK 内部で grant しないので明示的に行う)。
+    // DynamoUpdateItem task は CDK 側で grant しないので明示。
     props.deploymentsTable.grantWriteData(this.stateMachine);
   }
 
-  private markStatus(args: {
-    id: string;
-    table: ITable;
-    status: "COMPLETE" | "FAILED";
-    includeFailureReason?: boolean;
-  }): DynamoUpdateItem {
-    const expressionAttributeNames: Record<string, string> = { "#status": "status" };
-    const expressionAttributeValues: Record<string, DynamoAttributeValue> = {
-      ":status": DynamoAttributeValue.fromString(args.status),
-      ":updatedAt": DynamoAttributeValue.fromString(JsonPath.stringAt("$$.State.EnteredTime")),
-    };
-    const setClauses = ["#status = :status", "updatedAt = :updatedAt"];
-
-    if (args.includeFailureReason) {
-      expressionAttributeNames["#failureReason"] = "failureReason";
-      expressionAttributeValues[":failureReason"] = DynamoAttributeValue.fromString(
-        // `$.error.Cause` は Step Functions が catch 時に注入する JSON 文字列。
-        // CodeBuild RUN_JOB の場合 `States.TaskFailed` の Cause に build 失敗の
-        // detail が入る。100 文字以内に収まらないことがあるので JSON 文字列のまま渡す。
-        JsonPath.stringAt("$.error.Cause"),
-      );
-      setClauses.push("#failureReason = :failureReason");
-    }
-
-    return new DynamoUpdateItem(this, args.id, {
-      table: args.table,
-      key: {
-        PK: DynamoAttributeValue.fromString(
-          JsonPath.format("DEPLOYMENT#{}", JsonPath.stringAt("$.detail.jobId")),
-        ),
-        SK: DynamoAttributeValue.fromString("META"),
+  private buildMarkSucceeded(table: ITable): DynamoUpdateItem {
+    return new DynamoUpdateItem(this, "MarkSucceeded", {
+      table,
+      key: deploymentKey(),
+      updateExpression: "SET #status = :status, updatedAt = :updatedAt",
+      expressionAttributeNames: { "#status": "status" },
+      expressionAttributeValues: {
+        ":status": DynamoAttributeValue.fromString("COMPLETE"),
+        ":updatedAt": stateEnteredTime(),
       },
-      updateExpression: `SET ${setClauses.join(", ")}`,
-      expressionAttributeNames,
-      expressionAttributeValues,
-      // ConditionExpression は付けない (= 同 jobId の race を許容、後勝ち)。
-      // 失敗 path 後に成功 path が走ることはない (mutually exclusive な State Machine
-      // 分岐) のでこのままで良い。
     });
   }
+
+  private buildMarkFailed(table: ITable): DynamoUpdateItem {
+    return new DynamoUpdateItem(this, "MarkFailed", {
+      table,
+      key: deploymentKey(),
+      updateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, #failureReason = :failureReason",
+      expressionAttributeNames: {
+        "#status": "status",
+        "#failureReason": "failureReason",
+      },
+      expressionAttributeValues: {
+        ":status": DynamoAttributeValue.fromString("FAILED"),
+        ":updatedAt": stateEnteredTime(),
+        // `$.error.Cause` は CodeBuild RUN_JOB の `States.TaskFailed` Cause (= build
+        // 失敗 detail の JSON 文字列)。100 文字を超えるので JSON のまま格納する。
+        ":failureReason": DynamoAttributeValue.fromString(JsonPath.stringAt("$.error.Cause")),
+      },
+    });
+  }
+}
+
+function deploymentKey(): { PK: DynamoAttributeValue; SK: DynamoAttributeValue } {
+  return {
+    PK: DynamoAttributeValue.fromString(
+      JsonPath.format("DEPLOYMENT#{}", JsonPath.stringAt("$.detail.jobId")),
+    ),
+    SK: DynamoAttributeValue.fromString("META"),
+  };
+}
+
+function stateEnteredTime(): DynamoAttributeValue {
+  return DynamoAttributeValue.fromString(JsonPath.stringAt("$$.State.EnteredTime"));
 }
