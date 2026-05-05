@@ -1,11 +1,11 @@
 import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
-import { lookupByTeamLoginKey, type ParticipantView } from "./lookup.js";
+import { type ParticipantView, toView } from "./lookup.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
 
-const NON_TEARDOWNABLE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
+const NON_EDITABLE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
 export type UpdateOutcome =
   | { kind: "ok"; view: ParticipantView }
@@ -28,12 +28,12 @@ export function validateTeamName(raw: unknown): string | undefined {
 }
 
 /**
- * 競技者の teamName を更新する。
+ * 競技者の `displayTeamName` を更新する。
  *
- * 1. teamLoginKey で deployment を引く (lookup と同じ経路)
- * 2. status が DELETING/DELETED なら unauthorized
- * 3. PK/SK を取り直して UpdateItem (`displayTeamName = :name`)
- * 4. 更新後の view を返す
+ * GSI2 Query → 自分の行の `PK/status` を確認し、UpdateCommand を `ReturnValues=
+ * ALL_NEW` で実行して更新後の行を取得 → そのまま `toView` で返却。
+ * 旧実装の「Query → Update → Query (再 lookup)」3 round-trip を 2 round-trip に
+ * 圧縮し、Update と再 Query の間の eventual consistency 窓も無くす。
  */
 export async function setDisplayTeamName(
   shared: ParticipantSharedResources,
@@ -55,10 +55,10 @@ export async function setDisplayTeamName(
   const item = queryOut.Items?.[0] as Partial<DeploymentItem> | undefined;
   if (!item) return { kind: "unauthorized" };
   const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (NON_TEARDOWNABLE_STATUSES.has(status)) return { kind: "unauthorized" };
+  if (NON_EDITABLE_STATUSES.has(status)) return { kind: "unauthorized" };
   if (!item.PK) return { kind: "unauthorized" };
 
-  await shared.ddb.send(
+  const updateOut = await shared.ddb.send(
     new UpdateCommand({
       TableName: shared.tableName,
       Key: { PK: item.PK, SK: "META" },
@@ -67,11 +67,12 @@ export async function setDisplayTeamName(
         ":name": name,
         ":now": new Date().toISOString(),
       },
+      ReturnValues: "ALL_NEW",
     }),
   );
-
-  // 更新後の view を再取得して返す。
-  const view = await lookupByTeamLoginKey(shared, teamLoginKey);
+  const updated = updateOut.Attributes as Partial<DeploymentItem> | undefined;
+  if (!updated) return { kind: "unauthorized" };
+  const view = toView(updated);
   if (!view) return { kind: "unauthorized" };
   return { kind: "ok", view };
 }

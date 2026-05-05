@@ -53,6 +53,7 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
   const inputsLocked = response !== null || submitting;
   const canSubmit =
     !!apiClient &&
+    config.isDeployApiConfigured &&
     !!region.value &&
     AWS_ACCOUNT_ID_RE.test(awsAccountId) &&
     TEAM_NAME_RE.test(teamName) &&
@@ -150,6 +151,15 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
             </Alert>
           ) : (
             <>
+              {!config.isDeployApiConfigured && (
+                <Alert type="error" header="Deploy API が未配置です">
+                  この環境には ProblemDeployBackendStack の HTTP API が deploy されていません。
+                  operator は <code>CDK_PARAM_DEPLOY_USER_POOL_ID</code> /
+                  <code>CDK_PARAM_DEPLOY_USER_POOL_CLIENT_ID</code> を設定して
+                  ProblemDeployBackendStack と TenantTemplateStack を再 deploy してください。再
+                  deploy 後、本ページをリロードすると本フォームから送信できるようになります。
+                </Alert>
+              )}
               {error && (
                 <Alert type="error" header="デプロイ送信に失敗しました">
                   {error}

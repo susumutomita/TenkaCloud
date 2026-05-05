@@ -13,6 +13,7 @@ const config: AppConfig = {
   tenantName: "Shared Pooled Tenant", // ← intentionally placeholder; runtime should not display this
   apiBaseUrl: "https://api.example.com/prod",
   deployApiBaseUrl: "https://deploy.example.com",
+  isDeployApiConfigured: true,
 };
 
 function makeIdToken(claims: Record<string, string>): string {

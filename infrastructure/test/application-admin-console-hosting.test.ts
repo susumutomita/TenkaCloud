@@ -150,10 +150,18 @@ describe("ApplicationAdminConsoleHosting", () => {
       expect(json.deployApiUrl).toBe("https://deploy.example.com");
     });
 
-    it("deployApiUrl 未指定なら deployApiUrl は空文字 (frontend が dev fallback に倒れる)", () => {
-      const { stack } = synthWithRuntimeConfig();
-      const json = readRuntimeConfigJson(stack);
-      expect(json.deployApiUrl).toBe("");
+    it("deployApiUrl 未指定 / 空文字なら attribute ごと省略する (frontend が dev fallback に倒れる)", () => {
+      for (const arg of [undefined, ""] as const) {
+        const { stack } = synthWithRuntimeConfig(arg);
+        const json = readRuntimeConfigJson(stack);
+        expect(json.deployApiUrl).toBeUndefined();
+        // 他フィールドは入ること (#456 + 本 PR で「Cognito 設定があるのに env fallback」事故を防ぐ)
+        expect(json.cognitoDomain).toBeDefined();
+        expect(json.userClientId).toBeDefined();
+        expect(json.tenantId).toBeDefined();
+        expect(json.tenantName).toBeDefined();
+        expect(json.apiUrl).toBeDefined();
+      }
     });
   });
 });

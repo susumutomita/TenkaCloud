@@ -28,6 +28,31 @@ export type ParticipantView = Pick<
 const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
 /**
+ * DDB の生 row → `ParticipantView` 変換。`lookupByTeamLoginKey` と
+ * `setDisplayTeamName` (UpdateCommand `ReturnValues=ALL_NEW`) の両方から呼ばれる。
+ *
+ * status が DELETING / DELETED の場合は `undefined` を返す。これは sparse 化が
+ * 崩れた行 (GSI2PK が残ったまま teardown が進んだケース) への防御。
+ */
+export function toView(item: Partial<DeploymentItem>): ParticipantView | undefined {
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  if (DELETED_LIKE_STATUSES.has(status)) return undefined;
+  const operatorTeamSlug = String(item.teamName ?? "");
+  const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
+  return {
+    jobId: String(item.jobId ?? ""),
+    problemId: String(item.problemId ?? ""),
+    teamName: display ?? operatorTeamSlug,
+    teamNameSetByCompetitor: display !== undefined,
+    region: String(item.region ?? ""),
+    status,
+    stackOutputs: parseStackOutputs(item.stackOutputs),
+    failureReason: status === "FAILED" ? item.failureReason : undefined,
+    expiresAt: Number(item.expiresAt ?? 0),
+  };
+}
+
+/**
  * teamLoginKey で GSI2 を Query して 1 件の deployment を返す。
  *
  * GSI2 は eventually consistent。直近に rotate / 削除された teamLoginKey は
@@ -52,20 +77,5 @@ export async function lookupByTeamLoginKey(
   );
   const item = (out.Items?.[0] ?? undefined) as Partial<DeploymentItem> | undefined;
   if (!item) return undefined;
-  const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (DELETED_LIKE_STATUSES.has(status)) return undefined;
-
-  const operatorTeamSlug = String(item.teamName ?? "");
-  const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
-  return {
-    jobId: String(item.jobId ?? ""),
-    problemId: String(item.problemId ?? ""),
-    teamName: display ?? operatorTeamSlug,
-    teamNameSetByCompetitor: display !== undefined,
-    region: String(item.region ?? ""),
-    status,
-    stackOutputs: parseStackOutputs(item.stackOutputs),
-    failureReason: status === "FAILED" ? item.failureReason : undefined,
-    expiresAt: Number(item.expiresAt ?? 0),
-  };
+  return toView(item);
 }

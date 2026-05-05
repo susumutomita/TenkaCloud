@@ -57,6 +57,10 @@ describe("loadConfig", () => {
         "https://prod-deploy.example.com",
       );
     });
+
+    it("isDeployApiConfigured は true (runtime-config に明示的な URL がある)", async () => {
+      expect((await loadWithFullRuntime()).isDeployApiConfigured).toBe(true);
+    });
   });
 
   describe("/runtime-config.json が 404 を返したとき (dev fallback)", () => {
@@ -70,6 +74,12 @@ describe("loadConfig", () => {
       expect(config.tenantName).toBe("Local Dev Tenant");
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
       expect(config.deployApiBaseUrl).toBe("http://localhost:3998");
+    });
+
+    it("isDeployApiConfigured は dev では true (make start で localhost backend が立っている前提)", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      const config = await loadConfig(env);
+      expect(config.isDeployApiConfigured).toBe(true);
     });
   });
 
@@ -139,6 +149,9 @@ describe("loadConfig", () => {
         expect(config.tenantId).toBe("tenant-prod-1");
         // deployApiBaseUrl だけ env / dev fallback に
         expect(config.deployApiBaseUrl).toBe("http://localhost:3998");
+        // production runtime-config だが deployApiUrl が無い → 未配置として false に倒す
+        // (DeployForm が submit を disable して operator にエラー提示する)
+        expect(config.isDeployApiConfigured).toBe(false);
       }
     });
 
@@ -164,6 +177,8 @@ describe("loadConfig", () => {
         VITE_DEPLOY_API_BASE_URL: "https://override.example.com",
       });
       expect(config.deployApiBaseUrl).toBe("https://override.example.com");
+      // env で明示的に上書きされた → 配置済み扱い
+      expect(config.isDeployApiConfigured).toBe(true);
     });
   });
 

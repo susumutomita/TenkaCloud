@@ -18,6 +18,18 @@ export interface AppConfig {
    * 問題 deploy / 状態取得用 (POST /problems/:id/deploy など)。
    */
   readonly deployApiBaseUrl: string;
+  /**
+   * Deploy API の URL が明示的に設定されているか。
+   * - true: runtime-config.json に deployApiUrl があるか env (VITE_DEPLOY_API_BASE_URL) で
+   *   上書きされている (= operator が ProblemDeployBackendStack を deploy 済み)
+   * - false: production runtime-config が deploy backend を持っていないため dev placeholder
+   *   (`http://localhost:3998`) に倒れている。UI 側は deploy 操作を disable して、
+   *   operator に「Deploy API 未配置」を提示する。
+   *
+   * dev (`make start`、runtime-config.json 不在) では true として扱う —
+   * 開発者は localhost で deploy backend を立てている前提。
+   */
+  readonly isDeployApiConfigured: boolean;
 }
 
 /**
@@ -90,6 +102,7 @@ export async function loadConfig(
 
   const runtime = await fetchRuntimeConfig();
   if (runtime) {
+    const explicitDeployApiUrl = runtime.deployApiUrl || env.VITE_DEPLOY_API_BASE_URL || "";
     return {
       cognitoDomain: runtime.cognitoDomain,
       cognitoClientId: runtime.userClientId,
@@ -98,8 +111,8 @@ export async function loadConfig(
       apiBaseUrl: runtime.apiUrl,
       // `deployApiUrl` は HTTP API 未配置時に空文字で来る。env / dev fallback に倒す
       // ことで「全体は動くが deploy 機能だけ呼べない」状態 (= 部分 degrade) で起動する。
-      deployApiBaseUrl:
-        runtime.deployApiUrl || env.VITE_DEPLOY_API_BASE_URL || DEV_FALLBACK_DEPLOY_API_BASE_URL,
+      deployApiBaseUrl: explicitDeployApiUrl || DEV_FALLBACK_DEPLOY_API_BASE_URL,
+      isDeployApiConfigured: explicitDeployApiUrl.length > 0,
       redirectUri,
       scope,
     };
@@ -119,6 +132,9 @@ export async function loadConfig(
     tenantName: DEV_FALLBACK_TENANT_NAME,
     apiBaseUrl: env.VITE_API_BASE_URL ?? DEV_FALLBACK_API_BASE_URL,
     deployApiBaseUrl: env.VITE_DEPLOY_API_BASE_URL ?? DEV_FALLBACK_DEPLOY_API_BASE_URL,
+    // dev (runtime-config.json 不在) は make start で localhost backend を立てている前提
+    // で true 扱い。production の "runtime-config あるが deployApiUrl 空" だけが false に倒れる。
+    isDeployApiConfigured: true,
     redirectUri,
     scope,
   };

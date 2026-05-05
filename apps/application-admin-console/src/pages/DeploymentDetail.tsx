@@ -149,7 +149,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         }
         description={`Job ID: ${item.jobId}`}
       >
-        デプロイジョブ「{item.teamName}」
+        デプロイジョブ「{item.displayTeamName ?? item.teamName}」
       </Header>
 
       <Container header={<Header variant="h2">ステータス</Header>}>
@@ -173,7 +173,11 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
           <KeyValuePairs
             items={[
               { label: "Problem ID", value: <code>{item.problemId}</code> },
-              { label: "Team", value: item.teamName },
+              {
+                label: "表示名 (競技者選択)",
+                value: item.displayTeamName ?? "(未設定)",
+              },
+              { label: "内部 slug (operator 入力)", value: <code>{item.teamName}</code> },
               { label: "AWS Account", value: <code>{item.awsAccountId}</code> },
               { label: "Region", value: item.region },
             ]}
