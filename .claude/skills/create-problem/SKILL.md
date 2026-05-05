@@ -1,196 +1,168 @@
 ---
 name: create-problem
-description: Create a new TenkaCloud problem (GameDay or JAM) with the standard directory structure. Generates CloudFormation template, deploy script, and README.
+description: TenkaCloud の問題ディレクトリ (problems/<category>/<id>/) を metadata.json + template.yaml の規約で生成する。Battle (リアルタイム対戦) または Challenge (個別演習) の雛形を作る。
+allowed-tools: Bash(make validate-problems:*), Read, Write, Edit
 ---
 
-Create a new TenkaCloud problem in the standard format under `problems/`. The user provides problem requirements; you scaffold all required files.
+# create-problem
 
-## Standard Directory Structure
+TenkaCloud に新しい問題を追加するスキル。**正本は [`problems/README.md`](../../../problems/README.md) と [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)**。1 ディレクトリ 1 問題、`metadata.json` と `template.yaml` の 2 ファイルがあれば成立する。
 
-All problems follow this layout regardless of type:
-
-```
-problems/{type}/{problem-name}/
-├── README.md              # 必須: 問題説明・スコアリング・デプロイ手順
-├── problem.yaml           # 必須: プラットフォーム用メタデータ（JAM のみ）
-├── cloudformation/
-│   └── {name}.yaml        # 必須: CloudFormation テンプレート（1ファイルで完結）
-├── api/                   # 任意: サーバーサイドコード（GameDay で API サーバーが必要な場合）
-├── frontend/              # 任意: 静的サイト（GameDay で S3 ウェブサイトが必要な場合）
-└── scripts/
-    └── deploy.sh          # 必須: デプロイスクリプト（./deploy.sh で動く）
-```
-
-## Step 1: Gather Requirements
-
-Ask the user (or infer from context) the following:
-
-1. **Type**: `gameday` or `jam`
-2. **Problem name** (slug): e.g. `security-battle-royale`, `s3-secure-bucket`
-3. **Title** (Japanese OK): e.g. "S3 バケットセキュリティ強化"
-4. **Difficulty**: `easy` / `medium` / `hard` / `400` (GameDay level)
-5. **Category**: `security` / `architecture` / `cost` / `reliability` / `performance` / `operations`
-6. **AWS services used**: list of services
-7. **Scenario / description**: what the player needs to do
-8. **Scoring criteria**: what tasks/conditions earn points
-9. **Estimated play time**: e.g. 30分, 240分
-
-## Step 2: Create README.md
-
-```markdown
-# {Title}
-
-| 項目 | 内容 |
-|------|------|
-| 種別 | {type: JAM（構築型）or GameDay（攻撃・防御型）} |
-| 難易度 | {difficulty} |
-| 想定時間 | {estimated time} |
-| AWSサービス | {services} |
-
-## 概要
-
-{scenario description}
-
-## 採点基準
-
-| タスク | 配点 |
-|--------|------|
-| {task 1} | {points} |
-| {task 2} | {points} |
-
-## デプロイ手順
-
-```bash
-STACK_NAME={problem-name} ./scripts/deploy.sh
-```
-
-## 検証
-
-```bash
-aws cloudformation describe-stacks --stack-name {problem-name}
-```
+## ディレクトリ規約
 
 ```
+problems/<category>/<id>/
+├── metadata.json     # 必須: UI カタログと deploy パイプラインの正本
+├── template.yaml     # 必須: CFn ペライチ (deploy 本体)
+├── api/              # 任意: サーバーサイド実装 (Battle で API が要るとき)
+├── frontend/         # 任意: 静的サイト (Battle で S3 frontend が要るとき)
+└── local/            # 任意: docker-compose 等のローカル開発資材
+```
 
-## Step 3: Create problem.yaml (JAM only)
+`<category>` はディレクトリ命名上の分類（現状 `gameday/` を使っている）。`metadata.json` 内の `category` フィールドは **`Battle` か `Challenge`** の 2 値で、こちらが UI とパイプラインの正本。
+
+## Step 1 — 要件ヒアリング
+
+ユーザーから / 文脈から次を集める。不足はその場で訊く。
+
+1. **category** — `Battle` (リアルタイム対戦) / `Challenge` (個別演習・常設チャレンジ)
+2. **id** — kebab-case 英小文字 (例: `security-battle-royale`、`s3-secure-bucket`)。3〜32 文字。ディレクトリ名と一致させる
+3. **name** — UI 表示名 (日本語可、80 文字以内)
+4. **difficulty** — 1 (入門) 〜 5 (エキスパート)
+5. **estimatedDuration** — 自由文字列 (例: `60〜90 分`)
+6. **shortDescription** — カード用 1 行 (200 文字以内)
+7. **description** — 詳細ページ用の長文 (改行 OK)
+8. **tags** — kebab-case (例: `security`, `web`, `sql-injection`)
+9. **exposedPorts** — deploy 後に参加者へ払い出すポート群 (`{port, name}` の配列)
+10. **learningGoals** — 想定学習目的の箇条書き
+11. **AWS リソース概要** — `template.yaml` で何を立てるか (EC2 / RDS / S3 / Lambda 等)
+12. **status** — 通常は `draft` で作成、レビュー後 `ready`
+
+## Step 2 — `metadata.json` を書く
+
+`problems/SCHEMA.json` に従う。スキーマ補完のため `$schema` を相対パスで先頭に置く。
+
+```json
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "<id>",
+  "name": "<name>",
+  "category": "Battle",
+  "status": "draft",
+  "difficulty": 3,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "<カード用 1 行>",
+  "description": "<長文。改行可>",
+  "tags": ["security", "web"],
+  "exposedPorts": [
+    { "port": 80, "name": "frontend (nginx)" },
+    { "port": 8080, "name": "api (Flask)" }
+  ],
+  "learningGoals": [
+    "<目的 1>",
+    "<目的 2>"
+  ],
+  "cfnTemplate": "template.yaml"
+}
+```
+
+## Step 3 — `template.yaml` を書く
+
+CloudFormation **ペライチ**。deploy パイプラインがこのファイル単独を競技者アカウントの CFn にアップロードする。次の規約を守る。
+
+### 必須パラメータ
+
+deploy パイプラインがすべての問題テンプレートに対して同じ引数で起動できるよう、共通パラメータをサポートする。
+
+| パラメータ           | 必須 | 用途                                                                       |
+| -------------------- | ---- | -------------------------------------------------------------------------- |
+| `NamePrefix`         | ○    | `tc-{problemSlug}-{teamSlug}` 形式の共通リソース prefix                    |
+| `AllowedCidr`        | -    | 公開ポートを許可する CIDR (default `0.0.0.0/0`)                            |
+| 問題固有パラメータ   | -    | `DbPassword` など、問題ごとに自由に追加してよい                            |
+
+### 命名規約 (衝突回避)
+
+同一 (Account, Region) に複数チームの問題スタックが共存する。**全リソース名 / タグ / グループ名は `${NamePrefix}` を冠する**。
 
 ```yaml
-id: {problem-name}
-title: {title}
-type: jam
-category: {category}
-difficulty: {difficulty}
-
-metadata:
-  author: TenkaCloud Team
-  version: 1.0.0
-  createdAt: "{YYYY-MM-DD}"
-  updatedAt: "{YYYY-MM-DD}"
-  tags: [{tag1}, {tag2}]
-  license: MIT
-
-description:
-  overview: |
-    {scenario}
-
-scoring:
-  totalPoints: {total}
-  criteria:
-    - id: task-1
-      description: "{task 1 description}"
-      points: {points}
-      verification:
-        type: cloudformation-output | aws-api | manual
-        check: "{what to check}"
-```
-
-## Step 4: Create cloudformation/{name}.yaml
-
-Write a self-contained CloudFormation template that:
-
-- Provisions the infrastructure the player needs to **start** with (intentionally misconfigured / incomplete for JAM)
-- OR provisions the full competitive environment for GameDay
-- Uses `Parameters` for customization (e.g. `StackName`, `VpcId`)
-- Exports important values in `Outputs` for verification
-
-**JAM template pattern** (broken → player fixes it):
-
-```yaml
-AWSTemplateFormatVersion: "2010-09-09"
-Description: "{problem title} — starter environment with issues to fix"
-
 Parameters:
-  Environment:
+  NamePrefix:
     Type: String
-    Default: dev
+    Description: "tc-<problem>-<team> 形式の共通 prefix"
+  AllowedCidr:
+    Type: String
+    Default: "0.0.0.0/0"
 
 Resources:
-  # ... intentionally misconfigured resources ...
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+```
 
+### 必須 Outputs
+
+UI / 運営側で扱いやすいよう、最低でも次の Output を含める。
+
+- 参加者向けエンドポイント URL (`FrontendUrl` / `ApiUrl` 等)
+- 運営側のデバッグ用識別子 (`InstanceId` 等)
+- `NamePrefix` (deploy 時の引数 echo)
+
+```yaml
 Outputs:
-  ResourceArn:
-    Description: "Resource ARN for scoring verification"
-    Value: !GetAtt Resource.Arn
+  NamePrefix:
+    Description: "Deploy 時に渡された prefix (echo)"
+    Value: !Ref NamePrefix
+  FrontendUrl:
+    Description: "参加者向け frontend URL"
+    Value: !Sub "http://${MyEip}/"
 ```
 
-**GameDay template pattern** (full working environment, intentionally vulnerable):
+## Step 4 — 任意の補助ディレクトリ
 
-- Same as `security-battle-royale/cloudformation/team-stack.yaml` — provision EC2, RDS, S3, IAM per team
+問題実装の都合で次を置いてよい。**規約ではなく自由領域** なので、必要なものだけ作る。
 
-## Step 5: Create scripts/deploy.sh
+- `api/` — サーバーサイドコード (Flask / Express 等)
+- `frontend/` — 静的サイト
+- `local/` — docker-compose や開発用スクリプト
 
-For JAM problems, use the standard template:
+## Step 5 — 検証
+
+`make validate-problems` で `problems/SCHEMA.json` に対して `metadata.json` を検証する。CI でも走るので、ここで通らないと PR がブロックされる。
 
 ```bash
-#!/bin/bash
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROBLEM_DIR="$(dirname "$SCRIPT_DIR")"
-PROBLEM_NAME="$(basename "$PROBLEM_DIR")"
-STACK_NAME="${STACK_NAME:-$PROBLEM_NAME}"
-AWS_REGION="${AWS_REGION:-us-east-1}"
-CFN_TEMPLATE=$(ls "$PROBLEM_DIR"/cloudformation/*.yaml | head -1)
-echo "Deploying $PROBLEM_NAME → $STACK_NAME ($AWS_REGION)"
+make validate-problems
+```
+
+実 deploy の動作確認は競技者アカウントで:
+
+```bash
 aws cloudformation deploy \
-  --template-file "$CFN_TEMPLATE" \
-  --stack-name "$STACK_NAME" \
-  --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --region "$AWS_REGION"
-echo "✓ Done"
-aws cloudformation describe-stacks \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
-  --query "Stacks[0].Outputs" --output table 2>/dev/null || true
+  --template-file problems/<category>/<id>/template.yaml \
+  --stack-name tc-<id>-test \
+  --parameter-overrides NamePrefix=tc-<id>-test \
+  --capabilities CAPABILITY_NAMED_IAM
 ```
 
-For GameDay problems, follow the pattern in `security-battle-royale/scripts/deploy.sh`.
+## チェックリスト
 
-## Step 6: Make deploy.sh executable
+雛形作成後、次を確認する。
 
-Always run:
+- [ ] `metadata.json` の `id` がディレクトリ名と完全一致
+- [ ] `category` が `Battle` か `Challenge` (大文字始まり)
+- [ ] `cfnTemplate` で参照する `template.yaml` が同ディレクトリにある
+- [ ] `template.yaml` の Parameters に `NamePrefix` を含む
+- [ ] 全リソース名・タグに `${NamePrefix}` が冠されている
+- [ ] Outputs に参加者向け URL と `NamePrefix` echo がある
+- [ ] `make validate-problems` が通る
+- [ ] `status` は `draft` で作成（ready は別 PR でレビュー後に上げる）
 
-```bash
-chmod +x problems/{type}/{name}/scripts/deploy.sh
-```
+## 参考
 
-## Quality Checklist
-
-Before finishing, verify:
-
-- [ ] `cloudformation/*.yaml` is valid YAML (no syntax errors)
-- [ ] CFn template has `AWSTemplateFormatVersion` and `Description`
-- [ ] All resources are tagged with meaningful tags
-- [ ] `Outputs` exports enough info for scoring verification
-- [ ] `scripts/deploy.sh` is executable and uses `STACK_NAME` / `AWS_REGION` env vars
-- [ ] `README.md` has scoring criteria table
-- [ ] Problem path is `problems/{gameday|jam}/{problem-name}/`
-
-## Example invocation
-
-User: "S3 バケットが公開設定になってる問題を作って、プレーヤーが適切なアクセス制限を設定する JAM 問題"
-
-You should create:
-
-- `problems/jam/s3-secure-bucket/README.md`
-- `problems/jam/s3-secure-bucket/problem.yaml`
-- `problems/jam/s3-secure-bucket/cloudformation/s3-secure-bucket.yaml` (with `BlockPublicAcls: false` etc.)
-- `problems/jam/s3-secure-bucket/scripts/deploy.sh`
+- 実例: [`problems/gameday/security-battle-royale/`](../../../problems/gameday/security-battle-royale/) — Battle 問題の参考実装
+- スキーマ: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
+- 規約正本: [`problems/README.md`](../../../problems/README.md)
+- 競技者アカウント側のセットアップ: [`infrastructure/templates/README.md`](../../../infrastructure/templates/README.md)

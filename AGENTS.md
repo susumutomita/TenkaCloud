@@ -1,168 +1,133 @@
 # AGENTS.md — TenkaCloud
 
-AI エージェント（Claude Code, Codex 等）向けのガイド。このファイルは CLAUDE.md を補完する。
+AI エージェント (Claude Code, Codex CLI 等) 向けのガイド。プロダクト全体の正本は @CLAUDE.md。本ファイルは「エージェントとして動くときに守る運用ルール」だけに絞る。
 
-## セットアップ
+## 役割分担
 
-```bash
-make install    # 依存関係インストール（Bun 自動選択）
-make start      # 全サービス起動（Docker + UI + Backend 11 サービス）
-```
+- **インフラ (CDK / SBT / IAM / `infrastructure/templates/`) はユーザーが書く**。CDK スタック、IAM ポリシー、CFn テンプレートはユーザー判断で進める。提案は OK だが勝手に編集しない。
+- **アプリ (`apps/*`、`scripts/*` の orchestration、`problems/*`) はエージェントが進める**。テストを書き、`make before-commit` を通し、PR を出すところまで一気通貫で。
+- 不明点はまず repo を読む (`git log`, `git diff main...HEAD`, 関連 stack の test)。それでも判断つかないときだけユーザーに問う。
+
+## 一気通貫で動く
+
+中間で「次に進めていいですか？」と止まらない。タスクが完了するまで連続で進めて、最後に結果だけ報告する。途中で軌道修正があれば次の発話で受け取る。
+
+次の例外を除く。
+
+- 破壊的操作 (`rm -rf`、`git reset --hard`、強制 push、`make destroy`、本番への deploy)
+- 共有環境への push / PR 作成 / Slack 投稿等の外部副作用
+- シークレット (.env, AWS credentials) を扱う操作
+
+これらは確認を取る。
 
 ## 品質ゲート
 
-PR 作成前に以下を **この順序で** 実行する。
+PR 作成前に **この順序で** 通すこと。
 
 ```bash
-bun scripts/architecture-harness.ts --staged --fail-on=error
-make before-commit   # lint, format, typecheck, test (99％+ coverage), build
+make harness         # architecture invariant チェック (docs/architecture/harness.md)
+make before-commit   # lint (markdownlint + textlint + biome) / typecheck / test / validate-problems
 /review              # コードレビュー
 /security-review     # セキュリティレビュー
-/simplify            # コード重複・品質・効率チェック
+/simplify            # 重複・複雑度・効率の最終チェック
 ```
 
-**すべて通らない限りタスクは未完了。** 失敗したらコードを修正する（設定ファイルを変えない）。
+何か落ちたらコードを直す。設定ファイル (`biome.json`, `vitest.config.ts`, `tsconfig.json`) を直接いじって誤魔化さない。
 
-### 作業順序（厳守）
+`make harness` が落ちる場合は `docs/architecture/harness.md` の invariant ID と照らし合わせる。harness 自体のテストは `make harness-test`、ハーネスのルールロジックは `.claude/harness/src/architecture.ts` と `tech-debt.ts`。
 
-新規機能を追加する前に以下を実施する。
+CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format check → typecheck → test → build。ローカル `make before-commit` が通れば CI は通る前提。
 
-1. **ドキュメント更新** — 関連する docs/, ADR, CLAUDE.md を先に更新する。
-2. **リファクタリング** — 技術的負債を先に解消する（`bun scripts/ai-improvement-loop.ts --staged --fail-on=high`）。
+## 利用可能な skills
 
-アーキテクチャ原則の正本は [`docs/architecture/harness.md`](./docs/architecture/harness.md) です。`Codex` と `Claude Code` のどちらでも、この script を通らない変更は未完了です。
+`/<skill>` で起動する。実体は `.claude/skills/<skill>/SKILL.md`。
 
-大きい変更や新機能の前後では、次も実行する。
+| skill              | 用途                                                                  |
+| ------------------ | --------------------------------------------------------------------- |
+| `/harness`         | `make harness` を走らせて invariant 違反を検出                       |
+| `/tech-debt`       | `make tech-debt` で技術的負債バックログを生成                         |
+| `/create-problem`  | `problems/<category>/<id>/` を `metadata.json` + `template.yaml` で雛形生成 |
+| `/spec`            | Open Web Docs (MDN) スタイルの技術仕様書を書く                       |
 
-```bash
-bun scripts/architecture-harness.ts --staged --fail-on=error
-bun scripts/ai-improvement-loop.ts --write --fail-on=high
-```
+加えて TenkaCloud 関係なく使える共通 skill (`/review`、`/security-review`、`/simplify`、`/init` 等) は Claude Code 本体側に同梱されている。
 
-このループで `high` 以上が出た領域では、機能追加より先に負債を解消する。
+## ブランチと PR
 
-## コマンド一覧
+- **マージ済みブランチに push しない**。PR を出す前に必ず `gh pr view --json state` で state を確認。`MERGED` / `CLOSED` なら新ブランチを切る。
+- 小さな意味単位で PR を分ける。`feat(...)` `fix(...)` `refactor(...)` `docs(...)` `test(...)` `chore(...)` のいずれか (Conventional Commits)。
+- PR タイトルは 70 文字以内。本文に Summary + Test plan を書く。
+- コミット / PR で `#番号` 形式の Issue 引用は **禁止** (auto-close されるため)。`(PR-F1)` `(#446)` 等の別記法を使う。
 
-| コマンド            | 用途                                 |
-| ------------------- | ------------------------------------ |
-| `ni`                | 依存関係インストール（bun 自動選択） |
-| `nr dev`            | 全サービス起動                       |
-| `nr test`           | テスト実行                           |
-| `make test_quick`   | カバレッジなし高速テスト             |
-| `make gameday-seed` | GameDay デモデータ投入               |
-| `make help`         | 全コマンド一覧                       |
+## 禁止事項
 
-## 制約（破ったら即修正）
+- `npx` → `bunx` または `nlx`
+- `rm` (環境破壊リスク) → `git rm`
+- `#番号` 形式の Issue 引用 (本文・コミット message)
+- モック / スタブで握り潰す fallback / 空配列を返して見せかける処理
+- 設定ファイル (`biome.json`, `vitest.config.*`, `tsconfig.json`) の直接編集
+- DynamoDB の on-demand (`PAY_PER_REQUEST`) 化 — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED 強制
+- SSE / WebSocket の新規導入 — Lambda 運用と整合する **polling** で書く
+- シークレットのコミット (`infrastructure/environments/<env>/.env`、AWS credentials)
 
-- **`npx` 禁止** → `bunx` または `nlx` を使う
-- **`rm` コマンド禁止** → ファイル削除が必要なら `git` で管理
-- **`#番号` 形式の Issue 引用禁止** → コミット・PR で使わない
-- **モックデータ・スタブ API 禁止** → DynamoDB を使う
-- **空配列返し・stub・empty dataset で握り潰す fallback 禁止**
-- **テストタイトルは日本語「〜すべき」形式**
-- **設定ファイル（`biome.json`, `vitest.config.*` 等）の直接編集禁止** → コードを修正する
+## TDD
 
-## セキュリティ基準
-
-- ユーザー入力は Zod スキーマでバリデーション
-- 認証バイパス（AUTH_SKIP）には必ず `NODE_ENV !== "production"` ガード
-- シークレットをコードにハードコードしない
-- `innerHTML`、`eval`、`dangerouslySetInnerHTML` を使わない
-- SQL/NoSQL インジェクション対策: パラメータ化クエリを使う
-
-## アーキテクチャ概要
-
-```
-TenkaCloud/
-├── client/
-│   ├── AdminWeb/              # Control Plane UI (Next.js 16, :13000, basePath=/control)
-│   └── Application/           # Application Plane UI (Next.js 16, :13001)
-├── server/
-│   ├── microservices/         # Hono backend services
-│   │   ├── problem-service       :3100  # イベント・問題管理
-│   │   ├── gameday-service       :3020  # GameDay ゲーム状態
-│   │   ├── leaderboard-service   :3012  # スコア集計
-│   │   ├── battle-service        :3010  # バトル管理
-│   │   ├── scoring-service       :3011  # 採点パイプライン
-│   │   └── tenant-management     :13004 # テナント CRUD
-│   ├── libs/                  # DynamoDB クライアント, イベント型, cloud-abstraction
-│   └── reverseproxy/          # ローカル開発用リバースプロキシ
-├── infrastructure/
-│   ├── cdk/                   # SBT 0.3.9 ベースの CDK スタック (ADR-013, ADR-014)
-│   └── templates/             # CFn テンプレート (competitor IAM Role 等)
-├── packages/                  # 共有ライブラリ (quality harness 検出ロジック等)
-├── docs/architecture/harness.md  # アーキテクチャ invariant 正本
-├── docs/decisions/            # ADR (000-template.md, 001..014)
-├── scripts/                   # CDK orchestration (install/cleanup/provision-tenant.sh) + harness
-└── problems/                  # GameDay/JAM 問題セット
-```
-
-> 旧 `apps/` (PR #398 で `client/` に) および旧 `backend/services/` (PR #398 で `server/application/microservices/` 経由、ADR-014 で `server/microservices/` に) パスは廃止。`backend/services/` 配下に残る `node_modules` / `dist` / `lambda.zip` は build artifact のみで、ソースは `server/microservices/` を見ること。
-
-### サービス間通信
-
-- フロントエンド → バックエンド: HTTP REST（Hono）
-- リアルタイム: SSE（leaderboard-service）、WebSocket（realtime-service）
-- クロスプレーン: EventBridge（テナントプロビジョニング）
-
-### データベース設計
-
-DynamoDB シングルテーブル設計。PK/SK パターンは以下の通り。
-
-- イベント: `PK=EVENT#{eventId}`, `SK=METADATA`
-- GameDay チーム: `PK=GAMEDAY#{eventId}`, `SK=TEAM#{teamId}`
-- テナント別クエリ: GSI1 `PK=TENANT#{tenantId}`
-
-### イベントライフサイクル
-
-```
-draft → scheduled → active → paused → active → completed → cancelled
-                                 ↑________________↓
-```
-
-遷移ルールは `problem-service/src/services/event-lifecycle.ts` で定義。フロントエンドは `getStatusActions()` で有効な遷移のみボタン表示。
-
-## テストパターン
+テストを先に書く。テストタイトルは日本語「〜すべき」形式。
 
 ```typescript
-// Hono API テスト
-const app = new Hono();
-app.route("/", targetRoutes);
-const res = await app.request("/path", { method: "POST", ... });
-expect(res.status).toBe(200);
+import { Template } from "aws-cdk-lib/assertions";
+import { describe, expect, it } from "vitest";
+import { App, Stack } from "aws-cdk-lib";
 
-// vi.mock + vi.hoisted パターン（instanceof チェックがあるクラス）
-const mockController = vi.hoisted(() => ({
-  myFn: vi.fn(),
-  MyError: class extends Error { ... },
-}));
-vi.mock("../module", () => ({
-  myFn: mockController.myFn,
-  MyError: mockController.MyError,
-}));
-
-// DynamoDB リポジトリテスト
-const mockSend = vi.fn();
-vi.mock("@tenkacloud/dynamodb", () => ({
-  getDocClient: () => ({ send: mockSend }),
-  getTableName: () => "TestTable",
-}));
+describe("AdminConsoleHostingStack", () => {
+  it("CloudFront distribution に runtime-config.json が配置されるべき", () => {
+    const app = new App();
+    const stack = new AdminConsoleHostingStack(app, "Test", { /* ... */ });
+    const template = Template.fromStack(stack);
+    template.hasResourceProperties("AWS::S3::Bucket", { /* ... */ });
+  });
+});
 ```
 
-### ハーネス優先
+CDK の test では `Template.fromStack(stack)` で生成 CFn を assertion する。Lambda handler のユニットテストは `vi.mock` で AWS SDK clients をモックする。
 
-- 先に壊れるテストや検出ルールを書く
-- 先に [`docs/architecture/harness.md`](./docs/architecture/harness.md) の invariant を確認する
-- `tenant 作成 -> provisioning -> app endpoint -> event -> competitor account -> problem deploy -> participant join -> attack / defense / vote / aws-console` の one-pass を完了条件にする
-- 1 テストケースに `expect` を詰め込みすぎない（アサーションルーレット禁止）
-- route handler で fallback を重複実装しない
-- UI から直接 `fetch` や `process.env.*API_URL` を読まない
+## ディレクトリ早見
 
-## 決定記録
+```
+apps/
+  admin-console/                   # System Admin (Cognito Hosted UI / OAuth Code+PKCE)
+  application-admin-console/       # Tenant Admin (per-tenant Application Plane)
+  participant-portal/              # 競技者ポータル (per-team login key)
+infrastructure/
+  bin/infrastructure.ts            # 全 stack の配線
+  lib/control-plane-stack.ts       # SBT ControlPlane
+  lib/bootstrap-template/          # TenantMappingTable
+  lib/tenant-template/             # 1 tenant の API + Cognito + ApplicationConsole
+  lib/tenant-pipeline/             # CodePipeline 経由の per-tenant provisioning
+  lib/problem-deploy/              # 競技者 AWS への問題 deploy backend
+  lib/admin-console-hosting.ts     # admin-console S3+CloudFront 配信
+  lib/cdk-aspect/                  # DynamoDbLowCapacity / DestroyPolicySetter
+  environments/<env>/              # config.json + .env
+  templates/competitor-bootstrap.yaml  # 競技者アカウントで流す IAM Role
+scripts/
+  install.sh                       # 3-phase deploy のオーケストレーション
+  cleanup.sh                       # 冪等な teardown
+  provision-tenant.sh              # CodeBuild から呼ばれる per-tenant deploy
+  deprovision-tenant.sh            # tenant 削除
+problems/<category>/<id>/          # metadata.json + template.yaml が正本
+```
 
-アーキテクチャ決定記録: `docs/decisions/`
+## クロスプレーン契約 (壊さない)
 
-- ADR-001: ドキュメント構成
-- ADR-002: GameDay 仕様（攻撃カタログ、スコアリング）
-- ADR-003: MVP リリースアーキテクチャ
-- ADR-007: マルチテナント分離戦略
+- **EventBridge bus** は `ControlPlaneStack` が払い出し、`bin/infrastructure.ts` が他 stack に ARN を渡す。新 stack を追加するときも同じ bus を使う。
+- **Tenant 作成イベント** (`onboardingRequest`) は `ServerlessSaaSPipeline` が拾って per-tenant stack を deploy する。BASIC / STANDARD / PREMIUM は pooled stack を共有、PLATINUM のみ silo stack を立てる。
+- **DeployRequested イベント** は `ProblemDeployBackendStack` の Worker Lambda が拾い、tenant の ExternalId で競技者アカウントに AssumeRole → CFn CreateStack する。**ExternalId は必ず要求** (省略不可)。
+- **Frontend の URL** は `runtime-config.json` (CloudFront 配下) 経由で注入される。`apps/*/src/config.ts` に `loadConfig()` がある。新しい URL を追加するときは hosting stack の env と config.ts の interface を両方更新する。
+
+## 参照
+
+- @CLAUDE.md — プロダクト全体・アーキテクチャ・コマンド一覧
+- [`docs/architecture/harness.md`](./docs/architecture/harness.md) — invariant + PR Discipline の正本
+- [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — 競技者アカウント側のセットアップ
+- [`problems/README.md`](./problems/README.md) — 問題追加の手順とスキーマ
+- `apps/<app>/README.md` — 各 SPA のローカル開発手順
+- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) — CI が走らせるコマンド
