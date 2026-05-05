@@ -70,8 +70,10 @@ export class ApiGateway extends Construct {
     problem.addResource("deploy").addMethod("POST", deployIntegration, deployMethodOptions);
     problem.addResource("deployments").addMethod("GET", deployIntegration, deployMethodOptions);
 
-    // /deployments/{jobId}
+    // /deployments — tenant 内全 deploy job 一覧 (サイドバー「デプロイ履歴」用)
+    // /deployments/{jobId} — 1 件の取得 / 削除
     const deployments = this.restApi.root.addResource("deployments");
+    deployments.addMethod("GET", deployIntegration, deployMethodOptions);
     const deployment = deployments.addResource("{jobId}");
     deployment.addMethod("GET", deployIntegration, deployMethodOptions);
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);
