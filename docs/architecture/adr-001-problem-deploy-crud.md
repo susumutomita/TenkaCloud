@@ -188,16 +188,20 @@ Distributed Map の child execution は `EXPRESS` workflow にできるが、CFn
 
 ### Phase 1: MVP (Walking Skeleton) — 1 PR で end-to-end 1 経路を通す
 
-**PR-2 (MVP)**: 既存 UI の「Deploy 開始」ボタンを押すと、(問題 1 × アカウント 1) で Step Functions が起動して CFn deploy が成功するところまでを 1 PR で繋げる。
+**PR-2 (MVP)**: 既存 UI の「Deploy 開始」ボタンを押すと、(問題 1 × **同一 TenkaCloud AWS account 内**) で Step Functions が起動して CFn deploy が成功するところまでを 1 PR で繋げる。**MVP では cross-account を持ち込まない** — TenkaCloud 自社 AWS account 内に CFn stack を立てるだけ。これで「publish 経路 → Step Functions → CFn」のパス自体が動くことを証明する。cross-account / AssumeRole / ExternalId は Phase 2 (PR-3 以降) で重ねる。
 
 含める要素は次のとおり。
 
+- `ProblemTemplatesBucket` (S3 bucket) を `ProblemDeployBackendStack` 配下に新規作成 (versioning + lifecycle で旧版 30 日保持)
+- `install.sh` (= `make deploy`) に **repo の `problems/` ディレクトリ全体を `ProblemTemplatesBucket` へ sync する step** を追加 (`aws s3 sync problems/ s3://.../problems/`)。State Machine は `s3://.../problems/<id>/template.yaml` を CFn `TemplateURL` で参照する
+- 既存問題 (`security-battle-royale`) は CFn UserData が GitHub から Git clone して app コード (Flask api / MySQL-init / frontend) を取得する作りなので、**MVP では `template.yaml` を S3 に置くだけで動く**。`RepoUrl` / `RepoRef` はデフォルト値 (public TenkaCloud repo) を使う。private repo / S3 直配信が必要な問題種別への対応は Phase 2 で検討 (Open question 5 として後述)
 - `TenantTemplateStack` の REST API に Cognito authorizer + `POST /problems/{problemId}/deploy` route を追加 (要件 FR-2 Create の単発経路)
-- 同 route が tenant API Lambda を呼ぶ。Lambda は Zod validate → `events:PutEvents` で `DeployCreateRequested` を発行
+- 同 route が tenant API Lambda を呼ぶ。Lambda は Zod validate → S3 上の template URL を解決 → `events:PutEvents` で `DeployCreateRequested` を発行 (event detail に `templateUrl` を載せる)
 - EventBridge Rule (`source: tenkacloud.deploy`、`detail-type: DeployCreateRequested`) を作り、Target に `DeployCreateStateMachine` を設定
-- `DeployCreateStateMachine` は Distributed Map (要件 FR-1 を満たすが MVP では `deployments` 配列の長さ 1 しか入らない)。Map iterator は `AssumeRole` → `CloudFormation:CreateStack` (`.sync`) → 完了レポート
-- 競技者 IAM Role / ExternalId は `bin/infrastructure.ts` の env から渡す既存方式を流用 (#459 の解決前なのでハードコード気味、Phase 2 で改善)
+- `DeployCreateStateMachine` は Distributed Map (要件 FR-1 を満たすが MVP では `deployments` 配列の長さ 1 しか入らない)。Map iterator は **同一 account 内で** `CloudFormation:CreateStack` (`TemplateURL` で S3 上の template を指す) を `.sync` で完了待ち → 完了レポート (AssumeRole なし)
+- State Machine の execution role は CFn CreateStack / DescribeStacks を **同一 account 内のみ** に許可する単純な policy (cross-account は Phase 2 で追加)
 - `application-admin-console` の `useDeployApiClient` を `useApiClient` に切り替え、既存 `DeployFormModal` から新経路を叩く
+- DeployForm の `awsAccountId` 入力は MVP では使わない (= TenkaCloud 自社 account に固定)。input 自体は残しておくが値を Step Functions に渡さない、ような UI 上の degrade で十分
 - 旧 `DeployApiGateway` (専用 HTTP API + 別 Cognito) は **同 PR で削除する** (旧経路と並存させない、=「動く 1 本」だけが残る状態にする)
 - 旧 `DeployWorkerLambda` / `StatusUpdaterLambda` も同 PR で削除 (Step Functions が肩代わりするため)
 - `install.sh` の `cdk deploy` リストに `ProblemDeployBackendStack` を追加
@@ -238,6 +242,7 @@ PR-2 の MVP が main に入ったら、要件の残りを順に実装する。�
 - **`org-shared` の "組織" の定義** (要件 Open Question 1) — tenant のグループか、tenant 内の team か、ACL 列か。問題カタログ実装 (PR-3) 前に ADR-003 で確定する
 - **batch SLO の具体値** (要件 Open Question 4) — 並列度 50 で `~2h` という見積もりが要件として許容されるか、operator にフィードバックを取る
 - **失敗 item 再実行 API の冪等性** — CFn `CreateStack` の `AlreadyExists` をどう扱うか (成功扱い / 別エラー扱い)、再実行で stackName が衝突する場合の解決方針
+- **問題テンプレ依存ファイルの bundle 方式** (Phase 2) — 現在の問題 (`security-battle-royale`) は EC2 UserData の `git clone` で public TenkaCloud repo から app コード (Flask API / MySQL-init / frontend) を取ってくる作り。MVP では `template.yaml` だけ S3 に置けば動くが、private repo / 機密 / Lambda code zip 同梱が必要な問題が将来増えたとき、依存ファイル全体を S3 に bundle して UserData が `aws s3 cp` で取りに行く方式への切替が必要。問題種別ごとのテンプレ規約を整理する別 ADR で扱う
 
 ## References
 
