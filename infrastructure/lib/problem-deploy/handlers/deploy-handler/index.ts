@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
+import { cors } from "hono/cors";
 import {
   HTTP_ACCEPTED,
   HTTP_BAD_REQUEST,
@@ -41,6 +42,20 @@ const LIST_LIMIT_MAX = 200;
 const shared = buildSharedResources();
 
 const app = new Hono();
+
+// CORS は本 Lambda 側で打つ (= API Gateway の defaultCorsPreflightOptions は OPTIONS のみ
+// 対応で、実 POST/GET レスポンスには Access-Control-Allow-Origin が付かないため)。
+// Cognito JWT は Authorization header で送られるので credentials cookie は使わず、`*`
+// で許可する。Phase 2 で tenant の CloudFront URL に絞る。
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    allowHeaders: ["Authorization", "Content-Type"],
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    maxAge: 600,
+  }),
+);
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
