@@ -141,17 +141,22 @@ export class ApplicationAdminConsoleHosting extends Construct {
    *   - apiUrl: アプリ管理 API の base URL (POST /apps 等、#40-d)
    */
   deployRuntimeConfig(props: RuntimeConfigProps): void {
+    // `deployApiUrl` は HTTP API が未配置の構成だと undefined になる。空文字を
+    // 書き出すと frontend の旧 validation が runtime-config 全体を捨てる
+    // 副作用があったため (#456 で frontend 側は修正済)、ここでも attribute ごと
+    // 省略して両側で防御する。frontend が field 不在を扱える状態になっている。
+    const data: Record<string, string> = {
+      cognitoDomain: props.cognitoDomain,
+      userClientId: props.cognitoClientId,
+      tenantId: props.tenantId,
+      tenantName: props.tenantName,
+      apiUrl: props.apiUrl.replace(/\/$/, ""),
+    };
+    if (props.deployApiUrl && props.deployApiUrl.length > 0) {
+      data.deployApiUrl = props.deployApiUrl.replace(/\/$/, "");
+    }
     new BucketDeployment(this, "RuntimeConfigDeployment", {
-      sources: [
-        Source.jsonData("runtime-config.json", {
-          cognitoDomain: props.cognitoDomain,
-          userClientId: props.cognitoClientId,
-          tenantId: props.tenantId,
-          tenantName: props.tenantName,
-          apiUrl: props.apiUrl.replace(/\/$/, ""),
-          deployApiUrl: (props.deployApiUrl ?? "").replace(/\/$/, ""),
-        }),
-      ],
+      sources: [Source.jsonData("runtime-config.json", data)],
       destinationBucket: this.bucket,
       distribution: this.distribution,
       distributionPaths: ["/runtime-config.json"],

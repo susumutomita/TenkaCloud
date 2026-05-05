@@ -8,7 +8,16 @@ export interface DeploymentSummary {
   readonly tenantId: string;
   readonly awsAccountId: string;
   readonly region: string;
+  /**
+   * Operator が deploy form で入力した内部 slug。CFn StackName の由来 (`namePrefix`)
+   * になっていて、deploy 後は変更不可。Operator UI 上は「内部 slug」として表示する。
+   */
   readonly teamName: string;
+  /**
+   * 競技者が portal `PATCH /portal/me` で設定した表示用チーム名。Operator UI 上は
+   * 「表示名 (競技者選択)」として表示し、未設定なら undefined。
+   */
+  readonly displayTeamName?: string;
   readonly namePrefix: string;
   readonly status: DeploymentStatus;
   readonly stackId?: string;
@@ -47,6 +56,7 @@ export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
     awsAccountId: String(item.awsAccountId ?? ""),
     region: String(item.region ?? ""),
     teamName: String(item.teamName ?? ""),
+    displayTeamName: typeof item.displayTeamName === "string" ? item.displayTeamName : undefined,
     namePrefix: String(item.namePrefix ?? ""),
     status: (item.status ?? "PENDING") as DeploymentStatus,
     stackId: item.stackId,

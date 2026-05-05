@@ -54,7 +54,10 @@ export interface DeploymentSummary {
   readonly tenantId: string;
   readonly awsAccountId: string;
   readonly region: string;
+  /** Operator が deploy form で入力した内部 slug (CFn StackName 由来、immutable)。 */
   readonly teamName: string;
+  /** 競技者が portal で設定した表示用チーム名。未設定なら undefined。 */
+  readonly displayTeamName?: string;
   readonly namePrefix: string;
   readonly status: DeploymentStatus;
   readonly stackId?: string;
