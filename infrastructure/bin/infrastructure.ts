@@ -37,7 +37,13 @@ if (fs.existsSync(envFilePath)) {
  *   一致しない場合は metadata 側を信用する)
  */
 function discoverProblemsCatalog(problemsRoot: string): Record<string, string> {
-  if (!fs.existsSync(problemsRoot)) return {};
+  if (!fs.existsSync(problemsRoot)) {
+    console.warn(
+      `[discoverProblemsCatalog] ${problemsRoot} not found — assuming pre-install or wrong cwd. ` +
+        `Catalog will be empty; tenant API will reject all problemId.`,
+    );
+    return {};
+  }
   const catalog: Record<string, string> = {};
   for (const category of fs.readdirSync(problemsRoot, { withFileTypes: true })) {
     if (!category.isDirectory()) continue;
@@ -48,10 +54,16 @@ function discoverProblemsCatalog(problemsRoot: string): Record<string, string> {
       if (!fs.existsSync(metadataPath)) continue;
       try {
         const meta = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as { id?: unknown };
-        if (typeof meta.id !== "string" || meta.id.length === 0) continue;
+        if (typeof meta.id !== "string" || meta.id.length === 0) {
+          console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
+          continue;
+        }
         catalog[meta.id] = `problems/${category.name}/${problem.name}`;
-      } catch {
-        // 壊れた metadata.json は make validate-problems が CI で弾くので、ここは silent skip。
+      } catch (err) {
+        console.warn(
+          `[discoverProblemsCatalog] ${metadataPath}: parse failed (${(err as Error).message}). ` +
+            `Run 'make validate-problems' to see schema errors.`,
+        );
       }
     }
   }
