@@ -102,17 +102,24 @@ destroy:              env-check       ; bash scripts/cleanup.sh
 # SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を持ち込まず、
 # CFn template と AWS 権限の正しさだけを確認する。
 #
-# 使い方 (default 1 件):
-#   make deploy-battles
-#   make destroy-battles
+# `BATTLES` は **必須** (= default を持たない)。引数なしで `make deploy-battles` を叩いた
+# ときに silently deploy が始まる事故を防ぐため、明示指定を要求する。
 #
-# 使い方 (引数指定):
+# 使い方:
+#   make deploy-battles BATTLES="problems/gameday/security-battle-royale"
 #   make deploy-battles BATTLES="problems/gameday/security-battle-royale problems/gameday/another"
 #   make deploy-battles BATTLES="problems/gameday/security-battle-royale" TEAM_SLUG=alpha
-BATTLES   ?= problems/gameday/security-battle-royale
 TEAM_SLUG ?= demo-team
 
 deploy-battles:
+	@if [ -z "$(BATTLES)" ]; then \
+	  echo "error: BATTLES が未指定。例: make deploy-battles BATTLES=\"problems/gameday/security-battle-royale\"" >&2; \
+	  exit 1; \
+	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/deploy-battles.sh $(BATTLES)
 destroy-battles:
+	@if [ -z "$(BATTLES)" ]; then \
+	  echo "error: BATTLES が未指定。例: make destroy-battles BATTLES=\"problems/gameday/security-battle-royale\"" >&2; \
+	  exit 1; \
+	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)

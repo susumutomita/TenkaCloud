@@ -18,5 +18,8 @@
     "EC2 IMDS / IAM Role の露出経路と、それを塞ぐベストプラクティスを理解する",
     "競技中に同居する攻撃者と防御者のトレードオフ (可用性を保ちつつ守る) を体験する"
   ],
-  "cfnTemplate": "template.yaml"
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "DbPassword": "__RANDOM_PASSWORD__"
+  }
 }

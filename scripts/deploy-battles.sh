@@ -13,9 +13,13 @@
 #                 ため、固定値が必要なときは呼び出し側で `DB_PASSWORD=xxx make deploy-battles` を使う
 #
 # 例:
-#   bash scripts/deploy-battles.sh problems/gameday/security-battle-royale
-#   bash scripts/deploy-battles.sh problems/gameday/security-battle-royale problems/gameday/another
-#   TEAM_SLUG=alpha bash scripts/deploy-battles.sh problems/gameday/security-battle-royale
+#   bash scripts/deploy-battles.sh problems/sample/hello-world
+#   bash scripts/deploy-battles.sh problems/sample/hello-world problems/gameday/security-battle-royale
+#   TEAM_SLUG=alpha bash scripts/deploy-battles.sh problems/sample/hello-world
+#
+# CFn template の Parameter は metadata.json の `cfnParameters` で宣言する (= 問題作者が
+# 必要な値を渡す)。`NamePrefix` だけは script が自動注入する。`__RANDOM_PASSWORD__` を
+# value に置くと deploy ごとにランダム生成 (DbPassword 等の secret 用途)。
 #
 # 設計意図:
 #   ADR-001 の MVP-0 (PR-1.5) として、SaaS 配線 (Step Functions / EventBridge / tenant API /
@@ -28,14 +32,59 @@ set -euo pipefail
 # shellcheck source=lib/battles-common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/battles-common.sh"
 
+# CFn template の Description などに含まれる multibyte 文字 (日本語等) が aws CLI 経由で
+# 「?」に化ける現象がある。LC_ALL/LANG が C / POSIX / 空 のとき、aws CLI 内部の Python が
+# template file を ASCII codec で open し、UTF-8 chars を replace してしまうため。
+# 値が ASCII-only locale なら UTF-8 に倒す。
+case "${LC_ALL:-${LANG:-}}" in
+  C|POSIX|"")
+    export LANG="en_US.UTF-8"
+    export LC_ALL="en_US.UTF-8"
+    ;;
+esac
+
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 <problem-dir> [<problem-dir> ...]" >&2
-  echo "  e.g.: $0 problems/gameday/security-battle-royale" >&2
+  echo "  e.g.: $0 problems/sample/hello-world" >&2
+  exit 1
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "error: jq が必要です (brew install jq / apt install jq)" >&2
   exit 1
 fi
 
 TEAM_SLUG="${TEAM_SLUG:-demo-team}"
 AWS_REGION="$(resolve_aws_region)"
+
+# metadata.json の cfnParameters を `Key=Value` 形式の配列に展開する。`__RANDOM_PASSWORD__`
+# トークンは 32 桁ランダム英数字に置換 (DbPassword 等の secret 用途)。`NamePrefix` は
+# script が常に自動注入するので、ここでは扱わない。
+build_parameter_overrides() {
+  local problem_dir="$1"
+  local name_prefix="$2"
+  local metadata="${problem_dir}/metadata.json"
+  local -a overrides=("NamePrefix=${name_prefix}")
+
+  if [[ ! -f "${metadata}" ]]; then
+    printf '%s\n' "${overrides[@]}"
+    return 0
+  fi
+
+  local key value
+  while IFS=$'\t' read -r key value; do
+    [[ -z "${key}" ]] && continue
+    if [[ "${value}" == "__RANDOM_PASSWORD__" ]]; then
+      # /dev/urandom を `tr` で英数字に絞って 32 桁切り出す。`head -c 32` が早期 close した
+      # 際の SIGPIPE で `set -o pipefail` が pipeline を 141 で fail させることがあるため、
+      # subshell で pipefail を局所的に無効化する。
+      value="$(set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+    fi
+    overrides+=("${key}=${value}")
+  done < <(jq -r '.cfnParameters // {} | to_entries[] | "\(.key)\t\(.value)"' "${metadata}")
+
+  printf '%s\n' "${overrides[@]}"
+}
 
 deploy_one() {
   local problem_dir="$1"
@@ -50,24 +99,21 @@ deploy_one() {
   local name_prefix
   name_prefix="$(build_name_prefix "${problem_dir}" "${TEAM_SLUG}")"
 
+  # macOS 標準 bash 3.2 は `mapfile` (bash 4+) 未対応なので、while read で配列を埋める。
+  local -a parameter_overrides=()
+  local line
+  while IFS= read -r line; do
+    parameter_overrides+=("${line}")
+  done < <(build_parameter_overrides "${problem_dir}" "${name_prefix}")
+
   echo ""
   echo "=========================================="
   echo "Deploying: ${problem_dir}"
   echo "  StackName : ${name_prefix}"
   echo "  Region    : ${AWS_REGION}"
   echo "  TeamSlug  : ${TEAM_SLUG}"
+  echo "  Parameters: ${#parameter_overrides[@]} item(s) (NamePrefix + cfnParameters)"
   echo "=========================================="
-
-  # DbPassword は env DB_PASSWORD で渡す。未指定なら毎回ランダム生成 (smoke test なので
-  # 永続性は不要)。secrets-in-source の commit を防ぐためハードコードしない。
-  local db_password="${DB_PASSWORD:-}"
-  if [[ -z "${db_password}" ]]; then
-    # /dev/urandom を `tr` で英数字に絞って 32 桁切り出す。`head -c 32` が早期 close した
-    # 際の `tr` への SIGPIPE で `set -o pipefail` が pipeline 全体を 141 で fail させる
-    # ことがあるため、subshell で pipefail を局所的に無効化する (template の AllowedPattern
-    # `^[A-Za-z0-9!@#$%^&*()_+\-=]+$` に収まる字種を選んでいる)。
-    db_password="$(set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
-  fi
 
   # `aws cloudformation deploy` は CreateStack / UpdateStack を冪等に扱う:
   #   - stack が無ければ Create
@@ -79,9 +125,7 @@ deploy_one() {
     --template-file "${template}" \
     --capabilities CAPABILITY_NAMED_IAM \
     --no-fail-on-empty-changeset \
-    --parameter-overrides \
-        "NamePrefix=${name_prefix}" \
-        "DbPassword=${db_password}" \
+    --parameter-overrides "${parameter_overrides[@]}" \
     --tags \
         "TenkaCloud:NamePrefix=${name_prefix}" \
         "TenkaCloud:Problem=${problem_slug}" \

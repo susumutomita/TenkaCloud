@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud sample problem (hello-world). Minimal smoke test stack that creates
+  a single SSM Parameter and nothing else. Use this for verifying that
+  `make deploy-battles` end-to-end works without exposing any vulnerable software
+  or public-facing resources. Free of charge under standard SSM tier.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy-battles.sh script auto-injects
+      this value, you do not need to set it manually.
+    Description: >
+      Common prefix attached to all resource names. Used to prevent collisions
+      when multiple teams' stacks coexist in the same account / region.
+
+Resources:
+  HelloParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/hello"
+      Type: String
+      Value: !Sub "Hello from ${NamePrefix}"
+      Description: !Sub "TenkaCloud smoke test parameter created by hello-world (${NamePrefix})."
+      Tier: Standard
+
+Outputs:
+  ParameterName:
+    Description: SSM Parameter name created by this stack.
+    Value: !Ref HelloParameter
+  ParameterValue:
+    Description: SSM Parameter value (echoed in Outputs for smoke test verification).
+    Value: !Sub "Hello from ${NamePrefix}"
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
