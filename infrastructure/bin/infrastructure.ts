@@ -26,6 +26,38 @@ if (fs.existsSync(envFilePath)) {
   console.log(`[bin] Loaded env from ${envFilePath}`);
 }
 
+/**
+ * `problems/<category>/<id>/metadata.json` を持つディレクトリを列挙し、
+ * `{ [problemId]: "problems/<category>/<id>" }` の map を返す。frontend の Vite glob と
+ * 同じ正本 (filesystem) から問題カタログを引くための関数。
+ *
+ * - `problemsRoot` が存在しない / metadata.json が無い場合は空 map を返す (synth 時に
+ *   problems/ を埋める前に typecheck が走るケースの防御)
+ * - id は metadata.json の `id` field を採用 (ディレクトリ名と一致するのは規約だが、
+ *   一致しない場合は metadata 側を信用する)
+ */
+function discoverProblemsCatalog(problemsRoot: string): Record<string, string> {
+  if (!fs.existsSync(problemsRoot)) return {};
+  const catalog: Record<string, string> = {};
+  for (const category of fs.readdirSync(problemsRoot, { withFileTypes: true })) {
+    if (!category.isDirectory()) continue;
+    const categoryDir = path.join(problemsRoot, category.name);
+    for (const problem of fs.readdirSync(categoryDir, { withFileTypes: true })) {
+      if (!problem.isDirectory()) continue;
+      const metadataPath = path.join(categoryDir, problem.name, "metadata.json");
+      if (!fs.existsSync(metadataPath)) continue;
+      try {
+        const meta = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as { id?: unknown };
+        if (typeof meta.id !== "string" || meta.id.length === 0) continue;
+        catalog[meta.id] = `problems/${category.name}/${problem.name}`;
+      } catch {
+        // 壊れた metadata.json は make validate-problems が CI で弾くので、ここは silent skip。
+      }
+    }
+  }
+  return catalog;
+}
+
 const app = new cdk.App();
 
 // required input parameters
@@ -155,12 +187,11 @@ const participantPortal = enableParticipantPortal
   ? { runtimeConfig: participantPortalRuntimeConfig }
   : undefined;
 
-// MVP-1 hard-coded 問題カタログ。Phase 2 (ADR-003) で DDB ベース問題管理に置換予定。
-// problemId → problemDir (= scripts/deploy-battles.sh の引数 path)。
-const problemsCatalog: Record<string, string> = {
-  "hello-world": "problems/challenges/hello-world",
-  "security-battle-royale": "problems/battles/security-battle-royale",
-};
+// 問題カタログを `problems/<category>/<id>/metadata.json` から自動生成。問題追加時に
+// 本ファイルを書き換える必要はない (frontend `data/problems.ts` も同 metadata を Vite glob
+// で読むので、3 重管理を避ける)。
+// Phase 2 (ADR-003) で DDB ベース問題管理に置換するまでの自動 discovery 経路。
+const problemsCatalog = discoverProblemsCatalog(path.resolve(__dirname, "..", "..", "problems"));
 
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
