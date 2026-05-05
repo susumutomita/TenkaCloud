@@ -2,9 +2,7 @@ import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { SfnStateMachine } from "aws-cdk-lib/aws-events-targets";
 import type { IStateMachine } from "aws-cdk-lib/aws-stepfunctions";
 import { Construct } from "constructs";
-
-export const DEPLOY_EVENT_SOURCE = "tenkacloud.deploy" as const;
-export const DEPLOY_CREATE_REQUESTED_DETAIL_TYPE = "DeployCreateRequested" as const;
+import { EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED, EVENT_SOURCE } from "./handlers/shared/events";
 
 export interface DeployEventRuleProps {
   /** SBT ControlPlane が払い出す共通 EventBus。 */
@@ -33,10 +31,10 @@ export class DeployEventRule extends Construct {
 
     this.rule = new Rule(this, "Rule", {
       eventBus: props.eventBus,
-      description: `Route ${DEPLOY_CREATE_REQUESTED_DETAIL_TYPE} events to DeployCreateStateMachine`,
+      description: `Route ${EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED} events to DeployCreateStateMachine`,
       eventPattern: {
-        source: [DEPLOY_EVENT_SOURCE],
-        detailType: [DEPLOY_CREATE_REQUESTED_DETAIL_TYPE],
+        source: [EVENT_SOURCE],
+        detailType: [EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED],
       },
       targets: [new SfnStateMachine(props.stateMachine)],
     });

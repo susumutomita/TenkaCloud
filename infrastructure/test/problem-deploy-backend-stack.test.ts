@@ -3,9 +3,9 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 
-function synth(
-  overrides: Partial<ConstructorParameters<typeof ProblemDeployBackendStack>[2]> = {},
-): Template {
+// 全 it() で同じ Template を使い回す。stack 構造は default props で固定なので、
+// describe ブロック単位で 1 度 synth すれば 13 回 → 1 回に圧縮できる。
+function synthDefault(): Template {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStack", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -14,15 +14,15 @@ function synth(
     problemsCatalog: {
       "hello-world": "problems/sample/hello-world",
     },
-    ...overrides,
   });
   return Template.fromStack(stack);
 }
 
 describe("ProblemDeployBackendStack (MVP-1)", () => {
+  const tpl = synthDefault();
+
   describe("Deployments DDB table", () => {
     it("DDB テーブルを 1 つ持ち、PK/SK + PROVISIONED 1/1 であるべき", () => {
-      const tpl = synth();
       tpl.resourceCountIs("AWS::DynamoDB::Table", 1);
       // BillingMode は default (PROVISIONED) のとき CFn template に出力されないので、
       // ProvisionedThroughput と KeySchema で確認する。
@@ -42,7 +42,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
     });
 
     it("expiresAt の TTL を有効化すべき", () => {
-      synth().hasResourceProperties(
+      tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
           TimeToLiveSpecification: Match.objectLike({
@@ -56,7 +56,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
 
   describe("Deploy API Lambda (tenant API から invoke される)", () => {
     it("Node.js 20 / arm64 で BATTLE_PROBLEMS_CATALOG env を持つべき", () => {
-      synth().hasResourceProperties(
+      tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
           Runtime: "nodejs20.x",
@@ -75,11 +75,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
 
   describe("CodeBuild Project (deploy-battles.sh を実行)", () => {
     it("CodeBuild Project を 1 つ作るべき", () => {
-      synth().resourceCountIs("AWS::CodeBuild::Project", 1);
+      tpl.resourceCountIs("AWS::CodeBuild::Project", 1);
     });
 
     it("CodeBuild は S3 source を読むべき", () => {
-      synth().hasResourceProperties(
+      tpl.hasResourceProperties(
         "AWS::CodeBuild::Project",
         Match.objectLike({
           Source: Match.objectLike({
@@ -93,11 +93,10 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
     it("State Machine を 1 つ作るべき", () => {
-      synth().resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+      tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
     });
 
     it("EventBridge Rule (DeployCreateRequested → State Machine) を 1 つ作るべき", () => {
-      const tpl = synth();
       tpl.resourceCountIs("AWS::Events::Rule", 1);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
@@ -113,7 +112,6 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
 
   describe("Outputs", () => {
     it("DeploymentsTableName と DeployCreateStateMachineArn を Output として持つべき", () => {
-      const tpl = synth();
       const outputs = tpl.findOutputs("*");
       expect(Object.keys(outputs)).toEqual(
         expect.arrayContaining(["DeploymentsTableName", "DeployCreateStateMachineArn"]),
@@ -123,7 +121,6 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
 
   describe("legacy 経路の廃止", () => {
     it("旧 DeployApiGateway (HTTP API) を作らないべき", () => {
-      const tpl = synth();
       tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
     });
   });
