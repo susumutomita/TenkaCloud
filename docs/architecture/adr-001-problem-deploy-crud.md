@@ -1,9 +1,9 @@
 # ADR-001: 問題 Deploy を CRUD x Step Functions Distributed Map で実装する
 
 - **Status**: Proposed (2026-05-05)
-- **Requirements**: [`docs/requirements/problem-deploy.md`](../requirements/problem-deploy.md) の確定後に書き直し
+- **Requirements**: [`docs/requirements/problem-deploy.md`](../requirements/problem-deploy.md) (Approved)
 - **Supersedes**: 既存 `ProblemDeployBackendStack` の `DeployApiGateway` (専用 HTTP API + 単一 Cognito JWT authorizer) と `DeployWorkerLambda` (1 event = 1 CFn deploy) 構成
-- **Related issues**: #458 (publish 経路統一)、#459 (cross-account federation)
+- **Related issues**: Issue 458 (publish 経路統一)、Issue 459 (cross-account federation)
 
 ## Context
 
@@ -37,7 +37,7 @@
 
 専用 HTTP API + 別 Cognito の構成は廃止 (NFR-2 と整合)。tenant 自身の Cognito で認可する (= SBT の Control Plane → Application Plane と同型)。
 
-**Lambda は EventBridge に publish し、Step Functions は EventBridge Rule で event-driven に起動する**。Step Functions は EventBridge Rule の Target として直接設定可能 ([ドキュメント](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-eventbridge.html))。tenant API Lambda が StartExecution を直叩きせず EventBridge を中継する理由は次の 4 点。
+**Lambda は EventBridge に publish し、Step Functions は EventBridge Rule で event-driven に起動する**。Step Functions State Machine は EventBridge Rule の **native target** として設定可能 ([AWS docs: EventBridge Targets](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-targets.html#eb-console-targets))。仕組みは EventBridge Rule に専用 IAM Role (`states:StartExecution` 権限) を持たせ、event 受信時に EventBridge がその Role を assume して `StartExecution` を呼ぶ。Lambda 中継は不要 (CDK では `aws-events-targets.SfnStateMachine` で 1 行)。tenant API Lambda が StartExecution を直叩きせず EventBridge を中継する理由は次の 4 点。
 
 1. **疎結合の seam を残す**: 将来の audit log / Slack 通知 / 監視 subscriber が同じ event を listen できる
 2. **SBT の既存パターンとの整合**: ControlPlane → ApplicationPlane の `onboardingRequest` event 中継と同じ形を維持
@@ -107,7 +107,7 @@ Distributed Map の child execution は `EXPRESS` workflow にできるが、CFn
 
 - **deploy 状態** (PENDING / IN_PROGRESS / CREATE_COMPLETE / FAILED) → **CFn 自身が持つ**。`describe-stacks` で取得する。
 - **deploy 履歴** (誰がいつ batch を投げたか) → **Step Functions execution history** (Standard で 1 年保持)
-- **stack の所在カタログ** (operator UI の「自テナントの deploy 一覧」) → **CFn stack の Tag** (`TenkaCloud:TenantId`, `BatchId`, `ProblemId`, `JobId`) を参照する。Tag filter で逆引きする
+- **stack の所在カタログ** (operator UI の「自テナントの deploy 一覧」) → **CFn stack の Tag** (`TenkaCloud:TenantId`, `BatchId`, `ProblemId`, `JobId`) を打つ。逆引きの実装は次の 2 通りで実装する。`cloudformation:DescribeStacks` 自体は tag filter をサポートしないため、(a) `resource-groups:GetResources` (Resource Groups Tagging API、tag filter ネイティブ対応) を使うか、(b) `cloudformation:ListStacks` で取得後 client-side filter する。MVP では同一 account なので 1 回の `ListStacks` 結果を tenantId tag で絞る (b) が単純。Phase 2 で cross-account になったら各 account で `GetResources` を fan-out (a) に切替検討
 - **participant 体験用 state** (teamLoginKey、displayTeamName、将来のスコア) → **DDB `ParticipantSessions` テーブル** (現 `Deployments` テーブルを縮小・改称)
 - **問題カタログ** → 上述 (5) の `Problems` DDB
 
@@ -142,7 +142,7 @@ Distributed Map の child execution は `EXPRESS` workflow にできるが、CFn
 
 ### コスト・トレードオフ
 
-- Step Functions Distributed Map の課金: child execution 単価。750 件 × 4 transitions × $0.025/1000 ≈ $0.075/batch。GameDay 規模 (月 10 イベント) で月 $1 未満
+- Step Functions Distributed Map の課金: child execution × state transition 単価。CFn `.sync` の wait loop で transition 数が膨らむため、1 child execution あたり ~8 transitions と見積もり。750 × 8 × $0.025/1000 ≈ $0.15/batch + 親の Distributed Map 自体の transition。月 10 イベントでも $2 未満なので許容
 - 既存 `Deployments` DDB に蓄積された deploy 履歴データは migration 不可 (CFn が持ってるから捨てる、もしくは read-only で保持して新規はそちらに書かない)
 - 新規 `Problems` DDB + S3 bucket + 3 つの state machine + EventBridge Rule で CFn template が +30 リソース程度太る
 - 並列度 50 では Acceptance Criteria の「1 hour 以内」は未達 (~2h)。CFn template 最適化と組合せでカバー、達成できなければ SLO 緩和または並列度上げの検討
@@ -186,9 +186,36 @@ Distributed Map の child execution は `EXPRESS` workflow にできるが、CFn
 
 実装の優先順位は **「まず MVP (Walking Skeleton) を 1 本通す → 動くことを確認してから多機能化」** とする。これは「実装はまず既存の Application 画面から Deploy 開始ボタンを押したら Step Functions が起動して問題が deploy される、を目指す」という運用方針。
 
-### Phase 1: MVP (Walking Skeleton) — 1 PR で end-to-end 1 経路を通す
+### Phase 1a: MVP-0 — シェルで CFn deploy が通ることを確認する
 
-**PR-2 (MVP)**: 既存 UI の「Deploy 開始」ボタンを押すと、(問題 1 × **同一 TenkaCloud AWS account 内**) で Step Functions が起動して CFn deploy が成功するところまでを 1 PR で繋げる。**MVP では cross-account を持ち込まない** — TenkaCloud 自社 AWS account 内に CFn stack を立てるだけ。これで「publish 経路 → Step Functions → CFn」のパス自体が動くことを証明する。cross-account / AssumeRole / ExternalId は Phase 2 (PR-3 以降) で重ねる。
+**PR-1.5 (MVP-0)**: `scripts/deploy-battles.sh` (= 引数に問題フォルダを取り、順次 CFn deploy する shell script) と `make deploy-battles` ターゲットを追加し、AWS CLI セッションから「`problems/<id>/template.yaml` を CFn deploy → smoke 動作確認 → `make destroy-battles` で teardown」までできる状態を作る。
+
+**狙い**: SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を一切持ち込まず、**まず CFn template 自体と AWS 権限の正しさを smoke test する**。スクリプトとして deploy ロジックが固まれば、Phase 1b の orchestration はそのスクリプトをそのまま実行する形に乗せ替えるだけで済む。これは SBT の `BashJobRunner` (CodeBuild が provision-tenant.sh を実行する) と同じパターン。
+
+含める要素は次のとおり。
+
+- `scripts/deploy-battles.sh` (新規): 引数 1 個以上で問題ディレクトリ (`problems/gameday/security-battle-royale` 等) を受け取り、各々を順次 `aws cloudformation deploy` で同一 account に deploy する。teamSlug は env か引数で受ける
+- `scripts/destroy-battles.sh` (新規): 同じ引数で `aws cloudformation delete-stack` を順次呼ぶ
+- `Makefile` に `deploy-battles` / `destroy-battles` ターゲットを追加 (内部で上のシェルを呼ぶ。default 引数は `problems/gameday/security-battle-royale demo-team`)
+- これは「開発者が deploy 機構を smoke test するためのツール」であり、operator UX には繋がらない (operator は引き続き旧 UI 経路を使う)
+
+含めない要素 (Phase 1b 以降に倒す)。
+
+- Step Functions / EventBridge / CodeBuild / tenant API / Cognito 関連の変更
+- 既存 `ProblemDeployBackendStack` の構成変更 (= 旧経路はそのまま放置)
+- frontend の変更
+- bulk operation の並列化 (sequential ループのみ。並列化は Phase 2 の Distributed Map で扱う)
+
+完了条件 (PR-1.5 の DoD) は次のとおり。
+
+- `make deploy-battles` を流すと CFn stack が立ち、`security-battle-royale` の EC2 + nginx + Flask api + MySQL が動く (frontend URL が 200 を返す)
+- `make destroy-battles` で stack が消える (`DeleteStack` が成功)
+- 引数で複数問題を渡したときに順次 deploy される
+- 両 target が developer の AWS CLI セッションで実行できる (operator は使わない)
+
+### Phase 1b: MVP-1 — 既存 UI の Deploy ボタンを Step Functions 経路に切り替える
+
+**PR-2 (MVP-1)**: 既存 UI の「Deploy 開始」ボタンを押すと、(問題 1 × **同一 TenkaCloud AWS account 内**) で Step Functions が起動して CFn deploy が成功するところまでを 1 PR で繋げる。**MVP-1 でも cross-account を持ち込まない** — TenkaCloud 自社 AWS account 内に CFn stack を立てるだけ。これで「publish 経路 → Step Functions → CFn」のパス自体が動くことを証明する。cross-account / AssumeRole / ExternalId は Phase 2 (PR-3 以降) で重ねる。
 
 含める要素は次のとおり。
 
@@ -225,7 +252,7 @@ Distributed Map の child execution は `EXPRESS` workflow にできるが、CFn
 
 PR-2 の MVP が main に入ったら、要件の残りを順に実装する。順序は要件側の依存と Open questions 解決順に従う。
 
-1. **PR-3: ADR-002 (Cross-account federation)** + 競技者アカウント登録 UI / DDB / SSM SecureString。Issue #459 の決着
+1. **PR-3: ADR-002 (Cross-account federation)** + 競技者アカウント登録 UI / DDB / SSM SecureString。Issue (#459) の決着
 2. **PR-4: ADR-003 (問題カタログ + 可視範囲) + `ProblemsTable` (DDB) + `ProblemTemplatesBucket` (S3) + 問題管理 API + UI**。FR-5 の authoring 基盤
 3. **PR-5: bulk Create**。`POST /deployments` で `deployments[]` を 750 件まで受け取れるようにし、UI で「複数選択 → 一括 Deploy」を生やす。内部実装は PR-2 の Distributed Map をそのまま使う (entry 数だけ増える)
 4. **PR-6: `DeployDeleteStateMachine` + Delete API + UI 「batch を Delete」**。FR-1 (event 終了時 bulk teardown) の経路
@@ -238,17 +265,18 @@ PR-2 の MVP が main に入ったら、要件の残りを順に実装する。�
 
 ## Open questions (本 ADR の scope 外、後続で確定する)
 
-- **Cross-account federation の保存場所** (#459) — 競技者アカウントごとの ExternalId / RoleName / region をどこに持つか。Step Functions の入力に含めるための前提なので、本 ADR の実装着手 (PR-4 以降) 前に #459 を ADR-002 として別途確定する必要がある
+- **Cross-account federation の保存場所** (Issue (#459)) — 競技者アカウントごとの ExternalId / RoleName / region をどこに持つか。Step Functions の入力に含めるための前提なので、本 ADR の実装着手 (PR-4 以降) 前に Issue (#459) を ADR-002 として別途確定する必要がある
 - **`org-shared` の "組織" の定義** (要件 Open Question 1) — tenant のグループか、tenant 内の team か、ACL 列か。問題カタログ実装 (PR-3) 前に ADR-003 で確定する
 - **batch SLO の具体値** (要件 Open Question 4) — 並列度 50 で `~2h` という見積もりが要件として許容されるか、operator にフィードバックを取る
 - **失敗 item 再実行 API の冪等性** — CFn `CreateStack` の `AlreadyExists` をどう扱うか (成功扱い / 別エラー扱い)、再実行で stackName が衝突する場合の解決方針
+- **`ParticipantSessions` DDB の cleanup policy** — CFn `DeleteStack` 成功後、`teamLoginKey` / `displayTeamName` 等の participant 体験用 row はいつ削除するか。「競技履歴として保持」と「DeleteStack 成功イベントで cascade 削除」の 2 案を PR-10 で確定する
 - **問題テンプレ依存ファイルの bundle 方式** (Phase 2) — 現在の問題 (`security-battle-royale`) は EC2 UserData の `git clone` で public TenkaCloud repo から app コード (Flask API / MySQL-init / frontend) を取ってくる作り。MVP では `template.yaml` だけ S3 に置けば動くが、private repo / 機密 / Lambda code zip 同梱が必要な問題が将来増えたとき、依存ファイル全体を S3 に bundle して UserData が `aws s3 cp` で取りに行く方式への切替が必要。問題種別ごとのテンプレ規約を整理する別 ADR で扱う
 
 ## References
 
 - [`docs/requirements/problem-deploy.md`](../requirements/problem-deploy.md) — 本 ADR が満たすべき要件 (FR-1〜6 / NFR-1〜4 / Acceptance Criteria)
-- Issue #458 — Deploy 操作の publish 経路を SBT 同型 (tenant API + tenant Cognito) に統一する (本 ADR がスコープを拡張して supersede)
-- Issue #459 — Cross-account federation の保存・管理 (ADR-002 で決める)
+- Issue (#458) — Deploy 操作の publish 経路を SBT 同型 (tenant API + tenant Cognito) に統一する (本 ADR がスコープを拡張して supersede)
+- Issue (#459) — Cross-account federation の保存・管理 (ADR-002 で決める)
 - CLAUDE.md — `ONE_PASS_AWS` invariant、`INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER`
 - `docs/architecture/harness.md` — 既存 invariant 群
 - AWS docs: [Step Functions Distributed Map](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-asl-use-map-state-distributed.html)

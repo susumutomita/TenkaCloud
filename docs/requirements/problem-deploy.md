@@ -1,8 +1,8 @@
 # Problem Deploy 機能 要件定義
 
-- **Status**: Draft (2026-05-05)
+- **Status**: Approved (2026-05-05)
 - **Scope**: TenkaCloud の operator が SaaS UI から「問題スタック」を競技者の AWS アカウントへ deploy する機能。本ドキュメントは要件 (= 何を満たせば成功か) を定義する。実装方針 (= どう作るか) は別途 ADR で決める。
-- **Related**: ADR-001 (実装案、本要件確定後に書き直す)
+- **Related**: ADR-001 (本要件に基づく実装案)
 
 ## ゴール
 
@@ -187,13 +187,13 @@ Service Catalog を採用するためには下記すべてを満たす必要が�
 ## Open questions (要件レベルで未確定、ADR 着手前に確定が必要)
 
 1. **`org-shared` の "組織" の定義** — tenant のグループか、tenant 内の team か、ACL 列か (ADR-003 候補)
-2. **競技者アカウント登録 UI と ExternalId 管理** — Issue #459 で別途
+2. **競技者アカウント登録 UI と ExternalId 管理** — Issue (#459) で別途
 3. **問題作成者と operator の権限関係** — 同一テナント内で role 分離するか、operator なら誰でも問題を作れるか
 4. **batch SLO の具体値** — Acceptance Criteria 記載の「1 hour 以内」は仮置き
 
 ## References
 
-- Issue #458 — Deploy 操作の publish 経路 (本要件文書で再整理、現実装案は ADR-001 で書き直し)
-- Issue #459 — Cross-account federation (ExternalId 管理) — 本要件の前提
+- Issue (#458) — Deploy 操作の publish 経路 (本要件文書で再整理、現実装案は ADR-001 で書き直し)
+- Issue (#459) — Cross-account federation (ExternalId 管理) — 本要件の前提
 - `infrastructure/templates/competitor-bootstrap.yaml` — 競技者側 IAM Role 定義
 - ADR-001 (Draft) — 本要件確定後に Decision を書き直す対象
