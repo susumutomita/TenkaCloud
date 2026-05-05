@@ -2,21 +2,37 @@ import type { ApiClient } from "./client";
 
 export const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
+/**
+ * DDB の `stackOutputs` 文字列を `{key: value}` map に変換。次の 2 形式を許容する:
+ *   1. `{key: value}` (Lambda 由来)
+ *   2. `[{OutputKey, OutputValue}, ...]` (Step Functions describeStacks 由来)
+ *
+ * 壊れた JSON / 非 string value は無視 (best-effort 表示、ページを落とさない)。
+ */
 export function parseStackOutputs(json: string | undefined): Record<string, string> {
   if (!json) return {};
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(json);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const out: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === "string") out[k] = v;
-      }
-      return out;
-    }
+    parsed = JSON.parse(json);
   } catch {
-    // stackOutputs は best-effort 表示。壊れた JSON でページを落とさない。
+    return {};
   }
-  return {};
+  if (!parsed || typeof parsed !== "object") return {};
+  const out: Record<string, string> = {};
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      if (entry && typeof entry === "object") {
+        const k = (entry as { OutputKey?: unknown }).OutputKey;
+        const v = (entry as { OutputValue?: unknown }).OutputValue;
+        if (typeof k === "string" && typeof v === "string") out[k] = v;
+      }
+    }
+    return out;
+  }
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return out;
 }
 
 export type DeploymentStatus =

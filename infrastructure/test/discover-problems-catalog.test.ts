@@ -2,7 +2,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { discoverProblemsCatalog } from "../lib/utils/discover-problems-catalog";
+import {
+  discoverProblemsCatalog,
+  discoverProblemsScoring,
+} from "../lib/utils/discover-problems-catalog";
 
 /**
  * discoverProblemsCatalog: `problems/<category>/<id>/metadata.json` を 2 階層 scan して
@@ -111,5 +114,64 @@ describe("discoverProblemsCatalog", () => {
     const catalog = discoverProblemsCatalog(workspace);
 
     expect(catalog).toEqual({ "hello-world": "problems/challenges/hello-world" });
+  });
+});
+
+describe("discoverProblemsScoring", () => {
+  it("flag 形式の scoring を採集するべき", () => {
+    writeProblem("challenges", "hello-world", {
+      id: "hello-world",
+      scoring: { kind: "flag", flagOutputKey: "ParameterValue", points: 100 },
+    });
+    expect(discoverProblemsScoring(workspace)).toEqual({
+      "hello-world": { kind: "flag", flagOutputKey: "ParameterValue", points: 100 },
+    });
+  });
+
+  it("uptime 形式の scoring を採集するべき", () => {
+    writeProblem("battles", "battle-1", {
+      id: "battle-1",
+      scoring: {
+        kind: "uptime",
+        endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 50,
+      },
+    });
+    expect(discoverProblemsScoring(workspace)).toEqual({
+      "battle-1": {
+        kind: "uptime",
+        endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 50,
+      },
+    });
+  });
+
+  it("scoring を持たない problem は map に含めないべき", () => {
+    writeProblem("challenges", "hello-world", { id: "hello-world" });
+    writeProblem("challenges", "with-scoring", {
+      id: "with-scoring",
+      scoring: { kind: "flag", flagOutputKey: "X", points: 1 },
+    });
+    expect(discoverProblemsScoring(workspace)).toEqual({
+      "with-scoring": { kind: "flag", flagOutputKey: "X", points: 1 },
+    });
+  });
+
+  it("scoring の shape が壊れているもの (= kind 不正 / 必須 field 欠損) は drop するべき", () => {
+    writeProblem("challenges", "broken-1", {
+      id: "broken-1",
+      scoring: { kind: "wrong-kind" },
+    });
+    writeProblem("challenges", "broken-2", {
+      id: "broken-2",
+      scoring: { kind: "flag" }, // flagOutputKey / points 欠損
+    });
+    writeProblem("challenges", "good", {
+      id: "good",
+      scoring: { kind: "flag", flagOutputKey: "X", points: 1 },
+    });
+    expect(discoverProblemsScoring(workspace)).toEqual({
+      good: { kind: "flag", flagOutputKey: "X", points: 1 },
+    });
   });
 });

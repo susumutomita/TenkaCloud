@@ -86,6 +86,17 @@ export interface DeploymentItem {
   /** Reserved for bulk deploy. */
   accountGroupId?: string;
   problemSetId?: string;
+
+  /** Scoring engine が加算したチームの累計ポイント。0 default。 */
+  score?: number;
+  /** 最後に scoring が走った時刻 (ISO 8601)。 */
+  lastScoredAt?: string;
+  /** Battle (uptime) で最後の health check が成功したか。 */
+  lastResult?: "ok" | "fail";
+  /**
+   * Challenge (flag) で 1 度でも正解 submit されたら true。再提出での重複加算を防ぐ。
+   */
+  flagSubmitted?: boolean;
 }
 
 export const DeployResponseSchema = z.object({

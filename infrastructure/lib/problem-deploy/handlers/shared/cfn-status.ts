@@ -82,22 +82,38 @@ export function serializeStackOutputs(outputs: Output[] | undefined): string {
 }
 
 /**
- * `serializeStackOutputs` の逆。DDB に保存された JSON 文字列を `Record<string,string>`
- * に戻す。壊れた JSON / 非 object / 配列 / 非 string value は無視 (best-effort)。
+ * DDB に保存された JSON 文字列を `Record<string,string>` に戻す。次の 2 形式を許容する:
+ *
+ *   1. `{key: value}` map — `serializeStackOutputs` (Lambda 由来) が書き込む形式
+ *   2. `[{OutputKey, OutputValue}, ...]` array — Step Functions の
+ *      `cloudformation:describeStacks` task が `States.JsonToString` で書き込む CFn 生形式
+ *
+ * 壊れた JSON / 非 object / array 内の不正 entry は無視 (best-effort)。
  */
 export function parseStackOutputs(json: string | undefined): Record<string, string> {
   if (!json) return {};
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof v === "string") out[k] = v;
-    }
-    return out;
+    parsed = JSON.parse(json);
   } catch {
     return {};
   }
+  if (!parsed || typeof parsed !== "object") return {};
+  const out: Record<string, string> = {};
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      if (entry && typeof entry === "object") {
+        const k = (entry as { OutputKey?: unknown }).OutputKey;
+        const v = (entry as { OutputValue?: unknown }).OutputValue;
+        if (typeof k === "string" && typeof v === "string") out[k] = v;
+      }
+    }
+    return out;
+  }
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return out;
 }
 
 export function extractStackContext(stack: Stack | undefined): {

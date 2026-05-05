@@ -1,8 +1,12 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
+import Form from "@cloudscape-design/components/form";
+import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
@@ -14,6 +18,9 @@ import {
   getPortalMe,
   type ParticipantView,
   PortalAuthError,
+  PortalValidationError,
+  type SubmitFlagOutcome,
+  submitFlag,
   TERMINAL_STATUSES,
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
@@ -49,7 +56,6 @@ export function HomePage({ config }: { config: AppConfig }) {
       if (TERMINAL_STATUSES.has(next.status)) stopPollingRef.current = true;
     } catch (err) {
       if (err instanceof PortalAuthError) {
-        // セッションが backend で無効化された (削除等)。logout して login へ戻す。
         auth.logout();
         return;
       }
@@ -78,6 +84,8 @@ export function HomePage({ config }: { config: AppConfig }) {
       <Header variant="h1" description={`${config.eventTitle} へようこそ`}>
         Welcome, {teamName}
       </Header>
+
+      {view && <ScorePanel view={view} />}
 
       <Container header={<Header variant="h2">問題のデプロイ状況</Header>}>
         <SpaceBetween size="m">
@@ -139,13 +147,172 @@ export function HomePage({ config }: { config: AppConfig }) {
         </SpaceBetween>
       </Container>
 
-      <Container header={<Header variant="h2">これからやること</Header>}>
-        <Box variant="p">
-          上のステータスが <strong>COMPLETE</strong> になると、CloudFormation Outputs に 表示される
-          URL から問題に取り組めます。スコア状況は <strong>Scoreboard</strong>
-          、得点履歴は <strong>Score events</strong> から確認してください。
-        </Box>
-      </Container>
+      {view?.scoring?.kind === "flag" && view.status === "COMPLETE" && (
+        <FlagSubmissionPanel
+          apiBaseUrl={config.apiBaseUrl}
+          sessionToken={sessionToken ?? ""}
+          flagSubmitted={view.scoring.flagSubmitted ?? false}
+          points={view.scoring.points ?? 0}
+          hints={view.scoring.hints ?? []}
+          onScored={tick}
+        />
+      )}
     </SpaceBetween>
+  );
+}
+
+function ScorePanel({ view }: { view: ParticipantView }) {
+  return (
+    <Container header={<Header variant="h2">スコア</Header>}>
+      <ColumnLayout columns={3} variant="text-grid">
+        <KeyValuePairs
+          items={[
+            {
+              label: "現在の累計",
+              value: (
+                <Box variant="awsui-value-large" color="text-status-success">
+                  {view.score} pt
+                </Box>
+              ),
+            },
+          ]}
+        />
+        <KeyValuePairs
+          items={[
+            {
+              label: "形式",
+              value:
+                view.scoring?.kind === "flag"
+                  ? "Challenge (flag 提出)"
+                  : view.scoring?.kind === "uptime"
+                    ? "Battle (uptime 加点)"
+                    : "(未設定)",
+            },
+          ]}
+        />
+        <KeyValuePairs
+          items={[
+            {
+              label: "最終チェック",
+              value: view.lastScoredAt ?? "(まだ未採点)",
+            },
+          ]}
+        />
+      </ColumnLayout>
+    </Container>
+  );
+}
+
+function FlagSubmissionPanel({
+  apiBaseUrl,
+  sessionToken,
+  flagSubmitted,
+  points,
+  hints,
+  onScored,
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  flagSubmitted: boolean;
+  points: number;
+  hints: readonly string[];
+  onScored: () => Promise<void>;
+}) {
+  const [flag, setFlag] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  if (flagSubmitted) {
+    return (
+      <Container header={<Header variant="h2">Flag 提出</Header>}>
+        <Alert type="success" header="提出済み">
+          このチームは既に正解を提出済みです (+{points} pt)。
+        </Alert>
+      </Container>
+    );
+  }
+
+  const handleSubmit = async (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (!flag.trim() || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    setOutcome(null);
+    try {
+      const result = await submitFlag(apiBaseUrl, sessionToken, flag);
+      setOutcome(result);
+      if (result.kind === "ok" || result.kind === "already_scored") {
+        await onScored();
+      }
+    } catch (err) {
+      if (err instanceof PortalValidationError) {
+        setSubmitError(`バリデーションエラー: ${err.errorCode}`);
+      } else {
+        setSubmitError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Container
+      header={
+        <Header variant="h2" description={`正解を入力すると +${points} pt 獲得します。`}>
+          Flag 提出
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        {hints.length > 0 && (
+          <Alert type="info" header="ヒント">
+            <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
+              {hints.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
+        <form onSubmit={handleSubmit}>
+          <Form
+            actions={
+              <Button variant="primary" loading={submitting} formAction="submit">
+                提出
+              </Button>
+            }
+          >
+            <FormField label="Flag (Stack Output 値)">
+              <Input
+                value={flag}
+                onChange={(e) => setFlag(e.detail.value)}
+                placeholder="例: Hello from tc-hello-world-..."
+                disabled={submitting}
+              />
+            </FormField>
+          </Form>
+        </form>
+        {outcome?.kind === "ok" && (
+          <Alert type="success" header={`正解 (+${outcome.scoreDelta} pt)`}>
+            合計スコア: {outcome.totalScore} pt
+          </Alert>
+        )}
+        {outcome?.kind === "wrong" && (
+          <Alert type="warning" header="不正解">
+            値を確認して再度提出してください。
+          </Alert>
+        )}
+        {outcome?.kind === "already_scored" && (
+          <Alert type="info" header="提出済み">
+            既に正解済みです (合計 {outcome.totalScore} pt)。
+          </Alert>
+        )}
+        {submitError && (
+          <Alert type="error" header="提出に失敗しました">
+            {submitError}
+          </Alert>
+        )}
+      </SpaceBetween>
+    </Container>
   );
 }

@@ -9,6 +9,7 @@ import { DeployCodeBuildProject } from "./deploy-codebuild-project";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine";
 import { DeployEventRule } from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
+import { HealthCheckLambda } from "./health-check-lambda";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
@@ -37,6 +38,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * `problemDir` を解決する。Phase 2 (ADR-003) で DDB catalog に置換。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /**
+   * `problemId → scoring` の map (`{ kind: "flag", flagOutputKey, points, ... }`)。
+   * Participant Portal Lambda が submit-flag 採点に使う。`scoring` を持たない問題は
+   * このキーが無い (= 採点無効)。
+   */
+  readonly problemsScoring: Readonly<Record<string, unknown>>;
   /**
    * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
    * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
@@ -97,9 +104,19 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       stateMachine: stateMachine.stateMachine,
     });
 
+    // 1 分間隔で uptime 採点する Health Check Lambda。`scoring.kind=uptime` の問題のみが
+    // 対象。`flag` 形式は Portal Lambda が submit-flag 経路で採点するため別系統。
+    if (Object.keys(props.problemsScoring).length > 0) {
+      new HealthCheckLambda(this, "HealthCheck", {
+        deploymentsTable: deployments.table,
+        problemsScoring: props.problemsScoring,
+      });
+    }
+
     if (props.participantPortal) {
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
         deploymentsTable: deployments.table,
+        problemsScoring: props.problemsScoring,
       });
       new CfnOutput(this, "ParticipantPortalApiUrl", {
         value: portalLambda.url.url,

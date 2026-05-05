@@ -20,6 +20,12 @@ import { Construct } from "constructs";
 
 export interface ParticipantPortalLambdaProps {
   readonly deploymentsTable: ITable;
+  /**
+   * `{ [problemId]: { kind, flagOutputKey, points, ... } }` 形の scoring 設定。
+   * `discoverProblemsScoring` で metadata.json から自動収集して synth 時に注入する。
+   * 競技者が submit-flag したとき、この map を参照して採点する。
+   */
+  readonly problemsScoring: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -73,6 +79,7 @@ export class ParticipantPortalLambda extends Construct {
       role,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -87,7 +94,7 @@ export class ParticipantPortalLambda extends Construct {
       authType: FunctionUrlAuthType.NONE,
       cors: {
         allowedOrigins: ["*"],
-        allowedMethods: [HttpMethod.GET, HttpMethod.PATCH],
+        allowedMethods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.POST],
         allowedHeaders: ["content-type", "authorization"],
         maxAge: Duration.minutes(10),
       },
