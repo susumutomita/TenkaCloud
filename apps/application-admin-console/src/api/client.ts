@@ -56,14 +56,6 @@ export function useApiClient(config: AppConfig): ApiClient | null {
   );
 }
 
-export function useDeployApiClient(config: AppConfig): ApiClient | null {
-  const auth = useAuth();
-  return useMemo(
-    () => (auth.tokens ? createApiClient(config.deployApiBaseUrl, auth.tokens.idToken) : null),
-    [auth.tokens, config.deployApiBaseUrl],
-  );
-}
-
 export class ApiError extends Error {
   constructor(
     public readonly status: number,

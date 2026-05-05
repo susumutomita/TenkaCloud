@@ -9,7 +9,7 @@ import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useDeployApiClient } from "../api/client";
+import { useApiClient } from "../api/client";
 import { type DeployResponse, startDeployment } from "../api/deploy-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
@@ -36,7 +36,7 @@ const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
  * 利用者が控えるまで閉じない (navigate も明示クリック後)。
  */
 export function DeployFormModal({ config, problemId, problemName, visible, onDismiss }: Props) {
-  const apiClient = useDeployApiClient(config);
+  const apiClient = useApiClient(config);
   const navigate = useNavigate();
   const [region, setRegion] = useState<SelectProps.Option>({
     value: DEFAULT_AWS_REGION.code,
@@ -53,7 +53,6 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
   const inputsLocked = response !== null || submitting;
   const canSubmit =
     !!apiClient &&
-    config.isDeployApiConfigured &&
     !!region.value &&
     AWS_ACCOUNT_ID_RE.test(awsAccountId) &&
     TEAM_NAME_RE.test(teamName) &&
@@ -151,15 +150,6 @@ export function DeployFormModal({ config, problemId, problemName, visible, onDis
             </Alert>
           ) : (
             <>
-              {!config.isDeployApiConfigured && (
-                <Alert type="error" header="Deploy API が未配置です">
-                  この環境には ProblemDeployBackendStack の HTTP API が deploy されていません。
-                  operator は <code>CDK_PARAM_DEPLOY_USER_POOL_ID</code> /
-                  <code>CDK_PARAM_DEPLOY_USER_POOL_CLIENT_ID</code> を設定して
-                  ProblemDeployBackendStack と TenantTemplateStack を再 deploy してください。再
-                  deploy 後、本ページをリロードすると本フォームから送信できるようになります。
-                </Alert>
-              )}
               {error && (
                 <Alert type="error" header="デプロイ送信に失敗しました">
                   {error}

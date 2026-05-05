@@ -13,7 +13,7 @@ import StatusIndicator, {
 } from "@cloudscape-design/components/status-indicator";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
-import { useDeployApiClient } from "../api/client";
+import { useApiClient } from "../api/client";
 import {
   type DeploymentStatus,
   type DeploymentSummary,
@@ -38,7 +38,7 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
 
 export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const { jobId } = useParams<{ jobId: string }>();
-  const apiClient = useDeployApiClient(config);
+  const apiClient = useApiClient(config);
   const [item, setItem] = useState<DeploymentSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshing, setManualRefreshing] = useState(false);

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 export {
-  type DeployRequestedDetail,
-  DeployRequestedDetailSchema,
-  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+  type DeployCreateRequestedDetail,
+  DeployCreateRequestedDetailSchema,
+  EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../shared/events.js";
 

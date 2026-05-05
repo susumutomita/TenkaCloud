@@ -37,16 +37,12 @@ interface RuntimeConfigProps {
    */
   readonly tenantName: string;
   /**
-   * application-admin-console が叩くテナント API (POST /apps 等) の base URL。
+   * application-admin-console が叩くテナント API の base URL。
+   * Issue #458 / ADR-001 後: Deploy 系 endpoint も同じ tenant API に統合されているので、
+   * frontend は本 URL 1 本で全 API 呼び出しを賄う。
    * ApiGateway.restApi.url (末尾スラッシュ有) から渡す。
    */
   readonly apiUrl: string;
-  /**
-   * Deploy API (HTTP API + Cognito JWT authorizer) の base URL。
-   * ProblemDeployBackendStack の DeployApiGateway から渡す。未指定なら空文字 →
-   * frontend の dev fallback ("http://localhost:3998") に倒れる。
-   */
-  readonly deployApiUrl?: string;
 }
 
 /**
@@ -141,10 +137,6 @@ export class ApplicationAdminConsoleHosting extends Construct {
    *   - apiUrl: アプリ管理 API の base URL (POST /apps 等、#40-d)
    */
   deployRuntimeConfig(props: RuntimeConfigProps): void {
-    // `deployApiUrl` は HTTP API が未配置の構成だと undefined になる。空文字を
-    // 書き出すと frontend の旧 validation が runtime-config 全体を捨てる
-    // 副作用があったため (#456 で frontend 側は修正済)、ここでも attribute ごと
-    // 省略して両側で防御する。frontend が field 不在を扱える状態になっている。
     const data: Record<string, string> = {
       cognitoDomain: props.cognitoDomain,
       userClientId: props.cognitoClientId,
@@ -152,9 +144,6 @@ export class ApplicationAdminConsoleHosting extends Construct {
       tenantName: props.tenantName,
       apiUrl: props.apiUrl.replace(/\/$/, ""),
     };
-    if (props.deployApiUrl && props.deployApiUrl.length > 0) {
-      data.deployApiUrl = props.deployApiUrl.replace(/\/$/, "");
-    }
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", data)],
       destinationBucket: this.bucket,
