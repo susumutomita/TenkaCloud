@@ -9,41 +9,19 @@ export interface AppConfig {
   readonly tenantName: string;
   /**
    * テナント API の base URL (末尾スラッシュなし)。
-   * application-admin-console は /apps 等の操作を JWT 認証付きでここに送る。
+   * application-admin-console は全 API 呼び出し (テナント管理 + Deploy 系) を
+   * JWT 認証付きでここに送る。Issue #458 / ADR-001 以降、Deploy 用の独立 base URL は廃止。
    * dev fallback ではダミー URL になるので実 API 呼び出しは成立しない。
    */
   readonly apiBaseUrl: string;
-  /**
-   * Deploy API (HTTP API + Cognito JWT authorizer) の base URL。
-   * 問題 deploy / 状態取得用 (POST /problems/:id/deploy など)。
-   */
-  readonly deployApiBaseUrl: string;
-  /**
-   * Deploy API の URL が明示的に設定されているか。
-   * - true: runtime-config.json に deployApiUrl があるか env (VITE_DEPLOY_API_BASE_URL) で
-   *   上書きされている (= operator が ProblemDeployBackendStack を deploy 済み)
-   * - false: production runtime-config が deploy backend を持っていないため dev placeholder
-   *   (`http://localhost:3998`) に倒れている。UI 側は deploy 操作を disable して、
-   *   operator に「Deploy API 未配置」を提示する。
-   *
-   * dev (`make start`、runtime-config.json 不在) では true として扱う —
-   * 開発者は localhost で deploy backend を立てている前提。
-   */
-  readonly isDeployApiConfigured: boolean;
 }
 
-/**
- * production では CloudFront 同ドメインの `/runtime-config.json` に URL と
- * テナント情報が書かれている。ApplicationAdminConsoleHosting (TenantTemplateStack 内の
- * Construct) が deployRuntimeConfig() で配置する。
- */
 interface RuntimeConfig {
   readonly cognitoDomain: string;
   readonly userClientId: string;
   readonly tenantId: string;
   readonly tenantName: string;
   readonly apiUrl: string;
-  readonly deployApiUrl: string;
 }
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
@@ -51,11 +29,6 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<RuntimeConfig>;
-    // 認証 + tenant + apiUrl がそろっていれば runtime-config を採用する。
-    // `deployApiUrl` は ProblemDeployBackendStack で HTTP API がまだ立っていない構成
-    // (CDK_PARAM_DEPLOY_USER_POOL_ID 未設定) では空文字で書き出されるため、ここで
-    // 必須にすると 「Cognito 設定はあるのに env fallback (= VITE_COGNITO_DOMAIN 要求)」
-    // に倒れて全体が起動不能になる。空のときは下流で dev fallback URL に倒す。
     if (
       !data.cognitoDomain ||
       !data.userClientId ||
@@ -70,30 +43,16 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       tenantId: data.tenantId,
       tenantName: data.tenantName,
       apiUrl: data.apiUrl,
-      deployApiUrl: data.deployApiUrl ?? "",
     };
   } catch {
     return null;
   }
 }
 
-/** dev (`make dev`) で `/runtime-config.json` が無い場合の placeholder。production には使わない。 */
 const DEV_FALLBACK_TENANT_ID = "dev-local";
 const DEV_FALLBACK_TENANT_NAME = "Local Dev Tenant";
 const DEV_FALLBACK_API_BASE_URL = "http://localhost:3999";
-const DEV_FALLBACK_DEPLOY_API_BASE_URL = "http://localhost:3998";
 
-/**
- * 設定を解決する。URL は以下のいずれかから来る:
- *   1. `/runtime-config.json` (production、CloudFront から配信)
- *   2. `import.meta.env.VITE_*` (dev、apps/application-admin-console/.env.local に書いた値)
- *
- * redirectUri は env に依存しない — 常に `window.location.origin/callback` で解決する。
- *
- * tenantId / tenantName / apiBaseUrl は production では runtime-config.json が必ず持つ。
- * dev fallback では DEV_FALLBACK_* の placeholder を使う (env で上書きしない方針 —
- * 同じ dist が全テナントで共有されるため env に焼くと混乱の元)。
- */
 export async function loadConfig(
   env: Record<string, string | undefined> = import.meta.env,
 ): Promise<AppConfig> {
@@ -102,24 +61,17 @@ export async function loadConfig(
 
   const runtime = await fetchRuntimeConfig();
   if (runtime) {
-    const explicitDeployApiUrl = runtime.deployApiUrl || env.VITE_DEPLOY_API_BASE_URL || "";
     return {
       cognitoDomain: runtime.cognitoDomain,
       cognitoClientId: runtime.userClientId,
       tenantId: runtime.tenantId,
       tenantName: runtime.tenantName,
       apiBaseUrl: runtime.apiUrl,
-      // `deployApiUrl` は HTTP API 未配置時に空文字で来る。env / dev fallback に倒す
-      // ことで「全体は動くが deploy 機能だけ呼べない」状態 (= 部分 degrade) で起動する。
-      deployApiBaseUrl: explicitDeployApiUrl || DEV_FALLBACK_DEPLOY_API_BASE_URL,
-      isDeployApiConfigured: explicitDeployApiUrl.length > 0,
       redirectUri,
       scope,
     };
   }
 
-  // dev fallback: 認証用 URL は .env.local / import.meta.env から、テナント情報は
-  // ハードコード placeholder (dev-local / Local Dev Tenant / http://localhost:399x)。
   const required = (key: string): string => {
     const value = env[key];
     if (!value) throw new Error(`Missing required env var: ${key}`);
@@ -131,10 +83,6 @@ export async function loadConfig(
     tenantId: DEV_FALLBACK_TENANT_ID,
     tenantName: DEV_FALLBACK_TENANT_NAME,
     apiBaseUrl: env.VITE_API_BASE_URL ?? DEV_FALLBACK_API_BASE_URL,
-    deployApiBaseUrl: env.VITE_DEPLOY_API_BASE_URL ?? DEV_FALLBACK_DEPLOY_API_BASE_URL,
-    // dev (runtime-config.json 不在) は make start で localhost backend を立てている前提
-    // で true 扱い。production の "runtime-config あるが deployApiUrl 空" だけが false に倒れる。
-    isDeployApiConfigured: true,
     redirectUri,
     scope,
   };

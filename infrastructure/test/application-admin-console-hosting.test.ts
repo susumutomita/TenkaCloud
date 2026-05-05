@@ -100,7 +100,7 @@ describe("ApplicationAdminConsoleHosting", () => {
   });
 
   describe("deployRuntimeConfig() を呼び出したとき", () => {
-    function synthWithRuntimeConfig(deployApiUrl?: string) {
+    function synthWithRuntimeConfig() {
       const app = new cdk.App();
       const stack = new cdk.Stack(app, "TestStack");
       const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
@@ -112,7 +112,6 @@ describe("ApplicationAdminConsoleHosting", () => {
         tenantId: "tenant-1",
         tenantName: "DENSO 第一事業部",
         apiUrl: "https://abc.execute-api.ap-northeast-1.amazonaws.com/prod/",
-        deployApiUrl,
       });
       return { template: Template.fromStack(stack), stack };
     }
@@ -144,24 +143,15 @@ describe("ApplicationAdminConsoleHosting", () => {
       template.resourceCountIs("AWS::CloudFront::Distribution", 1);
     });
 
-    it("deployApiUrl 指定時は runtime-config.json に書き込むべき", () => {
-      const { stack } = synthWithRuntimeConfig("https://deploy.example.com/");
+    it("Issue #458 後: runtime-config.json に deployApiUrl は出ない (Deploy 系 endpoint は apiUrl に統合)", () => {
+      const { stack } = synthWithRuntimeConfig();
       const json = readRuntimeConfigJson(stack);
-      expect(json.deployApiUrl).toBe("https://deploy.example.com");
-    });
-
-    it("deployApiUrl 未指定 / 空文字なら attribute ごと省略する (frontend が dev fallback に倒れる)", () => {
-      for (const arg of [undefined, ""] as const) {
-        const { stack } = synthWithRuntimeConfig(arg);
-        const json = readRuntimeConfigJson(stack);
-        expect(json.deployApiUrl).toBeUndefined();
-        // 他フィールドは入ること (#456 + 本 PR で「Cognito 設定があるのに env fallback」事故を防ぐ)
-        expect(json.cognitoDomain).toBeDefined();
-        expect(json.userClientId).toBeDefined();
-        expect(json.tenantId).toBeDefined();
-        expect(json.tenantName).toBeDefined();
-        expect(json.apiUrl).toBeDefined();
-      }
+      expect(json.deployApiUrl).toBeUndefined();
+      expect(json.cognitoDomain).toBeDefined();
+      expect(json.userClientId).toBeDefined();
+      expect(json.tenantId).toBeDefined();
+      expect(json.tenantName).toBeDefined();
+      expect(json.apiUrl).toBeDefined();
     });
   });
 });

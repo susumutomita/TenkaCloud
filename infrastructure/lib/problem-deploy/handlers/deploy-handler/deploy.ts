@@ -4,11 +4,11 @@ import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import {
-  type DeployRequestedDetail,
-  EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+  type DeployCreateRequestedDetail,
+  EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   publishProblemEvent,
 } from "../shared/events.js";
-import { buildStackPrefix } from "./naming.js";
+import { buildStackPrefix, slugify } from "./naming.js";
 import { generateTeamLoginKey } from "./team-key.js";
 import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
 
@@ -23,6 +23,12 @@ export interface DeployContext {
   readonly ttlMs?: number;
   /** caller (TenantAdmin JWT) の `custom:tenantId`。 */
   readonly tenantId: string;
+  /**
+   * problemId → problemDir のマップ (例: `{"hello-world": "problems/sample/hello-world"}`)。
+   * MVP-1 で env (`BATTLE_PROBLEMS_CATALOG` JSON) から injected される hard-coded catalog。
+   * Phase 2 (ADR-003) で DDB ベースの問題カタログに置換する。
+   */
+  readonly problemsCatalog: Readonly<Record<string, string>>;
 }
 
 export type DeployInvocation = DeployRequest & {
@@ -33,21 +39,30 @@ const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 
 const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
+export class UnknownProblemError extends Error {
+  constructor(problemId: string) {
+    super(`unknown problemId: ${problemId}`);
+    this.name = "UnknownProblemError";
+  }
+}
+
 /**
  * 1 件の deploy job を起動する。
  *
  * DDB Put → EventBridge Publish の順序は失敗セマンティクスが要求する: PutEvents が
- * 先にいくと、worker が DDB から読めない行を見にいく可能性がある。Promise.all 化しない。
- *
- * 重複 deploy 防止 (同一 namePrefix の同時起動拒否) は別途 conditional put で追加する想定。
+ * 先にいくと、subscriber が DDB から読めない行を見にいく可能性がある。Promise.all 化しない。
  */
 export async function startDeployment(
   ctx: DeployContext,
   request: DeployInvocation,
 ): Promise<DeployResponse> {
+  const problemDir = ctx.problemsCatalog[request.problemId];
+  if (!problemDir) throw new UnknownProblemError(request.problemId);
+
   const jobId = ulid();
   const teamLoginKey = generateTeamLoginKey();
   const namePrefix = buildStackPrefix(request.problemId, request.teamName);
+  const teamSlug = slugify(request.teamName);
   const nowMs = ctx.now();
   const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
   const createdAt = new Date(nowMs).toISOString();
@@ -83,19 +98,20 @@ export async function startDeployment(
     }),
   );
 
-  const detail: DeployRequestedDetail = {
+  const detail: DeployCreateRequestedDetail = {
     jobId: item.jobId,
-    problemId: item.problemId,
     tenantId: item.tenantId,
-    awsAccountId: item.awsAccountId,
-    region: item.region,
-    teamName: item.teamName,
+    problemId: item.problemId,
+    problemDir,
+    teamSlug,
     namePrefix: item.namePrefix,
+    region: item.region,
+    awsAccountId: item.awsAccountId,
   };
   await publishProblemEvent({
     client: ctx.events,
     busName: ctx.eventBusName,
-    detailType: EVENT_DETAIL_TYPE_DEPLOY_REQUESTED,
+    detailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
     jobId,
     detail,
   });
@@ -118,14 +134,29 @@ export interface DeploySharedResources {
   readonly eventBusName: string;
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
+  readonly problemsCatalog: Readonly<Record<string, string>>;
 }
 
 export function buildSharedResources(): DeploySharedResources {
+  const catalogRaw = process.env.BATTLE_PROBLEMS_CATALOG ?? "{}";
+  let problemsCatalog: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(catalogRaw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string") problemsCatalog[k] = v;
+      }
+    }
+  } catch {
+    problemsCatalog = {};
+  }
+
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
+    problemsCatalog,
   };
 }
 

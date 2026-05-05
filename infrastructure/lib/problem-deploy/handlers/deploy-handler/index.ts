@@ -11,7 +11,12 @@ import {
 } from "../shared/http-status.js";
 import { resolveTenantId } from "./auth.js";
 import { requestTeardown } from "./delete.js";
-import { buildContext, buildSharedResources, startDeployment } from "./deploy.js";
+import {
+  buildContext,
+  buildSharedResources,
+  startDeployment,
+  UnknownProblemError,
+} from "./deploy.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { DeployRequestSchema } from "./types.js";
 
@@ -63,6 +68,9 @@ app.post("/problems/:problemId/deploy", async (c) => {
     const response = await startDeployment(ctx, { ...parsed.data, problemId });
     return c.json(response, HTTP_ACCEPTED);
   } catch (err) {
+    if (err instanceof UnknownProblemError) {
+      return c.json({ error: "unknown_problem", problemId }, HTTP_NOT_FOUND);
+    }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] startDeployment failed", { problemId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);

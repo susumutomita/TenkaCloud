@@ -135,27 +135,12 @@ cdk.Aspects.of(controlPlaneStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
 );
 
-// Problem deploy backend: Deployments DDB + IAM Role + Deploy API Lambda + Worker Lambda。
-// `DEPLOY_EXTERNAL_ID` は競技者 Bootstrap CFn (templates/competitor-bootstrap.yaml) で
-// 設定された ExternalId と一致させる必要がある。.env から渡す。
+// Problem deploy backend (MVP-1): Deployments DDB + DeployApi Lambda + EventBridge Rule
+// + Step Functions + CodeBuild Project (= scripts/deploy-battles.sh を実行)。
 //
-// `DEPLOY_USER_POOL_ID` / `DEPLOY_USER_POOL_CLIENT_ID` を両方渡すと UI 用の
-// HTTP API + Cognito JWT authorizer が立ち上がる。tenant-template-stack が払い出した
-// 値を `provision-tenant.sh` 経由で .env に転記する想定。
-const deployExternalId = process.env.CDK_PARAM_DEPLOY_EXTERNAL_ID || "tenkacloud-dev-external-id";
-const deployUserPoolId = process.env.CDK_PARAM_DEPLOY_USER_POOL_ID;
-const deployUserPoolClientId = process.env.CDK_PARAM_DEPLOY_USER_POOL_CLIENT_ID;
-const deployApiCognito =
-  deployUserPoolId && deployUserPoolClientId
-    ? { userPoolId: deployUserPoolId, clientId: deployUserPoolClientId }
-    : undefined;
-const deployApiCorsOriginsRaw = process.env.CDK_PARAM_DEPLOY_API_CORS_ORIGINS;
-const deployApiCorsOrigins = deployApiCorsOriginsRaw
-  ? deployApiCorsOriginsRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-  : undefined;
+// 旧仕様 (専用 HTTP API + 別 Cognito + DeployWorker + StatusUpdater) は廃止。tenant API
+// (TenantTemplateStack の REST API + Cognito) から `LambdaIntegration` で本 stack の
+// DeployApiLambda を invoke する形に統一 (ADR-001)。
 const enableParticipantPortal = process.env.CDK_PARAM_ENABLE_PARTICIPANT_PORTAL === "true";
 const participantPortalEventTitle = process.env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE;
 const participantPortalRuntimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" =
@@ -169,12 +154,20 @@ const participantPortalRuntimeConfig: ParticipantPortalRuntimeConfig | "default-
 const participantPortal = enableParticipantPortal
   ? { runtimeConfig: participantPortalRuntimeConfig }
   : undefined;
+
+// MVP-1 hard-coded 問題カタログ。Phase 2 (ADR-003) で DDB ベース問題管理に置換予定。
+// problemId → problemDir (= scripts/deploy-battles.sh の引数 path)。
+const problemsCatalog: Record<string, string> = {
+  "hello-world": "problems/sample/hello-world",
+  "security-battle-royale": "problems/gameday/security-battle-royale",
+};
+
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
-  deployExternalId,
-  deployApiCognito,
-  deployApiCorsOrigins,
+  sourceBucketName: s3SourceBucket,
+  sourceObjectKey: sourceZip,
+  problemsCatalog,
   participantPortal,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
@@ -215,9 +208,11 @@ const tenantTemplateStack = new TenantTemplateStack(
     ApiKeySSMParameterNames: apiKeySSMParameterNames,
     tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
     commitId,
-    deployApiUrl: problemDeployBackendStack.deployApiGatewayUrl,
+    deployApiLambda: problemDeployBackendStack.deployApiLambda,
   },
 );
+
+tenantTemplateStack.addDependency(problemDeployBackendStack);
 
 tenantTemplateStack.addDependency(bootstrapTemplateStack);
 cdk.Tags.of(tenantTemplateStack).add("TenantId", tenantId);

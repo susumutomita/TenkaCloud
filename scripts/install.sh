@@ -68,6 +68,9 @@ echo "Staging source.zip at ${STAGING}..."
 # infrastructure → cdk にリネーム、src と scripts はそのまま
 cp -R infrastructure "${STAGING}/cdk"
 cp -R scripts "${STAGING}/scripts"
+# MVP-1 (ADR-001 PR-2): problems/ を含めて source.zip に同梱する。CodeBuild の deploy-battles.sh
+# が `problems/<id>/template.yaml` を読むので、source.zip の root に problems/ を置く必要がある。
+cp -R problems "${STAGING}/problems"
 # 旧 ref-arch では src/ を staging に含めていたが、#76 で
 # infrastructure/lib/tenant-pipeline/handlers/ に移動済 (cdk/ 配下に同梱されるので不要)。
 
@@ -106,6 +109,7 @@ echo "=============================================="
 bunx cdk deploy \
   ControlPlaneStack \
   serverless-saas-ref-arch-bootstrap-stack \
+  ProblemDeployBackendStack \
   serverless-saas-ref-arch-tenant-template-pooled \
   ServerlessSaaSPipeline \
   --require-approval never --concurrency 4

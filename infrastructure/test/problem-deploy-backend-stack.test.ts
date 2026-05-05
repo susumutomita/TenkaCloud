@@ -1,57 +1,38 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 
-const FAKE_BUS_ARN = "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus";
-
-const portalDistDir = path.join(__dirname, "..", "..", "apps", "participant-portal", "dist");
-
-/**
- * ParticipantPortalHosting は Source.asset で apps/participant-portal/dist を
- * 参照する。CI / クリーンクローン時に未 build のことがあるので、最小 placeholder
- * を作って synth が通るようにする (実 build は install.sh / `bun run build` 経由で
- * 上書きされる)。
- */
-function ensurePortalPlaceholderDist() {
-  if (!fs.existsSync(portalDistDir)) {
-    fs.mkdirSync(portalDistDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(portalDistDir, "index.html"),
-      "<!doctype html><html><body>placeholder</body></html>",
-    );
-  }
-}
-
-function synth(
-  overrides?: Partial<ConstructorParameters<typeof ProblemDeployBackendStack>[2]>,
-): Template {
+// 全 it() で同じ Template を使い回す。stack 構造は default props で固定なので、
+// describe ブロック単位で 1 度 synth すれば 13 回 → 1 回に圧縮できる。
+function synthDefault(): Template {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStack", {
-    env: { account: "123456789012", region: "ap-northeast-1" },
-    eventBusArn: FAKE_BUS_ARN,
-    deployExternalId: "ext-test",
-    ...overrides,
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: {
+      "hello-world": "problems/sample/hello-world",
+    },
   });
   return Template.fromStack(stack);
 }
 
-describe("ProblemDeployBackendStack", () => {
-  describe("instantiate したとき", () => {
-    it("Deployments テーブルを 1 つ作るべき", () => {
-      const tpl = synth();
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 1);
-    });
+describe("ProblemDeployBackendStack (MVP-1)", () => {
+  const tpl = synthDefault();
 
-    it("Deployments テーブルは PROVISIONED 1/1 で PK/SK を持つべき", () => {
-      const tpl = synth();
+  describe("Deployments DDB table", () => {
+    it("DDB テーブルを 1 つ持ち、PK/SK + PROVISIONED 1/1 であるべき", () => {
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 1);
+      // BillingMode は default (PROVISIONED) のとき CFn template に出力されないので、
+      // ProvisionedThroughput と KeySchema で確認する。
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
-          BillingMode: Match.absent(),
-          ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+          ProvisionedThroughput: Match.objectLike({
+            ReadCapacityUnits: 1,
+            WriteCapacityUnits: 1,
+          }),
           KeySchema: Match.arrayWith([
             Match.objectLike({ AttributeName: "PK", KeyType: "HASH" }),
             Match.objectLike({ AttributeName: "SK", KeyType: "RANGE" }),
@@ -60,438 +41,87 @@ describe("ProblemDeployBackendStack", () => {
       );
     });
 
-    it("Deployments テーブルは GSI1 を持ち、PROVISIONED 1/1 であるべき", () => {
-      const tpl = synth();
+    it("expiresAt の TTL を有効化すべき", () => {
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
-          GlobalSecondaryIndexes: Match.arrayWith([
-            Match.objectLike({
-              IndexName: "GSI1",
-              KeySchema: Match.arrayWith([
-                Match.objectLike({ AttributeName: "GSI1PK", KeyType: "HASH" }),
-                Match.objectLike({ AttributeName: "GSI1SK", KeyType: "RANGE" }),
-              ]),
-              ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it("Deployments テーブルは GSI2 (TEAMKEY#... sparse) を持ち、PROVISIONED 1/1 であるべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::DynamoDB::Table",
-        Match.objectLike({
-          GlobalSecondaryIndexes: Match.arrayWith([
-            Match.objectLike({
-              IndexName: "GSI2",
-              KeySchema: Match.arrayWith([
-                Match.objectLike({ AttributeName: "GSI2PK", KeyType: "HASH" }),
-                Match.objectLike({ AttributeName: "GSI2SK", KeyType: "RANGE" }),
-              ]),
-              ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it("Deployments テーブルは expiresAt の TTL を持つべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::DynamoDB::Table",
-        Match.objectLike({
-          TimeToLiveSpecification: { AttributeName: "expiresAt", Enabled: true },
-        }),
-      );
-    });
-
-    it("Deployments テーブルは Retain で削除耐性を持つべき", () => {
-      const tpl = synth();
-      tpl.hasResource("AWS::DynamoDB::Table", { DeletionPolicy: "Retain" });
-    });
-
-    it("DeployWorkerRole は lambda.amazonaws.com に assume させるべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::IAM::Role",
-        Match.objectLike({
-          AssumeRolePolicyDocument: Match.objectLike({
-            Statement: Match.arrayWith([
-              Match.objectLike({
-                Effect: "Allow",
-                Principal: { Service: "lambda.amazonaws.com" },
-                Action: "sts:AssumeRole",
-              }),
-            ]),
+          TimeToLiveSpecification: Match.objectLike({
+            AttributeName: "expiresAt",
+            Enabled: true,
           }),
         }),
       );
     });
+  });
 
-    it("DeployWorkerRole は競技者 Role を AssumeRole できる inline policy を持つべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::IAM::Role",
-        Match.objectLike({
-          Policies: Match.arrayWith([
-            Match.objectLike({
-              PolicyName: "AssumeCompetitorRoles",
-              PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                  Match.objectLike({
-                    Effect: "Allow",
-                    Action: "sts:AssumeRole",
-                    Resource: "arn:aws:iam::*:role/TenkaCloud-CompetitorDeploy-Role",
-                  }),
-                ]),
-              }),
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it("DeployWorkerRole は Deployments への CRUD inline policy を持つべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::IAM::Role",
-        Match.objectLike({
-          Policies: Match.arrayWith([
-            Match.objectLike({
-              PolicyName: "DeploymentsTableAccess",
-              PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                  Match.objectLike({
-                    Effect: "Allow",
-                    Action: Match.arrayWith([
-                      "dynamodb:GetItem",
-                      "dynamodb:PutItem",
-                      "dynamodb:UpdateItem",
-                      "dynamodb:DeleteItem",
-                      "dynamodb:Query",
-                    ]),
-                  }),
-                ]),
-              }),
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it("DeployWorkerRole は EventBus PutEvents inline policy を持ち、Resource は与えた arn 限定であるべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::IAM::Role",
-        Match.objectLike({
-          Policies: Match.arrayWith([
-            Match.objectLike({
-              PolicyName: "EventBusPublish",
-              PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                  Match.objectLike({
-                    Effect: "Allow",
-                    Action: "events:PutEvents",
-                    Resource: FAKE_BUS_ARN,
-                  }),
-                ]),
-              }),
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it("Outputs に DeploymentsTableName と DeployWorkerRoleArn を含むべき", () => {
-      const tpl = synth();
-      tpl.hasOutput("DeploymentsTableName", {});
-      tpl.hasOutput("DeployWorkerRoleArn", {});
-      tpl.hasOutput("DeployApiUrl", {});
-    });
-
-    it("Deploy API Lambda を 1 つ作るべき (Node.js 20 / arm64)", () => {
-      const tpl = synth();
+  describe("Deploy API Lambda (tenant API から invoke される)", () => {
+    it("Node.js 20 / arm64 で BATTLE_PROBLEMS_CATALOG env を持つべき", () => {
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
           Runtime: "nodejs20.x",
           Architectures: ["arm64"],
-          Handler: "index.handler",
           Environment: Match.objectLike({
             Variables: Match.objectLike({
-              DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
-              DEPLOY_EVENT_BUS_NAME: Match.anyValue(),
-            }),
-          }),
-        }),
-      );
-    });
-
-    it("Deploy API Lambda の Function URL は AWS_IAM 認証であるべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::Lambda::Url",
-        Match.objectLike({
-          AuthType: "AWS_IAM",
-        }),
-      );
-    });
-
-    it("Deploy API Lambda は DeployWorkerRole を execution role として再利用するべき", () => {
-      const tpl = synth();
-      // Worker Role は inlinePolicies で DDB / EventBridge / AssumeRole 権限を持つ。
-      // Lambda は自動生成 role を作らず Worker Role を流用するので、追加の AWS::IAM::Policy
-      // (DDB Put 権限のみの reduced policy) は新規作成されない。
-      tpl.hasResourceProperties(
-        "AWS::IAM::Role",
-        Match.objectLike({
-          Policies: Match.arrayWith([
-            Match.objectLike({
-              PolicyName: "DeploymentsTableAccess",
-              PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                  Match.objectLike({
-                    Effect: "Allow",
-                    Action: Match.arrayWith(["dynamodb:PutItem"]),
-                  }),
-                ]),
+              BATTLE_PROBLEMS_CATALOG: JSON.stringify({
+                "hello-world": "problems/sample/hello-world",
               }),
             }),
-          ]),
+          }),
         }),
       );
     });
   });
 
-  describe("DeployWorkerLambda + EventBridge Rule", () => {
-    it("Lambda 関数を 3 つ作るべき (API + Worker + StatusUpdater)", () => {
-      const tpl = synth();
-      tpl.resourceCountIs("AWS::Lambda::Function", 3);
+  describe("CodeBuild Project (deploy-battles.sh を実行)", () => {
+    it("CodeBuild Project を 1 つ作るべき", () => {
+      tpl.resourceCountIs("AWS::CodeBuild::Project", 1);
     });
 
-    it("Worker Lambda は DEPLOY_EXTERNAL_ID を env として持つべき", () => {
-      const tpl = synth();
+    it("CodeBuild は S3 source を読むべき", () => {
       tpl.hasResourceProperties(
-        "AWS::Lambda::Function",
+        "AWS::CodeBuild::Project",
         Match.objectLike({
-          Environment: Match.objectLike({
-            Variables: Match.objectLike({
-              DEPLOY_EXTERNAL_ID: "ext-test",
-              COMPETITOR_ROLE_NAME: "TenkaCloud-CompetitorDeploy-Role",
-            }),
+          Source: Match.objectLike({
+            Type: "S3",
+            Location: Match.stringLikeRegexp("test-source-bucket/source.zip"),
           }),
         }),
       );
     });
+  });
 
-    it("EventBridge Rule で tenkacloud.problem / DeployRequested を target にすべき", () => {
-      const tpl = synth();
+  describe("Step Functions State Machine + EventBridge Rule", () => {
+    it("State Machine を 1 つ作るべき", () => {
+      tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+    });
+
+    it("EventBridge Rule (DeployCreateRequested → State Machine) を 1 つ作るべき", () => {
+      tpl.resourceCountIs("AWS::Events::Rule", 1);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
           EventPattern: Match.objectLike({
-            source: ["tenkacloud.problem"],
-            "detail-type": ["DeployRequested"],
+            source: ["tenkacloud.deploy"],
+            "detail-type": ["DeployCreateRequested"],
           }),
-        }),
-      );
-    });
-
-    it("StatusUpdater には rate(1 minute) の schedule rule を立てるべき", () => {
-      const tpl = synth();
-      tpl.hasResourceProperties(
-        "AWS::Events::Rule",
-        Match.objectLike({
-          ScheduleExpression: "rate(1 minute)",
         }),
       );
     });
   });
 
-  describe("HTTP API + Cognito JWT authorizer", () => {
-    it("deployApiCognito 未指定なら HTTP API は作らないべき", () => {
-      const tpl = synth();
+  describe("Outputs", () => {
+    it("DeploymentsTableName と DeployCreateStateMachineArn を Output として持つべき", () => {
+      const outputs = tpl.findOutputs("*");
+      expect(Object.keys(outputs)).toEqual(
+        expect.arrayContaining(["DeploymentsTableName", "DeployCreateStateMachineArn"]),
+      );
+    });
+  });
+
+  describe("legacy 経路の廃止", () => {
+    it("旧 DeployApiGateway (HTTP API) を作らないべき", () => {
       tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
-      tpl.resourceCountIs("AWS::ApiGatewayV2::Authorizer", 0);
-    });
-
-    it("deployApiCognito 指定で HTTP API + JWT authorizer を作るべき", () => {
-      const tpl = synth({
-        deployApiCognito: {
-          userPoolId: "ap-northeast-1_TESTPOOL",
-          clientId: "test-client-id",
-        },
-        deployApiCorsOrigins: ["http://localhost:5173"],
-      });
-      tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
-      tpl.hasResourceProperties(
-        "AWS::ApiGatewayV2::Authorizer",
-        Match.objectLike({
-          AuthorizerType: "JWT",
-          IdentitySource: ["$request.header.Authorization"],
-          JwtConfiguration: Match.objectLike({
-            Audience: ["test-client-id"],
-            Issuer: "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_TESTPOOL",
-          }),
-        }),
-      );
-    });
-
-    it("HTTP API は POST deploy / GET list / GET detail / DELETE detail の全ルートを JWT 認可で持つべき", () => {
-      const tpl = synth({
-        deployApiCognito: { userPoolId: "ap-northeast-1_X", clientId: "c-1" },
-      });
-      const expectedRoutes = [
-        "POST /problems/{problemId}/deploy",
-        "GET /problems/{problemId}/deployments",
-        "GET /deployments/{jobId}",
-        "DELETE /deployments/{jobId}",
-      ];
-      for (const routeKey of expectedRoutes) {
-        tpl.hasResourceProperties(
-          "AWS::ApiGatewayV2::Route",
-          Match.objectLike({ RouteKey: routeKey, AuthorizationType: "JWT" }),
-        );
-      }
-    });
-
-    it("CORS allowOrigins は指定値を反映するべき", () => {
-      const tpl = synth({
-        deployApiCognito: { userPoolId: "ap-northeast-1_X", clientId: "c-1" },
-        deployApiCorsOrigins: ["http://localhost:5173", "https://example.com"],
-      });
-      tpl.hasResourceProperties(
-        "AWS::ApiGatewayV2::Api",
-        Match.objectLike({
-          CorsConfiguration: Match.objectLike({
-            AllowOrigins: ["http://localhost:5173", "https://example.com"],
-          }),
-        }),
-      );
-    });
-  });
-
-  describe("Participant Portal hosting", () => {
-    beforeAll(() => ensurePortalPlaceholderDist());
-
-    it("participantPortal 未指定 (default) なら CloudFront / S3 Bucket を 1 個も増やさないべき", () => {
-      const tpl = synth();
-      tpl.resourceCountIs("AWS::CloudFront::Distribution", 0);
-      tpl.resourceCountIs("AWS::S3::Bucket", 0);
-    });
-
-    it("participantPortal 指定で S3 Bucket / CloudFront Distribution / OAI を 1 セット作るべき", () => {
-      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      tpl.resourceCountIs("AWS::S3::Bucket", 1);
-      tpl.resourceCountIs("AWS::CloudFront::Distribution", 1);
-      tpl.resourceCountIs("AWS::CloudFront::CloudFrontOriginAccessIdentity", 1);
-    });
-
-    it("participantPortal 指定なら ParticipantPortalUrl Output を持つべき", () => {
-      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      tpl.hasOutput("ParticipantPortalUrl", {});
-    });
-
-    it("S3 Bucket は public access を完全に block すべき (Portal も同様)", () => {
-      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      tpl.hasResourceProperties(
-        "AWS::S3::Bucket",
-        Match.objectLike({
-          PublicAccessBlockConfiguration: {
-            BlockPublicAcls: true,
-            BlockPublicPolicy: true,
-            IgnorePublicAcls: true,
-            RestrictPublicBuckets: true,
-          },
-        }),
-      );
-    });
-
-    it("participantPortal 指定で Function URL (NONE auth) の Lambda を追加するべき", () => {
-      const noPortal = synth();
-      const withPortal = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      // 既存 Function URL は Deploy API の AWS_IAM 1 個。Portal 追加で NONE が増える。
-      const noPortalUrls = Object.values(noPortal.findResources("AWS::Lambda::Url")) as {
-        Properties?: { AuthType?: string };
-      }[];
-      const withPortalUrls = Object.values(withPortal.findResources("AWS::Lambda::Url")) as {
-        Properties?: { AuthType?: string };
-      }[];
-      expect(withPortalUrls.length).toBe(noPortalUrls.length + 1);
-      expect(withPortalUrls.some((u) => u.Properties?.AuthType === "NONE")).toBe(true);
-    });
-
-    it("ParticipantPortalLambda は Deployments への Query 権限のみ持つべき (CFn / EventBridge は付与しない)", () => {
-      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      tpl.hasResourceProperties(
-        "AWS::IAM::Role",
-        Match.objectLike({
-          Policies: Match.arrayWith([
-            Match.objectLike({
-              PolicyName: "DeploymentsRead",
-              PolicyDocument: Match.objectLike({
-                Statement: Match.arrayWith([
-                  Match.objectLike({
-                    Effect: "Allow",
-                    Action: "dynamodb:Query",
-                  }),
-                ]),
-              }),
-            }),
-          ]),
-        }),
-      );
-    });
-
-    it("ParticipantPortalApiUrl Output を持つべき", () => {
-      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      tpl.hasOutput("ParticipantPortalApiUrl", {});
-    });
-
-    it("CloudFront Distribution は HTTPS リダイレクトと SPA fallback (403/404 → /index.html 200) を持つべき", () => {
-      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
-      tpl.hasResourceProperties(
-        "AWS::CloudFront::Distribution",
-        Match.objectLike({
-          DistributionConfig: Match.objectLike({
-            DefaultCacheBehavior: Match.objectLike({ ViewerProtocolPolicy: "redirect-to-https" }),
-            DefaultRootObject: "index.html",
-            CustomErrorResponses: Match.arrayWith([
-              Match.objectLike({
-                ErrorCode: 403,
-                ResponseCode: 200,
-                ResponsePagePath: "/index.html",
-              }),
-              Match.objectLike({
-                ErrorCode: 404,
-                ResponseCode: 200,
-                ResponsePagePath: "/index.html",
-              }),
-            ]),
-          }),
-        }),
-      );
-    });
-  });
-
-  describe("複数 stack を同居しても", () => {
-    it("synth が衝突なく通るべき (ResourceName 自動生成)", () => {
-      const app = new cdk.App();
-      const a = new ProblemDeployBackendStack(app, "A", {
-        env: { account: "123456789012", region: "ap-northeast-1" },
-        eventBusArn: FAKE_BUS_ARN,
-        deployExternalId: "ext-a",
-      });
-      const b = new ProblemDeployBackendStack(app, "B", {
-        env: { account: "123456789012", region: "ap-northeast-1" },
-        eventBusArn: FAKE_BUS_ARN,
-        deployExternalId: "ext-b",
-      });
-      expect(() => Template.fromStack(a)).not.toThrow();
-      expect(() => Template.fromStack(b)).not.toThrow();
     });
   });
 });

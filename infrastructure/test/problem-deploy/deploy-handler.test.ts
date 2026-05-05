@@ -22,6 +22,10 @@ function buildContext(overrides: Partial<DeployContext> = {}): {
     now: () => 1_700_000_000_000,
     ttlMs: 60_000,
     tenantId: "tenant-acme",
+    problemsCatalog: {
+      "security-battle-royale": "problems/gameday/security-battle-royale",
+      "hello-world": "problems/sample/hello-world",
+    },
     ...overrides,
   };
   return { ctx, ddbSend, eventsSend };
@@ -64,7 +68,7 @@ describe("startDeployment", () => {
     expect(item?.GSI2SK).toBe(item?.GSI1SK);
   });
 
-  it("EventBridge に DeployRequested イベントを送るべき", async () => {
+  it("EventBridge に DeployCreateRequested イベントを送るべき", async () => {
     const { ctx, eventsSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
     expect(eventsSend).toHaveBeenCalledOnce();
@@ -72,8 +76,8 @@ describe("startDeployment", () => {
     expect(cmd).toBeInstanceOf(PutEventsCommand);
     const entry = cmd.input.Entries?.[0];
     expect(entry?.EventBusName).toBe("test-bus");
-    expect(entry?.Source).toBe("tenkacloud.problem");
-    expect(entry?.DetailType).toBe("DeployRequested");
+    expect(entry?.Source).toBe("tenkacloud.deploy");
+    expect(entry?.DetailType).toBe("DeployCreateRequested");
     const detail = JSON.parse(entry?.Detail ?? "{}");
     expect(detail.problemId).toBe("security-battle-royale");
     expect(detail.tenantId).toBe("tenant-acme");

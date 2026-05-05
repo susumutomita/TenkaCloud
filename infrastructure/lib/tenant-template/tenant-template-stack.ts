@@ -1,5 +1,6 @@
 import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
+import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import {
   AwsCustomResource,
@@ -34,11 +35,11 @@ interface TenantTemplateStackProps extends StackProps {
   commitId: string;
   waveNumber?: string;
   /**
-   * ProblemDeployBackendStack の HTTP API URL (Cognito 認証付き)。
-   * runtime-config.json に書き出して application-admin-console が deploy API を
-   * 呼べるようにする。未指定なら空文字 → 既存の dev fallback で動作。
+   * `ProblemDeployBackendStack.deployApiLambda` をクロススタック参照で受ける。
+   * tenant API の Cognito-gated routes (`POST /problems/:id/deploy` 等) が本 Lambda を
+   * `LambdaIntegration` で invoke する (ADR-001 / Issue #458)。
    */
-  deployApiUrl?: string;
+  deployApiLambda: IFunction;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -78,6 +79,8 @@ export class TenantTemplateStack extends Stack {
       tenantId: props.tenantId,
       isPooledDeploy: props.isPooledDeploy,
       idpDetails: identityProvider.identityDetails,
+      userPool: identityProvider.tenantUserPool,
+      deployApiLambda: props.deployApiLambda,
       apiKeyBasicTier: {
         apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.basic.keyId),
         value: this.ssmLookup(props.ApiKeySSMParameterNames.basic.value),
@@ -97,13 +100,14 @@ export class TenantTemplateStack extends Stack {
     });
 
     // apiGateway 確定後に runtime-config.json を配置する (apiUrl を詰めるため)。
+    // ADR-001 / Issue #458: Deploy 系 endpoint は本 tenant API に統合されたので
+    // runtime-config.json は `apiUrl` 1 本のみ (旧 `deployApiUrl` 廃止)。
     applicationAdminConsoleHosting.deployRuntimeConfig({
       cognitoDomain: identityProvider.cognitoDomainUrl,
       cognitoClientId: identityProvider.tenantUserPoolClient.userPoolClientId,
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: apiGateway.restApi.url,
-      deployApiUrl: props.deployApiUrl,
     });
 
     new AwsCustomResource(this, "CreateTenantMapping", {

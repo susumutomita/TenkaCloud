@@ -3,41 +3,45 @@ import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { z } from "zod";
 
 /**
- * Deploy Backend で流れる EventBridge イベントの定義。
+ * Deploy backend で流れる EventBridge イベントの定義。
  *
- * Producer (Deploy API Lambda / Deploy Worker Lambda) と Consumer (Deploy Worker /
- * StatusUpdater) で同じシンボルを参照させ、文字列 drift を防ぐ。
+ * MVP-1 (ADR-001 PR-2): tenant API Lambda が `DeployCreateRequested` を publish し、
+ * EventBridge Rule が Step Functions State Machine を起動する流れ。Producer (tenant API)
+ * と Consumer (State Machine input transformer) で同じシンボルを参照させ、文字列 drift
+ * を防ぐ。
+ *
+ * `EVENT_SOURCE` は `tenkacloud.deploy` (ADR-001 命名規約)。Phase 2 で Update / Delete
+ * 系イベントが増えるときも同 source を使い、detail-type で分岐する。
  */
 
-export const EVENT_SOURCE = "tenkacloud.problem" as const;
-export const EVENT_DETAIL_TYPE_DEPLOY_REQUESTED = "DeployRequested" as const;
-export const EVENT_DETAIL_TYPE_DEPLOY_STARTED = "DeployStarted" as const;
-export const EVENT_DETAIL_TYPE_DEPLOY_FAILED = "DeployFailed" as const;
-export const EVENT_DETAIL_TYPE_DEPLOY_COMPLETED = "DeployCompleted" as const;
-export const EVENT_DETAIL_TYPE_DEPLOY_DELETED = "DeployDeleted" as const;
+export const EVENT_SOURCE = "tenkacloud.deploy" as const;
+export const EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED = "DeployCreateRequested" as const;
 
 export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" as const;
 
 /**
- * `DeployRequested` event の `detail`。Producer (Deploy API) と Consumer (Deploy Worker)
- * の両方で参照する単一の正本。Producer は出力時、Consumer は入力時に validate する。
+ * `DeployCreateRequested` event の `detail` schema。tenant API Lambda が publish 時に
+ * validate し、Step Functions State Machine の `CodeBuildStartBuild` task が
+ * `$.detail.problemDir` / `$.detail.teamSlug` を environmentVariablesOverride で
+ * CodeBuild に渡す。
  *
- * `namePrefix` は `slugify` の出力 (`tc-{problemSlug}-{teamSlug}`) と一致させる。
- * 各 slug は非空かつ末尾ハイフンを許さない (UI / API の slugify と一致)。
+ * `problemDir` は `scripts/deploy-battles.sh` への引数になる (例: `problems/sample/hello-world`)。
+ * `teamSlug` は同 script の `TEAM_SLUG` env として渡る (UI の teamName を slugify したもの)。
  */
-export const DeployRequestedDetailSchema = z.object({
+export const DeployCreateRequestedDetailSchema = z.object({
   jobId: z.string().min(1),
-  problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   tenantId: z.string().min(1),
-  awsAccountId: z.string().regex(/^\d{12}$/),
-  region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
-  teamName: z.string().min(1),
+  problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
+  problemDir: z.string().regex(/^problems\/[a-z0-9-]+\/[a-z0-9-]+$/),
+  teamSlug: z.string().min(1).max(40),
   namePrefix: z.string().regex(/^tc-[a-z0-9]+(?:-[a-z0-9]+)+$/),
+  region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
+  awsAccountId: z.string().regex(/^\d{12}$/),
 });
-export type DeployRequestedDetail = z.infer<typeof DeployRequestedDetailSchema>;
+export type DeployCreateRequestedDetail = z.infer<typeof DeployCreateRequestedDetailSchema>;
 
 /**
- * `tenkacloud.problem` event を 1 件 publish する shared helper。
+ * `tenkacloud.deploy` event を 1 件 publish する shared helper。
  * Resources は `tenkacloud:deployment:<jobId>` で統一し、subscriber が job 単位で
  * filter / 検索しやすいようにする。
  */
