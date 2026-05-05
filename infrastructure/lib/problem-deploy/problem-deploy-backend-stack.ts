@@ -7,6 +7,11 @@ import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployWorkerLambda } from "./deploy-worker-lambda";
 import { DeployWorkerRole } from "./deploy-worker-role";
 import { DeploymentsTable } from "./deployments-table";
+import {
+  DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
+  ParticipantPortalHosting,
+  type ParticipantPortalRuntimeConfig,
+} from "./participant-portal-hosting";
 import { StatusUpdaterLambda } from "./status-updater-lambda";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
@@ -39,6 +44,16 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * fetch するため必須。
    */
   readonly deployApiCorsOrigins?: readonly string[];
+  /**
+   * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
+   * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
+   * 無い段階では `runtimeConfig: "default-dev-mock"` を渡せば mode="dev-mock"
+   * のサンプル値で起動する (frontend 単体動作)。
+   * 未指定なら Portal Hosting を作らない。
+   */
+  readonly participantPortal?: {
+    readonly runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock";
+  };
 }
 
 /**
@@ -55,6 +70,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deployWorkerRoleArn: string;
   public readonly deployApiUrl: string;
   public readonly deployApiGatewayUrl?: string;
+  public readonly participantPortalUrl?: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -97,6 +113,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         corsAllowOrigins: props.deployApiCorsOrigins ?? ["*"],
       });
       this.deployApiGatewayUrl = apiGw.httpApi.apiEndpoint;
+    }
+
+    if (props.participantPortal) {
+      const portal = new ParticipantPortalHosting(this, "ParticipantPortal");
+      const runtimeConfig =
+        props.participantPortal.runtimeConfig === "default-dev-mock"
+          ? DEFAULT_DEV_MOCK_RUNTIME_CONFIG(this.region)
+          : props.participantPortal.runtimeConfig;
+      portal.deployRuntimeConfig(runtimeConfig);
+      this.participantPortalUrl = portal.distributionUrl;
+      new CfnOutput(this, "ParticipantPortalUrl", {
+        value: portal.distributionUrl,
+        description: "Participant Portal CloudFront URL.",
+      });
     }
 
     this.deploymentsTableName = deployments.table.tableName;

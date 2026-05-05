@@ -10,6 +10,7 @@ import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
 import { getEnv } from "../lib/helper-functions";
+import type { ParticipantPortalRuntimeConfig } from "../lib/problem-deploy/participant-portal-hosting";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
 import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
@@ -155,12 +156,26 @@ const deployApiCorsOrigins = deployApiCorsOriginsRaw
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
   : undefined;
+const enableParticipantPortal = process.env.CDK_PARAM_ENABLE_PARTICIPANT_PORTAL === "true";
+const participantPortalEventTitle = process.env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE;
+const participantPortalRuntimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" =
+  participantPortalEventTitle
+    ? {
+        eventTitle: participantPortalEventTitle,
+        eventRegion: awsRegion || "ap-northeast-1",
+        mode: "dev-mock",
+      }
+    : "default-dev-mock";
+const participantPortal = enableParticipantPortal
+  ? { runtimeConfig: participantPortalRuntimeConfig }
+  : undefined;
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
   deployExternalId,
   deployApiCognito,
   deployApiCorsOrigins,
+  participantPortal,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
