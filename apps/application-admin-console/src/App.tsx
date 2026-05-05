@@ -5,6 +5,7 @@ import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { CallbackPage } from "./pages/Callback";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
+import { DeploymentsPage } from "./pages/Deployments";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -37,6 +38,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/problems/:problemId"
           element={guarded(config, <ProblemDetailPage config={config} />)}
         />
+        <Route path="/deployments" element={guarded(config, <DeploymentsPage config={config} />)} />
         <Route
           path="/deployments/:jobId"
           element={guarded(config, <DeploymentDetailPage config={config} />)}

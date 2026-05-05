@@ -66,6 +66,12 @@ export interface DeploymentSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly expiresAt: number;
+  /**
+   * チーム共有ログインキー。`getDeployment` (= 単一行 Get) のレスポンスにのみ含まれ、
+   * `listDeployments` (一覧) には出ない。Operator が deploy 後に競技者 hand-off するため
+   * deploy 後の任意タイミングで取り出せる。
+   */
+  readonly teamLoginKey?: string;
 }
 
 export interface ListDeploymentsResponse {
@@ -106,4 +112,18 @@ export function listDeployments(
   return client.get<ListDeploymentsResponse>(
     `/problems/${encodeURIComponent(problemId)}/deployments${suffix}`,
   );
+}
+
+/**
+ * Tenant 内の deployment 一覧 (problemId scope なし)。サイドバー「デプロイ履歴」が引く。
+ */
+export function listAllDeployments(
+  client: ApiClient,
+  params: ListDeploymentsParams = {},
+): Promise<ListDeploymentsResponse> {
+  const qs = new URLSearchParams();
+  if (params.limit !== undefined) qs.set("limit", String(params.limit));
+  if (params.cursor) qs.set("cursor", params.cursor);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return client.get<ListDeploymentsResponse>(`/deployments${suffix}`);
 }

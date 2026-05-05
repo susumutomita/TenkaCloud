@@ -196,6 +196,43 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         </ColumnLayout>
       </Container>
 
+      {item.teamLoginKey && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              description="競技者にこのキーを渡してください。Participant Portal にログインするとこのチーム用の問題環境にアクセスできます。"
+            >
+              競技者 hand-off
+            </Header>
+          }
+        >
+          <KeyValuePairs
+            items={[
+              {
+                label: "チーム共有ログインキー",
+                value: (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Box variant="code">{item.teamLoginKey}</Box>
+                    <Button
+                      iconName="copy"
+                      ariaLabel="ログインキーをコピー"
+                      onClick={() => {
+                        if (item.teamLoginKey) {
+                          void navigator.clipboard?.writeText(item.teamLoginKey);
+                        }
+                      }}
+                    >
+                      コピー
+                    </Button>
+                  </SpaceBetween>
+                ),
+              },
+            ]}
+          />
+        </Container>
+      )}
+
       {Object.keys(outputs).length > 0 && (
         <Container header={<Header variant="h2">CloudFormation Outputs</Header>}>
           <KeyValuePairs

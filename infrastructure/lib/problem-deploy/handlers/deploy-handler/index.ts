@@ -18,7 +18,7 @@ import {
   startDeployment,
   UnknownProblemError,
 } from "./deploy.js";
-import { getDeployment, listDeployments } from "./list.js";
+import { getDeployment, listAllTenantDeployments, listDeployments } from "./list.js";
 import { DeployRequestSchema } from "./types.js";
 
 /**
@@ -113,6 +113,26 @@ app.get("/problems/:problemId/deployments", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] listDeployments failed", { problemId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.get("/deployments", async (c) => {
+  const limitParam = c.req.query("limit");
+  const limit = limitParam !== undefined ? Number.parseInt(limitParam, 10) : undefined;
+  if (limit !== undefined && (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX)) {
+    return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const response = await listAllTenantDeployments(shared, {
+      tenantId: resolveTenantId(c),
+      limit,
+      cursor: c.req.query("cursor"),
+    });
+    return c.json(response, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[deploy] listAllTenantDeployments failed", { message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

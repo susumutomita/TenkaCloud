@@ -179,12 +179,26 @@ describe("getDeployment", () => {
     expect(out).toBeUndefined();
   });
 
-  it("teamLoginKey を返り値に含めないべき", async () => {
+  it("operator (own tenantId) には teamLoginKey を含めて返すべき (= 競技者 hand-off 用)", async () => {
+    // 設計判断: 単一行 Get (`getDeployment`) は caller が own tenantId で TenantAdmin
+    // 認可済の経路。operator は competitor 配布のために teamLoginKey を deploy 後の任意
+    // タイミングで取り出せる必要がある。一覧 (`listDeployments` / `toSummary`) には出さない
+    // ため、誤露出経路は限定的。
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
     const out = await getDeployment(shared, "tenant-acme", "01HABC");
     expect(out).toBeDefined();
+    expect(out?.teamLoginKey).toBe("SECRET_LOGIN_KEY_DO_NOT_LEAK");
+  });
+
+  it("一覧 (`listDeployments`) には teamLoginKey を含めないべき (= 誤露出防止)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const out = await listDeployments(shared, { tenantId: "tenant-acme" });
+    expect(out.items).toHaveLength(1);
     expect(JSON.stringify(out)).not.toContain("SECRET_LOGIN_KEY_DO_NOT_LEAK");
+    expect((out.items[0] as { teamLoginKey?: string }).teamLoginKey).toBeUndefined();
   });
 });
