@@ -13,7 +13,8 @@ export JSII_DEPRECATED := quiet
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         env-check synth diff bootstrap \
-        deploy deploy-control-plane deploy-bootstrap destroy
+        deploy deploy-control-plane deploy-bootstrap destroy \
+        deploy-battles destroy-battles
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -95,3 +96,23 @@ deploy:               env-check
 deploy-control-plane: env-check build ; $(CDK) deploy ControlPlaneStack $(APPROVAL)
 deploy-bootstrap:     env-check build ; $(CDK) deploy serverless-saas-ref-arch-bootstrap-stack $(APPROVAL)
 destroy:              env-check       ; bash scripts/cleanup.sh
+
+# ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====
+# 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。
+# SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を持ち込まず、
+# CFn template と AWS 権限の正しさだけを確認する。
+#
+# 使い方 (default 1 件):
+#   make deploy-battles
+#   make destroy-battles
+#
+# 使い方 (引数指定):
+#   make deploy-battles BATTLES="problems/gameday/security-battle-royale problems/gameday/another"
+#   make deploy-battles BATTLES="problems/gameday/security-battle-royale" TEAM_SLUG=alpha
+BATTLES   ?= problems/gameday/security-battle-royale
+TEAM_SLUG ?= demo-team
+
+deploy-battles:
+	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/deploy-battles.sh $(BATTLES)
+destroy-battles:
+	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
