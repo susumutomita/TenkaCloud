@@ -13,6 +13,7 @@ const sample = (): ParticipantSession => ({
   eventId: "event-1",
   issuedAt: 1_700_000_000_000,
   expiresAt: Date.now() + 60_000,
+  teamNameSetByCompetitor: true,
 });
 
 describe("storage", () => {

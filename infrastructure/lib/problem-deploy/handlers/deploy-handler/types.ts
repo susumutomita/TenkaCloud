@@ -56,8 +56,18 @@ export interface DeploymentItem {
   tenantId: string;
   awsAccountId: string;
   region: string;
+  /**
+   * 内部 slug。operator が deploy form で入力し、`namePrefix` (CFn StackName) の
+   * 由来となる。CFn StackName は immutable なので、この値も deploy 後に変えない。
+   * 競技者向け表示には `displayTeamName` を優先するため、portal UI には基本出さない。
+   */
   teamName: string;
   namePrefix: string;
+  /**
+   * 競技者が portal `PATCH /portal/me` で設定する表示用チーム名。チームビルディング
+   * 体験のため、operator 入力ではなく競技者自身が決める。未設定なら undefined。
+   */
+  displayTeamName?: string;
   /** 短命キー。API レスポンスで TenantAdmin に 1 度だけ露出し、以降は DDB 内に閉じる。 */
   teamLoginKey: string;
   status: DeploymentStatus;

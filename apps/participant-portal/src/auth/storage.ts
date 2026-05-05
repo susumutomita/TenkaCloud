@@ -21,6 +21,12 @@ export const ParticipantSessionSchema = z.object({
   issuedAt: z.number().int().nonnegative(),
   /** unix ms。期限切れのセッションは自動 logout する。 */
   expiresAt: z.number().int().positive(),
+  /**
+   * 競技者が `PATCH /portal/me` で表示用チーム名を設定済みかのフラグ。
+   * 未設定なら App.tsx で `/setup` へリダイレクトされる。
+   * 後方互換のため optional (古い session 復元時は false 扱いになる)。
+   */
+  teamNameSetByCompetitor: z.boolean().optional().default(false),
 });
 
 export type ParticipantSession = z.infer<typeof ParticipantSessionSchema>;

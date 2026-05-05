@@ -8,12 +8,18 @@ import type { ParticipantSharedResources } from "./shared.js";
  * で派生させることで、`DeploymentItem` に新規フィールドが増えたときに「明示的に
  * include する / 除外する」判断を強制する (operator 内部情報の意図せぬ漏洩を防ぐ)。
  *
+ * `teamName` は `displayTeamName ?? <operator slug>` で resolve した最終表示名。
+ * `teamNameSetByCompetitor` は競技者が自分で名前を決めたかの flag (UI が「初回
+ * セットアップ画面」を出すかの判断に使う)。
+ *
  * stackOutputs は DDB に JSON 文字列で入っているが、UI に返す前に object へ展開する。
  */
 export type ParticipantView = Pick<
   DeploymentItem,
-  "jobId" | "problemId" | "teamName" | "region" | "expiresAt"
+  "jobId" | "problemId" | "region" | "expiresAt"
 > & {
+  readonly teamName: string;
+  readonly teamNameSetByCompetitor: boolean;
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
@@ -49,10 +55,13 @@ export async function lookupByTeamLoginKey(
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return undefined;
 
+  const operatorTeamSlug = String(item.teamName ?? "");
+  const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
   return {
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
-    teamName: String(item.teamName ?? ""),
+    teamName: display ?? operatorTeamSlug,
+    teamNameSetByCompetitor: display !== undefined,
     region: String(item.region ?? ""),
     status,
     stackOutputs: parseStackOutputs(item.stackOutputs),

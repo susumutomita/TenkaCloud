@@ -62,6 +62,7 @@ describe("lookupByTeamLoginKey", () => {
     expect(view?.jobId).toBe("JOB1");
     expect(view?.problemId).toBe("security-battle-royale");
     expect(view?.teamName).toBe("Alpha");
+    expect(view?.teamNameSetByCompetitor).toBe(false);
     expect(view?.region).toBe("ap-northeast-1");
     expect(view?.status).toBe("COMPLETE");
     expect(view?.stackOutputs).toEqual({ FrontendUrl: "https://x.example.com" });
@@ -71,6 +72,29 @@ describe("lookupByTeamLoginKey", () => {
     expect(json).not.toContain("tenantId");
     expect(json).not.toContain("999999999999");
     expect(json).not.toContain("namePrefix");
+  });
+
+  it("displayTeamName が DDB にあれば teamName はそれを優先し teamNameSetByCompetitor=true", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ teamName: "operator-slug", displayTeamName: "わたしたちのチーム" })],
+    });
+
+    const view = await lookupByTeamLoginKey(shared, "KEY1");
+    expect(view?.teamName).toBe("わたしたちのチーム");
+    expect(view?.teamNameSetByCompetitor).toBe(true);
+  });
+
+  it("displayTeamName が空文字でも未設定扱い (typeof string チェックは通るが trim 後の検証は upstream)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ teamName: "operator-slug", displayTeamName: "" })],
+    });
+    const view = await lookupByTeamLoginKey(shared, "KEY1");
+    // 空文字は string なので typeof check は通り、teamName="" / set=true になる。
+    // バリデーションは update.ts が責務。ここでは raw を expose することを担保する。
+    expect(view?.teamName).toBe("");
+    expect(view?.teamNameSetByCompetitor).toBe(true);
   });
 
   it("該当行が無ければ undefined", async () => {
