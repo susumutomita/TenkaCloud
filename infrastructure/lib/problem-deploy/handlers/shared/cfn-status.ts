@@ -81,6 +81,25 @@ export function serializeStackOutputs(outputs: Output[] | undefined): string {
   return JSON.stringify(obj);
 }
 
+/**
+ * `serializeStackOutputs` の逆。DDB に保存された JSON 文字列を `Record<string,string>`
+ * に戻す。壊れた JSON / 非 object / 配列 / 非 string value は無視 (best-effort)。
+ */
+export function parseStackOutputs(json: string | undefined): Record<string, string> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === "string") out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export function extractStackContext(stack: Stack | undefined): {
   cfnStatus: string | undefined;
   stackStatusReason: string | undefined;

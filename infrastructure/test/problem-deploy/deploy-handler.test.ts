@@ -54,6 +54,16 @@ describe("startDeployment", () => {
     expect(item?.namePrefix).toBe("tc-security-battle-royale-alpha-team");
   });
 
+  it("GSI2PK = TEAMKEY#<teamLoginKey> を sparse index 用に書き込むべき", async () => {
+    const { ctx, ddbSend } = buildContext();
+    await startDeployment(ctx, sampleRequest());
+    const cmd = ddbSend.mock.calls[0]?.[0] as PutCommand;
+    const item = cmd.input.Item;
+    expect(typeof item?.teamLoginKey).toBe("string");
+    expect(item?.GSI2PK).toBe(`TEAMKEY#${item?.teamLoginKey}`);
+    expect(item?.GSI2SK).toBe(item?.GSI1SK);
+  });
+
   it("EventBridge に DeployRequested イベントを送るべき", async () => {
     const { ctx, eventsSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
