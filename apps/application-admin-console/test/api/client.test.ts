@@ -11,6 +11,7 @@ const config: AppConfig = {
   tenantName: "T1",
   apiBaseUrl: "https://api.example.com/prod",
   deployApiBaseUrl: "https://deploy.example.com",
+  isDeployApiConfigured: true,
 };
 
 describe("createApiClient", () => {
