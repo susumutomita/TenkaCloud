@@ -17,32 +17,41 @@
 
 問題 Deploy を **CRUD 4 操作 × Step Functions の batch 処理** として再設計する。
 
-### 1. publish 経路は tenant API + tenant Cognito に統合
+### 1. publish 経路は tenant API + tenant Cognito + EventBridge → Step Functions
 
 ```
 [application-admin-console (ログイン済)]
         ↓ POST /deployments/{operation}  with tenant Cognito JWT
 [TenantTemplateStack の REST API]
-        ↓ Lambda が StepFunctions.StartExecution を呼ぶ
-[Step Functions]
+        ↓ Lambda が events:PutEvents を呼ぶ
+[EventBridge bus (= ControlPlaneStack.eventBusArn)]
+        ↓ EventBridge Rule (detail-type で分岐)
+[Step Functions State Machine (operation ごとに 1 つ)]
         ↓ 各 (problem × account) を Map iterator で処理
 [CFn API (cross-account AssumeRole 経由)]
 ```
 
 専用 HTTP API + 別 Cognito の構成は廃止。tenant 自身の Cognito で認可する (= SBT の Control Plane → Application Plane と同型)。
 
-EventBridge 中継は **入れない** (subscriber が他に居ない時点で経路を増やす意味なし)。tenant API Lambda が `StepFunctions:StartExecution` を直接呼ぶ。
+**Lambda は EventBridge に publish し、Step Functions は EventBridge Rule で event-driven に起動する**。Step Functions は EventBridge Rule の Target として直接設定可能 ([ドキュメント](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-eventbridge.html))。tenant API Lambda が StartExecution を直叩きせず EventBridge を中継する理由は次の 4 点。
 
-### 2. CRUD 4 操作を 4 つの Step Functions state machine として表現する
+1. **疎結合の seam を残す**: 将来の audit log / Slack 通知 / 監視 subscriber が同じ event を listen できる
+2. **SBT の既存パターンとの整合**: ControlPlane → ApplicationPlane の `onboardingRequest` event 中継と同じ形を維持
+3. **Replay / archive**: EventBridge archive で event を後から replay できる
+4. **権限境界の整理**: tenant API Lambda は `events:PutEvents` だけ持てば良く、`states:StartExecution` 権限を渡す必要がない
 
-| 操作 | 用途 | API | State Machine | 内部 |
+EventBridge detail-type は operation ごとに分ける (`DeployCreateRequested` / `DeployUpdateRequested` / `DeployDeleteRequested`)。Read は同期応答が必要なので EventBridge を経由せず、tenant API Lambda が直接 cross-account `cloudformation:DescribeStacks` を fan-out する。
+
+### 2. CRUD 4 操作を 3 つの event-driven state machine + 1 つの sync Lambda で表現する
+
+| 操作 | 用途 | API | 経路 | 内部 |
 |---|---|---|---|---|
-| **Create** | 新規 deploy (複数問題 × 複数アカウント) | POST /deployments/bulk-create | `BulkCreateStateMachine` | Map → AssumeRole → CFn CreateStack → .sync |
-| **Read** | 状況確認 (cross-account fan-out aggregation) | GET /deployments | `BulkReadStateMachine` (option) または同期 Lambda | Map → AssumeRole → CFn DescribeStacks |
-| **Update** | template の更新を既 deploy に push | POST /deployments/bulk-update | `BulkUpdateStateMachine` | Map → AssumeRole → CFn UpdateStack → .sync |
-| **Delete** | cleanup | POST /deployments/bulk-delete | `BulkDeleteStateMachine` | Map → AssumeRole → CFn DeleteStack → .sync |
+| **Create** | 新規 deploy (複数問題 × 複数アカウント) | POST /deployments/bulk-create | EventBridge (`DeployCreateRequested`) → `BulkCreateStateMachine` | Map → AssumeRole → CFn CreateStack → .sync |
+| **Read** | 状況確認 (cross-account fan-out aggregation) | GET /deployments | sync Lambda (cross-account `cloudformation:DescribeStacks` fan-out) | EventBridge 経由しない (同期応答が必要) |
+| **Update** | template の更新を既 deploy に push | POST /deployments/bulk-update | EventBridge (`DeployUpdateRequested`) → `BulkUpdateStateMachine` | Map → AssumeRole → CFn UpdateStack → .sync |
+| **Delete** | cleanup | POST /deployments/bulk-delete | EventBridge (`DeployDeleteRequested`) → `BulkDeleteStateMachine` | Map → AssumeRole → CFn DeleteStack → .sync |
 
-各 state machine は同じ shape の Map iterator を持つ。違いは inner step の CFn API だけ。
+3 つの state machine は同じ shape の Map iterator を持つ。違いは inner step の CFn API (CreateStack / UpdateStack / DeleteStack) だけ。各 state machine 専用の EventBridge Rule を 1 つ立て、Target を該当 state machine に設定する。
 
 ### 3. Spec cap で size 問題を回避する
 
@@ -134,10 +143,10 @@ PR 単位で以下を分割実装する。各 PR が `INVARIANT_PR_SHIPS_WORKING
 
 1. **PR-1: ADR commit** (本 PR)
 2. **PR-2: tenant API に Cognito authorizer + 空 routes 追加**。実 Lambda 配線はまだ。Single deploy だけ動く形で旧 DeployApiGateway と並存
-3. **PR-3: BulkCreateStateMachine 実装** + `POST /deployments/bulk-create` 配線。旧 single-deploy と並存
-4. **PR-4: BulkDeleteStateMachine + bulk-delete API**。旧 DELETE と並存
-5. **PR-5: BulkReadStateMachine (or sync Lambda) + GET /deployments fan-out**
-6. **PR-6: BulkUpdateStateMachine + bulk-update API**
+3. **PR-3: BulkCreateStateMachine + EventBridge Rule (`DeployCreateRequested`) + tenant API Lambda が `events:PutEvents`** 配線。`POST /deployments/bulk-create` で起動。旧 single-deploy と並存
+4. **PR-4: BulkDeleteStateMachine + EventBridge Rule (`DeployDeleteRequested`) + bulk-delete API**。旧 DELETE と並存
+5. **PR-5: GET /deployments の sync Lambda (cross-account DescribeStacks fan-out)**
+6. **PR-6: BulkUpdateStateMachine + EventBridge Rule (`DeployUpdateRequested`) + bulk-update API**
 7. **PR-7: 旧 DeployApiGateway / DeployWorkerLambda / StatusUpdaterLambda 廃止 + DDB 縮小 (Deployments → ParticipantSessions 改称)**
 8. **PR-8: install.sh に ProblemDeployBackendStack を追加 + frontend cleanup (`deployApiBaseUrl` 撤去等)**
 
