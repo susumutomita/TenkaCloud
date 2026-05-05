@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lookupByTeamLoginKey } from "../../lib/problem-deploy/handlers/participant-handler/lookup";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 
-function buildShared(scoring: Record<string, unknown> = {}): {
+function buildShared(scoring: ParticipantSharedResources["problemsScoring"] = {}): {
   shared: ParticipantSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
 } {

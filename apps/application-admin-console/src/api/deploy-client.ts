@@ -7,6 +7,9 @@ export const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
  *   1. `{key: value}` (Lambda 由来)
  *   2. `[{OutputKey, OutputValue}, ...]` (Step Functions describeStacks 由来)
  *
+ * Backend (`infrastructure/lib/problem-deploy/handlers/shared/cfn-status.ts`) に同じ
+ * 関数の sister 実装あり。両者は意味的に同一にする (frontend / backend の DTO 共有)。
+ *
  * 壊れた JSON / 非 string value は無視 (best-effort 表示、ページを落とさない)。
  */
 export function parseStackOutputs(json: string | undefined): Record<string, string> {

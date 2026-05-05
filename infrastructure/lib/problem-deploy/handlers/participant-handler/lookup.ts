@@ -1,4 +1,5 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { ParticipantSharedResources } from "./shared.js";
@@ -37,43 +38,6 @@ export type ParticipantView = Pick<
 
 const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
-interface FlagScoringConfig {
-  kind: "flag";
-  flagOutputKey: string;
-  points: number;
-  hints?: string[];
-}
-interface UptimeScoringConfig {
-  kind: "uptime";
-  pointsPerSuccess: number;
-}
-type AnyScoringConfig = FlagScoringConfig | UptimeScoringConfig | undefined;
-
-function asScoringConfig(value: unknown): AnyScoringConfig {
-  if (!value || typeof value !== "object") return undefined;
-  const v = value as { kind?: unknown };
-  if (v.kind === "flag") {
-    const f = value as { flagOutputKey?: unknown; points?: unknown; hints?: unknown };
-    if (typeof f.flagOutputKey === "string" && typeof f.points === "number") {
-      return {
-        kind: "flag",
-        flagOutputKey: f.flagOutputKey,
-        points: f.points,
-        hints: Array.isArray(f.hints)
-          ? (f.hints.filter((h) => typeof h === "string") as string[])
-          : undefined,
-      };
-    }
-  }
-  if (v.kind === "uptime") {
-    const u = value as { pointsPerSuccess?: unknown };
-    if (typeof u.pointsPerSuccess === "number") {
-      return { kind: "uptime", pointsPerSuccess: u.pointsPerSuccess };
-    }
-  }
-  return undefined;
-}
-
 /**
  * DDB の生 row → `ParticipantView` 変換。`lookupByTeamLoginKey` と
  * `setDisplayTeamName` (UpdateCommand `ReturnValues=ALL_NEW`) の両方から呼ばれる。
@@ -87,7 +51,7 @@ function asScoringConfig(value: unknown): AnyScoringConfig {
  */
 export function toView(
   item: Partial<DeploymentItem>,
-  scoringMap: Record<string, unknown> = {},
+  scoringMap: Record<string, ProblemScoringMetadata> = {},
 ): ParticipantView | undefined {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return undefined;
@@ -95,7 +59,7 @@ export function toView(
   const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
 
   const stackOutputs = parseStackOutputs(item.stackOutputs);
-  const scoring = item.problemId ? asScoringConfig(scoringMap[item.problemId]) : undefined;
+  const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
   if (scoring?.kind === "flag") {
     delete stackOutputs[scoring.flagOutputKey];
   }

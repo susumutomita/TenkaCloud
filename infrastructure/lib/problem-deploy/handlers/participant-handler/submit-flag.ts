@@ -1,4 +1,5 @@
 import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { ParticipantSharedResources } from "./shared.js";
@@ -10,41 +11,6 @@ export type SubmitFlagOutcome =
   | { kind: "not_flag_problem" }
   | { kind: "no_outputs" }
   | { kind: "unauthorized" };
-
-interface ScoringFlagConfig {
-  kind: "flag";
-  flagOutputKey: string;
-  points: number;
-}
-
-/**
- * env `BATTLE_PROBLEMS_SCORING` から `{ [problemId]: scoring }` を decode する。
- * 不正 / 欠損は空 map を返す (= 全 problemId が not_flag_problem になる、安全側)。
- */
-export function parseProblemsScoring(raw: string | undefined): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    /* fallthrough */
-  }
-  return {};
-}
-
-function isFlagConfig(value: unknown): value is ScoringFlagConfig {
-  if (!value || typeof value !== "object") return false;
-  const v = value as { kind?: unknown; flagOutputKey?: unknown; points?: unknown };
-  return (
-    v.kind === "flag" &&
-    typeof v.flagOutputKey === "string" &&
-    typeof v.points === "number" &&
-    Number.isFinite(v.points) &&
-    v.points > 0
-  );
-}
 
 /** 競技者 input と stack output 値を比較。両端 trim、case-sensitive。 */
 function flagMatches(submitted: string, expected: string): boolean {
@@ -61,7 +27,7 @@ function flagMatches(submitted: string, expected: string): boolean {
  */
 export async function submitFlag(
   shared: ParticipantSharedResources,
-  scoringMap: Record<string, unknown>,
+  scoringMap: Record<string, ProblemScoringMetadata>,
   teamLoginKey: string,
   submittedFlag: string,
 ): Promise<SubmitFlagOutcome> {
@@ -78,7 +44,7 @@ export async function submitFlag(
   if (!item?.PK || !item.problemId) return { kind: "unauthorized" };
 
   const scoring = scoringMap[item.problemId];
-  if (!isFlagConfig(scoring)) return { kind: "not_flag_problem" };
+  if (scoring?.kind !== "flag") return { kind: "not_flag_problem" };
 
   if (item.flagSubmitted === true) {
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) };

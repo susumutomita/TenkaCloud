@@ -1,7 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
-import { parseProblemsScoring } from "./submit-flag.js";
+import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 
 /**
  * Participant Lambda は DDB Query しか叩かない。Deploy Worker / API が使う
@@ -12,14 +12,14 @@ import { parseProblemsScoring } from "./submit-flag.js";
 export interface ParticipantSharedResources {
   readonly tableName: string;
   readonly ddb: DynamoDBDocumentClient;
-  /** `{ [problemId]: scoring }`。submit-flag が採点に使う。 */
-  readonly problemsScoring: Record<string, unknown>;
+  /** `{ [problemId]: ProblemScoringMetadata }`。submit-flag が採点に使う。 */
+  readonly problemsScoring: Record<string, ProblemScoringMetadata>;
 }
 
 export function buildParticipantSharedResources(): ParticipantSharedResources {
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
-    problemsScoring: parseProblemsScoring(process.env.BATTLE_PROBLEMS_SCORING),
+    problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
   };
 }

@@ -37,6 +37,26 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
+const SCORING_KIND_LABEL = {
+  flag: "Challenge (flag 提出)",
+  uptime: "Battle (uptime 加点)",
+} as const;
+
+/** Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。 */
+function viewIsUnchanged(prev: ParticipantView | null, next: ParticipantView): boolean {
+  if (!prev) return false;
+  return (
+    prev.status === next.status &&
+    prev.score === next.score &&
+    prev.lastScoredAt === next.lastScoredAt &&
+    prev.lastResult === next.lastResult &&
+    prev.scoring?.flagSubmitted === next.scoring?.flagSubmitted &&
+    prev.teamName === next.teamName &&
+    prev.failureReason === next.failureReason &&
+    JSON.stringify(prev.stackOutputs) === JSON.stringify(next.stackOutputs)
+  );
+}
+
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const teamName = auth.session?.teamName ?? "(unknown)";
@@ -51,9 +71,13 @@ export function HomePage({ config }: { config: AppConfig }) {
     if (!isBackend || !sessionToken) return;
     try {
       const next = await getPortalMe(config.apiBaseUrl, sessionToken);
-      setView(next);
+      setView((prev) => (viewIsUnchanged(prev, next) ? prev : next));
       setError(null);
-      if (TERMINAL_STATUSES.has(next.status)) stopPollingRef.current = true;
+      // uptime 採点は COMPLETE になっても polling を続けたい (= score が増え続ける)。
+      // Terminal 停止は FAILED / DELETED のみに限定。
+      if (next.status === "FAILED" || next.status === "DELETED") {
+        stopPollingRef.current = true;
+      }
     } catch (err) {
       if (err instanceof PortalAuthError) {
         auth.logout();
@@ -162,43 +186,24 @@ export function HomePage({ config }: { config: AppConfig }) {
 }
 
 function ScorePanel({ view }: { view: ParticipantView }) {
+  const kindLabel = view.scoring ? SCORING_KIND_LABEL[view.scoring.kind] : "(未設定)";
   return (
     <Container header={<Header variant="h2">スコア</Header>}>
-      <ColumnLayout columns={3} variant="text-grid">
-        <KeyValuePairs
-          items={[
-            {
-              label: "現在の累計",
-              value: (
-                <Box variant="awsui-value-large" color="text-status-success">
-                  {view.score} pt
-                </Box>
-              ),
-            },
-          ]}
-        />
-        <KeyValuePairs
-          items={[
-            {
-              label: "形式",
-              value:
-                view.scoring?.kind === "flag"
-                  ? "Challenge (flag 提出)"
-                  : view.scoring?.kind === "uptime"
-                    ? "Battle (uptime 加点)"
-                    : "(未設定)",
-            },
-          ]}
-        />
-        <KeyValuePairs
-          items={[
-            {
-              label: "最終チェック",
-              value: view.lastScoredAt ?? "(まだ未採点)",
-            },
-          ]}
-        />
-      </ColumnLayout>
+      <KeyValuePairs
+        columns={3}
+        items={[
+          {
+            label: "現在の累計",
+            value: (
+              <Box variant="awsui-value-large" color="text-status-success">
+                {view.score} pt
+              </Box>
+            ),
+          },
+          { label: "形式", value: kindLabel },
+          { label: "最終チェック", value: view.lastScoredAt ?? "(まだ未採点)" },
+        ]}
+      />
     </Container>
   );
 }

@@ -14,6 +14,7 @@ function buildShared(): {
   const shared: ParticipantSharedResources = {
     tableName: "TestDeployments",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
+    problemsScoring: {},
   };
   return { shared, ddbSend };
 }

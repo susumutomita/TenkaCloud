@@ -1,10 +1,8 @@
 import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
-import {
-  parseProblemsScoring,
-  submitFlag,
-} from "../../lib/problem-deploy/handlers/participant-handler/submit-flag";
+import { submitFlag } from "../../lib/problem-deploy/handlers/participant-handler/submit-flag";
+import type { ProblemScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 function buildShared(): {
   shared: ParticipantSharedResources;
@@ -37,28 +35,13 @@ const sampleRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const flagScoring = {
+const flagScoring: Record<string, ProblemScoringMetadata> = {
   "hello-world": {
     kind: "flag",
     flagOutputKey: "ParameterValue",
     points: 100,
   },
 };
-
-describe("parseProblemsScoring", () => {
-  it("undefined / 空文字 / 壊れた JSON は空 map を返すべき", () => {
-    expect(parseProblemsScoring(undefined)).toEqual({});
-    expect(parseProblemsScoring("")).toEqual({});
-    expect(parseProblemsScoring("{not-json")).toEqual({});
-  });
-  it("正常な JSON object はそのまま返すべき", () => {
-    expect(parseProblemsScoring(JSON.stringify(flagScoring))).toEqual(flagScoring);
-  });
-  it("array や primitive は空 map を返すべき (= shape mismatch)", () => {
-    expect(parseProblemsScoring(JSON.stringify(["x"]))).toEqual({});
-    expect(parseProblemsScoring(JSON.stringify(123))).toEqual({});
-  });
-});
 
 describe("submitFlag", () => {
   let shared: ParticipantSharedResources;

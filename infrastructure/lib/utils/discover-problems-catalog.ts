@@ -1,17 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type ProblemScoringMetadata, parseScoringMetadata } from "./scoring-metadata";
 
-/**
- * Scoring engine が読む metadata.json の `scoring` section の最低限 shape。
- * SCHEMA.json の oneOf と整合させる。
- */
-export type ProblemScoringMetadata =
-  | { kind: "flag"; flagOutputKey: string; points: number; hints?: string[] }
-  | {
-      kind: "uptime";
-      endpoints: { outputKey: string; path: string; expectStatus: number[] }[];
-      pointsPerSuccess: number;
-    };
+export type { ProblemScoringMetadata };
 
 /**
  * `problems/<category>/<id>/metadata.json` を持つディレクトリを列挙し、
@@ -38,9 +29,8 @@ export function discoverProblemsScoring(
 ): Record<string, ProblemScoringMetadata> {
   const result: Record<string, ProblemScoringMetadata> = {};
   for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    if (isValidScoring(meta.scoring)) {
-      result[meta.id] = meta.scoring;
-    }
+    const cfg = parseScoringMetadata(meta.scoring);
+    if (cfg) result[meta.id] = cfg;
   }
   return result;
 }
@@ -90,18 +80,4 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
       }
     }
   }
-}
-
-function isValidScoring(value: unknown): value is ProblemScoringMetadata {
-  if (!value || typeof value !== "object") return false;
-  const v = value as { kind?: unknown };
-  if (v.kind === "flag") {
-    const f = value as { flagOutputKey?: unknown; points?: unknown };
-    return typeof f.flagOutputKey === "string" && typeof f.points === "number";
-  }
-  if (v.kind === "uptime") {
-    const u = value as { endpoints?: unknown; pointsPerSuccess?: unknown };
-    return Array.isArray(u.endpoints) && typeof u.pointsPerSuccess === "number";
-  }
-  return false;
 }

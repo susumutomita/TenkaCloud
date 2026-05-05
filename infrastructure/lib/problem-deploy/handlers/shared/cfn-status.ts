@@ -88,6 +88,9 @@ export function serializeStackOutputs(outputs: Output[] | undefined): string {
  *   2. `[{OutputKey, OutputValue}, ...]` array — Step Functions の
  *      `cloudformation:describeStacks` task が `States.JsonToString` で書き込む CFn 生形式
  *
+ * Frontend (`apps/application-admin-console/src/api/deploy-client.ts`) に同じ関数の
+ * sister 実装あり。両者は意味的に同一にする。
+ *
  * 壊れた JSON / 非 object / array 内の不正 entry は無視 (best-effort)。
  */
 export function parseStackOutputs(json: string | undefined): Record<string, string> {
