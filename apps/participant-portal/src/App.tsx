@@ -6,17 +6,28 @@ import type { AppConfig } from "./config";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { PlaceholderPage } from "./pages/Placeholder";
+import { TeamSetupPage } from "./pages/TeamSetup";
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({
+  requireTeamName,
+  children,
+}: {
+  requireTeamName: boolean;
+  children: React.ReactNode;
+}) {
   const auth = useAuth();
   if (!auth.ready) return null;
   if (!auth.session) return <Navigate to="/login" replace />;
+  // backend モードで、まだチーム名を設定していない競技者は /setup に誘導する。
+  if (requireTeamName && !auth.session.teamNameSetByCompetitor) {
+    return <Navigate to="/setup" replace />;
+  }
   return <>{children}</>;
 }
 
 function guarded(config: AppConfig, element: React.ReactNode) {
   return (
-    <RequireAuth>
+    <RequireAuth requireTeamName>
       <ShellLayout config={config}>{element}</ShellLayout>
     </RequireAuth>
   );
@@ -27,6 +38,14 @@ export function App({ config }: { config: AppConfig }) {
     <AuthProvider config={config}>
       <Routes>
         <Route path="/login" element={<LoginPage config={config} />} />
+        <Route
+          path="/setup"
+          element={
+            <RequireAuth requireTeamName={false}>
+              <TeamSetupPage config={config} />
+            </RequireAuth>
+          }
+        />
         <Route path="/" element={guarded(config, <HomePage config={config} />)} />
         <Route
           path="/scoreboard"

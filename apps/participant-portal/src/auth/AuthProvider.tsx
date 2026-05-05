@@ -35,6 +35,7 @@ async function exchangeKeyForSession(
       issuedAt: now,
       // backend の expiresAt は epoch seconds、storage は ms に揃える。
       expiresAt: view.expiresAt > 0 ? view.expiresAt * 1000 : now + DEFAULT_DEV_TTL_MS,
+      teamNameSetByCompetitor: view.teamNameSetByCompetitor,
     };
   }
 
@@ -47,6 +48,8 @@ async function exchangeKeyForSession(
     eventId: "mock-event-1",
     issuedAt: now,
     expiresAt: now + DEFAULT_DEV_TTL_MS,
+    // dev-mock では teamName は競技者選択に追従しないので「設定済み」扱いにして setup を skip。
+    teamNameSetByCompetitor: true,
   };
 }
 
@@ -56,6 +59,13 @@ interface AuthState {
   /** team login key を渡してセッションを発行。失敗時は throw する。 */
   login: (teamLoginKey: string) => Promise<void>;
   logout: () => void;
+  /**
+   * セッションの一部フィールド (teamName / teamNameSetByCompetitor) を更新する。
+   * `PATCH /portal/me` の結果を AuthProvider 経由で反映するための内部 API。
+   */
+  updateSession: (
+    patch: Pick<Partial<ParticipantSession>, "teamName" | "teamNameSetByCompetitor">,
+  ) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -77,9 +87,24 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
     setSession(null);
   }, []);
 
+  const updateSession = useCallback<AuthState["updateSession"]>((patch) => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const next: ParticipantSession = {
+        ...prev,
+        ...(patch.teamName !== undefined ? { teamName: patch.teamName } : {}),
+        ...(patch.teamNameSetByCompetitor !== undefined
+          ? { teamNameSetByCompetitor: patch.teamNameSetByCompetitor }
+          : {}),
+      };
+      saveSession(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<AuthState>(
-    () => ({ session, ready: true, login, logout }),
-    [session, login, logout],
+    () => ({ session, ready: true, login, logout, updateSession }),
+    [session, login, logout, updateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

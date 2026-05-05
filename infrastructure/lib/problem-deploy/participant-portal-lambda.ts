@@ -48,6 +48,13 @@ export class ParticipantPortalLambda extends Construct {
                 `${props.deploymentsTable.tableArn}/index/GSI2`,
               ],
             }),
+            // 競技者の表示名 (`displayTeamName`) 更新のみ。テーブル全体に対する
+            // UpdateItem だが、Lambda コードは GSI2 経由で取得した自分の行しか
+            // 触らないので、実質的な書き込み対象は teamLoginKey 所有者の 1 行に限られる。
+            new PolicyStatement({
+              actions: ["dynamodb:UpdateItem"],
+              resources: [props.deploymentsTable.tableArn],
+            }),
           ],
         }),
       },
@@ -80,7 +87,7 @@ export class ParticipantPortalLambda extends Construct {
       authType: FunctionUrlAuthType.NONE,
       cors: {
         allowedOrigins: ["*"],
-        allowedMethods: [HttpMethod.GET],
+        allowedMethods: [HttpMethod.GET, HttpMethod.PATCH],
         allowedHeaders: ["content-type", "authorization"],
         maxAge: Duration.minutes(10),
       },
