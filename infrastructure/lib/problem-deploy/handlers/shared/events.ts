@@ -25,7 +25,7 @@ export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" a
  * `$.detail.problemDir` / `$.detail.teamSlug` を environmentVariablesOverride で
  * CodeBuild に渡す。
  *
- * `problemDir` は `scripts/deploy-battles.sh` への引数になる (例: `problems/sample/hello-world`)。
+ * `problemDir` は `scripts/deploy-battles.sh` への引数になる (例: `problems/challenges/hello-world`)。
  * `teamSlug` は同 script の `TEAM_SLUG` env として渡る (UI の teamName を slugify したもの)。
  */
 export const DeployCreateRequestedDetailSchema = z.object({

@@ -106,20 +106,20 @@ destroy:              env-check       ; bash scripts/cleanup.sh
 # ときに silently deploy が始まる事故を防ぐため、明示指定を要求する。
 #
 # 使い方:
-#   make deploy-battles BATTLES="problems/gameday/security-battle-royale"
-#   make deploy-battles BATTLES="problems/gameday/security-battle-royale problems/gameday/another"
-#   make deploy-battles BATTLES="problems/gameday/security-battle-royale" TEAM_SLUG=alpha
+#   make deploy-battles BATTLES="problems/battles/security-battle-royale"
+#   make deploy-battles BATTLES="problems/battles/security-battle-royale problems/battles/another"
+#   make deploy-battles BATTLES="problems/battles/security-battle-royale" TEAM_SLUG=alpha
 TEAM_SLUG ?= demo-team
 
 deploy-battles:
 	@if [ -z "$(BATTLES)" ]; then \
-	  echo "error: BATTLES が未指定。例: make deploy-battles BATTLES=\"problems/gameday/security-battle-royale\"" >&2; \
+	  echo "error: BATTLES が未指定。例: make deploy-battles BATTLES=\"problems/battles/security-battle-royale\"" >&2; \
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/deploy-battles.sh $(BATTLES)
 destroy-battles:
 	@if [ -z "$(BATTLES)" ]; then \
-	  echo "error: BATTLES が未指定。例: make destroy-battles BATTLES=\"problems/gameday/security-battle-royale\"" >&2; \
+	  echo "error: BATTLES が未指定。例: make destroy-battles BATTLES=\"problems/battles/security-battle-royale\"" >&2; \
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)

@@ -24,7 +24,7 @@ export interface DeployContext {
   /** caller (TenantAdmin JWT) の `custom:tenantId`。 */
   readonly tenantId: string;
   /**
-   * problemId → problemDir のマップ (例: `{"hello-world": "problems/sample/hello-world"}`)。
+   * problemId → problemDir のマップ (例: `{"hello-world": "problems/challenges/hello-world"}`)。
    * MVP-1 で env (`BATTLE_PROBLEMS_CATALOG` JSON) から injected される hard-coded catalog。
    * Phase 2 (ADR-003) で DDB ベースの問題カタログに置換する。
    */

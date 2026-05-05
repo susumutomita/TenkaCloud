@@ -194,9 +194,9 @@ Distributed Map の child execution は `EXPRESS` workflow にできるが、CFn
 
 含める要素は次のとおり。
 
-- `scripts/deploy-battles.sh` (新規): 引数 1 個以上で問題ディレクトリ (`problems/gameday/security-battle-royale` 等) を受け取り、各々を順次 `aws cloudformation deploy` で同一 account に deploy する。teamSlug は env か引数で受ける
+- `scripts/deploy-battles.sh` (新規): 引数 1 個以上で問題ディレクトリ (`problems/battles/security-battle-royale` 等) を受け取り、各々を順次 `aws cloudformation deploy` で同一 account に deploy する。teamSlug は env か引数で受ける
 - `scripts/destroy-battles.sh` (新規): 同じ引数で `aws cloudformation delete-stack` を順次呼ぶ
-- `Makefile` に `deploy-battles` / `destroy-battles` ターゲットを追加 (内部で上のシェルを呼ぶ。default 引数は `problems/gameday/security-battle-royale demo-team`)
+- `Makefile` に `deploy-battles` / `destroy-battles` ターゲットを追加 (内部で上のシェルを呼ぶ。default 引数は `problems/battles/security-battle-royale demo-team`)
 - これは「開発者が deploy 機構を smoke test するためのツール」であり、operator UX には繋がらない (operator は引き続き旧 UI 経路を使う)
 
 含めない要素 (Phase 1b 以降に倒す)。

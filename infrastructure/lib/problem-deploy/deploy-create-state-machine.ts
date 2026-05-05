@@ -25,7 +25,7 @@ export interface DeployCreateStateMachineProps {
  *
  * 入力 shape (event detail):
  *   {
- *     "problemDir": "problems/sample/hello-world",
+ *     "problemDir": "problems/challenges/hello-world",
  *     "teamSlug": "demo-team",
  *     "tenantId": "tenant-acme",
  *     "jobId": "01HX..."

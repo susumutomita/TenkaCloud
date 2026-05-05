@@ -30,7 +30,7 @@ export interface DeployCodeBuildProjectProps {
  * を実行する。
  *
  * 実行時の入力は env 経由 (Step Functions が `environmentVariablesOverride` で渡す):
- *   - `BATTLE_PROBLEM_DIR`: 例 `problems/sample/hello-world`
+ *   - `BATTLE_PROBLEM_DIR`: 例 `problems/challenges/hello-world`
  *   - `TEAM_SLUG`: 例 `demo-team`
  *
  * 同一 AWS account 内 deploy のみ (MVP-1 制約)。Phase 2 で cross-account になったら
@@ -60,7 +60,7 @@ export class DeployCodeBuildProject extends Construct {
         // ここでは default value を設定して、ローカルテストや手動起動でも壊れないようにする。
         BATTLE_PROBLEM_DIR: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
-          value: "problems/sample/hello-world",
+          value: "problems/challenges/hello-world",
         },
         TEAM_SLUG: {
           type: BuildEnvironmentVariableType.PLAINTEXT,

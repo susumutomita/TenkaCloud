@@ -162,7 +162,7 @@ aws cloudformation deploy \
 
 ## 参考
 
-- 実例: [`problems/gameday/security-battle-royale/`](../../../problems/gameday/security-battle-royale/) — Battle 問題の参考実装
+- 実例: [`problems/battles/security-battle-royale/`](../../../problems/battles/security-battle-royale/) — Battle 問題の参考実装
 - スキーマ: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
 - 規約正本: [`problems/README.md`](../../../problems/README.md)
 - 競技者アカウント側のセットアップ: [`infrastructure/templates/README.md`](../../../infrastructure/templates/README.md)
