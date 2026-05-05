@@ -40,12 +40,16 @@ export type DeployRequest = z.infer<typeof DeployRequestSchema>;
  *
  *   PK     = `DEPLOYMENT#<jobId>` / SK = `META`
  *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `<createdAt>` (ISO8601、テナント別ソート用)
+ *   GSI2PK = `TEAMKEY#<teamLoginKey>` / GSI2SK = `<createdAt>` (sparse、participant portal が引く)
  */
 export interface DeploymentItem {
   PK: string;
   SK: "META";
   GSI1PK: string;
   GSI1SK: string;
+  /** sparse — `teamLoginKey` を無効化したい場合は属性ごと削除する。 */
+  GSI2PK?: string;
+  GSI2SK?: string;
 
   jobId: string;
   problemId: string;

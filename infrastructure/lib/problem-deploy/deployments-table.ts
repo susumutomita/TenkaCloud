@@ -18,6 +18,11 @@ import { Construct } from "constructs";
  *   PK: TENANT#<tenantId>
  *   SK: createdAt (ISO8601)
  *
+ * GSI2 (sparse, participant portal がチーム共有ログインキーで引く):
+ *   PK: TEAMKEY#<teamLoginKey>
+ *   SK: createdAt (ISO8601)
+ *   GSI2PK 属性が無い行 (= teamLoginKey が無効化された行) はインデックスから自動的に外れる
+ *
  * memory: provisioned 1/1 (DynamoDbLowCapacity Aspect で更に均す)。training / 競技
  * イベント中の用途で QPS 極小、コスト 0 原則を優先する。
  *
@@ -44,6 +49,14 @@ export class DeploymentsTable extends Construct {
       indexName: "GSI1",
       partitionKey: { name: "GSI1PK", type: AttributeType.STRING },
       sortKey: { name: "GSI1SK", type: AttributeType.STRING },
+      readCapacity: 1,
+      writeCapacity: 1,
+    });
+
+    this.table.addGlobalSecondaryIndex({
+      indexName: "GSI2",
+      partitionKey: { name: "GSI2PK", type: AttributeType.STRING },
+      sortKey: { name: "GSI2SK", type: AttributeType.STRING },
       readCapacity: 1,
       writeCapacity: 1,
     });

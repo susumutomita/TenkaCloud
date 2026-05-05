@@ -57,6 +57,8 @@ export async function startDeployment(
     SK: "META",
     GSI1PK: `TENANT#${ctx.tenantId}`,
     GSI1SK: createdAt,
+    GSI2PK: `TEAMKEY#${teamLoginKey}`,
+    GSI2SK: createdAt,
 
     jobId,
     problemId: request.problemId,

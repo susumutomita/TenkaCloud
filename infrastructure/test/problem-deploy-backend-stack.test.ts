@@ -79,6 +79,25 @@ describe("ProblemDeployBackendStack", () => {
       );
     });
 
+    it("Deployments テーブルは GSI2 (TEAMKEY#... sparse) を持ち、PROVISIONED 1/1 であるべき", () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::DynamoDB::Table",
+        Match.objectLike({
+          GlobalSecondaryIndexes: Match.arrayWith([
+            Match.objectLike({
+              IndexName: "GSI2",
+              KeySchema: Match.arrayWith([
+                Match.objectLike({ AttributeName: "GSI2PK", KeyType: "HASH" }),
+                Match.objectLike({ AttributeName: "GSI2SK", KeyType: "RANGE" }),
+              ]),
+              ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+            }),
+          ]),
+        }),
+      );
+    });
+
     it("Deployments テーブルは expiresAt の TTL を持つべき", () => {
       const tpl = synth();
       tpl.hasResourceProperties(
@@ -389,6 +408,47 @@ describe("ProblemDeployBackendStack", () => {
           },
         }),
       );
+    });
+
+    it("participantPortal 指定で Function URL (NONE auth) の Lambda を追加するべき", () => {
+      const noPortal = synth();
+      const withPortal = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
+      // 既存 Function URL は Deploy API の AWS_IAM 1 個。Portal 追加で NONE が増える。
+      const noPortalUrls = Object.values(noPortal.findResources("AWS::Lambda::Url")) as {
+        Properties?: { AuthType?: string };
+      }[];
+      const withPortalUrls = Object.values(withPortal.findResources("AWS::Lambda::Url")) as {
+        Properties?: { AuthType?: string };
+      }[];
+      expect(withPortalUrls.length).toBe(noPortalUrls.length + 1);
+      expect(withPortalUrls.some((u) => u.Properties?.AuthType === "NONE")).toBe(true);
+    });
+
+    it("ParticipantPortalLambda は Deployments への Query 権限のみ持つべき (CFn / EventBridge は付与しない)", () => {
+      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
+      tpl.hasResourceProperties(
+        "AWS::IAM::Role",
+        Match.objectLike({
+          Policies: Match.arrayWith([
+            Match.objectLike({
+              PolicyName: "DeploymentsRead",
+              PolicyDocument: Match.objectLike({
+                Statement: Match.arrayWith([
+                  Match.objectLike({
+                    Effect: "Allow",
+                    Action: "dynamodb:Query",
+                  }),
+                ]),
+              }),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it("ParticipantPortalApiUrl Output を持つべき", () => {
+      const tpl = synth({ participantPortal: { runtimeConfig: "default-dev-mock" } });
+      tpl.hasOutput("ParticipantPortalApiUrl", {});
     });
 
     it("CloudFront Distribution は HTTPS リダイレクトと SPA fallback (403/404 → /index.html 200) を持つべき", () => {

@@ -12,6 +12,7 @@ import {
   ParticipantPortalHosting,
   type ParticipantPortalRuntimeConfig,
 } from "./participant-portal-hosting";
+import { ParticipantPortalLambda } from "./participant-portal-lambda";
 import { StatusUpdaterLambda } from "./status-updater-lambda";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
@@ -71,6 +72,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deployApiUrl: string;
   public readonly deployApiGatewayUrl?: string;
   public readonly participantPortalUrl?: string;
+  public readonly participantPortalApiUrl?: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -116,11 +118,27 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     }
 
     if (props.participantPortal) {
+      const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
+        deploymentsTable: deployments.table,
+      });
+      this.participantPortalApiUrl = portalLambda.url.url;
+      new CfnOutput(this, "ParticipantPortalApiUrl", {
+        value: portalLambda.url.url,
+        description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
+      });
+
       const portal = new ParticipantPortalHosting(this, "ParticipantPortal");
-      const runtimeConfig =
+      const baseConfig =
         props.participantPortal.runtimeConfig === "default-dev-mock"
           ? DEFAULT_DEV_MOCK_RUNTIME_CONFIG(this.region)
           : props.participantPortal.runtimeConfig;
+      // backend Lambda が立ち上がっている前提で apiBaseUrl を上書き、mode は backend に倒す。
+      // dev-mock 強制で frontend を独立させたい場合は runtimeConfig を明示指定すること。
+      const runtimeConfig: ParticipantPortalRuntimeConfig = {
+        ...baseConfig,
+        apiBaseUrl: portalLambda.url.url,
+        mode: "backend",
+      };
       portal.deployRuntimeConfig(runtimeConfig);
       this.participantPortalUrl = portal.distributionUrl;
       new CfnOutput(this, "ParticipantPortalUrl", {
