@@ -98,6 +98,11 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9._/-]+\\.(yaml|yml|json)$",
       "description": "同一ディレクトリからの相対パスで指す CFn テンプレートファイル (ペライチ)。デプロイ時にこのテンプレートが competitor account の CFn にアップロードされる。"
+    },
+    "cfnParameters": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "CFn template の Parameters に渡す値を {ParameterName: value} で宣言する。`NamePrefix` は script が自動注入するので含めない。`__RANDOM_PASSWORD__` を value にすると、deploy ごとに 32 桁ランダム英数字を生成して渡す (DbPassword 等の secret 用途)。省略可 (Parameters 全部に default が付いているテンプレートでは不要)。"
     }
   }
 }

@@ -18,6 +18,14 @@ set -euo pipefail
 # shellcheck source=lib/battles-common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/battles-common.sh"
 
+# UTF-8 強制 (deploy-battles.sh と同じ理由、対称性のため)。
+case "${LC_ALL:-${LANG:-}}" in
+  C|POSIX|"")
+    export LANG="en_US.UTF-8"
+    export LC_ALL="en_US.UTF-8"
+    ;;
+esac
+
 if [[ $# -lt 1 ]]; then
   echo "usage: $0 <problem-dir> [<problem-dir> ...]" >&2
   exit 1
