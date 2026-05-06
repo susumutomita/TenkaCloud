@@ -108,9 +108,17 @@ const dynamoWriteCapacity = Number(
   process.env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY || ddb?.writeCapacity || 1,
 );
 // KMS Key 削除スケジューリング後の待機期間 (日)。AWS KMS の許容範囲は 7〜30。
+//
+//   - config.json: `kmsConfig.pendingWindowInDays`
+//   - .env       : `KMS_PENDING_WINDOW_DAYS` で override (config.json の placeholder 経由)
+//   - 後方互換  : `CDK_PARAM_KMS_PENDING_WINDOW_DAYS` env も尊重 (set されていれば config 値より優先)
+//
 // `make destroy` 後の課金期間を最小化するため dev / training は default 7。production
-// で監査要件があれば env で 30 を指定して override する。default 発生箇所はここ 1 箇所。
-const kmsPendingWindowInDays = Number(process.env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || 7);
+// で監査要件があれば env / config で 14〜30 を指定して override する。default 発生箇所
+// は config.json の `${KMS_PENDING_WINDOW_DAYS:-7}` placeholder の 1 箇所。
+const kmsPendingWindowInDays = Number(
+  process.env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || config?.kmsConfig?.pendingWindowInDays || 7,
+);
 
 // 全 stack の KMS Key 削除待機期間を上記値に揃える Aspect を App scope に apply。
 // SBT が内部生成する CodeBuild EncryptionKey 等も含む全 `AWS::KMS::Key` が対象。

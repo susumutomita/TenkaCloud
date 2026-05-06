@@ -8,9 +8,10 @@ import type { Config } from "../config/config-interface";
 export interface ExpandOptions {
   /**
    * true なら env 未設定 + default 無しの placeholder を throw せず literal `${VAR}` のまま残す。
-   * 用途: bin/infrastructure.ts は config 全体のうち `dynamoDbConfig` セクションしか consume
-   * しないので、無関係セクション (`${TenkaCloud_ADMIN_EMAIL}` 等) の env 未設定で全体が落ちる
-   * のを避ける。consumer 側 (bin) が読まない field なら literal `${VAR}` で残っていても無害。
+   * 用途: bin/infrastructure.ts は config 全体のうち `dynamoDbConfig` / `kmsConfig` 等の
+   * 限定セクションしか consume しないので、無関係セクション (`${TenkaCloud_ADMIN_EMAIL}`
+   * 等) の env 未設定で全体が落ちるのを避ける。consumer 側 (bin) が読まない field なら
+   * literal `${VAR}` で残っていても無害。
    */
   tolerant?: boolean;
 }
@@ -99,10 +100,10 @@ export function parseConfig(configContent: string, logger: Logger): Config {
  *   - placeholder は env で展開、未設定 + default 無しは tolerant=true なら literal `${VAR}` のまま残る
  *   - JSON parse して `Config` interface に揃える (validateConfig は呼ばない)
  *
- * tolerant が default なのは、bin 側の段階導入を許すため: 現状 `dynamoDbConfig` 以外の
- * field (controlPlaneConfig 等) は bin が直接 process.env を読んでおり config.json 経由
- * ではない。それらに literal `${VAR}` が残っていても bin が無視するので安全。後続 PR で
- * 段階的に config.json 経由に寄せていく前提。
+ * tolerant が default なのは、bin 側の段階導入を許すため: 現状 `dynamoDbConfig` /
+ * `kmsConfig` 以外の field (controlPlaneConfig 等) は bin が直接 process.env を読んで
+ * おり config.json 経由ではない。それらに literal `${VAR}` が残っていても bin が無視
+ * するので安全。後続 PR で段階的に config.json 経由に寄せていく前提。
  */
 export function loadConfig(envName: string, baseDir: string): Config | undefined {
   const configPath = path.resolve(baseDir, `../environments/${envName}/config.json`);

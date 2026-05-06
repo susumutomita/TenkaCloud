@@ -33,5 +33,8 @@
     "billingMode": "${DYNAMODB_BILLING_MODE:-PROVISIONED}",
     "readCapacity": "${DYNAMODB_READ_CAPACITY:-1}",
     "writeCapacity": "${DYNAMODB_WRITE_CAPACITY:-1}"
+  },
+  "kmsConfig": {
+    "pendingWindowInDays": "${KMS_PENDING_WINDOW_DAYS:-7}"
   }
 }
