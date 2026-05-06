@@ -4,6 +4,11 @@ import { getEnv } from "../../../helper-functions.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
+import {
+  computeSince,
+  type EndpointHealth,
+  parseEndpointsHealth,
+} from "../shared/endpoints-health.js";
 
 /**
  * EventBridge Scheduler `rate(1 minute)` で起動される Lambda。
@@ -49,17 +54,33 @@ type UptimeScoring = Extract<ProblemScoringMetadata, { kind: "uptime" }>;
 async function checkOne(item: Partial<DeploymentItem>, scoring: UptimeScoring): Promise<void> {
   if (!item.PK) return;
   const outputs = parseStackOutputs(item.stackOutputs);
-  const probes: Promise<boolean>[] = [];
-  for (const e of scoring.endpoints) {
-    const base = outputs[e.outputKey];
-    if (!base) continue;
-    probes.push(probe(joinUrl(base, e.path), e.expectStatus));
-  }
-  if (probes.length === 0) return;
 
-  const allOk = (await Promise.all(probes)).every((ok) => ok);
+  // outputKey → probe を平行発行し、結果を outputKey と組で受ける (順序保証は必要無し)。
+  const probeResults = await Promise.all(
+    scoring.endpoints
+      .map((e) => {
+        const base = outputs[e.outputKey];
+        if (!base) return undefined;
+        return (async () => ({
+          outputKey: e.outputKey,
+          ok: await probe(joinUrl(base, e.path), e.expectStatus),
+        }))();
+      })
+      .filter((p): p is Promise<{ outputKey: string; ok: boolean }> => p !== undefined),
+  );
+  if (probeResults.length === 0) return;
+
   const now = new Date().toISOString();
-  await ddb.send(buildHealthUpdate(item.PK, allOk, scoring.pointsPerSuccess, now));
+  const prevHealth = parseEndpointsHealth(item.endpointsHealth);
+  const newHealth: Record<string, EndpointHealth> = {};
+  let allOk = true;
+  for (const { outputKey, ok } of probeResults) {
+    if (!ok) allOk = false;
+    const since = computeSince(ok, prevHealth[outputKey], now);
+    newHealth[outputKey] = { ok, checkedAt: now, ...(since ? { since } : {}) };
+  }
+
+  await ddb.send(buildHealthUpdate(item.PK, allOk, scoring.pointsPerSuccess, now, newHealth));
 }
 
 /** 成功 / 失敗で UpdateCommand の expression が分岐するが、Key と timestamp は共通。 */
@@ -68,21 +89,29 @@ function buildHealthUpdate(
   allOk: boolean,
   pointsPerSuccess: number,
   now: string,
+  endpointsHealth: Record<string, EndpointHealth>,
 ): UpdateCommand {
+  const healthJson = JSON.stringify(endpointsHealth);
   if (allOk) {
     return new UpdateCommand({
       TableName: tableName(),
       Key: { PK: pk, SK: "META" },
       UpdateExpression:
-        "ADD score :pts SET lastScoredAt = :now, lastResult = :ok, updatedAt = :now",
-      ExpressionAttributeValues: { ":pts": pointsPerSuccess, ":now": now, ":ok": "ok" },
+        "ADD score :pts SET lastScoredAt = :now, lastResult = :ok, updatedAt = :now, endpointsHealth = :health",
+      ExpressionAttributeValues: {
+        ":pts": pointsPerSuccess,
+        ":now": now,
+        ":ok": "ok",
+        ":health": healthJson,
+      },
     });
   }
   return new UpdateCommand({
     TableName: tableName(),
     Key: { PK: pk, SK: "META" },
-    UpdateExpression: "SET lastScoredAt = :now, lastResult = :fail, updatedAt = :now",
-    ExpressionAttributeValues: { ":now": now, ":fail": "fail" },
+    UpdateExpression:
+      "SET lastScoredAt = :now, lastResult = :fail, updatedAt = :now, endpointsHealth = :health",
+    ExpressionAttributeValues: { ":now": now, ":fail": "fail", ":health": healthJson },
   });
 }
 

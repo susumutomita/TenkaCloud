@@ -40,6 +40,9 @@ export interface ParticipantView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  // 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API
+  // には出さない。Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」
+  // で、画面で答え合わせをすると興ざめになる。
 }
 
 export type SubmitFlagOutcome =

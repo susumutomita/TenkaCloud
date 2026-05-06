@@ -34,6 +34,11 @@ export type ParticipantView = Pick<
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
+  // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
+  // あり、画面で答え合わせをすると興ざめになる。defender は score / lastScoredAt から
+  // 「何かおかしい」を察し、SSM Session 等で自力調査する。`endpointsHealth` 自体は DDB
+  // に保持され、operator ダッシュボード (将来) は full diagnostic として参照可能。
 };
 
 const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);

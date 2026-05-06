@@ -25,6 +25,7 @@ import {
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { describeAgo } from "../lib/format";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -185,25 +186,52 @@ export function HomePage({ config }: { config: AppConfig }) {
   );
 }
 
+/** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。Health Check は
+ *  毎分走るので、2 分以上空いていれば何かが普段と違う = defender が気付くべき信号。 */
+const STALE_THRESHOLD_MS = 2 * 60 * 1000;
+
 function ScorePanel({ view }: { view: ParticipantView }) {
   const kindLabel = view.scoring ? SCORING_KIND_LABEL[view.scoring.kind] : "(未設定)";
+  const now = Date.now();
+  const lastScoredMs = view.lastScoredAt ? new Date(view.lastScoredAt).getTime() : Number.NaN;
+  const isUptime = view.scoring?.kind === "uptime";
+  // uptime 採点で 2 分以上加点されていない = サービスが何か止まっている可能性。
+  // どこが原因かは敢えて UI に出さず、defender 自身に SSM / ログ調査させる
+  // (Battle のゲーム性 = 「自力で原因究明し復旧する」)。
+  const isStale =
+    isUptime &&
+    Number.isFinite(lastScoredMs) &&
+    now - lastScoredMs > STALE_THRESHOLD_MS &&
+    view.status === "COMPLETE";
+
   return (
     <Container header={<Header variant="h2">スコア</Header>}>
-      <KeyValuePairs
-        columns={3}
-        items={[
-          {
-            label: "現在の累計",
-            value: (
-              <Box variant="awsui-value-large" color="text-status-success">
-                {view.score} pt
-              </Box>
-            ),
-          },
-          { label: "形式", value: kindLabel },
-          { label: "最終チェック", value: view.lastScoredAt ?? "(まだ未採点)" },
-        ]}
-      />
+      <SpaceBetween size="m">
+        {isStale && (
+          <Alert type="warning" header="スコアが伸びていません">
+            直近の採点から {describeAgo(view.lastScoredAt, now)} 経過。サービスのどこかが期待
+            通り応答していない可能性があります。SSM Session 等で状態を確認してください。
+          </Alert>
+        )}
+        <KeyValuePairs
+          columns={3}
+          items={[
+            {
+              label: "現在の累計",
+              value: (
+                <Box
+                  variant="awsui-value-large"
+                  color={isStale ? "text-status-warning" : "text-status-success"}
+                >
+                  {view.score} pt
+                </Box>
+              ),
+            },
+            { label: "形式", value: kindLabel },
+            { label: "最終加点", value: describeAgo(view.lastScoredAt, now) },
+          ]}
+        />
+      </SpaceBetween>
     </Container>
   );
 }

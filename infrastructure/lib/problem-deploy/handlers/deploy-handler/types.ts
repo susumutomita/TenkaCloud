@@ -97,6 +97,13 @@ export interface DeploymentItem {
    * Challenge (flag) で 1 度でも正解 submit されたら true。再提出での重複加算を防ぐ。
    */
   flagSubmitted?: boolean;
+  /**
+   * 直近の health check で endpoint ごとに probe した結果の JSON 文字列。
+   * shape: `{ [outputKey]: { ok, checkedAt, since? } }`。
+   * `since` は ok=false が続いている開始時刻 (= attack を検知した時刻)。
+   * Battle 防御側が「どの endpoint が何分前から落ちている」を画面で見るため。
+   */
+  endpointsHealth?: string;
 }
 
 export const DeployResponseSchema = z.object({
