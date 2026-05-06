@@ -2,7 +2,6 @@ import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
-import { type EndpointHealth, parseEndpointsHealth } from "../shared/endpoints-health.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
 /**
@@ -22,9 +21,6 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
 }
 
-/** 競技者向け view 型 (= shared `EndpointHealth` の readonly alias)。 */
-export type EndpointHealthView = Readonly<EndpointHealth>;
-
 export type ParticipantView = Pick<
   DeploymentItem,
   "jobId" | "problemId" | "region" | "expiresAt"
@@ -38,8 +34,11 @@ export type ParticipantView = Pick<
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
-  /** uptime 形式問題で endpoint 別の最新ヘルス。Battle 防御側が攻撃検知に使う。 */
-  readonly endpointsHealth?: Record<string, EndpointHealthView>;
+  // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
+  // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
+  // あり、画面で答え合わせをすると興ざめになる。defender は score / lastScoredAt から
+  // 「何かおかしい」を察し、SSM Session 等で自力調査する。`endpointsHealth` 自体は DDB
+  // に保持され、operator ダッシュボード (将来) は full diagnostic として参照可能。
 };
 
 const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
@@ -70,9 +69,6 @@ export function toView(
     delete stackOutputs[scoring.flagOutputKey];
   }
 
-  const parsedHealth = parseEndpointsHealth(item.endpointsHealth);
-  const endpointsHealth = Object.keys(parsedHealth).length > 0 ? parsedHealth : undefined;
-
   return {
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
@@ -98,7 +94,6 @@ export function toView(
             : { pointsPerSuccess: scoring.pointsPerSuccess }),
         }
       : undefined,
-    endpointsHealth,
   };
 }
 

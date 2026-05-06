@@ -23,18 +23,6 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
 }
 
-/**
- * Backend `infrastructure/lib/problem-deploy/handlers/shared/endpoints-health.ts` に同
- * shape の `EndpointHealth` あり、両者は意味的に同一 (apps 横断の shared package が
- * 無いための duplication)。
- */
-export interface EndpointHealth {
-  readonly ok: boolean;
-  readonly checkedAt: string;
-  /** ok=false が連続している開始時刻 (= 攻撃検知 / down 開始時刻)。ok=true なら省略。 */
-  readonly since?: string;
-}
-
 export interface ParticipantView {
   readonly jobId: string;
   readonly problemId: string;
@@ -52,7 +40,9 @@ export interface ParticipantView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
-  readonly endpointsHealth?: Record<string, EndpointHealth>;
+  // 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API
+  // には出さない。Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」
+  // で、画面で答え合わせをすると興ざめになる。
 }
 
 export type SubmitFlagOutcome =

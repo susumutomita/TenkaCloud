@@ -15,7 +15,6 @@ import StatusIndicator, {
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type DeploymentStatus,
-  type EndpointHealth,
   getPortalMe,
   type ParticipantView,
   PortalAuthError,
@@ -26,6 +25,7 @@ import {
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { describeAgo } from "../lib/format";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -43,13 +43,7 @@ const SCORING_KIND_LABEL = {
   uptime: "Battle (uptime 加点)",
 } as const;
 
-/**
- * Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。
- *
- * `endpointsHealth` の比較は `checkedAt` を除外 (= 状態 ok/since が変わらない限り
- * 1 分ごとの checkedAt 更新で再 render しないようにする)。UI は ok / since 派生の
- * 「N 分前から」だけを表示するので checkedAt は表示要素ではない。
- */
+/** Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。 */
 function viewIsUnchanged(prev: ParticipantView | null, next: ParticipantView): boolean {
   if (!prev) return false;
   return (
@@ -60,30 +54,8 @@ function viewIsUnchanged(prev: ParticipantView | null, next: ParticipantView): b
     prev.scoring?.flagSubmitted === next.scoring?.flagSubmitted &&
     prev.teamName === next.teamName &&
     prev.failureReason === next.failureReason &&
-    JSON.stringify(prev.stackOutputs) === JSON.stringify(next.stackOutputs) &&
-    healthSignature(prev.endpointsHealth) === healthSignature(next.endpointsHealth)
+    JSON.stringify(prev.stackOutputs) === JSON.stringify(next.stackOutputs)
   );
-}
-
-/** `endpointsHealth` を `[outputKey, ok, since||""]` の配列で正規化 (checkedAt 無視)。 */
-function healthSignature(h: ParticipantView["endpointsHealth"]): string {
-  if (!h) return "";
-  return Object.entries(h)
-    .map(([k, v]) => `${k}:${v.ok}:${v.since ?? ""}`)
-    .sort()
-    .join("|");
-}
-
-function describeDuration(sinceIso: string, nowMs: number): string {
-  const sinceMs = new Date(sinceIso).getTime();
-  if (!Number.isFinite(sinceMs)) return "?";
-  const diff = Math.max(0, nowMs - sinceMs);
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec} 秒前から`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} 分前から`;
-  const hr = Math.floor(min / 60);
-  return `${hr} 時間 ${min % 60} 分前から`;
 }
 
 export function HomePage({ config }: { config: AppConfig }) {
@@ -139,10 +111,6 @@ export function HomePage({ config }: { config: AppConfig }) {
       </Header>
 
       {view && <ScorePanel view={view} />}
-
-      {view?.scoring?.kind === "uptime" && view.endpointsHealth && (
-        <ServiceHealthPanel endpointsHealth={view.endpointsHealth} />
-      )}
 
       <Container header={<Header variant="h2">問題のデプロイ状況</Header>}>
         <SpaceBetween size="m">
@@ -218,82 +186,52 @@ export function HomePage({ config }: { config: AppConfig }) {
   );
 }
 
-/**
- * 各 endpoint の現在ヘルス + down している時間を表示。Battle 中の防御側が
- * 「どこから攻撃を受けて何分前から落ちている」を一目で判断できる経路。
- */
-function ServiceHealthPanel({
-  endpointsHealth,
-}: {
-  endpointsHealth: Record<string, EndpointHealth>;
-}) {
-  const entries = Object.entries(endpointsHealth);
-  if (entries.length === 0) return null;
-  const anyDown = entries.some(([, h]) => !h.ok);
-  const now = Date.now();
-  return (
-    <Container
-      header={
-        <Header
-          variant="h2"
-          description={
-            anyDown
-              ? "サービスが落ちている間はスコアが加算されません。早急に復旧してください。"
-              : "全エンドポイント正常。スコアは 1 分ごとに加算されます。"
-          }
-        >
-          サービス健全性
-        </Header>
-      }
-    >
-      <SpaceBetween size="m">
-        {anyDown && (
-          <Alert type="error" header="攻撃検知 / サービス停止">
-            下記エンドポイントが応答していません。SSM Session で接続して復旧してください。
-          </Alert>
-        )}
-        <KeyValuePairs
-          columns={Math.min(entries.length, 3)}
-          items={entries.map(([key, h]) => ({
-            label: key,
-            value: h.ok ? (
-              <StatusIndicator type="success">OK</StatusIndicator>
-            ) : (
-              <Box>
-                <StatusIndicator type="error">DOWN</StatusIndicator>
-                {h.since && (
-                  <Box variant="small" color="text-status-error">
-                    {describeDuration(h.since, now)}
-                  </Box>
-                )}
-              </Box>
-            ),
-          }))}
-        />
-      </SpaceBetween>
-    </Container>
-  );
-}
+/** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。Health Check は
+ *  毎分走るので、2 分以上空いていれば何かが普段と違う = defender が気付くべき信号。 */
+const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
 function ScorePanel({ view }: { view: ParticipantView }) {
   const kindLabel = view.scoring ? SCORING_KIND_LABEL[view.scoring.kind] : "(未設定)";
+  const now = Date.now();
+  const lastScoredMs = view.lastScoredAt ? new Date(view.lastScoredAt).getTime() : Number.NaN;
+  const isUptime = view.scoring?.kind === "uptime";
+  // uptime 採点で 2 分以上加点されていない = サービスが何か止まっている可能性。
+  // どこが原因かは敢えて UI に出さず、defender 自身に SSM / ログ調査させる
+  // (Battle のゲーム性 = 「自力で原因究明し復旧する」)。
+  const isStale =
+    isUptime &&
+    Number.isFinite(lastScoredMs) &&
+    now - lastScoredMs > STALE_THRESHOLD_MS &&
+    view.status === "COMPLETE";
+
   return (
     <Container header={<Header variant="h2">スコア</Header>}>
-      <KeyValuePairs
-        columns={3}
-        items={[
-          {
-            label: "現在の累計",
-            value: (
-              <Box variant="awsui-value-large" color="text-status-success">
-                {view.score} pt
-              </Box>
-            ),
-          },
-          { label: "形式", value: kindLabel },
-          { label: "最終チェック", value: view.lastScoredAt ?? "(まだ未採点)" },
-        ]}
-      />
+      <SpaceBetween size="m">
+        {isStale && (
+          <Alert type="warning" header="スコアが伸びていません">
+            直近の採点から {describeAgo(view.lastScoredAt, now)} 経過。サービスのどこかが期待
+            通り応答していない可能性があります。SSM Session 等で状態を確認してください。
+          </Alert>
+        )}
+        <KeyValuePairs
+          columns={3}
+          items={[
+            {
+              label: "現在の累計",
+              value: (
+                <Box
+                  variant="awsui-value-large"
+                  color={isStale ? "text-status-warning" : "text-status-success"}
+                >
+                  {view.score} pt
+                </Box>
+              ),
+            },
+            { label: "形式", value: kindLabel },
+            { label: "最終加点", value: describeAgo(view.lastScoredAt, now) },
+          ]}
+        />
+      </SpaceBetween>
     </Container>
   );
 }
