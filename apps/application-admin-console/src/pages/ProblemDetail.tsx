@@ -22,6 +22,12 @@ import {
 import { DeployFormModal } from "../components/DeployForm";
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
+import {
+  DEPLOYMENT_LIST_PAGE_SIZE,
+  DEPLOYMENT_LIST_POLL_INTERVAL_MS,
+  deploymentsChanged,
+  EMPTY_DEPLOYMENT_ITEMS,
+} from "../utils/deployments";
 
 const DIFFICULTY_LABEL = {
   1: "入門",
@@ -142,30 +148,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   );
 }
 
-const POLL_INTERVAL_MS = 10_000;
-const EMPTY_ITEMS: readonly DeploymentSummary[] = [];
-
-function deploymentsChanged(
-  prev: readonly DeploymentSummary[],
-  next: readonly DeploymentSummary[],
-): boolean {
-  if (prev.length !== next.length) return true;
-  for (let i = 0; i < next.length; i++) {
-    const a = prev[i];
-    const b = next[i];
-    if (!a || !b) return true;
-    if (
-      a.jobId !== b.jobId ||
-      a.status !== b.status ||
-      a.updatedAt !== b.updatedAt ||
-      a.displayTeamName !== b.displayTeamName
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function buildColumns(
   navigate: NavigateFunction,
   onAskDelete: (item: DeploymentSummary) => void,
@@ -245,7 +227,9 @@ function ProblemDeploymentsSection({
   const fetchOnce = useCallback(async () => {
     if (!apiClient) return;
     try {
-      const res = await listDeployments(apiClient, problemId, { limit: 50 });
+      const res = await listDeployments(apiClient, problemId, {
+        limit: DEPLOYMENT_LIST_PAGE_SIZE,
+      });
       setItems((prev) => (prev && !deploymentsChanged(prev, res.items) ? prev : res.items));
       setError(null);
     } catch (err) {
@@ -260,7 +244,7 @@ function ProblemDeploymentsSection({
       await fetchOnce();
     };
     void tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    const interval = setInterval(tick, DEPLOYMENT_LIST_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -299,7 +283,7 @@ function ProblemDeploymentsSection({
           </Alert>
         )}
         <Table
-          items={items ?? EMPTY_ITEMS}
+          items={items ?? EMPTY_DEPLOYMENT_ITEMS}
           columnDefinitions={columns}
           loading={items === null && !error}
           loadingText="読み込み中"

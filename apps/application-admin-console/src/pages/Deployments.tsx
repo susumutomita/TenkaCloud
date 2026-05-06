@@ -16,10 +16,12 @@ import {
   listAllDeployments,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
-
-const POLL_INTERVAL_MS = 10_000;
-
-const EMPTY_ITEMS: readonly DeploymentSummary[] = [];
+import {
+  DEPLOYMENT_LIST_PAGE_SIZE,
+  DEPLOYMENT_LIST_POLL_INTERVAL_MS,
+  deploymentsChanged,
+  EMPTY_DEPLOYMENT_ITEMS,
+} from "../utils/deployments";
 
 function buildColumnDefinitions(
   navigate: NavigateFunction,
@@ -68,28 +70,6 @@ function buildColumnDefinitions(
   ];
 }
 
-/** 行が変わっていれば true。同 jobId の status / updatedAt / displayTeamName を比較する。 */
-function deploymentsChanged(
-  prev: readonly DeploymentSummary[],
-  next: readonly DeploymentSummary[],
-): boolean {
-  if (prev.length !== next.length) return true;
-  for (let i = 0; i < next.length; i++) {
-    const a = prev[i];
-    const b = next[i];
-    if (!a || !b) return true;
-    if (
-      a.jobId !== b.jobId ||
-      a.status !== b.status ||
-      a.updatedAt !== b.updatedAt ||
-      a.displayTeamName !== b.displayTeamName
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function DeploymentsPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
@@ -104,7 +84,7 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
       if (!apiClient) return;
       if (showSpinner) setManualRefreshing(true);
       try {
-        const res = await listAllDeployments(apiClient, { limit: 50 });
+        const res = await listAllDeployments(apiClient, { limit: DEPLOYMENT_LIST_PAGE_SIZE });
         setItems((prev) => (prev && !deploymentsChanged(prev, res.items) ? prev : res.items));
         setError(null);
       } catch (err) {
@@ -123,7 +103,7 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
       await fetchOnce();
     };
     void tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    const interval = setInterval(tick, DEPLOYMENT_LIST_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -161,7 +141,7 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
       </Header>
 
       <Table
-        items={items ?? EMPTY_ITEMS}
+        items={items ?? EMPTY_DEPLOYMENT_ITEMS}
         columnDefinitions={columnDefinitions}
         empty={
           <Box textAlign="center" color="inherit" padding="xxl">
