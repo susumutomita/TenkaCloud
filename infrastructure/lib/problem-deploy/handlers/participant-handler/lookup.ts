@@ -2,6 +2,7 @@ import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
+import { type EndpointHealth, parseEndpointsHealth } from "../shared/endpoints-health.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
 /**
@@ -21,12 +22,8 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
 }
 
-export interface EndpointHealthView {
-  readonly ok: boolean;
-  readonly checkedAt: string;
-  /** ok=false が連続している開始時刻。攻撃検知 / down 時間表示の起点。 */
-  readonly since?: string;
-}
+/** 競技者向け view 型 (= shared `EndpointHealth` の readonly alias)。 */
+export type EndpointHealthView = Readonly<EndpointHealth>;
 
 export type ParticipantView = Pick<
   DeploymentItem,
@@ -73,7 +70,8 @@ export function toView(
     delete stackOutputs[scoring.flagOutputKey];
   }
 
-  const endpointsHealth = parseEndpointsHealthForView(item.endpointsHealth);
+  const parsedHealth = parseEndpointsHealth(item.endpointsHealth);
+  const endpointsHealth = Object.keys(parsedHealth).length > 0 ? parsedHealth : undefined;
 
   return {
     jobId: String(item.jobId ?? ""),
@@ -102,35 +100,6 @@ export function toView(
       : undefined,
     endpointsHealth,
   };
-}
-
-/**
- * DDB の `endpointsHealth` JSON 文字列を `Record<outputKey, EndpointHealthView>` に展開。
- * 壊れた JSON / 非 object / 不正 entry は無視 (best-effort、UI を落とさない)。
- */
-function parseEndpointsHealthForView(
-  raw: string | undefined,
-): Record<string, EndpointHealthView> | undefined {
-  if (!raw) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-  const out: Record<string, EndpointHealthView> = {};
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!v || typeof v !== "object") continue;
-    const e = v as { ok?: unknown; checkedAt?: unknown; since?: unknown };
-    if (typeof e.ok !== "boolean" || typeof e.checkedAt !== "string") continue;
-    out[k] = {
-      ok: e.ok,
-      checkedAt: e.checkedAt,
-      since: typeof e.since === "string" ? e.since : undefined,
-    };
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

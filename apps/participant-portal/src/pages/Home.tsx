@@ -43,7 +43,13 @@ const SCORING_KIND_LABEL = {
   uptime: "Battle (uptime 加点)",
 } as const;
 
-/** Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。 */
+/**
+ * Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。
+ *
+ * `endpointsHealth` の比較は `checkedAt` を除外 (= 状態 ok/since が変わらない限り
+ * 1 分ごとの checkedAt 更新で再 render しないようにする)。UI は ok / since 派生の
+ * 「N 分前から」だけを表示するので checkedAt は表示要素ではない。
+ */
 function viewIsUnchanged(prev: ParticipantView | null, next: ParticipantView): boolean {
   if (!prev) return false;
   return (
@@ -55,8 +61,17 @@ function viewIsUnchanged(prev: ParticipantView | null, next: ParticipantView): b
     prev.teamName === next.teamName &&
     prev.failureReason === next.failureReason &&
     JSON.stringify(prev.stackOutputs) === JSON.stringify(next.stackOutputs) &&
-    JSON.stringify(prev.endpointsHealth ?? {}) === JSON.stringify(next.endpointsHealth ?? {})
+    healthSignature(prev.endpointsHealth) === healthSignature(next.endpointsHealth)
   );
+}
+
+/** `endpointsHealth` を `[outputKey, ok, since||""]` の配列で正規化 (checkedAt 無視)。 */
+function healthSignature(h: ParticipantView["endpointsHealth"]): string {
+  if (!h) return "";
+  return Object.entries(h)
+    .map(([k, v]) => `${k}:${v.ok}:${v.since ?? ""}`)
+    .sort()
+    .join("|");
 }
 
 function describeDuration(sinceIso: string, nowMs: number): string {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { joinUrl } from "../../lib/problem-deploy/handlers/health-check-handler";
 import {
-  joinUrl,
+  computeSince,
+  type EndpointHealth,
   parseEndpointsHealth,
-} from "../../lib/problem-deploy/handlers/health-check-handler";
+} from "../../lib/problem-deploy/handlers/shared/endpoints-health";
 
 /**
  * Health Check Lambda 内のヘルパーを pin する。Scoring の解釈は
@@ -73,5 +75,37 @@ describe("parseEndpointsHealth", () => {
     expect(parseEndpointsHealth(raw)).toEqual({
       Good: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z", since: undefined },
     });
+  });
+});
+
+describe("computeSince", () => {
+  const NOW = "2026-05-05T10:05:00.000Z";
+
+  it("ok=true なら undefined", () => {
+    expect(computeSince(true, undefined, NOW)).toBeUndefined();
+    expect(computeSince(true, { ok: false, checkedAt: "x", since: "y" }, NOW)).toBeUndefined();
+  });
+
+  it("ok=false 新規 (prev=undefined) なら now", () => {
+    expect(computeSince(false, undefined, NOW)).toBe(NOW);
+  });
+
+  it("ok=false 新規 (prev.ok=true) なら now", () => {
+    const prev: EndpointHealth = { ok: true, checkedAt: "2026-05-05T10:04:00.000Z" };
+    expect(computeSince(false, prev, NOW)).toBe(NOW);
+  });
+
+  it("ok=false 継続中 (prev.ok=false で prev.since あり) なら prev.since を保持", () => {
+    const prev: EndpointHealth = {
+      ok: false,
+      checkedAt: "2026-05-05T10:04:00.000Z",
+      since: "2026-05-05T09:50:00.000Z",
+    };
+    expect(computeSince(false, prev, NOW)).toBe("2026-05-05T09:50:00.000Z");
+  });
+
+  it("ok=false で prev.ok=false だが since 不在なら now (= データ不整合への防御)", () => {
+    const prev: EndpointHealth = { ok: false, checkedAt: "2026-05-05T10:04:00.000Z" };
+    expect(computeSince(false, prev, NOW)).toBe(NOW);
   });
 });

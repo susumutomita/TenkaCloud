@@ -23,6 +23,11 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
 }
 
+/**
+ * Backend `infrastructure/lib/problem-deploy/handlers/shared/endpoints-health.ts` に同
+ * shape の `EndpointHealth` あり、両者は意味的に同一 (apps 横断の shared package が
+ * 無いための duplication)。
+ */
 export interface EndpointHealth {
   readonly ok: boolean;
   readonly checkedAt: string;
