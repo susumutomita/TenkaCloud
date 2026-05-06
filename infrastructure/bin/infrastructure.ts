@@ -33,10 +33,6 @@ if (fs.existsSync(envFilePath)) {
 
 const app = new cdk.App();
 
-// 全 stack の KMS Key 削除待機期間を default 30 日 → 7 日に短縮 (`make destroy` 後の
-// 課金期間を縮める)。SBT が内部生成する CodeBuild EncryptionKey 等も含む。
-cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow());
-
 // required input parameters
 if (!process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL) {
   throw new Error("Please provide system admin email");
@@ -111,6 +107,14 @@ const dynamoReadCapacity = Number(
 const dynamoWriteCapacity = Number(
   process.env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY || ddb?.writeCapacity || 1,
 );
+// KMS Key 削除スケジューリング後の待機期間 (日)。AWS KMS の許容範囲は 7〜30。
+// `make destroy` 後の課金期間を最小化するため dev / training は default 7。production
+// で監査要件があれば env で 30 を指定して override する。default 発生箇所はここ 1 箇所。
+const kmsPendingWindowInDays = Number(process.env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || 7);
+
+// 全 stack の KMS Key 削除待機期間を上記値に揃える Aspect を App scope に apply。
+// SBT が内部生成する CodeBuild EncryptionKey 等も含む全 `AWS::KMS::Key` が対象。
+cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(kmsPendingWindowInDays));
 // Cognito UserPool domain は region globally unique なので env / tenantId / accountId を
 // 入れて衝突回避する (#83)。AdminConsoleHostingStack 用にも同じ値が要るので前倒しで定義。
 const awsRegion = process.env.CDK_PARAM_AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? "";
