@@ -23,6 +23,13 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
 }
 
+export interface EndpointHealth {
+  readonly ok: boolean;
+  readonly checkedAt: string;
+  /** ok=false が連続している開始時刻 (= 攻撃検知 / down 開始時刻)。ok=true なら省略。 */
+  readonly since?: string;
+}
+
 export interface ParticipantView {
   readonly jobId: string;
   readonly problemId: string;
@@ -40,6 +47,7 @@ export interface ParticipantView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  readonly endpointsHealth?: Record<string, EndpointHealth>;
 }
 
 export type SubmitFlagOutcome =

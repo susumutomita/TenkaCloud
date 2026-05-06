@@ -21,6 +21,13 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
 }
 
+export interface EndpointHealthView {
+  readonly ok: boolean;
+  readonly checkedAt: string;
+  /** ok=false が連続している開始時刻。攻撃検知 / down 時間表示の起点。 */
+  readonly since?: string;
+}
+
 export type ParticipantView = Pick<
   DeploymentItem,
   "jobId" | "problemId" | "region" | "expiresAt"
@@ -34,6 +41,8 @@ export type ParticipantView = Pick<
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  /** uptime 形式問題で endpoint 別の最新ヘルス。Battle 防御側が攻撃検知に使う。 */
+  readonly endpointsHealth?: Record<string, EndpointHealthView>;
 };
 
 const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
@@ -64,6 +73,8 @@ export function toView(
     delete stackOutputs[scoring.flagOutputKey];
   }
 
+  const endpointsHealth = parseEndpointsHealthForView(item.endpointsHealth);
+
   return {
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
@@ -89,7 +100,37 @@ export function toView(
             : { pointsPerSuccess: scoring.pointsPerSuccess }),
         }
       : undefined,
+    endpointsHealth,
   };
+}
+
+/**
+ * DDB の `endpointsHealth` JSON 文字列を `Record<outputKey, EndpointHealthView>` に展開。
+ * 壊れた JSON / 非 object / 不正 entry は無視 (best-effort、UI を落とさない)。
+ */
+function parseEndpointsHealthForView(
+  raw: string | undefined,
+): Record<string, EndpointHealthView> | undefined {
+  if (!raw) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+  const out: Record<string, EndpointHealthView> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!v || typeof v !== "object") continue;
+    const e = v as { ok?: unknown; checkedAt?: unknown; since?: unknown };
+    if (typeof e.ok !== "boolean" || typeof e.checkedAt !== "string") continue;
+    out[k] = {
+      ok: e.ok,
+      checkedAt: e.checkedAt,
+      since: typeof e.since === "string" ? e.since : undefined,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**

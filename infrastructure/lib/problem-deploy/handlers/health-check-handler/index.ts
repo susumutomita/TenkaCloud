@@ -46,20 +46,74 @@ function joinUrl(base: string, relPath: string): string {
 
 type UptimeScoring = Extract<ProblemScoringMetadata, { kind: "uptime" }>;
 
+/**
+ * 1 endpoint の最近のヘルス状態。`since` は ok=false が連続している開始時刻 (= 攻撃検知
+ * 起点)。Battle 防御側が「ApiUrl が 3 分前から落ちてる」を画面で見るためのフィールド。
+ */
+export interface EndpointHealth {
+  ok: boolean;
+  checkedAt: string;
+  /** ok=false のとき、現状態が始まった時刻。ok=true ならフィールド自体省略。 */
+  since?: string;
+}
+
+export function parseEndpointsHealth(raw: string | undefined): Record<string, EndpointHealth> {
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const out: Record<string, EndpointHealth> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!v || typeof v !== "object") continue;
+    const e = v as { ok?: unknown; checkedAt?: unknown; since?: unknown };
+    if (typeof e.ok !== "boolean" || typeof e.checkedAt !== "string") continue;
+    out[k] = {
+      ok: e.ok,
+      checkedAt: e.checkedAt,
+      since: typeof e.since === "string" ? e.since : undefined,
+    };
+  }
+  return out;
+}
+
 async function checkOne(item: Partial<DeploymentItem>, scoring: UptimeScoring): Promise<void> {
   if (!item.PK) return;
   const outputs = parseStackOutputs(item.stackOutputs);
-  const probes: Promise<boolean>[] = [];
+
+  // outputKey → probe Promise を順序保証付きで構築。空 base (= stackOutputs に該当 key
+  // 不在) は skip し、map から外す。
+  const probeJobs: { outputKey: string; promise: Promise<boolean> }[] = [];
   for (const e of scoring.endpoints) {
     const base = outputs[e.outputKey];
     if (!base) continue;
-    probes.push(probe(joinUrl(base, e.path), e.expectStatus));
+    probeJobs.push({
+      outputKey: e.outputKey,
+      promise: probe(joinUrl(base, e.path), e.expectStatus),
+    });
   }
-  if (probes.length === 0) return;
+  if (probeJobs.length === 0) return;
 
-  const allOk = (await Promise.all(probes)).every((ok) => ok);
+  const results = await Promise.all(probeJobs.map((p) => p.promise));
   const now = new Date().toISOString();
-  await ddb.send(buildHealthUpdate(item.PK, allOk, scoring.pointsPerSuccess, now));
+  const prevHealth = parseEndpointsHealth(item.endpointsHealth);
+  const newHealth: Record<string, EndpointHealth> = {};
+  let allOk = true;
+  for (let i = 0; i < probeJobs.length; i++) {
+    const job = probeJobs[i];
+    const ok = results[i] ?? false;
+    if (!job) continue;
+    if (!ok) allOk = false;
+    const prev = prevHealth[job.outputKey];
+    // ok=false が継続中なら `since` を保持、ok→fail 遷移なら `since=now`、ok=true なら省略。
+    const since = ok ? undefined : prev && !prev.ok && prev.since ? prev.since : now;
+    newHealth[job.outputKey] = { ok, checkedAt: now, ...(since ? { since } : {}) };
+  }
+
+  await ddb.send(buildHealthUpdate(item.PK, allOk, scoring.pointsPerSuccess, now, newHealth));
 }
 
 /** 成功 / 失敗で UpdateCommand の expression が分岐するが、Key と timestamp は共通。 */
@@ -68,21 +122,29 @@ function buildHealthUpdate(
   allOk: boolean,
   pointsPerSuccess: number,
   now: string,
+  endpointsHealth: Record<string, EndpointHealth>,
 ): UpdateCommand {
+  const healthJson = JSON.stringify(endpointsHealth);
   if (allOk) {
     return new UpdateCommand({
       TableName: tableName(),
       Key: { PK: pk, SK: "META" },
       UpdateExpression:
-        "ADD score :pts SET lastScoredAt = :now, lastResult = :ok, updatedAt = :now",
-      ExpressionAttributeValues: { ":pts": pointsPerSuccess, ":now": now, ":ok": "ok" },
+        "ADD score :pts SET lastScoredAt = :now, lastResult = :ok, updatedAt = :now, endpointsHealth = :health",
+      ExpressionAttributeValues: {
+        ":pts": pointsPerSuccess,
+        ":now": now,
+        ":ok": "ok",
+        ":health": healthJson,
+      },
     });
   }
   return new UpdateCommand({
     TableName: tableName(),
     Key: { PK: pk, SK: "META" },
-    UpdateExpression: "SET lastScoredAt = :now, lastResult = :fail, updatedAt = :now",
-    ExpressionAttributeValues: { ":now": now, ":fail": "fail" },
+    UpdateExpression:
+      "SET lastScoredAt = :now, lastResult = :fail, updatedAt = :now, endpointsHealth = :health",
+    ExpressionAttributeValues: { ":now": now, ":fail": "fail", ":health": healthJson },
   });
 }
 
