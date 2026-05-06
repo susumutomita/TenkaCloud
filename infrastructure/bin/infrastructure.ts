@@ -8,6 +8,7 @@ import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
+import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
 import { getEnv } from "../lib/helper-functions";
 import type { ParticipantPortalRuntimeConfig } from "../lib/problem-deploy/participant-portal-hosting";
@@ -31,6 +32,10 @@ if (fs.existsSync(envFilePath)) {
 }
 
 const app = new cdk.App();
+
+// 全 stack の KMS Key 削除待機期間を default 30 日 → 7 日に短縮 (`make destroy` 後の
+// 課金期間を縮める)。SBT が内部生成する CodeBuild EncryptionKey 等も含む。
+cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow());
 
 // required input parameters
 if (!process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL) {
