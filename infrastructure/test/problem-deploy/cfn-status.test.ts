@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseStackOutputs,
   resolveDeploymentStatus,
   serializeStackOutputs,
 } from "../../lib/problem-deploy/handlers/shared/cfn-status";
@@ -92,5 +93,46 @@ describe("serializeStackOutputs", () => {
       { OutputKey: "OnlyKey" },
     ]);
     expect(JSON.parse(json)).toEqual({ FrontendUrl: "http://example.com" });
+  });
+});
+
+describe("parseStackOutputs", () => {
+  it("undefined / 空文字 / 壊れた JSON は空オブジェクトを返すべき", () => {
+    expect(parseStackOutputs(undefined)).toEqual({});
+    expect(parseStackOutputs("")).toEqual({});
+    expect(parseStackOutputs("{not-json")).toEqual({});
+  });
+
+  it("`{key: value}` 形式 (Lambda 由来) を Record<string,string> に戻すべき", () => {
+    expect(
+      parseStackOutputs(JSON.stringify({ FrontendUrl: "http://x", ApiUrl: "http://y" })),
+    ).toEqual({
+      FrontendUrl: "http://x",
+      ApiUrl: "http://y",
+    });
+  });
+
+  it("`[{OutputKey, OutputValue}, ...]` 形式 (Step Functions describeStacks 由来) も解釈するべき", () => {
+    const cfnNative = JSON.stringify([
+      { OutputKey: "ParameterValue", OutputValue: "Hello from tc-...", Description: "x" },
+      { OutputKey: "ParameterName", OutputValue: "/tc-.../hello" },
+    ]);
+    expect(parseStackOutputs(cfnNative)).toEqual({
+      ParameterValue: "Hello from tc-...",
+      ParameterName: "/tc-.../hello",
+    });
+  });
+
+  it("非 string 値の entry は skip するべき (= best-effort)", () => {
+    expect(parseStackOutputs(JSON.stringify({ A: "ok", B: 123, C: null }))).toEqual({ A: "ok" });
+    expect(
+      parseStackOutputs(
+        JSON.stringify([
+          { OutputKey: "A", OutputValue: "ok" },
+          { OutputKey: "B", OutputValue: 123 },
+          { OutputKey: 999, OutputValue: "skipped" },
+        ]),
+      ),
+    ).toEqual({ A: "ok" });
   });
 });

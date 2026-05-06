@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { lookupByTeamLoginKey } from "../../lib/problem-deploy/handlers/participant-handler/lookup";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 
-function buildShared(): {
+function buildShared(scoring: ParticipantSharedResources["problemsScoring"] = {}): {
   shared: ParticipantSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
 } {
@@ -11,6 +11,7 @@ function buildShared(): {
   const shared: ParticipantSharedResources = {
     tableName: "TestDeployments",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
+    problemsScoring: scoring,
   };
   return { shared, ddbSend };
 }
@@ -149,5 +150,62 @@ describe("lookupByTeamLoginKey", () => {
 
     const view = await lookupByTeamLoginKey(shared, "KEY1");
     expect(view?.stackOutputs).toEqual({});
+  });
+
+  it("flag 形式 problem では flagOutputKey の値を stackOutputs から strip するべき (= 答え露出防止)", async () => {
+    const scoring = {
+      "security-battle-royale": {
+        kind: "flag",
+        flagOutputKey: "FlagAnswer",
+        points: 100,
+      },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          stackOutputs: JSON.stringify({
+            FrontendUrl: "https://x.example.com",
+            FlagAnswer: "the-secret-answer",
+          }),
+        }),
+      ],
+    });
+
+    const view = await lookupByTeamLoginKey(shared, "KEY1");
+    expect(view?.stackOutputs).toEqual({ FrontendUrl: "https://x.example.com" });
+    expect(view?.scoring?.kind).toBe("flag");
+    expect(view?.scoring?.points).toBe(100);
+  });
+
+  it("score / lastScoredAt / lastResult / scoring を participant view に含めるべき", async () => {
+    const scoring = {
+      "security-battle-royale": { kind: "uptime", pointsPerSuccess: 50 },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          score: 250,
+          lastScoredAt: "2026-05-05T10:00:00.000Z",
+          lastResult: "ok",
+        }),
+      ],
+    });
+
+    const view = await lookupByTeamLoginKey(shared, "KEY1");
+    expect(view?.score).toBe(250);
+    expect(view?.lastScoredAt).toBe("2026-05-05T10:00:00.000Z");
+    expect(view?.lastResult).toBe("ok");
+    expect(view?.scoring?.kind).toBe("uptime");
+    expect(view?.scoring?.pointsPerSuccess).toBe(50);
+  });
+
+  it("score 未設定の row は 0 を返すべき (default)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const view = await lookupByTeamLoginKey(shared, "KEY1");
+    expect(view?.score).toBe(0);
   });
 });

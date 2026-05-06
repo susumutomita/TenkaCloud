@@ -14,6 +14,7 @@ function synthDefault(): Template {
     problemsCatalog: {
       "hello-world": "problems/challenges/hello-world",
     },
+    problemsScoring: {},
   });
   return Template.fromStack(stack);
 }

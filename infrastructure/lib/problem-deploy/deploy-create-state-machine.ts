@@ -1,4 +1,4 @@
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Project } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
@@ -10,6 +10,7 @@ import {
   StateMachine,
 } from "aws-cdk-lib/aws-stepfunctions";
 import {
+  CallAwsService,
   CodeBuildStartBuild,
   DynamoAttributeValue,
   DynamoUpdateItem,
@@ -63,17 +64,40 @@ export class DeployCreateStateMachine extends Construct {
         BATTLE_PROBLEM_DIR: { value: JsonPath.stringAt("$.detail.problemDir") },
         TEAM_SLUG: { value: JsonPath.stringAt("$.detail.teamSlug") },
       },
-      // 後続 task が `$.detail` を参照できるよう、CodeBuild 結果を sub-path に格納。
       resultPath: "$.codebuild",
+    });
+
+    // CodeBuild 完了後に CFn から Outputs と StackId を取得。Outputs は
+    // `[{OutputKey, OutputValue, ...}]` の配列形で返るので、stackOutputs に JSON
+    // 文字列として格納し、portal 側 (cfn-status.ts) が array / object 両方を解釈する。
+    const describeStacks = new CallAwsService(this, "DescribeStack", {
+      service: "cloudformation",
+      action: "describeStacks",
+      parameters: { StackName: JsonPath.stringAt("$.detail.namePrefix") },
+      iamResources: [
+        Stack.of(this).formatArn({
+          service: "cloudformation",
+          resource: "stack",
+          resourceName: "*",
+        }),
+      ],
+      iamAction: "cloudformation:DescribeStacks",
+      resultPath: "$.cfn",
     });
 
     const markSucceeded = this.buildMarkSucceeded(props.deploymentsTable);
     const markFailed = this.buildMarkFailed(props.deploymentsTable);
 
+    // CodeBuild 失敗 / DescribeStacks 失敗、いずれも MarkFailed (= status=FAILED) に倒す。
+    // DescribeStacks は基本失敗しないが、稀な throttle / 競技者 account 側の Roles で
+    // 落ちうる。その場合 stackOutputs 不在のまま FAILED にして operator が再試行する。
     startCodeBuild.addCatch(markFailed, { resultPath: "$.error" });
+    describeStacks.addCatch(markFailed, { resultPath: "$.error" });
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
-      definitionBody: DefinitionBody.fromChainable(startCodeBuild.next(markSucceeded)),
+      definitionBody: DefinitionBody.fromChainable(
+        startCodeBuild.next(describeStacks).next(markSucceeded),
+      ),
       timeout: Duration.minutes(60),
       logs: { destination: logGroup, level: LogLevel.ALL },
       tracingEnabled: true,
@@ -87,11 +111,18 @@ export class DeployCreateStateMachine extends Construct {
     return new DynamoUpdateItem(this, "MarkSucceeded", {
       table,
       key: deploymentKey(),
-      updateExpression: "SET #status = :status, updatedAt = :updatedAt",
+      updateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs",
       expressionAttributeNames: { "#status": "status" },
       expressionAttributeValues: {
         ":status": DynamoAttributeValue.fromString("COMPLETE"),
         ":updatedAt": stateEnteredTime(),
+        ":stackId": DynamoAttributeValue.fromString(JsonPath.stringAt("$.cfn.Stacks[0].StackId")),
+        // CFn `Outputs: [{OutputKey, OutputValue, ...}]` の配列を JSON 文字列で格納。
+        // 読み出し側 (cfn-status.ts:parseStackOutputs) は array / object どちらも解釈する。
+        ":stackOutputs": DynamoAttributeValue.fromString(
+          JsonPath.jsonToString(JsonPath.objectAt("$.cfn.Stacks[0].Outputs")),
+        ),
       },
     });
   }

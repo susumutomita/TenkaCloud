@@ -6,11 +6,23 @@
   "status": "ready",
   "difficulty": 1,
   "estimatedDuration": "1 分",
-  "shortDescription": "TenkaCloud デプロイ機構の smoke test 用サンプル問題。SSM Parameter を 1 つだけ作る無害なスタック。",
-  "description": "deploy-battles.sh / Step Functions などのデプロイ経路を smoke test するためのサンプル。本問題は SSM Parameter (`/{NamePrefix}/hello`) を 1 つ作るだけで、EC2 / VPC / 公開エンドポイント / 脆弱性のあるソフトウェアは一切含まない。コストはゼロ。\n\n通常の競技には使わず、開発者が `make deploy-battles BATTLES=problems/challenges/hello-world` で deploy 機構の正しさを確かめるためだけに用意している。",
-  "tags": ["sample", "smoke-test", "ssm"],
+  "shortDescription": "Challenge / flag 提出形式の最小 sample。SSM Parameter Store に書かれた値を当てて入力すると 100 点獲得。",
+  "description": "Challenge / flag 提出形式の最小 sample。\n\nDeploy すると競技者の AWS アカウントに SSM Parameter `/{NamePrefix}/hello` が 1 つ作られる。値は `Hello from {NamePrefix}` の形。競技者は AWS Console / CLI でこの Parameter を読み出し、Participant Portal の入力欄に値を貼り付けて submit する。一致すれば +100 ポイント。\n\nコストはゼロ (SSM Standard tier、EC2 / VPC / 公開エンドポイントなし)。問題作成 / scoring engine の動作確認用。",
+  "tags": ["sample", "challenge", "flag", "ssm"],
   "exposedPorts": [{ "port": 1, "name": "(no public endpoint — SSM Parameter only, port unused)" }],
-  "learningGoals": ["TenkaCloud のデプロイ機構が end-to-end で動くことを smoke test で確認する"],
+  "learningGoals": [
+    "AWS Console / CLI で SSM Parameter Store の値を読み出す経路を体験する",
+    "TenkaCloud の deploy → flag 提出 → 加点 経路が end-to-end で動くことを確認する"
+  ],
   "cfnTemplate": "template.yaml",
-  "cfnParameters": {}
+  "cfnParameters": {},
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "ParameterValue",
+    "points": 100,
+    "hints": [
+      "AWS Console (SSM Parameter Store) または `aws ssm get-parameter --name /{NamePrefix}/hello` で値を読み出してください",
+      "値は `Hello from tc-...` の形式で、Stack 名 prefix を含みます"
+    ]
+  }
 }

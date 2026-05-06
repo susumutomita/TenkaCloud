@@ -1,4 +1,5 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { ParticipantSharedResources } from "./shared.js";
@@ -8,12 +9,18 @@ import type { ParticipantSharedResources } from "./shared.js";
  * で派生させることで、`DeploymentItem` に新規フィールドが増えたときに「明示的に
  * include する / 除外する」判断を強制する (operator 内部情報の意図せぬ漏洩を防ぐ)。
  *
- * `teamName` は `displayTeamName ?? <operator slug>` で resolve した最終表示名。
- * `teamNameSetByCompetitor` は競技者が自分で名前を決めたかの flag (UI が「初回
- * セットアップ画面」を出すかの判断に使う)。
- *
  * stackOutputs は DDB に JSON 文字列で入っているが、UI に返す前に object へ展開する。
+ * `flagOutputKey` で指定された field は **競技者に出さない** (= 当てる対象なので)。
  */
+export interface ParticipantScoringInfo {
+  readonly kind: "flag" | "uptime";
+  readonly points?: number;
+  readonly pointsPerSuccess?: number;
+  readonly hints?: readonly string[];
+  /** Challenge / flag のとき、提出済みなら true。再提出は加点されない。 */
+  readonly flagSubmitted?: boolean;
+}
+
 export type ParticipantView = Pick<
   DeploymentItem,
   "jobId" | "problemId" | "region" | "expiresAt"
@@ -23,6 +30,10 @@ export type ParticipantView = Pick<
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
+  readonly score: number;
+  readonly lastScoredAt?: string;
+  readonly lastResult?: "ok" | "fail";
+  readonly scoring?: ParticipantScoringInfo;
 };
 
 const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
@@ -33,12 +44,26 @@ const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING"
  *
  * status が DELETING / DELETED の場合は `undefined` を返す。これは sparse 化が
  * 崩れた行 (GSI2PK が残ったまま teardown が進んだケース) への防御。
+ *
+ * `scoringMap` から該当 problemId の scoring 設定を引き、participant 側に出してよい
+ * 情報だけ (= flagOutputKey の値は出さない、kind / points / hints のみ) を含める。
+ * stackOutputs からも flagOutputKey フィールドは strip し、答えが見えないようにする。
  */
-export function toView(item: Partial<DeploymentItem>): ParticipantView | undefined {
+export function toView(
+  item: Partial<DeploymentItem>,
+  scoringMap: Record<string, ProblemScoringMetadata> = {},
+): ParticipantView | undefined {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return undefined;
   const operatorTeamSlug = String(item.teamName ?? "");
   const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
+
+  const stackOutputs = parseStackOutputs(item.stackOutputs);
+  const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
+  if (scoring?.kind === "flag") {
+    delete stackOutputs[scoring.flagOutputKey];
+  }
+
   return {
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
@@ -46,9 +71,24 @@ export function toView(item: Partial<DeploymentItem>): ParticipantView | undefin
     teamNameSetByCompetitor: display !== undefined,
     region: String(item.region ?? ""),
     status,
-    stackOutputs: parseStackOutputs(item.stackOutputs),
+    stackOutputs,
     failureReason: status === "FAILED" ? item.failureReason : undefined,
     expiresAt: Number(item.expiresAt ?? 0),
+    score: Number(item.score ?? 0),
+    lastScoredAt: typeof item.lastScoredAt === "string" ? item.lastScoredAt : undefined,
+    lastResult: item.lastResult,
+    scoring: scoring
+      ? {
+          kind: scoring.kind,
+          ...(scoring.kind === "flag"
+            ? {
+                points: scoring.points,
+                hints: scoring.hints,
+                flagSubmitted: item.flagSubmitted === true,
+              }
+            : { pointsPerSuccess: scoring.pointsPerSuccess }),
+        }
+      : undefined,
   };
 }
 
@@ -77,5 +117,5 @@ export async function lookupByTeamLoginKey(
   );
   const item = (out.Items?.[0] ?? undefined) as Partial<DeploymentItem> | undefined;
   if (!item) return undefined;
-  return toView(item);
+  return toView(item, shared.problemsScoring);
 }

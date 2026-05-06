@@ -72,7 +72,7 @@ export async function setDisplayTeamName(
   );
   const updated = updateOut.Attributes as Partial<DeploymentItem> | undefined;
   if (!updated) return { kind: "unauthorized" };
-  const view = toView(updated);
+  const view = toView(updated, shared.problemsScoring);
   if (!view) return { kind: "unauthorized" };
   return { kind: "ok", view };
 }

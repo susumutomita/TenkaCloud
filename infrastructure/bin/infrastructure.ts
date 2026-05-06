@@ -15,7 +15,10 @@ import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
 import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stack";
 import { loadConfig } from "../lib/utils/config-loader";
-import { discoverProblemsCatalog } from "../lib/utils/discover-problems-catalog";
+import {
+  discoverProblemsCatalog,
+  discoverProblemsScoring,
+} from "../lib/utils/discover-problems-catalog";
 
 // TenkaCloud の env 読み込み。`infrastructure/environments/<env>/.env` がある場合だけ load。
 // ref の bin は CDK_PARAM_* を全部 process.env から直読みするので、ここで先に注入しておく。
@@ -160,7 +163,9 @@ const participantPortal = enableParticipantPortal
 // 本ファイルを書き換える必要はない (frontend `data/problems.ts` も同 metadata を Vite glob
 // で読むので、3 重管理を避ける)。
 // Phase 2 (ADR-003) で DDB ベース問題管理に置換するまでの自動 discovery 経路。
-const problemsCatalog = discoverProblemsCatalog(path.resolve(__dirname, "..", "..", "problems"));
+const problemsRoot = path.resolve(__dirname, "..", "..", "problems");
+const problemsCatalog = discoverProblemsCatalog(problemsRoot);
+const problemsScoring = discoverProblemsScoring(problemsRoot);
 
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
   ...stackEnv,
@@ -168,6 +173,7 @@ const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDep
   sourceBucketName: s3SourceBucket,
   sourceObjectKey: sourceZip,
   problemsCatalog,
+  problemsScoring,
   participantPortal,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
