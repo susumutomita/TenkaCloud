@@ -8,6 +8,7 @@ import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
+import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
 import { getEnv } from "../lib/helper-functions";
 import type { ParticipantPortalRuntimeConfig } from "../lib/problem-deploy/participant-portal-hosting";
@@ -106,6 +107,22 @@ const dynamoReadCapacity = Number(
 const dynamoWriteCapacity = Number(
   process.env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY || ddb?.writeCapacity || 1,
 );
+// KMS Key 削除スケジューリング後の待機期間 (日)。AWS KMS の許容範囲は 7〜30。
+//
+//   - config.json: `kmsConfig.pendingWindowInDays`
+//   - .env       : `KMS_PENDING_WINDOW_DAYS` で override (config.json の placeholder 経由)
+//   - 後方互換  : `CDK_PARAM_KMS_PENDING_WINDOW_DAYS` env も尊重 (set されていれば config 値より優先)
+//
+// `make destroy` 後の課金期間を最小化するため dev / training は default 7。production
+// で監査要件があれば env / config で 14〜30 を指定して override する。default 発生箇所
+// は config.json の `${KMS_PENDING_WINDOW_DAYS:-7}` placeholder の 1 箇所。
+const kmsPendingWindowInDays = Number(
+  process.env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || config?.kmsConfig?.pendingWindowInDays || 7,
+);
+
+// 全 stack の KMS Key 削除待機期間を上記値に揃える Aspect を App scope に apply。
+// SBT が内部生成する CodeBuild EncryptionKey 等も含む全 `AWS::KMS::Key` が対象。
+cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(kmsPendingWindowInDays));
 // Cognito UserPool domain は region globally unique なので env / tenantId / accountId を
 // 入れて衝突回避する (#83)。AdminConsoleHostingStack 用にも同じ値が要るので前倒しで定義。
 const awsRegion = process.env.CDK_PARAM_AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? "";

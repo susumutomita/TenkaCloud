@@ -11,6 +11,21 @@ export interface Config {
   readonly controlPlaneConfig: ControlPlaneConfig;
   readonly bootstrapConfig: BootstrapConfig;
   readonly dynamoDbConfig?: DynamoDbConfig;
+  readonly kmsConfig?: KmsConfig;
+}
+
+/**
+ * KMS Key の削除待機期間。`make destroy` 後 KMS Key が "Pending Deletion" 状態のまま
+ * 課金される期間 ($1/key/月) を縮めるため、AWS KMS の許容範囲 [7, 30] 内で指定。
+ *
+ *   - dev / training: 7 (= 最短、課金最小化)
+ *   - production: 14〜30 (= 監査要件 / 誤削除時の rollback 余地)
+ *
+ * 値は config.json + `${ENV_VAR:-default}` placeholder から渡るため、文字列で来ること
+ * がある (placeholder 展開後は string)。bin で `Number()` 正規化する。
+ */
+export interface KmsConfig {
+  readonly pendingWindowInDays?: number | string;
 }
 
 /**
