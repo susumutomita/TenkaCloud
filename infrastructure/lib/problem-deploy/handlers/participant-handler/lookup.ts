@@ -26,7 +26,7 @@ export interface ParticipantScoringInfo {
  */
 export type ParticipantProblemView = Pick<
   DeploymentItem,
-  "jobId" | "problemId" | "region" | "expiresAt"
+  "jobId" | "problemId" | "region" | "expiresAt" | "awsAccountId"
 > & {
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
@@ -38,6 +38,8 @@ export type ParticipantProblemView = Pick<
   // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
   // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
   // あり、画面で答え合わせをすると興ざめになる。
+  // `awsAccountId` は AWS Console 直接アクセス (SSO Credentials) のため公開する。
+  // AWS の account id は機密ではない (= IAM role 信頼ポリシーや CFn template にも露出する)。
 };
 
 export interface ParticipantTeamView {
@@ -78,6 +80,7 @@ export function toProblemView(
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
     region: String(item.region ?? ""),
+    awsAccountId: String(item.awsAccountId ?? ""),
     status,
     stackOutputs,
     failureReason: status === "FAILED" ? item.failureReason : undefined,

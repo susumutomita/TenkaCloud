@@ -10,6 +10,7 @@ import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { QuestsPage } from "./pages/Quests";
 import { ScoreboardPage } from "./pages/Scoreboard";
 import { ScoreEventsPage } from "./pages/ScoreEvents";
+import { SsoCredentialsPage } from "./pages/SsoCredentials";
 import { TeamSetupPage } from "./pages/TeamSetup";
 
 function RequireAuth({
@@ -74,14 +75,7 @@ export function App({ config }: { config: AppConfig }) {
         />
         <Route
           path="/tools/sso"
-          element={guarded(
-            config,
-            <PlaceholderPage
-              title="SSO Credentials"
-              description="AWS Console へのサインイン情報"
-              comingSoon="チーム単位の Identity Center 認証情報をここに表示します。発行は deploy backend 側。"
-            />,
-          )}
+          element={guarded(config, <SsoCredentialsPage config={config} />)}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

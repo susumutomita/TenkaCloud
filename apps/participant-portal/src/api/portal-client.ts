@@ -27,6 +27,8 @@ export interface ParticipantProblemView {
   readonly jobId: string;
   readonly problemId: string;
   readonly region: string;
+  /** 競技アカウント ID。SSO Credentials の AWS Console switch role URL で使う。 */
+  readonly awsAccountId: string;
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;

@@ -73,8 +73,10 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     const json = JSON.stringify(view);
     expect(json).not.toContain("SECRET_DO_NOT_LEAK");
     expect(json).not.toContain("tenantId");
-    expect(json).not.toContain("999999999999");
     expect(json).not.toContain("namePrefix");
+    // awsAccountId は SSO Credentials (AWS Console switch role) で必要なため公開する
+    // (= AWS account id は機密ではない、IAM trust policy / CFn template にも露出する)。
+    expect(view?.problems[0]?.awsAccountId).toBe("999999999999");
   });
 
   it("displayTeamName が DDB にあれば team.teamName はそれを優先し teamNameSetByCompetitor=true", async () => {
