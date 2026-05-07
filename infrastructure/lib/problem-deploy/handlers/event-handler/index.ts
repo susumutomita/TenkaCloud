@@ -128,13 +128,7 @@ app.post("/events/:eventId/deploy", async (c) => {
     return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
   }
   try {
-    const outcome = await bulkDeployEvent(
-      shared,
-      resolveTenantId(c),
-      eventId,
-      Date.now(),
-      shared.problemsCatalog,
-    );
+    const outcome = await bulkDeployEvent(shared, resolveTenantId(c), eventId, Date.now());
     if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
     return c.json(outcome.result, HTTP_ACCEPTED);
   } catch (err) {

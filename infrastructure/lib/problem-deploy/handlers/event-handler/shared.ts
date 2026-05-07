@@ -2,6 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import { parseProblemsCatalog } from "../shared/catalog.js";
 
 /**
  * Event handler Lambda module-scope で 1 度だけ build される shared resources。
@@ -32,23 +33,4 @@ export function buildEventSharedResources(): EventSharedResources {
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
   };
-}
-
-function parseProblemsCatalog(raw: string | undefined): Record<string, string> {
-  if (!raw) return {};
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    console.warn(
-      `[buildEventSharedResources] BATTLE_PROBLEMS_CATALOG parse failed (${(err as Error).message})`,
-    );
-    return {};
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  const catalog: Record<string, string> = {};
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof v === "string") catalog[k] = v;
-  }
-  return catalog;
 }

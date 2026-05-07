@@ -1,12 +1,13 @@
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem } from "../deploy-handler/types.js";
+import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   EVENT_SOURCE,
 } from "../shared/events.js";
 import type { EventSharedResources } from "./shared.js";
+import type { EventItem } from "./types.js";
 
 export interface BulkTeardownResult {
   readonly eventId: string;
@@ -21,17 +22,19 @@ export type BulkTeardownOutcome =
 const PUT_EVENTS_BATCH = 10;
 
 /**
- * `DELETE /events/{eventId}` の実体。Event 配下の全 deployment 行 (eventId == 指定) を
- * GSI1 (TENANT) で引き、PENDING / IN_PROGRESS / COMPLETE / FAILED な行に対して
- * status=DELETING を倒し、`DeployDeleteRequested` を fan-out publish する。既存
- * DeployDelete State Machine が個別に CFn DeleteStack を実行する。
+ * `DELETE /events/{eventId}` の実体。
  *
- * `tenantId` mismatch / event 不在は `not_found`。既に DELETING / DELETED な行は
- * skipped に計上 (= 操作者の再実行に対して idempotent)。
+ * 1. Event 行を Get で確認 (= tenantId mismatch / 不在は not_found)
+ * 2. Deployments を GSI1 で query → eventId フィルタ (Phase 3+ で eventId 専用 GSI 化を検討)
+ * 3. 各行を `Promise.all` 並列で `status=DELETING` に conditional update
+ * 4. update 成功分の DeployDeleteRequested を chunk 並列 publish
  *
- * 失敗 semantics: status update に成功した行は publish されるべき。chunk 化された
- * publish が途中で失敗すると、status は DELETING のまま orphan 化する。caller は
- * 再呼び出しすると DELETING 行は skip され、未 publish 分のみ拾える (= 結果整合性)。
+ * 既に DELETING / DELETED な行 / 並行更新 race / 必須フィールド欠損は skipped に計上
+ * (= 操作者の再実行に対して idempotent)。
+ *
+ * 失敗 semantics: publish chunk が失敗すると未 publish 分は status=DELETING のまま
+ * orphan 化する。caller が再呼び出ししても DELETING 行は skip されるため、Phase 3 で
+ * compensation pattern (FAILED 巻き戻し) を別途検討する。
  */
 export async function bulkTeardownEvent(
   shared: EventSharedResources,
@@ -39,8 +42,17 @@ export async function bulkTeardownEvent(
   eventId: string,
   nowMs: number,
 ): Promise<BulkTeardownOutcome> {
-  // GSI1 (TENANT#<tenantId>) で全 deployment を取り、in-memory で eventId フィルタ。
-  // 数百件規模を想定 (event が 25 teams × 30 problems = 750 行)。
+  const eventOut = await shared.ddb.send(
+    new GetCommand({
+      TableName: shared.eventsTableName,
+      Key: { PK: `EVENT#${eventId}`, SK: "META" },
+    }),
+  );
+  const event = eventOut.Item as Partial<EventItem> | undefined;
+  if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
+
+  // Phase 3+ で eventId 専用 GSI に切り替えれば 1 query で済むが、Phase 2a は
+  // tenant 全体を取って in-memory フィルタする。750 行規模で 1 query / 750 RCU。
   const out = await shared.ddb.send(
     new QueryCommand({
       TableName: shared.deploymentsTableName,
@@ -49,93 +61,87 @@ export async function bulkTeardownEvent(
       ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
     }),
   );
-  const all = (out.Items ?? []) as Partial<DeploymentItem>[];
-  const targets = all.filter((i) => i.eventId === eventId);
+  const targets = ((out.Items ?? []) as Partial<DeploymentItem>[]).filter(
+    (i) => i.eventId === eventId,
+  );
   if (targets.length === 0) {
-    // event が存在しないのか、まだ deploy してないのかを区別するため Events table を確認。
-    const eventOut = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.eventsTableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-      }),
-    );
-    const exists = (eventOut.Items ?? []).some(
-      (i) => (i as { eventId?: string }).eventId === eventId,
-    );
-    if (!exists) return { kind: "not_found" };
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
   }
 
   const updatedAt = new Date(nowMs).toISOString();
+  type UpdateOutcome = { entry: PutEventsRequestEntry } | { skip: true };
+
+  // 各 deployment の status=DELETING update を Promise.all で並列発火 (750 件 × 50ms
+  // = 37.5s の逐次は Lambda timeout に到達する)。各 update は独立で互いに依存しない。
+  const outcomes = await Promise.all(
+    targets.map(async (item): Promise<UpdateOutcome> => {
+      const status = (item.status ?? "PENDING") as DeploymentStatus;
+      if (status === "DELETING" || status === "DELETED") return { skip: true };
+
+      const jobId = String(item.jobId ?? "");
+      const region = String(item.region ?? "");
+      const awsAccountId = String(item.awsAccountId ?? "");
+      const stackName = String(item.stackId ?? item.namePrefix ?? "");
+      if (!jobId || !region || !awsAccountId || !stackName) return { skip: true };
+
+      try {
+        await shared.ddb.send(
+          new UpdateCommand({
+            TableName: shared.deploymentsTableName,
+            Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+            UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
+            ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
+            ExpressionAttributeNames: { "#s": "status" },
+            ExpressionAttributeValues: {
+              ":deleting": "DELETING",
+              ":updatedAt": updatedAt,
+              ":tenantId": tenantId,
+              ":p": "PENDING",
+              ":i": "IN_PROGRESS",
+              ":c": "COMPLETE",
+              ":f": "FAILED",
+            },
+          }),
+        );
+      } catch (err) {
+        const code = (err as { name?: string })?.name ?? "";
+        if (code === "ConditionalCheckFailedException") return { skip: true };
+        throw err;
+      }
+
+      const detail: DeployDeleteRequestedDetail = {
+        jobId,
+        tenantId,
+        stackName,
+        region,
+        awsAccountId,
+      };
+      return {
+        entry: {
+          EventBusName: shared.eventBusName,
+          Source: EVENT_SOURCE,
+          DetailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
+          Detail: JSON.stringify(detail),
+          Resources: [`tenkacloud:deployment:${jobId}`],
+        },
+      };
+    }),
+  );
+
   const entries: PutEventsRequestEntry[] = [];
   let skipped = 0;
-
-  for (const item of targets) {
-    const status = item.status ?? "PENDING";
-    if (status === "DELETING" || status === "DELETED") {
-      skipped++;
-      continue;
-    }
-    const jobId = String(item.jobId ?? "");
-    const region = String(item.region ?? "");
-    const awsAccountId = String(item.awsAccountId ?? "");
-    const stackName = String(item.stackId ?? item.namePrefix ?? "");
-    if (!jobId || !region || !awsAccountId || !stackName) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      await shared.ddb.send(
-        new UpdateCommand({
-          TableName: shared.deploymentsTableName,
-          Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-          UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
-          ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
-          ExpressionAttributeNames: { "#s": "status" },
-          ExpressionAttributeValues: {
-            ":deleting": "DELETING",
-            ":updatedAt": updatedAt,
-            ":tenantId": tenantId,
-            ":p": "PENDING",
-            ":i": "IN_PROGRESS",
-            ":c": "COMPLETE",
-            ":f": "FAILED",
-          },
-        }),
-      );
-    } catch (err) {
-      const code = (err as { name?: string })?.name ?? "";
-      if (code === "ConditionalCheckFailedException") {
-        // 並行 update / すでに DELETING に倒れた行は skip
-        skipped++;
-        continue;
-      }
-      throw err;
-    }
-
-    const detail: DeployDeleteRequestedDetail = {
-      jobId,
-      tenantId,
-      stackName,
-      region,
-      awsAccountId,
-    };
-    entries.push({
-      EventBusName: shared.eventBusName,
-      Source: EVENT_SOURCE,
-      DetailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
-      Detail: JSON.stringify(detail),
-      Resources: [`tenkacloud:deployment:${jobId}`],
-    });
+  for (const o of outcomes) {
+    if ("skip" in o) skipped++;
+    else entries.push(o.entry);
   }
 
+  // EventBridge PutEvents の chunk を Promise.all で並列発火。
+  const putChunks: Promise<unknown>[] = [];
   for (let i = 0; i < entries.length; i += PUT_EVENTS_BATCH) {
     const chunk = entries.slice(i, i + PUT_EVENTS_BATCH);
-    await shared.events.send(new PutEventsCommand({ Entries: chunk }));
+    putChunks.push(shared.events.send(new PutEventsCommand({ Entries: chunk })));
   }
+  await Promise.all(putChunks);
 
   return { kind: "ok", result: { eventId, enqueued: entries.length, skipped } };
 }

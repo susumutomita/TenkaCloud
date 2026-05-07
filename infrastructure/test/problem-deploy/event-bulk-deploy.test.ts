@@ -68,7 +68,7 @@ describe("bulkDeployEvent", () => {
     ddbSend.mockResolvedValue({}); // TransactWrite chunks (1 chunk for 6 items)
     eventsSend.mockResolvedValue({}); // PutEvents chunks (1 chunk for 6 entries)
 
-    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
 
     expect(out).toEqual({
       kind: "ok",
@@ -102,7 +102,7 @@ describe("bulkDeployEvent", () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
 
-    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({ kind: "not_found" });
     expect(ddbSend.mock.calls.filter((c) => c[0] instanceof TransactWriteCommand)).toHaveLength(0);
     expect(eventsSend).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe("bulkDeployEvent", () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ tenantId: "tenant-other" }) });
 
-    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({ kind: "not_found" });
     expect(ddbSend.mock.calls.filter((c) => c[0] instanceof TransactWriteCommand)).toHaveLength(0);
     expect(eventsSend).not.toHaveBeenCalled();
@@ -123,7 +123,7 @@ describe("bulkDeployEvent", () => {
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ problems: [] }) });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(3) });
 
-    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 0, skipped: 0 } });
     expect(ddbSend.mock.calls.filter((c) => c[0] instanceof TransactWriteCommand)).toHaveLength(0);
     expect(eventsSend).not.toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe("bulkDeployEvent", () => {
     ddbSend.mockResolvedValue({});
     eventsSend.mockResolvedValue({});
 
-    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     // 2 teams × 2 problems = 4 のうち hello-world-battle (catalog 不在) 2 件 skip
     expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 2, skipped: 2 } });
   });
@@ -151,7 +151,7 @@ describe("bulkDeployEvent", () => {
     eventsSend.mockResolvedValue({});
 
     // 15 teams × 2 problems = 30 行 → 25 + 5 で 2 chunk
-    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     const transactCmds = ddbSend.mock.calls
       .map((c) => c[0])
       .filter((c): c is TransactWriteCommand => c instanceof TransactWriteCommand);
@@ -168,7 +168,7 @@ describe("bulkDeployEvent", () => {
     eventsSend.mockResolvedValue({});
 
     // 15 teams × 2 problems = 30 entries → 10 + 10 + 10 で 3 chunk
-    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     const putCmds = eventsSend.mock.calls
       .map((c) => c[0])
       .filter((c): c is PutEventsCommand => c instanceof PutEventsCommand);
@@ -184,7 +184,7 @@ describe("bulkDeployEvent", () => {
     ddbSend.mockResolvedValue({});
     eventsSend.mockResolvedValue({});
 
-    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, shared.problemsCatalog);
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     const transactCmd = ddbSend.mock.calls[2]?.[0] as TransactWriteCommand;
     for (const item of transactCmd.input.TransactItems ?? []) {
       expect(item.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");

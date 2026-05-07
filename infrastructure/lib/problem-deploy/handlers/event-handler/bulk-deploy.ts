@@ -54,24 +54,27 @@ export async function bulkDeployEvent(
   tenantId: string,
   eventId: string,
   nowMs: number,
-  problemsCatalog: Readonly<Record<string, string>>,
 ): Promise<BulkDeployOutcome> {
-  const eventOut = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
+  // Event Get と Teams Query は依存なし → Promise.all で 1 ラウンドトリップ節約。
+  // 不正 eventId のとき teams query が無駄になるが空 partition で 1 RCU 程度。
+  const [eventOut, teamsOut] = await Promise.all([
+    shared.ddb.send(
+      new GetCommand({
+        TableName: shared.eventsTableName,
+        Key: { PK: `EVENT#${eventId}`, SK: "META" },
+      }),
+    ),
+    shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.teamsTableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
+        ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":tprefix": "TEAM#" },
+      }),
+    ),
+  ]);
   const event = eventOut.Item as Partial<EventItem> | undefined;
   if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
 
-  const teamsOut = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.teamsTableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
-      ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":tprefix": "TEAM#" },
-    }),
-  );
   const teams = (teamsOut.Items ?? []) as TeamItem[];
   const problems = (Array.isArray(event.problems) ? event.problems : []) as EventProblemTarget[];
   if (teams.length === 0 || problems.length === 0) {
@@ -82,13 +85,13 @@ export async function bulkDeployEvent(
   const expiresAt = toEpochSeconds(nowMs + DEFAULT_TTL_MS);
 
   // teams × problems を全展開し、deployment 行 + publish entry を組み立てる。
-  // problemsCatalog (problemId → problemDir) に存在しない problemId は skip。
+  // shared.problemsCatalog (problemId → problemDir) に存在しない problemId は skip。
   const items: DeploymentItem[] = [];
   const entries: PutEventsRequestEntry[] = [];
   let skipped = 0;
   for (const team of teams) {
     for (const problem of problems) {
-      const problemDir = problemsCatalog[problem.problemId];
+      const problemDir = shared.problemsCatalog[problem.problemId];
       if (!problemDir) {
         skipped++;
         continue;
@@ -144,8 +147,9 @@ export async function bulkDeployEvent(
     return { kind: "ok", result: { eventId, enqueued: 0, skipped } };
   }
 
-  // DDB TransactWrite は 1 call 25 items まで。chunk して順次書き込む。
+  // DDB TransactWrite は 1 call 25 items まで。chunk を Promise.all で並列発火。
   // ConditionExpression で同 jobId 二重生成を防ぐ (ULID 衝突は実質起こらないが defense)。
+  const transactChunks: Promise<unknown>[] = [];
   for (let i = 0; i < items.length; i += TRANSACT_WRITE_BATCH) {
     const chunk = items.slice(i, i + TRANSACT_WRITE_BATCH);
     const transact: TransactWriteCommandInput = {
@@ -157,17 +161,19 @@ export async function bulkDeployEvent(
         },
       })),
     };
-    await shared.ddb.send(new TransactWriteCommand(transact));
+    transactChunks.push(shared.ddb.send(new TransactWriteCommand(transact)));
   }
+  await Promise.all(transactChunks);
 
-  // EventBridge PutEvents は 1 call 10 entries まで。chunk して順次 publish。
-  // ここまで DDB Put は成功している。途中で publish が失敗すると半端な行が残るが、
-  // operator が再度 deploy を呼ぶと既行は idempotent skip され、未 publish 分だけ
-  // publish される (= 結果整合性で再試行可能)。
+  // EventBridge PutEvents は 1 call 10 entries まで。chunk を Promise.all で並列発火。
+  // 途中で publish が失敗した chunk があると半端な行が残るが、operator が再度 deploy を
+  // 呼ぶと既行は idempotent skip され、未 publish 分だけ publish される (= 結果整合性)。
+  const putChunks: Promise<unknown>[] = [];
   for (let i = 0; i < entries.length; i += PUT_EVENTS_BATCH) {
     const chunk = entries.slice(i, i + PUT_EVENTS_BATCH);
-    await shared.events.send(new PutEventsCommand({ Entries: chunk }));
+    putChunks.push(shared.events.send(new PutEventsCommand({ Entries: chunk })));
   }
+  await Promise.all(putChunks);
 
   return { kind: "ok", result: { eventId, enqueued: items.length, skipped } };
 }
