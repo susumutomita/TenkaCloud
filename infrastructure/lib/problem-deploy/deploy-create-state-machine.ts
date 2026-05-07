@@ -16,6 +16,7 @@ import {
   DynamoUpdateItem,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
+import { deploymentKey, stateEnteredTime } from "./state-machine-helpers";
 
 export interface DeployCreateStateMachineProps {
   /** 実体の deploy を担う CodeBuild Project (= `scripts/deploy-battles.sh` を実行)。 */
@@ -146,17 +147,4 @@ export class DeployCreateStateMachine extends Construct {
       },
     });
   }
-}
-
-function deploymentKey(): { PK: DynamoAttributeValue; SK: DynamoAttributeValue } {
-  return {
-    PK: DynamoAttributeValue.fromString(
-      JsonPath.format("DEPLOYMENT#{}", JsonPath.stringAt("$.detail.jobId")),
-    ),
-    SK: DynamoAttributeValue.fromString("META"),
-  };
-}
-
-function stateEnteredTime(): DynamoAttributeValue {
-  return DynamoAttributeValue.fromString(JsonPath.stringAt("$$.State.EnteredTime"));
 }

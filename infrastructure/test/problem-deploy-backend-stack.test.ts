@@ -93,18 +93,27 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
-    it("State Machine を 1 つ作るべき", () => {
-      tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
+    it("Create / Delete の State Machine を 2 つ作るべき", () => {
+      tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
     });
 
-    it("EventBridge Rule (DeployCreateRequested → State Machine) を 1 つ作るべき", () => {
-      tpl.resourceCountIs("AWS::Events::Rule", 1);
+    it("EventBridge Rule を Create / Delete でそれぞれ 1 つずつ持つべき", () => {
+      tpl.resourceCountIs("AWS::Events::Rule", 2);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
           EventPattern: Match.objectLike({
             source: ["tenkacloud.deploy"],
             "detail-type": ["DeployCreateRequested"],
+          }),
+        }),
+      );
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          EventPattern: Match.objectLike({
+            source: ["tenkacloud.deploy"],
+            "detail-type": ["DeployDeleteRequested"],
           }),
         }),
       );

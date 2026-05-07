@@ -7,7 +7,8 @@ import type { Construct } from "constructs";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine";
-import { DeployEventRule } from "./deploy-event-rule";
+import { DeployDeleteStateMachine } from "./deploy-delete-state-machine";
+import { DeployDeleteEventRule, DeployEventRule } from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
 import { HealthCheckLambda } from "./health-check-lambda";
 import {
@@ -102,6 +103,18 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     new DeployEventRule(this, "DeployCreateRule", {
       eventBus,
       stateMachine: stateMachine.stateMachine,
+    });
+
+    // 削除経路 (deploy 対称): `DeployDeleteRequested` → DeployDelete State Machine →
+    // 同 CodeBuild Project (`OPERATION=delete`) → `scripts/delete-battles.sh` → CFn DeleteStack。
+    // State Machine 完了で DDB の status を `DELETING` → `DELETED` / `FAILED` に書き戻す。
+    const deleteStateMachine = new DeployDeleteStateMachine(this, "DeployDelete", {
+      codeBuildProject: codeBuild.project,
+      deploymentsTable: deployments.table,
+    });
+    new DeployDeleteEventRule(this, "DeployDeleteRule", {
+      eventBus,
+      stateMachine: deleteStateMachine.stateMachine,
     });
 
     // 1 分間隔で uptime 採点する Health Check Lambda。`scoring.kind=uptime` の問題のみが
