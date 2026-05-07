@@ -26,7 +26,7 @@ export REGION=$(aws configure get region)
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # --- Source bucket 準備 (ref 準拠) ---
-export CDK_PARAM_S3_BUCKET_NAME="serverless-saas-${ACCOUNT_ID}-${REGION}"
+export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 
@@ -126,11 +126,11 @@ echo "=============================================="
 echo "Phase 1: Deploy backend stacks"
 echo "=============================================="
 bunx cdk deploy \
-  ControlPlaneStack \
-  serverless-saas-ref-arch-bootstrap-stack \
-  ProblemDeployBackendStack \
-  serverless-saas-ref-arch-tenant-template-pooled \
-  ServerlessSaaSPipeline \
+  tenkacloud-control-plane \
+  tenkacloud-bootstrap \
+  tenkacloud-problem-deploy \
+  tenkacloud-tenant-template-pooled \
+  tenkacloud-saas-pipeline \
   --require-approval never --concurrency 4
 
 # ============================================================================
@@ -144,9 +144,9 @@ echo ""
 echo "=============================================="
 echo "Phase 2: Build admin-console + deploy CloudFront"
 echo "=============================================="
-API_URL=$(aws cloudformation describe-stacks --stack-name ControlPlaneStack --query "Stacks[0].Outputs[?OutputKey=='controlPlaneAPIEndpoint'].OutputValue" --output text)
-USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name ControlPlaneStack --query "Stacks[0].Outputs[?contains(OutputKey,'ControlPlaneIdpUserPoolId')].OutputValue" --output text)
-CLIENT_ID=$(aws cloudformation describe-stacks --stack-name ControlPlaneStack --query "Stacks[0].Outputs[?contains(OutputKey,'ControlPlaneIdpClientId')].OutputValue" --output text)
+API_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-control-plane --query "Stacks[0].Outputs[?OutputKey=='controlPlaneAPIEndpoint'].OutputValue" --output text)
+USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name tenkacloud-control-plane --query "Stacks[0].Outputs[?contains(OutputKey,'ControlPlaneIdpUserPoolId')].OutputValue" --output text)
+CLIENT_ID=$(aws cloudformation describe-stacks --stack-name tenkacloud-control-plane --query "Stacks[0].Outputs[?contains(OutputKey,'ControlPlaneIdpClientId')].OutputValue" --output text)
 COGNITO_DOMAIN_PREFIX=$(aws cognito-idp describe-user-pool --user-pool-id "${USER_POOL_ID}" --query "UserPool.Domain" --output text)
 COGNITO_DOMAIN="https://${COGNITO_DOMAIN_PREFIX}.auth.${REGION}.amazoncognito.com"
 
@@ -167,7 +167,7 @@ echo "  → dist/ generated"
 # 出すため。silo platinum tenant は provision-tenant.sh が tenantConfig に書く)。
 # pooled stack は phase 1 で既に立っているので CFn output から取れる。
 POOLED_APP_CONSOLE_URL=$(aws cloudformation describe-stacks \
-  --stack-name "serverless-saas-ref-arch-tenant-template-pooled" \
+  --stack-name "tenkacloud-tenant-template-pooled" \
   --query "Stacks[0].Outputs[?OutputKey=='ApplicationAdminConsoleUrl'].OutputValue" \
   --output text)
 echo "  Pooled App URL: ${POOLED_APP_CONSOLE_URL}"
@@ -195,7 +195,7 @@ export CDK_PARAM_POOLED_APP_CONSOLE_URL="${POOLED_APP_CONSOLE_URL}"
 export CDK_PARAM_PROVISIONING_CODEBUILD_PROJECT="${PROVISIONING_CODEBUILD_PROJECT}"
 export CDK_PARAM_AWS_REGION="${REGION}"
 export CDK_PARAM_AWS_ACCOUNT_ID="${ACCOUNT_ID}"
-bunx cdk deploy AdminConsoleHostingStack --require-approval never
+bunx cdk deploy tenkacloud-admin-console-hosting --require-approval never
 
 # ============================================================================
 # Phase 3: ControlPlaneStack 再 deploy — CloudFront URL を callback/CORS に足す
@@ -204,10 +204,10 @@ echo ""
 echo "=============================================="
 echo "Phase 3: Update ControlPlaneStack with admin-console CloudFront URL"
 echo "=============================================="
-ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name AdminConsoleHostingStack --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
+ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
 export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"
 echo "  CloudFront URL: ${ADMIN_CONSOLE_URL}"
-bunx cdk deploy ControlPlaneStack --require-approval never
+bunx cdk deploy tenkacloud-control-plane --require-approval never
 
 # ============================================================================
 # 完了
@@ -216,12 +216,12 @@ bunx cdk deploy ControlPlaneStack --require-approval never
 # tenant が共有する 1 console)。silo (PLATINUM) tenant の URL は admin-console の
 # テナント一覧から開けるので install.sh 側では出さない。
 POOLED_APP_CONSOLE_URL=$(aws cloudformation describe-stacks \
-  --stack-name "serverless-saas-ref-arch-tenant-template-pooled" \
+  --stack-name "tenkacloud-tenant-template-pooled" \
   --query "Stacks[0].Outputs[?OutputKey=='ApplicationAdminConsoleUrl'].OutputValue" \
   --output text 2>/dev/null || echo "(not deployed yet)")
 
 PARTICIPANT_PORTAL_URL=$(aws cloudformation describe-stacks \
-  --stack-name "ProblemDeployBackendStack" \
+  --stack-name "tenkacloud-problem-deploy" \
   --query "Stacks[0].Outputs[?OutputKey=='ParticipantPortalUrl'].OutputValue" \
   --output text 2>/dev/null || echo "(not deployed)")
 
