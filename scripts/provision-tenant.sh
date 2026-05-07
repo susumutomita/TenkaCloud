@@ -19,7 +19,7 @@ export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "ACCOUNT_ID: ${ACCOUNT_ID}"
 
 # Download serverless reference solution from S3 bucket.
-export CDK_PARAM_S3_BUCKET_NAME="serverless-saas-${ACCOUNT_ID}-${REGION}"
+export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 
@@ -43,7 +43,7 @@ export TENANT_ADMIN_EMAIL=$email
 
 # Define variables
 TENANT_ADMIN_USERNAME="tenant-admin-$CDK_PARAM_TENANT_ID"
-STACK_NAME="serverless-saas-ref-arch-tenant-template-pooled"
+STACK_NAME="tenkacloud-tenant-template-pooled"
 USER_POOL_OUTPUT_PARAM_NAME="TenantUserpoolId"
 API_GATEWAY_URL_OUTPUT_PARAM_NAME="ApiGatewayUrl"
 APP_CLIENT_ID_OUTPUT_PARAM_NAME="UserPoolClientId"
@@ -51,7 +51,7 @@ APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME="ApplicationAdminConsoleUrl"
 
 # Deploy the tenant template for platinum tier(silo)
 if [[ $TIER == "PLATINUM" ]]; then
-  STACK_NAME="serverless-saas-ref-arch-tenant-template-$CDK_PARAM_TENANT_ID"
+  STACK_NAME="tenkacloud-tenant-template-$CDK_PARAM_TENANT_ID"
   export CDK_PARAM_CONTROL_PLANE_SOURCE='sbt-control-plane-api'
   export CDK_PARAM_ONBOARDING_DETAIL_TYPE='Onboarding'
   export CDK_PARAM_PROVISIONING_DETAIL_TYPE=$CDK_PARAM_ONBOARDING_DETAIL_TYPE

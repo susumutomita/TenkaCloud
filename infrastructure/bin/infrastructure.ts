@@ -145,7 +145,7 @@ const apiKeySSMParameterNames = {
 const stackEnv =
   awsAccountId && awsRegion ? { env: { account: awsAccountId, region: awsRegion } } : {};
 
-const controlPlaneStack = new ControlPlaneStack(app, "ControlPlaneStack", {
+const controlPlaneStack = new ControlPlaneStack(app, "tenkacloud-control-plane", {
   ...stackEnv,
   systemAdminEmail,
 });
@@ -184,7 +184,7 @@ const problemsRoot = path.resolve(__dirname, "..", "..", "problems");
 const problemsCatalog = discoverProblemsCatalog(problemsRoot);
 const problemsScoring = discoverProblemsScoring(problemsRoot);
 
-const problemDeployBackendStack = new ProblemDeployBackendStack(app, "ProblemDeployBackendStack", {
+const problemDeployBackendStack = new ProblemDeployBackendStack(app, "tenkacloud-problem-deploy", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
   sourceBucketName: s3SourceBucket,
@@ -197,44 +197,36 @@ cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
 );
 
-const bootstrapTemplateStack = new BootstrapTemplateStack(
-  app,
-  "serverless-saas-ref-arch-bootstrap-stack",
-  {
-    ...stackEnv,
-    systemAdminEmail,
-    eventBusArn: controlPlaneStack.eventBusArn,
-    apiKeyPlatinumTierParameter,
-    apiKeyPremiumTierParameter,
-    apiKeyStandardTierParameter,
-    apiKeyBasicTierParameter,
-    apiKeySSMParameterNames,
-    tenantMappingTableBillingMode: dynamoBillingMode,
-    tenantMappingTableReadCapacity: isDynamoProvisioned ? dynamoReadCapacity : undefined,
-    tenantMappingTableWriteCapacity: isDynamoProvisioned ? dynamoWriteCapacity : undefined,
-  },
-);
+const bootstrapTemplateStack = new BootstrapTemplateStack(app, "tenkacloud-bootstrap", {
+  ...stackEnv,
+  systemAdminEmail,
+  eventBusArn: controlPlaneStack.eventBusArn,
+  apiKeyPlatinumTierParameter,
+  apiKeyPremiumTierParameter,
+  apiKeyStandardTierParameter,
+  apiKeyBasicTierParameter,
+  apiKeySSMParameterNames,
+  tenantMappingTableBillingMode: dynamoBillingMode,
+  tenantMappingTableReadCapacity: isDynamoProvisioned ? dynamoReadCapacity : undefined,
+  tenantMappingTableWriteCapacity: isDynamoProvisioned ? dynamoWriteCapacity : undefined,
+});
 cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
 
-const tenantTemplateStack = new TenantTemplateStack(
-  app,
-  `serverless-saas-ref-arch-tenant-template-${tenantId}`,
-  {
-    ...stackEnv,
-    tenantId,
-    tenantName,
-    environment,
-    stageName,
-    lambdaReserveConcurrency,
-    lambdaCanaryDeploymentPreference,
-    isPooledDeploy,
-    ApiKeySSMParameterNames: apiKeySSMParameterNames,
-    tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
-    commitId,
-    deployApiLambda: problemDeployBackendStack.deployApiLambda,
-    eventApiLambda: problemDeployBackendStack.eventApiLambda,
-  },
-);
+const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-template-${tenantId}`, {
+  ...stackEnv,
+  tenantId,
+  tenantName,
+  environment,
+  stageName,
+  lambdaReserveConcurrency,
+  lambdaCanaryDeploymentPreference,
+  isPooledDeploy,
+  ApiKeySSMParameterNames: apiKeySSMParameterNames,
+  tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
+  commitId,
+  deployApiLambda: problemDeployBackendStack.deployApiLambda,
+  eventApiLambda: problemDeployBackendStack.eventApiLambda,
+});
 
 tenantTemplateStack.addDependency(problemDeployBackendStack);
 
@@ -243,7 +235,7 @@ cdk.Tags.of(tenantTemplateStack).add("TenantId", tenantId);
 cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(isPooledDeploy));
 cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
 
-const serverlessSaaSPipeline = new ServerlessSaaSPipeline(app, "ServerlessSaaSPipeline", {
+const serverlessSaaSPipeline = new ServerlessSaaSPipeline(app, "tenkacloud-saas-pipeline", {
   ...stackEnv,
   tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
   s3SourceBucket,
@@ -266,15 +258,19 @@ const provisioningCodeBuildProject =
 // awsRegion / awsAccountId は TenantTemplateStack のために前倒しで定義済み (上を参照)。
 
 if (adminConsoleApiUrl && adminConsoleCognitoDomain && adminConsoleUserClientId) {
-  const adminConsoleHosting = new AdminConsoleHostingStack(app, "AdminConsoleHostingStack", {
-    ...stackEnv,
-    apiUrl: adminConsoleApiUrl,
-    cognitoDomain: adminConsoleCognitoDomain,
-    userClientId: adminConsoleUserClientId,
-    pooledApplicationAdminConsoleUrl: pooledAppConsoleUrl,
-    provisioningCodeBuildProject,
-    awsRegion,
-    awsAccountId,
-  });
+  const adminConsoleHosting = new AdminConsoleHostingStack(
+    app,
+    "tenkacloud-admin-console-hosting",
+    {
+      ...stackEnv,
+      apiUrl: adminConsoleApiUrl,
+      cognitoDomain: adminConsoleCognitoDomain,
+      userClientId: adminConsoleUserClientId,
+      pooledApplicationAdminConsoleUrl: pooledAppConsoleUrl,
+      provisioningCodeBuildProject,
+      awsRegion,
+      awsAccountId,
+    },
+  );
   cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());
 }

@@ -93,8 +93,8 @@ bootstrap:            env-check build ; $(CDK) bootstrap
 deploy:               env-check
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
 # stack 単位の deploy (直接呼ぶ時用。source.zip + CDK_PARAM_COMMIT_ID を事前 export しておく前提)
-deploy-control-plane: env-check build ; $(CDK) deploy ControlPlaneStack $(APPROVAL)
-deploy-bootstrap:     env-check build ; $(CDK) deploy serverless-saas-ref-arch-bootstrap-stack $(APPROVAL)
+deploy-control-plane: env-check build ; $(CDK) deploy tenkacloud-control-plane $(APPROVAL)
+deploy-bootstrap:     env-check build ; $(CDK) deploy tenkacloud-bootstrap $(APPROVAL)
 destroy:              env-check       ; bash scripts/cleanup.sh
 
 # ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====
