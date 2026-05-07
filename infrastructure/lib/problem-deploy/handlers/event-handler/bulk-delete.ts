@@ -1,6 +1,6 @@
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import type { DeploymentStatus } from "../deploy-handler/types.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
