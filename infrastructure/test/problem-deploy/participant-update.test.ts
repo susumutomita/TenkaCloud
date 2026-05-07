@@ -72,11 +72,11 @@ describe("validateTeamName", () => {
 describe("setDisplayTeamName", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: GSI2 Query → UpdateItem (ReturnValues=ALL_NEW) で 2 round-trip", async () => {
+  it("正常系 (1 deployment): Query → Update (ALL_NEW) で team scope view を返す (再 query 不要)", async () => {
     const { shared, ddbSend } = buildShared();
-    // 1st Query: 現在の行を取得
+    // 1st Query: GSI2 で team の全 deployment 行
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    // 2nd UpdateItem: ALL_NEW で更新後の行を返す
+    // 2nd UpdateItem: ReturnValues=ALL_NEW で更新後 Attributes を返す
     ddbSend.mockResolvedValueOnce({
       Attributes: sampleRow({ displayTeamName: "新チーム" }),
     });
@@ -84,19 +84,49 @@ describe("setDisplayTeamName", () => {
     const out = await setDisplayTeamName(shared, "KEY1", "新チーム");
     expect(out.kind).toBe("ok");
     if (out.kind === "ok") {
-      expect(out.view.teamName).toBe("新チーム");
-      expect(out.view.teamNameSetByCompetitor).toBe(true);
+      expect(out.view.team.teamName).toBe("新チーム");
+      expect(out.view.team.teamNameSetByCompetitor).toBe(true);
+      expect(out.view.problems).toHaveLength(1);
     }
 
-    // ちょうど 2 回 (Query + UpdateItem)。3 回目の再 Query が消えていることの担保。
     expect(ddbSend).toHaveBeenCalledTimes(2);
-
     const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(updateCmd).toBeInstanceOf(UpdateCommand);
     expect(updateCmd.input.UpdateExpression).toContain("displayTeamName = :name");
     expect(updateCmd.input.ExpressionAttributeValues?.[":name"]).toBe("新チーム");
     expect(updateCmd.input.Key).toEqual({ PK: "DEPLOYMENT#JOB1", SK: "META" });
     expect(updateCmd.input.ReturnValues).toBe("ALL_NEW");
+  });
+
+  it("正常系 (N deployments): team の全 editable 行を Promise.all で並列 update するべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({ jobId: "JOB1", PK: "DEPLOYMENT#JOB1" }),
+        sampleRow({ jobId: "JOB2", PK: "DEPLOYMENT#JOB2", problemId: "p2" }),
+        sampleRow({ jobId: "JOB3", PK: "DEPLOYMENT#JOB3", problemId: "p3", status: "DELETING" }),
+      ],
+    });
+    // 並列 Update × 2 (DELETING 行は skip)。ALL_NEW で各 Attributes を返す。
+    ddbSend.mockResolvedValueOnce({
+      Attributes: sampleRow({ jobId: "JOB1", PK: "DEPLOYMENT#JOB1", displayTeamName: "X" }),
+    });
+    ddbSend.mockResolvedValueOnce({
+      Attributes: sampleRow({
+        jobId: "JOB2",
+        PK: "DEPLOYMENT#JOB2",
+        problemId: "p2",
+        displayTeamName: "X",
+      }),
+    });
+
+    await setDisplayTeamName(shared, "KEY1", "X");
+    const updateCmds = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is UpdateCommand => c instanceof UpdateCommand);
+    expect(updateCmds).toHaveLength(2); // DELETING は skip
+    const updatedKeys = updateCmds.map((c) => (c.input.Key as { PK: string }).PK).sort();
+    expect(updatedKeys).toEqual(["DEPLOYMENT#JOB1", "DEPLOYMENT#JOB2"]);
   });
 
   it("無効な teamName は invalid_team_name (DDB を叩かない)", async () => {
@@ -113,7 +143,7 @@ describe("setDisplayTeamName", () => {
     expect(out.kind).toBe("unauthorized");
   });
 
-  it("status が DELETING / DELETED なら unauthorized (UpdateItem しない)", async () => {
+  it("team の全行が DELETING / DELETED なら unauthorized (UpdateItem しない)", async () => {
     for (const status of ["DELETING", "DELETED"]) {
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status })] });
@@ -124,14 +154,16 @@ describe("setDisplayTeamName", () => {
     }
   });
 
-  it("最初の Query は GSI2 KeyCondition + Limit=1", async () => {
+  it("最初の Query は GSI2 KeyCondition (Limit なし、team の全行を取る)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    ddbSend.mockResolvedValueOnce({ Attributes: sampleRow({ displayTeamName: "X" }) });
+    ddbSend.mockResolvedValueOnce({
+      Attributes: sampleRow({ displayTeamName: "X" }),
+    });
     await setDisplayTeamName(shared, "KEY1", "X");
     const queryCmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
     expect(queryCmd).toBeInstanceOf(QueryCommand);
     expect(queryCmd.input.IndexName).toBe("GSI2");
-    expect(queryCmd.input.Limit).toBe(1);
+    expect(queryCmd.input.Limit).toBeUndefined();
   });
 });

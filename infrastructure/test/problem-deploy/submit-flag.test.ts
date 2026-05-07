@@ -54,13 +54,19 @@ describe("submitFlag", () => {
 
   it("teamLoginKey が一致する row が無いときは unauthorized を返すべき", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
-    const out = await submitFlag(shared, flagScoring, "BAD_KEY", "Hello from tc-...");
+    const out = await submitFlag(
+      shared,
+      flagScoring,
+      "BAD_KEY",
+      "hello-world",
+      "Hello from tc-...",
+    );
     expect(out).toEqual({ kind: "unauthorized" });
   });
 
   it("scoring 設定が無い problemId は not_flag_problem を返すべき", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ problemId: "no-scoring" })] });
-    const out = await submitFlag(shared, flagScoring, "KEY", "anything");
+    const out = await submitFlag(shared, flagScoring, "KEY", "no-scoring", "anything");
     expect(out).toEqual({ kind: "not_flag_problem" });
   });
 
@@ -68,7 +74,13 @@ describe("submitFlag", () => {
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ flagSubmitted: true, score: 100 })],
     });
-    const out = await submitFlag(shared, flagScoring, "KEY", "Hello from tc-hello-world-alpha");
+    const out = await submitFlag(
+      shared,
+      flagScoring,
+      "KEY",
+      "hello-world",
+      "Hello from tc-hello-world-alpha",
+    );
     expect(out).toEqual({ kind: "already_scored", totalScore: 100 });
     // UpdateItem は呼ばれないこと (= Query の 1 回のみ)
     expect(ddbSend).toHaveBeenCalledTimes(1);
@@ -78,13 +90,13 @@ describe("submitFlag", () => {
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ stackOutputs: undefined })],
     });
-    const out = await submitFlag(shared, flagScoring, "KEY", "anything");
+    const out = await submitFlag(shared, flagScoring, "KEY", "hello-world", "anything");
     expect(out).toEqual({ kind: "no_outputs" });
   });
 
   it("submitted flag が expected と一致しなければ wrong を返すべき (UpdateItem 呼ばない)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    const out = await submitFlag(shared, flagScoring, "KEY", "wrong-answer");
+    const out = await submitFlag(shared, flagScoring, "KEY", "hello-world", "wrong-answer");
     expect(out).toEqual({ kind: "wrong" });
     expect(ddbSend).toHaveBeenCalledTimes(1); // Query のみ、Update なし
   });
@@ -92,7 +104,13 @@ describe("submitFlag", () => {
   it("正解なら ADD score :pts SET flagSubmitted=true で UpdateItem し ok を返すべき", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
-    const out = await submitFlag(shared, flagScoring, "KEY", "Hello from tc-hello-world-alpha");
+    const out = await submitFlag(
+      shared,
+      flagScoring,
+      "KEY",
+      "hello-world",
+      "Hello from tc-hello-world-alpha",
+    );
     expect(out).toEqual({ kind: "ok", scoreDelta: 100, totalScore: 100 });
     expect(ddbSend).toHaveBeenCalledTimes(2);
     const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
@@ -105,7 +123,13 @@ describe("submitFlag", () => {
   it("trim した値が一致すれば ok を返すべき (= 末尾改行などで弾かない)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
-    const out = await submitFlag(shared, flagScoring, "KEY", "  Hello from tc-hello-world-alpha\n");
+    const out = await submitFlag(
+      shared,
+      flagScoring,
+      "KEY",
+      "hello-world",
+      "  Hello from tc-hello-world-alpha\n",
+    );
     expect(out.kind).toBe("ok");
   });
 
@@ -115,14 +139,26 @@ describe("submitFlag", () => {
       name: "ConditionalCheckFailedException",
     });
     ddbSend.mockRejectedValueOnce(condErr);
-    const out = await submitFlag(shared, flagScoring, "KEY", "Hello from tc-hello-world-alpha");
+    const out = await submitFlag(
+      shared,
+      flagScoring,
+      "KEY",
+      "hello-world",
+      "Hello from tc-hello-world-alpha",
+    );
     expect(out).toEqual({ kind: "already_scored", totalScore: 100 });
   });
 
   it("Query は GSI2 を `TEAMKEY#<key>` で叩くべき", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
-    await submitFlag(shared, flagScoring, "MYKEY", "Hello from tc-hello-world-alpha");
+    await submitFlag(
+      shared,
+      flagScoring,
+      "MYKEY",
+      "hello-world",
+      "Hello from tc-hello-world-alpha",
+    );
     const queryCmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
     expect(queryCmd).toBeInstanceOf(QueryCommand);
     expect(queryCmd.input.IndexName).toBe("GSI2");

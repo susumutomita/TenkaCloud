@@ -16,7 +16,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type DeploymentStatus,
   getPortalMe,
-  type ParticipantView,
+  type ParticipantProblemView,
+  type ParticipantTeamView,
   PortalAuthError,
   PortalValidationError,
   type SubmitFlagOutcome,
@@ -44,27 +45,36 @@ const SCORING_KIND_LABEL = {
 } as const;
 
 /** Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。 */
-function viewIsUnchanged(prev: ParticipantView | null, next: ParticipantView): boolean {
+function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeamView): boolean {
   if (!prev) return false;
-  return (
-    prev.status === next.status &&
-    prev.score === next.score &&
-    prev.lastScoredAt === next.lastScoredAt &&
-    prev.lastResult === next.lastResult &&
-    prev.scoring?.flagSubmitted === next.scoring?.flagSubmitted &&
-    prev.teamName === next.teamName &&
-    prev.failureReason === next.failureReason &&
-    JSON.stringify(prev.stackOutputs) === JSON.stringify(next.stackOutputs)
-  );
+  if (prev.team.teamName !== next.team.teamName) return false;
+  if (prev.problems.length !== next.problems.length) return false;
+  // problems は jobId で一致を取って意味的同一性を比較。順序は安定 (DDB Query 結果) と仮定。
+  for (let i = 0; i < prev.problems.length; i++) {
+    const p = prev.problems[i] as ParticipantProblemView;
+    const n = next.problems[i] as ParticipantProblemView;
+    if (
+      p.jobId !== n.jobId ||
+      p.status !== n.status ||
+      p.score !== n.score ||
+      p.lastScoredAt !== n.lastScoredAt ||
+      p.lastResult !== n.lastResult ||
+      p.scoring?.flagSubmitted !== n.scoring?.flagSubmitted ||
+      p.failureReason !== n.failureReason ||
+      JSON.stringify(p.stackOutputs) !== JSON.stringify(n.stackOutputs)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
-  const teamName = auth.session?.teamName ?? "(unknown)";
   const sessionToken = auth.session?.sessionToken ?? null;
   const isBackend = config.mode === "backend";
 
-  const [view, setView] = useState<ParticipantView | null>(null);
+  const [view, setView] = useState<ParticipantTeamView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stopPollingRef = useRef(false);
 
@@ -74,9 +84,8 @@ export function HomePage({ config }: { config: AppConfig }) {
       const next = await getPortalMe(config.apiBaseUrl, sessionToken);
       setView((prev) => (viewIsUnchanged(prev, next) ? prev : next));
       setError(null);
-      // uptime 採点は COMPLETE になっても polling を続けたい (= score が増え続ける)。
-      // Terminal 停止は FAILED / DELETED のみに限定。
-      if (next.status === "FAILED" || next.status === "DELETED") {
+      // team 全 problem が terminal (FAILED / DELETED) なら polling 停止。
+      if (next.problems.every((p) => p.status === "FAILED" || p.status === "DELETED")) {
         stopPollingRef.current = true;
       }
     } catch (err) {
@@ -104,133 +113,168 @@ export function HomePage({ config }: { config: AppConfig }) {
     };
   }, [isBackend, sessionToken, tick]);
 
+  const teamName = view?.team.teamName ?? auth.session?.teamName ?? "(unknown)";
+
   return (
     <SpaceBetween size="l">
       <Header variant="h1" description={`${config.eventTitle} へようこそ`}>
         Welcome, {teamName}
       </Header>
 
-      {view && <ScorePanel view={view} />}
+      {!isBackend && (
+        <Alert type="info">
+          dev-mock モードで動作中です。実 backend と接続するには runtime-config の <code>mode</code>{" "}
+          を <code>backend</code> に設定してください。
+        </Alert>
+      )}
+      {error && (
+        <Alert type="error" header="状態の取得に失敗しました">
+          {error}
+        </Alert>
+      )}
+      {isBackend && !view && !error && <Box>状態を取得中…</Box>}
 
-      <Container header={<Header variant="h2">問題のデプロイ状況</Header>}>
-        <SpaceBetween size="m">
-          {!isBackend && (
-            <Alert type="info">
-              dev-mock モードで動作中です。実 backend と接続するには runtime-config の{" "}
-              <code>mode</code> を <code>backend</code> に設定してください。
-            </Alert>
-          )}
-          {error && (
-            <Alert type="error" header="状態の取得に失敗しました">
-              {error}
-            </Alert>
-          )}
-          {isBackend && !view && !error && <Box>状態を取得中...</Box>}
-          {view && (
-            <>
-              <StatusIndicator type={STATUS_TYPE[view.status]}>{view.status}</StatusIndicator>
-              {view.status === "FAILED" && view.failureReason && (
-                <Alert type="error" header="失敗理由">
-                  {view.failureReason}
-                </Alert>
-              )}
-              <ColumnLayout columns={2} variant="text-grid">
-                <KeyValuePairs
-                  items={[
-                    { label: "Problem", value: <code>{view.problemId}</code> },
-                    { label: "Region", value: view.region },
-                  ]}
-                />
-                <KeyValuePairs
-                  items={[
-                    { label: "Job ID", value: <code>{view.jobId}</code> },
-                    { label: "Team", value: view.teamName },
-                  ]}
-                />
-              </ColumnLayout>
-              {Object.keys(view.stackOutputs).length > 0 && (
-                <Container header={<Header variant="h3">アクセス先 URL</Header>}>
-                  <KeyValuePairs
-                    items={Object.entries(view.stackOutputs).map(([label, value]) => ({
-                      label,
-                      value: (
-                        <a href={value} target="_blank" rel="noreferrer noopener">
-                          <code>{value}</code>
-                        </a>
-                      ),
-                    }))}
-                  />
-                </Container>
-              )}
-              {!TERMINAL_STATUSES.has(view.status) && (
-                <Box variant="small" color="text-status-info">
-                  {POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。
-                </Box>
-              )}
-            </>
-          )}
-        </SpaceBetween>
-      </Container>
+      {view && <TeamScorePanel view={view} />}
 
-      {view?.scoring?.kind === "flag" && view.status === "COMPLETE" && (
-        <FlagSubmissionPanel
+      {view?.problems.map((problem) => (
+        <ProblemCard
+          key={problem.jobId}
+          problem={problem}
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
-          flagSubmitted={view.scoring.flagSubmitted ?? false}
-          points={view.scoring.points ?? 0}
-          hints={view.scoring.hints ?? []}
           onScored={tick}
         />
+      ))}
+
+      {view && view.problems.length === 0 && (
+        <Container header={<Header variant="h2">問題がありません</Header>}>
+          <Box>このチームには deploy 済みの問題がありません。operator にお問い合わせください。</Box>
+        </Container>
       )}
     </SpaceBetween>
   );
 }
 
-/** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。Health Check は
- *  毎分走るので、2 分以上空いていれば何かが普段と違う = defender が気付くべき信号。 */
+function TeamScorePanel({ view }: { view: ParticipantTeamView }) {
+  const totalScore = view.problems.reduce((sum, p) => sum + p.score, 0);
+  return (
+    <Container header={<Header variant="h2">チーム累計スコア</Header>}>
+      <KeyValuePairs
+        columns={3}
+        items={[
+          {
+            label: "合計",
+            value: (
+              <Box variant="awsui-value-large" color="text-status-success">
+                {totalScore} pt
+              </Box>
+            ),
+          },
+          { label: "問題数", value: String(view.problems.length) },
+          {
+            label: "完了済",
+            value: String(view.problems.filter((p) => p.status === "COMPLETE").length),
+          },
+        ]}
+      />
+    </Container>
+  );
+}
+
+/** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
-function ScorePanel({ view }: { view: ParticipantView }) {
-  const kindLabel = view.scoring ? SCORING_KIND_LABEL[view.scoring.kind] : "(未設定)";
+function ProblemCard({
+  problem,
+  apiBaseUrl,
+  sessionToken,
+  onScored,
+}: {
+  problem: ParticipantProblemView;
+  apiBaseUrl: string;
+  sessionToken: string;
+  onScored: () => Promise<void>;
+}) {
+  const kindLabel = problem.scoring ? SCORING_KIND_LABEL[problem.scoring.kind] : "(未設定)";
   const now = Date.now();
-  const lastScoredMs = view.lastScoredAt ? new Date(view.lastScoredAt).getTime() : Number.NaN;
-  const isUptime = view.scoring?.kind === "uptime";
-  // uptime 採点で 2 分以上加点されていない = サービスが何か止まっている可能性。
-  // どこが原因かは敢えて UI に出さず、defender 自身に SSM / ログ調査させる
-  // (Battle のゲーム性 = 「自力で原因究明し復旧する」)。
+  const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
+  const isUptime = problem.scoring?.kind === "uptime";
   const isStale =
     isUptime &&
     Number.isFinite(lastScoredMs) &&
     now - lastScoredMs > STALE_THRESHOLD_MS &&
-    view.status === "COMPLETE";
+    problem.status === "COMPLETE";
 
   return (
-    <Container header={<Header variant="h2">スコア</Header>}>
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description={`${kindLabel} / ${problem.score} pt`}
+          actions={
+            <StatusIndicator type={STATUS_TYPE[problem.status]}>{problem.status}</StatusIndicator>
+          }
+        >
+          {problem.problemId}
+        </Header>
+      }
+    >
       <SpaceBetween size="m">
-        {isStale && (
-          <Alert type="warning" header="スコアが伸びていません">
-            直近の採点から {describeAgo(view.lastScoredAt, now)} 経過。サービスのどこかが期待
-            通り応答していない可能性があります。SSM Session 等で状態を確認してください。
+        {problem.status === "FAILED" && problem.failureReason && (
+          <Alert type="error" header="失敗理由">
+            {problem.failureReason}
           </Alert>
         )}
-        <KeyValuePairs
-          columns={3}
-          items={[
-            {
-              label: "現在の累計",
-              value: (
-                <Box
-                  variant="awsui-value-large"
-                  color={isStale ? "text-status-warning" : "text-status-success"}
-                >
-                  {view.score} pt
-                </Box>
-              ),
-            },
-            { label: "形式", value: kindLabel },
-            { label: "最終加点", value: describeAgo(view.lastScoredAt, now) },
-          ]}
-        />
+        {isStale && (
+          <Alert type="warning" header="スコアが伸びていません">
+            直近の採点から {describeAgo(problem.lastScoredAt, now)} 経過。サービスのどこかが
+            期待通り応答していない可能性があります。
+          </Alert>
+        )}
+        <ColumnLayout columns={2} variant="text-grid">
+          <KeyValuePairs
+            items={[
+              { label: "Region", value: problem.region },
+              { label: "Job ID", value: <code>{problem.jobId}</code> },
+            ]}
+          />
+          <KeyValuePairs
+            items={[
+              { label: "現在の score", value: `${problem.score} pt` },
+              { label: "最終加点", value: describeAgo(problem.lastScoredAt, now) },
+            ]}
+          />
+        </ColumnLayout>
+        {Object.keys(problem.stackOutputs).length > 0 && (
+          <Container header={<Header variant="h3">アクセス先 URL</Header>}>
+            <KeyValuePairs
+              items={Object.entries(problem.stackOutputs).map(([label, value]) => ({
+                label,
+                value: (
+                  <a href={value} target="_blank" rel="noreferrer noopener">
+                    <code>{value}</code>
+                  </a>
+                ),
+              }))}
+            />
+          </Container>
+        )}
+        {problem.scoring?.kind === "flag" && problem.status === "COMPLETE" && (
+          <FlagSubmissionPanel
+            apiBaseUrl={apiBaseUrl}
+            sessionToken={sessionToken}
+            problemId={problem.problemId}
+            flagSubmitted={problem.scoring.flagSubmitted ?? false}
+            points={problem.scoring.points ?? 0}
+            hints={problem.scoring.hints ?? []}
+            onScored={onScored}
+          />
+        )}
+        {!TERMINAL_STATUSES.has(problem.status) && (
+          <Box variant="small" color="text-status-info">
+            {POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。
+          </Box>
+        )}
       </SpaceBetween>
     </Container>
   );
@@ -239,6 +283,7 @@ function ScorePanel({ view }: { view: ParticipantView }) {
 function FlagSubmissionPanel({
   apiBaseUrl,
   sessionToken,
+  problemId,
   flagSubmitted,
   points,
   hints,
@@ -246,6 +291,7 @@ function FlagSubmissionPanel({
 }: {
   apiBaseUrl: string;
   sessionToken: string;
+  problemId: string;
   flagSubmitted: boolean;
   points: number;
   hints: readonly string[];
@@ -258,11 +304,9 @@ function FlagSubmissionPanel({
 
   if (flagSubmitted) {
     return (
-      <Container header={<Header variant="h2">Flag 提出</Header>}>
-        <Alert type="success" header="提出済み">
-          このチームは既に正解を提出済みです (+{points} pt)。
-        </Alert>
-      </Container>
+      <Alert type="success" header="提出済み">
+        この problem は既に正解を提出済みです (+{points} pt)。
+      </Alert>
     );
   }
 
@@ -273,7 +317,7 @@ function FlagSubmissionPanel({
     setSubmitError(null);
     setOutcome(null);
     try {
-      const result = await submitFlag(apiBaseUrl, sessionToken, flag);
+      const result = await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
       setOutcome(result);
       if (result.kind === "ok" || result.kind === "already_scored") {
         await onScored();
@@ -290,62 +334,54 @@ function FlagSubmissionPanel({
   };
 
   return (
-    <Container
-      header={
-        <Header variant="h2" description={`正解を入力すると +${points} pt 獲得します。`}>
-          Flag 提出
-        </Header>
-      }
-    >
-      <SpaceBetween size="m">
-        {hints.length > 0 && (
-          <Alert type="info" header="ヒント">
-            <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
-              {hints.map((h) => (
-                <li key={h}>{h}</li>
-              ))}
-            </ul>
-          </Alert>
-        )}
-        <form onSubmit={handleSubmit}>
-          <Form
-            actions={
-              <Button variant="primary" loading={submitting} formAction="submit">
-                提出
-              </Button>
-            }
-          >
-            <FormField label="Flag (Stack Output 値)">
-              <Input
-                value={flag}
-                onChange={(e) => setFlag(e.detail.value)}
-                placeholder="例: Hello from tc-hello-world-..."
-                disabled={submitting}
-              />
-            </FormField>
-          </Form>
-        </form>
-        {outcome?.kind === "ok" && (
-          <Alert type="success" header={`正解 (+${outcome.scoreDelta} pt)`}>
-            合計スコア: {outcome.totalScore} pt
-          </Alert>
-        )}
-        {outcome?.kind === "wrong" && (
-          <Alert type="warning" header="不正解">
-            値を確認して再度提出してください。
-          </Alert>
-        )}
-        {outcome?.kind === "already_scored" && (
-          <Alert type="info" header="提出済み">
-            既に正解済みです (合計 {outcome.totalScore} pt)。
-          </Alert>
-        )}
-        {submitError && (
-          <Alert type="error" header="提出に失敗しました">
-            {submitError}
-          </Alert>
-        )}
-      </SpaceBetween>
-    </Container>
+    <SpaceBetween size="s">
+      {hints.length > 0 && (
+        <Alert type="info" header="ヒント">
+          <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
+            {hints.map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+      <form onSubmit={handleSubmit}>
+        <Form
+          actions={
+            <Button variant="primary" loading={submitting} formAction="submit">
+              Flag 提出 (+{points} pt)
+            </Button>
+          }
+        >
+          <FormField label="Flag (Stack Output 値)">
+            <Input
+              value={flag}
+              onChange={(e) => setFlag(e.detail.value)}
+              placeholder="例: Hello from tc-hello-world-..."
+              disabled={submitting}
+            />
+          </FormField>
+        </Form>
+      </form>
+      {outcome?.kind === "ok" && (
+        <Alert type="success" header={`正解 (+${outcome.scoreDelta} pt)`}>
+          合計スコア: {outcome.totalScore} pt
+        </Alert>
+      )}
+      {outcome?.kind === "wrong" && (
+        <Alert type="warning" header="不正解">
+          値を確認して再度提出してください。
+        </Alert>
+      )}
+      {outcome?.kind === "already_scored" && (
+        <Alert type="info" header="提出済み">
+          既に正解済みです (合計 {outcome.totalScore} pt)。
+        </Alert>
+      )}
+      {submitError && (
+        <Alert type="error" header="提出に失敗しました">
+          {submitError}
+        </Alert>
+      )}
+    </SpaceBetween>
   );
 }

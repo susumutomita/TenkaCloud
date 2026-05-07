@@ -5,6 +5,10 @@ import { toAsciiSlug } from "../lib/slug";
 import { clearSession, loadSession, type ParticipantSession, saveSession } from "./storage";
 
 const DEFAULT_DEV_TTL_MS = 4 * 60 * 60 * 1000;
+// Phase 1 以前 (jobId-based) の deployment は eventId / teamId を持たない。
+// session には何かしら値を入れる必要がある (UI が表示するため) ので、
+// "(unknown)" placeholder を使う。Phase 4 で旧 deployment 行が消えれば削除可能。
+const UNKNOWN_PLACEHOLDER = "(unknown)";
 
 async function exchangeKeyForSession(
   config: AppConfig,
@@ -27,15 +31,21 @@ async function exchangeKeyForSession(
       throw new Error(err instanceof Error ? err.message : "backend に接続できませんでした");
     }
     const now = Date.now();
+    // Phase 2c: teamLoginKey で引いた view は team scope。teamId / eventId は team から、
+    // expiresAt は最初の problem から取る (= team の全 problems で同じ TTL を持つ前提)。
+    const firstProblem = view.problems[0];
+    const expiresAtMs =
+      firstProblem && firstProblem.expiresAt > 0
+        ? firstProblem.expiresAt * 1000
+        : now + DEFAULT_DEV_TTL_MS;
     return {
       sessionToken: trimmed,
-      teamId: view.jobId,
-      teamName: view.teamName,
-      eventId: view.problemId,
+      teamId: view.team.teamId ?? UNKNOWN_PLACEHOLDER,
+      teamName: view.team.teamName,
+      eventId: view.team.eventId ?? UNKNOWN_PLACEHOLDER,
       issuedAt: now,
-      // backend の expiresAt は epoch seconds、storage は ms に揃える。
-      expiresAt: view.expiresAt > 0 ? view.expiresAt * 1000 : now + DEFAULT_DEV_TTL_MS,
-      teamNameSetByCompetitor: view.teamNameSetByCompetitor,
+      expiresAt: expiresAtMs,
+      teamNameSetByCompetitor: view.team.teamNameSetByCompetitor,
     };
   }
 

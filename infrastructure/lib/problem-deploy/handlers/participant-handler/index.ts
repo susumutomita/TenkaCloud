@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
+import { PROBLEM_ID_RE } from "../shared/constants.js";
 import {
   HTTP_BAD_REQUEST,
   HTTP_INTERNAL_ERROR,
@@ -8,17 +9,18 @@ import {
   HTTP_UNAUTHORIZED,
 } from "../shared/http-status.js";
 import { extractBearerToken } from "./auth.js";
-import { lookupByTeamLoginKey } from "./lookup.js";
+import { lookupTeamByLoginKey } from "./lookup.js";
 import { buildParticipantSharedResources } from "./shared.js";
 import { submitFlag } from "./submit-flag.js";
 import { setDisplayTeamName } from "./update.js";
 
 /**
- * Participant Portal backend Lambda の Hono app。routes:
+ * Participant Portal backend Lambda の Hono app (Phase 2c で team scope)。routes:
  *   GET   /portal/healthz
  *   GET   /portal/me                — Authorization: Bearer <teamLoginKey>
- *   PATCH /portal/me                — body: { teamName: string }
- *   POST  /portal/me/submit-flag    — body: { flag: string }
+ *                                     → { team, problems[] }
+ *   PATCH /portal/me                — body: { teamName: string } (team の全行を update)
+ *   POST  /portal/me/submit-flag    — body: { problemId: string, flag: string }
  *
  * Function URL は `AuthType=NONE` で公開し、`teamLoginKey` 自体を bearer として
  * Lambda 内で検証する。
@@ -32,7 +34,7 @@ app.get("/portal/me", async (c) => {
   const token = extractBearerToken(c.req.header("authorization"));
   if (!token) return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
   try {
-    const view = await lookupByTeamLoginKey(shared, token);
+    const view = await lookupTeamByLoginKey(shared, token);
     if (!view) return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
     return c.json(view, HTTP_OK);
   } catch (err) {
@@ -77,12 +79,16 @@ app.post("/portal/me/submit-flag", async (c) => {
   } catch {
     return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
   }
+  const problemId = (body as { problemId?: unknown })?.problemId;
   const flag = (body as { flag?: unknown })?.flag;
+  if (typeof problemId !== "string" || !PROBLEM_ID_RE.test(problemId)) {
+    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
+  }
   if (typeof flag !== "string" || flag.length === 0 || flag.length > 200) {
     return c.json({ error: "invalid_flag" }, HTTP_BAD_REQUEST);
   }
   try {
-    const outcome = await submitFlag(shared, shared.problemsScoring, token, flag);
+    const outcome = await submitFlag(shared, shared.problemsScoring, token, problemId, flag);
     if (outcome.kind === "unauthorized")
       return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
     if (outcome.kind === "not_flag_problem") {

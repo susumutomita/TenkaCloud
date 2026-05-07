@@ -40,8 +40,8 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
     try {
       const view = await updateTeamName(config.apiBaseUrl, auth.session.sessionToken, trimmed);
       auth.updateSession({
-        teamName: view.teamName,
-        teamNameSetByCompetitor: view.teamNameSetByCompetitor,
+        teamName: view.team.teamName,
+        teamNameSetByCompetitor: view.team.teamNameSetByCompetitor,
       });
       navigate("/");
     } catch (err) {

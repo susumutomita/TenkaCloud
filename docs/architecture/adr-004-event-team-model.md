@@ -142,8 +142,8 @@ Lambda は `Bearer <teamLoginKey>` から Teams GSI2 で 1 行引き、`teamId` 
 
 - **Phase 1 (✅完了)**: Events / Teams Table を追加 + `POST /events` / `GET /events` / `GET /events/{id}` を新設。既存 `POST /problems/{id}/deploy` 経路は残す
 - **Phase 2a (✅完了)**: `POST /events/{id}/deploy` + `DELETE /events/{id}` を導入 (= bulk deploy / bulk teardown)。Distributed Map ではなく **EventBridge fan-out** で初期実装 (Lambda が teams × problems を展開して既存 `DeployCreateRequested` / `DeployDeleteRequested` を chunk publish、既存 DeployCreate / DeployDelete State Machine が個別に並列実行)。Phase 3+ で 1000 並列を超える scale が要求されたら Distributed Map に切り替える
-- **Phase 2b**: application-admin-console UI に EventCreate / EventList / EventDetail を追加
-- **Phase 2c**: Participant Portal を team scope に切り替え (`GET /portal/me` を `team + problems[]` に拡張)
+- **Phase 2b (✅完了)**: application-admin-console UI に EventCreate / EventList / EventDetail を追加
+- **Phase 2c (✅完了)**: Participant Portal を team scope に切り替え (`GET /portal/me` を `team + problems[]` に拡張)。`POST /portal/me/submit-flag` は `problemId` 必須に
 - **Phase 3**: 既存 `POST /problems/{id}/deploy` を deprecate (UI からの呼び出し削除)
 - **Phase 4**: 既存 routes と DDB の jobId-based 行を削除
 
