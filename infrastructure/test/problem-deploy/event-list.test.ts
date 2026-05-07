@@ -11,7 +11,11 @@ function buildShared(): {
   const shared: EventSharedResources = {
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
+    deploymentsTableName: "TestDeployments",
+    eventBusName: "test-bus",
     ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
+    events: { send: vi.fn() } as unknown as EventSharedResources["events"],
+    problemsCatalog: {},
   };
   return { shared, ddbSend };
 }
@@ -92,6 +96,9 @@ describe("getEventDetail", () => {
         { teamId: "T2", internalSlug: "team-beta", teamLoginKey: "key-2" },
       ],
     });
+    // Deployments query (3rd parallel call) — 競技者がまだ portal で名前を設定して
+    // いないので displayTeamName 行は無し。
+    ddbSend.mockResolvedValueOnce({ Items: [] });
 
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeDefined();
@@ -113,6 +120,57 @@ describe("getEventDetail", () => {
     expect(teamsQuery.input.KeyConditionExpression).toContain("begins_with(SK, :tprefix)");
     expect(teamsQuery.input.ExpressionAttributeValues?.[":pk"]).toBe("EVENT#EV1");
     expect(teamsQuery.input.ExpressionAttributeValues?.[":tprefix"]).toBe("TEAM#");
+    // 3 件目は QueryCommand (Deployments GSI1 = TENANT#)
+    const deploymentsQuery = ddbSend.mock.calls[2]?.[0] as QueryCommand;
+    expect(deploymentsQuery).toBeInstanceOf(QueryCommand);
+    expect(deploymentsQuery.input.IndexName).toBe("GSI1");
+    expect(deploymentsQuery.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
+  });
+
+  it("競技者が portal で設定した displayTeamName を Deployments から merge するべき", async () => {
+    // ADR-004 Phase 2c 統合ギャップの再発防止。participant の PATCH /portal/me は
+    // DeploymentsTable のみ書き込む (TeamsTable には書けない) ため、operator 側 read で
+    // merge する必要がある。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        eventId: "EV1",
+        tenantId: "tenant-acme",
+        name: "イベント A",
+        status: "DRAFT",
+        teamCount: 2,
+        problems: [],
+        createdAt: "2026-05-07T08:00:00.000Z",
+        updatedAt: "2026-05-07T08:00:00.000Z",
+        expiresAt: 9_999_999_999,
+      },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { teamId: "T1", internalSlug: "team-1", teamLoginKey: "key-1" },
+        { teamId: "T2", internalSlug: "team-2", teamLoginKey: "key-2" },
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        // T1 の 2 deployment 行 (両方とも sample111 で同期済み)
+        { teamId: "T1", eventId: "EV1", displayTeamName: "sample111" },
+        { teamId: "T1", eventId: "EV1", displayTeamName: "sample111" },
+        // T2 は competitor が未ログインで displayTeamName 無し
+        { teamId: "T2", eventId: "EV1" },
+        // 別 event (= filter で除外されるべき)
+        { teamId: "T1", eventId: "EV-OTHER", displayTeamName: "leak-from-other-event" },
+      ],
+    });
+
+    const out = await getEventDetail(shared, "tenant-acme", "EV1");
+    expect(out?.teams).toHaveLength(2);
+    const t1 = out?.teams.find((t) => t.teamId === "T1");
+    const t2 = out?.teams.find((t) => t.teamId === "T2");
+    expect(t1?.displayName).toBe("sample111");
+    expect(t2?.displayName).toBeUndefined();
+    // 別 event の displayTeamName が混入しないこと
+    expect(JSON.stringify(out)).not.toContain("leak-from-other-event");
   });
 
   it("Event 行が無ければ undefined を返し teams 結果を漏らさないべき", async () => {
@@ -123,6 +181,7 @@ describe("getEventDetail", () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ teamId: "LEAKED", internalSlug: "leaked", teamLoginKey: "should-not-leak" }],
     });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
 
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeUndefined();
@@ -140,6 +199,7 @@ describe("getEventDetail", () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ teamId: "T1", internalSlug: "other-team", teamLoginKey: "other-key" }],
     });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
 
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeUndefined();
