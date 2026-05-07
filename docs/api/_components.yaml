@@ -314,6 +314,30 @@ components:
               type: array
               items: { $ref: "#/components/schemas/EventProblemTarget" }
 
+    BulkDeployResult:
+      type: object
+      required: [eventId, enqueued, skipped]
+      properties:
+        eventId: { type: string }
+        enqueued:
+          type: integer
+          description: deploy 行を作成して publish 受付した件数
+        skipped:
+          type: integer
+          description: 既存行 (idempotent skip) や catalog 不在で deploy しなかった件数
+
+    BulkTeardownResult:
+      type: object
+      required: [eventId, enqueued, skipped]
+      properties:
+        eventId: { type: string }
+        enqueued:
+          type: integer
+          description: status を DELETING に倒し DeployDeleteRequested を publish した件数
+        skipped:
+          type: integer
+          description: 既に DELETING / DELETED / 並行更新で skip された件数
+
     ParticipantScoringInfo:
       type: object
       required: [kind]

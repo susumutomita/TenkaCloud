@@ -4,22 +4,27 @@ import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { resolveTenantId } from "../deploy-handler/auth.js";
 import {
+  HTTP_ACCEPTED,
   HTTP_BAD_REQUEST,
   HTTP_CREATED,
   HTTP_INTERNAL_ERROR,
   HTTP_NOT_FOUND,
   HTTP_OK,
 } from "../shared/http-status.js";
+import { bulkTeardownEvent } from "./bulk-delete.js";
+import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
 import { getEventDetail, listEvents } from "./list.js";
 import { buildEventSharedResources } from "./shared.js";
 import { CreateEventRequestSchema } from "./types.js";
 
 /**
- * Event API Lambda の Hono app (ADR-004 Phase 1)。routes:
- *   POST /events
- *   GET  /events
- *   GET  /events/:eventId
+ * Event API Lambda の Hono app (ADR-004 Phase 1+2a)。routes:
+ *   POST   /events
+ *   GET    /events
+ *   GET    /events/:eventId
+ *   POST   /events/:eventId/deploy   — Bulk deploy (teams × problems を fan-out)
+ *   DELETE /events/:eventId          — Bulk teardown
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
@@ -113,6 +118,38 @@ app.get("/events/:eventId", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] getEventDetail failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.post("/events/:eventId/deploy", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await bulkDeployEvent(shared, resolveTenantId(c), eventId, Date.now());
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    return c.json(outcome.result, HTTP_ACCEPTED);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] bulkDeployEvent failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.delete("/events/:eventId", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await bulkTeardownEvent(shared, resolveTenantId(c), eventId, Date.now());
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    return c.json(outcome.result, HTTP_ACCEPTED);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] bulkTeardownEvent failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

@@ -98,10 +98,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
     this.deployApiLambda = deployApi.fn;
 
-    // ADR-004 Phase 1: Event / Team CRUD Lambda。tenant API から invoke される。
+    // ADR-004 Phase 1+2a: Event / Team CRUD + Bulk Deploy/Teardown Lambda。
+    // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
     const eventApi = new EventApiLambda(this, "EventApi", {
       eventsTable: events.table,
       teamsTable: teams.table,
+      deploymentsTable: deployments.table,
+      eventBus,
+      problemsCatalog: props.problemsCatalog,
       defaultTenantId: props.defaultTenantId,
     });
     this.eventApiLambda = eventApi.fn;

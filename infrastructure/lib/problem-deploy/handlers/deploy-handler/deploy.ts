@@ -3,6 +3,7 @@ import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
+import { parseProblemsCatalog } from "../shared/catalog.js";
 import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
@@ -145,31 +146,6 @@ export function buildSharedResources(): DeploySharedResources {
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
   };
-}
-
-/**
- * `BATTLE_PROBLEMS_CATALOG` env (JSON `{problemId: problemDir}`) を decode する。
- * 不正な JSON / 不正な shape / 非 string value は drop し warn (operator が気づける)。
- * Lambda cold start で 1 回だけ評価されるので overhead は無視できる。
- */
-function parseProblemsCatalog(raw: string | undefined): Record<string, string> {
-  if (!raw) return {};
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    console.warn(
-      `[buildSharedResources] BATTLE_PROBLEMS_CATALOG parse failed (${(err as Error).message}). ` +
-        `tenant API will reject all problemId.`,
-    );
-    return {};
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  const catalog: Record<string, string> = {};
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof v === "string") catalog[k] = v;
-  }
-  return catalog;
 }
 
 export function buildContext(shared: DeploySharedResources, tenantId: string): DeployContext {
