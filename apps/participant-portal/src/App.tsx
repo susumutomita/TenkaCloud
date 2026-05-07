@@ -6,6 +6,7 @@ import type { AppConfig } from "./config";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { PlaceholderPage } from "./pages/Placeholder";
+import { QuestsPage } from "./pages/Quests";
 import { ScoreboardPage } from "./pages/Scoreboard";
 import { TeamSetupPage } from "./pages/TeamSetup";
 
@@ -71,17 +72,7 @@ export function App({ config }: { config: AppConfig }) {
             />,
           )}
         />
-        <Route
-          path="/problems"
-          element={guarded(
-            config,
-            <PlaceholderPage
-              title="問題一覧 (Quests)"
-              description="自チームに deploy された問題の入口"
-              comingSoon="deploy backend が完成すると、自チーム向けに deploy 済みの問題 (URL / API URL) がここに並びます。"
-            />,
-          )}
-        />
+        <Route path="/problems" element={guarded(config, <QuestsPage config={config} />)} />
         <Route
           path="/problems/:problemId"
           element={guarded(
