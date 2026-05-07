@@ -1,11 +1,10 @@
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
-import { lookupTeamByLoginKey, type ParticipantTeamView } from "./lookup.js";
-import type { ParticipantSharedResources } from "./shared.js";
+import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { buildTeamView, type ParticipantTeamView } from "./lookup.js";
+import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
-
-const NON_EDITABLE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
 export type UpdateOutcome =
   | { kind: "ok"; view: ParticipantTeamView }
@@ -17,8 +16,7 @@ export type UpdateOutcome =
  * ひらがな / カタカナ / 漢字。1〜40 文字。
  *
  * 制御文字 / 改行 / emoji を弾くのは、Cloudscape の表示崩れと SQL injection 風の
- * 攻撃面を予防するため (DDB 自体には injection リスクは無いが、後段の UI / CSV
- * export 等で safe であることを保証する)。
+ * 攻撃面を予防するため。
  */
 export function validateTeamName(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
@@ -28,15 +26,16 @@ export function validateTeamName(raw: unknown): string | undefined {
 }
 
 /**
- * 競技者の `displayTeamName` を **team の全 deployment 行で** 更新する (Phase 2c)。
+ * 競技者の `displayTeamName` を **team の全 deployment 行で** 更新する。
  *
- * 1 teamLoginKey = 1 team = N deployment になったため、display 名は team scope の
- * メタデータとして全行に伝播させる。`team` 集約 (Teams table) には book-keeping
- * しないが、Participant Portal が `lookupTeamByLoginKey` で全行から代表値を取って
- * 表示に使うので、すべての行で同じ値になっている必要がある。
+ * 1 teamLoginKey = 1 team = N deployment なので、display 名は team scope の
+ * メタデータとして全行に伝播させる。
  *
  * 編集不可な行 (DELETING / DELETED) は skip し、editable な 1 行も無ければ
  * `unauthorized` を返す (= teamLoginKey 自体が無効化された場合と同じ扱い)。
+ *
+ * Update は `ReturnValues=ALL_NEW` で更新後 row を取り、その集合から team view を
+ * 直接構築する (= 再 query 不要、strong write の整合性を保つ)。
  */
 export async function setDisplayTeamName(
   shared: ParticipantSharedResources,
@@ -46,25 +45,17 @@ export async function setDisplayTeamName(
   const name = validateTeamName(rawName);
   if (!name) return { kind: "invalid_team_name" };
 
-  const queryOut = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI2",
-      KeyConditionExpression: "GSI2PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-    }),
-  );
-  const items = (queryOut.Items ?? []) as Partial<DeploymentItem>[];
+  const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
 
   const editable = items.filter((i) => {
     const status = (i.status ?? "PENDING") as DeploymentStatus;
-    return !NON_EDITABLE_STATUSES.has(status) && typeof i.PK === "string";
+    return !DELETED_LIKE_STATUSES.has(status) && typeof i.PK === "string";
   });
   if (editable.length === 0) return { kind: "unauthorized" };
 
   const now = new Date().toISOString();
-  await Promise.all(
+  const updateResults = await Promise.all(
     editable.map((item) =>
       shared.ddb.send(
         new UpdateCommand({
@@ -72,16 +63,15 @@ export async function setDisplayTeamName(
           Key: { PK: item.PK as string, SK: "META" },
           UpdateExpression: "SET displayTeamName = :name, updatedAt = :now",
           ExpressionAttributeValues: { ":name": name, ":now": now },
+          ReturnValues: "ALL_NEW",
         }),
       ),
     ),
   );
-
-  // 更新後の team view を構築するために再 lookup。Update の eventually consistent な
-  // 反映を避けるため `lookupTeamByLoginKey` 内の Query は GSI2 で eventually
-  // consistent だが、`teamName` フィールドは UpdateCommand の strong write が反映済
-  // (= 直近の write 後に Query しても eventually 数十 ms 以内に新値が見える)。
-  const updated = await lookupTeamByLoginKey(shared, teamLoginKey);
-  if (!updated) return { kind: "unauthorized" };
-  return { kind: "ok", view: updated };
+  const updatedItems = updateResults
+    .map((r) => r.Attributes as Partial<DeploymentItem> | undefined)
+    .filter((a): a is Partial<DeploymentItem> => !!a);
+  const view = buildTeamView(updatedItems, shared.problemsScoring);
+  if (!view) return { kind: "unauthorized" };
+  return { kind: "ok", view };
 }

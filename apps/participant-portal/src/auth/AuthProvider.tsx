@@ -5,6 +5,10 @@ import { toAsciiSlug } from "../lib/slug";
 import { clearSession, loadSession, type ParticipantSession, saveSession } from "./storage";
 
 const DEFAULT_DEV_TTL_MS = 4 * 60 * 60 * 1000;
+// Phase 1 以前 (jobId-based) の deployment は eventId / teamId を持たない。
+// session には何かしら値を入れる必要がある (UI が表示するため) ので、
+// "(unknown)" placeholder を使う。Phase 4 で旧 deployment 行が消えれば削除可能。
+const UNKNOWN_PLACEHOLDER = "(unknown)";
 
 async function exchangeKeyForSession(
   config: AppConfig,
@@ -36,9 +40,9 @@ async function exchangeKeyForSession(
         : now + DEFAULT_DEV_TTL_MS;
     return {
       sessionToken: trimmed,
-      teamId: view.team.teamId ?? "(unknown-team-id)",
+      teamId: view.team.teamId ?? UNKNOWN_PLACEHOLDER,
       teamName: view.team.teamName,
-      eventId: view.team.eventId ?? "(unknown-event-id)",
+      eventId: view.team.eventId ?? UNKNOWN_PLACEHOLDER,
       issuedAt: now,
       expiresAt: expiresAtMs,
       teamNameSetByCompetitor: view.team.teamNameSetByCompetitor,

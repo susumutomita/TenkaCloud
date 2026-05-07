@@ -1,8 +1,7 @@
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
-import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
-import type { ParticipantSharedResources } from "./shared.js";
+import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 export type SubmitFlagOutcome =
   | { kind: "ok"; scoreDelta: number; totalScore: number }
@@ -36,15 +35,7 @@ export async function submitFlag(
   problemId: string,
   submittedFlag: string,
 ): Promise<SubmitFlagOutcome> {
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI2",
-      KeyConditionExpression: "GSI2PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-    }),
-  );
-  const items = (out.Items ?? []) as Partial<DeploymentItem>[];
+  const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
 
   const item = items.find((i) => i.problemId === problemId);

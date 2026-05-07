@@ -1,11 +1,11 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
-import type { ParticipantSharedResources } from "./shared.js";
+import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
- * Phase 2c: 1 teamLoginKey = 1 team (= N deployments) として view を構成する。
+ * 1 teamLoginKey = 1 team (= N deployments) として view を構成する。
  *
  * stackOutputs は DDB に JSON 文字列で入っているが、UI に返す前に object へ展開する。
  * `flagOutputKey` で指定された field は **競技者に出さない** (= 当てる対象なので)。
@@ -50,8 +50,6 @@ export interface ParticipantTeamView {
   };
   readonly problems: readonly ParticipantProblemView[];
 }
-
-const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
 /**
  * 1 deployment row → ParticipantProblemView 変換。
@@ -111,39 +109,37 @@ export function toProblemView(
  *
  * GSI2 は eventually consistent。直近に rotate / 削除された teamLoginKey は最大
  * 数百ms 程度認証が通る可能性があるが、TTL ベースの teardown と整合する許容範囲。
- *
- * Phase 1 以前 (jobId-based) の deployment は eventId / teamId が undefined。
- * Phase 2a 以降は同じ teamLoginKey を持つ行が複数 (team の問題数 = N 個) 返る。
  */
 export async function lookupTeamByLoginKey(
   shared: ParticipantSharedResources,
   teamLoginKey: string,
 ): Promise<ParticipantTeamView | undefined> {
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI2",
-      KeyConditionExpression: "GSI2PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-    }),
-  );
-  const items = (out.Items ?? []) as Partial<DeploymentItem>[];
+  const items = await queryTeamItems(shared, teamLoginKey);
+  return buildTeamView(items, shared.problemsScoring);
+}
+
+/**
+ * 既に Query 済みの items から ParticipantTeamView を組み立てる (1 pass)。
+ * lookup と update (Update 後の ALL_NEW Attributes 集合) の両方が利用する。
+ */
+export function buildTeamView(
+  items: readonly Partial<DeploymentItem>[],
+  scoringMap: Record<string, ProblemScoringMetadata>,
+): ParticipantTeamView | undefined {
   if (items.length === 0) return undefined;
 
   const problems: ParticipantProblemView[] = [];
+  let sample: Partial<DeploymentItem> | undefined;
   for (const item of items) {
-    const view = toProblemView(item, shared.problemsScoring);
+    const view = toProblemView(item, scoringMap);
     if (view) problems.push(view);
+    if (!sample) {
+      const status = (item.status ?? "PENDING") as DeploymentStatus;
+      if (!DELETED_LIKE_STATUSES.has(status)) sample = item;
+    }
   }
-  if (problems.length === 0) return undefined;
+  if (!sample || problems.length === 0) return undefined;
 
-  // 同 team の全行に共通する team 情報は最初の live 行から拾う (== teamLoginKey で
-  // 引いた deployment はすべて同 team)。teamName は競技者 displayTeamName 優先。
-  const sample = items.find((i) => {
-    const status = (i.status ?? "PENDING") as DeploymentStatus;
-    return !DELETED_LIKE_STATUSES.has(status);
-  });
-  if (!sample) return undefined;
   const operatorSlug = String(sample.teamName ?? "");
   const display = typeof sample.displayTeamName === "string" ? sample.displayTeamName : undefined;
 

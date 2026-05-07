@@ -3,6 +3,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { resolveTenantId } from "../deploy-handler/auth.js";
+import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
   HTTP_ACCEPTED,
   HTTP_BAD_REQUEST,
@@ -30,7 +31,6 @@ import { CreateEventRequestSchema } from "./types.js";
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
  */
 
-const EVENT_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/; // ULID
 const LIST_LIMIT_MAX = 200;
 
 const shared = buildEventSharedResources();

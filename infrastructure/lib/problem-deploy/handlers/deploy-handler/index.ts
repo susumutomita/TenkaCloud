@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
+import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import {
   HTTP_ACCEPTED,
   HTTP_BAD_REQUEST,
@@ -33,9 +34,6 @@ import { DeployRequestSchema } from "./types.js";
  * 残しており、その経路では `DEFAULT_TENANT_ID` env にフォールバック。
  */
 
-// problemId は metadata.json と整合する RFC 1035-ish の slug。両端は英数字、内側のみハイフン許容。
-const PROBLEM_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/; // ULID
 const LIST_LIMIT_MAX = 200;
 
 // SDK clients / env を module scope で 1 度だけ build。warm invoke で connection pool 再利用。

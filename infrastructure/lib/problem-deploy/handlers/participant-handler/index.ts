@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
+import { PROBLEM_ID_RE } from "../shared/constants.js";
 import {
   HTTP_BAD_REQUEST,
   HTTP_INTERNAL_ERROR,
@@ -12,8 +13,6 @@ import { lookupTeamByLoginKey } from "./lookup.js";
 import { buildParticipantSharedResources } from "./shared.js";
 import { submitFlag } from "./submit-flag.js";
 import { setDisplayTeamName } from "./update.js";
-
-const PROBLEM_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 /**
  * Participant Portal backend Lambda の Hono app (Phase 2c で team scope)。routes:

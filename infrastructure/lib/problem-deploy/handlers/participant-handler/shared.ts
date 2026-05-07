@@ -1,7 +1,8 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
+import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
  * Participant Lambda は DDB Query しか叩かない。Deploy Worker / API が使う
@@ -22,4 +23,23 @@ export function buildParticipantSharedResources(): ParticipantSharedResources {
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
   };
+}
+
+/**
+ * teamLoginKey で GSI2 を Query して team の全 deployment 行を返す共通 helper
+ * (lookup / update / submit-flag が同じ query を使うため)。
+ */
+export async function queryTeamItems(
+  shared: ParticipantSharedResources,
+  teamLoginKey: string,
+): Promise<Partial<DeploymentItem>[]> {
+  const out = await shared.ddb.send(
+    new QueryCommand({
+      TableName: shared.tableName,
+      IndexName: "GSI2",
+      KeyConditionExpression: "GSI2PK = :pk",
+      ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
+    }),
+  );
+  return (out.Items ?? []) as Partial<DeploymentItem>[];
 }
