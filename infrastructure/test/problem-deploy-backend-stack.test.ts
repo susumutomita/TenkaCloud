@@ -97,6 +97,15 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
     });
 
+    it("Create State Machine は CodeBuild 起動前に PENDING → IN_PROGRESS の中間遷移を書くべき", () => {
+      // RUN_JOB 同期 CodeBuild は 5〜15 分かかるため、この中間書込が無いと operator UI が
+      // PENDING のまま固定して polling が機能していないように見える (#159 の再発防止)。
+      const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
+      const synthJson = JSON.stringify(stateMachines);
+      expect(synthJson).toContain("MarkInProgress");
+      expect(synthJson).toContain("IN_PROGRESS");
+    });
+
     it("EventBridge Rule を Create / Delete でそれぞれ 1 つずつ持つべき", () => {
       tpl.resourceCountIs("AWS::Events::Rule", 2);
       tpl.hasResourceProperties(
