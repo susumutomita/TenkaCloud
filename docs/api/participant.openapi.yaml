@@ -117,17 +117,32 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  kind:
-                    type: string
-                    enum: [correct, incorrect, already_solved]
-                  awarded:
-                    type: integer
-                  totalScore:
-                    type: integer
+                oneOf:
+                  - type: object
+                    required: [kind, scoreDelta, totalScore]
+                    properties:
+                      kind: { type: string, enum: [ok] }
+                      scoreDelta:
+                        type: integer
+                        description: 今回の正解で加算された点数
+                      totalScore: { type: integer }
+                  - type: object
+                    required: [kind, totalScore]
+                    properties:
+                      kind: { type: string, enum: [already_scored] }
+                      totalScore: { type: integer }
+                  - type: object
+                    required: [kind]
+                    properties:
+                      kind: { type: string, enum: [wrong] }
         "400":
-          description: invalid_flag / not_flag_problem / no_outputs
+          description: |
+            invalid_flag (form 不正) / not_flag_problem (kind=uptime の問題に submit) /
+            no_outputs (deploy 未完了で flag が CFn Outputs に無い)
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/ErrorResponse"
         "401":
           $ref: "./_components.yaml#/components/responses/Unauthorized"
 

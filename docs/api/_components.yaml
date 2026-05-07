@@ -189,27 +189,61 @@ components:
           type: string
           description: 次ページの cursor (base64url JSON)
 
+    ParticipantScoringInfo:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [flag, uptime]
+        points:
+          type: integer
+          description: Challenge (flag) で正解時の獲得点数
+        pointsPerSuccess:
+          type: integer
+          description: Battle (uptime) で 1 health check 成功あたりの加点
+        hints:
+          type: array
+          items: { type: string }
+          description: Challenge のヒント (operator が metadata.json で宣言)
+        flagSubmitted:
+          type: boolean
+          description: Challenge (flag) で正解 submit 済みなら true (重複加算防止)
+
     ParticipantView:
       type: object
-      required: [jobId, problemId, status, createdAt, expiresAt]
+      required: [jobId, problemId, region, status, stackOutputs, score, expiresAt, teamName, teamNameSetByCompetitor]
       properties:
         jobId: { type: string }
         problemId: { type: string }
-        teamName: { type: string }
-        displayTeamName: { type: string }
+        region: { type: string }
+        teamName:
+          type: string
+          description: 表示名 (競技者が PATCH /portal/me で設定済みならそれ、未設定なら operator が deploy 時に入力した内部 slug)
+        teamNameSetByCompetitor:
+          type: boolean
+          description: 競技者自身が表示名を設定済みなら true (= operator slug をそのまま使っていれば false)
         status: { $ref: "#/components/schemas/DeploymentStatus" }
-        score: { type: integer }
+        stackOutputs:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            CFn Outputs を object に展開したもの。`flagOutputKey` で指定された field は
+            **競技者に出さない** (= 当てる対象なので strip 済み)。
+        failureReason:
+          type: string
+          description: status=FAILED のときのみ含まれる
+        score:
+          type: integer
+          description: チームの累計点数
+        lastScoredAt:
+          type: string
+          format: date-time
+          description: 最後に scoring が走った時刻
         lastResult:
           type: string
           enum: [ok, fail]
           description: Battle (uptime) で最後の health check 結果
-        endpointsHealth:
-          type: object
-          description: |
-            endpoint ごとの直近 probe 結果。`{ [outputKey]: { ok, checkedAt, since? } }`。
-            `since` は ok=false が続いている開始時刻 (= 攻撃検知時刻)。
-        flagSubmitted:
-          type: boolean
-          description: Challenge (flag) で正解 submit 済みなら true
-        createdAt: { type: string, format: date-time }
+        scoring:
+          $ref: "#/components/schemas/ParticipantScoringInfo"
         expiresAt: { type: integer }

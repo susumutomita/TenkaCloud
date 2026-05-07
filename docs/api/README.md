@@ -49,7 +49,8 @@ Authorization: Bearer <teamLoginKey>
 - Tenant Admin が `POST /problems/:id/deploy` を呼んだときに **1 度だけ** レスポンスに含まれる
 - 競技者に hand-off (口頭 / 安全な手段で) する短命キー
 - DDB の TTL (`expiresAt`) で自動失効
-- key 自体を bearer にしているため、leak したらそのチームの状態が外部から見える
+- key 自体を bearer にしているため、leak すると **そのチームの状態が外部から閲覧されるだけでなく、
+  `POST /portal/me/submit-flag` で不正に flag を提出され勝手に加点される** リスクがある
 
 ## API ごとの実行権限 (最小権限の早見表)
 
