@@ -7,6 +7,7 @@ import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { PlaceholderPage } from "./pages/Placeholder";
 import { ScoreboardPage } from "./pages/Scoreboard";
+import { ScoreEventsPage } from "./pages/ScoreEvents";
 import { TeamSetupPage } from "./pages/TeamSetup";
 
 function RequireAuth({
@@ -51,14 +52,7 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/scoreboard" element={guarded(config, <ScoreboardPage config={config} />)} />
         <Route
           path="/score-events"
-          element={guarded(
-            config,
-            <PlaceholderPage
-              title="Score events"
-              description="自チーム + 全体の得点履歴"
-              comingSoon="scoring backend を別 PR で接続後、ここに時刻 / source / 説明 / points の履歴が表示されます。"
-            />,
-          )}
+          element={guarded(config, <ScoreEventsPage config={config} />)}
         />
         <Route
           path="/notifications"

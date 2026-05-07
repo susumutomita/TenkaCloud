@@ -1,6 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
+import { writeScoreEvent } from "../shared/score-event.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 export type SubmitFlagOutcome =
@@ -56,6 +57,7 @@ export async function submitFlag(
 
   // ConditionExpression で flagSubmitted=true への 2 重加算を防ぐ。レース勝者だけが
   // 加点される。
+  const now = new Date().toISOString();
   try {
     const updated = await shared.ddb.send(
       new UpdateCommand({
@@ -68,12 +70,38 @@ export async function submitFlag(
           ":pts": scoring.points,
           ":true": true,
           ":false": false,
-          ":now": new Date().toISOString(),
+          ":now": now,
         },
         ReturnValues: "ALL_NEW",
       }),
     );
     const totalScore = Number((updated.Attributes as { score?: unknown })?.score ?? scoring.points);
+
+    // 加点成功時のみ score event 行を append。失敗 (= already_scored の race) では
+    // 既存の event 行が記録済みなので二重に書かない。Put 失敗は best-effort で log。
+    if (item.jobId) {
+      try {
+        await writeScoreEvent(
+          shared.ddb,
+          shared.tableName,
+          {
+            jobId: item.jobId,
+            problemId: item.problemId,
+            teamId: item.teamId,
+            eventId: item.eventId,
+            expiresAt: item.expiresAt ?? 0,
+          },
+          "flag",
+          scoring.points,
+          now,
+        );
+      } catch (err) {
+        console.warn(`[submit-flag] score-event write failed jobId=${item.jobId}`, {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return { kind: "ok", scoreDelta: scoring.points, totalScore };
   } catch (err) {
     if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {

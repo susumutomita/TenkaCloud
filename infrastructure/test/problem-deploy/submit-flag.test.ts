@@ -112,7 +112,8 @@ describe("submitFlag", () => {
       "Hello from tc-hello-world-alpha",
     );
     expect(out).toEqual({ kind: "ok", scoreDelta: 100, totalScore: 100 });
-    expect(ddbSend).toHaveBeenCalledTimes(2);
+    // 1: GSI2 query, 2: UpdateItem(score), 3: PutItem(score event log)
+    expect(ddbSend).toHaveBeenCalledTimes(3);
     const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(updateCmd).toBeInstanceOf(UpdateCommand);
     expect(updateCmd.input.UpdateExpression).toContain("ADD score :pts");

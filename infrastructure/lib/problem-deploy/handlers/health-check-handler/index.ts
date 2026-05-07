@@ -9,6 +9,7 @@ import {
   type EndpointHealth,
   parseEndpointsHealth,
 } from "../shared/endpoints-health.js";
+import { writeScoreEvent } from "../shared/score-event.js";
 
 /**
  * EventBridge Scheduler `rate(1 minute)` で起動される Lambda。
@@ -81,6 +82,32 @@ async function checkOne(item: Partial<DeploymentItem>, scoring: UptimeScoring): 
   }
 
   await ddb.send(buildHealthUpdate(item.PK, allOk, scoring.pointsPerSuccess, now, newHealth));
+
+  // 全 endpoint OK のときだけ score event を書き込む。失敗イベントは現状 history に
+  // 残さない (= 加点ログのみ)。Put 失敗は best-effort として log に残す (= 採点は
+  // 既に確定しているので整合性より可用性優先)。
+  if (allOk && item.jobId && item.problemId) {
+    try {
+      await writeScoreEvent(
+        ddb,
+        tableName(),
+        {
+          jobId: item.jobId,
+          problemId: item.problemId,
+          teamId: item.teamId,
+          eventId: item.eventId,
+          expiresAt: item.expiresAt ?? 0,
+        },
+        "uptime",
+        scoring.pointsPerSuccess,
+        now,
+      );
+    } catch (err) {
+      console.warn(`[health-check] score-event write failed jobId=${item.jobId}`, {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }
 
 /** 成功 / 失敗で UpdateCommand の expression が分岐するが、Key と timestamp は共通。 */
