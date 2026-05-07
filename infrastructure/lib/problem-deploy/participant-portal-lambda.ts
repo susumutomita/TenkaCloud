@@ -51,6 +51,7 @@ export class ParticipantPortalLambda extends Construct {
               actions: ["dynamodb:Query"],
               resources: [
                 props.deploymentsTable.tableArn,
+                `${props.deploymentsTable.tableArn}/index/GSI1`,
                 `${props.deploymentsTable.tableArn}/index/GSI2`,
               ],
             }),

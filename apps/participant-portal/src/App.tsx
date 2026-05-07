@@ -6,6 +6,7 @@ import type { AppConfig } from "./config";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { PlaceholderPage } from "./pages/Placeholder";
+import { ScoreboardPage } from "./pages/Scoreboard";
 import { TeamSetupPage } from "./pages/TeamSetup";
 
 function RequireAuth({
@@ -47,17 +48,7 @@ export function App({ config }: { config: AppConfig }) {
           }
         />
         <Route path="/" element={guarded(config, <HomePage config={config} />)} />
-        <Route
-          path="/scoreboard"
-          element={guarded(
-            config,
-            <PlaceholderPage
-              title="Scoreboard"
-              description="リアルタイムのチーム順位"
-              comingSoon="scoring backend を別 PR で接続後、ここに rank / team / trend / score の表が表示されます。"
-            />,
-          )}
-        />
+        <Route path="/scoreboard" element={guarded(config, <ScoreboardPage config={config} />)} />
         <Route
           path="/score-events"
           element={guarded(
