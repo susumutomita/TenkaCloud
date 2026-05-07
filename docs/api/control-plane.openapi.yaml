@@ -1,0 +1,101 @@
+openapi: 3.1.0
+info:
+  title: TenkaCloud Control Plane API
+  version: 1.0.0-mvp1
+  summary: System Admin がテナント (= 主催者組織) を CRUD する API
+  description: |
+    `ControlPlaneStack` (= SBT `@cdklabs/sbt-aws` 0.3.9 の `ControlPlane` construct) が
+    払い出す REST API。System Admin (Cognito UserPool の `SystemAdmin` group) のみ
+    アクセス可。
+
+    本 API のレスポンスで作成された tenant は EventBridge `onboardingRequest` イベントを
+    発火し、`ServerlessSaaSPipeline` が tier に応じて pooled / silo の Application Plane
+    stack を deploy する。
+
+    エラー方針 / 認証の詳細は [`./README.md`](./README.md) を参照。
+servers:
+  - url: "{controlPlaneApiUrl}"
+    description: Control Plane API (per-deployment URL)
+    variables:
+      controlPlaneApiUrl:
+        default: https://example.execute-api.ap-northeast-1.amazonaws.com/prod
+
+tags:
+  - name: control-plane
+    description: System Admin がテナント (= 主催者組織) を CRUD する。
+
+security:
+  - cognitoSystemAdmin: []
+
+paths:
+  /tenants:
+    get:
+      tags: [control-plane]
+      summary: テナント一覧取得
+      responses:
+        "200":
+          description: テナント一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "./_components.yaml#/components/schemas/Tenant"
+    post:
+      tags: [control-plane]
+      summary: テナント作成
+      description: |
+        作成と同時に EventBridge `onboardingRequest` イベントが publish され、
+        BASIC / STANDARD / PREMIUM tier は pooled stack を共有、PLATINUM tier は
+        `ServerlessSaaSPipeline` が CodeBuild を起動して silo stack を deploy する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./_components.yaml#/components/schemas/CreateTenantRequest"
+      responses:
+        "200":
+          description: 作成完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "./_components.yaml#/components/schemas/Tenant"
+
+  /tenants/{tenantId}:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [control-plane]
+      summary: テナント詳細取得
+      responses:
+        "200":
+          description: テナント詳細
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/Tenant"
+    delete:
+      tags: [control-plane]
+      summary: テナント無効化 (soft delete)
+      description: |
+        SBT 0.3.9 の挙動として `isActive = false` にする (物理削除はしない)。
+        後続のリソース解放は別経路で行う想定。
+      responses:
+        "204":
+          description: 無効化完了
+
+components:
+  securitySchemes:
+    cognitoSystemAdmin:
+      $ref: "./_components.yaml#/components/securitySchemes/cognitoSystemAdmin"
