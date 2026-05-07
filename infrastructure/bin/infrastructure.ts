@@ -232,6 +232,7 @@ const tenantTemplateStack = new TenantTemplateStack(
     tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
     commitId,
     deployApiLambda: problemDeployBackendStack.deployApiLambda,
+    eventApiLambda: problemDeployBackendStack.eventApiLambda,
   },
 );
 

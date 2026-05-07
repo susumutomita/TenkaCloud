@@ -1,0 +1,163 @@
+import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createEvent,
+  DuplicateInternalSlugError,
+  DuplicateProblemIdError,
+} from "../../lib/problem-deploy/handlers/event-handler/create";
+import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import type { CreateEventRequest } from "../../lib/problem-deploy/handlers/event-handler/types";
+
+const NOW_MS = 1_700_000_000_000;
+
+function buildShared(): {
+  shared: EventSharedResources;
+  ddbSend: ReturnType<typeof vi.fn>;
+} {
+  const ddbSend = vi.fn();
+  const shared: EventSharedResources = {
+    eventsTableName: "TestEvents",
+    teamsTableName: "TestTeams",
+    ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
+  };
+  return { shared, ddbSend };
+}
+
+const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventRequest => ({
+  name: "JAWS-UG 春の陣 2026",
+  teams: [{ internalSlug: "team-alpha" }, { internalSlug: "team-beta" }],
+  problems: [
+    {
+      problemId: "hello-world-battle",
+      defaultAwsAccountId: "999999999999",
+      defaultRegion: "ap-northeast-1",
+    },
+  ],
+  ...over,
+});
+
+describe("createEvent", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("Event 1 行 + Teams N 行を 1 つの TransactWrite で書くべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({});
+
+    const out = await createEvent(
+      shared,
+      { tenantId: "tenant-acme", nowMs: NOW_MS },
+      sampleRequest(),
+    );
+
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+    const cmd = ddbSend.mock.calls[0]?.[0] as TransactWriteCommand;
+    expect(cmd).toBeInstanceOf(TransactWriteCommand);
+    const items = cmd.input.TransactItems ?? [];
+    // Events 1 + Teams 2 = 3 行
+    expect(items).toHaveLength(3);
+
+    // 1 件目は Event
+    const eventPut = items[0]?.Put;
+    expect(eventPut?.TableName).toBe("TestEvents");
+    expect(eventPut?.Item?.SK).toBe("META");
+    expect(eventPut?.Item?.tenantId).toBe("tenant-acme");
+    expect(eventPut?.Item?.status).toBe("DRAFT");
+    expect(eventPut?.Item?.teamCount).toBe(2);
+
+    // 2 件目以降は Teams
+    for (let i = 1; i <= 2; i++) {
+      const teamPut = items[i]?.Put;
+      expect(teamPut?.TableName).toBe("TestTeams");
+      expect(teamPut?.Item?.tenantId).toBe("tenant-acme");
+      expect(typeof teamPut?.Item?.teamLoginKey).toBe("string");
+      expect((teamPut?.Item?.teamLoginKey as string).length).toBeGreaterThan(20);
+    }
+
+    // 各 team の teamLoginKey が一意
+    const keys = items.slice(1).map((i) => i.Put?.Item?.teamLoginKey);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    // レスポンスに teamLoginKey が含まれる (1 度だけ露出)
+    expect(out.teams).toHaveLength(2);
+    expect(out.teams[0]?.teamLoginKey).toBeTruthy();
+    expect(out.eventId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(out.status).toBe("DRAFT");
+  });
+
+  it("teams の internalSlug 重複は DuplicateInternalSlugError を投げ TransactWrite を呼ばないべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    await expect(
+      createEvent(
+        shared,
+        { tenantId: "tenant-acme", nowMs: NOW_MS },
+        sampleRequest({
+          teams: [{ internalSlug: "dup" }, { internalSlug: "dup" }],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(DuplicateInternalSlugError);
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("problems の problemId 重複は DuplicateProblemIdError を投げ TransactWrite を呼ばないべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    await expect(
+      createEvent(
+        shared,
+        { tenantId: "tenant-acme", nowMs: NOW_MS },
+        sampleRequest({
+          problems: [
+            {
+              problemId: "p",
+              defaultAwsAccountId: "999999999999",
+              defaultRegion: "ap-northeast-1",
+            },
+            {
+              problemId: "p",
+              defaultAwsAccountId: "888888888888",
+              defaultRegion: "us-east-1",
+            },
+          ],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(DuplicateProblemIdError);
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("Teams Put には GSI1 (TENANT) と GSI2 (TEAMKEY) の attribute が必ず付くべき (sparse 失効に備えて)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({});
+
+    await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as TransactWriteCommand;
+    const teamItem = cmd.input.TransactItems?.[1]?.Put?.Item;
+    expect(teamItem?.GSI1PK).toBe("TENANT#tenant-acme");
+    expect(teamItem?.GSI1SK).toMatch(/^EVENT#[0-9A-HJKMNP-TV-Z]{26}#TEAM#[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(teamItem?.GSI2PK).toBe(`TEAMKEY#${teamItem?.teamLoginKey}`);
+    expect(teamItem?.GSI2SK).toBe("META");
+  });
+
+  it("Event Put には GSI1 (TENANT / createdAt) が付き、新しい順 query を可能にするべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({});
+
+    await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
+
+    const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
+      ?.Put?.Item;
+    expect(eventItem?.GSI1PK).toBe("TENANT#tenant-acme");
+    expect(eventItem?.GSI1SK).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("ConditionExpression で同一 PK の二重生成を防ぐべき (defense in depth)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({});
+
+    await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as TransactWriteCommand;
+    for (const item of cmd.input.TransactItems ?? []) {
+      expect(item.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
+    }
+  });
+});

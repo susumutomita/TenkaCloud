@@ -24,6 +24,11 @@ interface ApiGatewayProps {
    * `LambdaIntegration` で本 Lambda を invoke する。
    */
   deployApiLambda: IFunction;
+  /**
+   * `ProblemDeployBackendStack.eventApiLambda` のクロススタック参照 (ADR-004 Phase 1)。
+   * Event / Team CRUD routes が本 Lambda を invoke する。
+   */
+  eventApiLambda: IFunction;
   apiKeyBasicTier: CustomApiKey;
   apiKeyStandardTier: CustomApiKey;
   apiKeyPremiumTier: CustomApiKey;
@@ -77,5 +82,15 @@ export class ApiGateway extends Construct {
     const deployment = deployments.addResource("{jobId}");
     deployment.addMethod("GET", deployIntegration, deployMethodOptions);
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);
+
+    // ADR-004 Phase 1: /events — 1 競技イベント = 1 行で teams + problems を持つ
+    // /events             POST = create / GET = list
+    // /events/{eventId}   GET  = detail (teams + problems)
+    const eventIntegration = new LambdaIntegration(props.eventApiLambda);
+    const events = this.restApi.root.addResource("events");
+    events.addMethod("GET", eventIntegration, deployMethodOptions);
+    events.addMethod("POST", eventIntegration, deployMethodOptions);
+    const event = events.addResource("{eventId}");
+    event.addMethod("GET", eventIntegration, deployMethodOptions);
   }
 }

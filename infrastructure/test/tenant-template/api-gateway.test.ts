@@ -22,6 +22,11 @@ function buildHarness() {
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
+  const eventFn = new LambdaFunction(stack, "EventApi", {
+    runtime: Runtime.NODEJS_20_X,
+    code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
+    handler: "index.handler",
+  });
   const apiKey: CustomApiKey = {
     id: "key-id",
     apiKey: { keyId: "k", keyArn: "arn:aws:apigateway:::/apikeys/k", keyName: "k" },
@@ -42,6 +47,7 @@ function buildHarness() {
     },
     userPool,
     deployApiLambda: fn,
+    eventApiLambda: eventFn,
     apiKeyBasicTier: apiKey,
     apiKeyStandardTier: apiKey,
     apiKeyPremiumTier: apiKey,

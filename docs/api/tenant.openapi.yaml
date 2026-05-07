@@ -23,6 +23,8 @@ servers:
 tags:
   - name: tenant
     description: Tenant Admin 用。問題 deploy の起動 / 状態管理。
+  - name: events
+    description: ADR-004 Phase 1。1 競技イベント = 1 行で teams + problems を持つ。
   - name: meta
     description: ヘルスチェック等。
 
@@ -190,6 +192,78 @@ paths:
             application/json:
               schema:
                 $ref: "./_components.yaml#/components/schemas/ErrorResponse"
+
+  /events:
+    get:
+      tags: [events]
+      summary: tenant の Event 一覧 (新しい順)
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event 一覧
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/EventListResponse"
+    post:
+      tags: [events]
+      summary: 競技イベントを作成 (Event + Teams を原子的に書く)
+      description: |
+        Event 1 行 + Teams N 行を **DDB TransactWrite で原子的に書く**。レスポンスに含まれる
+        `teams[].teamLoginKey` は **この経路でしか露出しない短命キー**。Tenant Admin が
+        競技者に hand-off する。
+
+        制約:
+        - `teams.length` は 1〜100 (TransactWrite items 上限の 100 から event 1 行を引く)
+        - `problems.length` は 1〜50
+        - `teams[].internalSlug` 重複は `400 duplicate_internal_slug`
+        - `problems[].problemId` 重複は `400 duplicate_problem_id`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./_components.yaml#/components/schemas/CreateEventRequest"
+      responses:
+        "201":
+          description: 作成完了 (teamLoginKey はこの経路でしか露出しない)
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/CreateEventResponse"
+        "400":
+          $ref: "./_components.yaml#/components/responses/ValidationError"
+
+  /events/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9A-HJKMNP-TV-Z]{26}$"
+          description: ULID
+    get:
+      tags: [events]
+      summary: Event 詳細 (Event + Teams + Problems を返す)
+      description: |
+        詳細経路では `teams[].teamLoginKey` を **再露出する** (operator が hand-off で
+        紛失した場合の再取得用)。一覧経路 (`GET /events`) では露出しない。
+      responses:
+        "200":
+          description: Event 詳細
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/EventDetail"
+        "404":
+          $ref: "./_components.yaml#/components/responses/NotFound"
 
 components:
   securitySchemes:

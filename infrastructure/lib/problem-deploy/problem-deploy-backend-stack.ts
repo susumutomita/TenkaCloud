@@ -10,6 +10,8 @@ import { DeployCreateStateMachine } from "./deploy-create-state-machine";
 import { DeployDeleteStateMachine } from "./deploy-delete-state-machine";
 import { DeployDeleteEventRule, DeployEventRule } from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
+import { EventApiLambda } from "./event-api-lambda";
+import { EventsTable } from "./events-table";
 import { HealthCheckLambda } from "./health-check-lambda";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
@@ -17,6 +19,7 @@ import {
   type ParticipantPortalRuntimeConfig,
 } from "./participant-portal-hosting";
 import { ParticipantPortalLambda } from "./participant-portal-lambda";
+import { TeamsTable } from "./teams-table";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   /** SBT ControlPlane の EventBus ARN。Deploy 系イベントを流す。 */
@@ -71,11 +74,19 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
 export class ProblemDeployBackendStack extends cdk.Stack {
   /** tenant API から `LambdaIntegration` で invoke される Lambda。 */
   public readonly deployApiLambda: IFunction;
+  /**
+   * Event / Team CRUD 用の Lambda (ADR-004 Phase 1)。tenant API から invoke される。
+   */
+  public readonly eventApiLambda: IFunction;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
 
     const deployments = new DeploymentsTable(this, "Deployments");
+    // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
+    // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
+    const events = new EventsTable(this, "Events");
+    const teams = new TeamsTable(this, "Teams");
     const eventBus = EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn);
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
@@ -86,6 +97,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsCatalog: props.problemsCatalog,
     });
     this.deployApiLambda = deployApi.fn;
+
+    // ADR-004 Phase 1: Event / Team CRUD Lambda。tenant API から invoke される。
+    const eventApi = new EventApiLambda(this, "EventApi", {
+      eventsTable: events.table,
+      teamsTable: teams.table,
+      defaultTenantId: props.defaultTenantId,
+    });
+    this.eventApiLambda = eventApi.fn;
 
     // CodeBuild Project: source.zip から `scripts/deploy-battles.sh` を実行する。
     const sourceBucket = Bucket.fromBucketName(this, "SourceBucket", props.sourceBucketName);
@@ -155,6 +174,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     new CfnOutput(this, "DeploymentsTableName", {
       value: deployments.table.tableName,
       description: "Deploy ジョブを記録する DynamoDB テーブル名。",
+    });
+    new CfnOutput(this, "EventsTableName", {
+      value: events.table.tableName,
+      description: "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
+    });
+    new CfnOutput(this, "TeamsTableName", {
+      value: teams.table.tableName,
+      description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
     });
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: stateMachine.stateMachine.stateMachineArn,
