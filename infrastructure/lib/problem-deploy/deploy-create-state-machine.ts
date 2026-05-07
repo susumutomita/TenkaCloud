@@ -58,6 +58,21 @@ export class DeployCreateStateMachine extends Construct {
       retention: RetentionDays.ONE_WEEK,
     });
 
+    // PENDING (deploy.ts が初期 row を書く時の値) を IN_PROGRESS に倒す。CodeBuild の
+    // RUN_JOB は同期で 5〜15 分待つので、この中間遷移が無いと operator UI は polling
+    // しても PENDING のまま固定で「動いていない」ように見える (実際は deploy 進行中)。
+    const markInProgress = new DynamoUpdateItem(this, "MarkInProgress", {
+      table: props.deploymentsTable,
+      key: deploymentKey(),
+      updateExpression: "SET #status = :status, updatedAt = :updatedAt",
+      expressionAttributeNames: { "#status": "status" },
+      expressionAttributeValues: {
+        ":status": DynamoAttributeValue.fromString("IN_PROGRESS"),
+        ":updatedAt": stateEnteredTime(),
+      },
+      resultPath: JsonPath.DISCARD,
+    });
+
     const startCodeBuild = new CodeBuildStartBuild(this, "StartDeployCodeBuild", {
       project: props.codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
@@ -89,15 +104,17 @@ export class DeployCreateStateMachine extends Construct {
     const markSucceeded = this.buildMarkSucceeded(props.deploymentsTable);
     const markFailed = this.buildMarkFailed(props.deploymentsTable);
 
-    // CodeBuild 失敗 / DescribeStacks 失敗、いずれも MarkFailed (= status=FAILED) に倒す。
-    // DescribeStacks は基本失敗しないが、稀な throttle / 競技者 account 側の Roles で
+    // MarkInProgress / CodeBuild / DescribeStacks のいずれの失敗も MarkFailed (= status=FAILED)
+    // に倒す。MarkInProgress は DDB throttle くらいでしか落ちないが落とし穴を残さないため
+    // catch を付ける。DescribeStacks も稀な throttle / 競技者 account 側 Role の問題で
     // 落ちうる。その場合 stackOutputs 不在のまま FAILED にして operator が再試行する。
+    markInProgress.addCatch(markFailed, { resultPath: "$.error" });
     startCodeBuild.addCatch(markFailed, { resultPath: "$.error" });
     describeStacks.addCatch(markFailed, { resultPath: "$.error" });
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
       definitionBody: DefinitionBody.fromChainable(
-        startCodeBuild.next(describeStacks).next(markSucceeded),
+        markInProgress.next(startCodeBuild).next(describeStacks).next(markSucceeded),
       ),
       timeout: Duration.minutes(60),
       logs: { destination: logGroup, level: LogLevel.ALL },
