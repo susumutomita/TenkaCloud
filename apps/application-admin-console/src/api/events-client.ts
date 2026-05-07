@@ -19,6 +19,8 @@ export interface EventSummary {
   createdAt: string;
   updatedAt: string;
   expiresAt: number;
+  /** 競技開始時刻 (ISO8601, UTC)。未設定なら HealthCheck は採点しない (= deploy 直後の誤加算防止)。 */
+  startsAt?: string;
 }
 
 export interface EventListResponse {
@@ -96,4 +98,21 @@ export async function bulkDeployEvent(api: ApiClient, eventId: string): Promise<
 
 export async function bulkTeardownEvent(api: ApiClient, eventId: string): Promise<BulkResult> {
   return api.delJson<BulkResult>(`events/${encodeURIComponent(eventId)}`);
+}
+
+export interface SetScheduleResult {
+  startsAt: string;
+  updatedDeployments: number;
+}
+
+/**
+ * 競技開始時刻を設定する。`{ startsAt }` で日時指定、`{ startNow: true }` で server now 採用。
+ * Event + 紐づく全 deployment 行に伝播する (eventStartsAt の denormalize)。
+ */
+export async function setEventSchedule(
+  api: ApiClient,
+  eventId: string,
+  body: { startsAt: string } | { startNow: true },
+): Promise<SetScheduleResult> {
+  return api.patch<SetScheduleResult>(`events/${encodeURIComponent(eventId)}/schedule`, body);
 }

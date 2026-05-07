@@ -1,7 +1,8 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 
 /**
@@ -33,4 +34,37 @@ export function buildEventSharedResources(): EventSharedResources {
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
   };
+}
+
+/**
+ * Deployments table から指定 event の全行を取得する共通 helper。
+ *
+ * 内部的に GSI1 (TENANT#<tenantId>) を query し、`FilterExpression` で eventId 一致だけ
+ * を返す。Filter は post-read のため RCU は変わらないが、ネットワーク転送 + Lambda 内
+ * 処理量は削減できる (= ~750 行規模で意味のある差)。
+ *
+ * Phase 3+ で eventId 専用 GSI に切り替えれば 1 query で済むが、現状は単一 tenant 内
+ * 全 deployment が <100 程度の運用想定で十分。Phase 2a の bulk-delete から、Phase 2c
+ * 経由の schedule (eventStartsAt 伝播) まで同じ query が必要なので 1 箇所に集約。
+ */
+export async function queryDeploymentsByEvent(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  projectionExpression?: string,
+): Promise<Partial<DeploymentItem>[]> {
+  const out = await shared.ddb.send(
+    new QueryCommand({
+      TableName: shared.deploymentsTableName,
+      IndexName: "GSI1",
+      KeyConditionExpression: "GSI1PK = :pk",
+      FilterExpression: "eventId = :ev",
+      ExpressionAttributeValues: {
+        ":pk": `TENANT#${tenantId}`,
+        ":ev": eventId,
+      },
+      ...(projectionExpression ? { ProjectionExpression: projectionExpression } : {}),
+    }),
+  );
+  return (out.Items ?? []) as Partial<DeploymentItem>[];
 }

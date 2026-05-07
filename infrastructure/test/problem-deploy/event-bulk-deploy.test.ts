@@ -1,5 +1,10 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { GetCommand, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  GetCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bulkDeployEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
@@ -189,5 +194,57 @@ describe("bulkDeployEvent", () => {
     for (const item of transactCmd.input.TransactItems ?? []) {
       expect(item.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
     }
+  });
+
+  it("Event.startsAt を deployment 行に eventStartsAt として denormalize するべき", async () => {
+    // operator が Bulk Deploy 前に schedule 済 (startsAt 設定済) だった場合、
+    // 新規 deployment 行が gate 値を持って作られるシナリオ。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleEvent({ startsAt: "2026-05-08T10:00:00.000Z" }),
+    });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    const transactCmd = ddbSend.mock.calls[2]?.[0] as TransactWriteCommand;
+    for (const item of transactCmd.input.TransactItems ?? []) {
+      expect(item.Put?.Item?.eventStartsAt).toBe("2026-05-08T10:00:00.000Z");
+    }
+  });
+
+  it("Event.startsAt 未設定の場合は eventStartsAt も undefined (採点 gate に倒す)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // startsAt 無し
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    const transactCmd = ddbSend.mock.calls[2]?.[0] as TransactWriteCommand;
+    for (const item of transactCmd.input.TransactItems ?? []) {
+      expect(item.Put?.Item?.eventStartsAt).toBeUndefined();
+    }
+  });
+
+  it("成功後に Event status を DRAFT → DEPLOYING に倒すべき (status badge 視認用)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    const updateCmds = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is UpdateCommand => c instanceof UpdateCommand);
+    expect(updateCmds).toHaveLength(1);
+    const cmd = updateCmds[0] as UpdateCommand;
+    expect(cmd.input.UpdateExpression).toContain("#status = :deploying");
+    expect(cmd.input.ExpressionAttributeValues?.[":deploying"]).toBe("DEPLOYING");
+    // TEARDOWN/ARCHIVED は触らない (ConditionExpression で DRAFT/READY/DEPLOYING のみ許可)
+    expect(cmd.input.ExpressionAttributeValues?.[":draft"]).toBe("DRAFT");
+    expect(cmd.input.ExpressionAttributeValues).not.toHaveProperty(":teardown");
   });
 });

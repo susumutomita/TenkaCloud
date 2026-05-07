@@ -43,6 +43,7 @@ function toSummary(item: Partial<EventItem>): EventSummary {
     createdAt: String(item.createdAt ?? ""),
     updatedAt: String(item.updatedAt ?? ""),
     expiresAt: Number(item.expiresAt ?? 0),
+    startsAt: typeof item.startsAt === "string" ? item.startsAt : undefined,
   };
 }
 

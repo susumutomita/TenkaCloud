@@ -1,12 +1,12 @@
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentStatus } from "../deploy-handler/types.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   EVENT_SOURCE,
 } from "../shared/events.js";
-import type { EventSharedResources } from "./shared.js";
+import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
 import type { EventItem } from "./types.js";
 
 export interface BulkTeardownResult {
@@ -51,19 +51,7 @@ export async function bulkTeardownEvent(
   const event = eventOut.Item as Partial<EventItem> | undefined;
   if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
 
-  // Phase 3+ で eventId 専用 GSI に切り替えれば 1 query で済むが、Phase 2a は
-  // tenant 全体を取って in-memory フィルタする。750 行規模で 1 query / 750 RCU。
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.deploymentsTableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-    }),
-  );
-  const targets = ((out.Items ?? []) as Partial<DeploymentItem>[]).filter(
-    (i) => i.eventId === eventId,
-  );
+  const targets = await queryDeploymentsByEvent(shared, tenantId, eventId);
   if (targets.length === 0) {
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
   }

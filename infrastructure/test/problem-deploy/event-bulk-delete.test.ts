@@ -1,5 +1,5 @@
 import type { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { GetCommand, type QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bulkTeardownEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-delete";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
@@ -52,11 +52,11 @@ describe("bulkTeardownEvent", () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // Get(Event)
     ddbSend.mockResolvedValueOnce({
-      // Query(Deployments) — tenant 全件
+      // Query(Deployments) — server-side FilterExpression が EV1 のみ返す
+      // (OTHER event は DDB が事前に除外、test mock は事後の状態を再現)
       Items: [
         dep({ jobId: "01A", namePrefix: "tc-p-t1" }),
         dep({ jobId: "01B", namePrefix: "tc-p-t2", eventId: "EV1" }),
-        dep({ jobId: "01C", namePrefix: "tc-q-t1", eventId: "OTHER" }),
       ],
     });
     ddbSend.mockResolvedValue({}); // 並列 Update * 2
@@ -67,6 +67,13 @@ describe("bulkTeardownEvent", () => {
       kind: "ok",
       result: { eventId: "EV1", enqueued: 2, skipped: 0 },
     });
+
+    // Query が FilterExpression で eventId 一致を要求し、cross-event 漏洩を防ぐ
+    const queryCmds = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is QueryCommand => c instanceof QueryCommand);
+    expect(queryCmds[0]?.input.FilterExpression).toBe("eventId = :ev");
+    expect(queryCmds[0]?.input.ExpressionAttributeValues?.[":ev"]).toBe("EV1");
 
     const updateCmds = ddbSend.mock.calls
       .map((c) => c[0])

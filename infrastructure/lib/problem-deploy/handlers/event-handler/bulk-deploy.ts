@@ -4,6 +4,7 @@ import {
   QueryCommand,
   TransactWriteCommand,
   type TransactWriteCommandInput,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { buildStackPrefix, slugify } from "../deploy-handler/naming.js";
@@ -83,6 +84,9 @@ export async function bulkDeployEvent(
 
   const createdAt = new Date(nowMs).toISOString();
   const expiresAt = toEpochSeconds(nowMs + DEFAULT_TTL_MS);
+  // Event.startsAt が未設定 = 競技開始時刻が決まっていないので採点開始しない gate に倒す。
+  // operator は EventDetail の「日時を設定」or「即座に開始」で後から有効化できる。
+  const eventStartsAt = typeof event.startsAt === "string" ? event.startsAt : undefined;
 
   // teams × problems を全展開し、deployment 行 + publish entry を組み立てる。
   // shared.problemsCatalog (problemId → problemDir) に存在しない problemId は skip。
@@ -120,6 +124,7 @@ export async function bulkDeployEvent(
         expiresAt,
         eventId,
         teamId: team.teamId,
+        eventStartsAt,
       };
       items.push(item);
 
@@ -173,7 +178,34 @@ export async function bulkDeployEvent(
     const chunk = entries.slice(i, i + PUT_EVENTS_BATCH);
     putChunks.push(shared.events.send(new PutEventsCommand({ Entries: chunk })));
   }
-  await Promise.all(putChunks);
+
+  // Event status を DRAFT → DEPLOYING に倒す。operator が EventDetail の status badge で
+  // 「Bulk Deploy が走っている」ことを視認できるようにするため。
+  // ConditionExpression で他 status (TEARDOWN 等) を踏み越えない安全弁。CCF は
+  // 既に TEARDOWN/ARCHIVED 等の終端状態 → 触らないだけで成功扱い。
+  // PutEvents と並列実行 (互いに依存なし、書き込み先が別 service なのでラウンドトリップ節約)。
+  const updateStatus = shared.ddb
+    .send(
+      new UpdateCommand({
+        TableName: shared.eventsTableName,
+        Key: { PK: `EVENT#${eventId}`, SK: "META" },
+        UpdateExpression: "SET #status = :deploying, updatedAt = :now",
+        ConditionExpression: "#status = :draft OR #status = :ready OR #status = :deploying",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":deploying": "DEPLOYING",
+          ":draft": "DRAFT",
+          ":ready": "READY",
+          ":now": createdAt,
+        },
+      }),
+    )
+    .catch((err: unknown) => {
+      if (err instanceof Error && err.name !== "ConditionalCheckFailedException") {
+        throw err;
+      }
+    });
+  await Promise.all([...putChunks, updateStatus]);
 
   return { kind: "ok", result: { eventId, enqueued: items.length, skipped } };
 }

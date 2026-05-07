@@ -11,7 +11,7 @@ import {
 
 interface CapturedCall {
   path: string;
-  method: "GET" | "POST" | "DELETE";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
 }
 
@@ -24,6 +24,10 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
     }),
     post: vi.fn().mockImplementation((path: string, body: unknown) => {
       calls.push({ path, method: "POST", body });
+      return Promise.resolve(response);
+    }),
+    patch: vi.fn().mockImplementation((path: string, body: unknown) => {
+      calls.push({ path, method: "PATCH", body });
       return Promise.resolve(response);
     }),
     del: vi.fn().mockImplementation((path: string) => {
