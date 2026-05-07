@@ -69,7 +69,7 @@ export function App({ config }: { config: AppConfig }) {
         />
         <Route path="/problems" element={guarded(config, <QuestsPage config={config} />)} />
         <Route
-          path="/problems/:problemId"
+          path="/problems/:jobId"
           element={guarded(config, <ProblemDetailPage config={config} />)}
         />
         <Route
