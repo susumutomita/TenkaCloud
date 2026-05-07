@@ -185,11 +185,62 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       )}
 
       {detail && (
+        <Container header={<Header variant="h2">参加者向け配布</Header>}>
+          <SpaceBetween size="m">
+            {config.participantPortalUrl ? (
+              <ColumnLayout columns={2} variant="text-grid">
+                <Box>
+                  <Box variant="awsui-key-label">Participant Portal URL</Box>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <a href={config.participantPortalUrl} target="_blank" rel="noreferrer noopener">
+                      <code>{config.participantPortalUrl}</code>
+                    </a>
+                    <Button
+                      iconName="copy"
+                      ariaLabel="Portal URL をコピー"
+                      onClick={() =>
+                        void navigator.clipboard?.writeText(config.participantPortalUrl ?? "")
+                      }
+                    >
+                      コピー
+                    </Button>
+                  </SpaceBetween>
+                </Box>
+                <Box>
+                  <Box variant="awsui-key-label">配布手順</Box>
+                  <Box variant="small">
+                    1. 下のチーム表から各 team の <code>teamLoginKey</code> をコピー
+                    <br />
+                    2. 上の Portal URL と一緒に各チームへ共有
+                    <br />
+                    3. <strong>Bulk Deploy</strong> で全チームの問題環境を起動 (Status が READY
+                    になったら競技開始)
+                    <br />
+                    4. 終了後は <strong>Bulk Teardown</strong> で全環境を一括削除
+                  </Box>
+                </Box>
+              </ColumnLayout>
+            ) : (
+              <Alert type="info" header="Participant Portal URL 未注入">
+                runtime-config.json に <code>participantPortalUrl</code> が無いため URL を表示
+                できません。ProblemDeployBackendStack の <code>ParticipantPortalUrl</code> Output を
+                application-admin-console hosting に注入する CDK 改修が必要です。 URL は{" "}
+                <code>
+                  aws cloudformation describe-stacks --stack-name tenkacloud-problem-deploy
+                </code>{" "}
+                で取得できます。
+              </Alert>
+            )}
+          </SpaceBetween>
+        </Container>
+      )}
+
+      {detail && (
         <Container
           header={
             <Header
               variant="h2"
-              description="teamLoginKey は作成完了時に 1 度だけ表示されたキーです。再表示はできません。"
+              description="teamLoginKey は競技者に配布する Bearer 認証キーです。漏洩した場合は該当チームの環境を再 deploy してキーを更新してください。"
             >
               チーム ({detail.teams.length})
             </Header>

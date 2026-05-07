@@ -17,7 +17,7 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/lookup", () => ({
 
 const { app } = await import("../../lib/problem-deploy/handlers/participant-handler/index");
 
-const VALID_KEY = "AbCdEfGhIjKlMnOpQrStUvWx"; // 24 文字 base64url
+const VALID_KEY = "AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQ"; // 43 文字 base64url
 
 describe("GET /portal/healthz", () => {
   it("ok: true を返すべき (auth 不要)", async () => {
