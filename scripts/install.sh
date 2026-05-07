@@ -96,6 +96,14 @@ find "${STAGING}" -name ".DS_Store" -delete
 mkdir -p "${STAGING}/apps/application-admin-console"
 cp -R "${TenkaCloud_ROOT}/apps/application-admin-console/dist" "${STAGING}/apps/application-admin-console/"
 
+# participant-portal も dist を staging に置く。現状 ProblemDeployBackendStack は
+# host 環境 (phase 1) でしか deploy されないので、host の `apps/participant-portal/dist`
+# 直参照で動く。が、将来 CodeBuild から再 deploy する経路を増やしたとき、source.zip 内に
+# dist が無いと Source.asset が解決できず失敗する。application-admin-console と同じ流儀
+# で予め staging に同梱して将来リスクを抑える (claude-review PR 475 の指摘)。
+mkdir -p "${STAGING}/apps/participant-portal"
+cp -R "${TenkaCloud_ROOT}/apps/participant-portal/dist" "${STAGING}/apps/participant-portal/"
+
 cd "${STAGING}"
 zip -rq "${CDK_SOURCE_NAME}" .
 export CDK_PARAM_COMMIT_ID=$(aws s3api put-object --bucket "${CDK_PARAM_S3_BUCKET_NAME}" --key "source.zip" --body "./${CDK_SOURCE_NAME}" --output text)
