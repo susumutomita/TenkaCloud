@@ -141,6 +141,49 @@ export async function updateTeamName(
 }
 
 /**
+ * Phase 3: Event scope の team ランキング (= Scoreboard)。
+ * 同じ event 内の全 team を score 降順 + 同点は teamName 昇順で並べた配列を返す。
+ */
+export interface LeaderboardEntry {
+  readonly rank: number;
+  readonly teamId: string;
+  readonly teamName: string;
+  readonly score: number;
+  readonly completedProblems: number;
+  readonly totalProblems: number;
+  /** requester 自身のチームなら true (UI ハイライト用)。 */
+  readonly isMyTeam: boolean;
+}
+
+export interface LeaderboardResponse {
+  readonly eventId: string;
+  readonly entries: readonly LeaderboardEntry[];
+}
+
+/**
+ * `GET /portal/leaderboard` を `Authorization: Bearer <teamLoginKey>` で呼ぶ。
+ * 旧 jobId-based deployment で eventId が無い場合は 404 → undefined を返す。
+ */
+export async function getLeaderboard(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  signal?: AbortSignal,
+): Promise<LeaderboardResponse | undefined> {
+  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/leaderboard"), {
+    method: "GET",
+    headers: { authorization: `Bearer ${teamLoginKey}` },
+    signal,
+  });
+  if (res.status === 401) throw new PortalAuthError();
+  if (res.status === 404) return undefined;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new PortalNetworkError(res.status, body);
+  }
+  return (await res.json()) as LeaderboardResponse;
+}
+
+/**
  * Phase 2c: Flag 提出は `problemId` 必須に。`POST /portal/me/submit-flag { problemId, flag }`。
  */
 export async function submitFlag(

@@ -5,10 +5,12 @@ import { PROBLEM_ID_RE } from "../shared/constants.js";
 import {
   HTTP_BAD_REQUEST,
   HTTP_INTERNAL_ERROR,
+  HTTP_NOT_FOUND,
   HTTP_OK,
   HTTP_UNAUTHORIZED,
 } from "../shared/http-status.js";
 import { extractBearerToken } from "./auth.js";
+import { getLeaderboard } from "./leaderboard.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
 import { buildParticipantSharedResources } from "./shared.js";
 import { submitFlag } from "./submit-flag.js";
@@ -17,6 +19,7 @@ import { setDisplayTeamName } from "./update.js";
 /**
  * Participant Portal backend Lambda の Hono app (Phase 2c で team scope)。routes:
  *   GET   /portal/healthz
+ *   GET   /portal/leaderboard       — event scope の team ランキング
  *   GET   /portal/me                — Authorization: Bearer <teamLoginKey>
  *                                     → { team, problems[] }
  *   PATCH /portal/me                — body: { teamName: string } (team の全行を update)
@@ -40,6 +43,26 @@ app.get("/portal/me", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[portal] lookup failed", { message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.get("/portal/leaderboard", async (c) => {
+  const token = extractBearerToken(c.req.header("authorization"));
+  if (!token) return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
+  try {
+    const outcome = await getLeaderboard(shared, token);
+    if (outcome.kind === "unauthorized") {
+      return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
+    }
+    if (outcome.kind === "no_event") {
+      // Phase 1 以前 / 旧 jobId-based deployment は event scope の leaderboard 不可
+      return c.json({ error: "no_event" }, HTTP_NOT_FOUND);
+    }
+    return c.json(outcome.response, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[portal] leaderboard failed", { message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });
