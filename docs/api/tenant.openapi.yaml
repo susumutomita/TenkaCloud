@@ -1,0 +1,197 @@
+openapi: 3.1.0
+info:
+  title: TenkaCloud Tenant API
+  version: 1.0.0-mvp1
+  summary: Tenant Admin が問題を競技者アカウントへ deploy / 削除 / 一覧する API
+  description: |
+    `TenantTemplateStack` に 1 tenant に 1 つ立つ REST API。Cognito (per-tenant
+    UserPool) で認可。Tenant Admin が「問題カタログ → 競技アカウントへデプロイ」を
+    起動する経路。
+
+    deploy / delete はいずれも非同期 (Lambda → EventBridge → Step Functions →
+    CodeBuild → CloudFormation)。詳細は [`./README.md`](./README.md) のライフサイクル節
+    を参照。
+
+    エラー方針 / 認証の詳細も [`./README.md`](./README.md) を参照。
+servers:
+  - url: "{tenantApiUrl}"
+    description: Tenant API (per-tenant URL, runtime-config.json 経由)
+    variables:
+      tenantApiUrl:
+        default: https://example.execute-api.ap-northeast-1.amazonaws.com/prod
+
+tags:
+  - name: tenant
+    description: Tenant Admin 用。問題 deploy の起動 / 状態管理。
+  - name: meta
+    description: ヘルスチェック等。
+
+security:
+  - cognitoTenantAdmin: []
+
+paths:
+  /healthz:
+    get:
+      tags: [meta]
+      summary: Tenant API Lambda の生存確認
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /problems/{problemId}/deploy:
+    parameters:
+      - name: problemId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    post:
+      tags: [tenant]
+      summary: 問題を競技者アカウントへデプロイ
+      description: |
+        deploy job を 1 件作成し、EventBridge `DeployCreateRequested` event を publish する。
+        実際の deploy は `DeployCreateStateMachine` が CodeBuild Project (= `scripts/deploy-battles.sh`)
+        を起動して非同期に実行される。
+
+        レスポンスの `teamLoginKey` は **この経路でしか露出しない短命キー**。Tenant Admin が
+        競技者に hand-off する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./_components.yaml#/components/schemas/DeployRequest"
+      responses:
+        "202":
+          description: 受付完了 (実 deploy は非同期)
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/DeployResponse"
+        "400":
+          $ref: "./_components.yaml#/components/responses/ValidationError"
+        "404":
+          description: 未知の problemId
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/ErrorResponse"
+
+  /problems/{problemId}/deployments:
+    parameters:
+      - name: problemId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      - name: cursor
+        in: query
+        schema: { type: string }
+    get:
+      tags: [tenant]
+      summary: 指定問題の deploy ジョブ一覧
+      responses:
+        "200":
+          description: deploy ジョブ一覧
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/DeploymentListResponse"
+
+  /deployments:
+    get:
+      tags: [tenant]
+      summary: tenant 全体の deploy ジョブ一覧 (新しい順)
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: deploy ジョブ一覧
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/DeploymentListResponse"
+
+  /deployments/{jobId}:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9A-HJKMNP-TV-Z]{26}$"
+          description: ULID
+    get:
+      tags: [tenant]
+      summary: deploy ジョブ詳細
+      description: 詳細取得経路では `teamLoginKey` を含む (一覧経路では露出しない)。
+      responses:
+        "200":
+          description: deploy ジョブ
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/DeploymentDetail"
+        "404":
+          $ref: "./_components.yaml#/components/responses/NotFound"
+    delete:
+      tags: [tenant]
+      summary: deploy ジョブを削除 (CFn DeleteStack 起動)
+      description: |
+        `DELETING` に status を上げ、EventBridge `DeployDeleteRequested` event を
+        publish する。`DeployDeleteStateMachine` が CodeBuild Project (`OPERATION=delete`)
+        で `scripts/delete-battles.sh` を実行し、同一 account の CFn DeleteStack を
+        非同期に発火する。完了で status は `DELETED`、失敗で `FAILED` になる。
+      responses:
+        "202":
+          description: 受付完了 (実 削除は非同期)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [accepted]
+                  previousStatus:
+                    $ref: "./_components.yaml#/components/schemas/DeploymentStatus"
+        "200":
+          description: 既に削除中 / 削除済み (no-op)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [already_deleted]
+        "404":
+          $ref: "./_components.yaml#/components/responses/NotFound"
+        "409":
+          description: 並行更新による race
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    cognitoTenantAdmin:
+      $ref: "./_components.yaml#/components/securitySchemes/cognitoTenantAdmin"

@@ -1,0 +1,249 @@
+# 3 サーフェス共通の schema / securityScheme / responses。
+# control-plane.openapi.yaml / tenant.openapi.yaml / participant.openapi.yaml から
+# `$ref: "./_components.yaml#/components/..."` で参照する。
+#
+# このファイルは単独 spec ではない (paths を持たない) ので、Redoc / Swagger UI で
+# 直接 render しない。
+openapi: 3.1.0
+info:
+  title: TenkaCloud API — Shared Components
+  version: 1.0.0-mvp1
+  description: |
+    3 サーフェス (Control Plane / Tenant / Participant) で共有する schema 定義。
+    paths は持たない。
+paths: {}
+
+components:
+  securitySchemes:
+    cognitoSystemAdmin:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito ID Token (`SystemAdmin` group)
+    cognitoTenantAdmin:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito ID Token (`TenantAdmin` custom claim 含む)
+    teamLoginKey:
+      type: http
+      scheme: bearer
+      description: Tenant Admin が deploy 時に発行した短命チーム共有キー
+
+  responses:
+    ValidationError:
+      description: Zod validation 失敗
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "validation failed"
+              issues:
+                type: array
+                items: { type: object }
+    NotFound:
+      description: 行が無い、または tenantId mismatch (存在を漏らさないため 404)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: bearer token 無効 / 期限切れ
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Tier:
+      type: string
+      enum: [basic, advanced, platinum]
+      description: |
+        SaaS tier。`platinum` だけが silo stack (per-tenant CDK deploy)。
+        他は pooled stack を共有する。
+
+    Tenant:
+      type: object
+      required: [tenantId, tenantName, email, tier, tenantStatus]
+      properties:
+        tenantId: { type: string }
+        tenantName: { type: string }
+        email: { type: string, format: email }
+        tier: { $ref: "#/components/schemas/Tier" }
+        tenantStatus:
+          type: string
+          description: '"In progress" | "Complete" | "Deleted" など SBT 由来の文字列'
+        isActive: { type: boolean }
+        tenantConfig:
+          type: string
+          description: |
+            provision-tenant.sh が CFn outputs を JSON 文字列として書き戻す。
+            `{userPoolId, appClientId, apiGatewayUrl, applicationAdminConsoleUrl, ...}`
+        createdAt: { type: string, format: date-time }
+
+    CreateTenantRequest:
+      type: object
+      required: [tenantName, email, tier]
+      properties:
+        tenantName: { type: string }
+        email: { type: string, format: email }
+        tier: { $ref: "#/components/schemas/Tier" }
+        tenantPhone: { type: string }
+        tenantAddress: { type: string }
+
+    DeploymentStatus:
+      type: string
+      enum: [PENDING, IN_PROGRESS, COMPLETE, FAILED, DELETING, DELETED]
+
+    DeployRequest:
+      type: object
+      required: [region, awsAccountId, teamName]
+      properties:
+        region:
+          type: string
+          pattern: "^[a-z]{2}-[a-z]+-\\d+$"
+          example: "ap-northeast-1"
+        awsAccountId:
+          type: string
+          pattern: "^\\d{12}$"
+          example: "123456789012"
+        teamName:
+          type: string
+          minLength: 1
+          maxLength: 40
+          pattern: "^[A-Za-z0-9 _-]+$"
+        accountGroupId:
+          type: string
+          description: bulk deploy 用の予約フィールド (現状未使用)
+        problemSetId:
+          type: string
+          description: bulk deploy 用の予約フィールド (現状未使用)
+
+    DeployResponse:
+      type: object
+      required: [jobId, status, namePrefix, teamLoginKey, expiresAt]
+      properties:
+        jobId: { type: string }
+        status: { $ref: "#/components/schemas/DeploymentStatus" }
+        namePrefix:
+          type: string
+          description: CFn StackName の prefix (`tc-{problemId}-{teamSlug}`)
+        teamLoginKey:
+          type: string
+          description: 短命チーム共有キー (この経路でしか露出しない)
+        expiresAt:
+          type: integer
+          description: TTL (epoch seconds)
+
+    DeploymentSummary:
+      type: object
+      required:
+        [jobId, problemId, tenantId, awsAccountId, region, teamName, namePrefix, status, createdAt, updatedAt, expiresAt]
+      properties:
+        jobId: { type: string }
+        problemId: { type: string }
+        tenantId: { type: string }
+        awsAccountId: { type: string }
+        region: { type: string }
+        teamName: { type: string }
+        displayTeamName:
+          type: string
+          description: 競技者が PATCH /portal/me で設定した表示名
+        namePrefix: { type: string }
+        status: { $ref: "#/components/schemas/DeploymentStatus" }
+        stackId: { type: string }
+        stackOutputs:
+          type: string
+          description: CFn Outputs を JSON 文字列で格納
+        failureReason: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        expiresAt: { type: integer }
+
+    DeploymentDetail:
+      allOf:
+        - $ref: "#/components/schemas/DeploymentSummary"
+        - type: object
+          properties:
+            teamLoginKey:
+              type: string
+              description: 詳細取得経路でのみ露出 (一覧経路では含まれない)
+
+    DeploymentListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DeploymentSummary" }
+        nextCursor:
+          type: string
+          description: 次ページの cursor (base64url JSON)
+
+    ParticipantScoringInfo:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [flag, uptime]
+        points:
+          type: integer
+          description: Challenge (flag) で正解時の獲得点数
+        pointsPerSuccess:
+          type: integer
+          description: Battle (uptime) で 1 health check 成功あたりの加点
+        hints:
+          type: array
+          items: { type: string }
+          description: Challenge のヒント (operator が metadata.json で宣言)
+        flagSubmitted:
+          type: boolean
+          description: Challenge (flag) で正解 submit 済みなら true (重複加算防止)
+
+    ParticipantView:
+      type: object
+      required: [jobId, problemId, region, status, stackOutputs, score, expiresAt, teamName, teamNameSetByCompetitor]
+      properties:
+        jobId: { type: string }
+        problemId: { type: string }
+        region: { type: string }
+        teamName:
+          type: string
+          description: 表示名 (競技者が PATCH /portal/me で設定済みならそれ、未設定なら operator が deploy 時に入力した内部 slug)
+        teamNameSetByCompetitor:
+          type: boolean
+          description: 競技者自身が表示名を設定済みなら true (= operator slug をそのまま使っていれば false)
+        status: { $ref: "#/components/schemas/DeploymentStatus" }
+        stackOutputs:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            CFn Outputs を object に展開したもの。`flagOutputKey` で指定された field は
+            **競技者に出さない** (= 当てる対象なので strip 済み)。
+        failureReason:
+          type: string
+          description: status=FAILED のときのみ含まれる
+        score:
+          type: integer
+          description: チームの累計点数
+        lastScoredAt:
+          type: string
+          format: date-time
+          description: 最後に scoring が走った時刻
+        lastResult:
+          type: string
+          enum: [ok, fail]
+          description: Battle (uptime) で最後の health check 結果
+        scoring:
+          $ref: "#/components/schemas/ParticipantScoringInfo"
+        expiresAt: { type: integer }
