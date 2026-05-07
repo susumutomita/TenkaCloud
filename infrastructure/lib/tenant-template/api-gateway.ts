@@ -83,10 +83,11 @@ export class ApiGateway extends Construct {
     deployment.addMethod("GET", deployIntegration, deployMethodOptions);
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);
 
-    // ADR-004 Phase 1+2a: /events — 1 競技イベント = 1 行で teams + problems を持つ
-    // /events                    POST = create   / GET = list
-    // /events/{eventId}          GET = detail    / DELETE = bulk teardown
-    // /events/{eventId}/deploy   POST = bulk deploy (teams × problems を fan-out)
+    // ADR-004 Phase 1+2a/2b: /events — 1 競技イベント = 1 行で teams + problems を持つ
+    // /events                      POST  = create   / GET = list
+    // /events/{eventId}            GET   = detail   / DELETE = bulk teardown
+    // /events/{eventId}/deploy     POST  = bulk deploy (teams × problems を fan-out)
+    // /events/{eventId}/schedule   PATCH = 競技開始時刻 (startsAt) を設定 (Phase 2b 追加)
     const eventIntegration = new LambdaIntegration(props.eventApiLambda);
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
@@ -95,5 +96,6 @@ export class ApiGateway extends Construct {
     event.addMethod("GET", eventIntegration, deployMethodOptions);
     event.addMethod("DELETE", eventIntegration, deployMethodOptions);
     event.addResource("deploy").addMethod("POST", eventIntegration, deployMethodOptions);
+    event.addResource("schedule").addMethod("PATCH", eventIntegration, deployMethodOptions);
   }
 }

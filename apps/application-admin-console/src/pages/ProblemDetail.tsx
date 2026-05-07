@@ -19,7 +19,6 @@ import {
   deleteDeployment,
   listDeployments,
 } from "../api/deploy-client";
-import { DeployFormModal } from "../components/DeployForm";
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
 import {
@@ -38,13 +37,15 @@ const DIFFICULTY_LABEL = {
 } as const;
 
 /**
- * 問題詳細ページ。manifest 由来のメタデータを表示し「競技アカウントへデプロイ」CTA を出す。
- * Deploy ボタンは Modal を開き、HTTP API 経由で deploy job を起動する。
+ * 問題詳細ページ。manifest 由来のメタデータを read-only で表示する。
+ *
+ * 旧: 「競技アカウントへデプロイ」CTA で単発 deploy できたが、Event 紐付き無しの
+ * orphan deployment になり scoreboard / 集計に出ない問題があったため flow を廃止。
+ * 全 deploy は Event の Bulk Deploy 経由のみ。
  */
 export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
-  const [confirmingDeploy, setConfirmingDeploy] = useState(false);
 
   if (!problemId) return <Navigate to="/problems" replace />;
   const problem = findProblem(problemId);
@@ -63,21 +64,15 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       <Header
         variant="h1"
         description={problem.shortDescription}
-        actions={
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={() => navigate("/problems")}>一覧へ戻る</Button>
-            <Button
-              variant="primary"
-              disabled={problem.status !== "ready" && problem.status !== "draft"}
-              onClick={() => setConfirmingDeploy(true)}
-            >
-              競技アカウントへデプロイ
-            </Button>
-          </SpaceBetween>
-        }
+        actions={<Button onClick={() => navigate("/problems")}>一覧へ戻る</Button>}
       >
         {problem.name}
       </Header>
+
+      <Alert type="info" header="この問題を deploy するには Event 経由で">
+        単発 deploy 経路は廃止しました。Event を作成して Bulk Deploy してください。Event
+        紐付きが無い deployment は scoreboard / 集計に表示されません。
+      </Alert>
 
       <Container header={<Header variant="h2">概要</Header>}>
         <ColumnLayout columns={4} variant="text-grid">
@@ -136,14 +131,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       </Container>
 
       <ProblemDeploymentsSection config={config} problemId={problem.id} />
-
-      <DeployFormModal
-        config={config}
-        problemId={problem.id}
-        problemName={problem.name}
-        visible={confirmingDeploy}
-        onDismiss={() => setConfirmingDeploy(false)}
-      />
     </SpaceBetween>
   );
 }
