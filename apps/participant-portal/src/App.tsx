@@ -6,6 +6,7 @@ import type { AppConfig } from "./config";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { PlaceholderPage } from "./pages/Placeholder";
+import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { QuestsPage } from "./pages/Quests";
 import { ScoreboardPage } from "./pages/Scoreboard";
 import { TeamSetupPage } from "./pages/TeamSetup";
@@ -75,14 +76,7 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/problems" element={guarded(config, <QuestsPage config={config} />)} />
         <Route
           path="/problems/:problemId"
-          element={guarded(
-            config,
-            <PlaceholderPage
-              title="問題ダッシュボード"
-              description="Battle / Challenge の状態 + 操作 UI"
-              comingSoon="Battle: Attack Statistics / Application Status / Attack History の 3 タブを後段 PR で実装します。"
-            />,
-          )}
+          element={guarded(config, <ProblemDetailPage config={config} />)}
         />
         <Route
           path="/tools/sso"

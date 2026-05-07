@@ -3,10 +3,12 @@ import Box from "@cloudscape-design/components/box";
 import Cards from "@cloudscape-design/components/cards";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
+import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
+import { useNavigate } from "react-router";
 import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
@@ -35,6 +37,7 @@ const SCORING_KIND_LABEL = {
  */
 export function QuestsPage({ config }: { config: AppConfig }) {
   const { view, error } = useTeamView();
+  const navigate = useNavigate();
   const isBackend = config.mode === "backend";
 
   return (
@@ -64,9 +67,16 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         loadingText="問題を取得中…"
         cardDefinition={{
           header: (problem) => (
-            <Box variant="h3">
+            <Link
+              fontSize="heading-m"
+              href={`/problems/${encodeURIComponent(problem.problemId)}`}
+              onFollow={(e) => {
+                e.preventDefault();
+                navigate(`/problems/${encodeURIComponent(problem.problemId)}`);
+              }}
+            >
               <code>{problem.problemId}</code>
-            </Box>
+            </Link>
           ),
           sections: [
             {
