@@ -12,19 +12,18 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   type DeploymentStatus,
-  getPortalMe,
   type ParticipantProblemView,
   type ParticipantTeamView,
-  PortalAuthError,
   PortalValidationError,
   type SubmitFlagOutcome,
   submitFlag,
   TERMINAL_STATUSES,
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
+import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 import { describeAgo } from "../lib/format";
 
@@ -44,74 +43,12 @@ const SCORING_KIND_LABEL = {
   uptime: "Battle (uptime 加点)",
 } as const;
 
-/** Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。 */
-function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeamView): boolean {
-  if (!prev) return false;
-  if (prev.team.teamName !== next.team.teamName) return false;
-  if (prev.problems.length !== next.problems.length) return false;
-  // problems は jobId で一致を取って意味的同一性を比較。順序は安定 (DDB Query 結果) と仮定。
-  for (let i = 0; i < prev.problems.length; i++) {
-    const p = prev.problems[i] as ParticipantProblemView;
-    const n = next.problems[i] as ParticipantProblemView;
-    if (
-      p.jobId !== n.jobId ||
-      p.status !== n.status ||
-      p.score !== n.score ||
-      p.lastScoredAt !== n.lastScoredAt ||
-      p.lastResult !== n.lastResult ||
-      p.scoring?.flagSubmitted !== n.scoring?.flagSubmitted ||
-      p.failureReason !== n.failureReason ||
-      JSON.stringify(p.stackOutputs) !== JSON.stringify(n.stackOutputs)
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
   const isBackend = config.mode === "backend";
-
-  const [view, setView] = useState<ParticipantTeamView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const stopPollingRef = useRef(false);
-
-  const tick = useCallback(async () => {
-    if (!isBackend || !sessionToken) return;
-    try {
-      const next = await getPortalMe(config.apiBaseUrl, sessionToken);
-      setView((prev) => (viewIsUnchanged(prev, next) ? prev : next));
-      setError(null);
-      // team 全 problem が terminal (FAILED / DELETED) なら polling 停止。
-      if (next.problems.every((p) => p.status === "FAILED" || p.status === "DELETED")) {
-        stopPollingRef.current = true;
-      }
-    } catch (err) {
-      if (err instanceof PortalAuthError) {
-        auth.logout();
-        return;
-      }
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [isBackend, sessionToken, config.apiBaseUrl, auth]);
-
-  useEffect(() => {
-    if (!isBackend || !sessionToken) return;
-    let cancelled = false;
-    stopPollingRef.current = false;
-    const run = async () => {
-      if (cancelled || stopPollingRef.current) return;
-      await tick();
-    };
-    void run();
-    const interval = setInterval(run, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [isBackend, sessionToken, tick]);
+  // Polling は ShellLayout の TeamViewProvider で一括管理される (TopNav も同じデータを共有)。
+  const { view, error, refresh } = useTeamView();
 
   const teamName = view?.team.teamName ?? auth.session?.teamName ?? "(unknown)";
 
@@ -142,7 +79,7 @@ export function HomePage({ config }: { config: AppConfig }) {
           problem={problem}
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
-          onScored={tick}
+          onScored={refresh}
         />
       ))}
 
