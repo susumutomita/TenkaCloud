@@ -26,6 +26,11 @@ export interface ParticipantPortalLambdaProps {
    * 競技者が submit-flag したとき、この map を参照して採点する。
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
+  /**
+   * `ConsoleViewerRole` の ARN。AWS Console federation login URL 発行のため
+   * Lambda が `sts:AssumeRole` する。caller side で IAM grant も付与する。
+   */
+  readonly consoleViewerRoleArn: string;
 }
 
 /**
@@ -81,6 +86,7 @@ export class ParticipantPortalLambda extends Construct {
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
+        CONSOLE_VIEWER_ROLE_ARN: props.consoleViewerRoleArn,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

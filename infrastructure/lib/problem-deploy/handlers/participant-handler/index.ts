@@ -14,6 +14,7 @@ import { getLeaderboard } from "./leaderboard.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
 import { listScoreEvents } from "./score-events.js";
 import { buildParticipantSharedResources } from "./shared.js";
+import { getConsoleSigninUrl } from "./sso.js";
 import { submitFlag } from "./submit-flag.js";
 import { setDisplayTeamName } from "./update.js";
 
@@ -61,6 +62,33 @@ app.get("/portal/me/score-events", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[portal] score-events failed", { message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.get("/portal/me/console-signin-url", async (c) => {
+  const token = extractBearerToken(c.req.header("authorization"));
+  if (!token) return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
+  const jobId = c.req.query("jobId");
+  if (!jobId) return c.json({ error: "missing_jobid" }, HTTP_BAD_REQUEST);
+  try {
+    const outcome = await getConsoleSigninUrl(shared, token, jobId);
+    if (outcome.kind === "unauthorized") {
+      return c.json({ error: "unauthorized" }, HTTP_UNAUTHORIZED);
+    }
+    if (outcome.kind === "invalid_jobid") {
+      return c.json({ error: "invalid_jobid" }, HTTP_BAD_REQUEST);
+    }
+    if (outcome.kind === "not_ready") {
+      return c.json({ error: "not_ready" }, HTTP_BAD_REQUEST);
+    }
+    if (outcome.kind === "misconfigured") {
+      return c.json({ error: "misconfigured" }, HTTP_INTERNAL_ERROR);
+    }
+    return c.json({ loginUrl: outcome.loginUrl }, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[portal] sso failed", { message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

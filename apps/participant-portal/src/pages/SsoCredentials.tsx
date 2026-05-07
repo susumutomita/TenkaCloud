@@ -5,56 +5,56 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { useState } from "react";
+import { getConsoleSigninUrl, PortalAuthError, PortalValidationError } from "../api/portal-client";
+import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 
 /**
- * 競技アカウントの IAM Role 名 (= operator が `templates/competitor-bootstrap.yaml`
- * 経由で立てる role の固定名)。switch role URL の `roleName` パラメータに使う。
+ * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
+ * を押すと backend Lambda が STS AssumeRole + signin federation を実行して
+ * `signin.aws.amazon.com/federation?Action=login` URL を発行 → 新タブで開く。
  *
- * 異なる名前で role を作っている operator は CDK env / runtime-config で上書き可能に
- * する余地があるが、現状はテンプレートの default 値で固定。
+ * Lambda が assume するのは `ConsoleViewerRole` (= ReadOnlyAccess managed policy)。
+ * 競技者は AWS Console で stack 状態を read-only で確認可能。
  */
-const COMPETITOR_ROLE_NAME = "TenkaCloudCompetitorBootstrap";
-
-/**
- * 自分の AWS アカウントから competitor role に switch role するための AWS Console URL を組み立てる。
- *
- *   https://signin.aws.amazon.com/switchrole?
- *     account=<accountId>&roleName=<roleName>&displayName=<label>&region=<region>
- *
- * 競技者が **既に AWS Console にログイン済** であれば、URL を開くだけで confirm
- * ダイアログ → role 切替が完了する。ログインしていないと AWS のログインを要求される。
- *
- * フル federation (= operator アカウントから token を発行して 1-click ログイン)
- * は cross-account AssumeRole + ExternalId 管理が必要で MVP-1 にはまだ無い (Issue #500)。
- * 当面はこの switch role URL で代替し、競技者は自身の AWS アカウントからアクセスする。
- */
-function buildSwitchRoleUrl(params: {
-  accountId: string;
-  region: string;
-  problemId: string;
-  jobId: string;
-}): string {
-  const display = `TC-${params.problemId}-${params.jobId.slice(0, 8)}`;
-  const qs = new URLSearchParams({
-    account: params.accountId,
-    roleName: COMPETITOR_ROLE_NAME,
-    displayName: display,
-    region: params.region,
-  });
-  return `https://signin.aws.amazon.com/switchrole?${qs.toString()}`;
-}
-
 export function SsoCredentialsPage({ config }: { config: AppConfig }) {
+  const auth = useAuth();
+  const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error } = useTeamView();
   const isBackend = config.mode === "backend";
+
+  const [pending, setPending] = useState<string | null>(null); // jobId
+  const [openError, setOpenError] = useState<string | null>(null);
+
+  const openConsole = async (jobId: string) => {
+    if (!sessionToken || pending) return;
+    setPending(jobId);
+    setOpenError(null);
+    try {
+      const loginUrl = await getConsoleSigninUrl(config.apiBaseUrl, sessionToken, jobId);
+      window.open(loginUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      if (err instanceof PortalAuthError) {
+        auth.logout();
+        return;
+      }
+      if (err instanceof PortalValidationError) {
+        setOpenError(`バリデーションエラー: ${err.errorCode}`);
+        return;
+      }
+      setOpenError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPending(null);
+    }
+  };
 
   return (
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="自チームに deploy された問題の競技アカウントへ AWS Console から直接アクセスする手段。"
+        description="AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。"
       >
         SSO Credentials
       </Header>
@@ -70,21 +70,21 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
           {error}
         </Alert>
       )}
+      {openError && (
+        <Alert
+          type="error"
+          header="AWS Console を開けませんでした"
+          dismissible
+          onDismiss={() => setOpenError(null)}
+        >
+          {openError}
+        </Alert>
+      )}
 
       <Alert type="info" header="使い方">
         <Box variant="p">
-          下のボタンは AWS Console の <strong>Switch Role</strong> 画面に飛びます。 先に各自の AWS
-          アカウントで{" "}
-          <a href="https://signin.aws.amazon.com/" target="_blank" rel="noreferrer noopener">
-            AWS Console
-          </a>{" "}
-          にログインしておいてください (普段使っている個人アカウント /
-          会社アカウント等で構いません)。 ログイン後にボタンを押すと、競技用の IAM Role
-          に切り替わって対象の問題環境に access できます。
-        </Box>
-        <Box variant="small" color="text-status-info" padding={{ top: "s" }}>
-          ※ ワンクリック federation (= 自前 AWS ログイン不要) は cross-account AssumeRole +
-          ExternalId 管理が要るため、後続 PR で実装予定 (Issue #500)。
+          下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面)
+          が自動でログイン状態で開きます。session の TTL は 1 時間です。
         </Box>
       </Alert>
 
@@ -100,45 +100,39 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
 
       {view?.problems
         .filter((p) => p.awsAccountId)
-        .map((problem) => {
-          const url = buildSwitchRoleUrl({
-            accountId: problem.awsAccountId,
-            region: problem.region,
-            problemId: problem.problemId,
-            jobId: problem.jobId,
-          });
-          return (
-            <Container
-              key={problem.jobId}
-              header={
-                <Header
-                  variant="h2"
-                  actions={
-                    <Button
-                      variant="primary"
-                      iconName="external"
-                      ariaLabel={`${problem.problemId} の AWS Console を開く`}
-                      onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-                    >
-                      AWS Console を開く
-                    </Button>
-                  }
-                >
-                  <code>{problem.problemId}</code>
-                </Header>
-              }
-            >
-              <KeyValuePairs
-                columns={3}
-                items={[
-                  { label: "AWS Account", value: <code>{problem.awsAccountId}</code> },
-                  { label: "Region", value: problem.region },
-                  { label: "Switch Role 先", value: <code>{COMPETITOR_ROLE_NAME}</code> },
-                ]}
-              />
-            </Container>
-          );
-        })}
+        .map((problem) => (
+          <Container
+            key={problem.jobId}
+            header={
+              <Header
+                variant="h2"
+                actions={
+                  <Button
+                    variant="primary"
+                    iconName="external"
+                    loading={pending === problem.jobId}
+                    disabled={pending !== null && pending !== problem.jobId}
+                    ariaLabel={`${problem.problemId} の AWS Console を開く`}
+                    onClick={() => void openConsole(problem.jobId)}
+                  >
+                    AWS Console を開く
+                  </Button>
+                }
+              >
+                <code>{problem.problemId}</code>
+              </Header>
+            }
+          >
+            <KeyValuePairs
+              columns={3}
+              items={[
+                { label: "AWS Account", value: <code>{problem.awsAccountId}</code> },
+                { label: "Region", value: problem.region },
+                { label: "Status", value: problem.status },
+              ]}
+            />
+          </Container>
+        ))}
     </SpaceBetween>
   );
 }

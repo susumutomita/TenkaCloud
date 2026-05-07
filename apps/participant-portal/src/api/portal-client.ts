@@ -224,6 +224,37 @@ export async function getLeaderboard(
 }
 
 /**
+ * SSO Credentials: AWS Console ワンクリック login URL を発行する API。
+ * 競技者が click すると Lambda が STS AssumeRole + federation で SigninToken を
+ * 発行し、URL を返す。frontend は window.open でその URL を開く (= 自前 AWS ログイン不要)。
+ */
+export async function getConsoleSigninUrl(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const url = buildPortalUrl(apiBaseUrl, "portal/me/console-signin-url");
+  url.searchParams.set("jobId", jobId);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { authorization: `Bearer ${teamLoginKey}` },
+    signal,
+  });
+  if (res.status === 401) throw new PortalAuthError();
+  if (res.status === 400) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new PortalValidationError(body.error ?? "invalid_request");
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new PortalNetworkError(res.status, body);
+  }
+  const data = (await res.json()) as { loginUrl: string };
+  return data.loginUrl;
+}
+
+/**
  * Phase 2c: Flag 提出は `problemId` 必須に。`POST /portal/me/submit-flag { problemId, flag }`。
  */
 export async function submitFlag(
