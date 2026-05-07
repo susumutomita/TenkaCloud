@@ -30,6 +30,10 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
       calls.push({ path, method: "DELETE" });
       return Promise.resolve();
     }),
+    delJson: vi.fn().mockImplementation((path: string) => {
+      calls.push({ path, method: "DELETE" });
+      return Promise.resolve(response);
+    }),
   };
   return { client, calls };
 }
