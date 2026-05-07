@@ -64,6 +64,17 @@ echo "Building apps/application-admin-console (used by both pooled stack at host
 (cd "${TenkaCloud_ROOT}/apps/application-admin-console" && bun install && bun run build)
 echo "  → dist/ generated"
 
+# apps/participant-portal を host build。ProblemDeployBackendStack の
+# ParticipantPortalHosting が `apps/participant-portal/dist/` を Source.asset で読む。
+# `CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true` のときだけ stack 側で生成される。
+echo "Building apps/participant-portal (used by ParticipantPortalHosting in ProblemDeployBackendStack)..."
+(cd "${TenkaCloud_ROOT}/apps/participant-portal" && bun install && bun run build)
+echo "  → dist/ generated"
+
+# Participant Portal を ProblemDeployBackendStack に含める (CDK 側で条件付き作成)。
+# eventTitle はオプション (default は "TenkaCloud Battle")。
+export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL="true"
+
 echo "Staging source.zip at ${STAGING}..."
 # infrastructure → cdk にリネーム、src と scripts はそのまま
 cp -R infrastructure "${STAGING}/cdk"
@@ -84,6 +95,14 @@ find "${STAGING}" -name ".DS_Store" -delete
 # Source.asset で `../apps/application-admin-console/dist` を解決できる必要がある。
 mkdir -p "${STAGING}/apps/application-admin-console"
 cp -R "${TenkaCloud_ROOT}/apps/application-admin-console/dist" "${STAGING}/apps/application-admin-console/"
+
+# participant-portal も dist を staging に置く。現状 ProblemDeployBackendStack は
+# host 環境 (phase 1) でしか deploy されないので、host の `apps/participant-portal/dist`
+# 直参照で動く。が、将来 CodeBuild から再 deploy する経路を増やしたとき、source.zip 内に
+# dist が無いと Source.asset が解決できず失敗する。application-admin-console と同じ流儀
+# で予め staging に同梱して将来リスクを抑える (claude-review PR 475 の指摘)。
+mkdir -p "${STAGING}/apps/participant-portal"
+cp -R "${TenkaCloud_ROOT}/apps/participant-portal/dist" "${STAGING}/apps/participant-portal/"
 
 cd "${STAGING}"
 zip -rq "${CDK_SOURCE_NAME}" .
@@ -201,6 +220,11 @@ POOLED_APP_CONSOLE_URL=$(aws cloudformation describe-stacks \
   --query "Stacks[0].Outputs[?OutputKey=='ApplicationAdminConsoleUrl'].OutputValue" \
   --output text 2>/dev/null || echo "(not deployed yet)")
 
+PARTICIPANT_PORTAL_URL=$(aws cloudformation describe-stacks \
+  --stack-name "ProblemDeployBackendStack" \
+  --query "Stacks[0].Outputs[?OutputKey=='ParticipantPortalUrl'].OutputValue" \
+  --output text 2>/dev/null || echo "(not deployed)")
+
 echo ""
 echo "=============================================="
 echo "Deploy complete!"
@@ -208,6 +232,7 @@ echo "=============================================="
 echo ""
 echo "Admin Console URL                  : ${ADMIN_CONSOLE_URL}"
 echo "Application Admin Console (pooled) : ${POOLED_APP_CONSOLE_URL}"
+echo "Participant Portal URL             : ${PARTICIPANT_PORTAL_URL}"
 echo ""
 echo "1. SystemAdmin 初回招待メール (${CDK_PARAM_SYSTEM_ADMIN_EMAIL}) が届いてるはずなので開く"
 echo "2. ${ADMIN_CONSOLE_URL} にブラウザで access"
