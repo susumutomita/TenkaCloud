@@ -11,6 +11,8 @@ export interface ApiClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   del(path: string): Promise<void>;
+  /** 削除系で JSON body を返す経路 (例: bulk teardown の集計結果)。 */
+  delJson<T>(path: string): Promise<T>;
 }
 
 export function createApiClient(baseUrl: string, idToken: string): ApiClient {
@@ -44,6 +46,9 @@ export function createApiClient(baseUrl: string, idToken: string): ApiClient {
     },
     async del(path: string): Promise<void> {
       await request(path, { method: "DELETE" });
+    },
+    async delJson<T>(path: string): Promise<T> {
+      return (await request(path, { method: "DELETE" })).json() as Promise<T>;
     },
   };
 }

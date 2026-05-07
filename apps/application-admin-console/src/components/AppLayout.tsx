@@ -51,6 +51,7 @@ export function ShellLayout({
             header={{ href: "/", text: "メニュー" }}
             items={[
               { type: "link", href: "/", text: "ホーム" },
+              { type: "link", href: "/events", text: "イベント" },
               { type: "link", href: "/problems", text: "問題カタログ" },
               { type: "link", href: "/deployments", text: "デプロイ履歴" },
             ]}

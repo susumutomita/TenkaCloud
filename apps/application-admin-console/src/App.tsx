@@ -6,6 +6,9 @@ import type { AppConfig } from "./config";
 import { CallbackPage } from "./pages/Callback";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
 import { DeploymentsPage } from "./pages/Deployments";
+import { EventCreatePage } from "./pages/EventCreate";
+import { EventDetailPage } from "./pages/EventDetail";
+import { EventListPage } from "./pages/EventList";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -42,6 +45,12 @@ export function App({ config }: { config: AppConfig }) {
         <Route
           path="/deployments/:jobId"
           element={guarded(config, <DeploymentDetailPage config={config} />)}
+        />
+        <Route path="/events" element={guarded(config, <EventListPage config={config} />)} />
+        <Route path="/events/new" element={guarded(config, <EventCreatePage config={config} />)} />
+        <Route
+          path="/events/:eventId"
+          element={guarded(config, <EventDetailPage config={config} />)}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
