@@ -140,7 +140,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="チーム数と問題セットを指定して Event を作成します。teamLoginKey は完了画面で 1 度だけ表示されます。"
+        description="チーム数と問題セットを指定して Event を作成します。teamLoginKey は EventDetail でいつでも確認できます。"
       >
         新規 Event 作成
       </Header>
