@@ -87,9 +87,11 @@ export async function getEventDetail(
   eventId: string,
 ): Promise<EventDetail | undefined> {
   // Event Get と Teams Query は依存関係なし → 並列発火でラウンドトリップを 1 回分節約。
-  // 不正 eventId のとき teams query が無駄になるが、空 partition の query は 1 RCU 程度。
-  // teams.max(100) なので 1 query で確定。
-  const [eventOut, teamsOut] = await Promise.all([
+  // Event / Teams / Deployments を並列発火。Deployments は競技者が PATCH /portal/me で
+  // 設定した displayTeamName を引くため必要 (TeamsTable には participant が直接書け
+  // ないので displayName が常に空のままになる、という ADR-004 Phase 2c 統合ギャップ
+  // への補正)。GSI1 = TENANT#<tenantId> 全件取得 → eventId で in-memory filter。
+  const [eventOut, teamsOut, deploymentsOut] = await Promise.all([
     shared.ddb.send(
       new GetCommand({
         TableName: shared.eventsTableName,
@@ -106,18 +108,46 @@ export async function getEventDetail(
         },
       }),
     ),
+    shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.deploymentsTableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
+        ProjectionExpression: "teamId, eventId, displayTeamName",
+      }),
+    ),
   ]);
   const event = eventOut.Item as Partial<EventItem> | undefined;
   if (!event) return undefined;
   if (event.tenantId !== tenantId) return undefined;
 
   const teamItems = (teamsOut.Items ?? []) as Partial<TeamItem>[];
-  const teams: TeamSummary[] = teamItems.map((t) => ({
-    teamId: String(t.teamId ?? ""),
-    internalSlug: String(t.internalSlug ?? ""),
-    displayName: typeof t.displayName === "string" ? t.displayName : undefined,
-    teamLoginKey: typeof t.teamLoginKey === "string" ? t.teamLoginKey : undefined,
-  }));
+
+  // teamId → displayTeamName の最新値 map を作る。同じ team の N 行のうち、operator
+  // 起動時には全て同じ値で埋まる (update.ts が Promise.all で全行を更新するため)。
+  // 念のため最後に拾った非空文字列を採用 (=「設定済」優先)。
+  const displayNameByTeamId = new Map<string, string>();
+  for (const d of deploymentsOut.Items ?? []) {
+    const row = d as { teamId?: unknown; eventId?: unknown; displayTeamName?: unknown };
+    if (row.eventId !== eventId) continue;
+    if (typeof row.teamId !== "string" || typeof row.displayTeamName !== "string") continue;
+    if (row.displayTeamName.length === 0) continue;
+    displayNameByTeamId.set(row.teamId, row.displayTeamName);
+  }
+
+  const teams: TeamSummary[] = teamItems.map((t) => {
+    const teamId = String(t.teamId ?? "");
+    const fromTeamsTable = typeof t.displayName === "string" ? t.displayName : undefined;
+    return {
+      teamId,
+      internalSlug: String(t.internalSlug ?? ""),
+      // 競技者が portal で設定した名前 (Deployments 経由) を優先、無ければ
+      // TeamsTable.displayName (operator 事前設定があれば)、それも無ければ undefined。
+      displayName: displayNameByTeamId.get(teamId) ?? fromTeamsTable,
+      teamLoginKey: typeof t.teamLoginKey === "string" ? t.teamLoginKey : undefined,
+    };
+  });
 
   const summary = toSummary(event);
   return {
