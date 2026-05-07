@@ -86,28 +86,31 @@ export async function getEventDetail(
   tenantId: string,
   eventId: string,
 ): Promise<EventDetail | undefined> {
-  const eventOut = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
+  // Event Get と Teams Query は依存関係なし → 並列発火でラウンドトリップを 1 回分節約。
+  // 不正 eventId のとき teams query が無駄になるが、空 partition の query は 1 RCU 程度。
+  // teams.max(100) なので 1 query で確定。
+  const [eventOut, teamsOut] = await Promise.all([
+    shared.ddb.send(
+      new GetCommand({
+        TableName: shared.eventsTableName,
+        Key: { PK: `EVENT#${eventId}`, SK: "META" },
+      }),
+    ),
+    shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.teamsTableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
+        ExpressionAttributeValues: {
+          ":pk": `EVENT#${eventId}`,
+          ":tprefix": "TEAM#",
+        },
+      }),
+    ),
+  ]);
   const event = eventOut.Item as Partial<EventItem> | undefined;
   if (!event) return undefined;
   if (event.tenantId !== tenantId) return undefined;
 
-  // Teams は EVENT#<eventId> をパーティションに、SK begins_with TEAM# で全件取る。
-  // teams.max(100) なので 1 query で確定。
-  const teamsOut = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.teamsTableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
-      ExpressionAttributeValues: {
-        ":pk": `EVENT#${eventId}`,
-        ":tprefix": "TEAM#",
-      },
-    }),
-  );
   const teamItems = (teamsOut.Items ?? []) as Partial<TeamItem>[];
   const teams: TeamSummary[] = teamItems.map((t) => ({
     teamId: String(t.teamId ?? ""),

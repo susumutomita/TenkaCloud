@@ -115,16 +115,20 @@ describe("getEventDetail", () => {
     expect(teamsQuery.input.ExpressionAttributeValues?.[":tprefix"]).toBe("TEAM#");
   });
 
-  it("Event 行が無ければ undefined を返し Teams Query を呼ばないべき", async () => {
+  it("Event 行が無ければ undefined を返し teams 結果を漏らさないべき", async () => {
+    // Get と Query は Promise.all で並列発火するため、Event 不在でも teams query
+    // 自体は走る (空 partition なので 1 RCU 程度)。重要なのは結果が caller に返らないこと。
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ teamId: "LEAKED", internalSlug: "leaked", teamLoginKey: "should-not-leak" }],
+    });
 
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeUndefined();
-    expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 
-  it("tenantId 不一致は undefined を返し Teams Query を呼ばないべき (クロステナント漏洩防止)", async () => {
+  it("tenantId 不一致は undefined を返し teams 結果を漏らさないべき (クロステナント漏洩防止)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -133,9 +137,11 @@ describe("getEventDetail", () => {
         name: "イベント B",
       },
     });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ teamId: "T1", internalSlug: "other-team", teamLoginKey: "other-key" }],
+    });
 
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeUndefined();
-    expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 });
