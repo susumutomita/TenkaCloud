@@ -1,4 +1,9 @@
 import { GetCommand, UpdateCommand, type UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
+import {
+  type DeployDeleteRequestedDetail,
+  EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
+  publishProblemEvent,
+} from "../shared/events.js";
 import type { DeploySharedResources } from "./deploy.js";
 import type { DeploymentItem, DeploymentStatus } from "./types.js";
 
@@ -9,16 +14,19 @@ export type TeardownOutcome =
   | { kind: "race"; reason: "tenant_or_status_mismatch" };
 
 /**
- * 手動 teardown を要求する。新しく CFn DeleteStack を呼ぶ Lambda は作らず、
- * `expiresAt` を現在時刻に書き換えて既存の StatusUpdater (1 min) に拾わせる。
+ * 手動 teardown を要求する。Deploy 経路 (Lambda → EventBridge → State Machine →
+ * CodeBuild → CFn CreateStack) と対称な削除経路 (Lambda → EventBridge →
+ * `DeployDelete` State Machine → CodeBuild → CFn DeleteStack) を発火する。
  *
- * これで:
- *   - Deploy API Lambda に新しい STS / CFn 権限を足さない
- *   - auto-teardown TTL の経路と同じ機械で動く (idempotent / let-win 込み)
- *   - 0〜60 秒の遅延は許容
+ * 1. 行を Get → tenantId 一致と status を確認 (race / not_found 防止)
+ * 2. status を `DELETING` に conditional update (race 防止 + UI に即時反映)
+ * 3. EventBridge bus に `DeployDeleteRequested` を publish
+ *    → `DeployDelete` Rule が State Machine を起動 → CodeBuild が delete-battles.sh
+ *      で `aws cloudformation delete-stack` を実行し、State Machine が完了で DDB を
+ *      `DELETED` に更新する (失敗時は `FAILED` + failureReason)
  *
- * 既に `DELETING` / `DELETED` の行は no-op で返す。
- * クロステナント漏洩防止のため `tenantId` mismatch は `not_found` 扱い (存在を漏らさない)。
+ * 既に `DELETING` / `DELETED` の行は no-op で `already_deleted` を返す。
+ * クロステナント漏洩防止のため `tenantId` mismatch は `not_found` 扱い。
  */
 export async function requestTeardown(
   shared: DeploySharedResources,
@@ -38,15 +46,27 @@ export async function requestTeardown(
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (status === "DELETING" || status === "DELETED") return { kind: "already_deleted" };
 
+  const region = String(item.region ?? "");
+  const awsAccountId = String(item.awsAccountId ?? "");
+  // CFn StackName は namePrefix で十分 (StackId は不要、State Machine 側で region 指定して
+  // delete-stack するときも namePrefix で identify できる)。stackId が無い場合 (PENDING で
+  // 削除した場合) でも namePrefix は deploy 時に必ず確定している。
+  const stackName = String(item.stackId ?? item.namePrefix ?? "");
+
+  if (!region || !awsAccountId || !stackName) {
+    return { kind: "race", reason: "tenant_or_status_mismatch" };
+  }
+
+  const updatedAt = new Date(nowMs).toISOString();
   const update: UpdateCommandInput = {
     TableName: shared.tableName,
     Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    UpdateExpression: "SET expiresAt = :expiresAt, updatedAt = :updatedAt",
+    UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
     ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
     ExpressionAttributeNames: { "#s": "status" },
     ExpressionAttributeValues: {
-      ":expiresAt": Math.floor(nowMs / 1000),
-      ":updatedAt": new Date(nowMs).toISOString(),
+      ":deleting": "DELETING",
+      ":updatedAt": updatedAt,
       ":tenantId": tenantId,
       ":p": "PENDING",
       ":i": "IN_PROGRESS",
@@ -63,5 +83,21 @@ export async function requestTeardown(
     }
     throw err;
   }
+
+  const detail: DeployDeleteRequestedDetail = {
+    jobId,
+    tenantId,
+    stackName,
+    region,
+    awsAccountId,
+  };
+  await publishProblemEvent({
+    client: shared.events,
+    busName: shared.eventBusName,
+    detailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
+    jobId,
+    detail,
+  });
+
   return { kind: "accepted", previousStatus: status };
 }

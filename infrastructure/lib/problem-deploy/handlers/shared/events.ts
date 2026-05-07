@@ -16,6 +16,7 @@ import { z } from "zod";
 
 export const EVENT_SOURCE = "tenkacloud.deploy" as const;
 export const EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED = "DeployCreateRequested" as const;
+export const EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED = "DeployDeleteRequested" as const;
 
 export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" as const;
 
@@ -39,6 +40,24 @@ export const DeployCreateRequestedDetailSchema = z.object({
   awsAccountId: z.string().regex(/^\d{12}$/),
 });
 export type DeployCreateRequestedDetail = z.infer<typeof DeployCreateRequestedDetailSchema>;
+
+/**
+ * `DeployDeleteRequested` event の `detail` schema。tenant API Lambda が削除要求時に
+ * publish し、`DeployDelete` State Machine が `CodeBuildStartBuild` task で
+ * `scripts/delete-battles.sh "$STACK_NAME"` を実行する。
+ *
+ * `stackName` は CFn StackName (= namePrefix) または StackId (ARN)。同一 account 内のみ
+ * (MVP-1)。Phase 2 で cross-account になったら `awsAccountId` を渡して target account の
+ * Role を AssumeRole する。
+ */
+export const DeployDeleteRequestedDetailSchema = z.object({
+  jobId: z.string().min(1),
+  tenantId: z.string().min(1),
+  stackName: z.string().min(1),
+  region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
+  awsAccountId: z.string().regex(/^\d{12}$/),
+});
+export type DeployDeleteRequestedDetail = z.infer<typeof DeployDeleteRequestedDetailSchema>;
 
 /**
  * `tenkacloud.deploy` event を 1 件 publish する shared helper。

@@ -30,8 +30,11 @@ export interface DeployCodeBuildProjectProps {
  * を実行する。
  *
  * 実行時の入力は env 経由 (Step Functions が `environmentVariablesOverride` で渡す):
- *   - `BATTLE_PROBLEM_DIR`: 例 `problems/challenges/hello-world`
- *   - `TEAM_SLUG`: 例 `demo-team`
+ *   - `OPERATION`: `create` (default) または `delete`。create / delete を 1 Project で兼用。
+ *   - `BATTLE_PROBLEM_DIR`: 例 `problems/challenges/hello-world` (create 時のみ)
+ *   - `TEAM_SLUG`: 例 `demo-team` (create 時のみ)
+ *   - `DELETE_STACK_NAME`: CFn StackName / StackId (delete 時のみ)
+ *   - `DELETE_REGION`: delete 対象 region (delete 時のみ)
  *
  * 同一 AWS account 内 deploy のみ (MVP-1 制約)。Phase 2 で cross-account になったら
  * IAM Role に `sts:AssumeRole` 等を足す。
@@ -58,11 +61,23 @@ export class DeployCodeBuildProject extends Construct {
       environmentVariables: {
         // Step Functions が environmentVariablesOverride で実行時に毎回上書きする。
         // CodeBuild 側で必須宣言するため placeholder default を入れる。
+        OPERATION: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "create",
+        },
         BATTLE_PROBLEM_DIR: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "<unset-overridden-by-step-functions>",
         },
         TEAM_SLUG: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "<unset-overridden-by-step-functions>",
+        },
+        DELETE_STACK_NAME: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "<unset-overridden-by-step-functions>",
+        },
+        DELETE_REGION: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "<unset-overridden-by-step-functions>",
         },
@@ -72,8 +87,9 @@ export class DeployCodeBuildProject extends Construct {
         phases: {
           build: {
             commands: [
-              'echo "BATTLE_PROBLEM_DIR=$BATTLE_PROBLEM_DIR  TEAM_SLUG=$TEAM_SLUG  AWS_REGION=$AWS_REGION"',
-              'bash scripts/deploy-battles.sh "$BATTLE_PROBLEM_DIR"',
+              'echo "OPERATION=$OPERATION  BATTLE_PROBLEM_DIR=$BATTLE_PROBLEM_DIR  TEAM_SLUG=$TEAM_SLUG  DELETE_STACK_NAME=$DELETE_STACK_NAME  DELETE_REGION=$DELETE_REGION  AWS_REGION=$AWS_REGION"',
+              // OPERATION で create / delete を分岐。default (env 未設定 / 空) は create。
+              'if [ "$OPERATION" = "delete" ]; then bash scripts/delete-battles.sh "$DELETE_STACK_NAME" "$DELETE_REGION"; else bash scripts/deploy-battles.sh "$BATTLE_PROBLEM_DIR"; fi',
             ],
           },
         },
