@@ -27,15 +27,21 @@ async function exchangeKeyForSession(
       throw new Error(err instanceof Error ? err.message : "backend に接続できませんでした");
     }
     const now = Date.now();
+    // Phase 2c: teamLoginKey で引いた view は team scope。teamId / eventId は team から、
+    // expiresAt は最初の problem から取る (= team の全 problems で同じ TTL を持つ前提)。
+    const firstProblem = view.problems[0];
+    const expiresAtMs =
+      firstProblem && firstProblem.expiresAt > 0
+        ? firstProblem.expiresAt * 1000
+        : now + DEFAULT_DEV_TTL_MS;
     return {
       sessionToken: trimmed,
-      teamId: view.jobId,
-      teamName: view.teamName,
-      eventId: view.problemId,
+      teamId: view.team.teamId ?? "(unknown-team-id)",
+      teamName: view.team.teamName,
+      eventId: view.team.eventId ?? "(unknown-event-id)",
       issuedAt: now,
-      // backend の expiresAt は epoch seconds、storage は ms に揃える。
-      expiresAt: view.expiresAt > 0 ? view.expiresAt * 1000 : now + DEFAULT_DEV_TTL_MS,
-      teamNameSetByCompetitor: view.teamNameSetByCompetitor,
+      expiresAt: expiresAtMs,
+      teamNameSetByCompetitor: view.team.teamNameSetByCompetitor,
     };
   }
 

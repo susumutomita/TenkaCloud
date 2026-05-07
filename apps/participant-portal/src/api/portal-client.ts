@@ -14,35 +14,43 @@ export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
 
 export interface ParticipantScoringInfo {
   readonly kind: "flag" | "uptime";
-  /** flag 形式での 1 提出あたりの獲得点。 */
   readonly points?: number;
-  /** uptime 形式での 1 回成功あたりの獲得点。 */
   readonly pointsPerSuccess?: number;
   readonly hints?: readonly string[];
-  /** flag 形式で既に正解済みなら true (= 再提出は加点されない)。 */
   readonly flagSubmitted?: boolean;
 }
 
-export interface ParticipantView {
+/**
+ * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
+ */
+export interface ParticipantProblemView {
   readonly jobId: string;
   readonly problemId: string;
-  /** `displayTeamName ?? <operator slug>` の最終表示名 */
-  readonly teamName: string;
-  /** 競技者が自分でチーム名を設定したか。false なら setup 画面を出す。 */
-  readonly teamNameSetByCompetitor: boolean;
   readonly region: string;
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
   readonly expiresAt: number;
-  /** チーム累計スコア (deploy 単位)。 */
   readonly score: number;
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
-  // 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API
-  // には出さない。Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」
-  // で、画面で答え合わせをすると興ざめになる。
+}
+
+/**
+ * Phase 2c: team の集約 view。1 teamLoginKey で event 内の N 問題を引ける。
+ *
+ * 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API には
+ * 出さない。Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」。
+ */
+export interface ParticipantTeamView {
+  readonly team: {
+    readonly teamName: string;
+    readonly teamNameSetByCompetitor: boolean;
+    readonly eventId?: string;
+    readonly teamId?: string;
+  };
+  readonly problems: readonly ParticipantProblemView[];
 }
 
 export type SubmitFlagOutcome =
@@ -74,21 +82,20 @@ export class PortalNetworkError extends Error {
   }
 }
 
-/**
- * `GET /portal/me` を `Authorization: Bearer <teamLoginKey>` で呼び、
- * `ParticipantView` を返す。401 は `PortalAuthError`、それ以外の HTTP error は
- * `PortalNetworkError`。Lambda 側 (PR-H2) と shape を一致させる。
- */
 function buildPortalUrl(apiBaseUrl: string, path: string): URL {
   const base = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
   return new URL(path, base);
 }
 
+/**
+ * `GET /portal/me` を `Authorization: Bearer <teamLoginKey>` で呼び、
+ * `ParticipantTeamView` (= team + problems[]) を返す。
+ */
 export async function getPortalMe(
   apiBaseUrl: string,
   teamLoginKey: string,
   signal?: AbortSignal,
-): Promise<ParticipantView> {
+): Promise<ParticipantTeamView> {
   const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me"), {
     method: "GET",
     headers: { authorization: `Bearer ${teamLoginKey}` },
@@ -99,22 +106,19 @@ export async function getPortalMe(
     const body = await res.text().catch(() => "");
     throw new PortalNetworkError(res.status, body);
   }
-  return (await res.json()) as ParticipantView;
+  return (await res.json()) as ParticipantTeamView;
 }
 
 /**
- * 競技者の表示用チーム名を更新する。`PATCH /portal/me { teamName }`。
- *  - 200: 更新成功、最新の `ParticipantView` を返す
- *  - 400: バリデーション失敗 → `PortalValidationError`
- *  - 401: bearer 失効 (削除済等) → `PortalAuthError`
- *  - その他 → `PortalNetworkError`
+ * 競技者の表示用チーム名を team scope で更新する (`PATCH /portal/me { teamName }`)。
+ * 全 deployment 行に伝播する (Lambda 側で並列 Update)。
  */
 export async function updateTeamName(
   apiBaseUrl: string,
   teamLoginKey: string,
   teamName: string,
   signal?: AbortSignal,
-): Promise<ParticipantView> {
+): Promise<ParticipantTeamView> {
   const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me"), {
     method: "PATCH",
     headers: {
@@ -133,18 +137,16 @@ export async function updateTeamName(
     const body = await res.text().catch(() => "");
     throw new PortalNetworkError(res.status, body);
   }
-  return (await res.json()) as ParticipantView;
+  return (await res.json()) as ParticipantTeamView;
 }
 
 /**
- * Flag を提出する。`POST /portal/me/submit-flag { flag }`.
- *  - 200 { kind: "ok" | "already_scored" | "wrong" }: 提出受理 (採点結果は kind で分岐)
- *  - 400 not_flag_problem / no_outputs / invalid_flag → `PortalValidationError`
- *  - 401 bearer 失効 → `PortalAuthError`
+ * Phase 2c: Flag 提出は `problemId` 必須に。`POST /portal/me/submit-flag { problemId, flag }`。
  */
 export async function submitFlag(
   apiBaseUrl: string,
   teamLoginKey: string,
+  problemId: string,
   flag: string,
   signal?: AbortSignal,
 ): Promise<SubmitFlagOutcome> {
@@ -154,7 +156,7 @@ export async function submitFlag(
       authorization: `Bearer ${teamLoginKey}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({ flag }),
+    body: JSON.stringify({ problemId, flag }),
     signal,
   });
   if (res.status === 400) {

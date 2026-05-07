@@ -359,19 +359,14 @@ components:
           type: boolean
           description: Challenge (flag) で正解 submit 済みなら true (重複加算防止)
 
-    ParticipantView:
+    # Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
+    ParticipantProblemView:
       type: object
-      required: [jobId, problemId, region, status, stackOutputs, score, expiresAt, teamName, teamNameSetByCompetitor]
+      required: [jobId, problemId, region, status, stackOutputs, score, expiresAt]
       properties:
         jobId: { type: string }
         problemId: { type: string }
         region: { type: string }
-        teamName:
-          type: string
-          description: 表示名 (競技者が PATCH /portal/me で設定済みならそれ、未設定なら operator が deploy 時に入力した内部 slug)
-        teamNameSetByCompetitor:
-          type: boolean
-          description: 競技者自身が表示名を設定済みなら true (= operator slug をそのまま使っていれば false)
         status: { $ref: "#/components/schemas/DeploymentStatus" }
         stackOutputs:
           type: object
@@ -379,20 +374,30 @@ components:
           description: |
             CFn Outputs を object に展開したもの。`flagOutputKey` で指定された field は
             **競技者に出さない** (= 当てる対象なので strip 済み)。
-        failureReason:
-          type: string
-          description: status=FAILED のときのみ含まれる
-        score:
-          type: integer
-          description: チームの累計点数
-        lastScoredAt:
-          type: string
-          format: date-time
-          description: 最後に scoring が走った時刻
-        lastResult:
-          type: string
-          enum: [ok, fail]
-          description: Battle (uptime) で最後の health check 結果
-        scoring:
-          $ref: "#/components/schemas/ParticipantScoringInfo"
+        failureReason: { type: string }
+        score: { type: integer }
+        lastScoredAt: { type: string, format: date-time }
+        lastResult: { type: string, enum: [ok, fail] }
+        scoring: { $ref: "#/components/schemas/ParticipantScoringInfo" }
         expiresAt: { type: integer }
+
+    # Phase 2c: 1 teamLoginKey で event 内 N 問題を引ける team scope view。
+    ParticipantTeamView:
+      type: object
+      required: [team, problems]
+      properties:
+        team:
+          type: object
+          required: [teamName, teamNameSetByCompetitor]
+          properties:
+            teamName: { type: string }
+            teamNameSetByCompetitor: { type: boolean }
+            eventId:
+              type: string
+              description: Phase 2a 経由の deployment 由来 (旧 deployment は無し)
+            teamId:
+              type: string
+              description: Phase 2a 経由の deployment 由来 (旧 deployment は無し)
+        problems:
+          type: array
+          items: { $ref: "#/components/schemas/ParticipantProblemView" }

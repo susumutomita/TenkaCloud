@@ -18,9 +18,13 @@ function flagMatches(submitted: string, expected: string): boolean {
 }
 
 /**
- * teamLoginKey で deployment 行を引き、flag を採点する。正解なら `ADD score :pts`
- * + `SET flagSubmitted = true` を 1 UpdateItem で atomic に行う。
+ * teamLoginKey で team の全 deployment 行を引き、`problemId` 一致する行に対し flag を
+ * 採点する。正解なら `ADD score :pts` + `SET flagSubmitted = true` を 1 UpdateItem
+ * で atomic に行う (Phase 2c: team scope なので problemId 引数が必須)。
  *
+ * - team scope に該当行が無い (key 不正) は `unauthorized`
+ * - team に該当 problemId が無い (= 違う event の問題を指定) は `unauthorized`
+ *   (= problem の存在を漏らさない)
  * - kind=flag 以外の問題は `not_flag_problem`
  * - stackOutputs に flagOutputKey が無い (= deploy 未完了等) は `no_outputs`
  * - 既に flagSubmitted=true なら `already_scored` (= 重複加算しない)
@@ -29,6 +33,7 @@ export async function submitFlag(
   shared: ParticipantSharedResources,
   scoringMap: Record<string, ProblemScoringMetadata>,
   teamLoginKey: string,
+  problemId: string,
   submittedFlag: string,
 ): Promise<SubmitFlagOutcome> {
   const out = await shared.ddb.send(
@@ -37,10 +42,12 @@ export async function submitFlag(
       IndexName: "GSI2",
       KeyConditionExpression: "GSI2PK = :pk",
       ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-      Limit: 1,
     }),
   );
-  const item = (out.Items?.[0] ?? undefined) as Partial<DeploymentItem> | undefined;
+  const items = (out.Items ?? []) as Partial<DeploymentItem>[];
+  if (items.length === 0) return { kind: "unauthorized" };
+
+  const item = items.find((i) => i.problemId === problemId);
   if (!item?.PK || !item.problemId) return { kind: "unauthorized" };
 
   const scoring = scoringMap[item.problemId];

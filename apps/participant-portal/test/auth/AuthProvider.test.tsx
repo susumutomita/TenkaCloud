@@ -78,13 +78,23 @@ describe("AuthProvider", () => {
       vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            jobId: "JOB1",
-            problemId: "p",
-            teamName: "Alpha",
-            region: "ap-northeast-1",
-            status: "COMPLETE",
-            stackOutputs: {},
-            expiresAt: 1_700_000_000,
+            team: {
+              teamName: "Alpha",
+              teamNameSetByCompetitor: false,
+              eventId: "EV1",
+              teamId: "T1",
+            },
+            problems: [
+              {
+                jobId: "JOB1",
+                problemId: "p",
+                region: "ap-northeast-1",
+                status: "COMPLETE",
+                stackOutputs: {},
+                expiresAt: 1_700_000_000,
+                score: 0,
+              },
+            ],
           }),
           { status: 200 },
         ),
@@ -95,9 +105,9 @@ describe("AuthProvider", () => {
       await result.current.login("AbCdEfGhIjKlMnOpQrStUvWx");
     });
     expect(result.current.session).not.toBeNull();
-    expect(result.current.session?.teamId).toBe("JOB1");
+    expect(result.current.session?.teamId).toBe("T1");
     expect(result.current.session?.teamName).toBe("Alpha");
-    expect(result.current.session?.eventId).toBe("p");
+    expect(result.current.session?.eventId).toBe("EV1");
     expect(result.current.session?.sessionToken).toBe("AbCdEfGhIjKlMnOpQrStUvWx");
     expect(result.current.session?.expiresAt).toBe(1_700_000_000_000);
   });

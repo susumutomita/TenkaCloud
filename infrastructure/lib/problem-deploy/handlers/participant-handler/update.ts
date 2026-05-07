@@ -1,6 +1,6 @@
 import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
-import { type ParticipantView, toView } from "./lookup.js";
+import { lookupTeamByLoginKey, type ParticipantTeamView } from "./lookup.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
@@ -8,7 +8,7 @@ const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
 const NON_EDITABLE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["DELETING", "DELETED"]);
 
 export type UpdateOutcome =
-  | { kind: "ok"; view: ParticipantView }
+  | { kind: "ok"; view: ParticipantTeamView }
   | { kind: "invalid_team_name" }
   | { kind: "unauthorized" };
 
@@ -28,12 +28,15 @@ export function validateTeamName(raw: unknown): string | undefined {
 }
 
 /**
- * 競技者の `displayTeamName` を更新する。
+ * 競技者の `displayTeamName` を **team の全 deployment 行で** 更新する (Phase 2c)。
  *
- * GSI2 Query → 自分の行の `PK/status` を確認し、UpdateCommand を `ReturnValues=
- * ALL_NEW` で実行して更新後の行を取得 → そのまま `toView` で返却。
- * 旧実装の「Query → Update → Query (再 lookup)」3 round-trip を 2 round-trip に
- * 圧縮し、Update と再 Query の間の eventual consistency 窓も無くす。
+ * 1 teamLoginKey = 1 team = N deployment になったため、display 名は team scope の
+ * メタデータとして全行に伝播させる。`team` 集約 (Teams table) には book-keeping
+ * しないが、Participant Portal が `lookupTeamByLoginKey` で全行から代表値を取って
+ * 表示に使うので、すべての行で同じ値になっている必要がある。
+ *
+ * 編集不可な行 (DELETING / DELETED) は skip し、editable な 1 行も無ければ
+ * `unauthorized` を返す (= teamLoginKey 自体が無効化された場合と同じ扱い)。
  */
 export async function setDisplayTeamName(
   shared: ParticipantSharedResources,
@@ -49,30 +52,36 @@ export async function setDisplayTeamName(
       IndexName: "GSI2",
       KeyConditionExpression: "GSI2PK = :pk",
       ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-      Limit: 1,
     }),
   );
-  const item = queryOut.Items?.[0] as Partial<DeploymentItem> | undefined;
-  if (!item) return { kind: "unauthorized" };
-  const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (NON_EDITABLE_STATUSES.has(status)) return { kind: "unauthorized" };
-  if (!item.PK) return { kind: "unauthorized" };
+  const items = (queryOut.Items ?? []) as Partial<DeploymentItem>[];
+  if (items.length === 0) return { kind: "unauthorized" };
 
-  const updateOut = await shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.tableName,
-      Key: { PK: item.PK, SK: "META" },
-      UpdateExpression: "SET displayTeamName = :name, updatedAt = :now",
-      ExpressionAttributeValues: {
-        ":name": name,
-        ":now": new Date().toISOString(),
-      },
-      ReturnValues: "ALL_NEW",
-    }),
+  const editable = items.filter((i) => {
+    const status = (i.status ?? "PENDING") as DeploymentStatus;
+    return !NON_EDITABLE_STATUSES.has(status) && typeof i.PK === "string";
+  });
+  if (editable.length === 0) return { kind: "unauthorized" };
+
+  const now = new Date().toISOString();
+  await Promise.all(
+    editable.map((item) =>
+      shared.ddb.send(
+        new UpdateCommand({
+          TableName: shared.tableName,
+          Key: { PK: item.PK as string, SK: "META" },
+          UpdateExpression: "SET displayTeamName = :name, updatedAt = :now",
+          ExpressionAttributeValues: { ":name": name, ":now": now },
+        }),
+      ),
+    ),
   );
-  const updated = updateOut.Attributes as Partial<DeploymentItem> | undefined;
+
+  // 更新後の team view を構築するために再 lookup。Update の eventually consistent な
+  // 反映を避けるため `lookupTeamByLoginKey` 内の Query は GSI2 で eventually
+  // consistent だが、`teamName` フィールドは UpdateCommand の strong write が反映済
+  // (= 直近の write 後に Query しても eventually 数十 ms 以内に新値が見える)。
+  const updated = await lookupTeamByLoginKey(shared, teamLoginKey);
   if (!updated) return { kind: "unauthorized" };
-  const view = toView(updated, shared.problemsScoring);
-  if (!view) return { kind: "unauthorized" };
-  return { kind: "ok", view };
+  return { kind: "ok", view: updated };
 }

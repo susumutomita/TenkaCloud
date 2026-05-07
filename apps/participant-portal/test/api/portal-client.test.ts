@@ -8,13 +8,18 @@ import {
 
 const KEY = "AbCdEfGhIjKlMnOpQrStUvWx";
 const VIEW = {
-  jobId: "JOB1",
-  problemId: "p",
-  teamName: "Alpha",
-  region: "ap-northeast-1",
-  status: "COMPLETE",
-  stackOutputs: { FrontendUrl: "https://x" },
-  expiresAt: 1_700_000_000,
+  team: { teamName: "Alpha", teamNameSetByCompetitor: false },
+  problems: [
+    {
+      jobId: "JOB1",
+      problemId: "p",
+      region: "ap-northeast-1",
+      status: "COMPLETE",
+      stackOutputs: { FrontendUrl: "https://x" },
+      expiresAt: 1_700_000_000,
+      score: 0,
+    },
+  ],
 };
 
 describe("getPortalMe", () => {
@@ -32,7 +37,8 @@ describe("getPortalMe", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const view = await getPortalMe("https://api.example.com", KEY);
-    expect(view.jobId).toBe("JOB1");
+    expect(view.team.teamName).toBe("Alpha");
+    expect(view.problems[0]?.jobId).toBe("JOB1");
 
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(url.toString()).toBe("https://api.example.com/portal/me");

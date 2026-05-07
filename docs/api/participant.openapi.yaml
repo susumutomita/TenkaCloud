@@ -59,7 +59,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./_components.yaml#/components/schemas/ParticipantView"
+                $ref: "./_components.yaml#/components/schemas/ParticipantTeamView"
         "401":
           $ref: "./_components.yaml#/components/responses/Unauthorized"
     patch:
@@ -86,7 +86,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "./_components.yaml#/components/schemas/ParticipantView"
+                $ref: "./_components.yaml#/components/schemas/ParticipantTeamView"
         "400":
           description: 不正なチーム名
         "401":
@@ -105,8 +105,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [flag]
+              required: [problemId, flag]
               properties:
+                problemId:
+                  type: string
+                  pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+                  description: |
+                    Phase 2c: 1 team = N problems になったので、どの problem の flag かを
+                    明示する必要がある。team 配下に該当 problemId が無い場合は
+                    `unauthorized` (= 存在を漏らさない)。
                 flag:
                   type: string
                   minLength: 1
