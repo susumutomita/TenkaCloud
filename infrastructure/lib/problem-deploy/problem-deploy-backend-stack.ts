@@ -81,7 +81,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   /**
    * Participant Portal の CloudFront URL。Participant Portal が無効化された tenant
    * では undefined。`TenantTemplateStack` が application-admin-console の runtime-config に
-   * 注入するため publicly export する。
+   * 注入するため publicly export する (兄弟 deployApiLambda / eventApiLambda と同 pattern)。
    */
   public readonly participantPortalUrl?: string;
 
