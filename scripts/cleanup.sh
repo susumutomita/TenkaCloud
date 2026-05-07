@@ -73,7 +73,14 @@ fi
 # 非空 bucket が残ると stack 削除が DELETE_FAILED で連鎖するので先に空にする。
 # autoDeleteObjects 付きも保険で含める。
 log "emptying related buckets (including all versions / delete markers)..."
-bucket_patterns="^${SOURCE_BUCKET}$|^tenkacloud-saas-pipeline-artifactsbucket-|^tenkacloud-control-plane-staticsitedistrostaticsitedistr-|^tenkacloud-tenant-template-|^tenkacloud-admin-console-hosting-"
+bucket_prefix_patterns=(
+  "^${SOURCE_BUCKET}$"
+  "^tenkacloud-saas-pipeline-artifactsbucket-"
+  "^tenkacloud-control-plane-staticsitedistrostaticsitedistr-"
+  "^tenkacloud-tenant-template-"
+  "^tenkacloud-admin-console-hosting-"
+)
+bucket_patterns=$(IFS='|'; echo "${bucket_prefix_patterns[*]}")
 while IFS= read -r bucket; do
   empty_versioned_bucket "$bucket"
 done < <(aws s3 ls 2>/dev/null | awk '{print $3}' | grep -E "$bucket_patterns" || true)

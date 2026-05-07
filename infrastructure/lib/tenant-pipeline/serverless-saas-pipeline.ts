@@ -16,6 +16,8 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import type { Construct } from "constructs";
 
+const DEPLOYMENT_STATE_MACHINE_NAME = "tenkacloud-saas-deployment-machine";
+
 export interface ServerlessSaaSPipelineInterface extends cdk.StackProps {
   tenantMappingTable: Table;
   s3SourceBucket: string;
@@ -251,7 +253,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
         TENANT_MAPPING_TABLE: props.tenantMappingTable.tableName,
         CODE_BUILD_PROJECT_NAME: codeBuildProject.projectName,
       },
-      stateMachineName: "tenkacloud-saas-deployment-machine",
+      stateMachineName: DEPLOYMENT_STATE_MACHINE_NAME,
       stateMachineType: "STANDARD",
       tracingConfiguration: {
         enabled: true,
@@ -269,7 +271,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     const stateMachine = stepfunctions.StateMachine.fromStateMachineName(
       this,
       "DeploymentStateMachine",
-      "tenkacloud-saas-deployment-machine",
+      DEPLOYMENT_STATE_MACHINE_NAME,
     );
 
     const stepFunctionAction = new codepipeline_actions.StepFunctionInvokeAction({

@@ -202,7 +202,7 @@ bunx cdk deploy tenkacloud-admin-console-hosting --require-approval never
 # ============================================================================
 echo ""
 echo "=============================================="
-echo "Phase 3: Update ControlPlaneStack with admin-console CloudFront URL"
+echo "Phase 3: Update tenkacloud-control-plane with admin-console CloudFront URL"
 echo "=============================================="
 ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
 export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"
