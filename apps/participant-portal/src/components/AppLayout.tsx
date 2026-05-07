@@ -10,12 +10,16 @@ import TopNavigation, {
 import { type ReactNode, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
+import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 
 /**
  * Participant Portal の shell。AWS GameDay の参考画面に倣って TopNavigation +
  * 3 セクション SideNavigation (Event / Quests / Tools) を組み立てる。
- * Score / Rank は scoring backend (別 PR) が繋がるまで placeholder 表示。
+ *
+ * Score は `TeamViewProvider` 経由で `/portal/me` polling 結果を共有 (Home の
+ * 累計スコアパネルと同じ source)。Rank は leaderboard 実装後 (#163 follow-up) に
+ * 有効化する — それまでは "—" 表示。
  */
 
 const SIDE_NAV_ITEMS: SideNavigationProps.Item[] = [
@@ -42,13 +46,28 @@ const SIDE_NAV_ITEMS: SideNavigationProps.Item[] = [
 ];
 
 export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
+  return (
+    <TeamViewProvider config={config}>
+      <ShellInner config={config}>{children}</ShellInner>
+    </TeamViewProvider>
+  );
+}
+
+function ShellInner({ config, children }: { config: AppConfig; children: ReactNode }) {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const teamView = useTeamView();
 
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
     if (!auth.session) return [];
-    const score = "—";
+    // Score: backend mode のときだけ実値、未取得なら "…"、dev-mock なら "—"。
+    const totalScore = teamView.view
+      ? teamView.view.problems.reduce((sum, p) => sum + p.score, 0)
+      : null;
+    const score =
+      config.mode === "backend" ? (totalScore !== null ? `${totalScore} pt` : "…") : "—";
+    // Rank は leaderboard API 接続前なので placeholder 維持。
     const rank = "—";
     return [
       {
@@ -70,7 +89,7 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
         },
       },
     ];
-  }, [auth.session, auth.logout, navigate]);
+  }, [auth.session, auth.logout, navigate, teamView.view, config.mode]);
 
   return (
     <>
