@@ -78,6 +78,12 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * Event / Team CRUD 用の Lambda (ADR-004 Phase 1)。tenant API から invoke される。
    */
   public readonly eventApiLambda: IFunction;
+  /**
+   * Participant Portal の CloudFront URL。Participant Portal が無効化された tenant
+   * では undefined。`TenantTemplateStack` が application-admin-console の runtime-config に
+   * 注入するため publicly export する。
+   */
+  public readonly participantPortalUrl?: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -169,6 +175,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         apiBaseUrl: portalLambda.url.url,
         mode: "backend",
       });
+      this.participantPortalUrl = portal.distributionUrl;
       new CfnOutput(this, "ParticipantPortalUrl", {
         value: portal.distributionUrl,
         description: "Participant Portal CloudFront URL.",

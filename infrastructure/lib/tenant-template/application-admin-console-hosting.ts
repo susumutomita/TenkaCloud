@@ -43,6 +43,12 @@ interface RuntimeConfigProps {
    * ApiGateway.restApi.url (末尾スラッシュ有) から渡す。
    */
   readonly apiUrl: string;
+  /**
+   * Participant Portal の CloudFront URL。EventDetail / DeploymentDetail で operator が
+   * 「このイベントの portal を共有」できるようにするため runtime-config.json に注入する。
+   * 未設定 (Participant Portal 無効化時) なら undefined → frontend は fallback 表示。
+   */
+  readonly participantPortalUrl?: string;
 }
 
 /**
@@ -143,6 +149,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: props.apiUrl.replace(/\/$/, ""),
+      ...(props.participantPortalUrl ? { participantPortalUrl: props.participantPortalUrl } : {}),
     };
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", data)],
