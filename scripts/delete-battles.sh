@@ -1,22 +1,13 @@
 #!/usr/bin/env bash
 # delete-battles.sh — 1 引数 (StackName) を受け取って CFn DeleteStack + Wait する。
-#
-# Usage:
-#   bash scripts/delete-battles.sh <stack-name-or-arn> [<region>]
-#
-# 環境変数:
-#   AWS_REGION    region。第 2 引数 / env / aws cli config の順で解決
-#
-# 設計意図:
-#   deploy-battles.sh と対称な操作。MVP-1 は same-account なので CodeBuild Project Role
-#   が直接 CFn DeleteStack 権限を持つ。Phase 2 (cross-account) では sts:AssumeRole に
-#   差し替える。
-#
-# ステータス:
-#   - Stack が存在しない (Already Deleted) → 0 で正常終了
-#   - DeleteStack 後 wait failed → 非 0 で終了 (State Machine 側 MarkFailed が拾う)
+# deploy-battles.sh と対称な操作。MVP-1 は same-account なので CodeBuild Project Role
+# が直接 CFn DeleteStack 権限を持つ。Phase 2 (cross-account) では sts:AssumeRole に
+# 差し替える。
 
 set -euo pipefail
+
+# shellcheck source=lib/battles-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/battles-common.sh"
 
 case "${LC_ALL:-${LANG:-}}" in
   C|POSIX|"")
@@ -31,12 +22,8 @@ if [[ $# -lt 1 ]]; then
 fi
 
 STACK_NAME="$1"
-REGION="${2:-${AWS_REGION:-$(aws configure get region 2>/dev/null || true)}}"
-
-if [[ -z "${REGION}" ]]; then
-  echo "error: AWS region が解決できません (引数 / AWS_REGION env / aws cli config の順で探した)" >&2
-  exit 1
-fi
+# 第 2 引数 > AWS_REGION env > aws cli config の順 (resolve_aws_region は env/cli config を見る)。
+REGION="${2:-$(resolve_aws_region)}"
 
 echo "=========================================="
 echo "Deleting stack"
@@ -44,34 +31,38 @@ echo "  StackName : ${STACK_NAME}"
 echo "  Region    : ${REGION}"
 echo "=========================================="
 
-# Stack 存在確認。既に削除済み (DescribeStacks が ValidationError) なら何もせず終了する。
-# stderr を捨てると auth / throttle / network 等の transient 失敗まで「削除済み」扱いに
-# してしまうので、stderr を捕捉して "ValidationError" / "does not exist" メッセージのときだけ
-# no-op exit 0 にし、それ以外は loud に fail する。
-describe_err="$(
-  aws cloudformation describe-stacks \
+# DeleteStack 自体が冪等 (削除済み stack に対して呼んでも ValidationError を返すだけで
+# 既存リソースに影響なし)。pre-check の describe-stacks は TOCTOU race を生む (= check と
+# delete の間に他 actor が消すと describe は OK でも delete が ValidationError) ので入れない。
+# 直接 delete-stack → 既に削除済みなら "does not exist" を握って no-op exit、それ以外は loud に fail。
+delete_err="$(
+  aws cloudformation delete-stack \
     --region "${REGION}" \
-    --stack-name "${STACK_NAME}" \
-    --query "Stacks[0].StackStatus" \
-    --output text 2>&1
+    --stack-name "${STACK_NAME}" 2>&1
 )" || {
-  if grep -qiE "ValidationError|does not exist" <<<"${describe_err}"; then
+  if grep -qiE "ValidationError|does not exist" <<<"${delete_err}"; then
     echo "Stack ${STACK_NAME} は既に存在しない (already deleted) → no-op で終了"
     exit 0
   fi
-  echo "error: describe-stacks failed (auth/throttle/network 等を疑う): ${describe_err}" >&2
+  echo "error: delete-stack failed (auth/throttle/network 等を疑う): ${delete_err}" >&2
   exit 1
 }
 
-aws cloudformation delete-stack \
-  --region "${REGION}" \
-  --stack-name "${STACK_NAME}"
-
 # DeleteStack は async。完了 (= DescribeStacks が ValidationError を返す) まで wait。
 # 60 minutes timeout (CodeBuild Project の build timeout と揃える)。
-aws cloudformation wait stack-delete-complete \
-  --region "${REGION}" \
-  --stack-name "${STACK_NAME}"
+# 既削除の race (wait より先に消えた) も ValidationError として握る。
+wait_err="$(
+  aws cloudformation wait stack-delete-complete \
+    --region "${REGION}" \
+    --stack-name "${STACK_NAME}" 2>&1
+)" || {
+  if grep -qiE "ValidationError|does not exist" <<<"${wait_err}"; then
+    echo "Stack ${STACK_NAME} は既に削除済 (wait の前に消えた) → no-op で終了"
+    exit 0
+  fi
+  echo "error: wait stack-delete-complete failed: ${wait_err}" >&2
+  exit 1
+}
 
 echo ""
 echo "Stack ${STACK_NAME} deleted (region=${REGION})."

@@ -15,21 +15,16 @@ export type TeardownOutcome =
   | { kind: "missing_required_fields"; fields: readonly string[] };
 
 /**
- * 手動 teardown を要求する。Deploy 経路 (Lambda → EventBridge → State Machine →
- * CodeBuild → CFn CreateStack) と対称な削除経路 (Lambda → EventBridge →
- * `DeployDelete` State Machine → CodeBuild → CFn DeleteStack) を発火する。
+ * 手動 teardown を要求する。status を DELETING に倒して `DeployDeleteRequested` を
+ * EventBridge に publish するだけ (実 CFn DeleteStack は State Machine 経由で非同期実行)。
+ * 詳細フローは ADR-004 を参照。
  *
- * 1. 行を Get → tenantId 一致と status を確認 (race / not_found 防止)
- * 2. region / awsAccountId / stackName が揃っているか確認 (corruption 検出)
- * 3. status を `DELETING` に conditional update (race 防止 + UI に即時反映)
- * 4. EventBridge bus に `DeployDeleteRequested` を publish
- *    publish 失敗時は status を `FAILED` に compensating update (DELETING に
- *    取り残されると next call が `already_deleted` 扱いで orphan stack 化するため)
+ * publish 失敗時は status を FAILED に巻き戻す: DELETING のまま放置すると次の呼び出しが
+ * `already_deleted` で no-op を返して CFn stack が orphan 化するため。
  *
- * 既に `DELETING` / `DELETED` の行は no-op で `already_deleted` を返す。
- * クロステナント漏洩防止のため `tenantId` mismatch は `not_found` 扱い。
- * 必須フィールドの欠損は `missing_required_fields` (= 並行更新 `race` とは区別する、
- * operator が DDB の corruption を検出できるように)。
+ * `tenantId` mismatch は `not_found` を返してクロステナント漏洩を防ぐ。必須フィールド
+ * (region / awsAccountId / stackName) の欠損は `missing_required_fields` で並行更新
+ * (`race`) とは区別する (corruption 検出シグナル)。
  */
 export async function requestTeardown(
   shared: DeploySharedResources,

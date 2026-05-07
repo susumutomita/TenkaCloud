@@ -15,6 +15,7 @@ import {
   DynamoUpdateItem,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
+import { deploymentKey, stateEnteredTime } from "./state-machine-helpers";
 
 export interface DeployDeleteStateMachineProps {
   /**
@@ -115,17 +116,4 @@ export class DeployDeleteStateMachine extends Construct {
       },
     });
   }
-}
-
-function deploymentKey(): { PK: DynamoAttributeValue; SK: DynamoAttributeValue } {
-  return {
-    PK: DynamoAttributeValue.fromString(
-      JsonPath.format("DEPLOYMENT#{}", JsonPath.stringAt("$.detail.jobId")),
-    ),
-    SK: DynamoAttributeValue.fromString("META"),
-  };
-}
-
-function stateEnteredTime(): DynamoAttributeValue {
-  return DynamoAttributeValue.fromString(JsonPath.stringAt("$$.State.EnteredTime"));
 }
