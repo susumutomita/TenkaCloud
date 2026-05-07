@@ -87,6 +87,13 @@ export interface DeploymentItem {
   accountGroupId?: string;
   problemSetId?: string;
 
+  /**
+   * ADR-004 Phase 2: bulk deploy 経由で作られた deployment 行は、紐づく Event / Team を
+   * 参照する。旧 `POST /problems/:id/deploy` 経路で作られた行は両方 undefined (後方互換)。
+   */
+  eventId?: string;
+  teamId?: string;
+
   /** Scoring engine が加算したチームの累計ポイント。0 default。 */
   score?: number;
   /** 最後に scoring が走った時刻 (ISO 8601)。 */

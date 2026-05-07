@@ -83,14 +83,17 @@ export class ApiGateway extends Construct {
     deployment.addMethod("GET", deployIntegration, deployMethodOptions);
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);
 
-    // ADR-004 Phase 1: /events — 1 競技イベント = 1 行で teams + problems を持つ
-    // /events             POST = create / GET = list
-    // /events/{eventId}   GET  = detail (teams + problems)
+    // ADR-004 Phase 1+2a: /events — 1 競技イベント = 1 行で teams + problems を持つ
+    // /events                    POST = create   / GET = list
+    // /events/{eventId}          GET = detail    / DELETE = bulk teardown
+    // /events/{eventId}/deploy   POST = bulk deploy (teams × problems を fan-out)
     const eventIntegration = new LambdaIntegration(props.eventApiLambda);
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
     events.addMethod("POST", eventIntegration, deployMethodOptions);
     const event = events.addResource("{eventId}");
     event.addMethod("GET", eventIntegration, deployMethodOptions);
+    event.addMethod("DELETE", eventIntegration, deployMethodOptions);
+    event.addResource("deploy").addMethod("POST", eventIntegration, deployMethodOptions);
   }
 }

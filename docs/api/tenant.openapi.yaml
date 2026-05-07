@@ -264,6 +264,58 @@ paths:
                 $ref: "./_components.yaml#/components/schemas/EventDetail"
         "404":
           $ref: "./_components.yaml#/components/responses/NotFound"
+    delete:
+      tags: [events]
+      summary: Event 配下を bulk teardown
+      description: |
+        Event 配下の全 deployment 行 (PENDING / IN_PROGRESS / COMPLETE / FAILED) に対し
+        status を `DELETING` に倒し、`DeployDeleteRequested` を fan-out publish する。
+        既存 DeployDelete State Machine が個別に CFn DeleteStack を実行する。
+
+        Idempotent: 既に DELETING / DELETED な行は `skipped` に計上される。
+      responses:
+        "202":
+          description: 受付完了 (実 削除は非同期)
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/BulkTeardownResult"
+        "404":
+          $ref: "./_components.yaml#/components/responses/NotFound"
+
+  /events/{eventId}/deploy:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9A-HJKMNP-TV-Z]{26}$"
+          description: ULID
+    post:
+      tags: [events]
+      summary: Event 配下を bulk deploy
+      description: |
+        Event の `teams × problems` を全展開し、各組み合わせに対し deployment 行を
+        作成 (status=PENDING) + `DeployCreateRequested` を fan-out publish する。
+        既存 DeployCreate State Machine が個別に CFn CreateStack を実行する。
+
+        各 deployment 行は `eventId` / `teamId` / `teamLoginKey` (Team scope の共有キー)
+        を持ち、Phase 2c の Participant Portal が teamLoginKey で team の全問題を引ける。
+
+        Idempotent: 同 (eventId, teamId, problemId) で既存行があれば `attribute_not_exists`
+        で skip される (再呼び出しで未 publish 分のみ拾える結果整合性)。
+
+        `problems[].problemId` がカタログに無い場合は `skipped` に計上 (deploy しない)。
+      responses:
+        "202":
+          description: 受付完了 (実 deploy は非同期)
+          content:
+            application/json:
+              schema:
+                $ref: "./_components.yaml#/components/schemas/BulkDeployResult"
+        "404":
+          $ref: "./_components.yaml#/components/responses/NotFound"
 
 components:
   securitySchemes:
