@@ -43,6 +43,12 @@ interface RuntimeConfigProps {
    * ApiGateway.restApi.url (末尾スラッシュ有) から渡す。
    */
   readonly apiUrl: string;
+  /**
+   * Participant Portal の CloudFront URL。EventDetail / DeploymentDetail で operator が
+   * 「このイベントの portal を共有」できるようにするため runtime-config.json に注入する。
+   * 未設定 (Participant Portal 無効化時) なら undefined → frontend は fallback 表示。
+   */
+  readonly participantPortalUrl?: string;
 }
 
 /**
@@ -130,11 +136,12 @@ export class ApplicationAdminConsoleHosting extends Construct {
    * IdentityProvider + ApiGateway 確定後に呼び出して、application-admin-console が
    * 起動時に fetch する `/runtime-config.json` を CloudFront に配置する。
    *
-   * 中身は `{ cognitoDomain, userClientId, tenantId, tenantName, apiUrl }`。
+   * 中身は `{ cognitoDomain, userClientId, tenantId, tenantName, apiUrl, participantPortalUrl? }`。
    *   - cognitoDomain / userClientId: 認証で使う
    *   - tenantId: 内部 (API 呼び出し等)
    *   - tenantName: 画面表示用 (HomePage 等)
    *   - apiUrl: アプリ管理 API の base URL (POST /apps 等、#40-d)
+   *   - participantPortalUrl: 競技者向け Portal の CloudFront URL (sparse、未設定なら field 自体を出さない)
    */
   deployRuntimeConfig(props: RuntimeConfigProps): void {
     const data: Record<string, string> = {
@@ -143,6 +150,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: props.apiUrl.replace(/\/$/, ""),
+      ...(props.participantPortalUrl ? { participantPortalUrl: props.participantPortalUrl } : {}),
     };
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", data)],

@@ -226,6 +226,7 @@ const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-temp
   commitId,
   deployApiLambda: problemDeployBackendStack.deployApiLambda,
   eventApiLambda: problemDeployBackendStack.eventApiLambda,
+  participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
 });
 
 tenantTemplateStack.addDependency(problemDeployBackendStack);

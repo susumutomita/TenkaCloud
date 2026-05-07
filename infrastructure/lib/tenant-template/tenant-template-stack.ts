@@ -45,6 +45,13 @@ interface TenantTemplateStackProps extends StackProps {
    * tenant API の `/events*` routes が本 Lambda を invoke する。
    */
   eventApiLambda: IFunction;
+  /**
+   * Participant Portal の CloudFront URL。`ProblemDeployBackendStack` の
+   * `participantPortalUrl` をクロススタック参照で受け、application-admin-console の
+   * runtime-config.json に注入する (operator が EventDetail 等で「Portal URL を共有」
+   * できるようにするため)。Participant Portal が無効化された tenant では undefined。
+   */
+  participantPortalUrl?: string;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -114,6 +121,7 @@ export class TenantTemplateStack extends Stack {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: apiGateway.restApi.url,
+      participantPortalUrl: props.participantPortalUrl,
     });
 
     new AwsCustomResource(this, "CreateTenantMapping", {

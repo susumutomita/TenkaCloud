@@ -1,3 +1,11 @@
+# =====================================================================
+# WARNING — INTENTIONALLY VULNERABLE CODE
+# このファイルは Battle 競技問題 "security-battle-royale" の被攻撃対象 API
+# として意図的に SQL injection / SSRF / RCE / debug-mode 等を含んでいる。
+# プレイヤーがこれらの脆弱性を攻撃することで採点 endpoint を落とすゲーム性。
+# CodeQL / 静的解析からの警告は「ゲームプレイの一部」として dismiss される。
+# 本番アプリのコードとして参考にしないこと。
+# =====================================================================
 import json
 import logging
 import os
