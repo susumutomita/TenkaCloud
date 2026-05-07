@@ -141,6 +141,44 @@ export async function updateTeamName(
 }
 
 /**
+ * Phase 3: 自チームの加点履歴 (時系列降順)。flag 提出と uptime probe 成功の両方を含む。
+ */
+export interface ScoreEventView {
+  readonly jobId: string;
+  readonly problemId: string;
+  readonly source: "uptime" | "flag";
+  readonly points: number;
+  readonly result: "ok";
+  readonly occurredAt: string;
+}
+
+export interface ScoreEventsResponse {
+  readonly entries: readonly ScoreEventView[];
+}
+
+/**
+ * `GET /portal/me/score-events` を `Authorization: Bearer <teamLoginKey>` で呼ぶ。
+ * occurredAt 降順で 100 件まで。team の全 deployment 横断で merge 済。
+ */
+export async function getScoreEvents(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  signal?: AbortSignal,
+): Promise<ScoreEventsResponse> {
+  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me/score-events"), {
+    method: "GET",
+    headers: { authorization: `Bearer ${teamLoginKey}` },
+    signal,
+  });
+  if (res.status === 401) throw new PortalAuthError();
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new PortalNetworkError(res.status, body);
+  }
+  return (await res.json()) as ScoreEventsResponse;
+}
+
+/**
  * Phase 3: Event scope の team ランキング (= Scoreboard)。
  * 同じ event 内の全 team を score 降順 + 同点は teamName 昇順で並べた配列を返す。
  */
