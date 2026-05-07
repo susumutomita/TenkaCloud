@@ -16,8 +16,9 @@ import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
 import { getEventDetail, listEvents } from "./list.js";
+import { setEventSchedule } from "./schedule.js";
 import { buildEventSharedResources } from "./shared.js";
-import { CreateEventRequestSchema } from "./types.js";
+import { CreateEventRequestSchema, ScheduleEventRequestSchema } from "./types.js";
 
 /**
  * Event API Lambda の Hono app (ADR-004 Phase 1+2a)。routes:
@@ -49,7 +50,7 @@ app.use(
   cors({
     origin: "*",
     allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     maxAge: 600,
   }),
 );
@@ -118,6 +119,38 @@ app.get("/events/:eventId", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] getEventDetail failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.patch("/events/:eventId/schedule", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, HTTP_BAD_REQUEST);
+  }
+  const parsed = ScheduleEventRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+  }
+  const nowMs = Date.now();
+  // `startNow: true` は server now を ISO8601 化して採用 (= 即座に開始ボタンの裏挙動)。
+  const startsAt = "startNow" in parsed.data ? new Date(nowMs).toISOString() : parsed.data.startsAt;
+  try {
+    const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, startsAt, nowMs);
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    return c.json(
+      { startsAt: outcome.startsAt, updatedDeployments: outcome.updatedDeployments },
+      HTTP_OK,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] setEventSchedule failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

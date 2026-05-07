@@ -4,11 +4,14 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
+import DatePicker from "@cloudscape-design/components/date-picker";
+import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
+import TimeInput from "@cloudscape-design/components/time-input";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
@@ -20,6 +23,7 @@ import {
   type EventDetail,
   type EventStatus,
   getEvent,
+  setEventSchedule,
 } from "../api/events-client";
 import type { AppConfig } from "../config";
 
@@ -40,6 +44,10 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   const [bulkInFlight, setBulkInFlight] = useState<"deploy" | "teardown" | null>(null);
   const [confirmTeardown, setConfirmTeardown] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [scheduleInFlight, setScheduleInFlight] = useState<"now" | "scheduled" | null>(null);
 
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
 
@@ -90,6 +98,47 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBulkInFlight(null);
+    }
+  };
+
+  const handleStartNow = async () => {
+    if (!apiClient || scheduleInFlight) return;
+    setScheduleInFlight("now");
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { startNow: true });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScheduleInFlight(null);
+    }
+  };
+
+  const handleScheduledStart = async () => {
+    if (!apiClient || scheduleInFlight) return;
+    if (!scheduleDate || !scheduleTime) {
+      setError("日付と時刻の両方を指定してください");
+      return;
+    }
+    // DatePicker は YYYY-MM-DD、TimeInput は HH:mm。秒は :00 固定で組む (operator UX が分精度想定)。
+    const local = new Date(`${scheduleDate}T${scheduleTime}:00`);
+    if (Number.isNaN(local.getTime())) {
+      setError("日時の形式が不正です");
+      return;
+    }
+    setScheduleInFlight("scheduled");
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { startsAt: local.toISOString() });
+      setScheduleModalOpen(false);
+      setScheduleDate("");
+      setScheduleTime("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setScheduleInFlight(null);
     }
   };
 
@@ -156,6 +205,58 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             <Field label="チーム数">{detail.teamCount}</Field>
             <Field label="問題数">{detail.problems.length}</Field>
             <Field label="作成">{detail.createdAt}</Field>
+          </ColumnLayout>
+        </Container>
+      )}
+
+      {detail && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              description="競技開始時刻を指定するまで Health Check は probe / 採点を skip します (deploy 直後の誤加算を防ぎ、Lambda 呼出 / outbound 通信コストも抑制)。"
+              actions={
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    onClick={() => setScheduleModalOpen(true)}
+                    disabled={!apiClient || scheduleInFlight !== null}
+                  >
+                    日時を指定して開始
+                  </Button>
+                  <Button
+                    variant="primary"
+                    loading={scheduleInFlight === "now"}
+                    disabled={!apiClient || scheduleInFlight === "scheduled"}
+                    onClick={handleStartNow}
+                  >
+                    即座に開始
+                  </Button>
+                </SpaceBetween>
+              }
+            >
+              競技スケジュール
+            </Header>
+          }
+        >
+          <ColumnLayout columns={2} variant="text-grid">
+            <Field label="開始時刻 (UTC)">
+              {detail.startsAt ? (
+                <code>{detail.startsAt}</code>
+              ) : (
+                <Box variant="small" color="text-status-inactive">
+                  未設定 (採点停止中)
+                </Box>
+              )}
+            </Field>
+            <Field label="採点ステータス">
+              {!detail.startsAt ? (
+                <Badge color="grey">未開始</Badge>
+              ) : new Date(detail.startsAt).getTime() > Date.now() ? (
+                <Badge color="blue">開始予定</Badge>
+              ) : (
+                <Badge color="green">採点中</Badge>
+              )}
+            </Field>
           </ColumnLayout>
         </Container>
       )}
@@ -305,6 +406,49 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             既に DELETING / DELETED な行は idempotent で skip されます。Phase 3+ で
             「失敗した行のみ再試行」を追加予定です。
           </Box>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={scheduleModalOpen}
+        onDismiss={() => setScheduleModalOpen(false)}
+        header="競技開始日時を指定"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setScheduleModalOpen(false)}>キャンセル</Button>
+              <Button
+                variant="primary"
+                loading={scheduleInFlight === "scheduled"}
+                onClick={handleScheduledStart}
+              >
+                設定
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>
+            指定時刻を超えると HealthCheck が採点を開始します。ブラウザのローカル時刻で入力した値を
+            UTC に変換して保存します (分精度)。
+          </Box>
+          <FormField label="日付 (YYYY-MM-DD)">
+            <DatePicker
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.detail.value)}
+              placeholder="YYYY/MM/DD"
+            />
+          </FormField>
+          <FormField label="時刻 (HH:mm)">
+            <TimeInput
+              value={scheduleTime}
+              format="hh:mm"
+              placeholder="hh:mm"
+              onChange={(e) => setScheduleTime(e.detail.value)}
+            />
+          </FormField>
         </SpaceBetween>
       </Modal>
     </SpaceBetween>

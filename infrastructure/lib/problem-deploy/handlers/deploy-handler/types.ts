@@ -94,6 +94,14 @@ export interface DeploymentItem {
   eventId?: string;
   teamId?: string;
 
+  /**
+   * 競技開始時刻 (ISO8601) を Event から denormalize したコピー。HealthCheckLambda が
+   * probe / 採点 gate で参照する (now < eventStartsAt なら skip)。Bulk Deploy 時に
+   * Event.startsAt をコピーし、operator が schedule API で更新したら全 deployment 行へ
+   * 伝播する (event-handler/schedule.ts)。未設定 → 採点無し (= deploy 直後の誤加算防止)。
+   */
+  eventStartsAt?: string;
+
   /** Scoring engine が加算したチームの累計ポイント。0 default。 */
   score?: number;
   /** 最後に scoring が走った時刻 (ISO 8601)。 */

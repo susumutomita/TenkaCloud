@@ -21,6 +21,12 @@ export interface EventItem {
   createdAt: string;
   updatedAt: string;
   expiresAt: number;
+  /**
+   * 競技開始時刻 (ISO8601, UTC)。これより前は HealthCheckLambda が probe / 採点を skip。
+   * 未設定なら採点は始まらない (= deploy 直後に勝手にスコアが加算されるのを防ぐ)。
+   * 値は分精度想定 (operator UI が DatePicker + TimeInput で入力)。
+   */
+  startsAt?: string;
 }
 
 export const EventStatusSchema = z.enum(["DRAFT", "DEPLOYING", "READY", "TEARDOWN", "ARCHIVED"]);
@@ -122,8 +128,20 @@ export const EventSummarySchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   expiresAt: z.number(),
+  startsAt: z.string().optional(),
 });
 export type EventSummary = z.infer<typeof EventSummarySchema>;
+
+/**
+ * `PATCH /events/:eventId/schedule` body。
+ * - `{ startsAt: ISO8601 }`: operator 指定の日時 (分精度)
+ * - `{ startNow: true }`: 即座に開始 (= server now を採用)
+ */
+export const ScheduleEventRequestSchema = z.union([
+  z.object({ startsAt: z.string().datetime({ offset: true }) }),
+  z.object({ startNow: z.literal(true) }),
+]);
+export type ScheduleEventRequest = z.infer<typeof ScheduleEventRequestSchema>;
 
 export const TeamSummarySchema = z.object({
   teamId: z.string(),

@@ -132,6 +132,7 @@ export async function handler(): Promise<void> {
     );
     const items = (out.Items ?? []) as Partial<DeploymentItem>[];
 
+    const nowIso = new Date().toISOString();
     // 全 deployment を **並列** に check する。Lambda timeout 2 min 内に収まるよう、
     // sequential だと N × PROBE_TIMEOUT_MS で容易に超過する。1 deployment 失敗が
     // 他に波及しないよう catch して log に残す。
@@ -139,6 +140,10 @@ export async function handler(): Promise<void> {
       items.map(async (item) => {
         const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
         if (scoring?.kind !== "uptime") return;
+        // Event 開始時刻 (eventStartsAt) より前は probe + 採点を skip。
+        //   - deploy 直後の意図しない加点を防ぐ (operator が「即座に開始」or 日時設定するまで停止)
+        //   - 競技開始前の Lambda 呼び出し / outbound HTTP probe を抑制 (無駄なコスト削減)
+        if (!isScoringActive(item, nowIso)) return;
         try {
           await checkOne(item, scoring);
         } catch (err) {
@@ -153,3 +158,17 @@ export async function handler(): Promise<void> {
 }
 
 export { joinUrl };
+
+/**
+ * deployment が採点対象かを判定。`eventStartsAt` が未設定 / 未来なら false。
+ * - 未設定: 旧 jobId-based deployment / Event.startsAt 未設定 → 採点無し
+ * - 未来: operator が schedule 済だがまだ時刻に到達していない → skip
+ * 比較は ISO8601 文字列の辞書順比較で安全 (UTC ISO は時系列ソート可能)。
+ */
+export function isScoringActive(
+  item: Pick<DeploymentItem, "eventStartsAt">,
+  nowIso: string,
+): boolean {
+  if (typeof item.eventStartsAt !== "string") return false;
+  return nowIso >= item.eventStartsAt;
+}

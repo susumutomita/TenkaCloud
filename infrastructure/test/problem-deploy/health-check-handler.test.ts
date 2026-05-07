@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { joinUrl } from "../../lib/problem-deploy/handlers/health-check-handler";
+import { isScoringActive, joinUrl } from "../../lib/problem-deploy/handlers/health-check-handler";
 import {
   computeSince,
   type EndpointHealth,
@@ -10,6 +10,26 @@ import {
  * Health Check Lambda 内のヘルパーを pin する。Scoring の解釈は
  * `lib/utils/scoring-metadata.ts` 側で集約され、別 test file が cover する。
  */
+
+describe("isScoringActive", () => {
+  const NOW = "2026-05-08T10:00:00.000Z";
+
+  it("eventStartsAt 未設定なら false (= deploy 直後の意図しない加点を防ぐ)", () => {
+    expect(isScoringActive({}, NOW)).toBe(false);
+    expect(isScoringActive({ eventStartsAt: undefined }, NOW)).toBe(false);
+  });
+
+  it("eventStartsAt が現在時刻より未来なら false (= operator が schedule 済だが時刻未到達)", () => {
+    expect(isScoringActive({ eventStartsAt: "2026-05-08T10:00:00.001Z" }, NOW)).toBe(false);
+    expect(isScoringActive({ eventStartsAt: "2026-05-08T11:00:00.000Z" }, NOW)).toBe(false);
+  });
+
+  it("eventStartsAt が現在時刻と同じか過去なら true (= 競技開始済、採点 active)", () => {
+    expect(isScoringActive({ eventStartsAt: NOW }, NOW)).toBe(true);
+    expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
+    expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(true);
+  });
+});
 
 describe("joinUrl", () => {
   it("path 空ならそのまま base を返すべき", () => {
