@@ -66,13 +66,15 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         loading={isBackend && !view && !error}
         loadingText="問題を取得中…"
         cardDefinition={{
+          // jobId (ULID) を URL key にする。problemId (slug) は metadata 上 unique 前提だが、
+          // 将来 problemId を意図せず重複登録された場合の link 衝突を回避する防御。
           header: (problem) => (
             <Link
               fontSize="heading-m"
-              href={`/problems/${encodeURIComponent(problem.problemId)}`}
+              href={`/problems/${encodeURIComponent(problem.jobId)}`}
               onFollow={(e) => {
                 e.preventDefault();
-                navigate(`/problems/${encodeURIComponent(problem.problemId)}`);
+                navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
               }}
             >
               <code>{problem.problemId}</code>

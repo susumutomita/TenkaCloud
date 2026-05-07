@@ -11,20 +11,21 @@ import type { AppConfig } from "../config";
 
 /**
  * 1 問題の詳細ページ。Quests から click で来る。`useTeamView()` の問題リストから
- * `:problemId` 一致する 1 件を見つけて `ProblemPanel` を 1 つだけ表示する。
+ * `:jobId` 一致する 1 件を見つけて `ProblemPanel` を 1 つだけ表示する。
  *
- * 不在 (= deploy されていない / 旧 deployment) の場合は Quests へ navigate。
+ * URL key は jobId (ULID) を採用。problemId (slug) は metadata 上 unique 前提だが、
+ * 同名 problem の link 衝突を回避する防御。問題不在の場合は Alert で説明。
  */
 export function ProblemDetailPage({ config }: { config: AppConfig }) {
-  const { problemId } = useParams<{ problemId: string }>();
+  const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error, refresh } = useTeamView();
 
-  if (!problemId) return <Navigate to="/problems" replace />;
+  if (!jobId) return <Navigate to="/problems" replace />;
 
-  const problem = view?.problems.find((p) => p.problemId === problemId);
+  const problem = view?.problems.find((p) => p.jobId === jobId);
 
   return (
     <SpaceBetween size="l">
@@ -32,7 +33,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         variant="h1"
         actions={<Button onClick={() => navigate("/problems")}>問題一覧へ戻る</Button>}
       >
-        {problemId}
+        {problem?.problemId ?? jobId}
       </Header>
 
       {error && (
@@ -44,7 +45,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {!problem && view && (
         <Alert type="warning" header="この問題は自チームに deploy されていません">
           <Box variant="p">
-            <code>{problemId}</code> は自チームの deploy リストに無いため、詳細を表示できません。
+            jobId <code>{jobId}</code> は自チームの deploy リストに無いため、詳細を表示できません。
             operator にお問い合わせください。
           </Box>
         </Alert>

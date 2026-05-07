@@ -38,11 +38,9 @@ const SIDE_NAV_ITEMS: SideNavigationProps.Item[] = [
     text: "Quests",
     items: [{ type: "link", href: "/problems", text: "問題一覧" }],
   },
-  {
-    type: "section",
-    text: "Tools",
-    items: [{ type: "link", href: "/tools/sso", text: "SSO Credentials" }],
-  },
+  // Tools section (SSO Credentials) は Identity Center 連携の ADR が固まるまで
+  // 非表示 (Issue #500)。route 自体は placeholder で残置しているので bookmark 経由の
+  // 直接アクセスは可能だが、sidebar からは導線を切る。
 ];
 
 export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
