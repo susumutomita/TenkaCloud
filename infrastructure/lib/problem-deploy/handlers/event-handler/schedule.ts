@@ -1,6 +1,6 @@
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import type { EventSharedResources } from "./shared.js";
+import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
 import type { EventItem } from "./types.js";
 
 /**
@@ -60,20 +60,11 @@ export async function setEventSchedule(
   }
   if (!updatedEvent) return { kind: "not_found" };
 
-  // 紐づく deployment 行を全部引いて eventStartsAt を伝播。GSI1 (TENANT#) で全件取得し
-  // eventId フィルタ — 同 tenant 内 deployment <100 程度の運用想定で in-memory 処理可。
-  const deploymentsOut = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.deploymentsTableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-      ProjectionExpression: "PK, eventId",
-    }),
-  );
-  const targets = (deploymentsOut.Items ?? [])
-    .map((d) => d as Pick<DeploymentItem, "PK" | "eventId">)
-    .filter((d) => d.eventId === eventId && typeof d.PK === "string");
+  // 紐づく deployment 行を全部引いて eventStartsAt を伝播 (PK だけあれば update 可)。
+  const deploymentsOut = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
+  const targets = deploymentsOut
+    .map((d) => d as Pick<DeploymentItem, "PK">)
+    .filter((d) => typeof d.PK === "string");
 
   // Promise.all で並列 update。各 row は冪等な単一フィールド update (UpdateExpression)。
   await Promise.all(

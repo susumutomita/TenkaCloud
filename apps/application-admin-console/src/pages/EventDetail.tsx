@@ -248,15 +248,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 </Box>
               )}
             </Field>
-            <Field label="採点ステータス">
-              {!detail.startsAt ? (
-                <Badge color="grey">未開始</Badge>
-              ) : new Date(detail.startsAt).getTime() > Date.now() ? (
-                <Badge color="blue">開始予定</Badge>
-              ) : (
-                <Badge color="green">採点中</Badge>
-              )}
-            </Field>
+            <Field label="採点ステータス">{scoringBadge(detail.startsAt)}</Field>
           </ColumnLayout>
         </Container>
       )}
@@ -453,6 +445,16 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       </Modal>
     </SpaceBetween>
   );
+}
+
+/**
+ * Event の採点状況バッジ。3 分岐: 未設定 / 開始予定 / 採点中。
+ * 時刻判定は新しいレンダ時の `Date.now()` を使うので polling refresh で自然に更新される。
+ */
+function scoringBadge(startsAt: string | undefined) {
+  if (!startsAt) return <Badge color="grey">未開始</Badge>;
+  if (new Date(startsAt).getTime() > Date.now()) return <Badge color="blue">開始予定</Badge>;
+  return <Badge color="green">採点中</Badge>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

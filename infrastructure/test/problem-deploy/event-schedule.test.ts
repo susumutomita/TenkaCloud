@@ -37,16 +37,15 @@ describe("setEventSchedule", () => {
         startsAt: STARTS_AT,
       },
     });
-    // 2nd: Deployments QueryCommand (GSI1 = TENANT#)
+    // 2nd: Deployments QueryCommand (FilterExpression で EV1 のみ server 側で除外済み)
     ddbSend.mockResolvedValueOnce({
       Items: [
         { PK: "DEPLOYMENT#J1", eventId: "EV1" },
         { PK: "DEPLOYMENT#J2", eventId: "EV1" },
-        { PK: "DEPLOYMENT#J3", eventId: "EV-OTHER" }, // 別 event は除外
         { PK: "DEPLOYMENT#J4", eventId: "EV1" },
       ],
     });
-    // 3rd-5th: Deployments UpdateCommand × 3 (J1, J2, J4 — EV-OTHER は skip)
+    // 3rd-5th: Deployments UpdateCommand × 3
     ddbSend.mockResolvedValue({});
 
     const out = await setEventSchedule(shared, "tenant-acme", "EV1", STARTS_AT, NOW_MS);
@@ -59,13 +58,15 @@ describe("setEventSchedule", () => {
     expect(eventUpd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
     expect(eventUpd.input.ExpressionAttributeValues?.[":startsAt"]).toBe(STARTS_AT);
 
-    // Deployments query は GSI1 = TENANT#tenant-acme
+    // Deployments query は GSI1 = TENANT# + FilterExpression で eventId 一致 (cross-event 漏洩防止)
     const queryCmd = ddbSend.mock.calls[1]?.[0] as QueryCommand;
     expect(queryCmd).toBeInstanceOf(QueryCommand);
     expect(queryCmd.input.IndexName).toBe("GSI1");
     expect(queryCmd.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
+    expect(queryCmd.input.FilterExpression).toBe("eventId = :ev");
+    expect(queryCmd.input.ExpressionAttributeValues?.[":ev"]).toBe("EV1");
 
-    // Deployment update が EV1 行のみ走り、EV-OTHER は触らない
+    // Deployment update が EV1 行 3 件のみ走る
     const updCmds = ddbSend.mock.calls
       .map((c) => c[0])
       .filter((c, i): c is UpdateCommand => i > 0 && c instanceof UpdateCommand);

@@ -178,13 +178,14 @@ export async function bulkDeployEvent(
     const chunk = entries.slice(i, i + PUT_EVENTS_BATCH);
     putChunks.push(shared.events.send(new PutEventsCommand({ Entries: chunk })));
   }
-  await Promise.all(putChunks);
 
   // Event status を DRAFT → DEPLOYING に倒す。operator が EventDetail の status badge で
   // 「Bulk Deploy が走っている」ことを視認できるようにするため。
-  // ConditionExpression で他 status (TEARDOWN 等) を踏み越えない安全弁。
-  try {
-    await shared.ddb.send(
+  // ConditionExpression で他 status (TEARDOWN 等) を踏み越えない安全弁。CCF は
+  // 既に TEARDOWN/ARCHIVED 等の終端状態 → 触らないだけで成功扱い。
+  // PutEvents と並列実行 (互いに依存なし、書き込み先が別 service なのでラウンドトリップ節約)。
+  const updateStatus = shared.ddb
+    .send(
       new UpdateCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
@@ -198,13 +199,13 @@ export async function bulkDeployEvent(
           ":now": createdAt,
         },
       }),
-    );
-  } catch (err) {
-    // ConditionalCheckFailedException = 既に TEARDOWN/ARCHIVED 等の終端状態 → 触らない。
-    if (err instanceof Error && err.name !== "ConditionalCheckFailedException") {
-      throw err;
-    }
-  }
+    )
+    .catch((err: unknown) => {
+      if (err instanceof Error && err.name !== "ConditionalCheckFailedException") {
+        throw err;
+      }
+    });
+  await Promise.all([...putChunks, updateStatus]);
 
   return { kind: "ok", result: { eventId, enqueued: items.length, skipped } };
 }
