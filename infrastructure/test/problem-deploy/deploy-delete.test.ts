@@ -75,7 +75,7 @@ describe("requestTeardown", () => {
     });
   });
 
-  it("stackId (ARN) があれば stackName よりそちらを使うべき", async () => {
+  it("stackId (ARN) があれば namePrefix ではなく ARN を stackName として publish するべき", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: sampleRow({
@@ -87,6 +87,8 @@ describe("requestTeardown", () => {
 
     await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
 
+    // CFn DeleteStack は ARN も name も受け付けるが、削除済みと同名の new stack が
+    // 並んだ場合に ARN なら必ず本来の物理リソースを差せるので priority を持たせる。
     const detail = JSON.parse(
       (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
     );
@@ -143,16 +145,53 @@ describe("requestTeardown", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("region / awsAccountId / stackName が欠けていれば race として返し PutEvents しないべき", async () => {
+  it("region / awsAccountId / stackName が欠けていれば missing_required_fields を欠損 fields 付きで返すべき", async () => {
+    // race (= 並行 update に負けた) と区別する: corruption (DDB データ欠損) は
+    // operator が watch する別の運用シグナルなので別 reason として返す。
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
-      Item: sampleRow({ region: "", namePrefix: "", stackId: undefined }),
+      Item: sampleRow({
+        region: "",
+        awsAccountId: "",
+        namePrefix: "",
+        stackId: undefined,
+      }),
     });
 
     const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
-    expect(out).toEqual({ kind: "race", reason: "tenant_or_status_mismatch" });
+    expect(out).toEqual({
+      kind: "missing_required_fields",
+      fields: ["region", "awsAccountId", "stackName"],
+    });
     expect(ddbSend.mock.calls.filter((c) => c[0] instanceof UpdateCommand)).toHaveLength(0);
     expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  it("publishProblemEvent が失敗したら status を FAILED に compensating update して例外を伝播するべき", async () => {
+    // DELETING のまま放置すると、次の呼び出しが already_deleted で no-op を返し
+    // CFn stack が orphan 化するため、publish 失敗時は status を巻き戻す。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
+    ddbSend.mockResolvedValueOnce({}); // DELETING 書き込み成功
+    eventsSend.mockRejectedValueOnce(new Error("EventBridge throttled"));
+    ddbSend.mockResolvedValueOnce({}); // FAILED への巻き戻し成功
+
+    await expect(requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS)).rejects.toThrow(
+      /EventBridge throttled/,
+    );
+
+    const updateCmds = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is UpdateCommand => c instanceof UpdateCommand);
+    expect(updateCmds).toHaveLength(2);
+    // 2 件目 (compensation) が FAILED への巻き戻し
+    const compensation = updateCmds[1] as UpdateCommand;
+    expect(compensation.input.ExpressionAttributeValues?.[":failed"]).toBe("FAILED");
+    expect(compensation.input.ExpressionAttributeValues?.[":deleting"]).toBe("DELETING");
+    expect(compensation.input.ConditionExpression).toContain("#s = :deleting");
+    expect(compensation.input.ExpressionAttributeValues?.[":reason"]).toContain(
+      "Failed to publish",
+    );
   });
 
   it("最初の GetItem は PK=DEPLOYMENT#<jobId> SK=META を引くべき", async () => {

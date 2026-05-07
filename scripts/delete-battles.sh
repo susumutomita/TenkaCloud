@@ -45,14 +45,23 @@ echo "  Region    : ${REGION}"
 echo "=========================================="
 
 # Stack 存在確認。既に削除済み (DescribeStacks が ValidationError) なら何もせず終了する。
-if ! aws cloudformation describe-stacks \
+# stderr を捨てると auth / throttle / network 等の transient 失敗まで「削除済み」扱いに
+# してしまうので、stderr を捕捉して "ValidationError" / "does not exist" メッセージのときだけ
+# no-op exit 0 にし、それ以外は loud に fail する。
+describe_err="$(
+  aws cloudformation describe-stacks \
     --region "${REGION}" \
     --stack-name "${STACK_NAME}" \
     --query "Stacks[0].StackStatus" \
-    --output text >/dev/null 2>&1; then
-  echo "Stack ${STACK_NAME} は既に存在しない (already deleted) → no-op で終了"
-  exit 0
-fi
+    --output text 2>&1
+)" || {
+  if grep -qiE "ValidationError|does not exist" <<<"${describe_err}"; then
+    echo "Stack ${STACK_NAME} は既に存在しない (already deleted) → no-op で終了"
+    exit 0
+  fi
+  echo "error: describe-stacks failed (auth/throttle/network 等を疑う): ${describe_err}" >&2
+  exit 1
+}
 
 aws cloudformation delete-stack \
   --region "${REGION}" \

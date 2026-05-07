@@ -167,6 +167,12 @@ app.delete("/deployments/:jobId", async (c) => {
       return c.json({ status: "already_deleted" }, HTTP_OK);
     }
     if (outcome.kind === "race") return c.json({ error: "conflict" }, HTTP_CONFLICT);
+    if (outcome.kind === "missing_required_fields") {
+      return c.json(
+        { error: "missing_required_fields", fields: outcome.fields },
+        HTTP_INTERNAL_ERROR,
+      );
+    }
     return c.json({ status: "accepted", previousStatus: outcome.previousStatus }, HTTP_ACCEPTED);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
