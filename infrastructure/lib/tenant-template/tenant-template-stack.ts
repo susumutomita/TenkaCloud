@@ -40,6 +40,11 @@ interface TenantTemplateStackProps extends StackProps {
    * `LambdaIntegration` で invoke する (ADR-001 / Issue #458)。
    */
   deployApiLambda: IFunction;
+  /**
+   * `ProblemDeployBackendStack.eventApiLambda` をクロススタック参照で受ける (ADR-004 Phase 1)。
+   * tenant API の `/events*` routes が本 Lambda を invoke する。
+   */
+  eventApiLambda: IFunction;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -81,6 +86,7 @@ export class TenantTemplateStack extends Stack {
       idpDetails: identityProvider.identityDetails,
       userPool: identityProvider.tenantUserPool,
       deployApiLambda: props.deployApiLambda,
+      eventApiLambda: props.eventApiLambda,
       apiKeyBasicTier: {
         apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.basic.keyId),
         value: this.ssmLookup(props.ApiKeySSMParameterNames.basic.value),

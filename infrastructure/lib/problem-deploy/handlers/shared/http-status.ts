@@ -5,6 +5,7 @@
  * Hono の `ContentfulStatusCode` は number union なので as const で number 互換に保つ。
  */
 export const HTTP_OK = 200 as const;
+export const HTTP_CREATED = 201 as const;
 export const HTTP_ACCEPTED = 202 as const;
 export const HTTP_BAD_REQUEST = 400 as const;
 export const HTTP_UNAUTHORIZED = 401 as const;

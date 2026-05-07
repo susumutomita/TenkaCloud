@@ -23,10 +23,10 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
   describe("Deployments DDB table", () => {
-    it("DDB テーブルを 1 つ持ち、PK/SK + PROVISIONED 1/1 であるべき", () => {
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 1);
-      // BillingMode は default (PROVISIONED) のとき CFn template に出力されないので、
-      // ProvisionedThroughput と KeySchema で確認する。
+    it("DDB テーブルを Deployments / Events / Teams の 3 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
+      // ADR-004 Phase 1 で Events / Teams を追加。3 Table すべて DynamoDbLowCapacity Aspect で
+      // 1/1 PROVISIONED に均される。
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 3);
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
