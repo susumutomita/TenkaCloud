@@ -67,7 +67,7 @@ export function LoginPage({ config }: { config: AppConfig }) {
             </Alert>
             <FormField
               label="チームログインキー"
-              description="問題 deploy 時に運営が発行する短命キー (例: 32 文字の base64)"
+              description="問題 deploy 時に運営が発行する短命キー"
             >
               <Input
                 value={teamLoginKey}

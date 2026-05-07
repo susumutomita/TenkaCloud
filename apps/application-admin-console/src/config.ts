@@ -14,6 +14,12 @@ export interface AppConfig {
    * dev fallback ではダミー URL になるので実 API 呼び出しは成立しない。
    */
   readonly apiBaseUrl: string;
+  /**
+   * 競技者向け Participant Portal の URL。EventDetail / DeploymentDetail から
+   * operator が「このイベントの portal を共有」する画面表示に使う。
+   * runtime-config に未注入なら undefined (CDK 側 wire-up が完了するまで fallback 表示)。
+   */
+  readonly participantPortalUrl?: string;
 }
 
 interface RuntimeConfig {
@@ -22,6 +28,7 @@ interface RuntimeConfig {
   readonly tenantId: string;
   readonly tenantName: string;
   readonly apiUrl: string;
+  readonly participantPortalUrl?: string;
 }
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
@@ -43,6 +50,8 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       tenantId: data.tenantId,
       tenantName: data.tenantName,
       apiUrl: data.apiUrl,
+      participantPortalUrl:
+        typeof data.participantPortalUrl === "string" ? data.participantPortalUrl : undefined,
     };
   } catch {
     return null;
@@ -67,6 +76,7 @@ export async function loadConfig(
       tenantId: runtime.tenantId,
       tenantName: runtime.tenantName,
       apiBaseUrl: runtime.apiUrl,
+      participantPortalUrl: runtime.participantPortalUrl,
       redirectUri,
       scope,
     };
