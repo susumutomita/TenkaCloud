@@ -1,17 +1,25 @@
 import Alert from "@cloudscape-design/components/alert";
+import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Cards from "@cloudscape-design/components/cards";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
+import SegmentedControl from "@cloudscape-design/components/segmented-control";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-client";
+import type {
+  DeploymentStatus,
+  ParticipantProblemView,
+  ParticipantScoringInfo,
+} from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { categoryOf } from "../lib/category";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -22,10 +30,14 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
-const SCORING_KIND_LABEL = {
-  flag: "Challenge (flag 提出)",
-  uptime: "Battle (uptime 加点)",
-} as const;
+type CategoryFilter = "all" | "battle" | "challenge";
+
+function categoryBadge(scoring: ParticipantScoringInfo | undefined) {
+  const cat = categoryOf(scoring);
+  if (cat === "battle") return <Badge color="red">Battle</Badge>;
+  if (cat === "challenge") return <Badge color="blue">Challenge</Badge>;
+  return <Badge color="grey">未分類</Badge>;
+}
 
 /**
  * 自チーム向け deploy 済問題のカタログ画面 (sidebar 「問題一覧」)。Home に対する
@@ -39,6 +51,22 @@ export function QuestsPage({ config }: { config: AppConfig }) {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
   const isBackend = config.mode === "backend";
+  const [filter, setFilter] = useState<CategoryFilter>("all");
+
+  const counts = useMemo(() => {
+    const all = view?.problems ?? [];
+    return {
+      all: all.length,
+      battle: all.filter((p) => categoryOf(p.scoring) === "battle").length,
+      challenge: all.filter((p) => categoryOf(p.scoring) === "challenge").length,
+    };
+  }, [view]);
+
+  const filteredItems = useMemo(() => {
+    const all = view?.problems ?? [];
+    if (filter === "all") return [...all];
+    return all.filter((p) => categoryOf(p.scoring) === filter);
+  }, [view, filter]);
 
   return (
     <SpaceBetween size="l">
@@ -61,24 +89,38 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
+      <SegmentedControl
+        selectedId={filter}
+        onChange={({ detail }) => setFilter(detail.selectedId as CategoryFilter)}
+        options={[
+          { id: "all", text: `すべて (${counts.all})` },
+          { id: "battle", text: `Battle (${counts.battle})` },
+          { id: "challenge", text: `Challenge (${counts.challenge})` },
+        ]}
+        label="カテゴリで絞り込み"
+      />
+
       <Cards<ParticipantProblemView>
-        items={view ? [...view.problems] : []}
+        items={filteredItems}
         loading={isBackend && !view && !error}
         loadingText="問題を取得中…"
         cardDefinition={{
           // jobId (ULID) を URL key にする。problemId (slug) は metadata 上 unique 前提だが、
           // 将来 problemId を意図せず重複登録された場合の link 衝突を回避する防御。
           header: (problem) => (
-            <Link
-              fontSize="heading-m"
-              href={`/problems/${encodeURIComponent(problem.jobId)}`}
-              onFollow={(e) => {
-                e.preventDefault();
-                navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
-              }}
-            >
-              <code>{problem.problemId}</code>
-            </Link>
+            <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+              <Link
+                fontSize="heading-m"
+                href={`/problems/${encodeURIComponent(problem.jobId)}`}
+                onFollow={(e) => {
+                  e.preventDefault();
+                  navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
+                }}
+              >
+                <code>{problem.problemId}</code>
+              </Link>
+              {categoryBadge(problem.scoring)}
+            </SpaceBetween>
           ),
           sections: [
             {
@@ -89,12 +131,6 @@ export function QuestsPage({ config }: { config: AppConfig }) {
                   {problem.status}
                 </StatusIndicator>
               ),
-            },
-            {
-              id: "kind",
-              header: "形式",
-              content: (problem) =>
-                problem.scoring ? SCORING_KIND_LABEL[problem.scoring.kind] : "(未設定)",
             },
             {
               id: "score",
@@ -142,9 +178,15 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         empty={
           <Container>
             <Box textAlign="center" padding="l">
-              <Box variant="strong">問題がありません</Box>
+              <Box variant="strong">
+                {filter === "all"
+                  ? "問題がありません"
+                  : `${filter === "battle" ? "Battle" : "Challenge"} カテゴリに該当する問題がありません`}
+              </Box>
               <Box variant="small" color="text-status-inactive" padding={{ top: "s" }}>
-                このチームには deploy 済みの問題がありません。operator にお問い合わせください。
+                {filter === "all"
+                  ? "このチームには deploy 済みの問題がありません。operator にお問い合わせください。"
+                  : "他カテゴリは「すべて」タブで確認できます。"}
               </Box>
             </Box>
           </Container>
