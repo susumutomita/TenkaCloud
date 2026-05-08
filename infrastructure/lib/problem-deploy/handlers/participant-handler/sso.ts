@@ -14,6 +14,60 @@ const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const FEDERATION_SESSION_DURATION_SEC = 3600;
 const TENKACLOUD_ISSUER = "https://tenkacloud.example/portal";
 
+/**
+ * AssumeRole 時の inline session policy。`ConsoleViewerRole` の `ReadOnlyAccess` を
+ * 「stack の状態が見れる + 競技対象 service の Describe」だけに**さらに絞る**ための gate。
+ *
+ * 必要: 競技者は自分の deployment の CFn / EC2 / Logs だけ見えればよい。
+ * 危険: ReadOnlyAccess 単体だと operator account の DDB Deployments テーブル
+ * (= 全チームの teamLoginKey が入っている) を Scan されて bearer token が漏れる。
+ * → `dynamodb:*` / `secretsmanager:*` / `ssm:Get*` / `kms:Decrypt` / `iam:*` を Deny で殺す。
+ *
+ * セッションポリシーは Role の policy との **AND** で評価される (= Allow の和集合では
+ * なく交差) なので、ここで Allow したものは元 Role に無ければ通らない。
+ */
+const SESSION_POLICY = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Effect: "Allow",
+      Action: [
+        "cloudformation:DescribeStacks",
+        "cloudformation:GetTemplate",
+        "cloudformation:ListStackResources",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "ec2:Describe*",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "lambda:GetFunction",
+        "lambda:ListFunctions",
+        "apigateway:GET",
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+      ],
+      Resource: "*",
+    },
+    {
+      Effect: "Deny",
+      Action: [
+        "dynamodb:*",
+        "secretsmanager:*",
+        "ssm:Get*",
+        "ssm:Describe*",
+        "kms:Decrypt",
+        "kms:GenerateDataKey",
+        "iam:*",
+        "sts:AssumeRole",
+      ],
+      Resource: "*",
+    },
+  ],
+});
+
 const sts = new STSClient({});
 
 /**
@@ -51,12 +105,14 @@ export async function getConsoleSigninUrl(
   const region = typeof deployment.region === "string" ? deployment.region : undefined;
   if (!region) return { kind: "not_ready" };
 
-  // STS AssumeRole. ExternalId は同 account 内なので省略 (cross-account は別 Role でカバー)。
+  // STS AssumeRole + inline session policy で `ReadOnlyAccess` をさらに絞る。
+  // ExternalId は同 account 内なので省略 (cross-account は別 Role でカバー)。
   const session = await sts.send(
     new AssumeRoleCommand({
       RoleArn: roleArn,
-      RoleSessionName: `participant-${jobId}`.slice(0, 64),
+      RoleSessionName: `participant-${jobId}`,
       DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
+      Policy: SESSION_POLICY,
     }),
   );
   const creds = session.Credentials;

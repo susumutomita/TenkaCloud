@@ -131,6 +131,46 @@ describe("getConsoleSigninUrl", () => {
     expect(result.loginUrl).toContain(encodeURIComponent("tc-security-battle-royale-alpha"));
   });
 
+  it("AssumeRole に inline session policy を渡し、DDB / Secrets Manager / KMS / IAM を Deny で殺すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIAFAKE",
+        SecretAccessKey: "SECRETFAKE",
+        SessionToken: "TOKENFAKE",
+        Expiration: new Date(),
+      },
+    });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ SigninToken: "TOKEN" }), { status: 200 }),
+    );
+
+    await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+
+    const cmd = stsSend.mock.calls[0]?.[0] as AssumeRoleCommand;
+    const policyRaw = cmd.input.Policy;
+    expect(typeof policyRaw).toBe("string");
+    const policy = JSON.parse(policyRaw as string) as {
+      Statement: Array<{ Effect: string; Action: string[] }>;
+    };
+    const denyActions = policy.Statement.filter((s) => s.Effect === "Deny").flatMap(
+      (s) => s.Action,
+    );
+    // 他チームの teamLoginKey が DDB Deployments に入っているので必須
+    expect(denyActions).toContain("dynamodb:*");
+    expect(denyActions).toContain("secretsmanager:*");
+    expect(denyActions).toContain("kms:Decrypt");
+    expect(denyActions).toContain("iam:*");
+    // 連鎖 AssumeRole も封じる (= 別 Role に乗り換えられない)
+    expect(denyActions).toContain("sts:AssumeRole");
+    // CFn の閲覧は Allow されている
+    const allowActions = policy.Statement.filter((s) => s.Effect === "Allow").flatMap(
+      (s) => s.Action,
+    );
+    expect(allowActions).toContain("cloudformation:DescribeStacks");
+  });
+
   it("getSigninToken が 5xx を返したら misconfigured", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
