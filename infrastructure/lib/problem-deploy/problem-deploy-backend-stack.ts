@@ -4,6 +4,7 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import { ConsoleViewerRole } from "./console-viewer-role";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine";
@@ -156,10 +157,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     }
 
     if (props.participantPortal) {
+      const consoleViewerRole = new ConsoleViewerRole(this, "ConsoleViewerRole");
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
         deploymentsTable: deployments.table,
         problemsScoring: props.problemsScoring,
+        consoleViewerRoleArn: consoleViewerRole.role.roleArn,
       });
+      // Lambda role に AssumeRole 権限を付与 (= federation flow の前提)。
+      consoleViewerRole.role.grantAssumeRole(portalLambda.fn.grantPrincipal);
       new CfnOutput(this, "ParticipantPortalApiUrl", {
         value: portalLambda.url.url,
         description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",

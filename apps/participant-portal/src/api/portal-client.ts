@@ -27,6 +27,8 @@ export interface ParticipantProblemView {
   readonly jobId: string;
   readonly problemId: string;
   readonly region: string;
+  /** 競技アカウント ID。SSO Credentials の AWS Console federation で使う。 */
+  readonly awsAccountId: string;
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
@@ -87,6 +89,54 @@ function buildPortalUrl(apiBaseUrl: string, path: string): URL {
   return new URL(path, base);
 }
 
+interface PortalFetchOptions {
+  readonly method?: "GET" | "POST" | "PATCH";
+  readonly query?: Readonly<Record<string, string>>;
+  readonly body?: unknown;
+  readonly signal?: AbortSignal;
+  /** 400 を `PortalValidationError(error)` に変換する (応答 body の `error` フィールドを採用)。 */
+  readonly throwOn400?: boolean;
+  /** 404 を `undefined` として返す (= "存在しない" を許容するエンドポイント)。 */
+  readonly returnUndefinedOn404?: boolean;
+}
+
+/**
+ * Portal API 共通 fetch。401→PortalAuthError / !ok→PortalNetworkError は全 endpoint
+ * 共通なので 1 箇所に集約。400 (validation) と 404 (no-content) は opt-in。
+ */
+async function portalFetch<T>(
+  apiBaseUrl: string,
+  path: string,
+  teamLoginKey: string,
+  options: PortalFetchOptions = {},
+): Promise<T | undefined> {
+  const url = buildPortalUrl(apiBaseUrl, path);
+  if (options.query) {
+    for (const [k, v] of Object.entries(options.query)) url.searchParams.set(k, v);
+  }
+  const headers: Record<string, string> = { authorization: `Bearer ${teamLoginKey}` };
+  const hasBody = options.body !== undefined;
+  if (hasBody) headers["content-type"] = "application/json";
+
+  const res = await fetch(url, {
+    method: options.method ?? "GET",
+    headers,
+    body: hasBody ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
+  });
+  if (res.status === 401) throw new PortalAuthError();
+  if (res.status === 404 && options.returnUndefinedOn404) return undefined;
+  if (res.status === 400 && options.throwOn400) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new PortalValidationError(body.error ?? "invalid_request");
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new PortalNetworkError(res.status, body);
+  }
+  return (await res.json()) as T;
+}
+
 /**
  * `GET /portal/me` を `Authorization: Bearer <teamLoginKey>` で呼び、
  * `ParticipantTeamView` (= team + problems[]) を返す。
@@ -96,17 +146,9 @@ export async function getPortalMe(
   teamLoginKey: string,
   signal?: AbortSignal,
 ): Promise<ParticipantTeamView> {
-  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me"), {
-    method: "GET",
-    headers: { authorization: `Bearer ${teamLoginKey}` },
+  return (await portalFetch<ParticipantTeamView>(apiBaseUrl, "portal/me", teamLoginKey, {
     signal,
-  });
-  if (res.status === 401) throw new PortalAuthError();
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new PortalNetworkError(res.status, body);
-  }
-  return (await res.json()) as ParticipantTeamView;
+  })) as ParticipantTeamView;
 }
 
 /**
@@ -119,25 +161,12 @@ export async function updateTeamName(
   teamName: string,
   signal?: AbortSignal,
 ): Promise<ParticipantTeamView> {
-  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me"), {
+  return (await portalFetch<ParticipantTeamView>(apiBaseUrl, "portal/me", teamLoginKey, {
     method: "PATCH",
-    headers: {
-      authorization: `Bearer ${teamLoginKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ teamName }),
+    body: { teamName },
+    throwOn400: true,
     signal,
-  });
-  if (res.status === 400) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new PortalValidationError(body.error ?? "invalid_team_name");
-  }
-  if (res.status === 401) throw new PortalAuthError();
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new PortalNetworkError(res.status, body);
-  }
-  return (await res.json()) as ParticipantTeamView;
+  })) as ParticipantTeamView;
 }
 
 /**
@@ -165,17 +194,12 @@ export async function getScoreEvents(
   teamLoginKey: string,
   signal?: AbortSignal,
 ): Promise<ScoreEventsResponse> {
-  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me/score-events"), {
-    method: "GET",
-    headers: { authorization: `Bearer ${teamLoginKey}` },
-    signal,
-  });
-  if (res.status === 401) throw new PortalAuthError();
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new PortalNetworkError(res.status, body);
-  }
-  return (await res.json()) as ScoreEventsResponse;
+  return (await portalFetch<ScoreEventsResponse>(
+    apiBaseUrl,
+    "portal/me/score-events",
+    teamLoginKey,
+    { signal },
+  )) as ScoreEventsResponse;
 }
 
 /**
@@ -207,18 +231,30 @@ export async function getLeaderboard(
   teamLoginKey: string,
   signal?: AbortSignal,
 ): Promise<LeaderboardResponse | undefined> {
-  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/leaderboard"), {
-    method: "GET",
-    headers: { authorization: `Bearer ${teamLoginKey}` },
+  return await portalFetch<LeaderboardResponse>(apiBaseUrl, "portal/leaderboard", teamLoginKey, {
+    returnUndefinedOn404: true,
     signal,
   });
-  if (res.status === 401) throw new PortalAuthError();
-  if (res.status === 404) return undefined;
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new PortalNetworkError(res.status, body);
-  }
-  return (await res.json()) as LeaderboardResponse;
+}
+
+/**
+ * SSO Credentials: AWS Console ワンクリック login URL を発行する API。
+ * 競技者が click すると Lambda が STS AssumeRole + federation で SigninToken を
+ * 発行し、URL を返す。frontend は window.open でその URL を開く (= 自前 AWS ログイン不要)。
+ */
+export async function getConsoleSigninUrl(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const data = (await portalFetch<{ loginUrl: string }>(
+    apiBaseUrl,
+    "portal/me/console-signin-url",
+    teamLoginKey,
+    { query: { jobId }, throwOn400: true, signal },
+  )) as { loginUrl: string };
+  return data.loginUrl;
 }
 
 /**
@@ -231,23 +267,10 @@ export async function submitFlag(
   flag: string,
   signal?: AbortSignal,
 ): Promise<SubmitFlagOutcome> {
-  const res = await fetch(buildPortalUrl(apiBaseUrl, "portal/me/submit-flag"), {
+  return (await portalFetch<SubmitFlagOutcome>(apiBaseUrl, "portal/me/submit-flag", teamLoginKey, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${teamLoginKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ problemId, flag }),
+    body: { problemId, flag },
+    throwOn400: true,
     signal,
-  });
-  if (res.status === 400) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new PortalValidationError(body.error ?? "invalid_flag");
-  }
-  if (res.status === 401) throw new PortalAuthError();
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new PortalNetworkError(res.status, body);
-  }
-  return (await res.json()) as SubmitFlagOutcome;
+  })) as SubmitFlagOutcome;
 }
