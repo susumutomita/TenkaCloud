@@ -21,7 +21,7 @@ async function exchangeKeyForSession(
 
   if (config.mode === "backend") {
     // teamLoginKey 自体が bearer。backend が view を返したらそれを session 化する。
-    // sessionToken には teamLoginKey そのものを保管 (sessionStorage は same-origin
+    // sessionToken には teamLoginKey そのものを保管 (localStorage は same-origin
     // 隔離されている前提) し、以降の polling でも同じキーを Authorization に乗せる。
     let view: Awaited<ReturnType<typeof getPortalMe>>;
     try {

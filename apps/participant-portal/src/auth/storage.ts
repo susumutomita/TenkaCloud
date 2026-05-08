@@ -1,13 +1,14 @@
 import { z } from "zod";
 
 /**
- * Participant session の sessionStorage 永続化層。
+ * Participant session の `localStorage` 永続化層。
  *
- * Cognito ではなく per-team ログインキーで認証するので、ローカルでは
- * sessionStorage に session token + チーム情報を保存し、ブラウザを閉じたら消える形にする。
- * (localStorage を使わない理由: 競技中は同一 tab で完結する想定 + ブラウザ共用時の安全)
+ * Cognito ではなく per-team ログインキーで認証する。session の生存期間 (TTL) は
+ * `expiresAt` で持っているので、保存は `localStorage` で十分かつ tab/reload を
+ * またいで保たれる。`sessionStorage` だと tab を閉じる / 別 tab を開くたびに再
+ * ログインが必要になり、競技中の UX を著しく損なう (Issue #495 報告)。
  *
- * sessionStorage は private window やブラウザ設定で利用不可なケースがある。その場合は
+ * `localStorage` は private window やブラウザ設定で利用不可なケースがある。その場合は
  * setter / getter とも throw せず無効化扱いにする (graceful degradation)。
  */
 
@@ -34,7 +35,7 @@ export type ParticipantSession = z.infer<typeof ParticipantSessionSchema>;
 export function loadSession(): ParticipantSession | null {
   let raw: string | null;
   try {
-    raw = sessionStorage.getItem(STORAGE_KEY);
+    raw = localStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
@@ -44,12 +45,22 @@ export function loadSession(): ParticipantSession | null {
   try {
     parsedUnknown = JSON.parse(raw);
   } catch {
+    console.warn("[portal] session JSON parse failed, clearing");
     clearSession();
     return null;
   }
 
   const result = ParticipantSessionSchema.safeParse(parsedUnknown);
-  if (!result.success || result.data.expiresAt <= Date.now()) {
+  if (!result.success) {
+    // 旧 shape の session が残っている / 手動編集された場合はここで落ちる。
+    // 原因特定のため issues 一覧をログに出す (= プレーンテキスト、PII なし)。
+    console.warn("[portal] session schema violation, clearing", {
+      issues: result.error.issues.map((i) => ({ path: i.path.join("."), code: i.code })),
+    });
+    clearSession();
+    return null;
+  }
+  if (result.data.expiresAt <= Date.now()) {
     clearSession();
     return null;
   }
@@ -58,7 +69,7 @@ export function loadSession(): ParticipantSession | null {
 
 export function saveSession(session: ParticipantSession): void {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   } catch {
     // 利用不可。次回 load で null になり再ログインが要求される
   }
@@ -66,7 +77,7 @@ export function saveSession(session: ParticipantSession): void {
 
 export function clearSession(): void {
   try {
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
   } catch {
     // ignore
   }
