@@ -24,6 +24,7 @@ const renderAuth = (config: AppConfig) =>
 
 describe("AuthProvider", () => {
   afterEach(() => {
+    localStorage.clear();
     sessionStorage.clear();
     vi.restoreAllMocks();
   });
