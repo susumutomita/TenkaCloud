@@ -1,6 +1,30 @@
 import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventSharedResources } from "./shared.js";
-import type { EventDetail, EventItem, EventSummary, TeamItem, TeamSummary } from "./types.js";
+import type {
+  EventDeploymentSummary,
+  EventDetail,
+  EventItem,
+  EventSummary,
+  TeamItem,
+  TeamSummary,
+} from "./types.js";
+
+const DEPLOYMENT_STATUS_VALUES = [
+  "PENDING",
+  "IN_PROGRESS",
+  "COMPLETE",
+  "FAILED",
+  "DELETING",
+  "DELETED",
+] as const;
+type DeploymentStatus = (typeof DEPLOYMENT_STATUS_VALUES)[number];
+
+function parseDeploymentStatus(raw: unknown): DeploymentStatus | undefined {
+  if (typeof raw !== "string") return undefined;
+  return (DEPLOYMENT_STATUS_VALUES as readonly string[]).includes(raw)
+    ? (raw as DeploymentStatus)
+    : undefined;
+}
 
 export interface ListEventsRequest {
   readonly tenantId: string;
@@ -115,7 +139,10 @@ export async function getEventDetail(
         IndexName: "GSI1",
         KeyConditionExpression: "GSI1PK = :pk",
         ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-        ProjectionExpression: "teamId, eventId, displayTeamName",
+        // problemId / jobId / status は per-problem deploy 状況を組み立てるのに必要。
+        // displayTeamName は既存の teams[].displayName 上書き用。
+        ProjectionExpression: "teamId, eventId, displayTeamName, problemId, jobId, #s",
+        ExpressionAttributeNames: { "#s": "status" },
       }),
     ),
   ]);
@@ -129,12 +156,35 @@ export async function getEventDetail(
   // 起動時には全て同じ値で埋まる (update.ts が Promise.all で全行を更新するため)。
   // 念のため最後に拾った非空文字列を採用 (=「設定済」優先)。
   const displayNameByTeamId = new Map<string, string>();
+  // problemId → deployment summary[]。本 event の deployment のみ集める。
+  const deploymentsByProblem: Record<string, EventDeploymentSummary[]> = {};
   for (const d of deploymentsOut.Items ?? []) {
-    const row = d as { teamId?: unknown; eventId?: unknown; displayTeamName?: unknown };
+    const row = d as {
+      teamId?: unknown;
+      eventId?: unknown;
+      displayTeamName?: unknown;
+      problemId?: unknown;
+      jobId?: unknown;
+      status?: unknown;
+    };
     if (row.eventId !== eventId) continue;
-    if (typeof row.teamId !== "string" || typeof row.displayTeamName !== "string") continue;
-    if (row.displayTeamName.length === 0) continue;
-    displayNameByTeamId.set(row.teamId, row.displayTeamName);
+    if (typeof row.teamId === "string" && typeof row.displayTeamName === "string") {
+      if (row.displayTeamName.length > 0) {
+        displayNameByTeamId.set(row.teamId, row.displayTeamName);
+      }
+    }
+    if (
+      typeof row.problemId !== "string" ||
+      typeof row.jobId !== "string" ||
+      typeof row.teamId !== "string"
+    ) {
+      continue;
+    }
+    const status = parseDeploymentStatus(row.status);
+    if (!status) continue;
+    const list = deploymentsByProblem[row.problemId] ?? [];
+    list.push({ jobId: row.jobId, teamId: row.teamId, status });
+    deploymentsByProblem[row.problemId] = list;
   }
 
   const teams: TeamSummary[] = teamItems.map((t) => {
@@ -155,5 +205,6 @@ export async function getEventDetail(
     ...summary,
     problems: Array.isArray(event.problems) ? (event.problems as EventDetail["problems"]) : [],
     teams,
+    deploymentsByProblem,
   };
 }

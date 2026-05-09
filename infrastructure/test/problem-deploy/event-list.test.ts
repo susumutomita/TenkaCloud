@@ -204,4 +204,100 @@ describe("getEventDetail", () => {
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeUndefined();
   });
+
+  it("Deployments の問題ごと jobId / teamId / status を deploymentsByProblem にまとめるべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        eventId: "EV1",
+        tenantId: "tenant-acme",
+        name: "イベント A",
+        status: "DRAFT",
+        teamCount: 2,
+        problems: [
+          { problemId: "p1", defaultAwsAccountId: "1", defaultRegion: "ap-northeast-1" },
+          { problemId: "p2", defaultAwsAccountId: "1", defaultRegion: "ap-northeast-1" },
+        ],
+        createdAt: "2026-05-07T08:00:00.000Z",
+        updatedAt: "2026-05-07T08:00:00.000Z",
+        expiresAt: 9_999_999_999,
+      },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ teamId: "T1", internalSlug: "alpha", teamLoginKey: "k1" }],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { teamId: "T1", eventId: "EV1", problemId: "p1", jobId: "J1", status: "COMPLETE" },
+        { teamId: "T1", eventId: "EV1", problemId: "p1", jobId: "J2", status: "FAILED" },
+        { teamId: "T1", eventId: "EV1", problemId: "p2", jobId: "J3", status: "IN_PROGRESS" },
+        // 別 event の deployment は除外されるべき
+        { teamId: "T1", eventId: "EV-OTHER", problemId: "p1", jobId: "J-LEAK", status: "COMPLETE" },
+      ],
+    });
+
+    const out = await getEventDetail(shared, "tenant-acme", "EV1");
+    expect(out?.deploymentsByProblem.p1).toHaveLength(2);
+    expect(out?.deploymentsByProblem.p2).toHaveLength(1);
+    expect(out?.deploymentsByProblem.p1?.[0]).toMatchObject({
+      jobId: "J1",
+      teamId: "T1",
+      status: "COMPLETE",
+    });
+    expect(out?.deploymentsByProblem.p2?.[0]).toMatchObject({
+      jobId: "J3",
+      status: "IN_PROGRESS",
+    });
+    // 別 event の jobId が漏れないこと
+    expect(JSON.stringify(out?.deploymentsByProblem)).not.toContain("J-LEAK");
+  });
+
+  it("Bulk Deploy 未実行 (Deployments 空) なら deploymentsByProblem は空 record", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        eventId: "EV1",
+        tenantId: "tenant-acme",
+        name: "イベント A",
+        status: "DRAFT",
+        teamCount: 1,
+        problems: [{ problemId: "p1", defaultAwsAccountId: "1", defaultRegion: "ap-northeast-1" }],
+        createdAt: "2026-05-07T08:00:00.000Z",
+        updatedAt: "2026-05-07T08:00:00.000Z",
+        expiresAt: 9_999_999_999,
+      },
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+
+    const out = await getEventDetail(shared, "tenant-acme", "EV1");
+    expect(out?.deploymentsByProblem).toEqual({});
+  });
+
+  it("不明な status 値の deployment 行は deploymentsByProblem から除外するべき (防御的)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        eventId: "EV1",
+        tenantId: "tenant-acme",
+        problems: [{ problemId: "p1", defaultAwsAccountId: "1", defaultRegion: "ap-northeast-1" }],
+        status: "DRAFT",
+        teamCount: 1,
+        createdAt: "2026-05-07T08:00:00.000Z",
+        updatedAt: "2026-05-07T08:00:00.000Z",
+        expiresAt: 9_999_999_999,
+      },
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { teamId: "T1", eventId: "EV1", problemId: "p1", jobId: "J1", status: "BOGUS" },
+        { teamId: "T1", eventId: "EV1", problemId: "p1", jobId: "J2", status: "COMPLETE" },
+      ],
+    });
+
+    const out = await getEventDetail(shared, "tenant-acme", "EV1");
+    expect(out?.deploymentsByProblem.p1).toHaveLength(1);
+    expect(out?.deploymentsByProblem.p1?.[0]?.jobId).toBe("J2");
+  });
 });
