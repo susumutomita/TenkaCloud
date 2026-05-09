@@ -29,6 +29,48 @@ describe("isScoringActive", () => {
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
     expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(true);
   });
+
+  it("eventEndsAt 未設定は終了 gate 無し (= 旧 deployment / 終了未指示の event の既存挙動)", () => {
+    expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
+    expect(
+      isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: undefined }, NOW),
+    ).toBe(true);
+  });
+
+  it("eventEndsAt が設定済で now < eventEndsAt なら true (= まだ競技中)", () => {
+    expect(
+      isScoringActive(
+        {
+          eventStartsAt: "2026-05-08T09:00:00.000Z",
+          eventEndsAt: "2026-05-08T11:00:00.000Z",
+        },
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("eventEndsAt 設定済で now >= eventEndsAt なら false (= operator が終了済、採点停止)", () => {
+    // ちょうど終了時刻 (= 境界値、含む側) は false
+    expect(
+      isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: NOW }, NOW),
+    ).toBe(false);
+    // 既に過去
+    expect(
+      isScoringActive(
+        {
+          eventStartsAt: "2026-05-08T09:00:00.000Z",
+          eventEndsAt: "2026-05-08T09:30:00.000Z",
+        },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("eventStartsAt 未到達なら eventEndsAt が未設定でも false (= 開始 gate が優先)", () => {
+    expect(
+      isScoringActive({ eventStartsAt: "2026-05-08T11:00:00.000Z", eventEndsAt: undefined }, NOW),
+    ).toBe(false);
+  });
 });
 
 describe("joinUrl", () => {
