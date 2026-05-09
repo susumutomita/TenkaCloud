@@ -149,9 +149,20 @@ export type EventSummary = z.infer<typeof EventSummarySchema>;
  * `PATCH /events/:eventId/schedule` body。
  * - `{ startsAt: ISO8601 }`: operator 指定の日時 (分精度)
  * - `{ startNow: true }`: 即座に開始 (= server now を採用)
+ *
+ * `startsAt` は `+09:00` 等の non-Z オフセットも入力としては受け付けるが、
+ * **canonical UTC Z 形式に transform して persist する** (Issue #497)。
+ * 理由: HealthCheck の `isScoringActive` は ISO 8601 の辞書順比較を時系列比較として使うが、
+ * `Z` (0x5A) と `+` (0x2B) は code point 順が逆転するので、混在すると
+ * 「同年月日の異 timezone」の比較が壊れる。入り口で 1 形式に揃えてしまう。
  */
 export const ScheduleEventRequestSchema = z.union([
-  z.object({ startsAt: z.string().datetime({ offset: true }) }),
+  z.object({
+    startsAt: z
+      .string()
+      .datetime({ offset: true })
+      .transform((s) => new Date(s).toISOString()),
+  }),
   z.object({ startNow: z.literal(true) }),
 ]);
 export type ScheduleEventRequest = z.infer<typeof ScheduleEventRequestSchema>;
