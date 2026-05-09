@@ -15,7 +15,7 @@ import Table from "@cloudscape-design/components/table";
 import TimeInput from "@cloudscape-design/components/time-input";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
-import { useApiClient } from "../api/client";
+import { ApiError, useApiClient } from "../api/client";
 import {
   type BulkResult,
   bulkDeployEvent,
@@ -223,6 +223,19 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       await endEvent(apiClient, eventId);
       await refresh();
     } catch (err) {
+      // 409 not_endable: backend は body に `currentStatus` を載せているので、
+      // どの status だったかを operator に伝える (= refresh 押せばいいのか、別操作が
+      // 要るのかを判断しやすくする)。
+      if (err instanceof ApiError && err.status === 409) {
+        const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
+        const current = match?.[1];
+        setError(
+          current
+            ? `Event は READY 状態でのみ終了できます (現在: ${current})`
+            : "Event は READY 状態でのみ終了できます",
+        );
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setEndInFlight(false);
@@ -506,7 +519,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             は残るので Bulk Teardown は別途必要)。
           </Box>
           <Box variant="small" color="text-status-warning">
-            この操作は取り消せません。READY 状態の event のみ終了できます。
+            ENDED 状態から READY に戻すことはできません。再開するには Event を作り直して下さい。
           </Box>
         </SpaceBetween>
       </Modal>
