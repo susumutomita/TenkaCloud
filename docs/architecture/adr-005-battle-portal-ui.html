@@ -71,7 +71,10 @@
   <div class="meta">
     <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-09</div>
     <div><b>Issue:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/501">#501</a>, <a href="https://github.com/susumutomita/TenkaCloud/issues/164">#164</a></div>
-    <div><b>Related ADR:</b> <a href="./adr-004-event-team-model.md">ADR-004</a> (Event/Team)</div>
+    <div><b>Related ADR:</b>
+      <a href="./adr-002-cross-account-federation.md">ADR-002</a> (federation)、
+      <a href="./adr-004-event-team-model.md">ADR-004</a> (Event/Team)
+    </div>
     <div><b>Memory:</b> <code>project_battle_challenge_hybrid</code></div>
   </div>
 </header>
@@ -198,7 +201,7 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
     <div class="title">Attack Statistics</div>
     <div class="body">
       <ul>
-        <li>直近 1h の「攻撃検知数 / 防御成功数」の 2-line graph (Cloudscape <code>LineChart</code>)</li>
+        <li>直近 1h の「攻撃検知回数 (= fail tick の回数) / 防御成功 tick 数 (= ok tick の回数)」の 2-line graph (Cloudscape <code>LineChart</code>)</li>
         <li>5 分粒度 bucket、<code>source: "attack-detected"</code> を集計</li>
         <li><span class="badge reject">per-endpoint breakdown は出さない</span></li>
       </ul>
@@ -219,10 +222,25 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 
 <h3>D4. real-time 性 / polling 間隔</h3>
 
-<p><code>feedback_polling_over_sse</code> に従い SSE / WebSocket は使わない。</p>
+<p><code>feedback_polling_over_sse</code> に従い SSE / WebSocket は使わない。tick の根拠は次のとおり。</p>
+
+<table>
+<thead><tr><th>層</th><th>tick / 間隔</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td>backend HealthCheck Lambda</td><td>EventBridge <code>rate(1 minute)</code></td>
+    <td>既存。コスト最適 (= 60 deployment × 1/min × 1 月で Lambda free tier 内)</td></tr>
+<tr><td>frontend TeamViewProvider</td><td>5 秒 polling</td>
+    <td>UX として「攻撃を受けた」自覚を最大 5 秒で出す。data 自体は 1 分粒度なので over-polling だが、Lambda 呼び出し回数は team 内 1 系統に集約済 (PR-509)</td></tr>
+<tr><td>frontend BattleAttackPanel (新)</td><td>10 秒 polling</td>
+    <td>attack timeline は data update 頻度が低い (1 attack/5 分想定) ので team view より緩い間隔。UI ちらつきも減らす</td></tr>
+</tbody>
+</table>
 
 <figure>
-<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="monospace" font-size="13">
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="monospace" font-size="13"
+     role="img" aria-labelledby="polling-diagram-title polling-diagram-desc">
+  <title id="polling-diagram-title">Polling 経路図</title>
+  <desc id="polling-diagram-desc">既存 TeamViewProvider (5 秒) と並走で BattleAttackPanel (10 秒) を新設し、両方が Participant Portal Lambda (Hono) に collect される。SSE 不使用。Score events は既存の 5 秒 polling を維持。</desc>
   <!-- TeamViewProvider 5s -->
   <rect x="20" y="30" width="200" height="60" fill="#cfe5ff" stroke="#0969da" rx="4"/>
   <text x="120" y="55" text-anchor="middle">TeamViewProvider</text>
@@ -341,10 +359,19 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 <summary>Phase 3.1 (本 ADR 実装の最初の PR、scope 中)</summary>
 <ol>
 <li><code>shared/score-event.ts</code> に <code>source: "attack-detected"</code> を追加</li>
-<li><code>health-check-handler</code> で <code>lastResult=fail</code> 遷移時 (= 直前 tick が ok だった場合) に attack-detected event を 1 件書く (連続失敗 tick での重複 write は避ける)</li>
+<li><code>health-check-handler</code> で <code>lastResult=fail</code> 遷移時 (= 直前 tick が ok だった場合) に attack-detected event を 1 件書く。<b>連続失敗 tick では重複 write しない</b> (= row 爆発防止の hard guard)</li>
 <li><code>lookup.ts</code> の <code>endpointsHealth</code> を <code>aggregate</code> (= ok count / total / overallStatus) に絞った view を新設、participant API でこちらを返す</li>
 <li><code>GET /portal/me/battle-attacks?jobId=&amp;sinceMin=</code> Lambda route + ParticipantPortalLambda の IAM に必要なら Query 権限を追加</li>
+<li><b><code>sinceMin</code> の上限は 60 分</b>とし、defaults は 30 分。Battle UI の uptime ％は「直近 5 分」、attack history は「直近 60 分」を最大として固定 (= read RCU 暴発の防止策)</li>
 </ol>
+
+<h4>追加するテスト</h4>
+<ul>
+<li><code>health-check-handler</code> が <code>ok → fail</code> 遷移時に attack-detected event を <b>1 件のみ</b> 書く (連続 fail tick で重複しない)</li>
+<li><code>lookup.ts</code> の aggregate view に <code>endpointsHealth</code> 内の URL / endpoint 名が含まれない (snapshot test)</li>
+<li><code>GET /portal/me/battle-attacks</code> が <code>jobId</code> / <code>sinceMin</code> で正しい <code>SCORE#&lt;eventId&gt;#&lt;jobId&gt;</code> を Query (mock DDB)</li>
+<li><code>sinceMin</code> > 60 を渡すと 400 (= clamp ではなく reject、operator が UI で渡す前提)</li>
+</ul>
 </details>
 
 <details>
@@ -379,9 +406,39 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 
 <h3>Negative</h3>
 <ul>
-<li>1 deployment あたり attack 検知ごとに 1 score event row が増える。1 試合 1h で 100 件規模を想定 (= TTL で消えるので blast 限定)</li>
 <li>LineChart 表示は Cloudscape <code>LineChart</code> を新規 import するので bundle が少し増える</li>
 <li>「per-endpoint visibility 禁止」を強く守る必要があり、handler の view 変換ロジックで漏れがあると即ゲーム性破壊。<code>lookup.ts</code> の変換層を test で固める必要</li>
+</ul>
+
+<h3>Capacity 見積もり</h3>
+
+<p>D2-A (Score Event row 流用) で row 爆発を防げるかを定量的に押さえる。</p>
+
+<table>
+<thead><tr><th>項目</th><th>値</th><th>根拠</th></tr></thead>
+<tbody>
+<tr><td>典型 Battle 試合の長さ</td><td>1 〜 2 時間</td><td>運用想定</td></tr>
+<tr><td>HealthCheck tick</td><td>1 分</td><td><a href="../../infrastructure/lib/problem-deploy/health-check-lambda.ts"><code>health-check-lambda.ts:21</code></a> <code>rate(1 minute)</code></td></tr>
+<tr><td>attack-detected event を書く頻度</td><td>1 deployment × 1 attack あたり <b>1 件のみ</b></td><td>Phase 3.1 hard guard: <code>ok → fail</code> 遷移時のみ書く。10 分連続 fail でも 1 件</td></tr>
+<tr><td>典型攻撃の頻度</td><td>1 deployment 1h 内 5 〜 10 attack 想定</td><td>運用想定 (大規模競技でも uptime% を意味のある値に保つ前提)</td></tr>
+<tr><td>1 event 規模 (FR-1 想定)</td><td>25 teams × 1 〜 2 Battle problem = 25 〜 50 deployments</td><td>1 event の Battle 系 deployment 数</td></tr>
+<tr><td><b>1 event での総 attack-detected event</b></td><td><b>250 〜 500 行</b></td><td>50 deployments × 10 attack/h × 1h</td></tr>
+<tr><td>row size</td><td>~1 KB</td><td>jobId / problemId / source / occurredAt / metadata だけで小さい</td></tr>
+<tr><td>Query (60 分分、1 deployment) のサイズ</td><td>~10 KB (10 events × 1KB)</td><td>個別 deployment scope の Query は team scope で絞る</td></tr>
+<tr><td>必要 RCU (eventually consistent)</td><td><b>2 〜 3 RCU</b></td><td>10 KB / 8 KB = 1.25 RCU/req、複数 team 同時 polling 想定で safety margin 含む</td></tr>
+</tbody>
+</table>
+
+<p>結論: <code>DynamoDbLowCapacity</code> Aspect の 1 RCU / 1 WCU PROVISIONED でも
+<b>典型運用は許容範囲</b>。ただし bursty access (= 25 teams が同時に Scoreboard を開く) で
+1 RCU を超えるシナリオはあり得る。
+<b>Phase 3.1 で <code>sinceMin</code> 上限 60 分 + Burst Capacity (= DDB の自動 burst credit) 任せ</b>
+で運用し、実測でスロットルが起きたら GSI を切るか on-demand reads に上げるかを検討する。</p>
+
+<h3>Anti-pattern として避けたもの</h3>
+<ul>
+<li>毎 fail tick で event を書く (= 10 分連続 fail で 10 events) → row 爆発 + 採点誤読 (= 単発 attack なのに高 RCU)。<b>Phase 3.1 で hard guard</b></li>
+<li><code>sinceMin</code> 無制限 → 1 試合の累計 row を Scan 風に読む。<b>Phase 3.1 で 60 分上限</b></li>
 </ul>
 
 <h3>Unknown</h3>
