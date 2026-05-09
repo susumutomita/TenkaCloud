@@ -1,12 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearSession,
   loadSession,
   type ParticipantSession,
+  STORAGE_KEY,
   saveSession,
 } from "../../src/auth/storage";
-
-const STORAGE_KEY = "TenkaCloud.participant.session";
 
 const sample = (): ParticipantSession => ({
   sessionToken: "abc.def.ghi",
@@ -19,6 +18,12 @@ const sample = (): ParticipantSession => ({
 });
 
 describe("storage", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
   afterEach(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -47,14 +52,12 @@ describe("storage", () => {
     });
 
     it("不正な JSON が入っていたら null + 削除を返すべき", () => {
-      vi.spyOn(console, "warn").mockImplementation(() => undefined);
       localStorage.setItem(STORAGE_KEY, "not-a-json");
       expect(loadSession()).toBeNull();
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
 
     it("schema 違反 (必須フィールド欠落) なら null + 削除を返すべき", () => {
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({ sessionToken: "x", teamId: "y" }), // 多くのフィールドが欠落
@@ -69,7 +72,6 @@ describe("storage", () => {
     });
 
     it("expiresAt が文字列 (型違反) なら null + 削除を返すべき", () => {
-      vi.spyOn(console, "warn").mockImplementation(() => undefined);
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...sample(), expiresAt: "later" }));
       expect(loadSession()).toBeNull();
     });

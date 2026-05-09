@@ -12,7 +12,7 @@ import { z } from "zod";
  * setter / getter とも throw せず無効化扱いにする (graceful degradation)。
  */
 
-const STORAGE_KEY = "TenkaCloud.participant.session";
+export const STORAGE_KEY = "TenkaCloud.participant.session";
 
 export const ParticipantSessionSchema = z.object({
   sessionToken: z.string().min(1),
