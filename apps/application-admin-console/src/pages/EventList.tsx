@@ -17,6 +17,7 @@ const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",
   DEPLOYING: "blue",
   READY: "green",
+  ENDED: "grey",
   TEARDOWN: "red",
   ARCHIVED: "grey",
 };
