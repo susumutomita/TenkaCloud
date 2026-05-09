@@ -1,6 +1,7 @@
 # ADR-002: 競技者 AWS アカウント への federation を tenant 単位 ExternalId + 専用 DDB + SSM SecureString で管理する
 
-- **Status**: Proposed (2026-05-05)
+- **Status**: Accepted (2026-05-09) — Issue 459 の A/B/C/D 設計判断はこの ADR で確定。
+  実装は Phase 2.1 / 2.2 / 3 で段階的に進める (= 後述「Implementation ownership」)。
 - **Related issues**: Issue 459 (cross-account federation 設計)、Issue 458 (publish 経路統一 ✅ 完了)
 - **Related ADR**: [ADR-001](./adr-001-problem-deploy-crud.md) (本 ADR は ADR-001 の Decision 6「cross-account 越境」をさらに具体化する)
 
@@ -118,6 +119,33 @@ ADR-001 で「問題 deploy 系の publish 経路は tenant API + EventBridge + 
 - 本番経路 (Worker Lambda の AssumeRole) は **必ず SSM から読む**
 - dev fallback env は CDK synth 時の bootstrap-stack 作成で 1 度だけ使う (ローカル開発で SSM が無い状態でも synth が通るように)
 - `bin/infrastructure.ts` から「単一 env を全 worker に注入する」ロジックを削除
+
+## Implementation ownership
+
+`AGENTS.md` の役割分担に従い、CDK / IAM / CFn template / `bin/infrastructure.ts` 関連は
+**user 担当**、apps / Lambda handler ロジック / docs は **Claude 担当** とする。
+
+| 領域 | Owner | 備考 |
+| ---- | ----- | ---- |
+| `CompetitorAccountsTable` CDK construct (新規) | **user** | DDB schema、`DynamoDbLowCapacity` Aspect 整合の確認込み |
+| SSM SecureString helper construct + IAM policy | **user** | `ssm:GetParameter` の resource 絞り込み、KMS managed key の参照 |
+| tenant API Gateway 新 routes (`/tenants/{me}/accounts*`) の `addResource/addMethod` 配線 | **user** | 既存 `api-gateway.ts` の延長 |
+| `bin/infrastructure.ts` の env 整理 (`CDK_PARAM_DEPLOY_EXTERNAL_ID` → `..._DEV_FALLBACK` rename) | **user** | env 注入経路の見直し |
+| `competitor-bootstrap.yaml` の Parameter 説明文改訂 | **user** | CFn template (= IAM Role 定義) は user 領域 |
+| 新 Lambda handler (`/tenants/{me}/accounts*` の Hono route 実装) | **Claude** | DDB CRUD + SSM Put/Delete のロジック、テスト込み |
+| Worker Lambda の AssumeRole 経路書き換え (`externalId` を deployment 行 / SSM から読む) | **Claude** | env 廃止に合わせて handler 側の書き換えとテスト |
+| application-admin-console「Competitor Accounts」画面 (一覧 / 追加 / verify / 削除) | **Claude** | Cloudscape Cards / Modal / Form |
+| `DeployForm.tsx` の AWS Account ID 自由入力 → verified Select 置換 | **Claude** | `useCompetitorAccounts()` hook + UI |
+| Lambda + frontend のテスト | **Claude** | infra の test (`Template.fromStack`) は user |
+| `infrastructure/templates/README.md` 改訂 | **Claude** | docs |
+
+着手順は次のとおり。
+
+1. **user** が Phase 2.1 の CDK 部分 (DDB / SSM helper / API GW route 配線) を 1 PR で出す。
+2. **Claude** が直後に Lambda handler + frontend を 1〜2 PR で続ける。同 PR 内で legacy
+   env を読むコードを同 commit で撤去する (CLAUDE.md「fallback 禁止」原則と整合)。
+3. Phase 2.2 の migration script (旧 deployment 行の `externalId` 補填) は **Claude** が書き、
+   ただし script を回す deploy は **user** が手動で実施する。
 
 ## Migration
 
