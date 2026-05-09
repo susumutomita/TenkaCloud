@@ -8,7 +8,9 @@ import {
   useState,
 } from "react";
 import {
+  getLeaderboard,
   getPortalMe,
+  type LeaderboardResponse,
   type ParticipantProblemView,
   type ParticipantTeamView,
   PortalAuthError,
@@ -21,6 +23,13 @@ const POLL_INTERVAL_MS = 5_000;
 interface TeamViewState {
   readonly view: ParticipantTeamView | null;
   readonly error: string | null;
+  /**
+   * Event scope の leaderboard。Phase 1 以前 (eventId 無しの jobId-based deployment)
+   * では `noEvent: true` を返す。Scoreboard / TopNav が共有する。
+   */
+  readonly leaderboard: LeaderboardResponse | null;
+  readonly leaderboardError: string | null;
+  readonly leaderboardNoEvent: boolean;
   /** Home の flag 提出後に呼ばれて即時再フェッチする経路。 */
   readonly refresh: () => Promise<void>;
 }
@@ -28,6 +37,9 @@ interface TeamViewState {
 const Ctx = createContext<TeamViewState>({
   view: null,
   error: null,
+  leaderboard: null,
+  leaderboardError: null,
+  leaderboardNoEvent: false,
   refresh: async () => {
     /* default no-op */
   },
@@ -64,17 +76,44 @@ function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeam
   return true;
 }
 
+function leaderboardIsUnchanged(
+  prev: LeaderboardResponse | null,
+  next: LeaderboardResponse,
+): boolean {
+  if (!prev) return false;
+  if (prev.eventId !== next.eventId) return false;
+  if (prev.entries.length !== next.entries.length) return false;
+  for (let i = 0; i < prev.entries.length; i++) {
+    const a = prev.entries[i];
+    const b = next.entries[i];
+    if (!a || !b) return false;
+    if (
+      a.rank !== b.rank ||
+      a.teamId !== b.teamId ||
+      a.teamName !== b.teamName ||
+      a.score !== b.score ||
+      a.completedProblems !== b.completedProblems ||
+      a.totalProblems !== b.totalProblems ||
+      a.isMyTeam !== b.isMyTeam
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Authenticated 領域 (`ShellLayout`) の中で 1 度だけ動く polling を提供する Context。
  *
- * Home page (累計スコアパネル + ProblemCard) と TopNav (Score / Rank widget) が同じ
- * `/portal/me` レスポンスを共有することで、polling が 2 つに増えるのを防ぐ。
+ * Home page (累計スコアパネル + ProblemCard) / TopNav (Score/Rank widget) / Scoreboard
+ * page が同じ `/portal/me` + `/portal/leaderboard` レスポンスを共有することで、
+ * polling が複数に増えるのを防ぐ。両 endpoint は 5 秒 tick 内で `Promise.allSettled`
+ * 並列 fetch する (= 一方が遅れても他方は更新)。
  *
  * `mode === "dev-mock"` のときは backend を叩かない。session が無いときも polling
  * 起動しない (= /login や /setup の guarded 外で何もしない)。
  *
  * 全 problem が FAILED / DELETED に到達したら polling を停止する (`stopPollingRef`)。
- * 既存の Home polling と同じ条件。
  */
 export function TeamViewProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   const auth = useAuth();
@@ -82,23 +121,51 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
   const isBackend = config.mode === "backend";
   const [view, setView] = useState<ParticipantTeamView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [leaderboardNoEvent, setLeaderboardNoEvent] = useState(false);
   const stopPollingRef = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!isBackend || !sessionToken) return;
-    try {
-      const next = await getPortalMe(config.apiBaseUrl, sessionToken);
+    const [meResult, leaderboardResult] = await Promise.allSettled([
+      getPortalMe(config.apiBaseUrl, sessionToken),
+      getLeaderboard(config.apiBaseUrl, sessionToken),
+    ]);
+
+    if (meResult.status === "fulfilled") {
+      const next = meResult.value;
       setView((prev) => (viewIsUnchanged(prev, next) ? prev : next));
       setError(null);
       if (next.problems.every((p) => p.status === "FAILED" || p.status === "DELETED")) {
         stopPollingRef.current = true;
       }
-    } catch (err) {
+    } else {
+      const err = meResult.reason;
       if (err instanceof PortalAuthError) {
         auth.logout();
         return;
       }
       setError(err instanceof Error ? err.message : String(err));
+    }
+
+    if (leaderboardResult.status === "fulfilled") {
+      const next = leaderboardResult.value;
+      if (next === undefined) {
+        // 404 = Phase 1 以前の旧 deployment (eventId 無し) → leaderboard 不能
+        setLeaderboardNoEvent(true);
+        setLeaderboard(null);
+      } else {
+        setLeaderboardNoEvent(false);
+        setLeaderboard((prev) => (leaderboardIsUnchanged(prev, next) ? prev : next));
+      }
+      setLeaderboardError(null);
+    } else {
+      const err = leaderboardResult.reason;
+      // Auth エラーは meResult 側で処理済 (= 同じ token を使っているので)
+      if (!(err instanceof PortalAuthError)) {
+        setLeaderboardError(err instanceof Error ? err.message : String(err));
+      }
     }
   }, [isBackend, sessionToken, config.apiBaseUrl, auth]);
 
@@ -118,5 +185,11 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     };
   }, [isBackend, sessionToken, refresh]);
 
-  return <Ctx.Provider value={{ view, error, refresh }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider
+      value={{ view, error, leaderboard, leaderboardError, leaderboardNoEvent, refresh }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
 }

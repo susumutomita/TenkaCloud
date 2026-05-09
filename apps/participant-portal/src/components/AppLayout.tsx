@@ -17,9 +17,10 @@ import type { AppConfig } from "../config";
  * Participant Portal の shell。AWS GameDay の参考画面に倣って TopNavigation +
  * 3 セクション SideNavigation (Event / Quests / Tools) を組み立てる。
  *
- * Score は `TeamViewProvider` 経由で `/portal/me` polling 結果を共有 (Home の
- * 累計スコアパネルと同じ source)。Rank は leaderboard 実装後 (#163 follow-up) に
- * 有効化する — それまでは "—" 表示。
+ * Score / Rank はどちらも `TeamViewProvider` 経由で `/portal/me` + `/portal/leaderboard`
+ * の polling 結果を共有 (Home の累計スコアパネル / Scoreboard と同 source)。Rank は
+ * 自チーム (`isMyTeam`) の rank / total entries で表示。Phase 1 以前の旧 deployment
+ * (eventId 無し) は leaderboard 不能なので "—" で fallback。
  */
 
 const SIDE_NAV_ITEMS: SideNavigationProps.Item[] = [
@@ -67,8 +68,18 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
       : null;
     const score =
       config.mode === "backend" ? (totalScore !== null ? `${totalScore} pt` : "…") : "—";
-    // Rank は leaderboard API 接続前なので placeholder 維持。
-    const rank = "—";
+    // Rank: leaderboard.entries.find(isMyTeam) の rank / 全 entries 数。
+    // Phase 1 以前 (eventId 無し) は leaderboardNoEvent → "—"、未取得は "…"。
+    const myEntry = teamView.leaderboard?.entries.find((e) => e.isMyTeam);
+    const totalEntries = teamView.leaderboard?.entries.length;
+    const rank =
+      config.mode !== "backend"
+        ? "—"
+        : teamView.leaderboardNoEvent
+          ? "—"
+          : myEntry && totalEntries
+            ? `${myEntry.rank}/${totalEntries}`
+            : "…";
     return [
       {
         type: "menu-dropdown",
@@ -89,7 +100,15 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         },
       },
     ];
-  }, [auth.session, auth.logout, navigate, teamView.view, config.mode]);
+  }, [
+    auth.session,
+    auth.logout,
+    navigate,
+    teamView.view,
+    teamView.leaderboard,
+    teamView.leaderboardNoEvent,
+    config.mode,
+  ]);
 
   return (
     <>
