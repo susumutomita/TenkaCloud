@@ -87,6 +87,9 @@ export async function bulkDeployEvent(
   // Event.startsAt が未設定 = 競技開始時刻が決まっていないので採点開始しない gate に倒す。
   // operator は EventDetail の「日時を設定」or「即座に開始」で後から有効化できる。
   const eventStartsAt = typeof event.startsAt === "string" ? event.startsAt : undefined;
+  // Event.endsAt が設定済 (= 既に終了済 event) なら deploy 行にも denormalize して
+  // 採点 gate を即時 close する。READY 状態のみ end-event 可能なので通常は undefined。
+  const eventEndsAt = typeof event.endsAt === "string" ? event.endsAt : undefined;
 
   // teams × problems を全展開し、deployment 行 + publish entry を組み立てる。
   // shared.problemsCatalog (problemId → problemDir) に存在しない problemId は skip。
@@ -125,6 +128,7 @@ export async function bulkDeployEvent(
         eventId,
         teamId: team.teamId,
         eventStartsAt,
+        eventEndsAt,
       };
       items.push(item);
 

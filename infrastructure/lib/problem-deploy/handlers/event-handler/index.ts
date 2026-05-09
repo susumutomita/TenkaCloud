@@ -7,6 +7,7 @@ import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
   HTTP_ACCEPTED,
   HTTP_BAD_REQUEST,
+  HTTP_CONFLICT,
   HTTP_CREATED,
   HTTP_INTERNAL_ERROR,
   HTTP_NOT_FOUND,
@@ -15,6 +16,7 @@ import {
 import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
+import { endEvent } from "./end-event.js";
 import { getEventDetail, listEvents } from "./list.js";
 import { setEventSchedule } from "./schedule.js";
 import { buildEventSharedResources } from "./shared.js";
@@ -151,6 +153,28 @@ app.patch("/events/:eventId/schedule", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] setEventSchedule failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.post("/events/:eventId/end", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await endEvent(shared, resolveTenantId(c), eventId, Date.now());
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    if (outcome.kind === "not_endable") {
+      return c.json({ error: "not_endable", currentStatus: outcome.status }, HTTP_CONFLICT);
+    }
+    return c.json(
+      { endsAt: outcome.endsAt, updatedDeployments: outcome.updatedDeployments },
+      HTTP_OK,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] endEvent failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

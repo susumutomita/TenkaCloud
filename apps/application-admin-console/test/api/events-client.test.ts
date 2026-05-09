@@ -5,6 +5,7 @@ import {
   bulkTeardownEvent,
   createEvent,
   EVENT_ID_RE,
+  endEvent,
   getEvent,
   listEvents,
 } from "../../src/api/events-client";
@@ -118,5 +119,20 @@ describe("bulkTeardownEvent", () => {
     expect(calls[0]?.path).toBe("events/EV1");
     expect(calls[0]?.method).toBe("DELETE");
     expect(out.enqueued).toBe(6);
+  });
+});
+
+describe("endEvent", () => {
+  it("POST /events/{id}/end を空 body で呼び EndEventResult を返すべき", async () => {
+    const { client, calls } = fakeClient({
+      endsAt: "2026-05-08T10:00:00.000Z",
+      updatedDeployments: 12,
+    });
+    const out = await endEvent(client, "EV1");
+    expect(calls[0]?.path).toBe("events/EV1/end");
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({});
+    expect(out.endsAt).toBe("2026-05-08T10:00:00.000Z");
+    expect(out.updatedDeployments).toBe(12);
   });
 });

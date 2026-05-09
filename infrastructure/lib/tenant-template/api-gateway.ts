@@ -88,6 +88,7 @@ export class ApiGateway extends Construct {
     // /events/{eventId}            GET   = detail   / DELETE = bulk teardown
     // /events/{eventId}/deploy     POST  = bulk deploy (teams × problems を fan-out)
     // /events/{eventId}/schedule   PATCH = 競技開始時刻 (startsAt) を設定 (Phase 2b 追加)
+    // /events/{eventId}/end        POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
     const eventIntegration = new LambdaIntegration(props.eventApiLambda);
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
@@ -97,5 +98,6 @@ export class ApiGateway extends Construct {
     event.addMethod("DELETE", eventIntegration, deployMethodOptions);
     event.addResource("deploy").addMethod("POST", eventIntegration, deployMethodOptions);
     event.addResource("schedule").addMethod("PATCH", eventIntegration, deployMethodOptions);
+    event.addResource("end").addMethod("POST", eventIntegration, deployMethodOptions);
   }
 }
