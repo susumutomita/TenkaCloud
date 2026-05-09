@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../src/api/client";
 import {
+  archiveEvent,
   bulkDeployEvent,
   bulkTeardownEvent,
   createEvent,
@@ -134,5 +135,16 @@ describe("endEvent", () => {
     expect(calls[0]?.body).toEqual({});
     expect(out.endsAt).toBe("2026-05-08T10:00:00.000Z");
     expect(out.updatedDeployments).toBe(12);
+  });
+});
+
+describe("archiveEvent", () => {
+  it("POST /events/{id}/archive を空 body で呼び ArchiveEventResult を返すべき", async () => {
+    const { client, calls } = fakeClient({ archivedAt: "2026-05-09T10:00:00.000Z" });
+    const out = await archiveEvent(client, "EV1");
+    expect(calls[0]?.path).toBe("events/EV1/archive");
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({});
+    expect(out.archivedAt).toBe("2026-05-09T10:00:00.000Z");
   });
 });

@@ -13,6 +13,7 @@ import {
   HTTP_NOT_FOUND,
   HTTP_OK,
 } from "../shared/http-status.js";
+import { archiveEvent } from "./archive.js";
 import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
@@ -175,6 +176,25 @@ app.post("/events/:eventId/end", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] endEvent failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.post("/events/:eventId/archive", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await archiveEvent(shared, resolveTenantId(c), eventId, Date.now());
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    if (outcome.kind === "not_archivable") {
+      return c.json({ error: "not_archivable", currentStatus: outcome.status }, HTTP_CONFLICT);
+    }
+    return c.json({ archivedAt: outcome.archivedAt }, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] archiveEvent failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });
