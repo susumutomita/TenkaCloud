@@ -33,6 +33,11 @@ export interface EventItem {
    * `ENDED` に遷移する。Bulk Teardown 待たずに採点を停めるための gate (Issue #494)。
    */
   endsAt?: string;
+  /**
+   * Archive 操作で `status=ARCHIVED` に遷移した時刻 (ISO 8601, UTC)。Issue #493。
+   * EventList が ARCHIVED を default view から外すときの sort key としても使える。
+   */
+  archivedAt?: string;
 }
 
 export const EventStatusSchema = z.enum([

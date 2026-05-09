@@ -148,3 +148,16 @@ export interface EndEventResult {
 export async function endEvent(api: ApiClient, eventId: string): Promise<EndEventResult> {
   return api.post<EndEventResult>(`events/${encodeURIComponent(eventId)}/end`, {});
 }
+
+export interface ArchiveEventResult {
+  archivedAt: string;
+}
+
+/**
+ * Event を ARCHIVED 状態にして EventList のデフォルト view から外す soft delete (Issue #493)。
+ * 許可: DRAFT (一度も deploy していない) / ENDED (採点停止済) / TEARDOWN (一括削除済)。
+ * 拒否: DEPLOYING / READY / ARCHIVED は 409 で拒否される。
+ */
+export async function archiveEvent(api: ApiClient, eventId: string): Promise<ArchiveEventResult> {
+  return api.post<ArchiveEventResult>(`events/${encodeURIComponent(eventId)}/archive`, {});
+}

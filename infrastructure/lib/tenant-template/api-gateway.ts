@@ -99,5 +99,6 @@ export class ApiGateway extends Construct {
     event.addResource("deploy").addMethod("POST", eventIntegration, deployMethodOptions);
     event.addResource("schedule").addMethod("PATCH", eventIntegration, deployMethodOptions);
     event.addResource("end").addMethod("POST", eventIntegration, deployMethodOptions);
+    event.addResource("archive").addMethod("POST", eventIntegration, deployMethodOptions);
   }
 }
