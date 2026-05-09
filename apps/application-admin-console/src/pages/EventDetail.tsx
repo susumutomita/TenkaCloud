@@ -7,6 +7,7 @@ import Container from "@cloudscape-design/components/container";
 import DatePicker from "@cloudscape-design/components/date-picker";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
@@ -20,12 +21,79 @@ import {
   bulkDeployEvent,
   bulkTeardownEvent,
   EVENT_ID_RE,
+  type EventDeploymentStatus,
+  type EventDeploymentSummary,
   type EventDetail,
   type EventStatus,
   getEvent,
   setEventSchedule,
 } from "../api/events-client";
 import type { AppConfig } from "../config";
+
+const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "grey" | "red"> = {
+  PENDING: "grey",
+  IN_PROGRESS: "blue",
+  COMPLETE: "green",
+  FAILED: "red",
+  DELETING: "grey",
+  DELETED: "grey",
+};
+
+/**
+ * 1 problem 行の deploy 状況サマリ: `成功 N / 全 M` + 失敗があれば赤 Badge を併記。
+ * Bulk Deploy 未実行 (deployments 無し) なら "未デプロイ" 表示。
+ */
+function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[] | undefined) {
+  if (!deployments || deployments.length === 0) {
+    return (
+      <Box variant="small" color="text-status-inactive">
+        未デプロイ
+      </Box>
+    );
+  }
+  const total = deployments.length;
+  const complete = deployments.filter((d) => d.status === "COMPLETE").length;
+  const failed = deployments.filter((d) => d.status === "FAILED").length;
+  const inFlight = deployments.filter(
+    (d) => d.status === "PENDING" || d.status === "IN_PROGRESS",
+  ).length;
+  return (
+    <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+      <Box variant="strong">
+        {complete} / {total}
+      </Box>
+      {failed > 0 && <Badge color="red">FAILED {failed}</Badge>}
+      {inFlight > 0 && <Badge color="blue">進行中 {inFlight}</Badge>}
+    </SpaceBetween>
+  );
+}
+
+/**
+ * 1 problem 行の deploy job click-through link 列。各 jobId を /deployments/:jobId に
+ * 飛ばす (= per-team の deploy 詳細ページ)。
+ */
+function renderProblemJobLinks(deployments: readonly EventDeploymentSummary[] | undefined) {
+  if (!deployments || deployments.length === 0) {
+    return (
+      <Box variant="small" color="text-status-inactive">
+        —
+      </Box>
+    );
+  }
+  return (
+    <SpaceBetween direction="horizontal" size="xxs">
+      {deployments.map((d) => (
+        <Link
+          key={d.jobId}
+          href={`/deployments/${encodeURIComponent(d.jobId)}`}
+          ariaLabel={`Deploy job ${d.jobId} (status: ${d.status})`}
+        >
+          <Badge color={DEPLOY_STATUS_COLOR[d.status]}>{d.status}</Badge>
+        </Link>
+      ))}
+    </SpaceBetween>
+  );
+}
 
 const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",
@@ -271,6 +339,16 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               { id: "id", header: "Problem ID", cell: (p) => <code>{p.problemId}</code> },
               { id: "account", header: "Default AWS Account", cell: (p) => p.defaultAwsAccountId },
               { id: "region", header: "Default Region", cell: (p) => p.defaultRegion },
+              {
+                id: "status",
+                header: "Deploy Status",
+                cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId]),
+              },
+              {
+                id: "jobs",
+                header: "Job Links",
+                cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId]),
+              },
             ]}
             empty={<Box>未設定 — Event 編集 (Phase 2c+) で追加できる予定</Box>}
           />

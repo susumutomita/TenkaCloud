@@ -36,9 +36,28 @@ export interface TeamSummary {
   teamLoginKey?: string;
 }
 
+export type EventDeploymentStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "COMPLETE"
+  | "FAILED"
+  | "DELETING"
+  | "DELETED";
+
+export interface EventDeploymentSummary {
+  jobId: string;
+  teamId: string;
+  status: EventDeploymentStatus;
+}
+
 export interface EventDetail extends EventSummary {
   teams: readonly TeamSummary[];
   problems: readonly EventProblemTarget[];
+  /**
+   * `problemId` ごとの deploy job 一覧 (= 全 team 分)。Bulk Deploy 前は空 record。
+   * 旧 jobId-based deployment は eventId が無いので含まれない。
+   */
+  deploymentsByProblem: Readonly<Record<string, readonly EventDeploymentSummary[]>>;
 }
 
 export interface CreateEventTeamInput {

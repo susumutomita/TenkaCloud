@@ -152,8 +152,25 @@ export const TeamSummarySchema = z.object({
 });
 export type TeamSummary = z.infer<typeof TeamSummarySchema>;
 
+/**
+ * EventDetail の問題セット行に紐づく deploy job の最小情報。
+ * operator が「どの team のどの問題が PENDING/COMPLETE/FAILED か」を一目で
+ * 確認できるようにし、jobId 経由で /deployments/:jobId に click-through できる。
+ */
+export const EventDeploymentSummarySchema = z.object({
+  jobId: z.string(),
+  teamId: z.string(),
+  status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETE", "FAILED", "DELETING", "DELETED"]),
+});
+export type EventDeploymentSummary = z.infer<typeof EventDeploymentSummarySchema>;
+
 export const EventDetailSchema = EventSummarySchema.extend({
   problems: z.array(EventProblemTargetSchema),
   teams: z.array(TeamSummarySchema),
+  /**
+   * `problemId` ごとの deploy job 一覧 (= 全 team 分)。Bulk Deploy 前は空 record。
+   * 旧 jobId-based deployment は eventId が無いので含まれない。
+   */
+  deploymentsByProblem: z.record(z.string(), z.array(EventDeploymentSummarySchema)),
 });
 export type EventDetail = z.infer<typeof EventDetailSchema>;
