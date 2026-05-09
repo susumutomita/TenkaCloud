@@ -2,7 +2,7 @@ import type { ApiClient } from "./client";
 
 export const EVENT_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
-export type EventStatus = "DRAFT" | "DEPLOYING" | "READY" | "TEARDOWN" | "ARCHIVED";
+export type EventStatus = "DRAFT" | "DEPLOYING" | "READY" | "ENDED" | "TEARDOWN" | "ARCHIVED";
 
 export interface EventProblemTarget {
   problemId: string;
@@ -115,4 +115,17 @@ export async function setEventSchedule(
   body: { startsAt: string } | { startNow: true },
 ): Promise<SetScheduleResult> {
   return api.patch<SetScheduleResult>(`events/${encodeURIComponent(eventId)}/schedule`, body);
+}
+
+export interface EndEventResult {
+  endsAt: string;
+  updatedDeployments: number;
+}
+
+/**
+ * Event を ENDED 状態に遷移させ、紐づく全 deployment 行に \`eventEndsAt\` を伝播する。
+ * READY 状態の event のみ受理 (= 二重操作 / 未開始 event の終了は 409)。
+ */
+export async function endEvent(api: ApiClient, eventId: string): Promise<EndEventResult> {
+  return api.post<EndEventResult>(`events/${encodeURIComponent(eventId)}/end`, {});
 }

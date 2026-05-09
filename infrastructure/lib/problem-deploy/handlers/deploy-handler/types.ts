@@ -101,6 +101,13 @@ export interface DeploymentItem {
    * 伝播する (event-handler/schedule.ts)。未設定 → 採点無し (= deploy 直後の誤加算防止)。
    */
   eventStartsAt?: string;
+  /**
+   * 競技終了時刻 (ISO8601) を Event から denormalize したコピー。HealthCheckLambda が
+   * probe / 採点 gate で参照する (eventEndsAt <= now なら skip)。`POST /events/:id/end`
+   * で operator が明示的に終了させたとき、event-handler が全 deployment 行へ伝播する。
+   * 未設定 → 終了 gate 無し (= 旧 deployment / 終了未指示の event で既存挙動を保つ)。
+   */
+  eventEndsAt?: string;
 
   /** Scoring engine が加算したチームの累計ポイント。0 default。 */
   score?: number;

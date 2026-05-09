@@ -1,0 +1,94 @@
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentItem } from "../deploy-handler/types.js";
+import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
+import type { EventItem } from "./types.js";
+
+/**
+ * `endEvent` の結果。
+ * - `not_found`: tenant 不一致 / event 不在 → 404 相当
+ * - `not_endable`: status が END に遷移可能でない (DRAFT / DEPLOYING / TEARDOWN /
+ *    ARCHIVED / ENDED) → 409 相当。READY のみ許可。
+ * - `ok`: 終了完了。endsAt と影響を受けた deployment 数を返す。
+ */
+export type EndEventOutcome =
+  | { kind: "not_found" }
+  | { kind: "not_endable"; status: string }
+  | { kind: "ok"; endsAt: string; updatedDeployments: number };
+
+/**
+ * Event を `ENDED` 状態にし、紐づく全 deployment 行に `eventEndsAt` を denormalize する。
+ *
+ * HealthCheckLambda は deployment 行の `eventEndsAt` を見て probe / 採点 gate を切る
+ * (now >= eventEndsAt なら skip)。Bulk Teardown 待たずに採点を停めるための path
+ * (Issue #494)。Event 単独更新では足りないので schedule.ts と同じ denormalize 戦略。
+ *
+ * `READY` 状態のみ「終了」可能。
+ *   - `DRAFT` / `DEPLOYING`: まだ動いていないので無意味
+ *   - `TEARDOWN` / `ARCHIVED`: 既に teardown 済 → 終了は redundant
+ *   - `ENDED`: 二重操作防止
+ */
+export async function endEvent(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  nowMs: number,
+): Promise<EndEventOutcome> {
+  const now = new Date(nowMs).toISOString();
+
+  let updatedEvent: Partial<EventItem> | undefined;
+  try {
+    const updateOut = await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.eventsTableName,
+        Key: { PK: `EVENT#${eventId}`, SK: "META" },
+        UpdateExpression: "SET #s = :ended, endsAt = :now, updatedAt = :now",
+        // tenant 跨ぎ防止 + status=READY のみ許可
+        ConditionExpression: "tenantId = :tenantId AND #s = :ready",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":ended": "ENDED",
+          ":ready": "READY",
+          ":now": now,
+          ":tenantId": tenantId,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+    updatedEvent = updateOut.Attributes as Partial<EventItem> | undefined;
+  } catch (err) {
+    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
+      // tenant 不一致 / 行不在 / status != READY のいずれか。区別するため Get で確認。
+      const probe = await shared.ddb.send(
+        new (await import("@aws-sdk/lib-dynamodb")).GetCommand({
+          TableName: shared.eventsTableName,
+          Key: { PK: `EVENT#${eventId}`, SK: "META" },
+        }),
+      );
+      const item = probe.Item as Partial<EventItem> | undefined;
+      if (!item || item.tenantId !== tenantId) return { kind: "not_found" };
+      return { kind: "not_endable", status: typeof item.status === "string" ? item.status : "?" };
+    }
+    throw err;
+  }
+  if (!updatedEvent) return { kind: "not_found" };
+
+  const deploymentsOut = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
+  const targets = deploymentsOut
+    .map((d) => d as Pick<DeploymentItem, "PK">)
+    .filter((d) => typeof d.PK === "string");
+
+  await Promise.all(
+    targets.map((d) =>
+      shared.ddb.send(
+        new UpdateCommand({
+          TableName: shared.deploymentsTableName,
+          Key: { PK: d.PK, SK: "META" },
+          UpdateExpression: "SET eventEndsAt = :e, updatedAt = :now",
+          ExpressionAttributeValues: { ":e": now, ":now": now },
+        }),
+      ),
+    ),
+  );
+
+  return { kind: "ok", endsAt: now, updatedDeployments: targets.length };
+}

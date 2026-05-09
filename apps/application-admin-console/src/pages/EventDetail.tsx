@@ -22,6 +22,7 @@ import {
   EVENT_ID_RE,
   type EventDetail,
   type EventStatus,
+  endEvent,
   getEvent,
   setEventSchedule,
 } from "../api/events-client";
@@ -31,6 +32,7 @@ const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",
   DEPLOYING: "blue",
   READY: "green",
+  ENDED: "grey",
   TEARDOWN: "red",
   ARCHIVED: "grey",
 };
@@ -48,6 +50,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleInFlight, setScheduleInFlight] = useState<"now" | "scheduled" | null>(null);
+  const [endInFlight, setEndInFlight] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
 
@@ -142,6 +146,21 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     }
   };
 
+  const handleEndEvent = async () => {
+    if (!apiClient || endInFlight) return;
+    setEndInFlight(true);
+    setConfirmEnd(false);
+    setError(null);
+    try {
+      await endEvent(apiClient, eventId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEndInFlight(false);
+    }
+  };
+
   if (!detail && !error) {
     return (
       <Box textAlign="center" padding="l">
@@ -161,10 +180,24 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             <Button
               variant="primary"
               loading={bulkInFlight === "deploy"}
-              disabled={!detail || detail.problems.length === 0 || detail.teams.length === 0}
+              disabled={
+                !detail ||
+                detail.problems.length === 0 ||
+                detail.teams.length === 0 ||
+                detail.status === "ENDED" ||
+                detail.status === "TEARDOWN" ||
+                detail.status === "ARCHIVED"
+              }
               onClick={handleBulkDeploy}
             >
               Bulk Deploy
+            </Button>
+            <Button
+              loading={endInFlight}
+              disabled={!detail || detail.status !== "READY"}
+              onClick={() => setConfirmEnd(true)}
+            >
+              Event を終了
             </Button>
             <Button
               loading={bulkInFlight === "teardown"}
@@ -373,6 +406,32 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           />
         </Container>
       )}
+
+      <Modal
+        visible={confirmEnd}
+        header="Event を終了しますか?"
+        onDismiss={() => setConfirmEnd(false)}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setConfirmEnd(false)}>キャンセル</Button>
+              <Button variant="primary" onClick={handleEndEvent}>
+                終了
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>
+            Event を <code>ENDED</code> に遷移し、HealthCheck の採点を停止します (deployment
+            は残るので Bulk Teardown は別途必要)。
+          </Box>
+          <Box variant="small" color="text-status-warning">
+            この操作は取り消せません。READY 状態の event のみ終了できます。
+          </Box>
+        </SpaceBetween>
+      </Modal>
 
       <Modal
         visible={confirmTeardown}

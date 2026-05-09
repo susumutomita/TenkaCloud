@@ -27,9 +27,22 @@ export interface EventItem {
    * 値は分精度想定 (operator UI が DatePicker + TimeInput で入力)。
    */
   startsAt?: string;
+  /**
+   * 競技終了時刻 (ISO8601, UTC)。これ以降は HealthCheckLambda が probe / 採点を skip。
+   * operator が「Event を終了」 button を押した時点で `now()` が書かれ、status も
+   * `ENDED` に遷移する。Bulk Teardown 待たずに採点を停めるための gate (Issue #494)。
+   */
+  endsAt?: string;
 }
 
-export const EventStatusSchema = z.enum(["DRAFT", "DEPLOYING", "READY", "TEARDOWN", "ARCHIVED"]);
+export const EventStatusSchema = z.enum([
+  "DRAFT",
+  "DEPLOYING",
+  "READY",
+  "ENDED",
+  "TEARDOWN",
+  "ARCHIVED",
+]);
 export type EventStatus = z.infer<typeof EventStatusSchema>;
 
 /**
