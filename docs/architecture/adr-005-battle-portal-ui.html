@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-005: Battle Portal UI 設計</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text);
+    background: var(--c-bg);
+    max-width: 960px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  .opt-row { display: flex; gap: .8rem; margin: .4rem 0; align-items: baseline; }
+  .opt-row .pill { flex: 0 0 auto; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  figure { margin: 1rem 0; }
+  figcaption { font-size: 0.85rem; color: var(--c-muted); margin-top: .3rem; }
+  svg { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px; }
+  .legend { display: flex; gap: 1rem; font-size: 0.85rem; color: var(--c-muted); margin: .3rem 0 .6rem; }
+  .legend span::before { content: "■"; margin-right: .25rem; }
+  .legend .l-show::before { color: var(--c-accept); }
+  .legend .l-hide::before { color: var(--c-reject); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-005: Battle 形式 Portal UI を「攻撃の有無は見える、原因は隠す」3 タブで設計する</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-09</div>
+    <div><b>Issue:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/501">#501</a>, <a href="https://github.com/susumutomita/TenkaCloud/issues/164">#164</a></div>
+    <div><b>Related ADR:</b> <a href="./adr-004-event-team-model.md">ADR-004</a> (Event/Team)</div>
+    <div><b>Memory:</b> <code>project_battle_challenge_hybrid</code></div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>Phase 2c までの Participant Portal は <b>Challenge 形式</b> (= flag 提出 / 1 回限り採点)
+を前提に設計されており、ProblemDetail / Scoreboard / ScoreEvents の 3 画面で完結していた。
+Battle 形式 (= uptime 攻撃防御、時間軸で勝敗が動く) の問題が運用上 1 件
+(<code>hello-world-battle</code>、<code>security-battle-royale</code>) 立ち上がった一方で、
+Battle に固有の「自チームへの攻撃が今どう進行しているか」「どの程度耐えているか」という
+時間軸情報を見る UI は未整備。</p>
+
+<p>本 ADR を駆動する制約は次のとおり。</p>
+
+<table>
+<thead><tr><th>制約</th><th>由来</th><th>本 ADR への影響</th></tr></thead>
+<tbody>
+<tr><td><b>Game balance</b>: 防御側自身が壊れている原因を調査して回復する</td>
+    <td><a href="../../infrastructure/lib/problem-deploy/handlers/participant-handler/lookup.ts">lookup.ts:38-40</a> 既存決定</td>
+    <td>「どの endpoint が 503」と教えるとゲーム性破壊 → 隠す</td></tr>
+<tr><td><b>観戦者体験</b>: Scoreboard で他チームの状況も見たい</td><td>運用想定</td>
+    <td>aggregate (uptime%) は OK / 内部状態は NG</td></tr>
+<tr><td><b>polling over SSE</b></td><td>memory <code>feedback_polling_over_sse</code></td>
+    <td>real-time は polling、SSE 不使用</td></tr>
+<tr><td><b>DDB は 1 RCU/1 WCU PROVISIONED</b></td><td>memory <code>feedback_dynamodb_provisioned</code> + Aspect</td>
+    <td>新 DDB は立てない方向</td></tr>
+<tr><td><b>Battle / Challenge は完全分離しない</b></td><td>memory <code>project_battle_challenge_hybrid</code></td>
+    <td>ProblemDetail に Tabs 追加で対応、別画面化しない</td></tr>
+</tbody>
+</table>
+
+<h3>現状</h3>
+<table>
+<thead><tr><th>項目</th><th>現状</th></tr></thead>
+<tbody>
+<tr><td>攻撃ログの保存</td><td><code>health-check-handler</code> が deployment 行の <code>endpointsHealth</code> JSON を毎 tick 上書き。timeline は残らない</td></tr>
+<tr><td>score event の保存</td><td>Deployments テーブルの <code>SCORE#&lt;eventId&gt;#&lt;jobId&gt;#&lt;ulid&gt;</code> row として残る (<code>shared/score-event.ts</code>)。再利用可能</td></tr>
+<tr><td>Portal 側 UI</td><td>ProblemPanel が flag 提出フォームを出すのみ。Battle 専用表示は無い</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>解くべき設計判断</h2>
+
+<h3>D1. per-endpoint health の見える粒度</h3>
+
+<p>防御側のゲーム性を保つため、<b>per-endpoint の OK/NG breakdown は participant に出さない</b>。
+ただし「攻撃が成功した / していない」「現在 healthy か劣化中か」程度の <b>aggregate 情報は出す</b>
+(= 防御側に「いま自分が攻撃を受けている」自覚を与えるため)。</p>
+
+<div class="legend">
+  <span class="l-show">見せる</span>
+  <span class="l-hide">見せない</span>
+</div>
+
+<table>
+<thead><tr><th>情報</th><th>判断</th><th>備考</th></tr></thead>
+<tbody>
+<tr class="show"><td>全 endpoint OK か (boolean)</td><td><span class="badge accept">見せる</span></td><td>ProblemPanel の Status バッジで</td></tr>
+<tr class="show"><td>健全 endpoint 数 / 全 endpoint 数</td><td><span class="badge accept">見せる</span></td><td><code>3 / 5</code> 風に</td></tr>
+<tr class="hide"><td>どの endpoint が NG か (名前 / URL)</td><td><span class="badge reject">隠す</span></td><td>原因を Portal で答え合わせさせない</td></tr>
+<tr class="show"><td>直近 N 分の uptime ％</td><td><span class="badge accept">見せる</span></td><td>aggregate なのでゲーム性に干渉しない</td></tr>
+<tr class="show"><td>攻撃検知時刻 (= <code>lastResult=fail</code> 遷移)</td><td><span class="badge accept">見せる</span></td><td>「いま攻撃を受けた」自覚は OK</td></tr>
+<tr class="hide"><td>攻撃元 (= 誰が攻撃したか)</td><td><span class="badge reject">隠す</span></td><td>観戦者にも非公開、Battle = 公平試合</td></tr>
+</tbody>
+</table>
+
+<p>→ Decision 1 は <b>「aggregate のみ可視化、per-endpoint は隠す、攻撃元は隠す」</b>。</p>
+
+<h3>D2. 攻撃 log の保存先</h3>
+
+<p>3 タブ (Attack Statistics / Application Status / Attack History) すべて時系列データを要求する。
+保存場所候補は次のとおり。</p>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th><th>欠点</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D2-A</b></td><td><span class="badge accept">採用</span></td>
+   <td>既存 Score Event row を流用 (<code>source: "attack-detected"</code> を追加)</td>
+   <td>1 試合で row が増える (TTL で expire)</td></tr>
+<tr class="hide"><td>D2-B</td><td><span class="badge reject">却下</span></td>
+   <td>新 DDB <code>BattleAttackLog</code></td>
+   <td>新テーブル運用コスト + DynamoDbLowCapacity Aspect 影響範囲が広がる</td></tr>
+<tr class="hide"><td>D2-C</td><td><span class="badge reject">却下</span></td>
+   <td>CloudWatch Logs に書いて Insights で query</td>
+   <td>料金 / 整合性 / latency が劣る、Portal 側との結合が重い</td></tr>
+</tbody>
+</table>
+
+<details>
+<summary>D2-A を採用する 3 つの理由</summary>
+<ol>
+<li>既に Score events 画面 (<code>/score-events</code>) が同テーブルを polling している。Battle の attack timeline は「種別: 攻撃検知」として混ぜれば 1 source of truth。</li>
+<li>新 DDB を立てない (<code>DynamoDbLowCapacity</code> Aspect の影響範囲を増やさない、コスト 0 維持)。</li>
+<li>Score event の <code>expiresAt</code> TTL に乗るので自動削除されて運用コスト低い。</li>
+</ol>
+<p>実装上は <code>shared/score-event.ts</code> の <code>source</code> フィールドに
+<code>"attack-detected"</code> を追加する。</p>
+</details>
+
+<h3>D3. 3 タブの表示粒度 / 配置</h3>
+
+<p>issue body の 3 タブ案を維持しつつ、D1 に従って粒度を絞る。タブ切替は ProblemDetail 画面の中の
+Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを表示せず ProblemPanel のみ
+(= 既存挙動)。</p>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">TAB 1</div>
+    <div class="title">Application Status</div>
+    <div class="body">
+      <ul>
+        <li>「全 endpoint healthy」「一部劣化」「全停止」の 3 状態 Badge</li>
+        <li>直近 5 分の uptime ％ (= 5 分内の score event success / total tick)</li>
+        <li><span class="badge reject">per-endpoint は出さない</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="decision-card">
+    <div class="num">TAB 2</div>
+    <div class="title">Attack Statistics</div>
+    <div class="body">
+      <ul>
+        <li>直近 1h の「攻撃検知数 / 防御成功数」の 2-line graph (Cloudscape <code>LineChart</code>)</li>
+        <li>5 分粒度 bucket、<code>source: "attack-detected"</code> を集計</li>
+        <li><span class="badge reject">per-endpoint breakdown は出さない</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="decision-card">
+    <div class="num">TAB 3</div>
+    <div class="title">Attack History</div>
+    <div class="body">
+      <ul>
+        <li>Table: occurredAt / 結果 (= 攻撃成功 or 防御成功) / 自動回復までの秒数</li>
+        <li>(uptime 復活時刻 − 攻撃検知時刻) を回復秒数として併記</li>
+        <li><span class="badge reject">攻撃元 / target endpoint は出さない</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h3>D4. real-time 性 / polling 間隔</h3>
+
+<p><code>feedback_polling_over_sse</code> に従い SSE / WebSocket は使わない。</p>
+
+<figure>
+<svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="monospace" font-size="13">
+  <!-- TeamViewProvider 5s -->
+  <rect x="20" y="30" width="200" height="60" fill="#cfe5ff" stroke="#0969da" rx="4"/>
+  <text x="120" y="55" text-anchor="middle">TeamViewProvider</text>
+  <text x="120" y="78" text-anchor="middle" font-weight="bold">5s polling</text>
+  <text x="120" y="105" text-anchor="middle" fill="#59636e">/portal/me</text>
+
+  <!-- Battle Attack Polling 10s -->
+  <rect x="280" y="30" width="200" height="60" fill="#ffe2c5" stroke="#9a6700" rx="4"/>
+  <text x="380" y="55" text-anchor="middle">BattleAttackPanel</text>
+  <text x="380" y="78" text-anchor="middle" font-weight="bold">10s polling</text>
+  <text x="380" y="105" text-anchor="middle" fill="#59636e">/portal/me/battle-attacks</text>
+
+  <!-- ScoreEvents 5s (existing) -->
+  <rect x="540" y="30" width="160" height="60" fill="#ddf4e0" stroke="#1a7f37" rx="4"/>
+  <text x="620" y="55" text-anchor="middle">Score events</text>
+  <text x="620" y="78" text-anchor="middle" font-weight="bold">既存 5s</text>
+
+  <!-- Lambda backend -->
+  <rect x="220" y="140" width="280" height="40" fill="#f6f8fa" stroke="#59636e" rx="4"/>
+  <text x="360" y="166" text-anchor="middle">Participant Portal Lambda (Hono)</text>
+
+  <!-- Arrows -->
+  <line x1="120" y1="90" x2="280" y2="140" stroke="#0969da" stroke-width="1.5"/>
+  <line x1="380" y1="90" x2="380" y2="140" stroke="#9a6700" stroke-width="1.5"/>
+  <line x1="620" y1="90" x2="440" y2="140" stroke="#1a7f37" stroke-width="1.5"/>
+</svg>
+<figcaption>polling 経路: 既存 TeamViewProvider (5s) と並走で BattleAttackPanel (10s) を新設。SSE 不使用。</figcaption>
+</figure>
+
+<ul>
+<li>既存 <code>TeamViewProvider</code> の 5 秒 polling に乗せる (Application Status の uptime ％)</li>
+<li>Battle 系 deployment が 1 つでもある team は <b>追加 polling として attack log を 10 秒で fetch</b></li>
+<li>新 endpoint: <code>GET /portal/me/battle-attacks?jobId=&lt;ulid&gt;&amp;sinceMin=60</code></li>
+</ul>
+
+<h3>D5. 観戦者向けの leaderboard 表示</h3>
+
+<p>Scoreboard 画面で Battle 形式 event の場合、各 team の uptime ％ を rank の補助列として表示する。
+「その team がいま落ちているか」までは見せない (= D1 と整合)。</p>
+
+<ul>
+<li>列追加: <code>直近 5 分 uptime</code></li>
+<li>全チーム劣化中 (= 全員に攻撃が届いている) なら全員に同じ uptime → ゲーム継続情報として有用</li>
+</ul>
+</section>
+
+<section>
+<h2>Decision (まとめ)</h2>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">D1</div>
+    <div class="title">per-endpoint visibility</div>
+    <div class="body">aggregate のみ可視化、per-endpoint は隠す、攻撃元も隠す</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D2</div>
+    <div class="title">攻撃 log 保存先</div>
+    <div class="body">既存 Score Event row を流用、<code>source: "attack-detected"</code> を追加 (新 DDB 不要)</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D3</div>
+    <div class="title">3 タブ構成</div>
+    <div class="body">Application Status / Attack Statistics / Attack History を Battle 問題の ProblemDetail 内 Tabs で出す</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D4</div>
+    <div class="title">real-time 戦略</div>
+    <div class="body">polling 5 秒 (team view) + 10 秒 (attack log 専用)、SSE 不使用</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D5</div>
+    <div class="title">Scoreboard</div>
+    <div class="body">Battle event のとき「直近 5 分 uptime ％」列を追加。観戦者向け</div>
+  </div>
+</div>
+</section>
+
+<section>
+<h2>Implementation ownership</h2>
+
+<p><code>AGENTS.md</code> の役割分担に従い、各 task の Owner を表で示す。</p>
+
+<table>
+<thead><tr><th>領域</th><th>Owner</th><th>備考</th></tr></thead>
+<tbody>
+<tr><td><code>health-check-handler</code> で <code>lastResult=fail</code> 遷移時に score event を書く拡張</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td><code>shared/score-event.ts</code> の source enum 拡張 + handler の write path</td></tr>
+<tr><td><code>GET /portal/me/battle-attacks</code> Hono route + handler</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>既存 <code>participant-handler/score-events.ts</code> の sibling として実装</td></tr>
+<tr><td>API Gateway / Function URL / IAM の routing 配線</td>
+    <td><span class="badge warn">user</span></td>
+    <td>既存 Function URL の Hono は path レベル match で吸収できる、軽微</td></tr>
+<tr><td>ProblemDetail に Battle 用 Tabs / Cloudscape LineChart 統合</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>新コンポーネント <code>BattleAttackPanel.tsx</code></td></tr>
+<tr><td>Scoreboard に uptime ％ 列追加</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td><code>LeaderboardEntry</code> schema 拡張 (optional) + UI 列</td></tr>
+<tr><td><code>lookup.ts</code> の <code>endpointsHealth → aggregate</code> 変換</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>per-endpoint を消して aggregate のみ露出 (既存決定の念押し)</td></tr>
+<tr><td>ADR 自体 + 運用ガイドライン doc</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>本 PR + Phase 3.3</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Migration</h2>
+
+<details open>
+<summary>Phase 3.1 (本 ADR 実装の最初の PR、scope 中)</summary>
+<ol>
+<li><code>shared/score-event.ts</code> に <code>source: "attack-detected"</code> を追加</li>
+<li><code>health-check-handler</code> で <code>lastResult=fail</code> 遷移時 (= 直前 tick が ok だった場合) に attack-detected event を 1 件書く (連続失敗 tick での重複 write は避ける)</li>
+<li><code>lookup.ts</code> の <code>endpointsHealth</code> を <code>aggregate</code> (= ok count / total / overallStatus) に絞った view を新設、participant API でこちらを返す</li>
+<li><code>GET /portal/me/battle-attacks?jobId=&amp;sinceMin=</code> Lambda route + ParticipantPortalLambda の IAM に必要なら Query 権限を追加</li>
+</ol>
+</details>
+
+<details>
+<summary>Phase 3.2 (frontend、scope 中〜大)</summary>
+<ol>
+<li><code>participant-portal</code> の ProblemDetail に Cloudscape <code>Tabs</code> 導入</li>
+<li><code>BattleAttackPanel.tsx</code> 新規 (3 タブの中身)</li>
+<li>Scoreboard に uptime ％ 列追加</li>
+<li><code>LineChart</code> 用の bucket 化 helper (= 5 分粒度)</li>
+</ol>
+</details>
+
+<details>
+<summary>Phase 3.3 (運用ガイドライン)</summary>
+<ul>
+<li><code>problems/README.md</code> に「Battle 問題が score event に attack-detected を書く前提」を追記</li>
+<li>新規 Battle 問題の作者向けに「per-endpoint 健全性は隠す」設計を再周知</li>
+</ul>
+</details>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Positive</h3>
+<ul>
+<li>防御側のゲーム性 (= 自分で調査) を維持しつつ、「攻撃を受けている」自覚は与えられる</li>
+<li>新 DDB を立てない (D2-A) ので運用コスト 0 維持 (<code>DynamoDbLowCapacity</code> Aspect の影響範囲が広がらない)</li>
+<li>Challenge / Battle で Portal の base layout が同じ (= ProblemDetail に Tabs が増えるだけ) で UX 一貫性</li>
+<li>Scoreboard に uptime ％ を出すことで観戦者にも盛り上がる viewing 要素ができる</li>
+</ul>
+
+<h3>Negative</h3>
+<ul>
+<li>1 deployment あたり attack 検知ごとに 1 score event row が増える。1 試合 1h で 100 件規模を想定 (= TTL で消えるので blast 限定)</li>
+<li>LineChart 表示は Cloudscape <code>LineChart</code> を新規 import するので bundle が少し増える</li>
+<li>「per-endpoint visibility 禁止」を強く守る必要があり、handler の view 変換ロジックで漏れがあると即ゲーム性破壊。<code>lookup.ts</code> の変換層を test で固める必要</li>
+</ul>
+
+<h3>Unknown</h3>
+<ul>
+<li>Battle event の長時間化 (例: 1 日連続) で score event row が deployment あたり 1000 件超える可能性。TTL で expire するが、Scan する handler 側でページネーション再確認が必要 (= Phase 3 の PR で計測してから判断)</li>
+</ul>
+</section>
+
+<section>
+<h2>関連リソース</h2>
+
+<table>
+<thead><tr><th>リソース</th><th>役割</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/susumutomita/TenkaCloud/issues/501">Issue 501</a></td><td>本 ADR の起票元</td></tr>
+<tr><td><a href="https://github.com/susumutomita/TenkaCloud/issues/164">Issue 164</a></td><td>Battle Portal UI 設計の上位 issue</td></tr>
+<tr><td><a href="../../infrastructure/lib/problem-deploy/handlers/participant-handler/lookup.ts"><code>participant-handler/lookup.ts</code></a></td><td>既存の per-endpoint 隠蔽決定 (38-40 行目)</td></tr>
+<tr><td><a href="../../infrastructure/lib/problem-deploy/handlers/health-check-handler/index.ts"><code>health-check-handler/index.ts</code></a></td><td>攻撃検知 (= <code>lastResult=fail</code> 遷移) を score event 化する責務を負う</td></tr>
+<tr><td><a href="../../infrastructure/lib/problem-deploy/handlers/shared/score-event.ts"><code>shared/score-event.ts</code></a></td><td><code>source</code> enum を拡張する場所</td></tr>
+<tr><td><a href="../../apps/participant-portal/src/pages/ProblemDetail.tsx"><code>ProblemDetail.tsx</code></a></td><td>Tabs を追加する画面</td></tr>
+<tr><td><a href="../../apps/participant-portal/src/pages/Scoreboard.tsx"><code>Scoreboard.tsx</code></a></td><td>uptime ％ 列を追加する画面</td></tr>
+</tbody>
+</table>
+</section>
+
+</body>
+</html>
