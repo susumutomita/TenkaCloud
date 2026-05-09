@@ -43,9 +43,7 @@ const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "gre
  * 1 problem 行の deploy 状況サマリ: `成功 N / 全 M` + 失敗があれば赤 Badge を併記。
  * Bulk Deploy 未実行 (deployments 無し) なら "未デプロイ" 表示。
  */
-function renderProblemDeployStatus(
-  deployments: readonly EventDeploymentSummary[] | undefined,
-): JSX.Element {
+function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[] | undefined) {
   if (!deployments || deployments.length === 0) {
     return (
       <Box variant="small" color="text-status-inactive">
@@ -74,9 +72,7 @@ function renderProblemDeployStatus(
  * 1 problem 行の deploy job click-through link 列。各 jobId を /deployments/:jobId に
  * 飛ばす (= per-team の deploy 詳細ページ)。
  */
-function renderProblemJobLinks(
-  deployments: readonly EventDeploymentSummary[] | undefined,
-): JSX.Element {
+function renderProblemJobLinks(deployments: readonly EventDeploymentSummary[] | undefined) {
   if (!deployments || deployments.length === 0) {
     return (
       <Box variant="small" color="text-status-inactive">
