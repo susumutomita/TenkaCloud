@@ -15,6 +15,7 @@ import { extractBearerToken } from "./auth.js";
 const ERROR_STATUS = {
   unauthorized: HTTP_UNAUTHORIZED,
   invalid_jobid: HTTP_BAD_REQUEST,
+  invalid_sincemin: HTTP_BAD_REQUEST,
   invalid_team_name: HTTP_BAD_REQUEST,
   invalid_problem_id: HTTP_BAD_REQUEST,
   invalid_flag: HTTP_BAD_REQUEST,
@@ -24,6 +25,7 @@ const ERROR_STATUS = {
   not_flag_problem: HTTP_BAD_REQUEST,
   no_outputs: HTTP_BAD_REQUEST,
   no_event: HTTP_NOT_FOUND,
+  not_found: HTTP_NOT_FOUND,
   misconfigured: HTTP_INTERNAL_ERROR,
   internal_error: HTTP_INTERNAL_ERROR,
 } as const;

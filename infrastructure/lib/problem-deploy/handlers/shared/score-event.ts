@@ -4,7 +4,7 @@ import { ulid } from "ulid";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
- * 1 採点イベント (= スコア加算の単位) を Deployments table に書き込むときの shape。
+ * 1 採点イベント (= スコア加算 / 攻撃検知の単位) を Deployments table に書き込むときの shape。
  *
  *   PK = `DEPLOYMENT#<jobId>` (= 親 deployment と同じ partition)
  *   SK = `EVENT#<isoTimestamp>#<ulid>` (時系列ソート + 衝突防止)
@@ -22,27 +22,39 @@ export interface ScoreEventItem {
   /** Phase 2a 以前の旧 deployment は持たない (= history 列も undefined)。 */
   teamId?: string;
   eventId?: string;
-  /** 加点の発生源。`uptime` = HealthCheck の probe 成功、`flag` = 競技者の flag 提出。 */
-  source: "uptime" | "flag";
-  /** 加算ポイント。flag は scoring.points、uptime は scoring.pointsPerSuccess。 */
+  /**
+   * イベント発生源。
+   * - `uptime`: HealthCheck の probe で全 endpoint OK
+   * - `flag`: 競技者の flag 提出が正解
+   * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
+   *   Battle Portal の Attack Statistics / History で使う)
+   */
+  source: "uptime" | "flag" | "attack-detected";
+  /**
+   * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
+   * `attack-detected` = 0 (= イベント marker のみ、score 加算なし)。
+   */
   points: number;
   /**
-   * 結果。`uptime` で全 endpoint OK or `flag` で正解なら "ok"。
-   * 失敗イベントは現状書き込まない (= history は加点ログのみ)。将来 fail も書くなら
-   * extend 可能。
+   * 結果。
+   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解
+   * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた)
+   *
+   * Phase 2 以前の event 行は `"ok"` のみ書かれているので backward compatible。
    */
-  result: "ok";
+  result: "ok" | "down";
   occurredAt: string;
   /** 親 deployment の TTL を継承。0 なら無期限 (旧 deployment 互換)。 */
   expiresAt: number;
 }
 
 /**
- * 採点イベントを 1 行 PutItem する。HealthCheck (uptime) と submit-flag (flag) の両方
- * から呼ばれるので shared/ に置く。書き込み失敗は親 score 加算と整合性が崩れるが、
- * caller が catch して log のみ残す方針 (= MVP は best-effort)。
+ * 採点イベントを 1 行 PutItem する。HealthCheck (uptime / attack-detected) と
+ * submit-flag (flag) から呼ばれるので shared/ に置く。書き込み失敗は親 score 加算と
+ * 整合性が崩れるが、caller が catch して log のみ残す方針 (= MVP は best-effort)。
  *
  * `parent` から jobId / teamId / eventId / expiresAt を継承して event row を組む。
+ * `result` は source に応じて自動決定 (= attack-detected なら "down"、それ以外は "ok")。
  */
 export async function writeScoreEvent(
   ddb: DynamoDBDocumentClient,
@@ -61,7 +73,7 @@ export async function writeScoreEvent(
     eventId: parent.eventId,
     source,
     points,
-    result: "ok",
+    result: source === "attack-detected" ? "down" : "ok",
     occurredAt,
     expiresAt: Number(parent.expiresAt ?? 0),
   };

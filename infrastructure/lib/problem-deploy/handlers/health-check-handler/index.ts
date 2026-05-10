@@ -83,27 +83,41 @@ async function checkOne(item: Partial<DeploymentItem>, scoring: UptimeScoring): 
 
   await ddb.send(buildHealthUpdate(item.PK, allOk, scoring.pointsPerSuccess, now, newHealth));
 
-  // 全 endpoint OK のときだけ score event を書き込む。失敗イベントは現状 history に
-  // 残さない (= 加点ログのみ)。Put 失敗は best-effort として log に残す (= 採点は
-  // 既に確定しているので整合性より可用性優先)。
-  if (allOk && item.jobId && item.problemId) {
+  // ok / fail に応じて 2 種類の score event を best-effort で書き込む。Put 失敗は log のみ
+  // (= 採点 / 健全性 update は既に確定済、整合性より可用性優先)。
+  //
+  // - allOk = true  → "uptime" event (加点 marker、source=uptime / result=ok / points=N)
+  // - allOk = false かつ 直前 tick が ok → "attack-detected" event (= 攻撃検知の遷移
+  //   marker、source=attack-detected / result=down / points=0)。**連続 fail tick では
+  //   書かない** (= row 爆発防止、ADR-005 D2-A の hard guard)
+  if (!item.jobId || !item.problemId) return;
+  const parent = {
+    jobId: item.jobId,
+    problemId: item.problemId,
+    teamId: item.teamId,
+    eventId: item.eventId,
+    expiresAt: item.expiresAt ?? 0,
+  };
+
+  if (allOk) {
     try {
-      await writeScoreEvent(
-        ddb,
-        tableName(),
-        {
-          jobId: item.jobId,
-          problemId: item.problemId,
-          teamId: item.teamId,
-          eventId: item.eventId,
-          expiresAt: item.expiresAt ?? 0,
-        },
-        "uptime",
-        scoring.pointsPerSuccess,
-        now,
-      );
+      await writeScoreEvent(ddb, tableName(), parent, "uptime", scoring.pointsPerSuccess, now);
     } catch (err) {
       console.warn(`[health-check] score-event write failed jobId=${item.jobId}`, {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return;
+  }
+
+  // 直前 tick が ok だった場合のみ attack-detected を書く (= 連続 fail tick での重複
+  // write を防ぐ hard guard)。`undefined` (= probe 未実行 / 旧 deployment) は ok 扱い
+  // しない (= 初回 deploy 直後の誤検知を避ける)。
+  if (item.lastResult === "ok") {
+    try {
+      await writeScoreEvent(ddb, tableName(), parent, "attack-detected", 0, now);
+    } catch (err) {
+      console.warn(`[health-check] attack-detected write failed jobId=${item.jobId}`, {
         message: err instanceof Error ? err.message : String(err),
       });
     }

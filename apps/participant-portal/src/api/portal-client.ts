@@ -21,6 +21,19 @@ export interface ParticipantScoringInfo {
 }
 
 /**
+ * Battle (uptime kind) の集約 health (ADR-005 D1)。per-endpoint URL / 名前は **絶対に
+ * 露出しない** (= ゲーム性のため)。Challenge (flag kind) では undefined。
+ */
+export type ApplicationStatusOverall = "healthy" | "degraded" | "down" | "unknown";
+
+export interface ApplicationStatus {
+  readonly overall: ApplicationStatusOverall;
+  readonly healthyCount: number;
+  readonly totalCount: number;
+  readonly checkedAt?: string;
+}
+
+/**
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
 export interface ParticipantProblemView {
@@ -37,6 +50,8 @@ export interface ParticipantProblemView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  /** ADR-005 Phase 3.1: Battle (uptime) のみ aggregate health を露出。 */
+  readonly applicationStatus?: ApplicationStatus;
 }
 
 /**
@@ -255,6 +270,46 @@ export async function getConsoleSigninUrl(
     { query: { jobId }, throwOn400: true, signal },
   )) as { loginUrl: string };
   return data.loginUrl;
+}
+
+/**
+ * ADR-005 Phase 3.1: 自 team の指定 deployment における attack-detected event の
+ * 時系列。Battle Portal の Attack Statistics / Attack History タブが poll する。
+ */
+export interface BattleAttackEventView {
+  readonly occurredAt: string;
+  readonly source: "attack-detected";
+  readonly result: "down";
+  readonly recoveredAt: string | null;
+}
+
+export interface BattleAttacksResponse {
+  readonly jobId: string;
+  readonly problemId: string;
+  readonly sinceMin: number;
+  readonly events: readonly BattleAttackEventView[];
+}
+
+/**
+ * `GET /portal/me/battle-attacks?jobId=&sinceMin=` を `Authorization: Bearer <teamLoginKey>`
+ * で呼ぶ。直近 sinceMin (default 30、上限 60) 分内の attack-detected event を時系列降順
+ * で返す。invalid_jobid / invalid_sincemin / not_found は `PortalValidationError` で throw。
+ */
+export async function getBattleAttacks(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  jobId: string,
+  sinceMin?: number,
+  signal?: AbortSignal,
+): Promise<BattleAttacksResponse> {
+  const query: Record<string, string> = { jobId };
+  if (sinceMin !== undefined) query.sinceMin = String(sinceMin);
+  return (await portalFetch<BattleAttacksResponse>(
+    apiBaseUrl,
+    "portal/me/battle-attacks",
+    teamLoginKey,
+    { query, throwOn400: true, signal },
+  )) as BattleAttacksResponse;
 }
 
 /**

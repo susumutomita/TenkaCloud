@@ -3,6 +3,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { PROBLEM_ID_RE } from "../shared/constants.js";
 import { HTTP_OK } from "../shared/http-status.js";
+import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { getLeaderboard } from "./leaderboard.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
 import { respondError, withBearerAuth } from "./route-helpers.js";
@@ -54,6 +55,21 @@ app.get("/portal/me/console-signin-url", (c) =>
     if (!jobId) return respondError(c, "missing_jobid");
     const outcome = await getConsoleSigninUrl(shared, token, jobId);
     if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, HTTP_OK);
+    return respondError(c, outcome.kind);
+  }),
+);
+
+app.get("/portal/me/battle-attacks", (c) =>
+  withBearerAuth(c, "battle-attacks", async (token) => {
+    const jobId = c.req.query("jobId");
+    if (!jobId) return respondError(c, "missing_jobid");
+    const sinceMinRaw = c.req.query("sinceMin");
+    const sinceMin =
+      sinceMinRaw === undefined
+        ? BATTLE_ATTACKS_SINCE_MIN_DEFAULT
+        : Number.parseInt(sinceMinRaw, 10);
+    const outcome = await listBattleAttacks(shared, token, jobId, sinceMin);
+    if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
     return respondError(c, outcome.kind);
   }),
 );
