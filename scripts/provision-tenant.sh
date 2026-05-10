@@ -30,18 +30,18 @@ aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAM
 # silent fail。`-o` で必ず上書きする。
 unzip -o $CDK_SOURCE_NAME
 
-# Node 切替は **`.nvmrc` (= source of truth、repo root に commit、install.sh が source.zip 同梱)**
-# を読む。CodeBuild standard image 同梱の nvm を使うので追加 install 不要。
-# 上げる時はリポジトリ root の `.nvmrc` を 1 か所書き換えれば全 script + ローカル dev に伝搬する
-# (= ハードコード版数の散乱を防ぐ)。
-NODE_VERSION=$(cat .nvmrc)
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-# shellcheck disable=SC1091
-. "$NVM_DIR/nvm.sh"
-nvm install "$NODE_VERSION"
-nvm use "$NODE_VERSION"
+# Node version は **`.nvmrc` (= source of truth、repo root に commit、install.sh が
+# source.zip 同梱)** を読み、NodeSource yum repo で OS-level に install。
+# 旧 nvm 経由は CodeBuild image に nvm が無いケースで silent fail し、結局 default node 14 で
+# cdk が "Unexpected token '{'" になる regression を起こした (#560)。NodeSource なら image 非依存。
+# 上げる時は repo root の `.nvmrc` を 1 行書き換えるだけで全 script + ローカル dev に伝搬。
+NODE_MAJOR=$(cut -d. -f1 .nvmrc)
+echo "Installing Node.js ${NODE_MAJOR}.x via NodeSource yum repo..."
+curl -fsSL "https://rpm.nodesource.com/setup_${NODE_MAJOR}.x" | sudo bash -
+sudo yum install -y nodejs
 node --version
-npm install -g aws-cdk
+npm --version
+sudo npm install -g aws-cdk
 
 cd cdk
 npm install
