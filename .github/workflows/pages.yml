@@ -1,0 +1,39 @@
+# GitHub Pages: landing/ ディレクトリだけを配信する。
+#
+# 設計判断: ADR / 運用 doc などの中間情報 (= docs/) は **ホストしない**。
+# 公開 landing は OSS としての product description / 入り口だけに絞り、
+# 設計詳細は repo 内 docs/ で完結させて core 開発者だけが読む形にする。
+# (= public landing と core dev docs を IA で分離)
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: landing
+      - id: deployment
+        uses: actions/deploy-pages@v4
