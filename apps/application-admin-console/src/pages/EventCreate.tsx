@@ -7,7 +7,6 @@ import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
-import Modal from "@cloudscape-design/components/modal";
 import Multiselect, { type MultiselectProps } from "@cloudscape-design/components/multiselect";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -15,11 +14,7 @@ import Table from "@cloudscape-design/components/table";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
-import {
-  type CreateEventResponse,
-  createEvent,
-  type EventProblemTarget,
-} from "../api/events-client";
+import { createEvent, type EventProblemTarget } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
@@ -47,8 +42,9 @@ interface ProblemRow extends EventProblemTarget {
  *   - チーム数 (1〜99) — 作成時に `team-1`, `team-2` ... の internalSlug が自動付番される
  *   - 問題セット (`Multiselect`) — 各問題ごとに deploy 先 account / region を入力
  *
- * 提出後、レスポンスの `teams[].teamLoginKey` を Modal で 1 度だけ表示する (= operator が
- * 控える / CSV ダウンロードする)。
+ * 提出後は EventDetail に直接 navigate する (#530)。teamLoginKey は EventDetail の
+ * 「チーム」 table で常時表示 + 各行にコピー button があるので、modal で 1 度きり露出
+ * する旧 UX は不要。
  */
 export function EventCreatePage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
@@ -66,7 +62,6 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const [problemRows, setProblemRows] = useState<ProblemRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [response, setResponse] = useState<CreateEventResponse | null>(null);
 
   // Multiselect 変更時は problemRows を sync (既存行は値保持、新規分は default)。
   const onProblemsChange = (next: readonly MultiselectProps.Option[]) => {
@@ -128,7 +123,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           defaultRegion: r.defaultRegion,
         })),
       });
-      setResponse(res);
+      // #530: 旧 UX は「teamLoginKey は一度きり表示」 modal を出していたが、operator が
+      // 配布チャンスを逃すと event 作り直しになる非可逆 UX。EventDetail で常時 teamLoginKey
+      // を表示する方針に合わせ、modal は廃止して直接 EventDetail に navigate。
+      navigate(`/events/${res.eventId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -260,49 +258,6 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           </Box>
         </SpaceBetween>
       </Form>
-
-      <Modal
-        visible={response !== null}
-        header="Event 作成完了 — チームログインキーを控えてください"
-        size="large"
-        onDismiss={() => {
-          if (!response) return;
-          navigate(`/events/${response.eventId}`);
-        }}
-        footer={
-          <Box float="right">
-            <Button
-              variant="primary"
-              onClick={() => response && navigate(`/events/${response.eventId}`)}
-            >
-              Event 詳細へ
-            </Button>
-          </Box>
-        }
-      >
-        {response && (
-          <SpaceBetween size="m">
-            <Alert type="warning" header="teamLoginKey はこの画面でしか表示されません">
-              安全な手段で各チームに hand-off してください。閉じた後は再表示できません (= Phase 2c
-              で operator 用の再取得 API を検討)。
-            </Alert>
-            <Box>
-              Event ID: <Box variant="code">{response.eventId}</Box>
-            </Box>
-            <Table
-              items={[...response.teams]}
-              columnDefinitions={[
-                { id: "team", header: "Team", cell: (t) => t.internalSlug },
-                {
-                  id: "key",
-                  header: "teamLoginKey",
-                  cell: (t) => <Box variant="code">{t.teamLoginKey}</Box>,
-                },
-              ]}
-            />
-          </SpaceBetween>
-        )}
-      </Modal>
     </SpaceBetween>
   );
 }
