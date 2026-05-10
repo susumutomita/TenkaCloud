@@ -10,7 +10,6 @@ import type { NotificationView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 import { describeAgo } from "../lib/format";
-import { saveLastSeenAt } from "../lib/notifications-storage";
 
 const SEVERITY_COLOR: Record<NotificationView["severity"], "blue" | "red"> = {
   info: "blue",
@@ -32,17 +31,18 @@ const SEVERITY_LABEL: Record<NotificationView["severity"], string> = {
  * `notificationsNoEvent` で告知して空白を出す。
  */
 export function NotificationsPage({ config }: { config: AppConfig }) {
-  const { notifications, notificationsError, notificationsNoEvent } = useTeamView();
+  const { notifications, notificationsError, notificationsNoEvent, markNotificationsSeen } =
+    useTeamView();
   const isBackend = config.mode === "backend";
   const items = notifications?.items;
 
-  // page を開いたら latest occurredAt を localStorage に書いて未読 badge を 0 化。
-  // items が更新されるたびに走るが、saveLastSeenAt は巻き戻し防止 + 同値 skip なので no-op が連続しても害なし。
+  // page を開いたら latest occurredAt を context+localStorage に書いて未読 badge を **即時** 0 化。
+  // markNotificationsSeen は巻き戻し防止 + 同値 skip なので no-op が連続しても害なし。
   useEffect(() => {
     if (items && items.length > 0) {
-      saveLastSeenAt(items[0]?.occurredAt ?? "");
+      markNotificationsSeen(items[0]?.occurredAt ?? "");
     }
-  }, [items]);
+  }, [items, markNotificationsSeen]);
 
   return (
     <SpaceBetween size="l">
