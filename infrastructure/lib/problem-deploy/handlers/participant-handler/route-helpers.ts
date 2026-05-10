@@ -16,6 +16,7 @@ const ERROR_STATUS = {
   unauthorized: HTTP_UNAUTHORIZED,
   invalid_jobid: HTTP_BAD_REQUEST,
   invalid_sincemin: HTTP_BAD_REQUEST,
+  invalid_limit: HTTP_BAD_REQUEST,
   invalid_team_name: HTTP_BAD_REQUEST,
   invalid_problem_id: HTTP_BAD_REQUEST,
   invalid_flag: HTTP_BAD_REQUEST,

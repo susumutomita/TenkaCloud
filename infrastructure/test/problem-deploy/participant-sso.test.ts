@@ -22,6 +22,7 @@ function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnTyp
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
     tableName: "TestDeployments",
+    eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
     problemsScoring: {},
   };

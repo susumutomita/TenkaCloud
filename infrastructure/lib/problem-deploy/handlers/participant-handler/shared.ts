@@ -12,6 +12,12 @@ import type { DeploymentItem } from "../deploy-handler/types.js";
  */
 export interface ParticipantSharedResources {
   readonly tableName: string;
+  /**
+   * Events table 名 (ADR-006 Notifications で参照)。`GET /portal/me/notifications` が
+   * `PK=EVENT#<eventId>` の partition で `begins_with(SK, "NOTIFICATION#")` を
+   * Query する。CDK 側で IAM `dynamodb:Query` を Events table にも付与する。
+   */
+  readonly eventsTableName: string;
   readonly ddb: DynamoDBDocumentClient;
   /** `{ [problemId]: ProblemScoringMetadata }`。submit-flag が採点に使う。 */
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
@@ -20,6 +26,7 @@ export interface ParticipantSharedResources {
 export function buildParticipantSharedResources(): ParticipantSharedResources {
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    eventsTableName: getEnv("EVENTS_TABLE_NAME"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
   };
