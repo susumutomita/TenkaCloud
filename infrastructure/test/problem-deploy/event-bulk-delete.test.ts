@@ -78,11 +78,22 @@ describe("bulkTeardownEvent", () => {
     const updateCmds = ddbSend.mock.calls
       .map((c) => c[0])
       .filter((c): c is UpdateCommand => c instanceof UpdateCommand);
-    expect(updateCmds).toHaveLength(2);
-    for (const cmd of updateCmds) {
-      expect(cmd.input.ExpressionAttributeValues?.[":deleting"]).toBe("DELETING");
+    // 2 deployment updates (DELETING) + 1 Event status update (TEARDOWN, #557)
+    expect(updateCmds).toHaveLength(3);
+    const depUpdates = updateCmds.filter(
+      (c) => c.input.ExpressionAttributeValues?.[":deleting"] === "DELETING",
+    );
+    expect(depUpdates).toHaveLength(2);
+    for (const cmd of depUpdates) {
       expect(cmd.input.ConditionExpression).toContain("tenantId = :tenantId");
     }
+    // #557: Event status TEARDOWN への遷移を pin
+    const eventStatusUpdate = updateCmds.find(
+      (c) => c.input.ExpressionAttributeValues?.[":teardown"] === "TEARDOWN",
+    );
+    expect(eventStatusUpdate).toBeDefined();
+    expect(eventStatusUpdate?.input.ConditionExpression).toContain("#status <> :archived");
+    expect(eventStatusUpdate?.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
 
     const putCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
     expect(putCmd.input.Entries).toHaveLength(2);
@@ -141,6 +152,9 @@ describe("bulkTeardownEvent", () => {
 
   it("ConditionalCheckFailed (並行更新) は skip して例外を伝播しないべき", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
+    // Event status update (= 後続の 4th call) は通常 success を返す fallback。
+    // #557 で 1 deployment + Event status の 2 件目 UpdateCommand が増えたため。
+    ddbSend.mockResolvedValue({});
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: [dep()] });
     ddbSend.mockImplementationOnce(async (cmd) => {
@@ -155,6 +169,32 @@ describe("bulkTeardownEvent", () => {
     const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 0, skipped: 1 } });
     expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  it("Event status update が CCF (= ARCHIVED 等) でも例外を伝播せず deployment 削除は完了するべき (#557)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ status: "ARCHIVED" }) });
+    // GetCommand 後の "ARCHIVED" 判定は handler では行わないので Query へ進む。
+    ddbSend.mockResolvedValueOnce({ Items: [dep()] });
+    // deployment update success
+    ddbSend.mockResolvedValueOnce({});
+    eventsSend.mockResolvedValue({});
+    // Event status update で CCF を投げる (= ARCHIVED から踏み越えられない条件)
+    ddbSend.mockImplementationOnce(async (cmd) => {
+      if (
+        cmd instanceof UpdateCommand &&
+        cmd.input.ExpressionAttributeValues?.[":teardown"] === "TEARDOWN"
+      ) {
+        const err: Error & { name?: string } = new Error("archived");
+        err.name = "ConditionalCheckFailedException";
+        throw err;
+      }
+      return {};
+    });
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    // handler は正常に完了 (= deployment は DELETING に倒した)
+    expect(out.kind).toBe("ok");
   });
 
   it("Deployments query は GSI1 (TENANT) を引いて in-memory で eventId フィルタするべき", async () => {
