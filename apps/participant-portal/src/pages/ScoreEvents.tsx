@@ -15,7 +15,7 @@ import {
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
-import { describeAgo } from "../lib/format";
+import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -108,13 +108,14 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
               {
                 id: "occurredAt",
                 header: "発生時刻",
+                // #548: 相対時刻だけ表示し、絶対時刻 (UTC + ローカル) は cell hover の
+                // tooltip (= title 属性) で出す。ISO + 相対が連結して読めない bug と
+                // UTC 表示が直感的でない問題を同時に解消。Score events は「最近採点
+                // されたか」の即時 feedback が主用途なので relative 表示が一次情報。
                 cell: (e) => (
-                  <Box>
-                    <Box variant="small">{e.occurredAt}</Box>
-                    <Box variant="small" color="text-status-inactive">
-                      {describeAgo(e.occurredAt, Date.now())}
-                    </Box>
-                  </Box>
+                  <span title={formatOccurredAtTooltip(e.occurredAt)}>
+                    {describeAgo(e.occurredAt, Date.now())}
+                  </span>
                 ),
               },
               {
