@@ -42,8 +42,19 @@ describe("CodeBuildUseAwsManagedKms", () => {
       const statements = (policy as { Properties: { PolicyDocument: { Statement: unknown[] } } })
         .Properties.PolicyDocument.Statement;
       for (const s of statements) {
-        const json = JSON.stringify(s);
-        expect(json).not.toContain("kms:");
+        const stmt = s as { Action?: string | string[] };
+        const actions = Array.isArray(stmt.Action)
+          ? stmt.Action
+          : stmt.Action != null
+            ? [stmt.Action]
+            : [];
+        // `kms:` prefix で始まる action が残っていないこと。
+        // 旧 test は JSON.stringify().includes("kms:") だったが、これだと
+        // alias/aws/s3 ARN 等の "arn:...kms:..." にも誤 match する。
+        // statement.Action だけを構造的に check する。
+        for (const action of actions) {
+          expect(action.startsWith("kms:")).toBe(false);
+        }
       }
     }
   });
@@ -64,5 +75,40 @@ describe("CodeBuildUseAwsManagedKms", () => {
     Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
     const template = Template.fromStack(stack);
     template.resourceCountIs("AWS::KMS::Key", 1);
+  });
+
+  it("mixed Resource (EncryptionKey + 他 ARN) の statement は維持されるべき (.every() defensive)", async () => {
+    const { App, Aspects, Stack } = await import("aws-cdk-lib");
+    const { Role, ServicePrincipal, PolicyStatement, Effect, Policy } = await import(
+      "aws-cdk-lib/aws-iam"
+    );
+    const { Key } = await import("aws-cdk-lib/aws-kms");
+    const app = new App();
+    const stack = new Stack(app, "MixedStack");
+    const key = new Key(stack, "EncryptionKey");
+    const role = new Role(stack, "Role", {
+      assumedBy: new ServicePrincipal("codebuild.amazonaws.com"),
+    });
+    new Policy(stack, "Pol", {
+      roles: [role],
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["s3:GetObject", "kms:Decrypt"],
+          resources: [key.keyArn, "arn:aws:s3:::other-bucket/*"],
+        }),
+      ],
+    });
+    Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
+    const template = Template.fromStack(stack);
+    // mixed Resource statement は .every() で false 判定 → 維持される
+    const policies = template.findResources("AWS::IAM::Policy");
+    const policyStatements = Object.values(policies).flatMap(
+      (p) =>
+        (p as { Properties: { PolicyDocument: { Statement: unknown[] } } }).Properties
+          .PolicyDocument.Statement,
+    );
+    // 1 statement が残っている (= 削除されなかった)
+    expect(policyStatements.length).toBe(1);
   });
 });

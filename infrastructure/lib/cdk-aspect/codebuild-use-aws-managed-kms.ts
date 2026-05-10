@@ -56,7 +56,17 @@ export class CodeBuildUseAwsManagedKms implements IAspect {
       if (filtered.length === statements.length) return; // 無変更
       if (filtered.length === 0) {
         // 全 statement が消えた = この policy は全部 KMS key 用だった。policy ごと削除。
-        node.node.scope?.node.tryRemoveChild(node.node.id);
+        // scope が無い CfnPolicy が存在することは現 SBT では無いが、将来構造が変わって
+        // scope=undefined になったら silent failure (空 PolicyDocument が template に残り
+        // CFn validation で失敗) するので明示的に throw する。
+        const parent = node.node.scope;
+        if (!parent) {
+          throw new Error(
+            `[CodeBuildUseAwsManagedKms] CfnPolicy '${node.node.path}' has no scope; ` +
+              `cannot remove orphan empty policy. SBT 構造が変わった可能性、本 Aspect の追従が必要。`,
+          );
+        }
+        parent.node.tryRemoveChild(node.node.id);
         return;
       }
       node.addPropertyOverride("PolicyDocument.Statement", filtered);
@@ -91,9 +101,19 @@ interface PolicyStatement {
 }
 
 /**
- * Statement の Resource が `Fn::GetAtt` で削除対象 KMS key を参照しているか判定する。
+ * Statement の **全 Resource** が `Fn::GetAtt` で削除対象 KMS key を参照しているか判定する。
  * Resource は string / array / object のいずれか。object は `{ "Fn::GetAtt": [logicalId, attr] }`
  * の形なので logical ID を見て "EncryptionKey" を含むかで判定。
+ *
+ * `.some()` でなく `.every()` を使う理由: 1 statement の Resource array に
+ * EncryptionKey 参照と他 ARN が混在する場合に `.some()` だと statement 全体を破棄
+ * して非 KMS 権限まで道連れにしてしまう。SBT 0.3.9 の BashJobRunner は kms statement
+ * に他 ARN を混ぜないので現状は影響無いが、将来 `@cdklabs/sbt-aws` が statement を
+ * consolidate しても安全に動くよう defensive に書く。
+ *
+ * Resource が string literal (= ARN 直書き) の場合は false-negative になる (= statement
+ * は維持)。SBT 0.3.9 の BashJobRunner は ARN を string literal で書かないので現状は
+ * 問題無し。リスクを取らず温存する側に倒す方針。
  *
  * `JSON.stringify().includes(...)` だと statement の他の場所に "EncryptionKey" 文字列が
  * あれば false-positive する (= Sid 等)。Resource を構造的に見ることで誤判定を避ける。
@@ -102,7 +122,7 @@ function referencesEncryptionKey(statement: PolicyStatement): boolean {
   const resource = statement.Resource;
   if (resource == null) return false;
   const resources = Array.isArray(resource) ? resource : [resource];
-  return resources.some((r) => {
+  return resources.every((r) => {
     if (typeof r !== "object" || r === null) return false;
     const getAtt = (r as { "Fn::GetAtt"?: unknown[] })["Fn::GetAtt"];
     if (!Array.isArray(getAtt) || getAtt.length === 0) return false;
