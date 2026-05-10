@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-001: 問題 Deploy を CRUD x Step Functions Distributed Map で実装する</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+
+  /* mockup styles */
+  .mock {
+    border: 1px solid var(--c-border); border-radius: 8px; background: #fafbfc;
+    padding: 1rem 1.25rem; margin: 1rem 0 1.5rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .mock-title {
+    font-size: 0.78rem; font-weight: 700; color: var(--c-link);
+    letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: .4rem;
+  }
+  .mock-frame {
+    background: #fff; border: 1px solid var(--c-border); border-radius: 6px;
+    padding: 1rem 1.25rem; min-height: 200px;
+  }
+  .mock h4 { margin: 0 0 .6rem; font-size: 1rem; color: var(--c-text); }
+  .pill-status {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: 4px 12px; border-radius: 16px; font-size: 0.85rem; font-weight: 600;
+  }
+  .pill-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+  .pill-status.info { background: #cfe5ff; color: var(--c-link); }
+  .pill-status.info::before { background: var(--c-link); }
+  .pill-status.warning { background: #fff8c5; color: var(--c-warn); }
+  .pill-status.warning::before { background: var(--c-warn); }
+  .topnav-mock {
+    display: flex; align-items: center; gap: .8rem; padding: .6rem 1rem;
+    background: #232f3e; color: #fff; border-radius: 4px; font-size: 0.88rem;
+  }
+  .topnav-mock .brand { font-weight: 700; }
+  .topnav-mock .spacer { flex: 1; }
+  .topnav-mock .nav-item {
+    position: relative; padding: 4px 12px; border-radius: 3px; cursor: pointer;
+  }
+  .topnav-mock .nav-item:hover { background: rgba(255,255,255,0.1); }
+  .topnav-mock .badge-dot {
+    position: absolute; top: -2px; right: 0;
+    background: var(--c-reject); color: #fff; border-radius: 10px;
+    font-size: 0.7rem; padding: 1px 6px; min-width: 16px; text-align: center;
+    line-height: 1.4; font-weight: 700;
+  }
+  .notif-list { display: flex; flex-direction: column; gap: .6rem; }
+  .notif-item {
+    border: 1px solid var(--c-border); border-radius: 4px;
+    padding: .8rem 1rem; background: #fff; display: flex; gap: .8rem; align-items: flex-start;
+  }
+  .notif-item.unread { background: #f1f8ff; border-color: #c8e1ff; }
+  .notif-item .body { flex: 1; }
+  .notif-item .title { font-weight: 600; margin-bottom: .2rem; }
+  .notif-item .meta-row { font-size: 0.78rem; color: var(--c-muted); margin-top: .3rem; }
+  .modal-mock {
+    border: 1px solid var(--c-border); border-radius: 6px; background: #fff;
+    padding: 1rem 1.25rem; max-width: 480px; margin: 0 auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .modal-mock h5 { margin: 0 0 .6rem; font-size: 1rem; }
+  .modal-mock .form-row { margin-bottom: .8rem; }
+  .modal-mock label { display: block; font-size: 0.82rem; color: var(--c-muted); margin-bottom: .2rem; }
+  .modal-mock input, .modal-mock textarea, .modal-mock select {
+    width: 100%; box-sizing: border-box; padding: 6px 10px;
+    border: 1px solid var(--c-border); border-radius: 3px; font-size: 0.9rem;
+  }
+  .modal-mock .btn-row {
+    display: flex; gap: .4rem; justify-content: flex-end; margin-top: .8rem;
+    padding-top: .6rem; border-top: 1px solid var(--c-border);
+  }
+  .btn { padding: 5px 14px; border-radius: 3px; font-size: 0.88rem; cursor: pointer;
+         border: 1px solid var(--c-border); background: var(--c-bg); }
+  .btn.primary { background: var(--c-link); color: #fff; border-color: var(--c-link); }
+
+  /* api block */
+  .api-block { border: 1px solid var(--c-border); border-radius: 6px; padding: 1rem 1.25rem;
+               margin: 1rem 0; background: var(--c-bg); }
+  .api-head { display: flex; gap: .6rem; align-items: baseline; margin-bottom: .6rem;
+              border-bottom: 1px solid var(--c-border); padding-bottom: .5rem; }
+  .api-method { display: inline-block; padding: 2px 10px; border-radius: 4px;
+                font-family: monospace; font-size: 0.8rem; font-weight: 700; }
+  .api-method.GET   { background: #ddf4e0; color: var(--c-accept); }
+  .api-method.POST  { background: #cfe5ff; color: var(--c-link); }
+  .api-path { font-family: monospace; font-size: 1rem; font-weight: 600; }
+  .api-tag  { font-size: 0.78rem; color: var(--c-muted); margin-left: auto; }
+  .api-block h4 { margin: .8rem 0 .3rem; font-size: 0.85rem; color: var(--c-muted);
+                  text-transform: uppercase; letter-spacing: 0.05em; }
+  .api-block pre { background: var(--c-code-bg); padding: .8rem 1rem; border-radius: 4px;
+                   overflow-x: auto; font-size: 0.85rem; line-height: 1.5; margin: .3rem 0; }
+  .api-block td.req { color: var(--c-reject); font-weight: 600; }
+  .api-block td.opt { color: var(--c-muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-001: 問題 Deploy を CRUD x Step Functions Distributed Map で実装する</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-05</div>
+    <div><b>Requirements:</b> <a href="../requirements/problem-deploy.md">docs/requirements/problem-deploy.md</a> (Approved)</div>
+    <div><b>Supersedes:</b> 既存 <code>ProblemDeployBackendStack</code> の <code>DeployApiGateway</code> (専用 HTTP API + 単一 Cognito JWT authorizer) と <code>DeployWorkerLambda</code> (1 event = 1 CFn deploy) 構成</div>
+    <div><b>Related issues:</b> Issue 458 (publish 経路統一)、Issue 459 (cross-account federation)</div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>要件文書 <a href="../requirements/problem-deploy.md"><code>docs/requirements/problem-deploy.md</code></a> で確定した要件と、現状実装の <code>ProblemDeployBackendStack</code> のギャップを埋めるための設計判断を本 ADR で記録する。</p>
+
+<p>要件側の主要な制約 (本 ADR の Decision を駆動するもの) は次のとおり。</p>
+
+<ul>
+<li><b>FR-1</b>: 1 batch あたり 750 stacks (= Challenge: 25 チーム × 30 問) を扱える bulk operation 必須</li>
+<li><b>FR-2</b>: CRUD 4 操作すべて要る (Update は問題作成 iteration 用途)</li>
+<li><b>FR-3</b>: 失敗時は部分 retry のみ。operator はデバッグできない</li>
+<li><b>FR-5</b>: 問題カタログ (S3 template + DDB metadata + 可視範囲)</li>
+<li><b>NFR-1</b>: operator は AWS 専門知識を持たない</li>
+<li><b>NFR-2</b>: operator は TenkaCloud 自社 AWS account を一切触らない</li>
+<li><b>NFR-3</b>: 競技者アカウントは野良 AWS account の可能性あり (= AWS Organizations 単位の共有が使えない)</li>
+</ul>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<h3>1. publish 経路は tenant API + tenant Cognito + EventBridge → Step Functions</h3>
+
+<pre>[application-admin-console (ログイン済)]
+        ↓ POST /deployments/{operation}  with tenant Cognito JWT
+[TenantTemplateStack の REST API]
+        ↓ Lambda が events:PutEvents を呼ぶ
+[EventBridge bus (= ControlPlaneStack.eventBusArn)]
+        ↓ EventBridge Rule (detail-type で分岐)
+[Step Functions State Machine (operation ごとに 1 つ)]
+        ↓ Distributed Map で各 (problem × account) を並列処理
+[CFn API (cross-account AssumeRole 経由)]</pre>
+
+<p>専用 HTTP API + 別 Cognito の構成は廃止 (NFR-2 と整合)。tenant 自身の Cognito で認可する (= SBT の Control Plane → Application Plane と同型)。</p>
+
+<p><b>Lambda は EventBridge に publish し、Step Functions は EventBridge Rule で event-driven に起動する</b>。Step Functions State Machine は EventBridge Rule の <b>native target</b> として設定可能 (<a href="https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-targets.html#eb-console-targets">AWS docs: EventBridge Targets</a>)。仕組みは EventBridge Rule に専用 IAM Role (<code>states:StartExecution</code> 権限) を持たせ、event 受信時に EventBridge がその Role を assume して <code>StartExecution</code> を呼ぶ。Lambda 中継は不要 (CDK では <code>aws-events-targets.SfnStateMachine</code> で 1 行)。tenant API Lambda が StartExecution を直叩きせず EventBridge を中継する理由は次の 4 点。</p>
+
+<ol>
+<li><b>疎結合の seam を残す</b>: 将来の audit log / Slack 通知 / 監視 subscriber が同じ event を listen できる</li>
+<li><b>SBT の既存パターンとの整合</b>: ControlPlane → ApplicationPlane の <code>onboardingRequest</code> event 中継と同じ形を維持</li>
+<li><b>Replay / archive</b>: EventBridge archive で event を後から replay できる</li>
+<li><b>権限境界の整理</b>: tenant API Lambda は <code>events:PutEvents</code> だけ持てば良く、<code>states:StartExecution</code> 権限を渡す必要がない</li>
+</ol>
+
+<p>EventBridge detail-type は operation ごとに分ける (<code>DeployCreateRequested</code> / <code>DeployUpdateRequested</code> / <code>DeployDeleteRequested</code>)。Read は同期応答が必要なので EventBridge を経由せず、tenant API Lambda が直接 cross-account <code>cloudformation:DescribeStacks</code> を fan-out する。</p>
+
+<h3>2. CRUD 4 操作の API と State Machine 配置</h3>
+
+<p>要件 FR-2 で確定した 4 操作それぞれの実装方針。</p>
+
+<table>
+<thead><tr><th>操作</th><th>API</th><th>経路</th><th>内部</th><th>駆動要件</th></tr></thead>
+<tbody>
+<tr><td><b>Create</b></td><td><code>POST /deployments</code></td><td>EventBridge (<code>DeployCreateRequested</code>) → <code>DeployCreateStateMachine</code> (Distributed Map)</td><td>AssumeRole → CFn CreateStack → <code>.sync</code> で完了待ち</td><td>FR-1 (bulk 750)、FR-5 (authoring iteration では 1 件)</td></tr>
+<tr><td><b>Read</b></td><td><code>GET /deployments</code></td><td>sync Lambda (cross-account <code>cloudformation:DescribeStacks</code> fan-out)</td><td>EventBridge を経由しない (同期応答が必要)</td><td>FR-3 (operator が UI で状況把握)</td></tr>
+<tr><td><b>Update</b></td><td><code>POST /deployments/update</code></td><td>EventBridge (<code>DeployUpdateRequested</code>) → <code>DeployUpdateStateMachine</code> (Distributed Map)</td><td>AssumeRole → CFn UpdateStack → <code>.sync</code></td><td>FR-5 (authoring iteration、通常 1 件)</td></tr>
+<tr><td><b>Delete</b></td><td><code>POST /deployments/delete</code></td><td>EventBridge (<code>DeployDeleteRequested</code>) → <code>DeployDeleteStateMachine</code> (Distributed Map)</td><td>AssumeRole → CFn DeleteStack → <code>.sync</code></td><td>FR-1 (event 終了時 bulk teardown)、FR-4</td></tr>
+</tbody>
+</table>
+
+<p>3 つの state machine (Create / Update / Delete) は同じ shape の Distributed Map iterator を持つ。違いは inner step の CFn API (<code>CreateStack</code> / <code>UpdateStack</code> / <code>DeleteStack</code>) だけ。各 state machine 専用の EventBridge Rule を 1 つ立て、Target を該当 state machine に設定する。</p>
+
+<p>API は <b>bulk と単発を区別しない</b>。bulk request body は <code>{deployments: [{problemId, accountId, region, ...}]}</code>、単発は <code>deployments</code> 配列の長さが 1 のもの。authoring iteration (FR-5) では length=1、event preparation (FR-1) では length=750。state machine は同じものを iterator 1 件で回す。</p>
+
+<h3>3. Distributed Map で 750 件の bulk を扱う</h3>
+
+<p>要件 FR-1 が「1 batch = 750 stacks」を要求するので、Step Functions の <b>Standard Map</b> ではなく <b>Distributed Map</b> を使う。</p>
+
+<table>
+<thead><tr><th>観点</th><th>Standard Map</th><th>Distributed Map</th><th>750 件で必要か</th></tr></thead>
+<tbody>
+<tr><td>入力サイズ上限</td><td>state input 256 KB</td><td>S3 経由なら無制限、in-memory でも 100K entries まで</td><td>Distributed Map 必須 (750 × 500 bytes = 375 KB は 256 KB 超過)</td></tr>
+<tr><td>並列度</td><td>40</td><td>10,000</td><td>Distributed Map で並列化</td></tr>
+<tr><td>子実行の分離</td><td>親 execution の history 内</td><td>各 item が独立 child execution</td><td>失敗 item の再実行が容易 (FR-3)</td></tr>
+<tr><td>課金</td><td>state transition のみ</td><td>child execution × state transition</td><td>コスト増だが許容 (後述)</td></tr>
+</tbody>
+</table>
+
+<p>Distributed Map の child execution は <code>EXPRESS</code> workflow にできるが、CFn <code>.sync</code> は Standard が要るので <b>Standard child execution</b> を選ぶ。</p>
+
+<p>並列度 (<code>MaxConcurrency</code>) は <b>default 50</b> とする。750 件を並列 50 で回すと、CFn 1 件 5〜10 分と仮定して <code>750 / 50 × 7.5 min ≈ 113 min ≈ 2 時間</code>。Acceptance Criteria の「1 hour 以内」目標とは届かないので、CFn template の最適化 (リソース数削減 / VPC 持ち込み) と併せて改善する。並列度を上げるとカウンターパート側 AWS account の API rate limit に当たる懸念があるため、operator が「並列度を上げる/下げる」設定はしない (<code>MaxConcurrency: 50</code> 固定)。</p>
+
+<h3>4. 失敗時は continue + summary、再実行 API で部分 retry</h3>
+
+<p>要件 FR-3 を満たすための具体実装。</p>
+
+<ul>
+<li><b>Distributed Map の <code>ToleratedFailureCount</code> / <code>ToleratedFailurePercentage</code> を未設定</b> にする (= 失敗してもエラー扱いにせず、全 item を最後まで試す)</li>
+<li>各 child execution の Catch で per-item 失敗を吸収。最後に親が <code>{ ok: N, failed: M, failedItems: [...] }</code> を返す</li>
+<li>失敗 item の jobId を返り値に含めて、operator が同 batch を「失敗分だけ再実行」できるようにする
+  <ul>
+  <li>UI 上のボタンは「失敗した N 件を再実行」と表示</li>
+  <li>内部的には <code>POST /deployments</code> で <code>{deployments: [失敗 item の subset]}</code> を再投げ</li>
+  <li>新しい batchId が振られるが、stack は同じ namePrefix で CFn 側が冪等に扱う (CreateStack の <code>AlreadyExists</code> を成功扱いにする等)</li>
+  </ul>
+</li>
+</ul>
+
+<h3>5. 問題カタログ: S3 template + DDB metadata + 可視範囲</h3>
+
+<p>要件 FR-5 を実装するための data model。</p>
+
+<ul>
+<li><b>CFn テンプレ実体</b>: S3 bucket に置く。バージョンごとに別 key (例: <code>tenants/{tenantId}/problems/{problemId}/v{N}.yaml</code>) もしくは S3 versioning 利用</li>
+<li><b>問題メタデータ DDB</b> (新規 <code>Problems</code> テーブル):
+  <ul>
+  <li><code>PK = TENANT#{ownerTenantId}</code>, <code>SK = PROBLEM#{problemId}</code></li>
+  <li>列: <code>title</code>, <code>description</code>, <code>templateS3Url</code>, <code>currentVersion</code>, <code>visibility</code> (<code>public</code> / <code>org-shared</code> / <code>private</code>), <code>createdAt</code>, <code>updatedAt</code></li>
+  <li>GSI1: <code>PK = VISIBILITY#public</code>, <code>SK = PROBLEM#{problemId}</code> で全 tenant への横断 list</li>
+  <li>GSI2: <code>PK = ORG#{orgId}</code> (org-shared のための index、組織エンティティが確定後に活性化)</li>
+  </ul>
+</li>
+<li><b>CFn deploy 時の template 取得</b>: state machine が <code>templateS3Url</code> を CFn <code>CreateStack</code> の <code>TemplateURL</code> parameter に渡す。CFn が S3 から fetch する経路を使う (Lambda が pre-fetch しない)</li>
+</ul>
+
+<p><code>org-shared</code> の "組織" 定義は Open Questions に残す (本 ADR では「将来 org-shared を扱うための GSI を予約」までしか書かない)。</p>
+
+<h3>6. State の所在: CFn が source of truth、DDB は participant 体験用 + 問題カタログのみ</h3>
+
+<p>要件 FR-4 (cleanup の保証範囲) との整合。</p>
+
+<ul>
+<li><b>deploy 状態</b> (PENDING / IN_PROGRESS / CREATE_COMPLETE / FAILED) → <b>CFn 自身が持つ</b>。<code>describe-stacks</code> で取得する。</li>
+<li><b>deploy 履歴</b> (誰がいつ batch を投げたか) → <b>Step Functions execution history</b> (Standard で 1 年保持)</li>
+<li><b>stack の所在カタログ</b> (operator UI の「自テナントの deploy 一覧」) → <b>CFn stack の Tag</b> (<code>TenkaCloud:TenantId</code>, <code>BatchId</code>, <code>ProblemId</code>, <code>JobId</code>) を打つ。逆引きの実装は次の 2 通りで実装する。<code>cloudformation:DescribeStacks</code> 自体は tag filter をサポートしないため、(a) <code>resource-groups:GetResources</code> (Resource Groups Tagging API、tag filter ネイティブ対応) を使うか、(b) <code>cloudformation:ListStacks</code> で取得後 client-side filter する。MVP では同一 account なので 1 回の <code>ListStacks</code> 結果を tenantId tag で絞る (b) が単純。Phase 2 で cross-account になったら各 account で <code>GetResources</code> を fan-out (a) に切替検討</li>
+<li><b>participant 体験用 state</b> (teamLoginKey、displayTeamName、将来のスコア) → <b>DDB <code>ParticipantSessions</code> テーブル</b> (現 <code>Deployments</code> テーブルを縮小・改称)</li>
+<li><b>問題カタログ</b> → 上述 (5) の <code>Problems</code> DDB</li>
+</ul>
+
+<p>つまり <b>既存 <code>Deployments</code> DDB の deploy 状態列 (status / failureReason / stackOutputs) は全廃止する</b>。CFn が持っているものを DDB に複製しない。</p>
+
+<h3>7. 既存 stack / Lambda の整理</h3>
+
+<table>
+<thead><tr><th>Construct</th><th>扱い</th><th>駆動要件</th></tr></thead>
+<tbody>
+<tr><td><code>ProblemDeployBackendStack.DeployApiGateway</code></td><td><b>削除</b> (専用 HTTP API 廃止)</td><td>NFR-2</td></tr>
+<tr><td><code>ProblemDeployBackendStack.DeployApiLambda</code></td><td><b>「StartExecution + 入力 validation」薄 Lambda</b> にダイエット (tenant API から呼ばれる)</td><td>FR-2</td></tr>
+<tr><td><code>ProblemDeployBackendStack.DeployWorkerLambda</code></td><td><b>廃止</b> (Step Functions が直接 CFn を呼ぶ)</td><td>FR-1 (15min timeout の壁を消す)</td></tr>
+<tr><td><code>ProblemDeployBackendStack.StatusUpdaterLambda</code></td><td><b>廃止</b> (CFn 自身が状態保持、polling は不要)</td><td>FR-4</td></tr>
+<tr><td><code>ProblemDeployBackendStack.DeploymentsTable</code></td><td><b><code>ParticipantSessions</code> に改称 + 縮小</b> (deploy 状態列を全部削除、teamLoginKey / displayTeamName 等のみ残す)</td><td>FR-4</td></tr>
+<tr><td><code>ProblemDeployBackendStack.ParticipantPortalLambda</code> / <code>ParticipantPortalHosting</code></td><td><b>継続</b> (本 ADR と独立)</td><td>-</td></tr>
+<tr><td><code>bin/infrastructure.ts</code> の <code>CDK_PARAM_DEPLOY_USER_POOL_ID</code> 周り</td><td><b>削除</b></td><td>NFR-2</td></tr>
+<tr><td><code>application-admin-console</code> の <code>deployApiBaseUrl</code> / <code>useDeployApiClient</code> / <code>isDeployApiConfigured</code></td><td><b>削除</b> (<code>apiBaseUrl</code> に統合)</td><td>NFR-2</td></tr>
+<tr><td><code>runtime-config.json.deployApiUrl</code></td><td><b>削除</b> (<code>apiUrl</code> のみ)</td><td>NFR-2</td></tr>
+<tr><td><code>install.sh</code> の <code>cdk deploy</code> リスト</td><td><code>ProblemDeployBackendStack</code> を <b>追加</b></td><td><code>ONE_PASS_AWS</code> invariant</td></tr>
+<tr><td><code>ProblemDeployBackendStack</code> 配下の <b>新規 construct</b>: <code>ProblemsTable</code> (DDB)、<code>ProblemTemplatesBucket</code> (S3)、3 つの State Machine (Create / Update / Delete)</td><td><b>追加</b></td><td>FR-1 / FR-2 / FR-5</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>良くなること (要件との対応)</h3>
+
+<ul>
+<li>NFR-2 (operator が AWS account を触らない) — 認可は tenant 自身の Cognito で完結</li>
+<li>FR-1 (bulk 750 stacks) — Distributed Map で並列処理</li>
+<li>FR-3 (部分 retry) — 失敗 item を返す API で operator が単純に「再実行」できる</li>
+<li>FR-4 (cleanup の保証範囲) — CFn DeleteStack 成功までを responsibility に閉じ込め</li>
+<li>FR-5 (authoring iteration) — 単発 (length=1) も bulk と同じ API で扱える</li>
+<li><code>ONE_PASS_AWS</code> invariant — <code>make deploy</code> 1 発で全動線が通る</li>
+</ul>
+
+<h3>コスト・トレードオフ</h3>
+
+<ul>
+<li>Step Functions Distributed Map の課金: child execution × state transition 単価。CFn <code>.sync</code> の wait loop で transition 数が膨らむため、1 child execution あたり ~8 transitions と見積もり。750 × 8 × $0.025/1000 ≈ $0.15/batch + 親の Distributed Map 自体の transition。月 10 イベントでも $2 未満なので許容</li>
+<li>既存 <code>Deployments</code> DDB に蓄積された deploy 履歴データは migration 不可 (CFn が持ってるから捨てる、もしくは read-only で保持して新規はそちらに書かない)</li>
+<li>新規 <code>Problems</code> DDB + S3 bucket + 3 つの state machine + EventBridge Rule で CFn template が +30 リソース程度太る</li>
+<li>並列度 50 では Acceptance Criteria の「1 hour 以内」は未達 (~2h)。CFn template 最適化と組合せでカバー、達成できなければ SLO 緩和または並列度上げの検討</li>
+</ul>
+</section>
+
+<section>
+<h2>Alternatives considered</h2>
+
+<h3>Alt-A: Lambda fan-out (SQS) で順次起動</h3>
+<ul>
+<li>Lambda 15 分 timeout で CFn 完了待ちが詰まる</li>
+<li>「Lambda 起動中に CFn が終わらないと別途 polling Lambda が要る」の罠</li>
+</ul>
+
+<h3>Alt-B: CodeBuild で実行</h3>
+<ul>
+<li>コンテナ起動 30 秒 × N の overhead</li>
+<li>状態機械を bash で書くことになり、retry / 並列度の制御が貧弱</li>
+<li>任意 script を実行できるのは利点だが、現スコープでは不要 (CFn API を呼ぶだけ)</li>
+</ul>
+
+<h3>Alt-C: ECS Task / Fargate</h3>
+<ul>
+<li>Container infra が増える (network / cluster / task definition の運用負荷)</li>
+<li>起動 latency が deploy あたり 30〜60 秒上乗せ</li>
+</ul>
+
+<h3>Alt-D: AWS Service Catalog</h3>
+
+<p>要件文書 (<a href="../requirements/problem-deploy.md"><code>docs/requirements/problem-deploy.md</code></a>) の「Service Catalog 採否の判断基準」セクションで詳細評価済み。</p>
+
+<ul>
+<li>NFR-3 (野良 AWS account 許容) で Service Catalog の AWS Organizations 単位 portfolio 共有が使えない</li>
+<li>NFR-2 (operator が AWS Console を見ない) で Service Catalog の主 UI が直接使えない</li>
+<li>provisioning engine 専用利用は技術的に可能だが、UI を SaaS 側で作る以上 Service Catalog のメリット (admin UI / portfolio 管理) が消える</li>
+</ul>
+
+<p>→ Step Functions Distributed Map が決定打。</p>
+
+<h3>Alt-E: Standard Map で並列起動 (本 ADR の前案)</h3>
+<ul>
+<li>256 KB 入力上限で 750 件が入らない (FR-1 違反)</li>
+<li>MaxConcurrency が最大 40</li>
+</ul>
+
+<p>→ Distributed Map に切り替えた。</p>
+</section>
+
+<section>
+<h2>Migration plan</h2>
+
+<p>実装の優先順位は <b>「まず MVP (Walking Skeleton) を 1 本通す → 動くことを確認してから多機能化」</b> とする。これは「実装はまず既存の Application 画面から Deploy 開始ボタンを押したら Step Functions が起動して問題が deploy される、を目指す」という運用方針。</p>
+
+<details open>
+<summary>Phase 1a: MVP-0 — シェルで CFn deploy が通ることを確認する</summary>
+
+<p><b>PR-1.5 (MVP-0)</b>: <code>scripts/deploy-battles.sh</code> (= 引数に問題フォルダを取り、順次 CFn deploy する shell script) と <code>make deploy-battles</code> ターゲットを追加し、AWS CLI セッションから「<code>problems/&lt;id&gt;/template.yaml</code> を CFn deploy → smoke 動作確認 → <code>make destroy-battles</code> で teardown」までできる状態を作る。</p>
+
+<p><b>狙い</b>: SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を一切持ち込まず、<b>まず CFn template 自体と AWS 権限の正しさを smoke test する</b>。スクリプトとして deploy ロジックが固まれば、Phase 1b の orchestration はそのスクリプトをそのまま実行する形に乗せ替えるだけで済む。これは SBT の <code>BashJobRunner</code> (CodeBuild が provision-tenant.sh を実行する) と同じパターン。</p>
+
+<p>含める要素は次のとおり。</p>
+
+<ul>
+<li><code>scripts/deploy-battles.sh</code> (新規): 引数 1 個以上で問題ディレクトリ (<code>problems/battles/security-battle-royale</code> 等) を受け取り、各々を順次 <code>aws cloudformation deploy</code> で同一 account に deploy する。teamSlug は env か引数で受ける</li>
+<li><code>scripts/destroy-battles.sh</code> (新規): 同じ引数で <code>aws cloudformation delete-stack</code> を順次呼ぶ</li>
+<li><code>Makefile</code> に <code>deploy-battles</code> / <code>destroy-battles</code> ターゲットを追加 (内部で上のシェルを呼ぶ。default 引数は <code>problems/battles/security-battle-royale demo-team</code>)</li>
+<li>これは「開発者が deploy 機構を smoke test するためのツール」であり、operator UX には繋がらない (operator は引き続き旧 UI 経路を使う)</li>
+</ul>
+
+<p>含めない要素 (Phase 1b 以降に倒す)。</p>
+
+<ul>
+<li>Step Functions / EventBridge / CodeBuild / tenant API / Cognito 関連の変更</li>
+<li>既存 <code>ProblemDeployBackendStack</code> の構成変更 (= 旧経路はそのまま放置)</li>
+<li>frontend の変更</li>
+<li>bulk operation の並列化 (sequential ループのみ。並列化は Phase 2 の Distributed Map で扱う)</li>
+</ul>
+
+<p>完了条件 (PR-1.5 の DoD) は次のとおり。</p>
+
+<ul>
+<li><code>make deploy-battles</code> を流すと CFn stack が立ち、<code>security-battle-royale</code> の EC2 + nginx + Flask api + MySQL が動く (frontend URL が 200 を返す)</li>
+<li><code>make destroy-battles</code> で stack が消える (<code>DeleteStack</code> が成功)</li>
+<li>引数で複数問題を渡したときに順次 deploy される</li>
+<li>両 target が developer の AWS CLI セッションで実行できる (operator は使わない)</li>
+</ul>
+</details>
+
+<details>
+<summary>Phase 1b: MVP-1 — 既存 UI の Deploy ボタンを Step Functions 経路に切り替える</summary>
+
+<p><b>PR-2 (MVP-1)</b>: 既存 UI の「Deploy 開始」ボタンを押すと、(問題 1 × <b>同一 TenkaCloud AWS account 内</b>) で Step Functions が起動して CFn deploy が成功するところまでを 1 PR で繋げる。<b>MVP-1 でも cross-account を持ち込まない</b> — TenkaCloud 自社 AWS account 内に CFn stack を立てるだけ。これで「publish 経路 → Step Functions → CFn」のパス自体が動くことを証明する。cross-account / AssumeRole / ExternalId は Phase 2 (PR-3 以降) で重ねる。</p>
+
+<p>含める要素は次のとおり。</p>
+
+<ul>
+<li><code>ProblemTemplatesBucket</code> (S3 bucket) を <code>ProblemDeployBackendStack</code> 配下に新規作成 (versioning + lifecycle で旧版 30 日保持)</li>
+<li><code>install.sh</code> (= <code>make deploy</code>) に <b>repo の <code>problems/</code> ディレクトリ全体を <code>ProblemTemplatesBucket</code> へ sync する step</b> を追加 (<code>aws s3 sync problems/ s3://.../problems/</code>)。State Machine は <code>s3://.../problems/&lt;id&gt;/template.yaml</code> を CFn <code>TemplateURL</code> で参照する</li>
+<li>既存問題 (<code>security-battle-royale</code>) は CFn UserData が GitHub から Git clone して app コード (Flask api / MySQL-init / frontend) を取得する作りなので、<b>MVP では <code>template.yaml</code> を S3 に置くだけで動く</b>。<code>RepoUrl</code> / <code>RepoRef</code> はデフォルト値 (public TenkaCloud repo) を使う。private repo / S3 直配信が必要な問題種別への対応は Phase 2 で検討 (Open question 5 として後述)</li>
+<li><code>TenantTemplateStack</code> の REST API に Cognito authorizer + <code>POST /problems/{problemId}/deploy</code> route を追加 (要件 FR-2 Create の単発経路)</li>
+<li>同 route が tenant API Lambda を呼ぶ。Lambda は Zod validate → S3 上の template URL を解決 → <code>events:PutEvents</code> で <code>DeployCreateRequested</code> を発行 (event detail に <code>templateUrl</code> を載せる)</li>
+<li>EventBridge Rule (<code>source: tenkacloud.deploy</code>、<code>detail-type: DeployCreateRequested</code>) を作り、Target に <code>DeployCreateStateMachine</code> を設定</li>
+<li><code>DeployCreateStateMachine</code> は Distributed Map (要件 FR-1 を満たすが MVP では <code>deployments</code> 配列の長さ 1 しか入らない)。Map iterator は <b>同一 account 内で</b> <code>CloudFormation:CreateStack</code> (<code>TemplateURL</code> で S3 上の template を指す) を <code>.sync</code> で完了待ち → 完了レポート (AssumeRole なし)</li>
+<li>State Machine の execution role は CFn CreateStack / DescribeStacks を <b>同一 account 内のみ</b> に許可する単純な policy (cross-account は Phase 2 で追加)</li>
+<li><code>application-admin-console</code> の <code>useDeployApiClient</code> を <code>useApiClient</code> に切り替え、既存 <code>DeployFormModal</code> から新経路を叩く</li>
+<li>DeployForm の <code>awsAccountId</code> 入力は MVP では使わない (= TenkaCloud 自社 account に固定)。input 自体は残しておくが値を Step Functions に渡さない、ような UI 上の degrade で十分</li>
+<li>旧 <code>DeployApiGateway</code> (専用 HTTP API + 別 Cognito) は <b>同 PR で削除する</b> (旧経路と並存させない、=「動く 1 本」だけが残る状態にする)</li>
+<li>旧 <code>DeployWorkerLambda</code> / <code>StatusUpdaterLambda</code> も同 PR で削除 (Step Functions が肩代わりするため)</li>
+<li><code>install.sh</code> の <code>cdk deploy</code> リストに <code>ProblemDeployBackendStack</code> を追加</li>
+<li>frontend の <code>deployApiBaseUrl</code> / <code>isDeployApiConfigured</code> / <code>runtime-config.deployApiUrl</code> を削除</li>
+</ul>
+
+<p>含めない要素 (Phase 2 に倒す)。</p>
+
+<ul>
+<li>問題カタログ DDB / S3 (= 既存の repo <code>problems/&lt;id&gt;/template.yaml</code> をそのまま使う、<code>templateS3Url</code> は CFn template 直アップロードで代用)</li>
+<li>bulk operation (deployments 配列は length=1 固定)</li>
+<li>Update / Delete / Read fan-out</li>
+<li>失敗時の部分 retry UX (失敗したら再投げのみ、UI は単純なエラー表示)</li>
+<li>ParticipantSessions DDB 改称 (現 <code>Deployments</code> テーブル名のまま、ただし deploy 状態列は使わない)</li>
+</ul>
+
+<p>完了条件 (PR-2 の DoD) は次のとおり。</p>
+
+<ul>
+<li><code>make deploy</code> 1 発で AWS 上の経路が立ち上がる</li>
+<li>application-admin-console から「Deploy」ボタン → 競技者アカウントに CFn stack が作られる</li>
+<li>operator は AWS Console / CLI を一切触らない</li>
+</ul>
+</details>
+
+<details>
+<summary>Phase 2: 多機能化 (MVP が動いてから着手)</summary>
+
+<p>PR-2 の MVP が main に入ったら、要件の残りを順に実装する。順序は要件側の依存と Open questions 解決順に従う。</p>
+
+<ol>
+<li><b>PR-3: ADR-002 (Cross-account federation)</b> + 競技者アカウント登録 UI / DDB / SSM SecureString。Issue (#459) の決着</li>
+<li><b>PR-4: ADR-003 (問題カタログ + 可視範囲) + <code>ProblemsTable</code> (DDB) + <code>ProblemTemplatesBucket</code> (S3) + 問題管理 API + UI</b>。FR-5 の authoring 基盤</li>
+<li><b>PR-5: bulk Create</b>。<code>POST /deployments</code> で <code>deployments[]</code> を 750 件まで受け取れるようにし、UI で「複数選択 → 一括 Deploy」を生やす。内部実装は PR-2 の Distributed Map をそのまま使う (entry 数だけ増える)</li>
+<li><b>PR-6: <code>DeployDeleteStateMachine</code> + Delete API + UI 「batch を Delete」</b>。FR-1 (event 終了時 bulk teardown) の経路</li>
+<li><b>PR-7: <code>DeployUpdateStateMachine</code> + Update API + UI</b>。FR-5 (authoring iteration) の単発 Update</li>
+<li><b>PR-8: <code>GET /deployments</code> の sync Lambda (cross-account DescribeStacks fan-out)</b>。FR-3 (operator が状況を画面で見る)</li>
+<li><b>PR-9: 失敗 item 再実行 UX</b>。FR-3 の「失敗した分だけ再実行」ボタン</li>
+<li><b>PR-10: <code>Deployments</code> → <code>ParticipantSessions</code> 改称 + deploy 状態列削除</b>。data model 整理</li>
+</ol>
+
+<p>各 PR は依然 <code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code> を満たす。Phase 2 の各 PR は MVP の上に機能を「積み増す」形なので、merge ごとに operator から見える機能が 1 つ増える。</p>
+</details>
+</section>
+
+<section>
+<h2>Open questions (本 ADR の scope 外、後続で確定する)</h2>
+
+<ul>
+<li><b>Cross-account federation の保存場所</b> (Issue (#459)) — 競技者アカウントごとの ExternalId / RoleName / region をどこに持つか。Step Functions の入力に含めるための前提なので、本 ADR の実装着手 (PR-4 以降) 前に Issue (#459) を ADR-002 として別途確定する必要がある</li>
+<li><b><code>org-shared</code> の "組織" の定義</b> (要件 Open Question 1) — tenant のグループか、tenant 内の team か、ACL 列か。問題カタログ実装 (PR-3) 前に ADR-003 で確定する</li>
+<li><b>batch SLO の具体値</b> (要件 Open Question 4) — 並列度 50 で <code>~2h</code> という見積もりが要件として許容されるか、operator にフィードバックを取る</li>
+<li><b>失敗 item 再実行 API の冪等性</b> — CFn <code>CreateStack</code> の <code>AlreadyExists</code> をどう扱うか (成功扱い / 別エラー扱い)、再実行で stackName が衝突する場合の解決方針</li>
+<li><b><code>ParticipantSessions</code> DDB の cleanup policy</b> — CFn <code>DeleteStack</code> 成功後、<code>teamLoginKey</code> / <code>displayTeamName</code> 等の participant 体験用 row はいつ削除するか。「競技履歴として保持」と「DeleteStack 成功イベントで cascade 削除」の 2 案を PR-10 で確定する</li>
+<li><b>問題テンプレ依存ファイルの bundle 方式</b> (Phase 2) — 現在の問題 (<code>security-battle-royale</code>) は EC2 UserData の <code>git clone</code> で public TenkaCloud repo から app コード (Flask API / MySQL-init / frontend) を取ってくる作り。MVP では <code>template.yaml</code> だけ S3 に置けば動くが、private repo / 機密 / Lambda code zip 同梱が必要な問題が将来増えたとき、依存ファイル全体を S3 に bundle して UserData が <code>aws s3 cp</code> で取りに行く方式への切替が必要。問題種別ごとのテンプレ規約を整理する別 ADR で扱う</li>
+</ul>
+</section>
+
+<section>
+<h2>References</h2>
+<ul>
+<li><a href="../requirements/problem-deploy.md"><code>docs/requirements/problem-deploy.md</code></a> — 本 ADR が満たすべき要件 (FR-1〜6 / NFR-1〜4 / Acceptance Criteria)</li>
+<li>Issue (#458) — Deploy 操作の publish 経路を SBT 同型 (tenant API + tenant Cognito) に統一する (本 ADR がスコープを拡張して supersede)</li>
+<li>Issue (#459) — Cross-account federation の保存・管理 (ADR-002 で決める)</li>
+<li>CLAUDE.md — <code>ONE_PASS_AWS</code> invariant、<code>INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER</code></li>
+<li><code>docs/architecture/harness.md</code> — 既存 invariant 群</li>
+<li>AWS docs: <a href="https://docs.aws.amazon.com/step-functions/latest/dg/concepts-asl-use-map-state-distributed.html">Step Functions Distributed Map</a></li>
+<li>AWS docs: <a href="https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-eventbridge.html">EventBridge → Step Functions Rule</a></li>
+</ul>
+</section>
+
+</body>
+</html>
