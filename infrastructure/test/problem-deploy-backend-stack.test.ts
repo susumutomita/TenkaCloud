@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
+import { ParticipantPortalLambda } from "../lib/problem-deploy/participant-portal-lambda";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 
 // 全 it() で同じ Template を使い回す。stack 構造は default props で固定なので、
@@ -142,5 +143,78 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
     it("旧 DeployApiGateway (HTTP API) を作らないべき", () => {
       tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
     });
+  });
+});
+
+/**
+ * ParticipantPortalLambda 単体 synth (#535 再発防止)。
+ *
+ * Stack 全体を synth すると `ParticipantPortalHosting` が
+ * `apps/participant-portal/dist` の asset を要求し、CI 環境 (= dist 未 build) で
+ * fail する。Lambda の env / IAM だけ確認できれば十分なので、Lambda construct を
+ * 単体で synth する。
+ */
+function synthParticipantPortalLambdaOnly(): Template {
+  const app = new cdk.App();
+  const stack = new cdk.Stack(app, "TestStack");
+  const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  const events = new cdk.aws_dynamodb.Table(stack, "Events", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  new ParticipantPortalLambda(stack, "ParticipantPortal", {
+    deploymentsTable: deployments,
+    eventsTable: events,
+    problemsScoring: {},
+    consoleViewerRoleArn: "arn:aws:iam::123456789012:role/console-viewer",
+  });
+  return Template.fromStack(stack);
+}
+
+describe("ParticipantPortalLambda wiring (#535)", () => {
+  const tpl = synthParticipantPortalLambdaOnly();
+
+  it("ParticipantPortal Lambda の environment に EVENTS_TABLE_NAME が設定されるべき", () => {
+    // ADR-006 Notifications backend (PR-524) が Module load 時に EVENTS_TABLE_NAME を
+    // 必須で読むので、CDK 配線が無いと Lambda init で throw して portal 全 route が
+    // 502 になる (= #535 regression)。本 assertion で再発防止。
+    tpl.hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({
+            DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
+            EVENTS_TABLE_NAME: Match.anyValue(),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("ParticipantPortal Lambda の IAM Role に Events table の dynamodb:Query を付与するべき", () => {
+    // ADR-006: GET /portal/me/notifications が Events table を Query する。
+    // 配線が無いと AccessDenied で 500 になる。Role 直貼りの inline policy なので
+    // `AWS::IAM::Role` の Policies 配列を見る。
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "EventsRead",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({
+                  Action: "dynamodb:Query",
+                  Effect: "Allow",
+                }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
   });
 });

@@ -21,6 +21,11 @@ import { Construct } from "constructs";
 export interface ParticipantPortalLambdaProps {
   readonly deploymentsTable: ITable;
   /**
+   * Events table (ADR-006 Notifications で参照)。
+   * `GET /portal/me/notifications` が `PK=EVENT#<eventId>` で `dynamodb:Query`。
+   */
+  readonly eventsTable: ITable;
+  /**
    * `{ [problemId]: { kind, flagOutputKey, points, ... } }` 形の scoring 設定。
    * `discoverProblemsScoring` で metadata.json から自動収集して synth 時に注入する。
    * 競技者が submit-flag したとき、この map を参照して採点する。
@@ -69,6 +74,16 @@ export class ParticipantPortalLambda extends Construct {
             }),
           ],
         }),
+        // ADR-006 Notifications: Events table の partition Query 権限のみ。
+        // 書き込みは event-handler / health-check 側に閉じる (= participant は read-only)。
+        EventsRead: new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              actions: ["dynamodb:Query"],
+              resources: [props.eventsTable.tableArn],
+            }),
+          ],
+        }),
       },
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
@@ -85,6 +100,7 @@ export class ParticipantPortalLambda extends Construct {
       role,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        EVENTS_TABLE_NAME: props.eventsTable.tableName,
         BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
         CONSOLE_VIEWER_ROLE_ARN: props.consoleViewerRoleArn,
         NODE_OPTIONS: "--enable-source-maps",
