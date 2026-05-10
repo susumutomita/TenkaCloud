@@ -6,19 +6,6 @@ sudo yum install -y jq
 sudo yum install -y python3-pip
 sudo python3 -m pip install --upgrade setuptools
 
-# CodeBuild の default node が 14.x で、CDK 2 系 / aws-sdk v3 / @cdklabs/sbt-aws 0.3.9
-# などが node >=18 (一部 >=20) を要求するため、build 開始時に nvm で node 20 を入れる。
-# yum install -y nodejs だと AL2 系では node 16 等になり要件を満たさない場合がある。
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-# shellcheck disable=SC1091
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm install 20
-nvm use 20
-node --version
-npm --version
-
-npm install -g aws-cdk
-
 # Enable nocasematch option
 shopt -s nocasematch
 
@@ -42,6 +29,19 @@ aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAM
 # あり、prompt が出ると stdin EOF で `[N]one` 扱いになって展開不完全 → 後段 `cd cdk` などで
 # silent fail。`-o` で必ず上書きする。
 unzip -o $CDK_SOURCE_NAME
+
+# Node 切替は **`.nvmrc` (= source of truth、repo root に commit、install.sh が source.zip 同梱)**
+# を読む。CodeBuild standard image 同梱の nvm を使うので追加 install 不要。
+# 上げる時はリポジトリ root の `.nvmrc` を 1 か所書き換えれば全 script + ローカル dev に伝搬する
+# (= ハードコード版数の散乱を防ぐ)。
+NODE_VERSION=$(cat .nvmrc)
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck disable=SC1091
+. "$NVM_DIR/nvm.sh"
+nvm install "$NODE_VERSION"
+nvm use "$NODE_VERSION"
+node --version
+npm install -g aws-cdk
 
 cd cdk
 npm install

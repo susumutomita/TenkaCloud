@@ -82,6 +82,9 @@ cp -R scripts "${STAGING}/scripts"
 # MVP-1 (ADR-001 PR-2): problems/ を含めて source.zip に同梱する。CodeBuild の deploy-battles.sh
 # が `problems/<id>/template.yaml` を読むので、source.zip の root に problems/ を置く必要がある。
 cp -R problems "${STAGING}/problems"
+# `.nvmrc` を staging root に同梱 (= source of truth、CodeBuild 内 provision/update-tenant.sh が
+# `nvm install $(cat .nvmrc)` で参照する)。repo root から copy。
+cp "${TenkaCloud_ROOT}/.nvmrc" "${STAGING}/.nvmrc"
 # 旧 ref-arch では src/ を staging に含めていたが、#76 で
 # infrastructure/lib/tenant-pipeline/handlers/ に移動済 (cdk/ 配下に同梱されるので不要)。
 
