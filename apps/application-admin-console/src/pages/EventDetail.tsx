@@ -29,6 +29,7 @@ import {
   getEvent,
   setEventSchedule,
 } from "../api/events-client";
+import { SendNotificationModal } from "../components/SendNotificationModal";
 import type { AppConfig } from "../config";
 
 const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "grey" | "red"> = {
@@ -120,6 +121,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [scheduleInFlight, setScheduleInFlight] = useState<"now" | "scheduled" | null>(null);
   const [endInFlight, setEndInFlight] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+  const [notifyJustSent, setNotifyJustSent] = useState(false);
 
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
 
@@ -272,6 +275,17 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               onClick={handleBulkDeploy}
             >
               Bulk Deploy
+            </Button>
+            <Button
+              disabled={
+                !detail ||
+                detail.status === "DRAFT" ||
+                detail.status === "TEARDOWN" ||
+                detail.status === "ARCHIVED"
+              }
+              onClick={() => setNotifyModalOpen(true)}
+            >
+              通知を送る
             </Button>
             <Button
               loading={endInFlight}
@@ -593,6 +607,27 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           </FormField>
         </SpaceBetween>
       </Modal>
+
+      <SendNotificationModal
+        config={config}
+        visible={notifyModalOpen}
+        eventId={eventId}
+        onDismiss={() => setNotifyModalOpen(false)}
+        onSuccess={() => {
+          setNotifyModalOpen(false);
+          setNotifyJustSent(true);
+        }}
+      />
+      {notifyJustSent && (
+        <Alert
+          type="success"
+          dismissible
+          onDismiss={() => setNotifyJustSent(false)}
+          header="通知を送信しました"
+        >
+          競技者の Participant Portal /notifications で 60 秒以内に表示されます。
+        </Alert>
+      )}
     </SpaceBetween>
   );
 }

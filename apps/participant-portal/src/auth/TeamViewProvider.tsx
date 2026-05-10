@@ -9,16 +9,25 @@ import {
 } from "react";
 import {
   getLeaderboard,
+  getNotifications,
   getPortalMe,
   type LeaderboardResponse,
+  type NotificationsResponse,
   type ParticipantProblemView,
   type ParticipantTeamView,
   PortalAuthError,
 } from "../api/portal-client";
 import type { AppConfig } from "../config";
+import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 
 const POLL_INTERVAL_MS = 5_000;
+/**
+ * Notifications だけは 60 秒間隔で polling する (ADR-006 D3 + codex review)。
+ * Events table は 1 RCU PROVISIONED なので、N 競技者 × 5 秒 polling で簡単に throttle
+ * を引き起こす。Score / Leaderboard と同じ tick (5 秒) には乗せない。
+ */
+const NOTIFICATIONS_POLL_INTERVAL_MS = 60_000;
 
 interface TeamViewState {
   readonly view: ParticipantTeamView | null;
@@ -30,8 +39,23 @@ interface TeamViewState {
   readonly leaderboard: LeaderboardResponse | null;
   readonly leaderboardError: string | null;
   readonly leaderboardNoEvent: boolean;
+  /**
+   * 自 event の運営通知 (ADR-006)。Phase 1 以前 (eventId 無し) では
+   * `notificationsNoEvent: true` を返して null。
+   */
+  readonly notifications: NotificationsResponse | null;
+  readonly notificationsError: string | null;
+  readonly notificationsNoEvent: boolean;
+  /** TopNav 未読 badge 用。lastSeenAt は localStorage、polling 毎に再計算。 */
+  readonly unreadNotificationCount: number;
   /** Home の flag 提出後に呼ばれて即時再フェッチする経路。 */
   readonly refresh: () => Promise<void>;
+  /**
+   * `/notifications` page を開いたときに呼ぶ。`occurredAt` を localStorage と Context
+   * 両方に書き込み、TopNav 未読 badge を **次の polling tick を待たず即時 0 化** する
+   * (codex review)。
+   */
+  readonly markNotificationsSeen: (occurredAt: string) => void;
 }
 
 const Ctx = createContext<TeamViewState>({
@@ -40,7 +64,14 @@ const Ctx = createContext<TeamViewState>({
   leaderboard: null,
   leaderboardError: null,
   leaderboardNoEvent: false,
+  notifications: null,
+  notificationsError: null,
+  notificationsNoEvent: false,
+  unreadNotificationCount: 0,
   refresh: async () => {
+    /* default no-op */
+  },
+  markNotificationsSeen: () => {
     /* default no-op */
   },
 });
@@ -76,6 +107,24 @@ function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeam
   return true;
 }
 
+function notificationsAreUnchanged(
+  prev: NotificationsResponse | null,
+  next: NotificationsResponse,
+): boolean {
+  if (!prev) return false;
+  if (prev.eventId !== next.eventId) return false;
+  if (prev.items.length !== next.items.length) return false;
+  for (let i = 0; i < prev.items.length; i++) {
+    const a = prev.items[i];
+    const b = next.items[i];
+    if (!a || !b) return false;
+    if (a.notificationId !== b.notificationId) return false;
+    // title / body / severity / occurredAt は immutable (= 編集 API 無し) なので
+    // notificationId 一致なら内容も同一とみなす。
+  }
+  return true;
+}
+
 function leaderboardIsUnchanged(
   prev: LeaderboardResponse | null,
   next: LeaderboardResponse,
@@ -105,27 +154,35 @@ function leaderboardIsUnchanged(
 /**
  * Authenticated 領域 (`ShellLayout`) の中で 1 度だけ動く polling を提供する Context。
  *
- * Home page (累計スコアパネル + ProblemCard) / TopNav (Score/Rank widget) / Scoreboard
- * page が同じ `/portal/me` + `/portal/leaderboard` レスポンスを共有することで、
- * polling が複数に増えるのを防ぐ。両 endpoint は 5 秒 tick 内で `Promise.allSettled`
- * 並列 fetch する (= 一方が遅れても他方は更新)。
+ * Polling は **2 系統** で動かす:
+ *   - 5 秒 tick: `/portal/me` + `/portal/leaderboard` (= score / rank の即時感重視)
+ *   - 60 秒 tick: `/portal/me/notifications` (= ADR-006 D3、Events table 1 RCU 保護)
  *
  * `mode === "dev-mock"` のときは backend を叩かない。session が無いときも polling
  * 起動しない (= /login や /setup の guarded 外で何もしない)。
  *
- * 全 problem が FAILED / DELETED に到達したら polling を停止する (`stopPollingRef`)。
+ * 全 problem が FAILED / DELETED に到達したら 5s tick の polling を停止する
+ * (`stopPollingRef`)。Notifications 側は event 終了後も配信され得るため止めない。
  */
 export function TeamViewProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
+  // codex review: `lastSeenAt` を eventId scope にして「同 browser で別 event ログイン
+  // 後、前 event の lastSeen を引きずって新 event の通知を silent 既読化」を防ぐ。
+  const eventIdForKey = auth.session?.eventId ?? "";
   const isBackend = config.mode === "backend";
   const [view, setView] = useState<ParticipantTeamView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardNoEvent, setLeaderboardNoEvent] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationsResponse | null>(null);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [notificationsNoEvent, setNotificationsNoEvent] = useState(false);
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(() => loadLastSeenAt(eventIdForKey));
   const stopPollingRef = useRef(false);
 
+  /** 5 秒 tick: `/portal/me` + `/portal/leaderboard`。Notifications は別系統。 */
   const refresh = useCallback(async () => {
     if (!isBackend || !sessionToken) return;
     const [meResult, leaderboardResult] = await Promise.allSettled([
@@ -169,6 +226,31 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     }
   }, [isBackend, sessionToken, config.apiBaseUrl, auth]);
 
+  /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
+  const refreshNotifications = useCallback(async () => {
+    if (!isBackend || !sessionToken) return;
+    try {
+      const next = await getNotifications(config.apiBaseUrl, sessionToken);
+      if (next === undefined) {
+        // 404 = Phase 1 以前の旧 deployment (eventId 無し) → notifications 配信対象外
+        setNotificationsNoEvent(true);
+        setNotifications(null);
+      } else {
+        setNotificationsNoEvent(false);
+        setNotifications((prev) => (notificationsAreUnchanged(prev, next) ? prev : next));
+      }
+      setNotificationsError(null);
+      // 別 tab 経由で更新された lastSeenAt を tick 毎に拾い直す。
+      setLastSeenAt(loadLastSeenAt(eventIdForKey));
+    } catch (err) {
+      if (err instanceof PortalAuthError) {
+        auth.logout();
+        return;
+      }
+      setNotificationsError(err instanceof Error ? err.message : String(err));
+    }
+  }, [isBackend, sessionToken, config.apiBaseUrl, auth, eventIdForKey]);
+
   useEffect(() => {
     if (!isBackend || !sessionToken) return;
     let cancelled = false;
@@ -185,9 +267,49 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     };
   }, [isBackend, sessionToken, refresh]);
 
+  useEffect(() => {
+    if (!isBackend || !sessionToken) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshNotifications();
+    };
+    void tick();
+    const interval = setInterval(tick, NOTIFICATIONS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isBackend, sessionToken, refreshNotifications]);
+
+  // codex review P3: page を開いた瞬間の既読化を **localStorage と Context state 両方** に
+  // 反映して、TopNav 未読 badge が次の 60s tick を待たず即 0 化する。
+  const markNotificationsSeen = useCallback(
+    (occurredAt: string) => {
+      if (!eventIdForKey || typeof occurredAt !== "string" || occurredAt.length === 0) return;
+      saveLastSeenAt(eventIdForKey, occurredAt);
+      setLastSeenAt((prev) => (prev !== null && prev >= occurredAt ? prev : occurredAt));
+    },
+    [eventIdForKey],
+  );
+
+  const unreadNotificationCount = countUnread(notifications?.items ?? [], lastSeenAt);
+
   return (
     <Ctx.Provider
-      value={{ view, error, leaderboard, leaderboardError, leaderboardNoEvent, refresh }}
+      value={{
+        view,
+        error,
+        leaderboard,
+        leaderboardError,
+        leaderboardNoEvent,
+        notifications,
+        notificationsError,
+        notificationsNoEvent,
+        unreadNotificationCount,
+        refresh,
+        markNotificationsSeen,
+      }}
     >
       {children}
     </Ctx.Provider>

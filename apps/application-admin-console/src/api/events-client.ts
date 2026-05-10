@@ -161,3 +161,29 @@ export interface ArchiveEventResult {
 export async function archiveEvent(api: ApiClient, eventId: string): Promise<ArchiveEventResult> {
   return api.post<ArchiveEventResult>(`events/${encodeURIComponent(eventId)}/archive`, {});
 }
+
+/**
+ * ADR-006 Notifications: 運営 → 競技者 通知を 1 件発信する。tenant 不一致 / event 不在は 404。
+ * `severity` 既定 `info`。`title` 1〜120、`body` 1〜2000 chars。
+ */
+export interface CreateNotificationRequest {
+  title: string;
+  body: string;
+  severity?: "info" | "warning";
+}
+
+export interface CreateNotificationResponse {
+  notificationId: string;
+  occurredAt: string;
+}
+
+export async function createNotification(
+  api: ApiClient,
+  eventId: string,
+  body: CreateNotificationRequest,
+): Promise<CreateNotificationResponse> {
+  return api.post<CreateNotificationResponse>(
+    `events/${encodeURIComponent(eventId)}/notifications`,
+    body,
+  );
+}

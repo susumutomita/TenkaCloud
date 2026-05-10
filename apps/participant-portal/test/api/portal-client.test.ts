@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getNotifications,
   getPortalMe,
   PortalAuthError,
   PortalNetworkError,
@@ -87,6 +88,62 @@ describe("getPortalMe", () => {
     await getPortalMe("https://x", KEY, ctrl.signal);
     const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
     expect(init.signal).toBe(ctrl.signal);
+  });
+});
+
+describe("getNotifications", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("/portal/me/notifications を Bearer 付きで GET し response を返すべき", async () => {
+    const payload = {
+      eventId: "01HZX",
+      items: [
+        {
+          notificationId: "01J0",
+          title: "scoring 再開",
+          body: "メンテ完了",
+          severity: "info",
+          occurredAt: "2026-05-10T14:42:00.000Z",
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await getNotifications("https://api.example.com", KEY);
+    expect(out?.eventId).toBe("01HZX");
+    expect(out?.items).toHaveLength(1);
+
+    const [url] = fetchMock.mock.calls[0] as [URL];
+    expect(url.toString()).toBe("https://api.example.com/portal/me/notifications");
+  });
+
+  it("404 (no_event) は undefined を返すべき (旧 jobId-based deployment 互換)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "no_event" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await getNotifications("https://x", KEY)).toBeUndefined();
+  });
+
+  it("limit を渡したら ?limit=N で query に乗せる", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ eventId: "X", items: [] }), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await getNotifications("https://x", KEY, 50);
+    const [url] = fetchMock.mock.calls[0] as [URL];
+    expect(url.searchParams.get("limit")).toBe("50");
   });
 });
 
