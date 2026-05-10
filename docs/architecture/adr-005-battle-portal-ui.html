@@ -222,41 +222,49 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 
 <h3>D4. real-time 性 / polling 間隔</h3>
 
-<p><code>feedback_polling_over_sse</code> に従い SSE / WebSocket は使わない。tick の根拠は次のとおり。</p>
+<p><code>feedback_polling_over_sse</code> に従い SSE / WebSocket は使わない。
+backend の tick が <code>rate(1 minute)</code> なので、frontend polling も
+<b>1 分間隔に統一</b>する (= 5 秒 polling は over-polling で Lambda 呼び出し回数 / DDB
+RCU を無駄に消費する)。</p>
 
 <table>
 <thead><tr><th>層</th><th>tick / 間隔</th><th>根拠</th></tr></thead>
 <tbody>
 <tr><td>backend HealthCheck Lambda</td><td>EventBridge <code>rate(1 minute)</code></td>
     <td>既存。コスト最適 (= 60 deployment × 1/min × 1 月で Lambda free tier 内)</td></tr>
-<tr><td>frontend TeamViewProvider</td><td>5 秒 polling</td>
-    <td>UX として「攻撃を受けた」自覚を最大 5 秒で出す。data 自体は 1 分粒度なので over-polling だが、Lambda 呼び出し回数は team 内 1 系統に集約済 (PR-509)</td></tr>
-<tr><td>frontend BattleAttackPanel (新)</td><td>10 秒 polling</td>
-    <td>attack timeline は data update 頻度が低い (1 attack/5 分想定) ので team view より緩い間隔。UI ちらつきも減らす</td></tr>
+<tr><td>frontend TeamViewProvider</td><td>60 秒 polling</td>
+    <td>backend tick と同じ粒度。data 更新頻度に揃えて余分な負荷を避ける。Phase 3.1 の PR で <b>5s → 60s に変更</b> (= 既存 PR-509 の調整)</td></tr>
+<tr><td>frontend BattleAttackPanel (新)</td><td>60 秒 polling</td>
+    <td>attack timeline は data update 頻度が低い (1 attack/5 分想定)。team view と同じ tick で十分。専用 polling を立てるが間隔は同じ</td></tr>
 </tbody>
 </table>
+
+<p><b>UX trade-off</b>: 攻撃検知から画面反映までの最大ラグは <b>backend tick (最大 60s) + polling (最大 60s) = 約 2 分</b>。
+Battle のゲーム性 (= 「気づいて調査して直す」) はもともと数分単位なので、この遅延は許容範囲。
+逆に過剰な polling は (a) 観戦者多数のとき DDB RCU を圧迫、(b) 試合中の Lambda 呼び出し
+回数を増やして Free Tier を消費する、というデメリットの方が大きい。</p>
 
 <figure>
 <svg viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="monospace" font-size="13"
      role="img" aria-labelledby="polling-diagram-title polling-diagram-desc">
   <title id="polling-diagram-title">Polling 経路図</title>
-  <desc id="polling-diagram-desc">既存 TeamViewProvider (5 秒) と並走で BattleAttackPanel (10 秒) を新設し、両方が Participant Portal Lambda (Hono) に collect される。SSE 不使用。Score events は既存の 5 秒 polling を維持。</desc>
-  <!-- TeamViewProvider 5s -->
+  <desc id="polling-diagram-desc">TeamViewProvider / BattleAttackPanel / Score events すべて 60 秒 polling に統一。backend HealthCheck の rate(1 minute) と同粒度。SSE 不使用。</desc>
+  <!-- TeamViewProvider 60s -->
   <rect x="20" y="30" width="200" height="60" fill="#cfe5ff" stroke="#0969da" rx="4"/>
   <text x="120" y="55" text-anchor="middle">TeamViewProvider</text>
-  <text x="120" y="78" text-anchor="middle" font-weight="bold">5s polling</text>
+  <text x="120" y="78" text-anchor="middle" font-weight="bold">60s polling</text>
   <text x="120" y="105" text-anchor="middle" fill="#59636e">/portal/me</text>
 
-  <!-- Battle Attack Polling 10s -->
+  <!-- Battle Attack Polling 60s -->
   <rect x="280" y="30" width="200" height="60" fill="#ffe2c5" stroke="#9a6700" rx="4"/>
   <text x="380" y="55" text-anchor="middle">BattleAttackPanel</text>
-  <text x="380" y="78" text-anchor="middle" font-weight="bold">10s polling</text>
+  <text x="380" y="78" text-anchor="middle" font-weight="bold">60s polling</text>
   <text x="380" y="105" text-anchor="middle" fill="#59636e">/portal/me/battle-attacks</text>
 
-  <!-- ScoreEvents 5s (existing) -->
+  <!-- ScoreEvents 60s -->
   <rect x="540" y="30" width="160" height="60" fill="#ddf4e0" stroke="#1a7f37" rx="4"/>
   <text x="620" y="55" text-anchor="middle">Score events</text>
-  <text x="620" y="78" text-anchor="middle" font-weight="bold">既存 5s</text>
+  <text x="620" y="78" text-anchor="middle" font-weight="bold">60s polling</text>
 
   <!-- Lambda backend -->
   <rect x="220" y="140" width="280" height="40" fill="#f6f8fa" stroke="#59636e" rx="4"/>
@@ -267,12 +275,12 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
   <line x1="380" y1="90" x2="380" y2="140" stroke="#9a6700" stroke-width="1.5"/>
   <line x1="620" y1="90" x2="440" y2="140" stroke="#1a7f37" stroke-width="1.5"/>
 </svg>
-<figcaption>polling 経路: 既存 TeamViewProvider (5s) と並走で BattleAttackPanel (10s) を新設。SSE 不使用。</figcaption>
+<figcaption>polling 経路: 全 channel を 60 秒に統一。backend HealthCheck の rate(1 minute) と同粒度。</figcaption>
 </figure>
 
 <ul>
-<li>既存 <code>TeamViewProvider</code> の 5 秒 polling に乗せる (Application Status の uptime ％)</li>
-<li>Battle 系 deployment が 1 つでもある team は <b>追加 polling として attack log を 10 秒で fetch</b></li>
+<li>既存 <code>TeamViewProvider</code> の polling 間隔を <b>5s → 60s に変更</b> (Application Status の uptime ％ も 60s で十分)</li>
+<li>Battle 系 deployment が 1 つでもある team は <b>追加 polling として attack log を 60 秒で fetch</b> (= team view と同 tick だが endpoint は別系統)</li>
 <li>新 endpoint: <code>GET /portal/me/battle-attacks?jobId=&lt;ulid&gt;&amp;sinceMin=60</code></li>
 </ul>
 
@@ -461,7 +469,7 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 <div class="mock">
   <div class="mock-title">Mockup 2 — Scoreboard (Battle event)</div>
   <div class="mock-frame">
-    <h4>Scoreboard <span style="font-size:0.85rem;color:var(--c-muted);font-weight:400;">— 5 秒ごと自動更新</span></h4>
+    <h4>Scoreboard <span style="font-size:0.85rem;color:var(--c-muted);font-weight:400;">— 1 分ごと自動更新</span></h4>
     <table>
       <thead>
         <tr>
@@ -545,7 +553,7 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
   <div class="decision-card">
     <div class="num">D4</div>
     <div class="title">real-time 戦略</div>
-    <div class="body">polling 5 秒 (team view) + 10 秒 (attack log 専用)、SSE 不使用</div>
+    <div class="body">全 channel を <b>60 秒 polling に統一</b> (backend tick rate(1 minute) と同粒度)。SSE 不使用</div>
   </div>
   <div class="decision-card" style="opacity:0.7;">
     <div class="num">D5 <span class="badge reject" style="margin-left:.4rem;">撤回</span></div>
@@ -792,6 +800,7 @@ URL は path-prefix でなく path-pattern なし、すべて Lambda にプロ�
 <li><code>lookup.ts</code> の <code>endpointsHealth</code> を <code>aggregate</code> (= ok count / total / overallStatus) に絞った view を新設、participant API でこちらを返す</li>
 <li><code>GET /portal/me/battle-attacks?jobId=&amp;sinceMin=</code> Lambda route + ParticipantPortalLambda の IAM に必要なら Query 権限を追加</li>
 <li><b><code>sinceMin</code> の上限は 60 分</b>とし、defaults は 30 分。Battle UI の uptime ％は「直近 5 分」、attack history は「直近 60 分」を最大として固定 (= read RCU 暴発の防止策)</li>
+<li><code>TeamViewProvider</code> (PR-509) の polling 間隔を <b>5s → 60s に変更</b> (D4)。1 行差し替え + 既存テストの interval 期待値を更新</li>
 </ol>
 
 <h4>追加するテスト</h4>
