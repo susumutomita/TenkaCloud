@@ -71,8 +71,12 @@ function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[
 }
 
 /**
- * 1 problem 行の deploy job click-through link 列。各 jobId を /deployments/:jobId に
- * 飛ばす (= per-team の deploy 詳細ページ)。
+ * 1 problem 行の deploy job click-through link 列 (#533)。
+ *
+ * 旧: Badge を Link でラップしただけだと click 可能か視覚的にわからない (= hover でしか
+ * cursor が変わらない)。新: Link テキスト + status badge を **横並び** にし、Link 部分に
+ * external icon を付けて click 可能 affordance を明示する。status badge は同色で残し、
+ * 「これは link であり、横の badge はその job の状態」の visual identity を分離する。
  */
 function renderProblemJobLinks(deployments: readonly EventDeploymentSummary[] | undefined) {
   if (!deployments || deployments.length === 0) {
@@ -83,15 +87,18 @@ function renderProblemJobLinks(deployments: readonly EventDeploymentSummary[] | 
     );
   }
   return (
-    <SpaceBetween direction="horizontal" size="xxs">
-      {deployments.map((d) => (
-        <Link
-          key={d.jobId}
-          href={`/deployments/${encodeURIComponent(d.jobId)}`}
-          ariaLabel={`Deploy job ${d.jobId} (status: ${d.status})`}
-        >
+    <SpaceBetween direction="vertical" size="xxs">
+      {deployments.map((d, i) => (
+        <SpaceBetween key={d.jobId} direction="horizontal" size="xxs" alignItems="center">
+          <Link
+            href={`/deployments/${encodeURIComponent(d.jobId)}`}
+            external={false}
+            ariaLabel={`Deploy job 詳細 (status: ${d.status})`}
+          >
+            Job #{i + 1} ↗
+          </Link>
           <Badge color={DEPLOY_STATUS_COLOR[d.status]}>{d.status}</Badge>
-        </Link>
+        </SpaceBetween>
       ))}
     </SpaceBetween>
   );
@@ -282,7 +289,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               }
               onClick={handleBulkDeploy}
             >
-              Bulk Deploy
+              Deploy
             </Button>
             <Button
               disabled={
@@ -307,7 +314,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               disabled={!detail}
               onClick={() => setConfirmTeardown(true)}
             >
-              Bulk Teardown
+              Delete
             </Button>
           </SpaceBetween>
         }
@@ -325,7 +332,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           type="success"
           dismissible
           onDismiss={() => setBulkResult(null)}
-          header="Bulk 操作 受付"
+          header="Deploy / Delete 受付"
         >
           受付: {bulkResult.enqueued} 件 / skipped: {bulkResult.skipped} 件 (実 deploy / delete は
           State Machine が非同期に進めます。数分後に再読み込みしてください)
@@ -452,10 +459,10 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     <br />
                     2. 上の Portal URL と一緒に各チームへ共有
                     <br />
-                    3. <strong>Bulk Deploy</strong> で全チームの問題環境を起動 (Status が READY
+                    3. <strong>Deploy</strong> で全チームの問題環境を起動 (Status が READY
                     になったら競技開始)
                     <br />
-                    4. 終了後は <strong>Bulk Teardown</strong> で全環境を一括削除
+                    4. 終了後は <strong>Delete</strong> で全環境を一括削除
                   </Box>
                 </Box>
               </ColumnLayout>
@@ -503,11 +510,21 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               {
                 id: "key",
                 header: "teamLoginKey",
+                // #554: copy button を併設して text 選択 + Ctrl-C より早く配布できるように。
+                // Cloudscape Button の iconName="copy" + ariaLabel で a11y も担保。
                 cell: (t) =>
                   t.teamLoginKey ? (
-                    <Box variant="code" fontSize="body-s">
-                      {t.teamLoginKey}
-                    </Box>
+                    <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+                      <Box variant="code" fontSize="body-s">
+                        {t.teamLoginKey}
+                      </Box>
+                      <Button
+                        iconName="copy"
+                        variant="inline-icon"
+                        ariaLabel={`${t.internalSlug} の teamLoginKey をコピー`}
+                        onClick={() => void navigator.clipboard?.writeText(t.teamLoginKey ?? "")}
+                      />
+                    </SpaceBetween>
                   ) : (
                     <Box variant="small" color="text-status-inactive">
                       (詳細で再表示可)
@@ -548,7 +565,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
 
       <Modal
         visible={confirmTeardown}
-        header="Bulk Teardown を実行しますか?"
+        header="Event 全 deployment を削除しますか?"
         onDismiss={() => setConfirmTeardown(false)}
         footer={
           <Box float="right">
