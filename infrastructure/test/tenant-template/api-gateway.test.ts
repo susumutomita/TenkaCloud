@@ -101,4 +101,20 @@ describe("tenant ApiGateway", () => {
     expect(findResource("deploy")).toBeDefined();
     expect(findResource("{problemId}")).toBeDefined();
   });
+
+  it("/events/{eventId}/notifications resource + POST method が存在するべき (#553)", () => {
+    // backend handler `POST /events/:eventId/notifications` (= ADR-006 通知 push) と
+    // API Gateway route の配線がセットでないと frontend は "Failed to fetch" になる。
+    // #535 と同種の「backend だけ merge、CDK 後追い」 regression を再発させないための pin。
+    const notificationsResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { PathPart: "notifications" },
+      }),
+    )[0]?.[0];
+    expect(notificationsResourceId).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "POST",
+      ResourceId: { Ref: notificationsResourceId },
+    });
+  });
 });
