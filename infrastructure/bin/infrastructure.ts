@@ -6,6 +6,7 @@ import { BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import * as dotenv from "dotenv";
 import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
+import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window";
@@ -123,6 +124,11 @@ const kmsPendingWindowInDays = Number(
 // 全 stack の KMS Key 削除待機期間を上記値に揃える Aspect を App scope に apply。
 // SBT が内部生成する CodeBuild EncryptionKey 等も含む全 `AWS::KMS::Key` が対象。
 cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(kmsPendingWindowInDays));
+
+// SBT BashJobRunner が CodeBuild project artifact 暗号化用に作る customer-managed
+// KMS Key ($1/key/月) を AWS-managed alias `alias/aws/s3` (無料) に置き換え、
+// 不要になった KMS Key resource を template から除く Aspect (cost cleanup)。
+cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
 // Cognito UserPool domain は region globally unique なので env / tenantId / accountId を
 // 入れて衝突回避する (#83)。AdminConsoleHostingStack 用にも同じ値が要るので前倒しで定義。
 const awsRegion = process.env.CDK_PARAM_AWS_REGION ?? process.env.CDK_DEFAULT_REGION ?? "";
