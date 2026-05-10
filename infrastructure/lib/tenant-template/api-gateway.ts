@@ -84,11 +84,12 @@ export class ApiGateway extends Construct {
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);
 
     // ADR-004 Phase 1+2a/2b: /events — 1 競技イベント = 1 行で teams + problems を持つ
-    // /events                      POST  = create   / GET = list
-    // /events/{eventId}            GET   = detail   / DELETE = bulk teardown
-    // /events/{eventId}/deploy     POST  = bulk deploy (teams × problems を fan-out)
-    // /events/{eventId}/schedule   PATCH = 競技開始時刻 (startsAt) を設定 (Phase 2b 追加)
-    // /events/{eventId}/end        POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
+    // /events                          POST  = create   / GET = list
+    // /events/{eventId}                GET   = detail   / DELETE = bulk teardown
+    // /events/{eventId}/deploy         POST  = bulk deploy (teams × problems を fan-out)
+    // /events/{eventId}/schedule       PATCH = 競技開始時刻 (startsAt) を設定 (Phase 2b 追加)
+    // /events/{eventId}/end            POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
+    // /events/{eventId}/notifications  POST  = 運営 → 競技者 通知 1 件作成 (ADR-006、#553)
     const eventIntegration = new LambdaIntegration(props.eventApiLambda);
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
@@ -100,5 +101,6 @@ export class ApiGateway extends Construct {
     event.addResource("schedule").addMethod("PATCH", eventIntegration, deployMethodOptions);
     event.addResource("end").addMethod("POST", eventIntegration, deployMethodOptions);
     event.addResource("archive").addMethod("POST", eventIntegration, deployMethodOptions);
+    event.addResource("notifications").addMethod("POST", eventIntegration, deployMethodOptions);
   }
 }
