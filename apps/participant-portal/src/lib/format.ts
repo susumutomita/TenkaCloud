@@ -1,4 +1,20 @@
 /**
+ * Score events cell の hover tooltip 用「UTC + ローカル時刻」併記文字列。
+ *
+ * 一次情報は相対時刻 (= 「何分前」、即時 feedback) で十分、絶対時刻は **必要なときだけ**
+ * 引きたいので tooltip に逃がす設計 (#548)。`Intl.DateTimeFormat` でブラウザ環境の
+ * ローカル TZ を解決し、UTC ISO と並べて返す。Invalid な ISO は `?` で防御。
+ */
+export function formatOccurredAtTooltip(iso: string | undefined): string {
+  if (!iso) return "未採点";
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "?";
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const local = new Date(ms).toLocaleString(undefined, { timeZone: tz });
+  return `${iso}\n${local} (${tz})`;
+}
+
+/**
  * 「N 秒前 / N 分前 / N 時間 N 分前」の人間可読フォーマット。
  *
  * Battle 中の defender が score の停滞時間を察知するための display helper。
