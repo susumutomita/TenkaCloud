@@ -5,10 +5,35 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
 import { listProblemSummaries } from "../data/problems";
+
+// #542: 初回 operator 向けの onboarding section を dismiss 可能にするための localStorage key。
+// 2 回目以降の visit では「次のアクション」 section を出さず、画面上半分を進行中 Event 一覧
+// 等の優先情報に譲る。値は "true" のみ意味を持つ。
+const ONBOARDING_DISMISSED_KEY = "TenkaCloud.applicationAdmin.onboardingDismissed";
+
+function readOnboardingDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeOnboardingDismissed(value: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
+    else window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
+  } catch {
+    // localStorage 不可 (= private mode 等) は no-op、毎回表示で安全側
+  }
+}
 
 /**
  * TenantAdmin のホーム画面。
@@ -37,6 +62,8 @@ export function HomePage() {
   const draftCount = problems.filter((p) => p.status === "draft").length;
   const battleCount = problems.filter((p) => p.category === "Battle").length;
 
+  const [onboardingDismissed, setOnboardingDismissed] = useState(readOnboardingDismissed);
+
   return (
     <SpaceBetween size="l">
       <Header
@@ -60,24 +87,41 @@ export function HomePage() {
         </ColumnLayout>
       </Container>
 
-      <Container
-        header={
-          <Header
-            variant="h2"
-            actions={<Button onClick={() => navigate("/problems")}>すべての問題を見る</Button>}
-          >
-            次のアクション
-          </Header>
-        }
-      >
-        <Box variant="p">
-          競技アカウントへ問題をデプロイすると、参加者向けの URL (frontend / api) と、
-          <strong>チーム単位のログインキー</strong>{" "}
-          が払い出されます。参加者個別のアカウントは作成せず、各チームに 1
-          つ配布する短命なキーでアクセス制御するため、運営側で個人情報の管理義務を抱え込みません。
-          まずは <strong>問題カタログ</strong> から問題を 1 つ選んでください。
-        </Box>
-      </Container>
+      {/* #542: 初回 onboarding section。閉じると localStorage に dismissed=true が記録され
+       *   以降の visit で出ない。テナント情報の上に置いて初見 operator の導線にする。*/}
+      {!onboardingDismissed && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              actions={
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button onClick={() => navigate("/problems")}>すべての問題を見る</Button>
+                  <Button
+                    iconName="close"
+                    variant="icon"
+                    ariaLabel="次のアクション section を閉じる"
+                    onClick={() => {
+                      writeOnboardingDismissed(true);
+                      setOnboardingDismissed(true);
+                    }}
+                  />
+                </SpaceBetween>
+              }
+            >
+              次のアクション
+            </Header>
+          }
+        >
+          <Box variant="p">
+            競技アカウントへ問題をデプロイすると、参加者向けの URL (frontend / api) と、
+            <strong>チーム単位のログインキー</strong>{" "}
+            が払い出されます。参加者個別のアカウントは作成せず、各チームに 1
+            つ配布する短命なキーでアクセス制御するため、運営側で個人情報の管理義務を抱え込みません。
+            まずは <strong>問題カタログ</strong> から問題を 1 つ選んでください。
+          </Box>
+        </Container>
+      )}
 
       <Container header={<Header variant="h2">テナント情報</Header>}>
         <ColumnLayout columns={2} variant="text-grid">

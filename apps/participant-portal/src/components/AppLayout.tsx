@@ -95,11 +95,17 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
             ? `${myEntry.rank}/${totalEntries}`
             : "…";
     return [
+      // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
+      // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
+      // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
+      // affordance を排除)。
       {
-        type: "menu-dropdown",
+        type: "button",
         text: `Score: ${score}  /  Rank: ${rank}`,
         iconName: "status-positive",
-        items: [],
+        onClick: () => {
+          navigate("/scoreboard");
+        },
       },
       {
         type: "menu-dropdown",

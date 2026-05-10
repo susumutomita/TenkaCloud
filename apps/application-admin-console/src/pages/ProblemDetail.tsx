@@ -6,7 +6,6 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
-import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
@@ -16,7 +15,6 @@ import { useApiClient } from "../api/client";
 import {
   DEPLOYMENT_STATUS_INDICATOR,
   type DeploymentSummary,
-  deleteDeployment,
   listDeployments,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
@@ -68,11 +66,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       >
         {problem.name}
       </Header>
-
-      <Alert type="info" header="この問題を deploy するには Event 経由で">
-        単発 deploy 経路は廃止しました。Event を作成して Bulk Deploy してください。Event
-        紐付きが無い deployment は scoreboard / 集計に表示されません。
-      </Alert>
 
       <Container header={<Header variant="h2">概要</Header>}>
         <ColumnLayout columns={4} variant="text-grid">
@@ -137,8 +130,10 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 
 function buildColumns(
   navigate: NavigateFunction,
-  onAskDelete: (item: DeploymentSummary) => void,
 ): TableProps.ColumnDefinition<DeploymentSummary>[] {
+  // #541: 単発「削除」 button は撤去。削除は EventDetail の「Delete」 (= 旧 Bulk Teardown)
+  // に集約。orphan single delete を残すと「片付け済の hidden 行が見えないまま課金される」
+  // 危険性があり、operator 視点で削除フローが 1 箇所に集まっている方が事故が少ない。
   return [
     {
       id: "team",
@@ -175,20 +170,6 @@ function buildColumns(
       header: "作成",
       cell: (item) => item.createdAt,
     },
-    {
-      id: "actions",
-      header: "操作",
-      cell: (item) => (
-        <Button
-          variant="normal"
-          iconName="delete-marker"
-          disabled={item.status === "DELETING" || item.status === "DELETED"}
-          onClick={() => onAskDelete(item)}
-        >
-          削除
-        </Button>
-      ),
-    },
   ];
 }
 
@@ -207,9 +188,6 @@ function ProblemDeploymentsSection({
   const navigate = useNavigate();
   const [items, setItems] = useState<readonly DeploymentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [askDelete, setAskDelete] = useState<DeploymentSummary | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchOnce = useCallback(async () => {
     if (!apiClient) return;
@@ -238,22 +216,7 @@ function ProblemDeploymentsSection({
     };
   }, [fetchOnce]);
 
-  const columns = useMemo(() => buildColumns(navigate, (item) => setAskDelete(item)), [navigate]);
-
-  const handleDelete = async () => {
-    if (!apiClient || !askDelete) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteDeployment(apiClient, askDelete.jobId);
-      setAskDelete(null);
-      await fetchOnce();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const columns = useMemo(() => buildColumns(navigate), [navigate]);
 
   return (
     <Container
@@ -281,38 +244,6 @@ function ProblemDeploymentsSection({
           }
         />
       </SpaceBetween>
-
-      <Modal
-        visible={askDelete !== null}
-        onDismiss={() => setAskDelete(null)}
-        header={askDelete ? `「${askDelete.teamName}」のデプロイを削除` : ""}
-        size="medium"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setAskDelete(null)} disabled={deleting}>
-                キャンセル
-              </Button>
-              <Button variant="primary" loading={deleting} onClick={handleDelete}>
-                削除する
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        {askDelete && (
-          <SpaceBetween size="s">
-            <Box>
-              競技アカウント (<code>{askDelete.awsAccountId}</code> / {askDelete.region}) で
-              起動中の CloudFormation Stack <code>{askDelete.namePrefix}</code> を削除します。
-            </Box>
-            <Box variant="small" color="text-status-warning">
-              この操作は取り消せません。実際の削除は次の周期で実行されます。
-            </Box>
-            {deleteError && <Alert type="error">{deleteError}</Alert>}
-          </SpaceBetween>
-        )}
-      </Modal>
     </Container>
   );
 }
