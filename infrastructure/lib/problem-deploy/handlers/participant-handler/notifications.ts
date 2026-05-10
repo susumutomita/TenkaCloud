@@ -15,7 +15,12 @@ export type ListNotificationsOutcome =
   | { kind: "ok"; response: NotificationsResponse }
   | { kind: "unauthorized" }
   | { kind: "no_event" }
-  | { kind: "invalid_limit" };
+  | { kind: "invalid_limit" }
+  /**
+   * `EVENTS_TABLE_NAME` env が CDK 側で配線されておらず Notifications backend が
+   * disabled な状態。500 で返して frontend に「設定漏れ」を伝える。他 route は通常動作。
+   */
+  | { kind: "misconfigured" };
 
 /** limit 既定値 / 上限 (ADR-006 API 設計)。*/
 export const NOTIFICATIONS_DEFAULT_LIMIT = 100;
@@ -39,6 +44,10 @@ export async function listNotifications(
   teamLoginKey: string,
   limitRaw: number = NOTIFICATIONS_DEFAULT_LIMIT,
 ): Promise<ListNotificationsOutcome> {
+  // CDK 配線前 (= EVENTS_TABLE_NAME 未設定) に portal 全体を 502 で落とさないよう、
+  // 本 handler だけ misconfigured で 500 を返す (#535 regression 対策)。
+  if (!shared.eventsTableName) return { kind: "misconfigured" };
+
   if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > NOTIFICATIONS_MAX_LIMIT) {
     return { kind: "invalid_limit" };
   }

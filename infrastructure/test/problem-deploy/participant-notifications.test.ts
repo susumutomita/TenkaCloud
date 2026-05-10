@@ -37,6 +37,13 @@ const teamRow = (over: Record<string, unknown> = {}) => ({
 describe("listNotifications (ADR-006)", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("EVENTS_TABLE_NAME 未配線 (= eventsTableName undefined) は misconfigured を返し、DDB を叩かない (#535 regression 対策)", async () => {
+    const { shared, ddbSend } = buildShared();
+    const sharedNoEnv: ParticipantSharedResources = { ...shared, eventsTableName: undefined };
+    expect((await listNotifications(sharedNoEnv, TEAM_KEY, 50)).kind).toBe("misconfigured");
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
   it("limit が 0 / 負 / 上限超 / 非整数 は invalid_limit", async () => {
     const { shared } = buildShared();
     expect((await listNotifications(shared, TEAM_KEY, 0)).kind).toBe("invalid_limit");

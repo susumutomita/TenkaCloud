@@ -1,6 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { getEnv } from "../../../helper-functions.js";
+import { getEnv, getOptionalEnv } from "../../../helper-functions.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
@@ -16,17 +16,29 @@ export interface ParticipantSharedResources {
    * Events table 名 (ADR-006 Notifications で参照)。`GET /portal/me/notifications` が
    * `PK=EVENT#<eventId>` の partition で `begins_with(SK, "NOTIFICATION#")` を
    * Query する。CDK 側で IAM `dynamodb:Query` を Events table にも付与する。
+   *
+   * **undefined を許容する** (= optional): CDK 配線が遅れて入る予定なので、未配線でも
+   * Lambda init で throw させない (= 過去 PR-524 で portal 全 route が 502 になった
+   * regression #535 の対策)。`/portal/me/notifications` handler 側で undefined を
+   * check し、`misconfigured` outcome (= 500) を返す。
    */
-  readonly eventsTableName: string;
+  readonly eventsTableName: string | undefined;
   readonly ddb: DynamoDBDocumentClient;
   /** `{ [problemId]: ProblemScoringMetadata }`。submit-flag が採点に使う。 */
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
 }
 
 export function buildParticipantSharedResources(): ParticipantSharedResources {
+  const eventsTableName = getOptionalEnv("EVENTS_TABLE_NAME");
+  if (!eventsTableName) {
+    // CloudWatch Logs に init 時 1 回だけ警告。CDK 配線忘れの早期検知。
+    console.warn(
+      "[participant-portal] EVENTS_TABLE_NAME env が未設定。/portal/me/notifications は 500 を返します (= ADR-006 backend は disabled)。CDK 側で env と IAM を配線するまで他の route は通常動作します。",
+    );
+  }
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
-    eventsTableName: getEnv("EVENTS_TABLE_NAME"),
+    eventsTableName,
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
   };
