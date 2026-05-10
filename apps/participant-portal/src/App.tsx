@@ -5,7 +5,7 @@ import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
-import { PlaceholderPage } from "./pages/Placeholder";
+import { NotificationsPage } from "./pages/Notifications";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { QuestsPage } from "./pages/Quests";
 import { ScoreboardPage } from "./pages/Scoreboard";
@@ -59,14 +59,7 @@ export function App({ config }: { config: AppConfig }) {
         />
         <Route
           path="/notifications"
-          element={guarded(
-            config,
-            <PlaceholderPage
-              title="Notifications"
-              description="運営からの通知"
-              comingSoon="運営者が application admin console から発信した通知をここに表示します。"
-            />,
-          )}
+          element={guarded(config, <NotificationsPage config={config} />)}
         />
         <Route path="/problems" element={guarded(config, <QuestsPage config={config} />)} />
         <Route

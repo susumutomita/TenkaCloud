@@ -1,4 +1,5 @@
 import AppLayout from "@cloudscape-design/components/app-layout";
+import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import SideNavigation, {
   type SideNavigationProps,
@@ -23,28 +24,41 @@ import type { AppConfig } from "../config";
  * (eventId 無し) は leaderboard 不能なので "—" で fallback。
  */
 
-const SIDE_NAV_ITEMS: SideNavigationProps.Item[] = [
-  {
-    type: "section",
-    text: "Event",
-    items: [
-      { type: "link", href: "/", text: "Home" },
-      { type: "link", href: "/scoreboard", text: "Scoreboard" },
-      { type: "link", href: "/score-events", text: "Score events" },
-      { type: "link", href: "/notifications", text: "Notifications" },
-    ],
-  },
-  {
-    type: "section",
-    text: "Quests",
-    items: [{ type: "link", href: "/problems", text: "問題一覧" }],
-  },
-  {
-    type: "section",
-    text: "Tools",
-    items: [{ type: "link", href: "/tools/sso", text: "SSO Credentials" }],
-  },
-];
+/**
+ * SideNavigation items (notifications 未読 badge 用に動的構築)。`unread` を渡して
+ * `info` バッジに件数を出す。> 99 は "99+" にクランプして badge 横幅を一定にする。
+ */
+function buildSideNavItems(unread: number): SideNavigationProps.Item[] {
+  const notificationsLink: SideNavigationProps.Link = {
+    type: "link",
+    href: "/notifications",
+    text: "Notifications",
+    info:
+      unread > 0 ? <Badge color="red">{unread > 99 ? "99+" : String(unread)}</Badge> : undefined,
+  };
+  return [
+    {
+      type: "section",
+      text: "Event",
+      items: [
+        { type: "link", href: "/", text: "Home" },
+        { type: "link", href: "/scoreboard", text: "Scoreboard" },
+        { type: "link", href: "/score-events", text: "Score events" },
+        notificationsLink,
+      ],
+    },
+    {
+      type: "section",
+      text: "Quests",
+      items: [{ type: "link", href: "/problems", text: "問題一覧" }],
+    },
+    {
+      type: "section",
+      text: "Tools",
+      items: [{ type: "link", href: "/tools/sso", text: "SSO Credentials" }],
+    },
+  ];
+}
 
 export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
   return (
@@ -110,6 +124,11 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     config.mode,
   ]);
 
+  const sideNavItems = useMemo(
+    () => buildSideNavItems(teamView.unreadNotificationCount),
+    [teamView.unreadNotificationCount],
+  );
+
   return (
     <>
       <TopNavigation
@@ -121,7 +140,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
           <SideNavigation
             activeHref={location.pathname}
             header={{ href: "/", text: "メニュー" }}
-            items={SIDE_NAV_ITEMS}
+            items={sideNavItems}
             onFollow={(e) => {
               if (!e.detail.external) {
                 e.preventDefault();

@@ -9,13 +9,16 @@ import {
 } from "react";
 import {
   getLeaderboard,
+  getNotifications,
   getPortalMe,
   type LeaderboardResponse,
+  type NotificationsResponse,
   type ParticipantProblemView,
   type ParticipantTeamView,
   PortalAuthError,
 } from "../api/portal-client";
 import type { AppConfig } from "../config";
+import { countUnread, loadLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -30,6 +33,15 @@ interface TeamViewState {
   readonly leaderboard: LeaderboardResponse | null;
   readonly leaderboardError: string | null;
   readonly leaderboardNoEvent: boolean;
+  /**
+   * 自 event の運営通知 (ADR-006)。Phase 1 以前 (eventId 無し) では
+   * `notificationsNoEvent: true` を返して null。
+   */
+  readonly notifications: NotificationsResponse | null;
+  readonly notificationsError: string | null;
+  readonly notificationsNoEvent: boolean;
+  /** TopNav 未読 badge 用。lastSeenAt は localStorage、polling 毎に再計算。 */
+  readonly unreadNotificationCount: number;
   /** Home の flag 提出後に呼ばれて即時再フェッチする経路。 */
   readonly refresh: () => Promise<void>;
 }
@@ -40,6 +52,10 @@ const Ctx = createContext<TeamViewState>({
   leaderboard: null,
   leaderboardError: null,
   leaderboardNoEvent: false,
+  notifications: null,
+  notificationsError: null,
+  notificationsNoEvent: false,
+  unreadNotificationCount: 0,
   refresh: async () => {
     /* default no-op */
   },
@@ -72,6 +88,24 @@ function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeam
     ) {
       return false;
     }
+  }
+  return true;
+}
+
+function notificationsAreUnchanged(
+  prev: NotificationsResponse | null,
+  next: NotificationsResponse,
+): boolean {
+  if (!prev) return false;
+  if (prev.eventId !== next.eventId) return false;
+  if (prev.items.length !== next.items.length) return false;
+  for (let i = 0; i < prev.items.length; i++) {
+    const a = prev.items[i];
+    const b = next.items[i];
+    if (!a || !b) return false;
+    if (a.notificationId !== b.notificationId) return false;
+    // title / body / severity / occurredAt は immutable (= 編集 API 無し) なので
+    // notificationId 一致なら内容も同一とみなす。
   }
   return true;
 }
@@ -124,13 +158,21 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardNoEvent, setLeaderboardNoEvent] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationsResponse | null>(null);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [notificationsNoEvent, setNotificationsNoEvent] = useState(false);
+  // localStorage の lastSeenAt は polling 内で読み直す必要は無い (= 同 tab 内で
+  // /notifications を開いた瞬間に saveLastSeenAt → 直後の useEffect で再計算)。
+  // ただし別 tab で更新された値も拾えると親切なので 60s tick で読み直す。
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(() => loadLastSeenAt());
   const stopPollingRef = useRef(false);
 
   const refresh = useCallback(async () => {
     if (!isBackend || !sessionToken) return;
-    const [meResult, leaderboardResult] = await Promise.allSettled([
+    const [meResult, leaderboardResult, notificationsResult] = await Promise.allSettled([
       getPortalMe(config.apiBaseUrl, sessionToken),
       getLeaderboard(config.apiBaseUrl, sessionToken),
+      getNotifications(config.apiBaseUrl, sessionToken),
     ]);
 
     if (meResult.status === "fulfilled") {
@@ -167,6 +209,26 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
         setLeaderboardError(err instanceof Error ? err.message : String(err));
       }
     }
+
+    if (notificationsResult.status === "fulfilled") {
+      const next = notificationsResult.value;
+      if (next === undefined) {
+        // 404 = Phase 1 以前の旧 deployment (eventId 無し) → notifications 配信対象外
+        setNotificationsNoEvent(true);
+        setNotifications(null);
+      } else {
+        setNotificationsNoEvent(false);
+        setNotifications((prev) => (notificationsAreUnchanged(prev, next) ? prev : next));
+      }
+      setNotificationsError(null);
+      // 別 tab 経由で更新された lastSeenAt を tick 毎に拾い直す (同 tab は useEffect 経由)。
+      setLastSeenAt(loadLastSeenAt());
+    } else {
+      const err = notificationsResult.reason;
+      if (!(err instanceof PortalAuthError)) {
+        setNotificationsError(err instanceof Error ? err.message : String(err));
+      }
+    }
   }, [isBackend, sessionToken, config.apiBaseUrl, auth]);
 
   useEffect(() => {
@@ -185,9 +247,22 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     };
   }, [isBackend, sessionToken, refresh]);
 
+  const unreadNotificationCount = countUnread(notifications?.items ?? [], lastSeenAt);
+
   return (
     <Ctx.Provider
-      value={{ view, error, leaderboard, leaderboardError, leaderboardNoEvent, refresh }}
+      value={{
+        view,
+        error,
+        leaderboard,
+        leaderboardError,
+        leaderboardNoEvent,
+        notifications,
+        notificationsError,
+        notificationsNoEvent,
+        unreadNotificationCount,
+        refresh,
+      }}
     >
       {children}
     </Ctx.Provider>
