@@ -276,15 +276,22 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 <li>新 endpoint: <code>GET /portal/me/battle-attacks?jobId=&lt;ulid&gt;&amp;sinceMin=60</code></li>
 </ul>
 
-<h3>D5. 観戦者向けの leaderboard 表示</h3>
+<h3>D5. 観戦者向けの leaderboard 表示 (撤回)</h3>
 
-<p>Scoreboard 画面で Battle 形式 event の場合、各 team の uptime ％ を rank の補助列として表示する。
-「その team がいま落ちているか」までは見せない (= D1 と整合)。</p>
+<p><span class="badge reject">撤回</span> 当初は Scoreboard に「直近 5 分 uptime ％」列を
+追加することを検討したが、UI モックアップ (Mockup 2) を見たユーザー判断で撤回。理由:</p>
 
 <ul>
-<li>列追加: <code>直近 5 分 uptime</code></li>
-<li>全チーム劣化中 (= 全員に攻撃が届いている) なら全員に同じ uptime → ゲーム継続情報として有用</li>
+<li>他チームの uptime ％ は <b>aggregate でも攻撃側へのヒントになる</b> (例: uptime 42% =
+  「あの team は今攻撃が刺さってる」「自分の攻撃も同じ脆弱性で通るかも」が読める) →
+  D1 の「攻撃元 / 内部状態は隠す」原則と <b>整合性が弱い</b></li>
+<li>自チームの uptime は ProblemDetail の Application Status タブで十分確認できる
+  (= Scoreboard に同じ情報を持つ動機が薄い)</li>
+<li>Scoreboard は「rank + score」というシンプルな勝敗表示に専念する方が混乱が少ない</li>
 </ul>
+
+<p>結果として Scoreboard は <b>既存仕様のまま (順位 / チーム / Score)</b> とし、
+本 ADR では Scoreboard を変更しない。</p>
 </section>
 
 <section>
@@ -459,23 +466,19 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
       <thead>
         <tr>
           <th>順位</th><th>チーム</th><th>Score</th>
-          <th>完了 / 全体</th>
-          <th>直近 5 分 uptime <small style="font-weight:400;text-transform:none;">(Battle 列、新規)</small></th>
         </tr>
       </thead>
       <tbody>
-        <tr><td><b>#1</b></td><td>Alpha</td><td>1450 pt</td><td>4 / 5</td>
-            <td><div style="display:flex;gap:.4rem;align-items:center;"><div class="uptime-bar"><div style="width:96%;"></div></div><span>96 %</span></div></td></tr>
-        <tr class="me"><td><b>#2</b></td><td>Bravo (あなた)</td><td>1380 pt</td><td>4 / 5</td>
-            <td><div style="display:flex;gap:.4rem;align-items:center;"><div class="uptime-bar warn"><div style="width:78%;"></div></div><span>78 %</span></div></td></tr>
-        <tr><td><b>#3</b></td><td>Charlie</td><td>1240 pt</td><td>3 / 5</td>
-            <td><div style="display:flex;gap:.4rem;align-items:center;"><div class="uptime-bar bad"><div style="width:42%;"></div></div><span>42 %</span></div></td></tr>
-        <tr><td><b>#4</b></td><td>Delta</td><td>1100 pt</td><td>3 / 5</td>
-            <td><div style="display:flex;gap:.4rem;align-items:center;"><div class="uptime-bar"><div style="width:88%;"></div></div><span>88 %</span></div></td></tr>
+        <tr><td><b>#1</b></td><td>Alpha</td><td>1450 pt</td></tr>
+        <tr class="me"><td><b>#2</b></td><td>Bravo (あなた)</td><td>1380 pt</td></tr>
+        <tr><td><b>#3</b></td><td>Charlie</td><td>1240 pt</td></tr>
+        <tr><td><b>#4</b></td><td>Delta</td><td>1100 pt</td></tr>
       </tbody>
     </table>
     <div class="hidden-note">
-      ⓘ 各 team の「いま落ちている endpoint」は表示しません。aggregate uptime ％ のみ。
+      ⓘ Battle event でも他チームの内部状態 (uptime ％ / 進捗) は表示しません
+      (= 公平性 / 攻撃側にヒントを与えないため)。自チームの uptime は ProblemDetail の
+      Application Status タブで確認できます。
     </div>
   </div>
 </div>
@@ -544,10 +547,10 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
     <div class="title">real-time 戦略</div>
     <div class="body">polling 5 秒 (team view) + 10 秒 (attack log 専用)、SSE 不使用</div>
   </div>
-  <div class="decision-card">
-    <div class="num">D5</div>
-    <div class="title">Scoreboard</div>
-    <div class="body">Battle event のとき「直近 5 分 uptime ％」列を追加。観戦者向け</div>
+  <div class="decision-card" style="opacity:0.7;">
+    <div class="num">D5 <span class="badge reject" style="margin-left:.4rem;">撤回</span></div>
+    <div class="title">Scoreboard 不変</div>
+    <div class="body">他 team の uptime ％ は攻撃側ヒントになり D1 と整合性が弱い。Scoreboard は既存仕様のまま (順位 / チーム / Score)</div>
   </div>
 </div>
 </section>
@@ -572,9 +575,6 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 <tr><td>ProblemDetail に Battle 用 Tabs / Cloudscape LineChart 統合</td>
     <td><span class="badge accept">Claude</span></td>
     <td>新コンポーネント <code>BattleAttackPanel.tsx</code></td></tr>
-<tr><td>Scoreboard に uptime ％ 列追加</td>
-    <td><span class="badge accept">Claude</span></td>
-    <td><code>LeaderboardEntry</code> schema 拡張 (optional) + UI 列</td></tr>
 <tr><td><code>lookup.ts</code> の <code>endpointsHealth → aggregate</code> 変換</td>
     <td><span class="badge accept">Claude</span></td>
     <td>per-endpoint を消して aggregate のみ露出 (既存決定の念押し)</td></tr>
@@ -583,6 +583,202 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
     <td>本 PR + Phase 3.3</td></tr>
 </tbody>
 </table>
+</section>
+
+<section>
+<h2>API 設計</h2>
+
+<p>本 ADR で新設 / 変更する HTTP API を以下に定義する。すべて Participant Portal Lambda
+(Function URL、AuthType=NONE、bearer は <code>teamLoginKey</code>) に乗せる。Cognito JWT
+経路は別系統 (operator UI) なので本 ADR では触らない。</p>
+
+<style>
+  .api-block {
+    border: 1px solid var(--c-border); border-radius: 6px; padding: 1rem 1.25rem;
+    margin: 1rem 0; background: var(--c-bg);
+  }
+  .api-head {
+    display: flex; gap: .6rem; align-items: baseline; margin-bottom: .6rem;
+    border-bottom: 1px solid var(--c-border); padding-bottom: .5rem;
+  }
+  .api-method {
+    display: inline-block; padding: 2px 10px; border-radius: 4px;
+    font-family: monospace; font-size: 0.8rem; font-weight: 700;
+  }
+  .api-method.GET   { background: #ddf4e0; color: var(--c-accept); }
+  .api-method.POST  { background: #cfe5ff; color: var(--c-link); }
+  .api-method.PATCH { background: #fff8c5; color: var(--c-warn); }
+  .api-path { font-family: monospace; font-size: 1rem; font-weight: 600; }
+  .api-tag  { font-size: 0.78rem; color: var(--c-muted); margin-left: auto; }
+  .api-block h4 { margin: .8rem 0 .3rem; font-size: 0.85rem; color: var(--c-muted);
+                  text-transform: uppercase; letter-spacing: 0.05em; }
+  .api-block pre {
+    background: var(--c-code-bg); padding: .8rem 1rem; border-radius: 4px;
+    overflow-x: auto; font-size: 0.85rem; line-height: 1.5; margin: .3rem 0;
+  }
+  .api-block table { width: 100%; font-size: 0.88rem; margin: .3rem 0; }
+  .api-block th { background: var(--c-bg-soft); padding: 5px 8px; }
+  .api-block td { padding: 5px 8px; border-bottom: 1px solid var(--c-border); }
+  .api-block td.req { color: var(--c-reject); font-weight: 600; }
+  .api-block td.opt { color: var(--c-muted); }
+</style>
+
+<h3>新設 API</h3>
+
+<div class="api-block">
+  <div class="api-head">
+    <span class="api-method GET">GET</span>
+    <span class="api-path">/portal/me/battle-attacks</span>
+    <span class="api-tag">新規 — Phase 3.1 で追加</span>
+  </div>
+
+  <p>自チームの 1 deployment における attack-detected event の時系列を返す。
+  ProblemDetail の Attack Statistics / Attack History タブが poll する。</p>
+
+  <h4>Auth</h4>
+  <p><code>Authorization: Bearer &lt;teamLoginKey&gt;</code> (43 文字 base64url、Phase 2c)</p>
+
+  <h4>Request — Query parameters</h4>
+  <table>
+  <thead><tr><th>名前</th><th>型</th><th>必須</th><th>制約</th><th>意味</th></tr></thead>
+  <tbody>
+  <tr><td><code>jobId</code></td><td>string (ULID 26 chars)</td><td class="req">required</td>
+      <td>正規表現 ULID</td><td>対象 deployment の jobId</td></tr>
+  <tr><td><code>sinceMin</code></td><td>integer</td><td class="opt">optional (default 30)</td>
+      <td>1 〜 60</td><td>「直近 N 分」を指定。60 超は 400</td></tr>
+  </tbody>
+  </table>
+
+  <h4>Response — 200 OK</h4>
+  <pre>{
+  "jobId": "01HZX0K3M3K9ZQHB3MRQHBA1B2",
+  "problemId": "security-battle-royale",
+  "sinceMin": 30,
+  "events": [
+    {
+      "occurredAt": "2026-05-09T14:32:18.000Z",
+      "source": "attack-detected",
+      "result": "down",
+      "recoveredAt": "2026-05-09T14:35:18.000Z"
+    },
+    {
+      "occurredAt": "2026-05-09T14:21:05.000Z",
+      "source": "attack-detected",
+      "result": "down",
+      "recoveredAt": "2026-05-09T14:22:07.000Z"
+    },
+    {
+      "occurredAt": "2026-05-09T14:11:22.000Z",
+      "source": "attack-detected",
+      "result": "down",
+      "recoveredAt": null
+    }
+  ]
+}</pre>
+  <p style="font-size:0.85rem;color:var(--c-muted);">
+    <code>events</code> は <code>occurredAt</code> 降順。<code>recoveredAt</code> は
+    その後 <code>ok</code> tick が観測された時刻、未復旧なら <code>null</code>。
+  </p>
+
+  <h4>Error responses</h4>
+  <table>
+  <thead><tr><th>code</th><th>body</th><th>条件</th></tr></thead>
+  <tbody>
+  <tr><td>400</td><td><code>{ "error": "invalid_jobid" }</code></td><td>ULID format でない</td></tr>
+  <tr><td>400</td><td><code>{ "error": "invalid_sincemin" }</code></td><td>1 未満 or 60 超</td></tr>
+  <tr><td>401</td><td><code>{ "error": "unauthorized" }</code></td><td>bearer 不在 / teamLoginKey 不一致</td></tr>
+  <tr><td>404</td><td><code>{ "error": "not_found" }</code></td><td>jobId が自 team の deployment にない</td></tr>
+  </tbody>
+  </table>
+
+  <h4>Backend 実装</h4>
+  <ul>
+  <li>handler: <code>infrastructure/lib/problem-deploy/handlers/participant-handler/battle-attacks.ts</code> (新規)</li>
+  <li>DDB Query: <code>PK = SCORE#&lt;eventId&gt;#&lt;jobId&gt;</code>、<code>occurredAt &gt;= now − sinceMin</code> の FilterExpression</li>
+  <li>auth: 既存の <code>queryTeamItems</code> で teamLoginKey → deployments を引き、jobId が含まれることを check (= 自 team の deployment かを保証)</li>
+  </ul>
+</div>
+
+<h3>変更 API</h3>
+
+<div class="api-block">
+  <div class="api-head">
+    <span class="api-method GET">GET</span>
+    <span class="api-path">/portal/me</span>
+    <span class="api-tag">既存 — Phase 3.1 で response shape 変更</span>
+  </div>
+
+  <p>既存の team view を返す endpoint。response の <code>problems[].endpointsHealth</code>
+  を <b>aggregate</b> に絞り、per-endpoint breakdown を <b>露出しない</b> ように
+  view 変換ロジックを変更する。</p>
+
+  <h4>Before (Phase 2c)</h4>
+  <pre>{
+  "problems": [
+    {
+      "jobId": "01HZX0...",
+      "endpointsHealth": {
+        "FrontendUrl": { "ok": true,  "checkedAt": "..." },
+        "ApiUrl":      { "ok": false, "checkedAt": "...", "since": "..." }
+      }
+    }
+  ]
+}</pre>
+
+  <h4>After (Phase 3.1)</h4>
+  <pre>{
+  "problems": [
+    {
+      "jobId": "01HZX0...",
+      "applicationStatus": {
+        "overall": "degraded",
+        "healthyCount": 1,
+        "totalCount": 2,
+        "checkedAt": "2026-05-09T14:33:00.000Z"
+      }
+    }
+  ]
+}</pre>
+
+  <h4>変換ルール (lookup.ts 内)</h4>
+  <table>
+  <thead><tr><th>条件</th><th>overall</th></tr></thead>
+  <tbody>
+  <tr><td>healthyCount === totalCount</td><td><code>"healthy"</code></td></tr>
+  <tr><td>healthyCount === 0</td><td><code>"down"</code></td></tr>
+  <tr><td>0 &lt; healthyCount &lt; totalCount</td><td><code>"degraded"</code></td></tr>
+  <tr><td>endpointsHealth が空 (= probe 未実行)</td><td><code>"unknown"</code></td></tr>
+  </tbody>
+  </table>
+  <p style="font-size:0.85rem;color:var(--c-muted);">
+    <b>endpoint 名 / URL は一切露出しない</b> (D1 の hard constraint)。テストで snapshot 固定。
+  </p>
+</div>
+
+<h3>変更しない API</h3>
+
+<table>
+<thead><tr><th>endpoint</th><th>変更</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td><code>GET /portal/me/score-events</code></td><td>不変 (response shape そのまま)</td>
+    <td>D2-A の <code>source: "attack-detected"</code> は既存 response の <code>source</code> string union に値が増えるだけ。frontend は新値を「攻撃検知」として render するが、backend の API は不変</td></tr>
+<tr><td><code>GET /portal/leaderboard</code></td><td>不変</td>
+    <td>D5 撤回により Scoreboard は既存仕様のまま (= rank / teamName / score)</td></tr>
+<tr><td><code>POST /portal/me/submit-flag</code></td><td>不変</td>
+    <td>Battle 内 sub-quest も既存 flag 提出 path と同じ (memory <code>project_battle_challenge_hybrid</code> 整合)</td></tr>
+</tbody>
+</table>
+
+<h3>API GW / Function URL の routing 変更</h3>
+
+<p>Participant Portal Lambda は Function URL (AuthType=NONE) で公開され、内部 Hono が
+path で route する。新 endpoint <code>/portal/me/battle-attacks</code> は Hono の
+<code>app.get</code> 配線のみで完結し、CDK 側 (API GW) の resource 追加は不要 (= Function
+URL は path-prefix でなく path-pattern なし、すべて Lambda にプロキシされる)。</p>
+
+<p>IAM の <code>ParticipantPortalLambda</code> Role に必要なら DDB <code>Query</code> 権限を
+追加する (= 既に <code>SCORE#</code> prefix を読む score-events handler が持っているはず、
+追加変更不要を期待。Phase 3.1 の PR で確認)。</p>
 </section>
 
 <section>
@@ -612,9 +808,9 @@ Cloudscape <code>Tabs</code> で実現。Challenge 形式問題ではタブを�
 <ol>
 <li><code>participant-portal</code> の ProblemDetail に Cloudscape <code>Tabs</code> 導入</li>
 <li><code>BattleAttackPanel.tsx</code> 新規 (3 タブの中身)</li>
-<li>Scoreboard に uptime ％ 列追加</li>
 <li><code>LineChart</code> 用の bucket 化 helper (= 5 分粒度)</li>
 </ol>
+<p>注: Scoreboard は本 ADR では <b>変更しない</b> (D5 撤回)。</p>
 </details>
 
 <details>
