@@ -65,7 +65,8 @@ describe("listEvents", () => {
     });
     const out = await listEvents(shared, { tenantId: "tenant-acme" });
     expect(out.nextCursor).toBeTruthy();
-    const decoded = JSON.parse(Buffer.from(out.nextCursor!, "base64url").toString("utf8"));
+    if (!out.nextCursor) throw new Error("nextCursor should be set");
+    const decoded = JSON.parse(Buffer.from(out.nextCursor, "base64url").toString("utf8"));
     expect(decoded).toEqual({ PK: "EVENT#X", SK: "META" });
   });
 });
