@@ -6,6 +6,7 @@ import { HTTP_OK } from "../shared/http-status.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { getLeaderboard } from "./leaderboard.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
+import { listNotifications, NOTIFICATIONS_DEFAULT_LIMIT } from "./notifications.js";
 import { respondError, withBearerAuth } from "./route-helpers.js";
 import { listScoreEvents } from "./score-events.js";
 import { buildParticipantSharedResources } from "./shared.js";
@@ -18,6 +19,7 @@ import { setDisplayTeamName } from "./update.js";
  *   GET   /portal/healthz
  *   GET   /portal/leaderboard           — event scope の team ランキング
  *   GET   /portal/me/score-events       — 自チームの加点履歴 (時系列降順)
+ *   GET   /portal/me/notifications      — 自 event 宛の運営通知 (ADR-006、時系列降順)
  *   GET   /portal/me                    — Authorization: Bearer <teamLoginKey>
  *                                         → { team, problems[] }
  *   GET   /portal/me/console-signin-url — AWS Console federation login URL 発行
@@ -55,6 +57,18 @@ app.get("/portal/me/console-signin-url", (c) =>
     if (!jobId) return respondError(c, "missing_jobid");
     const outcome = await getConsoleSigninUrl(shared, token, jobId);
     if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, HTTP_OK);
+    return respondError(c, outcome.kind);
+  }),
+);
+
+app.get("/portal/me/notifications", (c) =>
+  withBearerAuth(c, "notifications", async (token) => {
+    const limitRaw = c.req.query("limit");
+    // `Number` で strict parse — "100.5" や "10abc" は NaN/float になり listNotifications
+    // 側の `Number.isInteger` で reject。`parseInt` だと truncate されて silent pass する。
+    const limit = limitRaw === undefined ? NOTIFICATIONS_DEFAULT_LIMIT : Number(limitRaw);
+    const outcome = await listNotifications(shared, token, limit);
+    if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
     return respondError(c, outcome.kind);
   }),
 );

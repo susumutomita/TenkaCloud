@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
-import { resolveTenantId } from "../deploy-handler/auth.js";
+import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
   HTTP_ACCEPTED,
@@ -13,10 +13,12 @@ import {
   HTTP_NOT_FOUND,
   HTTP_OK,
 } from "../shared/http-status.js";
+import { NotificationCreateRequestSchema } from "../shared/notification.js";
 import { archiveEvent } from "./archive.js";
 import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
+import { createNotification } from "./create-notification.js";
 import { endEvent } from "./end-event.js";
 import { getEventDetail, listEvents } from "./list.js";
 import { setEventSchedule } from "./schedule.js";
@@ -24,12 +26,13 @@ import { buildEventSharedResources } from "./shared.js";
 import { CreateEventRequestSchema, ScheduleEventRequestSchema } from "./types.js";
 
 /**
- * Event API Lambda の Hono app (ADR-004 Phase 1+2a)。routes:
+ * Event API Lambda の Hono app (ADR-004 Phase 1+2a, ADR-006 Notifications)。routes:
  *   POST   /events
  *   GET    /events
  *   GET    /events/:eventId
- *   POST   /events/:eventId/deploy   — Bulk deploy (teams × problems を fan-out)
- *   DELETE /events/:eventId          — Bulk teardown
+ *   POST   /events/:eventId/deploy         — Bulk deploy (teams × problems を fan-out)
+ *   POST   /events/:eventId/notifications  — 運営 → 競技者 通知 1 件作成 (ADR-006)
+ *   DELETE /events/:eventId                — Bulk teardown
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
@@ -176,6 +179,41 @@ app.post("/events/:eventId/end", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] endEvent failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.post("/events/:eventId/notifications", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, HTTP_BAD_REQUEST);
+  }
+  const parsed = NotificationCreateRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await createNotification(
+      shared,
+      resolveTenantId(c),
+      eventId,
+      resolveCognitoSub(c),
+      parsed.data,
+    );
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    return c.json(
+      { notificationId: outcome.notificationId, occurredAt: outcome.occurredAt },
+      HTTP_CREATED,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] createNotification failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
   buildParticipantSharedResources: () => ({
     tableName: "TestDeployments",
+    eventsTableName: "TestEvents",
     ddb: { send: vi.fn() },
   }),
 }));

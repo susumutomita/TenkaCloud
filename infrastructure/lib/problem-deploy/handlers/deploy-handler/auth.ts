@@ -21,3 +21,15 @@ export function resolveTenantId(c: Context): string {
   if (fromJwt) return fromJwt;
   return process.env.DEFAULT_TENANT_ID ?? FALLBACK_TENANT_ID;
 }
+
+/**
+ * Cognito `sub` claim を取り出す (= operator の安定識別子)。Notifications の
+ * `createdBy` 監査用などで使う。JWT 認可が無い経路 (= tests / local fallback) は
+ * `"unknown"` を返す。
+ */
+export function resolveCognitoSub(c: Context): string {
+  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
+  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
+  const sub = claims?.sub;
+  return typeof sub === "string" && sub.length > 0 ? sub : "unknown";
+}
