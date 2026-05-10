@@ -160,6 +160,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       const consoleViewerRole = new ConsoleViewerRole(this, "ConsoleViewerRole");
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
         deploymentsTable: deployments.table,
+        eventsTable: events.table,
         problemsScoring: props.problemsScoring,
         consoleViewerRoleArn: consoleViewerRole.role.roleArn,
       });

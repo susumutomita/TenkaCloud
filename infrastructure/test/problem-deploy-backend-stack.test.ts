@@ -144,3 +144,67 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
     });
   });
 });
+
+/**
+ * ParticipantPortalLambda を含む synth (= participantPortal prop あり)。
+ * EVENTS_TABLE_NAME 配線 + Events table への Query IAM 付与を assert する。
+ */
+function synthWithParticipantPortal(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStack", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: {
+      "hello-world": "problems/challenges/hello-world",
+    },
+    problemsScoring: {},
+    participantPortal: { runtimeConfig: "default-dev-mock" },
+  });
+  return Template.fromStack(stack);
+}
+
+describe("ProblemDeployBackendStack — ParticipantPortalLambda wiring (#535)", () => {
+  const tpl = synthWithParticipantPortal();
+
+  it("ParticipantPortal Lambda の environment に EVENTS_TABLE_NAME が設定されるべき", () => {
+    // ADR-006 Notifications backend (PR-524) が Module load 時に EVENTS_TABLE_NAME を
+    // 必須で読むので、CDK 配線が無いと Lambda init で throw して portal 全 route が
+    // 502 になる (= #535 regression)。本 assertion で再発防止。
+    tpl.hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({
+            DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
+            EVENTS_TABLE_NAME: Match.anyValue(),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("ParticipantPortal Lambda の IAM Role に Events table の dynamodb:Query を付与するべき", () => {
+    // ADR-006: GET /portal/me/notifications が Events table を Query する。
+    // 配線が無いと AccessDenied で 500 になる。Role 直貼りの inline policy なので
+    // `AWS::IAM::Role` の Policies 配列を見る。
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "EventsRead",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({
+                  Action: "dynamodb:Query",
+                  Effect: "Allow",
+                }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+});
