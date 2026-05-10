@@ -9,6 +9,7 @@ export JSII_DEPRECATED := quiet
 .DEFAULT_GOAL := help
 
 .PHONY: help install install_ci build typecheck test check before-commit beforecommit \
+        build-docs check-docs \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -27,8 +28,10 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 validate-problems: ; bun run validate:problems
-check:         install lint test validate-problems
-before-commit: lint test validate-problems
+build-docs:    ; bun run scripts/build-docs.ts
+check-docs:    ; bun run scripts/build-docs.ts --check
+check:         install lint test validate-problems check-docs
+before-commit: lint test validate-problems check-docs
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
