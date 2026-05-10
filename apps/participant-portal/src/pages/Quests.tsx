@@ -30,6 +30,24 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
+/**
+ * 競技者語彙の status label (#549)。
+ *
+ * deployment status (`COMPLETE` / `IN_PROGRESS` / ...) は operator 視点の語彙で、
+ * 競技者目線では「自分が解いた = COMPLETE」と誤解されていた。インフラ状態を抽象化して
+ * 「プレイ可能か」の軸に変換する。本来は scoring kind ごとに「正解/未提出」「防御中/攻撃検知」
+ * を出すべきだが (issue 内 案 A)、それは participant API の拡張が要るので別 issue
+ * (#163 / #164) で対応する。本 PR では **「環境の起動状態」** を競技者語彙に統一する第一弾。
+ */
+const STATUS_PARTICIPANT_LABEL: Record<DeploymentStatus, string> = {
+  PENDING: "起動準備中",
+  IN_PROGRESS: "起動中…",
+  COMPLETE: "起動中",
+  FAILED: "起動失敗",
+  DELETING: "停止中",
+  DELETED: "停止済",
+};
+
 type CategoryFilter = "all" | "battle" | "challenge";
 
 function categoryBadge(scoring: ParticipantScoringInfo | undefined) {
@@ -125,10 +143,10 @@ export function QuestsPage({ config }: { config: AppConfig }) {
           sections: [
             {
               id: "status",
-              header: "ステータス",
+              header: "環境ステータス",
               content: (problem) => (
                 <StatusIndicator type={STATUS_TYPE[problem.status]}>
-                  {problem.status}
+                  {STATUS_PARTICIPANT_LABEL[problem.status]}
                 </StatusIndicator>
               ),
             },
