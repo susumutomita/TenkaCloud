@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TenkaCloud Architecture Harness</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>TenkaCloud Architecture Harness</h1>
+<p>この文書は、セッションが変わっても壊してはいけない原則を機械可読な ID つきで固定する正本です。</p>
+<h2>Invariants</h2>
+<ul>
+<li><p><code>INVARIANT_CONTROL_PLANE_USES_SBT</code>
+Control Plane は <code>@cdklabs/sbt-aws</code> の ControlPlane construct に乗せる。Cognito User Pool / API Gateway / EventBridge を自前で再実装しない。sbt-aws の更新に追従する。</p>
+</li>
+<li><p><code>INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME</code>
+Control Plane は tenant manager であり、tenant runtime host ではない。AssumeRole + CloudFormation 経由の問題 deploy は tenant Application Plane (<code>ProblemDeployBackendStack</code>) 側に閉じ込め、Control Plane stack には持ち込まない。</p>
+</li>
+<li><p><code>INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER</code>
+テナント分離はインフラ層で実現する。DynamoDB は PK にテナント ID を含める。アプリコードでは tenant 識別ロジックを書かない（アプリは自分が誰のためのインスタンスか知らなくていい）。</p>
+</li>
+<li><p><code>INVARIANT_APP_CODE_IS_UNMODIFIED</code>
+<code>apps/</code> 配下のアプリケーションコードは tenant ごとにフォークしたり書き換えない。同じ build artifact (<code>dist/</code>) を pooled stack と silo stack の両方で使い回し、tenant 差分は CDK が <code>runtime-config.json</code> 経由で注入する。tenant ごとに変わる可能性があるのは config だけで、コードは 1 セット。これが崩れた瞬間に「customer 1 = fork 1」になり SaaS の経済が壊れる。</p>
+</li>
+<li><p><code>INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER</code>
+認証 (Cognito UserPool / Hosted UI / JWT) はインフラ層で注入する。アプリコードに認証バイパス (<code>AUTH_SKIP</code> 的な分岐) や tenant 識別ロジックを書かない。production / dev で別のフロー要件が出ても、CDK 側で UserPool を分けるか callback URL を切り替えるかで対応する。アプリ側の <code>if (isDev)</code> でのバイパス禁止。</p>
+</li>
+</ul>
+<h2>One Pass</h2>
+<p>セッションが変わっても、次の 2 つのフローを 1 回で通せる状態を保つ。</p>
+<ul>
+<li><p><code>ONE_PASS_LOCAL</code>
+ローカル開発で <code>make install</code> → 各 SPA の <code>make dev</code> を起動した後、<code>apps/admin-console</code> から <code>apps/application-admin-console</code> へ繋いで「tenant 作成 → application console → 問題 deploy form 表示 → participant portal でログイン」までブラウザ操作だけで一気通貫で動くこと。途中で別ターミナルでスクリプトを叩く / .env を手で書き換える必要が発生したら、その時点で原因を CDK / scripts に戻して恒久化する。</p>
+</li>
+<li><p><code>ONE_PASS_AWS</code>
+AWS deploy では <code>infrastructure/environments/&lt;env&gt;/.env</code> に必須値だけ入れて <code>make deploy</code> 1 発で「Phase 1 (backend) → Phase 2 (admin-console hosting) → Phase 3 (callback 更新)」が通り、SystemAdmin 招待メール → admin-console ログイン → tenant 作成 → application-admin-console から問題 deploy → 競技者 portal でログイン → 問題エンドポイント表示まで一気通貫で動くこと。teardown は <code>make destroy</code> で冪等。途中失敗時は同じコマンドで resume できる。</p>
+</li>
+</ul>
+<h2>PR Discipline</h2>
+<p>商用 SaaS として出す以上、「動くものを小さくインクリメンタルに積み上げる」規律を PR 単位で強制する。ここでいう「動くもの」は商用運用に耐える状態を指す。小さい scope でも、テストされていて、意図が明示されていて、場当たり対応が混ざっていない。デモのためのハリボテ、proof-of-concept、後続 PR が前提の scaffolding は対象外。</p>
+<p>参考ケース: <code>https://zenn.dev/nttdata_tech/articles/8a010aff542625</code>。AI-native 開発の失敗パターンとして、テスト観点不足・PR 単位の不明瞭・仕様の埋没があり、これらは統合テストまでリグレッション検出を遅らせる。PR 単位でこの視点を強制する。</p>
+<ul>
+<li><p><code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code>
+PR 単体を main に merge した後、ユーザー観察可能な機能が 1 つ以上 start working すること。次の 3 条件を同時に満たすこと。</p>
+<ul>
+<li>小さい (1 PR = 1 関心事、触るファイル数はおおむね 10 を超えない)</li>
+<li>商用品質 (テストされていて意図が明確、場当たり的な hardcode / TODO 残しが無い)</li>
+<li>独立に価値を持つ (「別 PR の土台」「scaffolding」「consumer 待ちのライブラリ」は単独では merge しない)</li>
+</ul>
+</li>
+<li><p><code>INVARIANT_PR_TESTS_COUPLED_WITH_CHANGE</code>
+コード変更と、そのコードの振る舞いを固定するテストを同じ PR に含める。既存テストでカバーされている場合は「この PR で追加したテストはゼロ」と明記してよい。ただし、どの既存テストがどの挙動を守るかを PR body で明示する。AI 生成テストを含める場合、主張する code path を実際に exercise しているか手で確認する。claim と実体の食い違いが起きる場合もある。</p>
+</li>
+<li><p><code>INVARIANT_PR_REGRESSION_ANALYSIS_DOCUMENTED</code>
+PR body の <code>## Regression 分析</code> セクションで、merge で壊しうる既存挙動を列挙する。確認方法 (grep / code read / test run / 実環境観察) を項目ごとに書く。未確認が 1 つでも残っている PR は DRAFT のまま残す。テストが green であることは Regression 分析の代替にならない。テストが existing behavior をカバーしているか自体の確認が別途必要。</p>
+</li>
+<li><p><code>INVARIANT_PR_PHYSICAL_IMPACT_DOCUMENTED</code>
+PR body に <code>## 物理影響</code> セクションを置く。そこで <code>make deploy</code> で変わる AWS リソース、<code>make build</code> で変わる成果物を列挙する。CFT 差分ゼロの場合も明示し、reviewer に推論させない。種別は CREATE / UPDATE / REPLACE / DELETE / NO-OP から選ぶ。</p>
+</li>
+</ul>
+<h2>Banned Assumptions</h2>
+<ul>
+<li>アプリコード内で tenant ID を引き回す前提（<code>INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER</code> 違反）</li>
+<li>「一部画面が出た」「synth だけ通る」を one-pass completion と見なす運用</li>
+<li>「テストが green だから merge OK」思考。Regression 分析を省略する言い訳にしない。テストが existing behavior をカバーしているかどうかは別途確認</li>
+<li>「small PR だから影響範囲も小さい」という前提 (diff の行数と影響範囲は独立。小さい IAM 変更 1 行で本番が止まる)</li>
+<li>「動くまでチェイン PR が要る」形の scaffolding PR を単独 merge する運用 (<code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code> 違反)。consumer と束ねて 1 PR にするか、rebase で順序を整える</li>
+<li>「動くもの = 最小のハリボテでもよい」誤解 (商用品質が条件。小さい scope ≠ 雑でよい)</li>
+<li>AI 生成テストの実効性を人間が検証しない運用。claim している code path を実際に exercise しているか確認しないまま merge する</li>
+</ul>
+<h2>Enforcement Rules</h2>
+<p>Invariants に加えて、実装レベルの原則を機械検査するルールを harness が持つ。ルール ID は <code>secrets-manager-forbidden</code> のようにケバブケースで命名する。</p>
+<ul>
+<li><p><code>secrets-manager-forbidden</code>
+<code>@aws-sdk/client-secrets-manager</code> の import を TS/JS ファイルで検出すると error。TenkaCloud はコスト 0 運用を原則とし、秘匿値は SSM Parameter Store (SecureString, Standard tier = 無料) に置く。Secrets Manager はシークレット 1 件あたり月額課金が発生する。</p>
+</li>
+<li><p><code>handler-must-not-call-fetch</code>
+<code>lib/handlers/</code> 配下のファイルで <code>fetch(</code> の直接呼び出しを検出すると error。handler (Controller 層) は入力検証と Service 呼び出しとレスポンス整形のみを担い、外部 API 通信は Repository 層に閉じ込める。Controller に fetch を入れると Service / Repository の境界が崩れ、ユニットテストが HTTP モック前提になる。</p>
+</li>
+</ul>
+<h2>Enforcement</h2>
+<ul>
+<li><code>make harness</code> (= <code>bun run .claude/harness/bin/architecture.ts --staged --fail-on=error</code>)</li>
+<li><code>make harness-test</code> (= <code>cd .claude/harness &amp;&amp; bunx vitest run</code>)</li>
+<li><code>make tech-debt</code> (= <code>bun run .claude/harness/bin/tech-debt.ts</code>)</li>
+<li><code>make before-commit</code>（<code>.claude/settings.json</code> の PreToolUse hook と <code>.husky/pre-commit</code> から自動実行）</li>
+</ul>
+<h2>Harness Commands</h2>
+<ul>
+<li>Staged ファイルに対する strict run: <code>make harness</code></li>
+<li>Harness ルール自体のユニットテスト: <code>make harness-test</code></li>
+<li>技術的負債レポート生成: <code>make tech-debt</code></li>
+<li>コミット前チェック: <code>make before-commit</code></li>
+</ul>
+<p>Git hook と AI エージェント向けガイドは、この文書を参照して同じ判定に従う。</p>
+
+<div class="doc-source">Source: <code>docs/architecture/harness.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/architecture/harness.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
