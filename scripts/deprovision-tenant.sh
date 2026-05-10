@@ -79,9 +79,15 @@ if [[ $TIER == "PLATINUM" ]]; then
     --query 'Item.stackName.S')
 
   echo "Stack name from $TENANT_STACK_MAPPING_TABLE is  $STACK_NAME"
-  # Clone the serverless reference solution repository
+  # Clone the serverless reference solution repository (idempotent — 再実行で
+  # "destination path already exists" にならないよう、既存 dir があればそのまま使う)。
+  # cdk destroy は CFn 既存 stack に対して動くので、ローカル CDK code は最低限あれば十分。
   export CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME="aws-saas-factory-ref-solution-serverless-saas"
-  git clone codecommit://$CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME
+  if [ ! -d "$CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME" ]; then
+    git clone codecommit://$CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME
+  else
+    echo "Repository already cloned: $CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME (skip clone)"
+  fi
   cd $CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME/server
   npm install
 

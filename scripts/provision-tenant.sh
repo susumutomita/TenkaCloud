@@ -72,17 +72,26 @@ API_GATEWAY_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --
 # operator が確認する)。
 APPLICATION_ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME'].OutputValue" --output text)
 
-# Create tenant admin user
-aws cognito-idp admin-create-user \
-  --user-pool-id "$SAAS_APP_USERPOOL_ID" \
-  --username "$TENANT_ADMIN_USERNAME" \
-  --user-attributes Name=email,Value="$TENANT_ADMIN_EMAIL" Name=email_verified,Value="True" Name=phone_number,Value="+11234567890" Name="custom:userRole",Value="TenantAdmin" Name="custom:tenantId",Value="$CDK_PARAM_TENANT_ID" Name="custom:tenantTier",Value="$TIER" \
-  --desired-delivery-mediums EMAIL
+# Create tenant admin user (idempotent — provisioning が中途で失敗 → SBT が再実行
+# したとき UsernameExistsException で死なないよう、既存 user は skip)。
+if aws cognito-idp admin-get-user --user-pool-id "$SAAS_APP_USERPOOL_ID" --username "$TENANT_ADMIN_USERNAME" >/dev/null 2>&1; then
+  echo "Tenant admin user already exists: $TENANT_ADMIN_USERNAME (skip create)"
+else
+  aws cognito-idp admin-create-user \
+    --user-pool-id "$SAAS_APP_USERPOOL_ID" \
+    --username "$TENANT_ADMIN_USERNAME" \
+    --user-attributes Name=email,Value="$TENANT_ADMIN_EMAIL" Name=email_verified,Value="True" Name=phone_number,Value="+11234567890" Name="custom:userRole",Value="TenantAdmin" Name="custom:tenantId",Value="$CDK_PARAM_TENANT_ID" Name="custom:tenantTier",Value="$TIER" \
+    --desired-delivery-mediums EMAIL
+fi
 
-# Create tenant user group
-aws cognito-idp create-group \
-  --user-pool-id "$SAAS_APP_USERPOOL_ID" \
-  --group-name "$CDK_PARAM_TENANT_ID"
+# Create tenant user group (idempotent — 再実行で GroupExistsException にならないよう skip)
+if aws cognito-idp get-group --user-pool-id "$SAAS_APP_USERPOOL_ID" --group-name "$CDK_PARAM_TENANT_ID" >/dev/null 2>&1; then
+  echo "Tenant user group already exists: $CDK_PARAM_TENANT_ID (skip create)"
+else
+  aws cognito-idp create-group \
+    --user-pool-id "$SAAS_APP_USERPOOL_ID" \
+    --group-name "$CDK_PARAM_TENANT_ID"
+fi
 
 # Add tenant admin user to tenant user group
 aws cognito-idp admin-add-user-to-group \
