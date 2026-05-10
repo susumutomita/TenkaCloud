@@ -137,11 +137,25 @@ const isPooledDeploy = tenantId === pooledId;
 
 // parameter names to facilitate sharing api keys
 // between the bootstrap template and the tenant template stack(s)
+//
+// `tenkacloud-` prefix で衝突回避 (#481 と同じ方針) — 同 AWS account / region に
+// ProtoShip 等の SBT-based 別プロジェクトを併存 deploy したとき、SSM Parameter は
+// region globally unique なので prefix が無いと `Resource of type 'AWS::SSM::Parameter'
+// with identifier 'apiKey...' already exists` で CFn ChangeSet validation が落ちる。
 const apiKeySSMParameterNames = {
-  basic: { keyId: "apiKeyBasicTierKeyId", value: "apiKeyBasicTierValue" },
-  standard: { keyId: "apiKeyStandardTierKeyId", value: "apiKeyStandardTierValue" },
-  premium: { keyId: "apiKeyPremiumTierKeyId", value: "apiKeyPremiumTierValue" },
-  platinum: { keyId: "apiKeyPlatinumTierKeyId", value: "apiKeyPlatinumTierValue" },
+  basic: { keyId: "tenkacloud-apiKeyBasicTierKeyId", value: "tenkacloud-apiKeyBasicTierValue" },
+  standard: {
+    keyId: "tenkacloud-apiKeyStandardTierKeyId",
+    value: "tenkacloud-apiKeyStandardTierValue",
+  },
+  premium: {
+    keyId: "tenkacloud-apiKeyPremiumTierKeyId",
+    value: "tenkacloud-apiKeyPremiumTierValue",
+  },
+  platinum: {
+    keyId: "tenkacloud-apiKeyPlatinumTierKeyId",
+    value: "tenkacloud-apiKeyPlatinumTierValue",
+  },
 };
 
 // 全 stack の env を統一する: TenantTemplateStack だけ env-aware にすると、
