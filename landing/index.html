@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TenkaCloud — AWS マルチテナント SaaS 競技基盤</title>
+<meta name="description" content="TenkaCloud は AWS マルチテナント SaaS の競技 (Battle / Challenge) ホスティング基盤。SBT (@cdklabs/sbt-aws) 上で問題テンプレートを競技者 AWS アカウントへ自動 deploy する。OSS / Apache 2.0。">
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-link: #0969da;
+    --c-accent: #0550ae;
+    --c-warn: #9a6700;
+    --c-warn-bg: #fff8c5;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif;
+    color: var(--c-text);
+    background: var(--c-bg);
+    line-height: 1.65;
+  }
+  a { color: var(--c-link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--c-bg-soft);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    font-size: 0.92em;
+    font-family: SFMono-Regular, Consolas, monospace;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 1.5rem; }
+  header.site {
+    border-bottom: 1px solid var(--c-border);
+    padding: 1rem 0;
+    background: var(--c-bg);
+  }
+  header.site .wrap {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    flex-wrap: wrap;
+  }
+  header.site .brand {
+    font-weight: 700; font-size: 1.1rem; color: var(--c-text);
+  }
+  header.site nav { display: flex; gap: 1.2rem; font-size: 0.95rem; }
+
+  .hero {
+    padding: 3.5rem 0 2.5rem;
+    background: linear-gradient(180deg, var(--c-bg-soft) 0%, var(--c-bg) 100%);
+    border-bottom: 1px solid var(--c-border);
+  }
+  .hero h1 {
+    font-size: 2.2rem; line-height: 1.25; margin: 0 0 1rem;
+    letter-spacing: -0.01em;
+  }
+  .hero .tagline {
+    font-size: 1.2rem; color: var(--c-muted); margin: 0 0 1.5rem;
+  }
+  .hero .cta {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: var(--c-link); color: #fff;
+    padding: 0.7rem 1.4rem; border-radius: 6px;
+    font-weight: 600; font-size: 0.98rem;
+  }
+  .hero .cta:hover { background: var(--c-accent); text-decoration: none; }
+  .hero .cta-secondary {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    border: 1px solid var(--c-border); color: var(--c-text);
+    padding: 0.7rem 1.4rem; border-radius: 6px;
+    font-weight: 600; font-size: 0.98rem;
+    margin-left: 0.6rem;
+  }
+  .hero .cta-secondary:hover { background: var(--c-bg-soft); text-decoration: none; }
+
+  .alpha-banner {
+    background: var(--c-warn-bg); color: var(--c-warn);
+    padding: 0.8rem 1rem; border-radius: 4px;
+    font-size: 0.92rem; margin: 1.5rem 0 0;
+    border-left: 4px solid var(--c-warn);
+  }
+
+  section { padding: 2.5rem 0; }
+  section h2 {
+    font-size: 1.4rem; margin: 0 0 1rem;
+    border-bottom: 1px solid var(--c-border); padding-bottom: 0.4rem;
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.2rem; margin-top: 1rem;
+  }
+  .feature {
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    padding: 1.2rem 1.3rem;
+    background: var(--c-bg);
+  }
+  .feature h3 {
+    font-size: 1.02rem; margin: 0 0 0.5rem;
+  }
+  .feature p {
+    font-size: 0.93rem; color: var(--c-muted); margin: 0;
+  }
+
+  .stack-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 0.93rem; margin-top: 0.5rem;
+  }
+  .stack-table th, .stack-table td {
+    border: 1px solid var(--c-border);
+    padding: 0.5rem 0.8rem; text-align: left; vertical-align: top;
+  }
+  .stack-table th { background: var(--c-bg-soft); font-weight: 600; }
+
+  pre.cli {
+    background: #0d1117; color: #e6edf3;
+    padding: 1rem 1.2rem; border-radius: 6px;
+    overflow-x: auto; font-size: 0.88rem; line-height: 1.6;
+    font-family: SFMono-Regular, Consolas, monospace;
+  }
+  pre.cli .comment { color: #8b949e; }
+  pre.cli .cmd { color: #79c0ff; }
+
+  footer.site {
+    border-top: 1px solid var(--c-border);
+    padding: 2rem 0;
+    color: var(--c-muted); font-size: 0.9rem;
+    margin-top: 2rem;
+  }
+  footer.site .wrap {
+    display: flex; gap: 1.5rem; flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  footer.site a { color: var(--c-muted); }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">TenkaCloud</div>
+    <nav>
+      <a href="#what">What</a>
+      <a href="#features">機能</a>
+      <a href="#stack">技術スタック</a>
+      <a href="#start">Getting Started</a>
+      <a href="https://github.com/susumutomita/TenkaCloud">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>AWS マルチテナント SaaS 競技基盤</h1>
+    <p class="tagline">
+      Battle (uptime 防御戦) と Challenge (CTF 形式の単発問題) の競技を、
+      競技者の AWS アカウントへ自動 deploy する OSS。
+    </p>
+    <div>
+      <a class="cta" href="https://github.com/susumutomita/TenkaCloud">GitHub repo →</a>
+      <a class="cta-secondary" href="#start">Getting Started</a>
+    </div>
+    <div class="alpha-banner">
+      ⚠️ <b>Alpha</b> — 初回の dogfood セッションを完了したばかりで production-ready ではありません。
+      実運用前に <a href="https://github.com/susumutomita/TenkaCloud/issues">Issue tracker</a> で
+      open issue を確認してください。
+    </div>
+  </div>
+</section>
+
+<section id="what">
+  <div class="wrap">
+    <h2>これは何か</h2>
+    <p>
+      TenkaCloud は <b>AWS の権威付き競技</b> (CTF / Hands-on / Battle / Challenge 形式)
+      を <b>マルチテナント SaaS としてホスト</b> する基盤です。
+    </p>
+    <p>
+      運営 (operator) は <b>SaaS 画面操作だけで</b> 「競技イベントの作成」「全 team 環境の
+      bulk deploy」「採点」「teardown」 を完結させ、AWS Console や CLI を一切触りません。
+      競技者 (participant) は <b>チーム単位のログインキー</b> でポータルへログインし、
+      自 team の AWS account に立ち上がった問題環境にアクセスします。
+    </p>
+    <p>
+      問題は <code>problems/&lt;category&gt;/&lt;id&gt;/</code> に
+      <code>metadata.json</code> + <code>template.yaml</code> (CFn) を置くだけで追加でき、
+      問題作成者は <b>scoring engine の細部を意識せずに問題に集中</b> できます。
+    </p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>主な機能</h2>
+    <div class="features">
+      <div class="feature">
+        <h3>2 カテゴリの競技</h3>
+        <p>
+          <b>Battle</b> (uptime 採点、HealthCheck 1 分間隔) と <b>Challenge</b>
+          (flag 提出形式の単発問題)。1 event に両方混在可能。
+        </p>
+      </div>
+      <div class="feature">
+        <h3>マルチテナント (SBT 0.3.9 ベース)</h3>
+        <p>
+          SaaS Builder Toolkit の Control Plane / Application Plane 構造に乗せ、
+          basic / standard / premium / platinum tier を分離 deploy。
+        </p>
+      </div>
+      <div class="feature">
+        <h3>競技者 AWS アカウントへ問題を deploy</h3>
+        <p>
+          AssumeRole + ExternalId で cross-account に CFn CreateStack。
+          Operator は AWS Console を開かず SaaS 画面だけで運営完結。
+        </p>
+      </div>
+      <div class="feature">
+        <h3>Free Tier 内コスト設計</h3>
+        <p>
+          DynamoDB は PROVISIONED 1 RCU / 1 WCU を Aspect で強制。Lambda + EventBridge
+          + Step Functions で実装、idle コストを最小化。
+        </p>
+      </div>
+      <div class="feature">
+        <h3>競技者ポータル</h3>
+        <p>
+          Cloudscape Design System で組んだ portal。problem catalog / scoreboard /
+          notifications / SSO で AWS Console federation login も提供。
+        </p>
+      </div>
+      <div class="feature">
+        <h3>OSS / Apache 2.0</h3>
+        <p>
+          Issue / PR welcome。詳細な architecture invariant と PR discipline は
+          repo 内 <code>docs/architecture/harness.md</code>。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <h2>技術スタック</h2>
+    <table class="stack-table">
+      <tr><th style="width:30%">レイヤー</th><th>採用技術</th></tr>
+      <tr><td>フロントエンド</td><td>Vite 7, React 19, Cloudscape Design System</td></tr>
+      <tr><td>バックエンド</td><td>AWS Lambda + Hono, API Gateway HTTP API, DynamoDB</td></tr>
+      <tr><td>IaC</td><td>AWS CDK 2 + <code>@cdklabs/sbt-aws</code> 0.3.9, cdk-nag</td></tr>
+      <tr><td>認証</td><td>AWS Cognito (Hosted UI + OAuth Code + PKCE)</td></tr>
+      <tr><td>イベント</td><td>EventBridge (cross-plane で tenant 作成 / deploy 完了 etc を伝達)</td></tr>
+      <tr><td>テスト</td><td>Vitest (unit / CDK assertion)</td></tr>
+      <tr><td>パッケージ管理</td><td>Bun 1.3.11 (workspaces)</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <h2>Getting Started</h2>
+    <p>
+      ローカルで repo を clone して、AWS account に <code>make deploy</code> で 3-phase
+      で立ち上がります (= ControlPlane / Bootstrap / TenantTemplate / Pipeline →
+      AdminConsole hosting → Cognito callback URL 更新)。
+    </p>
+    <pre class="cli"><span class="comment"># clone</span>
+<span class="cmd">git clone</span> --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+<span class="cmd">cd</span> TenkaCloud
+
+<span class="comment"># dependency + 初期 deploy (= 全 stack を 1 発で)</span>
+<span class="cmd">make</span> install
+<span class="cmd">make</span> deploy ENV=development
+
+<span class="comment"># 立ち上がったら出力された URL に access して SystemAdmin で login</span>
+<span class="comment"># テナント作成 → application-admin-console → Event 作成 → bulk deploy → 競技開始</span></pre>
+    <p style="margin-top:1.5rem; font-size:0.92rem; color: var(--c-muted);">
+      詳細な setup / 問題追加 / contribute の流れは
+      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
+      および
+      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CLAUDE.md">CLAUDE.md</a> (= AI agent 向けですが人間も読める)
+      を参照。
+    </p>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <div>
+      © 2026 TenkaCloud / Susumu Tomita
+      &nbsp;·&nbsp;
+      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/LICENSE">Apache 2.0</a>
+    </div>
+    <div>
+      <a href="https://github.com/susumutomita/TenkaCloud">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/susumutomita/TenkaCloud/issues">Issues</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/susumutomita/TenkaCloud/discussions">Discussions</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,51 @@
+# GitHub Pages: landing/ ディレクトリだけを配信する。
+#
+# 設計判断: ADR / 運用 doc などの中間情報 (= docs/) は **ホストしない**。
+# 公開 landing は OSS としての product description / 入り口だけに絞り、
+# 設計詳細は repo 内 docs/ で完結させて core 開発者だけが読む形にする。
+# (= public landing と core dev docs を IA で分離)
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+      - name: Setup safe-chain
+        continue-on-error: true
+        run: bunx @aikidosec/safe-chain setup-ci
+      # 全 third-party action は **commit SHA で pin** する (tag は移動可能なため supply-chain
+      # 攻撃面になる)。version comment は更新の参考、書き換えは Renovate に任せる。
+      # actions/configure-pages v5.0.0
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      # actions/upload-pages-artifact v3.0.1
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: landing
+      # actions/deploy-pages v4.0.5
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
