@@ -137,11 +137,35 @@ const isPooledDeploy = tenantId === pooledId;
 
 // parameter names to facilitate sharing api keys
 // between the bootstrap template and the tenant template stack(s)
+//
+// `<appName>-<environment>-` prefix で 2 軸の衝突を同時に回避する:
+//   1. 横軸 (別 application): ProtoShip 等の SBT-based 別プロジェクトと併存 deploy
+//      (SSM Parameter は region globally unique なので prefix 無しだと 100% 衝突)
+//   2. 縦軸 (同 application の別 environment): development / staging / production を
+//      同 account に併置するときに同名 Parameter で衝突
+//
+// 静的 prefix `tenkacloud-` だけだと縦軸が塞げないので、`config.appName` (= application
+// 識別子) と `environment` (= dev/staging/prod 等) の 2 つを連結して namespace を切る。
+// SSM Parameter 名の文字 class は `[a-zA-Z0-9_.\-/]` なので appName を lowercase 化して
+// safety margin を取る。
+const namePrefix = `${(config?.appName ?? "tenkacloud").toLowerCase()}-${environment}`;
 const apiKeySSMParameterNames = {
-  basic: { keyId: "apiKeyBasicTierKeyId", value: "apiKeyBasicTierValue" },
-  standard: { keyId: "apiKeyStandardTierKeyId", value: "apiKeyStandardTierValue" },
-  premium: { keyId: "apiKeyPremiumTierKeyId", value: "apiKeyPremiumTierValue" },
-  platinum: { keyId: "apiKeyPlatinumTierKeyId", value: "apiKeyPlatinumTierValue" },
+  basic: {
+    keyId: `${namePrefix}-apiKeyBasicTierKeyId`,
+    value: `${namePrefix}-apiKeyBasicTierValue`,
+  },
+  standard: {
+    keyId: `${namePrefix}-apiKeyStandardTierKeyId`,
+    value: `${namePrefix}-apiKeyStandardTierValue`,
+  },
+  premium: {
+    keyId: `${namePrefix}-apiKeyPremiumTierKeyId`,
+    value: `${namePrefix}-apiKeyPremiumTierValue`,
+  },
+  platinum: {
+    keyId: `${namePrefix}-apiKeyPlatinumTierKeyId`,
+    value: `${namePrefix}-apiKeyPlatinumTierValue`,
+  },
 };
 
 // 全 stack の env を統一する: TenantTemplateStack だけ env-aware にすると、
