@@ -38,9 +38,14 @@ jobs:
       - name: Setup safe-chain
         continue-on-error: true
         run: bunx @aikidosec/safe-chain setup-ci
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # 全 third-party action は **commit SHA で pin** する (tag は移動可能なため supply-chain
+      # 攻撃面になる)。version comment は更新の参考、書き換えは Renovate に任せる。
+      # actions/configure-pages v5.0.0
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      # actions/upload-pages-artifact v3.0.1
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
           path: landing
+      # actions/deploy-pages v4.0.5
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
