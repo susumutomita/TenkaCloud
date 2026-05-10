@@ -107,6 +107,27 @@ describe("setEventSchedule", () => {
     expect(updCmds).toHaveLength(0);
   });
 
+  it("startsAt が now - 60s より過去なら past_starts_at で DDB に触れず reject すべき (#537)", async () => {
+    const { shared, ddbSend } = buildShared();
+    // NOW_MS の 5 分前 (= SLACK 60s より十分過去)
+    const pastStartsAt = new Date(NOW_MS - 5 * 60_000).toISOString();
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", pastStartsAt, NOW_MS);
+    expect(out).toEqual({ kind: "past_starts_at", startsAt: pastStartsAt, nowMs: NOW_MS });
+    // DDB call は 0 (= 過去日時 reject は DDB 触れない、副作用なし)
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("startsAt が now - 30s (= SLACK 内) なら過去扱いせず通すべき (#537 clock skew tolerance)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Attributes: { eventId: "EV1", tenantId: "tenant-acme", startsAt: NOW_ISO },
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    const slackOk = new Date(NOW_MS - 30_000).toISOString();
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", slackOk, NOW_MS);
+    expect(out.kind).toBe("ok");
+  });
+
   it("Event 更新 + 全 deployment update の updatedAt は同じ now 値を使うべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({

@@ -6,11 +6,22 @@ import type { EventItem } from "./types.js";
 /**
  * `setEventSchedule` の結果。
  * - `not_found`: tenant 不一致 / event 不在 → 404 相当
+ * - `past_starts_at`: 指定 startsAt が `now - SLACK_MS` 以前 → 400 相当 (#537)
  * - `ok`: 更新後の startsAt + 影響を受けた deployment 数を返す
  */
 export type SetEventScheduleOutcome =
   | { kind: "not_found" }
+  | { kind: "past_starts_at"; startsAt: string; nowMs: number }
   | { kind: "ok"; startsAt: string; updatedDeployments: number };
+
+/**
+ * 過去日時 reject の slack (= clock skew tolerance、#537)。これより過去の startsAt は
+ * 「即座に開始」 button を使うべきなので backend 側で reject する。
+ *
+ * 60s = LB / Lambda の clock drift 経験上の上限。これより緩いと typo 起因の誤入力を
+ * 通してしまうし、これより厳しいと真っ当な「ちょっと前の時刻」も弾いてしまう。
+ */
+const PAST_STARTS_AT_SLACK_MS = 60_000;
 
 /**
  * Event の `startsAt` を更新し、紐づく全 deployment 行に `eventStartsAt` を denormalize する。
@@ -30,6 +41,14 @@ export async function setEventSchedule(
   startsAt: string,
   nowMs: number,
 ): Promise<SetEventScheduleOutcome> {
+  // #537: 過去日時 reject (第二防衛線、frontend 迂回 / API 直叩き対策)。「即座に開始」は
+  // handler で `startNow: true` 経路に振られて server now を採用するので、ここに到達する
+  // `startsAt` は operator 入力 (= 任意時刻)。`nowMs - SLACK_MS` より前なら past_starts_at。
+  const startsAtMs = new Date(startsAt).getTime();
+  if (Number.isFinite(startsAtMs) && startsAtMs < nowMs - PAST_STARTS_AT_SLACK_MS) {
+    return { kind: "past_starts_at", startsAt, nowMs };
+  }
+
   // Event の存在 + tenantId 確認のため UpdateItem の ConditionExpression で防御。
   // 同時に Deployments の対象行 (eventId 一致) を Query で集める。
   const now = new Date(nowMs).toISOString();

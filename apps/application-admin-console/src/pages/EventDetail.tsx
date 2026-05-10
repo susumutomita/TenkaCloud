@@ -202,6 +202,14 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       setError("日時の形式が不正です");
       return;
     }
+    // #537: 過去日時 reject (第一防衛線、frontend)。SLACK 60s で server 側と揃える。
+    // 過去にしたいなら「即座に開始」 button を使うべき。
+    if (local.getTime() < Date.now() - 60_000) {
+      setError(
+        "過去の日時は指定できません。即座に開始するには「即座に開始」 button を使ってください。",
+      );
+      return;
+    }
     setScheduleInFlight("scheduled");
     setError(null);
     try {

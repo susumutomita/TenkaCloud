@@ -150,6 +150,20 @@ app.patch("/events/:eventId/schedule", async (c) => {
   try {
     const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, startsAt, nowMs);
     if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    if (outcome.kind === "past_starts_at") {
+      // #537: 過去日時を frontend が迂回した場合の防御線。SLACK_MS (= 60s) より過去なら
+      // 「即座に開始」 button を使うべきなので reject。message は frontend で表示する。
+      return c.json(
+        {
+          error: "past_starts_at",
+          message:
+            "startsAt が過去の時刻です。「即座に開始」 button を使うか、未来の時刻を指定してください。",
+          startsAt: outcome.startsAt,
+          serverNow: new Date(outcome.nowMs).toISOString(),
+        },
+        HTTP_BAD_REQUEST,
+      );
+    }
     return c.json(
       { startsAt: outcome.startsAt, updatedDeployments: outcome.updatedDeployments },
       HTTP_OK,
