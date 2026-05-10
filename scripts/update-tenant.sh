@@ -1,5 +1,20 @@
 #!/bin/bash -xe
 
+# CodeBuild の default node が 14.x で、CDK 2 系 / aws-sdk v3 / @cdklabs/sbt-aws 0.3.9
+# などが node >=18 (一部 >=20) を要求するため、build 開始時に nvm で node 20 を入れる。
+# `n` ではなく `nvm` を使うのは CodeBuild standard image に既に nvm が同梱されている
+# (= 追加 install 不要、cold start で速い) ため。
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck disable=SC1091
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm install 20
+nvm use 20
+node --version
+npm --version
+
+# 古い node で global install された aws-cdk は捨てて、node 20 で再 install。
+npm install -g aws-cdk
+
 export CDK_PARAM_CONTROL_PLANE_SOURCE='sbt-control-plane-api'
 export CDK_PARAM_ONBOARDING_DETAIL_TYPE='Onboarding'
 export CDK_PARAM_PROVISIONING_DETAIL_TYPE=$CDK_PARAM_ONBOARDING_DETAIL_TYPE
@@ -24,7 +39,10 @@ export CDK_PARAM_COMMIT_ID=$(echo "$VERSIONS" | awk 'NR==1{print $1}')
 echo "CDK_PARAM_COMMIT_ID: ${CDK_PARAM_COMMIT_ID}"
 
 aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAME" --version-id "$CDK_PARAM_COMMIT_ID" "$CDK_SOURCE_NAME" 2>&1
-unzip $CDK_SOURCE_NAME
+# `-o`: 既存ファイルを silent overwrite (CodeBuild は workspace 再利用でファイルが残ることが
+# あり、prompt が出ると stdin EOF で `[N]one` 扱いになって展開不完全 → 後段 `cd cdk` などで
+# silent fail。`-o` で必ず上書きする。
+unzip -o $CDK_SOURCE_NAME
 
 cd cdk
 npm install

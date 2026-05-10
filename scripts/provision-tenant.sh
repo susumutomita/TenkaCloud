@@ -2,12 +2,22 @@
 
 # Install dependencies
 sudo yum update -y
-sudo yum install -y nodejs
 sudo yum install -y jq
 sudo yum install -y python3-pip
-sudo yum install -y npm
-sudo npm install -g aws-cdk
 sudo python3 -m pip install --upgrade setuptools
+
+# CodeBuild の default node が 14.x で、CDK 2 系 / aws-sdk v3 / @cdklabs/sbt-aws 0.3.9
+# などが node >=18 (一部 >=20) を要求するため、build 開始時に nvm で node 20 を入れる。
+# yum install -y nodejs だと AL2 系では node 16 等になり要件を満たさない場合がある。
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+# shellcheck disable=SC1091
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+nvm install 20
+nvm use 20
+node --version
+npm --version
+
+npm install -g aws-cdk
 
 # Enable nocasematch option
 shopt -s nocasematch
@@ -28,7 +38,10 @@ CDK_PARAM_COMMIT_ID=$(echo "$VERSIONS" | awk 'NR==1{print $1}')
 echo "CDK_PARAM_COMMIT_ID: ${CDK_PARAM_COMMIT_ID}"
 
 aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAME" --version-id "$CDK_PARAM_COMMIT_ID" "$CDK_SOURCE_NAME" 2>&1
-unzip $CDK_SOURCE_NAME
+# `-o`: 既存ファイルを silent overwrite (CodeBuild は workspace 再利用でファイルが残ることが
+# あり、prompt が出ると stdin EOF で `[N]one` 扱いになって展開不完全 → 後段 `cd cdk` などで
+# silent fail。`-o` で必ず上書きする。
+unzip -o $CDK_SOURCE_NAME
 
 cd cdk
 npm install
