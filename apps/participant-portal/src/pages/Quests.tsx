@@ -1,6 +1,7 @@
 import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import Cards from "@cloudscape-design/components/cards";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
@@ -12,11 +13,14 @@ import StatusIndicator, {
 } from "@cloudscape-design/components/status-indicator";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import type {
-  DeploymentStatus,
-  ParticipantProblemView,
-  ParticipantScoringInfo,
+import {
+  type DeploymentStatus,
+  getConsoleSigninUrl,
+  type ParticipantProblemView,
+  type ParticipantScoringInfo,
+  PortalAuthError,
 } from "../api/portal-client";
+import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 import { categoryOf } from "../lib/category";
@@ -50,8 +54,37 @@ function categoryBadge(scoring: ParticipantScoringInfo | undefined) {
 export function QuestsPage({ config }: { config: AppConfig }) {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
+  const auth = useAuth();
   const isBackend = config.mode === "backend";
   const [filter, setFilter] = useState<CategoryFilter>("all");
+  // #551: 問題ごとの「AWS Console を開く」 button 進行中フラグ。1 card につき 1 click だけ
+  // signin URL 発行 API を叩き window.open するための loading state (jobId → boolean)。
+  const [consoleInFlight, setConsoleInFlight] = useState<Record<string, boolean>>({});
+  const [consoleError, setConsoleError] = useState<string | null>(null);
+
+  const openAwsConsole = async (jobId: string) => {
+    if (consoleInFlight[jobId]) return;
+    const sessionToken = auth.session?.sessionToken ?? null;
+    if (!sessionToken) {
+      setConsoleError("セッションが切れています。再ログインしてください。");
+      return;
+    }
+    setConsoleInFlight((prev) => ({ ...prev, [jobId]: true }));
+    setConsoleError(null);
+    try {
+      const url = await getConsoleSigninUrl(config.apiBaseUrl, sessionToken, jobId);
+      // 別 tab で開く (= popup 系 blocker は同期 click 直下なら基本通る)。
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      if (err instanceof PortalAuthError) {
+        auth.logout();
+        return;
+      }
+      setConsoleError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConsoleInFlight((prev) => ({ ...prev, [jobId]: false }));
+    }
+  };
 
   const counts = useMemo(() => {
     const all = view?.problems ?? [];
@@ -86,6 +119,16 @@ export function QuestsPage({ config }: { config: AppConfig }) {
       {error && (
         <Alert type="error" header="状態の取得に失敗しました">
           {error}
+        </Alert>
+      )}
+      {consoleError && (
+        <Alert
+          type="error"
+          dismissible
+          onDismiss={() => setConsoleError(null)}
+          header="AWS Console の発行に失敗しました"
+        >
+          {consoleError}
         </Alert>
       )}
 
@@ -168,6 +211,18 @@ export function QuestsPage({ config }: { config: AppConfig }) {
                         </a>
                       </Box>
                     ))}
+                    {/* #551: 問題詳細から 1 click で competitor AWS account の Console を開く。
+                     *   backend は POST /portal/me/console-signin-url で短命の federation URL を
+                     *   発行 (= /tools/sso の 2-step フローを 1-step に短縮)。*/}
+                    <Button
+                      iconName="external"
+                      iconAlign="right"
+                      disabled={!isBackend}
+                      loading={consoleInFlight[problem.jobId] === true}
+                      onClick={() => void openAwsConsole(problem.jobId)}
+                    >
+                      AWS Console を開く
+                    </Button>
                   </SpaceBetween>
                 );
               },
