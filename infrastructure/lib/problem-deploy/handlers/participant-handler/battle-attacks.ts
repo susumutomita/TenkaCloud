@@ -1,6 +1,6 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem } from "../deploy-handler/types.js";
-import { ULID_RE } from "../shared/constants.js";
+import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
@@ -67,31 +67,44 @@ export async function listBattleAttacks(
   const myItems = await queryTeamItems(shared, teamLoginKey);
   if (myItems.length === 0) return { kind: "unauthorized" };
 
-  const target = myItems.find((i) => i.jobId === jobIdRaw) as
-    | Pick<DeploymentItem, "PK" | "jobId" | "problemId">
-    | undefined;
+  // DELETING / DELETED な行は teardown 中の sparse 残骸 (GSI2PK が消えていない race) の
+  // 可能性があるので除外。team key が teardown 後も battle-attacks を叩けてしまう穴を塞ぐ。
+  const target = myItems.find((i) => {
+    if (i.jobId !== jobIdRaw) return false;
+    const status = (i.status ?? "PENDING") as DeploymentStatus;
+    return !DELETED_LIKE_STATUSES.has(status);
+  }) as Pick<DeploymentItem, "PK" | "jobId" | "problemId"> | undefined;
   if (!target || typeof target.PK !== "string") return { kind: "not_found" };
 
   const sinceIso = new Date(nowMs - sinceMinRaw * 60_000).toISOString();
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
-      // FilterExpression は server 側で時間絞り込みする。GSI を新設せずに済ませる。
-      FilterExpression: "occurredAt >= :since",
-      ExpressionAttributeValues: {
-        ":pk": target.PK,
-        ":evpfx": "EVENT#",
-        ":since": sinceIso,
-      },
-      // 降順で取り出して time-window 内のみ抽出。typical row 数は 100 以下を想定 (ADR-005)。
-      ScanIndexForward: false,
-    }),
-  );
+  // 時間窓は SK の prefix `EVENT#<isoTimestamp>#<ulid>` を使い key condition で BETWEEN
+  // 絞り込み。FilterExpression は post-read filter なので RCU を実数据えしないし、
+  // LastEvaluatedKey を放置すると 1 page を超えた瞬間に欠損する (= 旧実装のバグ)。
+  // 上限 sentinel `EVENT#~` は ASCII で `Z` (ISO 8601 末尾) より大きい固定値。
+  const skStart = `EVENT#${sinceIso}`;
+  const skEnd = "EVENT#~";
 
-  const events = ((out.Items ?? []) as Partial<ScoreEventItem>[]).filter(
-    (i): i is Partial<ScoreEventItem> => typeof i.source === "string",
-  );
+  const events: Partial<ScoreEventItem>[] = [];
+  let exclusiveStart: Record<string, unknown> | undefined;
+  do {
+    const out = await shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.tableName,
+        KeyConditionExpression: "PK = :pk AND SK BETWEEN :sk_start AND :sk_end",
+        ExpressionAttributeValues: {
+          ":pk": target.PK,
+          ":sk_start": skStart,
+          ":sk_end": skEnd,
+        },
+        ScanIndexForward: false,
+        ExclusiveStartKey: exclusiveStart,
+      }),
+    );
+    for (const item of (out.Items ?? []) as Partial<ScoreEventItem>[]) {
+      if (typeof item.source === "string") events.push(item);
+    }
+    exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStart);
 
   // attack-detected と uptime を分けて、attack-detected の各行に recoveredAt を結合する。
   const attacks = events.filter((e) => e.source === "attack-detected");

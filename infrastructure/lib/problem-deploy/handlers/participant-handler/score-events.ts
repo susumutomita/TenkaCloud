@@ -51,25 +51,43 @@ export async function listScoreEvents(
   if (liveJobs.length === 0) return { kind: "unauthorized" };
 
   // 各 deployment の event 行を並列に query。N query を Promise.all で発火。
+  // attack-detected 行 (ADR-005 D2-A) は同 EVENT# partition に共存し、`toView` で
+  // undefined になる。Limit は scan 量に効くので、そのまま 100 にすると markers が
+  // 詰まったときに valid scoring 行が押し出される。LastEvaluatedKey で paginate して
+  // valid 行が limit 件集まる (or 親なし) まで読む。MAX_PAGES で暴走防止。
+  const MAX_PAGES = 5;
   const eventChunks = await Promise.all(
     liveJobs.map(async (job) => {
-      const out = await shared.ddb.send(
-        new QueryCommand({
-          TableName: shared.tableName,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
-          ExpressionAttributeValues: {
-            ":pk": job.PK,
-            ":evpfx": "EVENT#",
-          },
-          ScanIndexForward: false,
-          Limit: limit,
-        }),
-      );
-      return ((out.Items ?? []) as Partial<ScoreEventItem>[]).map(toView);
+      const collected: ScoreEventView[] = [];
+      let exclusiveStart: Record<string, unknown> | undefined;
+      let pages = 0;
+      while (collected.length < limit && pages < MAX_PAGES) {
+        const out = await shared.ddb.send(
+          new QueryCommand({
+            TableName: shared.tableName,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
+            ExpressionAttributeValues: {
+              ":pk": job.PK,
+              ":evpfx": "EVENT#",
+            },
+            ScanIndexForward: false,
+            Limit: limit,
+            ExclusiveStartKey: exclusiveStart,
+          }),
+        );
+        for (const item of (out.Items ?? []) as Partial<ScoreEventItem>[]) {
+          const v = toView(item);
+          if (v) collected.push(v);
+        }
+        exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+        pages++;
+        if (!exclusiveStart) break;
+      }
+      return collected;
     }),
   );
 
-  const merged = eventChunks.flat().filter((e): e is ScoreEventView => e !== undefined);
+  const merged = eventChunks.flat();
   // occurredAt 降順 sort + 全 deployment 横断の上位 limit 件を返す。
   merged.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : a.occurredAt > b.occurredAt ? -1 : 0));
   const entries = merged.slice(0, limit);

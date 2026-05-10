@@ -79,7 +79,7 @@ describe("listBattleAttacks", () => {
     expect(out).toEqual({ kind: "not_found" });
   });
 
-  it("正常系: PK=DEPLOYMENT#<jobId> + SK begins_with EVENT# + occurredAt >= since で Query", async () => {
+  it("正常系: PK=DEPLOYMENT#<jobId> + SK BETWEEN EVENT#<since> AND EVENT#~ で Query (時間窓は key-condition で絞る)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [teamRow()] });
     ddbSend.mockResolvedValueOnce({ Items: [] });
@@ -89,13 +89,49 @@ describe("listBattleAttacks", () => {
     const q = ddbSend.mock.calls[1]?.[0] as QueryCommand;
     expect(q).toBeInstanceOf(QueryCommand);
     expect(q.input.KeyConditionExpression).toContain("PK = :pk");
-    expect(q.input.KeyConditionExpression).toContain("begins_with(SK, :evpfx)");
+    expect(q.input.KeyConditionExpression).toContain("SK BETWEEN :sk_start AND :sk_end");
     expect(q.input.ExpressionAttributeValues?.[":pk"]).toBe(`DEPLOYMENT#${VALID_JOB_ID}`);
-    expect(q.input.ExpressionAttributeValues?.[":evpfx"]).toBe("EVENT#");
-    expect(q.input.FilterExpression).toBe("occurredAt >= :since");
     // since = NOW − 30 分 = "2026-05-10T09:30:00.000Z"
-    expect(q.input.ExpressionAttributeValues?.[":since"]).toBe("2026-05-10T09:30:00.000Z");
+    expect(q.input.ExpressionAttributeValues?.[":sk_start"]).toBe("EVENT#2026-05-10T09:30:00.000Z");
+    expect(q.input.ExpressionAttributeValues?.[":sk_end"]).toBe("EVENT#~");
+    // FilterExpression は使わず key condition のみ (post-read filter で RCU 暴発しないように)
+    expect(q.input.FilterExpression).toBeUndefined();
     expect(q.input.ScanIndexForward).toBe(false);
+  });
+
+  it("DELETING / DELETED 状態の deployment 行は target にしない (= teardown 中の sparse 残骸対策)", async () => {
+    for (const status of ["DELETING", "DELETED"] as const) {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [teamRow({ status })] });
+      const out = await listBattleAttacks(shared, TEAM_KEY, VALID_JOB_ID, 30, NOW_MS);
+      expect(out).toEqual({ kind: "not_found" });
+      // 1 回目 (queryTeamItems) のみ呼ばれて event query には到達しない
+      expect(ddbSend).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("LastEvaluatedKey があれば paginate して残りの page も読む", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [teamRow()] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { source: "attack-detected", occurredAt: "2026-05-10T09:55:00.000Z", result: "down" },
+      ],
+      LastEvaluatedKey: { PK: "x", SK: "y" },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { source: "attack-detected", occurredAt: "2026-05-10T09:35:00.000Z", result: "down" },
+      ],
+    });
+
+    const out = await listBattleAttacks(shared, TEAM_KEY, VALID_JOB_ID, 30, NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.response.events).toHaveLength(2);
+    // 2 page 目への ExclusiveStartKey が指定されている
+    const secondPage = ddbSend.mock.calls[2]?.[0] as QueryCommand;
+    expect(secondPage.input.ExclusiveStartKey).toEqual({ PK: "x", SK: "y" });
   });
 
   it("attack-detected event を時系列降順で返し、後続 uptime event を recoveredAt として結合する", async () => {

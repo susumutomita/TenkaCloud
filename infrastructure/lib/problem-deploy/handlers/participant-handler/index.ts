@@ -64,10 +64,11 @@ app.get("/portal/me/battle-attacks", (c) =>
     const jobId = c.req.query("jobId");
     if (!jobId) return respondError(c, "missing_jobid");
     const sinceMinRaw = c.req.query("sinceMin");
+    // `Number` を使い "60.9" / "1abc" のような non-integer は NaN または float に
+    // して `listBattleAttacks` 側の `Number.isInteger` で reject させる。`parseInt` は
+    // truncate するので "60.9"→60 / "1abc"→1 と silently 通ってしまう。
     const sinceMin =
-      sinceMinRaw === undefined
-        ? BATTLE_ATTACKS_SINCE_MIN_DEFAULT
-        : Number.parseInt(sinceMinRaw, 10);
+      sinceMinRaw === undefined ? BATTLE_ATTACKS_SINCE_MIN_DEFAULT : Number(sinceMinRaw);
     const outcome = await listBattleAttacks(shared, token, jobId, sinceMin);
     if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
     return respondError(c, outcome.kind);
