@@ -139,6 +139,36 @@ describe("listScoreEvents", () => {
     }
   });
 
+  it("attack-detected が 1 page 目を埋め尽くしても次 page を読んで scoring 行を回収する", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [meta()] });
+    // 1 page 目: 全部 attack-detected (= toView で undefined になり 0 件)
+    ddbSend.mockResolvedValueOnce({
+      Items: Array.from({ length: 3 }, (_, i) =>
+        event({
+          source: "attack-detected",
+          result: "down",
+          occurredAt: `2026-05-08T10:0${i}:00.000Z`,
+        }),
+      ),
+      LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: "EVENT#x" },
+    });
+    // 2 page 目: 有効な uptime row
+    ddbSend.mockResolvedValueOnce({
+      Items: [event({ occurredAt: "2026-05-08T09:00:00.000Z", source: "uptime" })],
+    });
+
+    const out = await listScoreEvents(shared, "KEY1", 1);
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.response.entries).toHaveLength(1);
+      expect(out.response.entries[0]?.source).toBe("uptime");
+    }
+    // 2 page 目の query には ExclusiveStartKey が乗る
+    const secondPage = ddbSend.mock.calls[2]?.[0] as QueryCommand;
+    expect(secondPage.input.ExclusiveStartKey).toEqual({ PK: "DEPLOYMENT#J1", SK: "EVENT#x" });
+  });
+
   it("teamId / eventId / tenantId 等 operator 内部情報を出力に含めないべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });

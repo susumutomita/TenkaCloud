@@ -230,4 +230,117 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     const view = await lookupTeamByLoginKey(shared, "KEY1");
     expect(view?.problems[0]?.score).toBe(0);
   });
+
+  /* ADR-005 Phase 3.1: applicationStatus aggregate ----------------------- */
+
+  it("uptime kind problem の applicationStatus を aggregate (healthy) で返すべき", async () => {
+    const scoring = {
+      "security-battle-royale": {
+        kind: "uptime" as const,
+        pointsPerSuccess: 5,
+        endpoints: [],
+      },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          endpointsHealth: JSON.stringify({
+            FrontendUrl: { ok: true, checkedAt: "2026-05-10T09:55:00.000Z" },
+            ApiUrl: { ok: true, checkedAt: "2026-05-10T09:55:00.000Z" },
+          }),
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.applicationStatus).toEqual({
+      overall: "healthy",
+      healthyCount: 2,
+      totalCount: 2,
+      checkedAt: "2026-05-10T09:55:00.000Z",
+    });
+  });
+
+  it("uptime kind: 一部 NG なら degraded、全 NG なら down", async () => {
+    const scoring = { p: { kind: "uptime" as const, pointsPerSuccess: 5, endpoints: [] } };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          jobId: "J1",
+          PK: "DEPLOYMENT#J1",
+          problemId: "p",
+          endpointsHealth: JSON.stringify({
+            FrontendUrl: { ok: true, checkedAt: "2026-05-10T09:55:00.000Z" },
+            ApiUrl: { ok: false, checkedAt: "2026-05-10T09:55:00.000Z" },
+          }),
+        }),
+        sampleRow({
+          jobId: "J2",
+          PK: "DEPLOYMENT#J2",
+          problemId: "p",
+          endpointsHealth: JSON.stringify({
+            FrontendUrl: { ok: false, checkedAt: "2026-05-10T09:55:00.000Z" },
+            ApiUrl: { ok: false, checkedAt: "2026-05-10T09:55:00.000Z" },
+          }),
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.applicationStatus?.overall).toBe("degraded");
+    expect(view?.problems[1]?.applicationStatus?.overall).toBe("down");
+  });
+
+  it("uptime kind: endpointsHealth が無い (probe 未実行) なら unknown", async () => {
+    const scoring = { p: { kind: "uptime" as const, pointsPerSuccess: 5, endpoints: [] } };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ problemId: "p", endpointsHealth: undefined })],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.applicationStatus?.overall).toBe("unknown");
+    expect(view?.problems[0]?.applicationStatus?.totalCount).toBe(0);
+  });
+
+  it("flag kind problem は applicationStatus を露出しないべき (= Challenge は対象外)", async () => {
+    const scoring = {
+      "hello-world": { kind: "flag" as const, flagOutputKey: "F", points: 100 },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          problemId: "hello-world",
+          endpointsHealth: JSON.stringify({ X: { ok: true, checkedAt: "x" } }),
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.applicationStatus).toBeUndefined();
+  });
+
+  it("applicationStatus に endpoint 名 / URL を絶対に含めないべき (snapshot guard)", async () => {
+    const scoring = { p: { kind: "uptime" as const, pointsPerSuccess: 5, endpoints: [] } };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          problemId: "p",
+          endpointsHealth: JSON.stringify({
+            FrontendUrl: { ok: false, checkedAt: "2026-05-10T09:55:00.000Z" },
+            SecretInternalProbeName: { ok: true, checkedAt: "2026-05-10T09:55:00.000Z" },
+          }),
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    const json = JSON.stringify(view?.problems[0]?.applicationStatus);
+    expect(json).not.toContain("FrontendUrl");
+    expect(json).not.toContain("SecretInternalProbeName");
+  });
 });

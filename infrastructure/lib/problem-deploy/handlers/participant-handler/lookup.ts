@@ -2,6 +2,7 @@ import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js"
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -24,6 +25,24 @@ export interface ParticipantScoringInfo {
  * チームに紐づく 1 problem 単位の view。team 集約 (`ParticipantTeamView.problems[]`) の
  * 1 要素として返す。
  */
+/**
+ * Battle 系 (uptime kind) deployment の health 集約。`endpointsHealth` JSON を per-endpoint
+ * のまま露出すると「どの endpoint が落ちているか」が見えてしまい Battle のゲーム性
+ * (= 防御側が自分で調査) を破壊するため、aggregate のみに絞る (ADR-005 D1)。
+ *
+ * 旧 deployment / probe 未実行 / Challenge 系 (= flag kind、HealthCheck 対象外) は
+ * `unknown` を返す。
+ */
+export type ApplicationStatusOverall = "healthy" | "degraded" | "down" | "unknown";
+
+export interface ApplicationStatus {
+  readonly overall: ApplicationStatusOverall;
+  readonly healthyCount: number;
+  readonly totalCount: number;
+  /** 最後の probe 時刻 (ISO 8601)。`unknown` のときは undefined。 */
+  readonly checkedAt?: string;
+}
+
 export type ParticipantProblemView = Pick<
   DeploymentItem,
   "jobId" | "problemId" | "region" | "expiresAt" | "awsAccountId"
@@ -35,9 +54,14 @@ export type ParticipantProblemView = Pick<
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  /**
+   * Battle (uptime kind) の集約 health。per-endpoint の URL / 名前は **絶対に出さない**
+   * (ADR-005 D1)。Challenge 形式 (flag kind) では undefined。
+   */
+  readonly applicationStatus?: ApplicationStatus;
   // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
   // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
-  // あり、画面で答え合わせをすると興ざめになる。
+  // あり、画面で答え合わせをすると興ざめになる。露出するのは aggregate のみ。
   // `awsAccountId` は AWS Console 直接アクセス (SSO Credentials) のため公開する。
   // AWS の account id は機密ではない (= IAM role 信頼ポリシーや CFn template にも露出する)。
 };
@@ -100,7 +124,36 @@ export function toProblemView(
             : { pointsPerSuccess: scoring.pointsPerSuccess }),
         }
       : undefined,
+    applicationStatus: scoring?.kind === "uptime" ? toApplicationStatus(item) : undefined,
   };
+}
+
+/**
+ * `endpointsHealth` JSON を aggregate (overall / healthyCount / totalCount / checkedAt)
+ * に変換する。**per-endpoint URL / 名前は絶対に出さない** (ADR-005 D1)。
+ *
+ * 判定ルール:
+ *   - probe 未実行 (= endpointsHealth が無い / 空) → `unknown`
+ *   - 全 endpoint OK → `healthy`
+ *   - 全 endpoint NG → `down`
+ *   - 一部 OK → `degraded`
+ */
+function toApplicationStatus(item: Partial<DeploymentItem>): ApplicationStatus {
+  const health = parseEndpointsHealth(item.endpointsHealth);
+  const entries = Object.values(health);
+  if (entries.length === 0) {
+    return { overall: "unknown", healthyCount: 0, totalCount: 0 };
+  }
+  const healthyCount = entries.filter((e) => e.ok).length;
+  const totalCount = entries.length;
+  const checkedAt = entries[0]?.checkedAt;
+  let overall: ApplicationStatusOverall;
+  if (healthyCount === totalCount) overall = "healthy";
+  else if (healthyCount === 0) overall = "down";
+  else overall = "degraded";
+  return checkedAt
+    ? { overall, healthyCount, totalCount, checkedAt }
+    : { overall, healthyCount, totalCount };
 }
 
 /**
