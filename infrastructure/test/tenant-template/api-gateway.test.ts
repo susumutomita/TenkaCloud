@@ -27,6 +27,11 @@ function buildHarness() {
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
+  const competitorAccountsFn = new LambdaFunction(stack, "CompetitorAccountsApi", {
+    runtime: Runtime.NODEJS_20_X,
+    code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
+    handler: "index.handler",
+  });
   const apiKey: CustomApiKey = {
     id: "key-id",
     apiKey: { keyId: "k", keyArn: "arn:aws:apigateway:::/apikeys/k", keyName: "k" },
@@ -48,6 +53,7 @@ function buildHarness() {
     userPool,
     deployApiLambda: fn,
     eventApiLambda: eventFn,
+    competitorAccountsApiLambda: competitorAccountsFn,
     apiKeyBasicTier: apiKey,
     apiKeyStandardTier: apiKey,
     apiKeyPremiumTier: apiKey,
@@ -115,6 +121,29 @@ describe("tenant ApiGateway", () => {
     tpl.hasResourceProperties("AWS::ApiGateway::Method", {
       HttpMethod: "POST",
       ResourceId: { Ref: notificationsResourceId },
+    });
+  });
+
+  it("/admin/competitor-accounts と /admin/competitor-accounts/{awsAccountId}/verify を持つべき (Issue #459)", () => {
+    // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
+    expect(findResource("admin")).toBeDefined();
+    expect(findResource("competitor-accounts")).toBeDefined();
+    expect(findResource("{awsAccountId}")).toBeDefined();
+    expect(findResource("verify")).toBeDefined();
+
+    const caResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { PathPart: "competitor-accounts" },
+      }),
+    )[0]?.[0];
+    expect(caResourceId).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "GET",
+      ResourceId: { Ref: caResourceId },
+    });
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "POST",
+      ResourceId: { Ref: caResourceId },
     });
   });
 });

@@ -240,6 +240,9 @@ const problemDeployBackendStack = new ProblemDeployBackendStack(app, "tenkacloud
   problemsScoring,
   participantPortal,
   deployConcurrentBuildLimit,
+  // Issue #459 / ADR-002: SSM SecureString path `/{environmentName}/tenants/{tenantId}/external-id`
+  // の prefix。`environment` 変数 (= development / staging / production 等) と同じ値。
+  environmentName: environment,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
@@ -296,6 +299,7 @@ const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-temp
   commitId,
   deployApiLambda: problemDeployBackendStack.deployApiLambda,
   eventApiLambda: problemDeployBackendStack.eventApiLambda,
+  competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
   participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
 });
 

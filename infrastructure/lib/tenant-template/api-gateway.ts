@@ -29,6 +29,11 @@ interface ApiGatewayProps {
    * Event / Team CRUD routes が本 Lambda を invoke する。
    */
   eventApiLambda: IFunction;
+  /**
+   * `ProblemDeployBackendStack.competitorAccountsApiLambda` のクロススタック参照
+   * (Issue #459 / ADR-002 Phase 2.1)。`/admin/competitor-accounts*` routes を proxy する。
+   */
+  competitorAccountsApiLambda: IFunction;
   apiKeyBasicTier: CustomApiKey;
   apiKeyStandardTier: CustomApiKey;
   apiKeyPremiumTier: CustomApiKey;
@@ -106,5 +111,20 @@ export class ApiGateway extends Construct {
     const lockScoring = event.addResource("lock-scoring");
     lockScoring.addMethod("POST", eventIntegration, deployMethodOptions);
     lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
+
+    // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
+    //   /admin/competitor-accounts                       POST=register, GET=list
+    //   /admin/competitor-accounts/{awsAccountId}        DELETE=remove (last row なら SSM 鍵も掃除)
+    //   /admin/competitor-accounts/{awsAccountId}/verify POST=STS AssumeRole sanity check
+    const competitorAccountsIntegration = new LambdaIntegration(props.competitorAccountsApiLambda);
+    const admin = this.restApi.root.addResource("admin");
+    const competitorAccounts = admin.addResource("competitor-accounts");
+    competitorAccounts.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
+    competitorAccounts.addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
+    const competitorAccount = competitorAccounts.addResource("{awsAccountId}");
+    competitorAccount.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
+    competitorAccount
+      .addResource("verify")
+      .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
   }
 }

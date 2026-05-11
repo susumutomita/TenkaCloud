@@ -16,6 +16,7 @@ function synthDefault(): Template {
       "hello-world": "problems/challenges/hello-world",
     },
     problemsScoring: {},
+    environmentName: "development",
   });
   return Template.fromStack(stack);
 }
@@ -24,10 +25,10 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
   describe("Deployments DDB table", () => {
-    it("DDB テーブルを Deployments / Events / Teams の 3 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
-      // ADR-004 Phase 1 で Events / Teams を追加。3 Table すべて DynamoDbLowCapacity Aspect で
-      // 1/1 PROVISIONED に均される。
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 3);
+    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts の 4 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
+      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts。
+      // 4 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 4);
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
@@ -135,6 +136,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
         problemsScoring: {},
         deployConcurrentBuildLimit: 200,
+        environmentName: "development",
       });
       const limited = Template.fromStack(stack);
       limited.hasResourceProperties(
@@ -203,6 +205,61 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   describe("legacy 経路の廃止", () => {
     it("旧 DeployApiGateway (HTTP API) を作らないべき", () => {
       tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
+    });
+  });
+
+  describe("Competitor Accounts API Lambda (Issue #459 / ADR-002 Phase 2.1)", () => {
+    it("Lambda が COMPETITOR_ACCOUNTS_TABLE_NAME / DEPLOY_ENVIRONMENT / TENKACLOUD_ACCOUNT_ID env を持つべき", () => {
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Architectures: ["arm64"],
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              COMPETITOR_ACCOUNTS_TABLE_NAME: Match.anyValue(),
+              DEPLOY_ENVIRONMENT: "development",
+              TENKACLOUD_ACCOUNT_ID: Match.anyValue(),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("Lambda Role に SSM Parameter Store + STS AssumeRole の最小権限を付与するべき", () => {
+      // SSM は path prefix で絞り込み、STS は TenkaCloud- Role 名 pattern で絞り込み。
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: Match.arrayWith(["ssm:GetParameter", "ssm:PutParameter"]),
+              }),
+            ]),
+          }),
+        }),
+      );
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: "sts:AssumeRole",
+                Resource: "arn:aws:iam::*:role/TenkaCloud-*",
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it("Output に CompetitorAccountsTableName を含むべき", () => {
+      const outputs = tpl.findOutputs("*");
+      expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["CompetitorAccountsTableName"]));
     });
   });
 });

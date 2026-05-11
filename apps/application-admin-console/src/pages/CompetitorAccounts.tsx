@@ -1,0 +1,409 @@
+import Alert from "@cloudscape-design/components/alert";
+import Badge from "@cloudscape-design/components/badge";
+import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
+import FormField from "@cloudscape-design/components/form-field";
+import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
+import Modal from "@cloudscape-design/components/modal";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import Spinner from "@cloudscape-design/components/spinner";
+import Table, { type TableProps } from "@cloudscape-design/components/table";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ApiError, useApiClient } from "../api/client";
+import {
+  type CompetitorAccountSummary,
+  type CreateCompetitorAccountResponse,
+  createCompetitorAccount,
+  deleteCompetitorAccount,
+  listCompetitorAccounts,
+  verifyCompetitorAccount,
+} from "../api/competitor-accounts-client";
+import type { AppConfig } from "../config";
+
+const ACCOUNT_ID_RE = /^\d{12}$/;
+const ALIAS_MAX = 120;
+
+/**
+ * Competitor Accounts 管理画面 (Issue #459 / ADR-002 Phase 2.1)。
+ *
+ * 一覧 / 追加 / Verify / 削除の 4 操作。`externalId` は **追加直後の modal でのみ** 1 度
+ * 露出 (= 競技者にコピペで渡してもらう secret)。verified=false の row は赤、true は緑。
+ *
+ * 「Verify」 button は STS AssumeRole sanity check を tenant 側で発行する (= 競技者が
+ * `competitor-bootstrap.yaml` を deploy し終えたかを operator がワンクリックで確認)。
+ */
+export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
+  const apiClient = useApiClient(config);
+  const [items, setItems] = useState<readonly CompetitorAccountSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
+  const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const [showSecret, setShowSecret] = useState<CreateCompetitorAccountResponse | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!apiClient) return;
+    try {
+      const res = await listCompetitorAccounts(apiClient);
+      setItems(res.items);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [apiClient]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const handleVerify = useCallback(
+    async (awsAccountId: string) => {
+      if (!apiClient) return;
+      setVerifyInFlight(awsAccountId);
+      try {
+        await verifyCompetitorAccount(apiClient, awsAccountId);
+        await reload();
+      } catch (err) {
+        const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
+        setError(message);
+      } finally {
+        setVerifyInFlight(null);
+      }
+    },
+    [apiClient, reload],
+  );
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!apiClient || !deleteTarget) return;
+    setDeleteInFlight(true);
+    try {
+      await deleteCompetitorAccount(apiClient, deleteTarget.awsAccountId);
+      setDeleteTarget(null);
+      await reload();
+    } catch (err) {
+      const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
+      setError(message);
+    } finally {
+      setDeleteInFlight(false);
+    }
+  }, [apiClient, deleteTarget, reload]);
+
+  const columnDefinitions = useMemo<TableProps.ColumnDefinition<CompetitorAccountSummary>[]>(
+    () => [
+      {
+        id: "awsAccountId",
+        header: "AWS Account ID",
+        cell: (item) => <code>{item.awsAccountId}</code>,
+      },
+      {
+        id: "alias",
+        header: "Alias",
+        cell: (item) => item.alias ?? <Box color="text-status-inactive">(未設定)</Box>,
+      },
+      {
+        id: "region",
+        header: "Region",
+        cell: (item) => <code>{item.region}</code>,
+      },
+      {
+        id: "competitorRoleName",
+        header: "IAM Role 名",
+        cell: (item) => <code>{item.competitorRoleName}</code>,
+      },
+      {
+        id: "verified",
+        header: "状態",
+        cell: (item) =>
+          item.verified ? (
+            <Badge color="green">Verified</Badge>
+          ) : (
+            <Badge color="red">Unverified</Badge>
+          ),
+      },
+      {
+        id: "actions",
+        header: "操作",
+        cell: (item) => (
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              variant="normal"
+              loading={verifyInFlight === item.awsAccountId}
+              disabled={verifyInFlight !== null}
+              onClick={() => handleVerify(item.awsAccountId)}
+            >
+              {item.verified ? "再 Verify" : "Verify"}
+            </Button>
+            <Button variant="link" onClick={() => setDeleteTarget(item)}>
+              削除
+            </Button>
+          </SpaceBetween>
+        ),
+      },
+    ],
+    [handleVerify, verifyInFlight],
+  );
+
+  if (!items && !error) {
+    return (
+      <Box textAlign="center" padding="l">
+        <Spinner /> 一覧を取得中...
+      </Box>
+    );
+  }
+
+  return (
+    <SpaceBetween size="l">
+      <Header
+        variant="h1"
+        description="tenant に紐付ける競技者 AWS account の一覧。verified=true のみ deploy 可能です。"
+        actions={
+          <Button variant="primary" onClick={() => setAddModalVisible(true)}>
+            アカウントを追加
+          </Button>
+        }
+      >
+        Competitor Accounts
+      </Header>
+
+      {error && (
+        <Alert type="error" header="エラー">
+          {error}
+        </Alert>
+      )}
+
+      <Table
+        items={items ?? []}
+        columnDefinitions={columnDefinitions}
+        empty={
+          <Box textAlign="center" color="inherit" padding="xxl">
+            まだ Competitor Account が登録されていません。「アカウントを追加」から開始してください。
+          </Box>
+        }
+      />
+
+      <AddAccountModal
+        config={config}
+        visible={addModalVisible}
+        onDismiss={() => setAddModalVisible(false)}
+        onSuccess={(res) => {
+          setAddModalVisible(false);
+          setShowSecret(res);
+          void reload();
+        }}
+      />
+
+      <SecretRevealModal details={showSecret} onDismiss={() => setShowSecret(null)} />
+
+      <Modal
+        visible={deleteTarget !== null}
+        onDismiss={() => setDeleteTarget(null)}
+        header="アカウントを削除"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setDeleteTarget(null)} disabled={deleteInFlight}>
+                キャンセル
+              </Button>
+              <Button variant="primary" loading={deleteInFlight} onClick={handleConfirmDelete}>
+                削除する
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <p>
+          AWS Account <code>{deleteTarget?.awsAccountId}</code> を tenant から外しますか？
+        </p>
+        <p>
+          この操作で tenant に残る最後の row だった場合は、SSM の ExternalId も同時に削除されます (=
+          鍵漏洩リスク削減)。
+        </p>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+interface AddAccountModalProps {
+  config: AppConfig;
+  visible: boolean;
+  onDismiss: () => void;
+  onSuccess: (res: CreateCompetitorAccountResponse) => void;
+}
+
+function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountModalProps) {
+  const apiClient = useApiClient(config);
+  const [awsAccountId, setAwsAccountId] = useState("");
+  const [alias, setAlias] = useState("");
+  const [region, setRegion] = useState("ap-northeast-1");
+  const [competitorRoleName, setCompetitorRoleName] = useState("TenkaCloud-CompetitorDeploy-Role");
+  const [inFlight, setInFlight] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setAwsAccountId("");
+    setAlias("");
+    setRegion("ap-northeast-1");
+    setCompetitorRoleName("TenkaCloud-CompetitorDeploy-Role");
+    setError(null);
+  };
+
+  const handleDismiss = () => {
+    if (inFlight) return;
+    reset();
+    onDismiss();
+  };
+
+  const awsAccountIdInvalid = awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(awsAccountId);
+  const aliasInvalid = alias.length > ALIAS_MAX;
+  const submitDisabled =
+    !apiClient || inFlight || awsAccountId.length === 0 || awsAccountIdInvalid || aliasInvalid;
+
+  const handleSubmit = async () => {
+    if (!apiClient || submitDisabled) return;
+    setInFlight(true);
+    setError(null);
+    try {
+      const res = await createCompetitorAccount(apiClient, {
+        awsAccountId,
+        region,
+        competitorRoleName,
+        ...(alias.length > 0 ? { alias } : {}),
+      });
+      reset();
+      onSuccess(res);
+    } catch (err) {
+      const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
+      setError(message);
+    } finally {
+      setInFlight(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      onDismiss={handleDismiss}
+      header="Competitor Account を追加"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={handleDismiss} disabled={inFlight}>
+              キャンセル
+            </Button>
+            <Button
+              variant="primary"
+              loading={inFlight}
+              disabled={submitDisabled}
+              onClick={handleSubmit}
+            >
+              追加
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {error && (
+          <Alert type="error" header="登録に失敗しました">
+            {error}
+          </Alert>
+        )}
+        <FormField
+          label="AWS Account ID"
+          description="12 桁の数字"
+          errorText={awsAccountIdInvalid ? "12 桁の数字で入力してください" : undefined}
+        >
+          <Input
+            value={awsAccountId}
+            onChange={(e) => setAwsAccountId(e.detail.value)}
+            invalid={awsAccountIdInvalid}
+            placeholder="123456789012"
+            disabled={inFlight}
+          />
+        </FormField>
+        <FormField label="Alias (任意)" description="operator 表示用ラベル">
+          <Input
+            value={alias}
+            onChange={(e) => setAlias(e.detail.value)}
+            invalid={aliasInvalid}
+            placeholder="Team Acme prod"
+            disabled={inFlight}
+          />
+        </FormField>
+        <FormField label="Region" description="deploy 先 region (default: ap-northeast-1)">
+          <Input value={region} onChange={(e) => setRegion(e.detail.value)} disabled={inFlight} />
+        </FormField>
+        <FormField
+          label="IAM Role 名"
+          description="競技者側 bootstrap で deploy する Role 名 (default: TenkaCloud-CompetitorDeploy-Role)"
+        >
+          <Input
+            value={competitorRoleName}
+            onChange={(e) => setCompetitorRoleName(e.detail.value)}
+            disabled={inFlight}
+          />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+interface SecretRevealModalProps {
+  details: CreateCompetitorAccountResponse | null;
+  onDismiss: () => void;
+}
+
+function SecretRevealModal({ details, onDismiss }: SecretRevealModalProps) {
+  if (!details) return null;
+  return (
+    <Modal
+      visible
+      onDismiss={onDismiss}
+      header="競技者に共有する情報"
+      footer={
+        <Box float="right">
+          <Button variant="primary" onClick={onDismiss}>
+            閉じる
+          </Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <Alert type="warning" header="この画面でのみ ExternalId を確認できます">
+          ExternalId は SecureString として保存されており、閉じると再表示できません。
+          競技者に渡すコピーは **今** 取ってください。
+        </Alert>
+        <ColumnLayout columns={1} variant="text-grid">
+          <div>
+            <Box variant="awsui-key-label">TenkaCloud Account ID</Box>
+            <code>{details.tenkaCloudAccountId}</code>
+          </div>
+          <div>
+            <Box variant="awsui-key-label">ExternalId</Box>
+            <code style={{ wordBreak: "break-all" }}>{details.externalId}</code>
+          </div>
+          <div>
+            <Box variant="awsui-key-label">Competitor Role 名</Box>
+            <code>{details.competitorRoleName}</code>
+          </div>
+          <div>
+            <Box variant="awsui-key-label">次のステップ</Box>
+            <ol>
+              <li>
+                競技者が <code>infrastructure/templates/competitor-bootstrap.yaml</code> を 自分の
+                AWS account で 1 回 deploy する (上の値を Parameter として渡す)
+              </li>
+              <li>
+                deploy 完了後、この画面の「Verify」 button で STS AssumeRole sanity check を行う
+              </li>
+              <li>verified=true になれば deploy 経路で利用可能になる</li>
+            </ol>
+          </div>
+        </ColumnLayout>
+      </SpaceBetween>
+    </Modal>
+  );
+}
