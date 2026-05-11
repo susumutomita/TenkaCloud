@@ -124,8 +124,25 @@ export async function createEvent(
   return api.post<CreateEventResponse>("events", body);
 }
 
-export async function bulkDeployEvent(api: ApiClient, eventId: string): Promise<BulkResult> {
-  return api.post<BulkResult>(`events/${encodeURIComponent(eventId)}/deploy`, {});
+/**
+ * #555: `POST /events/:id/deploy` の opt-in body。全フィールド optional:
+ *   - `retryFailedOnly: true` — FAILED 状態の deployment 行だけ再実行 (= 失敗分 retry)
+ *   - `teamIds` — 指定 team のみ deploy (= 後追い team / 該当 team の env 再構築)
+ *   - `problemIds` — 指定 problem のみ deploy (= 後追い問題 / 修正済問題の全 team 再 deploy)
+ *
+ * 何も指定しないと従来通り teams × problems を全展開 (= idempotent skip で衝突は飛ばす)。
+ */
+export interface BulkDeployBody {
+  retryFailedOnly?: true;
+  teamIds?: readonly string[];
+  problemIds?: readonly string[];
+}
+export async function bulkDeployEvent(
+  api: ApiClient,
+  eventId: string,
+  body: BulkDeployBody = {},
+): Promise<BulkResult> {
+  return api.post<BulkResult>(`events/${encodeURIComponent(eventId)}/deploy`, body);
 }
 
 export async function bulkTeardownEvent(api: ApiClient, eventId: string): Promise<BulkResult> {

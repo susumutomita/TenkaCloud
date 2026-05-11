@@ -109,7 +109,22 @@ describe("bulkDeployEvent", () => {
     const out = await bulkDeployEvent(client, "EV1");
     expect(calls[0]?.path).toBe("events/EV1/deploy");
     expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({});
     expect(out.enqueued).toBe(6);
+  });
+
+  // #555: opt-in body の partial deploy / retry-failed 経路
+  it("retryFailedOnly: true を body にそのまま乗せて POST するべき", async () => {
+    const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
+    await bulkDeployEvent(client, "EV1", { retryFailedOnly: true });
+    expect(calls[0]?.path).toBe("events/EV1/deploy");
+    expect(calls[0]?.body).toEqual({ retryFailedOnly: true });
+  });
+
+  it("teamIds / problemIds を body にそのまま乗せて POST するべき (部分 deploy)", async () => {
+    const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
+    await bulkDeployEvent(client, "EV1", { teamIds: ["t1"], problemIds: ["hello-world"] });
+    expect(calls[0]?.body).toEqual({ teamIds: ["t1"], problemIds: ["hello-world"] });
   });
 });
 

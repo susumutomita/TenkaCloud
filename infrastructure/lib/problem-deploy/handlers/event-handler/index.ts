@@ -25,7 +25,11 @@ import { getEventDetail, listEvents } from "./list.js";
 import { lockScoring, unlockScoring } from "./lock-scoring.js";
 import { setEventSchedule } from "./schedule.js";
 import { buildEventSharedResources } from "./shared.js";
-import { CreateEventRequestSchema, ScheduleEventRequestSchema } from "./types.js";
+import {
+  BulkDeployRequestSchema,
+  CreateEventRequestSchema,
+  ScheduleEventRequestSchema,
+} from "./types.js";
 
 /**
  * Event API Lambda の Hono app (ADR-004 Phase 1+2a, ADR-006 Notifications)。routes:
@@ -377,8 +381,29 @@ app.post("/events/:eventId/deploy", async (c) => {
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
   }
+  // #555: body は opt-in。空 body は bulk-all 扱い (= 後方互換)。値が来た場合だけ
+  // validate (= retryFailedOnly / teamIds / problemIds の filter として使う)。
+  let body: unknown = {};
+  const raw = await c.req.text().catch(() => "");
+  if (raw.length > 0) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return c.json({ error: "request body must be JSON" }, HTTP_BAD_REQUEST);
+    }
+  }
+  const parsed = BulkDeployRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+  }
   try {
-    const outcome = await bulkDeployEvent(shared, resolveTenantId(c), eventId, Date.now());
+    const outcome = await bulkDeployEvent(
+      shared,
+      resolveTenantId(c),
+      eventId,
+      Date.now(),
+      parsed.data,
+    );
     if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
     return c.json(outcome.result, HTTP_ACCEPTED);
   } catch (err) {

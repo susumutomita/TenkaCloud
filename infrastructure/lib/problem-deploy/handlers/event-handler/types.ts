@@ -259,3 +259,29 @@ export const EventDetailSchema = EventSummarySchema.extend({
   deploymentsByProblem: z.record(z.string(), z.array(EventDeploymentSummarySchema)),
 });
 export type EventDetail = z.infer<typeof EventDetailSchema>;
+
+/**
+ * `POST /events/:eventId/deploy` の opt-in body (#555 partial deploy / retry failed)。
+ *
+ * 全フィールド optional:
+ *   - **何も指定しない** (body `{}` / 無し) → 従来通り teams × problems を全展開
+ *   - `retryFailedOnly: true` → status=FAILED の deployment 行のみ抽出。旧 DDB 行を
+ *     DELETE → 同 (teamId, problemId) で新 jobId で PENDING を CREATE する (= 旧 jobId は
+ *     消える)。Issue #555 / 要件 FR-3 の「失敗分を再実行」 button の backend。
+ *   - `teamIds` / `problemIds` → 指定された team / problem だけに範囲を絞る (= 後追い参加
+ *     team / 後追い投入問題のみを deploy)。`retryFailedOnly: true` と組み合わせ可能
+ *     (= 「team t1 の失敗だけ retry」)。
+ *
+ * idempotent semantics: 既存 deployment と (eventId, teamId, problemId) が衝突する組は
+ * 全展開モードでも skipped に計上する (= 後追い deploy が二重生成しないため)。
+ * `retryFailedOnly` は旧 FAILED 行を必ず DELETE してから新 PENDING を CREATE するので
+ * idempotent (= 連打しても二重生成しない)。
+ */
+export const BulkDeployRequestSchema = z
+  .object({
+    retryFailedOnly: z.literal(true).optional(),
+    teamIds: z.array(z.string().min(1)).min(1).max(100).optional(),
+    problemIds: z.array(z.string().min(1)).min(1).max(50).optional(),
+  })
+  .strict();
+export type BulkDeployRequest = z.infer<typeof BulkDeployRequestSchema>;
