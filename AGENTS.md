@@ -62,10 +62,18 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
   - **PR 同士の参照** = `PR-565` のように番号 prefix
   - 旧ルール (= `(#N)` の括弧で auto-close 抑止) は誤解だった。`Closes` などの keyword が無ければ `#N` 単独で auto-close されない (= backlink のみ作る)。
 
+## コーディング規約
+
+- **HTTP status code は `StatusCodes.*` (`http-status-codes` library) を使う**。`c.json(body, 200)` / `res.status === 401` のような数値リテラル直書きは禁止。意図 (200 vs 202、400 vs 409 等) を name で明示し、grep / lint で意味検索を可能にする。
+  - backend: `import { StatusCodes } from "http-status-codes"; return c.json(body, StatusCodes.OK);`
+  - frontend: `if (res.status === StatusCodes.UNAUTHORIZED) ...`
+  - legacy alias (`HTTP_OK` 等、`infrastructure/lib/problem-deploy/handlers/shared/http-status.ts`) は deprecated。新規コードでは使わない
+
 ## 禁止事項
 
 - `npx` → `bunx` または `nlx`
 - `rm` (環境破壊リスク) → `git rm`
+- HTTP status code の数値リテラル直書き — `StatusCodes.*` を使う
 - モック / スタブで握り潰す fallback / 空配列を返して見せかける処理
 - 設定ファイル (`biome.json`, `vitest.config.*`, `tsconfig.json`) の直接編集
 - DynamoDB の on-demand (`PAY_PER_REQUEST`) 化 — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED 強制

@@ -13,6 +13,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
 import TimeInput from "@cloudscape-design/components/time-input";
+import { StatusCodes } from "http-status-codes";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { ApiError, useApiClient } from "../api/client";
@@ -244,7 +245,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       // 409 not_endable: backend は body に `currentStatus` を載せているので、
       // どの status だったかを operator に伝える (= refresh 押せばいいのか、別操作が
       // 要るのかを判断しやすくする)。
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
         const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
         const current = match?.[1];
         setError(

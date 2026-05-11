@@ -139,10 +139,32 @@ GitHub の auto-close keyword は **括弧なし** で書く。
 旧ルール (= `(#N)` の括弧で囲って auto-close を抑止) は仕様誤解だった。`Closes` などの
 keyword が無ければ `#N` 単独でも auto-close されない (= backlink のみ作る)。
 
+### HTTP status code は magic number 禁止
+
+`c.json(body, 500)` のような数値リテラル直書きは禁止です。`http-status-codes` の `StatusCodes` enum を使ってください。
+
+```ts
+import { StatusCodes } from "http-status-codes";
+
+return c.json({ ok: true }, StatusCodes.OK);                    // ✅
+return c.json({ error: "..." }, StatusCodes.INTERNAL_SERVER_ERROR);  // ✅
+return c.json({ ok: true }, 200);                               // ❌ magic number
+```
+
+フロントエンドの fetch response 判定も同様です。
+
+```ts
+if (res.status === StatusCodes.UNAUTHORIZED) throw new PortalAuthError();  // ✅
+if (res.status === 401) throw new PortalAuthError();                       // ❌
+```
+
+旧来の `HTTP_OK` / `HTTP_INTERNAL_ERROR` は `infrastructure/lib/problem-deploy/handlers/shared/http-status.ts` に deprecated alias として残ります。新規コードでは使いません。値は `StatusCodes.*` から派生するため、library 更新で自動追従します。
+
 ## 禁止事項
 
 - **`npx` 禁止** → `bunx` または `nlx` を使う
 - **`rm` コマンド禁止** → ファイル削除は `git rm` 経由で扱う
+- **HTTP status code の数値リテラル直書き禁止** — `StatusCodes.*` (`http-status-codes` library) を使う
 - **モック / スタブで握り潰す fallback 禁止** — 失敗するなら明示的に失敗させる
 - **DynamoDB を on-demand (PAY_PER_REQUEST) で立てない** — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED に強制している。これを破る変更は CFn 出力で必ず引っかかる
 - **設定ファイル (`biome.json`, 各 `vitest.config.ts`, `tsconfig.json`) の直接変更禁止** — コード側を修正する

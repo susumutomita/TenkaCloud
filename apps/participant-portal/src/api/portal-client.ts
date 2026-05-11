@@ -1,3 +1,5 @@
+import { StatusCodes } from "http-status-codes";
+
 export type DeploymentStatus =
   | "PENDING"
   | "IN_PROGRESS"
@@ -139,9 +141,9 @@ async function portalFetch<T>(
     body: hasBody ? JSON.stringify(options.body) : undefined,
     signal: options.signal,
   });
-  if (res.status === 401) throw new PortalAuthError();
-  if (res.status === 404 && options.returnUndefinedOn404) return undefined;
-  if (res.status === 400 && options.throwOn400) {
+  if (res.status === StatusCodes.UNAUTHORIZED) throw new PortalAuthError();
+  if (res.status === StatusCodes.NOT_FOUND && options.returnUndefinedOn404) return undefined;
+  if (res.status === StatusCodes.BAD_REQUEST && options.throwOn400) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new PortalValidationError(body.error ?? "invalid_request");
   }

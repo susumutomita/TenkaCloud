@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
+import { StatusCodes } from "http-status-codes";
 import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
@@ -60,6 +61,22 @@ app.use(
     maxAge: 600,
   }),
 );
+
+// #559 defensive layer: handler 内 try/catch を漏れた exception (= 例えば
+// `resolveTenantId(c)` の throw、middleware の throw、type 違い等) が API Gateway 層に
+// 抜けると 500 + no CORS headers で返ってしまい、browser は「Failed to fetch」とだけ
+// 表示して response body を読めない。onError で 500 を Hono response として返せば
+// CORS middleware を通って Access-Control-* headers が付き、browser は body の
+// `error` field を読めるようになる (= CloudWatch Logs に到達する前に UI で原因が見える)。
+//
+// `message` は **logs だけ** に残し response body には含めない (= 内部 IAM ARN / table 名 /
+// stack trace 等が browser に漏れない、PR-570 review 指摘)。operator は CloudWatch Logs
+// の `[events] uncaught handler error` 行で詳細を引く。
+app.onError((err, c) => {
+  const message = err instanceof Error ? err.message : "unknown error";
+  console.error("[events] uncaught handler error", { path: c.req.path, message });
+  return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+});
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));
 
