@@ -127,6 +127,11 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleInFlight, setScheduleInFlight] = useState<"now" | "scheduled" | null>(null);
+  // #536: 終了予約 modal の state (= 開始 modal と独立)
+  const [endsAtModalOpen, setEndsAtModalOpen] = useState(false);
+  const [endsAtDate, setEndsAtDate] = useState("");
+  const [endsAtTime, setEndsAtTime] = useState("");
+  const [endsAtInFlight, setEndsAtInFlight] = useState(false);
   const [endInFlight, setEndInFlight] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
@@ -230,6 +235,50 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setScheduleInFlight(null);
+    }
+  };
+
+  // #536: 「日時を指定して終了」 modal の submit。endsAt を未来時刻で予約する。
+  // 既存「Event を終了」 button (= POST /events/:id/end、status=ENDED 即遷移) とは別経路:
+  // こちらは status は触らず HealthCheck の gate で時刻 gate するだけ (operator の負担減)。
+  const handleScheduleEnd = async () => {
+    if (!apiClient || endsAtInFlight) return;
+    if (!endsAtDate || !endsAtTime) {
+      setError("終了の日付と時刻の両方を指定してください");
+      return;
+    }
+    const local = new Date(`${endsAtDate}T${endsAtTime}:00`);
+    if (Number.isNaN(local.getTime())) {
+      setError("終了日時の形式が不正です");
+      return;
+    }
+    // #536 frontend 防御線: 過去 endsAt を弾く (= SLACK 60s で backend と揃える)
+    if (local.getTime() < Date.now() - 60_000) {
+      setError(
+        "過去の日時は指定できません。今すぐ終了するには「Event を終了」 button を使ってください。",
+      );
+      return;
+    }
+    // #536 frontend 防御線: endsAt が startsAt 以前なら弾く (= 競技時間 0 / 負を防ぐ)
+    if (detail?.startsAt) {
+      const startsAtMs = new Date(detail.startsAt).getTime();
+      if (Number.isFinite(startsAtMs) && local.getTime() <= startsAtMs) {
+        setError("終了時刻は開始時刻より後の時刻を指定してください。");
+        return;
+      }
+    }
+    setEndsAtInFlight(true);
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { endsAt: local.toISOString() });
+      setEndsAtModalOpen(false);
+      setEndsAtDate("");
+      setEndsAtTime("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEndsAtInFlight(false);
     }
   };
 
@@ -347,8 +396,22 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           header={
             <Header
               variant="h2"
-              description="競技開始時刻を指定するまで Health Check は probe / 採点を skip します (deploy 直後の誤加算を防ぎ、Lambda 呼出 / outbound 通信コストも抑制)。"
-              actions={
+              description="開始時刻を指定すると HealthCheck が probe / 採点を開始、終了時刻を指定すると自動で gate を閉めます (= operator が「Event を終了」を押し忘れても採点が垂れ流しにならない、#536)。"
+            >
+              競技スケジュール
+            </Header>
+          }
+        >
+          <ColumnLayout columns={2} variant="text-grid">
+            <Field label="開始時刻 (UTC)">
+              <SpaceBetween size="xs">
+                {detail.startsAt ? (
+                  <code>{detail.startsAt}</code>
+                ) : (
+                  <Box variant="small" color="text-status-inactive">
+                    未設定 (採点停止中)
+                  </Box>
+                )}
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button
                     onClick={() => setScheduleModalOpen(true)}
@@ -365,24 +428,32 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     即座に開始
                   </Button>
                 </SpaceBetween>
-              }
-            >
-              競技スケジュール
-            </Header>
-          }
-        >
-          <ColumnLayout columns={2} variant="text-grid">
-            <Field label="開始時刻 (UTC)">
-              {detail.startsAt ? (
-                <code>{detail.startsAt}</code>
-              ) : (
-                <Box variant="small" color="text-status-inactive">
-                  未設定 (採点停止中)
-                </Box>
-              )}
+              </SpaceBetween>
             </Field>
-            <Field label="採点ステータス">{scoringBadge(detail.startsAt)}</Field>
+            {/* #536: 終了時刻 column (= 予約終了)。「Event を終了」 button (= 即終了) は
+             *   Header actions に既存、こちらは未来時刻を予約する経路。両方とも endsAt
+             *   field を書き、HealthCheck が `now >= endsAt` で gate を閉じる。 */}
+            <Field label="終了時刻 (UTC)">
+              <SpaceBetween size="xs">
+                {detail.endsAt ? (
+                  <code>{detail.endsAt}</code>
+                ) : (
+                  <Box variant="small" color="text-status-inactive">
+                    未設定 (= 手動「Event を終了」まで採点継続)
+                  </Box>
+                )}
+                <Button
+                  onClick={() => setEndsAtModalOpen(true)}
+                  disabled={!apiClient || endsAtInFlight}
+                >
+                  日時を指定して終了
+                </Button>
+              </SpaceBetween>
+            </Field>
           </ColumnLayout>
+          <Box margin={{ top: "m" }}>
+            <Field label="採点ステータス">{scoringBadge(detail.startsAt)}</Field>
+          </Box>
         </Container>
       )}
 
@@ -668,6 +739,54 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               format="hh:mm"
               placeholder="hh:mm"
               onChange={(e) => setScheduleTime(e.detail.value)}
+            />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+
+      {/* #536: 競技終了予約 modal。開始 modal とは独立 (= 単一目的の方が初見でも分かる)。
+       *   未来時刻のみ受理、past_ends_at / ends_before_starts は backend で第二防衛線。 */}
+      <Modal
+        visible={endsAtModalOpen}
+        onDismiss={() => setEndsAtModalOpen(false)}
+        header="競技終了日時を指定 (予約)"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setEndsAtModalOpen(false)}>キャンセル</Button>
+              <Button variant="primary" loading={endsAtInFlight} onClick={handleScheduleEnd}>
+                設定
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>
+            指定時刻を超えると HealthCheck が採点を停止します。「Event を終了」 button (= 即時)
+            と違い、status は READY のまま (= operator は手動で「Event を終了」
+            を押す必要なし)。ブラウザのローカル時刻で入力した値を UTC に変換します (分精度)。
+          </Box>
+          {detail?.startsAt && (
+            <Box variant="small" color="text-status-inactive">
+              開始時刻: <code>{detail.startsAt}</code> —
+              終了時刻はこれより後の時刻を指定してください。
+            </Box>
+          )}
+          <FormField label="日付 (YYYY-MM-DD)">
+            <DatePicker
+              value={endsAtDate}
+              onChange={(e) => setEndsAtDate(e.detail.value)}
+              placeholder="YYYY/MM/DD"
+            />
+          </FormField>
+          <FormField label="時刻 (HH:mm)">
+            <TimeInput
+              value={endsAtTime}
+              format="hh:mm"
+              placeholder="hh:mm"
+              onChange={(e) => setEndsAtTime(e.detail.value)}
             />
           </FormField>
         </SpaceBetween>
