@@ -38,6 +38,19 @@ export interface EventItem {
    * EventList が ARCHIVED を default view から外すときの sort key としても使える。
    */
   archivedAt?: string;
+  /**
+   * 採点 lock flag (#558)。`true` のとき:
+   *   - HealthCheck Lambda は uptime 加点 / probe を skip
+   *   - submit-flag handler は `scoring_locked` outcome を返し score 不変
+   *   - leaderboard / score-events の read は許可 (= 表彰画面で最終 score を見せる)
+   * status (DRAFT/.../ARCHIVED) と直交する軸として持つ (`status=READY (locked)` 等の合成)。
+   * reversible — operator が表彰中に bug 発見した場合 unlock 可能。
+   */
+  scoringLocked?: boolean;
+  /** scoringLocked を true にした時刻 (ISO 8601, UTC)。unlock 時は undefined に戻す。 */
+  scoringLockedAt?: string;
+  /** scoringLocked を変更した operator の Cognito sub (= audit 用)。 */
+  scoringLockedBy?: string;
 }
 
 export const EventStatusSchema = z.enum([
@@ -166,6 +179,10 @@ export const EventSummarySchema = z.object({
   /** 競技終了時刻 (#536)。HealthCheck が `now >= endsAt` で gate 閉。
    *  「Event を終了」 button = now を書く / 「日時を指定して終了」 = 未来時刻を書く。 */
   endsAt: z.string().optional(),
+  /** 採点 lock flag (#558)。true なら加点経路全停止、read のみ可。 */
+  scoringLocked: z.boolean().optional(),
+  /** scoringLocked を true にした時刻 (#558)。 */
+  scoringLockedAt: z.string().optional(),
 });
 export type EventSummary = z.infer<typeof EventSummarySchema>;
 

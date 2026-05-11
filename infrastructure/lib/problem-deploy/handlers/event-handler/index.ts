@@ -22,6 +22,7 @@ import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from
 import { createNotification } from "./create-notification.js";
 import { endEvent } from "./end-event.js";
 import { getEventDetail, listEvents } from "./list.js";
+import { lockScoring, unlockScoring } from "./lock-scoring.js";
 import { setEventSchedule } from "./schedule.js";
 import { buildEventSharedResources } from "./shared.js";
 import { CreateEventRequestSchema, ScheduleEventRequestSchema } from "./types.js";
@@ -251,6 +252,68 @@ app.post("/events/:eventId/end", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] endEvent failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+// #558: scoring lock — operator が表彰フェーズで採点を凍結 / 解除する。
+//   - POST  /events/:eventId/lock-scoring : 採点 lock (scoringLocked=true)
+//   - DELETE /events/:eventId/lock-scoring : 採点 unlock (scoringLocked を REMOVE)
+// idempotent: already locked / unlocked のときは 200 + body に現状を返す。
+// status=READY / ENDED のみ lockable (= 加点経路があり得る state)。
+app.post("/events/:eventId/lock-scoring", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await lockScoring(
+      shared,
+      resolveTenantId(c),
+      eventId,
+      resolveCognitoSub(c),
+      Date.now(),
+    );
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    if (outcome.kind === "not_lockable") {
+      return c.json({ error: "not_lockable", currentStatus: outcome.status }, HTTP_CONFLICT);
+    }
+    return c.json(
+      {
+        scoringLocked: outcome.scoringLocked,
+        scoringLockedAt: outcome.kind === "ok" ? outcome.scoringLockedAt : undefined,
+        idempotent: outcome.kind === "already",
+      },
+      HTTP_OK,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] lockScoring failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.delete("/events/:eventId/lock-scoring", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid eventId" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const outcome = await unlockScoring(shared, resolveTenantId(c), eventId, Date.now());
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    if (outcome.kind === "not_lockable") {
+      return c.json({ error: "not_lockable", currentStatus: outcome.status }, HTTP_CONFLICT);
+    }
+    return c.json(
+      {
+        scoringLocked: outcome.scoringLocked,
+        idempotent: outcome.kind === "already",
+      },
+      HTTP_OK,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[events] unlockScoring failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

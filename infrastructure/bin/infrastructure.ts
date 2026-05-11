@@ -214,6 +214,22 @@ const problemsRoot = path.resolve(__dirname, "..", "..", "problems");
 const problemsCatalog = discoverProblemsCatalog(problemsRoot);
 const problemsScoring = discoverProblemsScoring(problemsRoot);
 
+// #538: Bulk Deploy 並列度 (CodeBuild concurrent build cap)。
+// `CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT` env で operator が tune する。未設定なら
+// AWS account 全体の concurrent build quota (region default 60) をそのまま使う。
+// Service Quota request で 200 等に上げた環境では同値を渡して project 上限を明示する
+// (= 他 stack 用 CodeBuild が枯渇しない安全弁になる)。
+const rawDeployConcurrentBuildLimit = process.env.CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT;
+const deployConcurrentBuildLimit =
+  rawDeployConcurrentBuildLimit && rawDeployConcurrentBuildLimit.trim() !== ""
+    ? Number(rawDeployConcurrentBuildLimit)
+    : undefined;
+if (deployConcurrentBuildLimit !== undefined && !Number.isInteger(deployConcurrentBuildLimit)) {
+  throw new Error(
+    `CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT は整数で指定してください (got: ${rawDeployConcurrentBuildLimit})`,
+  );
+}
+
 const problemDeployBackendStack = new ProblemDeployBackendStack(app, "tenkacloud-problem-deploy", {
   ...stackEnv,
   eventBusArn: controlPlaneStack.eventBusArn,
@@ -222,6 +238,7 @@ const problemDeployBackendStack = new ProblemDeployBackendStack(app, "tenkacloud
   problemsCatalog,
   problemsScoring,
   participantPortal,
+  deployConcurrentBuildLimit,
 });
 cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),

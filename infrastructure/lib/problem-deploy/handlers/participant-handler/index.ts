@@ -124,6 +124,7 @@ app.post("/portal/me/submit-flag", (c) =>
     if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
     if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
     if (outcome.kind === "no_outputs") return respondError(c, "no_outputs");
+    if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
     return c.json(outcome, HTTP_OK);
   }),
 );

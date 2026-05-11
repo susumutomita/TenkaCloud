@@ -90,6 +90,7 @@ export class ApiGateway extends Construct {
     // /events/{eventId}/schedule       PATCH = 競技開始時刻 (startsAt) を設定 (Phase 2b 追加)
     // /events/{eventId}/end            POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
     // /events/{eventId}/notifications  POST  = 運営 → 競技者 通知 1 件作成 (ADR-006、#553)
+    // /events/{eventId}/lock-scoring   POST  = 採点を lock (表彰フェーズ)、DELETE = unlock (#558)
     const eventIntegration = new LambdaIntegration(props.eventApiLambda);
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
@@ -102,5 +103,8 @@ export class ApiGateway extends Construct {
     event.addResource("end").addMethod("POST", eventIntegration, deployMethodOptions);
     event.addResource("archive").addMethod("POST", eventIntegration, deployMethodOptions);
     event.addResource("notifications").addMethod("POST", eventIntegration, deployMethodOptions);
+    const lockScoring = event.addResource("lock-scoring");
+    lockScoring.addMethod("POST", eventIntegration, deployMethodOptions);
+    lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
   }
 }

@@ -1,4 +1,4 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { writeScoreEvent } from "../shared/score-event.js";
@@ -10,11 +10,39 @@ export type SubmitFlagOutcome =
   | { kind: "wrong" }
   | { kind: "not_flag_problem" }
   | { kind: "no_outputs" }
+  | { kind: "scoring_locked" }
   | { kind: "unauthorized" };
 
 /** 競技者 input と stack output 値を比較。両端 trim、case-sensitive。 */
 function flagMatches(submitted: string, expected: string): boolean {
   return submitted.trim() === expected.trim();
+}
+
+/**
+ * #558: Event の scoringLocked flag を read-through で取得する。
+ * - 行不在 / フィールド無し → false (= unlocked と同義)
+ * - error → false (fail-open。lock が効かない方が「採点ストップ」より運用上マシ、健全な状態に戻る)
+ */
+async function isEventScoringLocked(
+  shared: ParticipantSharedResources,
+  eventId: string,
+): Promise<boolean> {
+  try {
+    const out = await shared.ddb.send(
+      new GetCommand({
+        TableName: shared.eventsTableName,
+        Key: { PK: `EVENT#${eventId}`, SK: "META" },
+        ProjectionExpression: "scoringLocked",
+      }),
+    );
+    return (out.Item as { scoringLocked?: boolean } | undefined)?.scoringLocked === true;
+  } catch (err) {
+    console.warn("[submit-flag] isEventScoringLocked failed (fail-open)", {
+      eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
 }
 
 /**
@@ -41,6 +69,14 @@ export async function submitFlag(
 
   const item = items.find((i) => i.problemId === problemId);
   if (!item?.PK || !item.problemId) return { kind: "unauthorized" };
+
+  // #558: scoring lock check — Event 単位で lock されていたら加点経路を返さない
+  // (= 提出履歴は残さず、`scoring_locked` outcome で UI に伝える)。Event GET は 1 RCU、
+  // submit-flag は per-attempt の rare path なので read-through で十分。
+  if (typeof item.eventId === "string" && item.eventId.length > 0) {
+    const locked = await isEventScoringLocked(shared, item.eventId);
+    if (locked) return { kind: "scoring_locked" };
+  }
 
   const scoring = scoringMap[item.problemId];
   if (scoring?.kind !== "flag") return { kind: "not_flag_problem" };

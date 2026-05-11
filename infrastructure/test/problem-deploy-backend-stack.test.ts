@@ -112,6 +112,36 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         }),
       );
     });
+
+    it("`deployConcurrentBuildLimit` 未指定なら ConcurrentBuildLimit を出力しないべき (#538)", () => {
+      // 未指定 = AWS account 全体の concurrent build quota (region default 60) を本 Project
+      // でフルに使う既存挙動。本 stack の default props で synth した時点で property が
+      // 出ていないことを保証する (= 既存運用への regression 防止)。
+      const projects = tpl.findResources("AWS::CodeBuild::Project");
+      const project = Object.values(projects)[0] as {
+        Properties?: { ConcurrentBuildLimit?: number };
+      };
+      expect(project?.Properties?.ConcurrentBuildLimit).toBeUndefined();
+    });
+  });
+
+  describe("CodeBuild Project concurrent build limit (#538)", () => {
+    it("`deployConcurrentBuildLimit: 200` を渡したら CFn property に反映されるべき", () => {
+      const app = new cdk.App();
+      const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
+        eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+        sourceBucketName: "test-source-bucket",
+        sourceObjectKey: "source.zip",
+        problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+        problemsScoring: {},
+        deployConcurrentBuildLimit: 200,
+      });
+      const limited = Template.fromStack(stack);
+      limited.hasResourceProperties(
+        "AWS::CodeBuild::Project",
+        Match.objectLike({ ConcurrentBuildLimit: 200 }),
+      );
+    });
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
