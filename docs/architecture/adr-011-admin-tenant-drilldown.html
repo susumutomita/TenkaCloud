@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-011: admin-console per-tenant ドリルダウン — System Admin が cross-tenant に deploy 進捗を見る経路</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .quote { border-left: 3px solid var(--c-warn); background: #fff8c5; padding: .5rem .9rem; margin: .8rem 0; border-radius: 0 4px 4px 0; font-size: 0.92rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-011: admin-console per-tenant ドリルダウン — System Admin が cross-tenant に deploy 進捗を見る経路</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-11</div>
+    <div><b>Issue:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/590">#590</a></div>
+    <div><b>Related ADR:</b>
+      <a href="./adr-001-problem-deploy-crud.html">ADR-001</a>、
+      <a href="./adr-004-event-team-model.html">ADR-004</a>
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>PR-585 (#532) で admin-console (System Admin) の tenant 一覧に provisioning 状態 badge + CodeBuild log link を追加。
+PR-588 (#534) で application-admin-console (Tenant Admin) の deploy job 詳細に CFn StackEvents / Resources / Console link を追加。</p>
+
+<p>ただし <strong>System Admin から各 tenant の deploy job 進捗を横断的に見る経路は存在しない</strong>。System Admin が「どの tenant のどの問題が今 deploy 中か」「失敗してる tenant はどれか」を確認するには、tenant ごとに application-admin-console に切り替えて再ログインする必要がある。</p>
+
+<table>
+<thead><tr><th>制約</th><th>由来</th><th>本 ADR への影響</th></tr></thead>
+<tbody>
+<tr><td>テナント分離はインフラ層で</td><td><code>INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER</code></td>
+    <td>System Admin だけが超える正規経路を本 ADR で設計</td></tr>
+<tr><td>cost 最小化</td><td>repo 経済設計</td>
+    <td>新 Lambda 1 個 + 既存 DDB read で完結、新 table は追加しない</td></tr>
+<tr><td>polling over SSE</td><td>memory <code>feedback_polling_over_sse</code></td>
+    <td>tenant 一覧の auto-refresh は 60s polling</td></tr>
+<tr><td>HTTP status は enum</td><td>memory `StatusCodes.*`</td>
+    <td>新 endpoint も <code>StatusCodes.*</code> 規約遵守</td></tr>
+<tr><td>SystemAdmin group は SBT 標準</td><td>SBT 0.3.9</td>
+    <td>Cognito authorizer は SystemAdmin group のみ受理</td></tr>
+</tbody>
+</table>
+
+<h3>現状</h3>
+<ul>
+<li>admin-console は <strong>SBT ControlPlane API</strong> のみ叩く (= tenant CRUD)</li>
+<li>tenant 一覧の <code>provisioning status</code> は <code>provision-tenant.sh</code> の最終出力 (= bootstrap 完了 / 失敗) 粒度のみ</li>
+<li>Application Plane の Events / Deployments table を read する経路は <strong>tenant API GW (Cognito JWT、custom:tenantId claim) のみ</strong></li>
+<li>System Admin が他 tenant の Events を見るには (a) tenant Admin に invite してもらう、(b) AWS Console で DDB を直接叩く、のどちらか — どちらも運用上厳しい</li>
+</ul>
+</section>
+
+<section>
+<h2>解くべき設計判断</h2>
+
+<div class="decisions">
+  <div class="decision-card"><div class="num">D1</div><div class="title">Read 経路</div><div class="body">専用 API / delegated request / iframe</div></div>
+  <div class="decision-card"><div class="num">D2</div><div class="title">認可境界</div><div class="body">SystemAdmin group / SBT 既存 authorizer / 新 authorizer</div></div>
+  <div class="decision-card"><div class="num">D3</div><div class="title">drill-down 段階</div><div class="body">tenant 一覧 → events 一覧 → job 詳細 の 3 段</div></div>
+  <div class="decision-card"><div class="num">D4</div><div class="title">CFn StackEvents 経路</div><div class="body">同 same-account 前提 / cross-account AssumeRole</div></div>
+  <div class="decision-card"><div class="num">D5</div><div class="title">監査ログ</div><div class="body">DDB / CloudWatch Logs / 無し</div></div>
+  <div class="decision-card"><div class="num">D6</div><div class="title">read-only スコープ</div><div class="body">read only / write 可 (lock 等)</div></div>
+</div>
+
+<h3>D1. Read 経路</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th><th>欠点</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D1-A</b></td><td><span class="badge accept">採用</span></td>
+   <td><b>新 backend Lambda + 新 API (`AdminInsightApiLambda`)</b>。SystemAdmin Cognito JWT で認可、Application Plane DDB (Events / Teams / Deployments) を read-only (cross-tenant) で query する。新 stack `AdminConsoleHostingStack` か既存 ControlPlane に同居する</td>
+   <td>新 Lambda 1 個増 (~$0 idle、Free Tier 内)</td></tr>
+<tr class="hide"><td>D1-B</td><td><span class="badge reject">却下</span></td>
+   <td>既存 tenant API を SystemAdmin claim で bypass</td>
+   <td>tenant authorizer に SystemAdmin 例外を埋め込むのは <b>分離の境界を破る</b>。tenant 側 Lambda が cross-tenant の責務を持ってしまう</td></tr>
+<tr class="hide"><td>D1-C</td><td><span class="badge reject">却下</span></td>
+   <td>iframe / new window で application-admin-console をログインせず開く</td>
+   <td>OAuth Code + PKCE が各 tenant Cognito に別々ログインを要求するので結局再ログインが要る、UX 不一致</td></tr>
+</tbody>
+</table>
+
+<h3>D2. 認可境界</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D2-A</b></td><td><span class="badge accept">採用</span></td>
+   <td><b>SBT 標準 SystemAdmin group</b> (= ControlPlane の Cognito UserPool に既存)。新 Lambda の authorizer で <code>cognito:groups</code> claim に <code>SystemAdmin</code> が含まれることを必須化</td></tr>
+<tr class="hide"><td>D2-B</td><td><span class="badge reject">却下</span></td>
+   <td>新 Cognito group (例: <code>SystemAdminReadOnly</code>) を追加</td></tr>
+<tr class="hide"><td>D2-C</td><td><span class="badge reject">却下</span></td>
+   <td>IAM-based authorizer (= SigV4)</td></tr>
+</tbody>
+</table>
+
+<h3>D3. drill-down 段階</h3>
+
+<table>
+<thead><tr><th>段階</th><th>表示</th><th>API</th></tr></thead>
+<tbody>
+<tr><td><b>L1</b> tenant 一覧 (= 既存 admin-console)</td>
+    <td>tenant 一覧 + active deploy / failed / total の集計 column 追加</td>
+    <td><code>GET /admin/insight/tenants/summary</code> (= per-tenant 集計)</td></tr>
+<tr><td><b>L2</b> tenant 詳細</td>
+    <td>tenant の Events 一覧 (= application-admin-console EventList と同等)</td>
+    <td><code>GET /admin/insight/tenants/{tenantId}/events</code></td></tr>
+<tr><td><b>L3</b> event 詳細</td>
+    <td>event の deploy 進捗 (= EventDetail の問題セット / チーム を read-only)</td>
+    <td><code>GET /admin/insight/tenants/{tenantId}/events/{eventId}</code></td></tr>
+<tr><td><b>L4</b> deploy job 詳細</td>
+    <td>CFn StackEvents / Resources / Console link (= PR-588 DeploymentDetail と同等)</td>
+    <td><code>GET /admin/insight/tenants/{tenantId}/deployments/{jobId}</code><br><code>GET /admin/insight/tenants/{tenantId}/deployments/{jobId}/stack-progress</code></td></tr>
+</tbody>
+</table>
+
+<h3>D4. CFn StackEvents 経路</h3>
+
+<p><strong>same-account 前提</strong> (= MVP-1 と同じ)。Application Plane の各 tenant 用 stack は同 AWS account 内に存在するので、新 Lambda の IAM role に <code>cloudformation:DescribeStackEvents</code> / <code>cloudformation:DescribeStackResources</code> を Resource:* で grant する (PR-588 と同設計)。</p>
+
+<p>Phase 2 (= 競技者 cross-account に Lambda が直接見にいく時) は <a href="https://github.com/susumutomita/TenkaCloud/issues/459">#459 ADR-009</a> の cross-account federation を流用する (= deployment 行から <code>(awsAccountId, externalId, competitorRoleName)</code> を読んで AssumeRole)。</p>
+
+<h3>D5. 監査ログ</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D5-A</b></td><td><span class="badge accept">採用</span></td>
+   <td><b>CloudWatch Logs structured log</b>。各 read API に <code>console.log({ event: "admin.insight.read", admin: sub, target: tenantId, path })</code> を入れて Logs Insights で query 可能に</td></tr>
+<tr class="hide"><td>D5-B</td><td><span class="badge reject">却下</span></td>
+   <td>専用 DDB <code>AdminAuditLog</code> table</td>
+   <td>1 table 増 + WCU 課金、現フェーズ過剰</td></tr>
+<tr class="hide"><td>D5-C</td><td><span class="badge reject">却下</span></td>
+   <td>監査ログ無し</td>
+   <td>compliance / 信頼性で不可</td></tr>
+</tbody>
+</table>
+
+<h3>D6. read-only スコープ</h3>
+
+<p><strong>Phase 1 は read-only に限定</strong>。SystemAdmin が他 tenant の deploy を中止 / lock-scoring / 再 deploy する操作経路は本 ADR では作らない (= 別 ADR で要件確定後)。</p>
+
+<p>理由:</p>
+<ul>
+<li>SystemAdmin が誤って他 tenant の競技中 event を止めると blast radius が大きい (= 全 team の競技体験を破壊)</li>
+<li>read-only に閉じることで <strong>境界の正当性</strong> (= tenant 分離違反は「読むだけ」) が明確になる</li>
+<li>Phase 2 で write 経路を作るなら「明示 ack ボタン + 監査 log 強化 + 競技者通知」が要る (= 別 ADR)</li>
+</ul>
+</section>
+
+<section>
+<h2>Decision (まとめ)</h2>
+
+<table>
+<thead><tr><th>#</th><th>決定</th><th>場所</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>新 Lambda + 新 API (<code>AdminInsightApiLambda</code>)</td><td>新 stack or 既存 ControlPlane 同居</td></tr>
+<tr><td>D2</td><td>SBT 標準 SystemAdmin group の Cognito claim</td><td>新 Lambda の authorizer</td></tr>
+<tr><td>D3</td><td>4 段 drill-down (tenant summary → events → event detail → deploy job)</td><td>admin-console 新 page 群 + 既存 TenantList 拡張</td></tr>
+<tr><td>D4</td><td>same-account CFn Describe (Phase 1)、cross-account は #459 統合で Phase 2</td><td>新 Lambda の IAM</td></tr>
+<tr><td>D5</td><td>CloudWatch Logs structured log</td><td>各 handler の console.log</td></tr>
+<tr><td>D6</td><td>read-only に限定 (Phase 1)、write 操作は別 ADR</td><td>新 Lambda routes は GET のみ</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>段階的ロールアウト</h2>
+
+<table>
+<thead><tr><th>Phase</th><th>scope</th><th>依存</th></tr></thead>
+<tbody>
+<tr><td><b>Phase 1</b></td>
+    <td>新 Lambda + 新 GET 4 endpoint + admin-console 4 新 page。read-only、same-account CFn Describe</td>
+    <td>本 ADR 採択 (Accepted)</td></tr>
+<tr><td><b>Phase 2</b></td>
+    <td>cross-account StackEvents (#459 ADR-009 統合)。<code>deployment.awsAccountId</code> 別 account への CFn Describe を AssumeRole で</td>
+    <td>#459 Phase 1 完了</td></tr>
+<tr><td><b>Phase 3</b></td>
+    <td>active deploy real-time dashboard (= 60s polling auto-refresh)</td>
+    <td>Phase 1 完了</td></tr>
+<tr><td><b>Phase 4</b></td>
+    <td>write 操作 (= operator 介入: deploy 中止 / lock-scoring / 再 deploy)。要別 ADR</td>
+    <td>Phase 1-3 dogfood で実需要が見えてから</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Phase 1 Acceptance Criteria</h2>
+
+<ul>
+<li>System Admin が admin-console から tenant 一覧 → tenant 行 click → Events 一覧 → Event 行 click → deploy 詳細 へ <strong>1 度もログインし直さず</strong> ドリルダウンできる</li>
+<li>failed な deploy が存在する tenant が tenant 一覧で識別できる (= 失敗件数 badge)</li>
+<li>CFn StackEvent reason が System Admin 画面で直接読める</li>
+<li>Tenant Admin (= non-SystemAdmin) は同じ API を叩いて <code>403</code> を返される</li>
+<li>各 read action が CloudWatch Logs に structured log として残る</li>
+</ul>
+</section>
+
+<section>
+<h2>API 設計 (Phase 1)</h2>
+
+<table>
+<thead><tr><th>method</th><th>path</th><th>response</th></tr></thead>
+<tbody>
+<tr><td>GET</td><td><code>/admin/insight/tenants/summary</code></td>
+    <td><code>{ items: [{ tenantId, name, tier, activeDeploys, failedDeploys, totalEvents }] }</code></td></tr>
+<tr><td>GET</td><td><code>/admin/insight/tenants/{tenantId}/events</code></td>
+    <td><code>{ items: [EventSummary], nextCursor? }</code> (= 既存 EventSummary 型を流用)</td></tr>
+<tr><td>GET</td><td><code>/admin/insight/tenants/{tenantId}/events/{eventId}</code></td>
+    <td><code>EventDetail</code> (= 既存型、ただし teamLoginKey は黒塗り)</td></tr>
+<tr><td>GET</td><td><code>/admin/insight/tenants/{tenantId}/deployments/{jobId}</code></td>
+    <td><code>DeploymentDetail</code> (= 既存型)</td></tr>
+<tr><td>GET</td><td><code>/admin/insight/tenants/{tenantId}/deployments/{jobId}/stack-progress</code></td>
+    <td><code>{ stackEvents, resources, consoleUrl }</code> (= PR-588 同型)</td></tr>
+</tbody>
+</table>
+
+<p><strong>セキュリティ要件</strong>:</p>
+<ul>
+<li><code>teamLoginKey</code> は detail response から <strong>除外</strong> (= System Admin 経路で漏洩しない、Tenant Admin の領域)</li>
+<li>path の <code>tenantId</code> は実在チェック (= tenant 存在しないなら 404)。<code>tenantId</code> を typo して別 tenant の data を見ない保証</li>
+<li>tenant 削除済の場合は historical data の read を許可 (= archive view)</li>
+</ul>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>positive</h3>
+<ul>
+<li>System Admin が <b>全 tenant 横断で deploy 状態を観察</b> できる (= 運営判断のため必須)</li>
+<li>tenant 分離原則を <b>1 つの正規経路</b> (= AdminInsightApiLambda) に閉じ込め、tenant Lambda 側に admin 例外を漏らさない</li>
+<li>監査ログ (CloudWatch) で誰がいつ覗いたか追える</li>
+<li>Phase 2 で #459 ADR-009 と統合すれば cross-account の StackEvents まで System Admin が直接見える</li>
+</ul>
+
+<h3>negative</h3>
+<ul>
+<li>新 Lambda 1 個 + Cognito group 配線 + IAM の追加</li>
+<li>SystemAdmin の権限が「全 tenant の Event / Deployment 内容を read 可能」に拡大 (= 既存は tenant CRUD のみだった)</li>
+<li>admin-console SPA に 3 新 page (Events 一覧 / Event 詳細 / Deploy 詳細) が必要、bundle size +</li>
+</ul>
+
+<h3>open questions (= follow-up issue)</h3>
+<ul>
+<li>tenant 一覧の <code>activeDeploys / failedDeploys</code> 集計は per-tenant Scan が必要。tenant 数 × per-tenant Deployments 行数 で RCU 消費が問題化する境界はどこか</li>
+<li>監査ログのリテンション (CloudWatch Logs default 30 日で良いか)</li>
+<li>Phase 4 (write 操作) の正当な ADR 要件 — どこまでが SystemAdmin の責務か</li>
+<li>tenant 削除済の historical data はどこまで残すか (TTL との関係)</li>
+</ul>
+</section>
+
+<section>
+<h2>関連リソース</h2>
+<ul>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/590">#590</a> — 本 ADR 起票元</li>
+<li>PR <a href="https://github.com/susumutomita/TenkaCloud/pull/585">#585</a> (#532) — admin-console tenant 一覧 provisioning 状態</li>
+<li>PR <a href="https://github.com/susumutomita/TenkaCloud/pull/588">#588</a> (#534) — application-admin-console deploy job CFn 進行状況 (本 ADR L4 と同型 API)</li>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/459">#459</a> — Phase 2 で統合する cross-account federation</li>
+<li><code>INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER</code> — テナント分離を破る唯一の正規経路として本 ADR が必要</li>
+</ul>
+</section>
+</body>
+</html>
