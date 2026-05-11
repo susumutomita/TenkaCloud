@@ -20,10 +20,15 @@ import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
 
 const NAME_MAX = 120;
+// MUST match infrastructure/lib/problem-deploy/handlers/event-handler/types.ts (zod schema)。
+// drift すると frontend が通した値を backend が reject する。
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 const ACCOUNT_ID_RE = /^\d{12}$/;
+const ACCOUNT_ID_MAX_LEN = 12;
 const TEAMS_MIN = 1;
 const TEAMS_MAX = 99;
+const TEAM_COUNT_INPUT_MAX_LEN = 3; // TEAMS_MAX が 99 = 2 桁、+1 余裕で 3 桁まで入力受理
+const INITIAL_TEAM_COUNT = 3;
 
 const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
   value: r.code,
@@ -69,21 +74,24 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   );
 
   const [name, setName] = useState("");
-  // #528: チーム数を変えると teamRows が動的に伸縮 (= 初期 3 行)。
+  // チーム数を変えると teamRows が動的に伸縮 (= 初期 INITIAL_TEAM_COUNT 行)。
   const [teamRows, setTeamRows] = useState<TeamRow[]>(() =>
-    Array.from({ length: 3 }, (_, i) => ({ internalSlug: `team-${i + 1}`, awsAccountId: "" })),
+    Array.from({ length: INITIAL_TEAM_COUNT }, (_, i) => ({
+      internalSlug: `team-${i + 1}`,
+      awsAccountId: "",
+    })),
   );
   const [selectedProblems, setSelectedProblems] = useState<readonly MultiselectProps.Option[]>([]);
   const [problemRows, setProblemRows] = useState<ProblemRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /** #528: チーム数の Input が変わったら teamRows を伸縮する。
-   *   - 増えるとき: 既存 row はそのまま、新 row は `team-N` の internalSlug + 空 account
-   *   - 減るとき: 末尾を捨てる (= operator が入力した内容を可能な限り保持) */
+  /** チーム数の Input 変更で teamRows を伸縮。同数なら same-reference を返して
+   *  無駄な再 render を防ぐ。減るとき末尾捨て、増えるとき新 row 追加。 */
   const handleTeamCountChange = (next: number) => {
     setTeamRows((prev) => {
-      if (next <= prev.length) return prev.slice(0, Math.max(next, 0));
+      if (next === prev.length) return prev;
+      if (next < prev.length) return prev.slice(0, Math.max(next, 0));
       const additions = Array.from({ length: next - prev.length }, (_, i) => ({
         internalSlug: `team-${prev.length + i + 1}`,
         awsAccountId: "",
@@ -120,27 +128,36 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     setProblemRows((rows) => rows.map((r) => (r.problemId === problemId ? { ...r, ...patch } : r)));
   };
 
+  // teamRows ベースの validation を 1 pass に集約 (= 4 つ .every() / IIFE を回す代わり)。
+  // teamRows 変更時のみ再評価され、render path の負担を減らす。
+  const teamValidation = useMemo(() => {
+    let allSlugsValid = true;
+    let allAccountsValid = true;
+    const slugs = new Set<string>();
+    let hasDuplicateSlug = false;
+    for (const t of teamRows) {
+      if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
+      if (!ACCOUNT_ID_RE.test(t.awsAccountId)) allAccountsValid = false;
+      if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;
+      else slugs.add(t.internalSlug);
+    }
+    return { allSlugsValid, allAccountsValid, hasDuplicateSlug };
+  }, [teamRows]);
+  // Table の items に渡す配列を teamRows ベースで memo 化。Cloudscape Table は items の
+  // shallow identity で再 render 判定するので、毎 render 新 array を渡すと無駄に重い
+  // (= 99 行 × 2 column の Input が全部 reconcile される)。
+  const teamTableItems = useMemo(() => teamRows.map((t, i) => ({ ...t, idx: i })), [teamRows]);
   const teamCountInvalid = teamRows.length < TEAMS_MIN || teamRows.length > TEAMS_MAX;
   const nameInvalid = name.length === 0 || name.length > NAME_MAX;
-  const allTeamSlugsValid = teamRows.every((t) => SLUG_RE.test(t.internalSlug));
-  const allTeamAccountsValid = teamRows.every((t) => ACCOUNT_ID_RE.test(t.awsAccountId));
-  const duplicateSlugs = (() => {
-    const seen = new Set<string>();
-    for (const t of teamRows) {
-      if (seen.has(t.internalSlug)) return true;
-      seen.add(t.internalSlug);
-    }
-    return false;
-  })();
   const canSubmit =
     !!apiClient &&
     !submitting &&
     !nameInvalid &&
     !teamCountInvalid &&
     problemRows.length > 0 &&
-    allTeamSlugsValid &&
-    allTeamAccountsValid &&
-    !duplicateSlugs;
+    teamValidation.allSlugsValid &&
+    teamValidation.allAccountsValid &&
+    !teamValidation.hasDuplicateSlug;
 
   const handleSubmit = async () => {
     if (!canSubmit || !apiClient) return;
@@ -149,18 +166,16 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     try {
       const res = await createEvent(apiClient, {
         name,
-        // #528: teams は internalSlug + awsAccountId のペア。
         teams: teamRows.map((t) => ({
           internalSlug: t.internalSlug,
           awsAccountId: t.awsAccountId,
         })),
-        // 問題側は region のみ (account は team 側に移動)。
         problems: problemRows.map((r) => ({
           problemId: r.problemId,
           defaultRegion: r.defaultRegion,
         })),
       });
-      // #530: 作成直後に EventDetail へ。teamLoginKey は EventDetail で常時表示。
+      // teamLoginKey は EventDetail で常時表示するので作成直後に遷移 (#530)。
       navigate(`/events/${res.eventId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -209,7 +224,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                   inputMode="numeric"
                   value={String(teamRows.length)}
                   onChange={({ detail }) => {
-                    const next = Number.parseInt(detail.value.replace(/\D/g, "").slice(0, 3), 10);
+                    const next = Number.parseInt(
+                      detail.value.replace(/\D/g, "").slice(0, TEAM_COUNT_INPUT_MAX_LEN),
+                      10,
+                    );
                     if (Number.isFinite(next))
                       handleTeamCountChange(Math.max(0, Math.min(TEAMS_MAX, next)));
                   }}
@@ -239,7 +257,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             ) : (
               <Table
                 variant="embedded"
-                items={teamRows.map((t, i) => ({ ...t, idx: i }))}
+                items={teamTableItems}
                 columnDefinitions={[
                   {
                     id: "slug",
@@ -266,7 +284,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                         invalid={t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)}
                         onChange={({ detail }) =>
                           updateTeamRow(t.idx, {
-                            awsAccountId: detail.value.replace(/\D/g, "").slice(0, 12),
+                            awsAccountId: detail.value
+                              .replace(/\D/g, "")
+                              .slice(0, ACCOUNT_ID_MAX_LEN),
                           })
                         }
                       />
@@ -275,7 +295,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                 ]}
               />
             )}
-            {duplicateSlugs && (
+            {teamValidation.hasDuplicateSlug && (
               <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
                 重複する internalSlug があります。各 team で固有の slug を指定してください。
               </Box>
