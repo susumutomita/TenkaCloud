@@ -1,5 +1,10 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  QueryCommand,
+  ScanCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -24,6 +29,7 @@ import { writeScoreEvent } from "../shared/score-event.js";
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 // 遅延 lookup: module load 時に env が無くても import がコケない (test 互換)。
 const tableName = (): string => getEnv("DEPLOYMENTS_TABLE_NAME");
+const eventsTableName = (): string => getEnv("EVENTS_TABLE_NAME");
 
 const PROBE_TIMEOUT_MS = 8_000;
 
@@ -156,8 +162,145 @@ function buildHealthUpdate(
   });
 }
 
+/**
+ * #557 / #539: Event status の auto-transition 判定 (pure function、test-friendly)。
+ *
+ * - `DEPLOYING`: 子 deployment が **全て terminal** (`COMPLETE` / `FAILED`) → `READY`。
+ *   1 件でも進行中 (`PENDING` / `IN_PROGRESS`) があれば `undefined` (= 触らない)。
+ * - `TEARDOWN`: 子 deployment が **全て終端** (`DELETED` / `FAILED`) → `ARCHIVED`。
+ *   `DELETING` が残っていれば `undefined`。
+ * - 子 deployment 0 件: `undefined` (= bulk-deploy/bulk-delete 前の race state、触らない)。
+ * - その他 status (`DRAFT` / `READY` / `ENDED` / `ARCHIVED`): caller でフィルタ済前提だが
+ *   defense-in-depth で `undefined`。
+ *
+ * `FAILED` を terminal に含む理由: deploy が失敗した行も「これ以上進行しない」状態なので
+ * Event 全体としては前進可能 (= operator 視点で再実行 or skip 判断)。同様に teardown 失敗も
+ * 引きずらない (= 最終手段は operator 手動削除)。
+ */
+export function resolveEventStatusTransition(
+  eventStatus: string,
+  deploymentStatuses: readonly string[],
+): "READY" | "ARCHIVED" | undefined {
+  if (deploymentStatuses.length === 0) return undefined;
+  if (eventStatus === "DEPLOYING") {
+    const allTerminal = deploymentStatuses.every((s) => s === "COMPLETE" || s === "FAILED");
+    return allTerminal ? "READY" : undefined;
+  }
+  if (eventStatus === "TEARDOWN") {
+    const allDone = deploymentStatuses.every((s) => s === "DELETED" || s === "FAILED");
+    return allDone ? "ARCHIVED" : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Events table を scan して `DEPLOYING` / `TEARDOWN` 状態の Event について、
+ * 子 deployment 集約 status を見て `READY` / `ARCHIVED` に遷移させる (#557 #539)。
+ *
+ * 各 Event の判定は **並列**: 1 件遅い tenant が他を block しない。Update が CCF
+ * (= operator 手動遷移などの race) で失敗した行は silent skip (= 次の tick で再評価)。
+ *
+ * Scan limit 100: TenkaCloud MVP 規模 (events ~10 件 / tenant、~5 tenants) で 1 tick で
+ * 全件処理できる範囲。Phase 2+ で増えたら GSI3 (PK=STATUS) で query 化を検討。
+ */
+export async function reconcileEventStatuses(nowIso: string): Promise<void> {
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const out = await ddb.send(
+      new ScanCommand({
+        TableName: eventsTableName(),
+        ProjectionExpression: "PK, tenantId, eventId, #status",
+        ExpressionAttributeNames: { "#status": "status" },
+        FilterExpression: "#status = :deploying OR #status = :teardown",
+        ExpressionAttributeValues: {
+          ":deploying": "DEPLOYING",
+          ":teardown": "TEARDOWN",
+        },
+        Limit: 100,
+        ExclusiveStartKey: exclusiveStartKey,
+      }),
+    );
+    const items = (out.Items ?? []) as Array<{
+      PK?: string;
+      tenantId?: string;
+      eventId?: string;
+      status?: string;
+    }>;
+
+    await Promise.all(
+      items.map(async (event) => {
+        if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
+        // 子 deployments を GSI1 (TENANT#) で query → 同 event のものに in-memory filter。
+        const depsOut = await ddb.send(
+          new QueryCommand({
+            TableName: tableName(),
+            IndexName: "GSI1",
+            KeyConditionExpression: "GSI1PK = :pk",
+            FilterExpression: "eventId = :ev",
+            ProjectionExpression: "#status",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":pk": `TENANT#${event.tenantId}`,
+              ":ev": event.eventId,
+            },
+          }),
+        );
+        const depStatuses = (depsOut.Items ?? [])
+          .map((d) => String((d as { status?: string }).status ?? ""))
+          .filter((s) => s.length > 0);
+        const next = resolveEventStatusTransition(event.status, depStatuses);
+        if (!next) return;
+
+        try {
+          await ddb.send(
+            new UpdateCommand({
+              TableName: eventsTableName(),
+              Key: { PK: event.PK, SK: "META" },
+              UpdateExpression: "SET #status = :next, updatedAt = :now",
+              // race 防止: 期待 current status と一致しているときのみ更新 (= operator が
+              // 手動 archive / 再 deploy で先に動かしてたら CCF で skip)。
+              ConditionExpression: "tenantId = :tenant AND #status = :current",
+              ExpressionAttributeNames: { "#status": "status" },
+              ExpressionAttributeValues: {
+                ":tenant": event.tenantId,
+                ":current": event.status,
+                ":next": next,
+                ":now": nowIso,
+              },
+            }),
+          );
+          console.log("[health-check] Event status auto-transition", {
+            eventId: event.eventId,
+            from: event.status,
+            to: next,
+          });
+        } catch (err) {
+          const code = (err as { name?: string })?.name ?? "";
+          if (code === "ConditionalCheckFailedException") return;
+          console.warn("[health-check] Event status update failed", {
+            eventId: event.eventId,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }),
+    );
+
+    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+}
+
 export async function handler(): Promise<void> {
   const scoringMap = parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING);
+  const nowIso = new Date().toISOString();
+
+  // Event 状態 reconcile (#557 #539) と uptime 採点を並列実行。互いに依存なし、
+  // 別 table / 別 row を触るので race も無い。reconcile 失敗が scoring を巻き込まない
+  // よう catch して log に残す (1 tick の失敗は次 tick で再評価される)。
+  const reconcilePromise = reconcileEventStatuses(nowIso).catch((err) => {
+    console.warn("[health-check] reconcileEventStatuses failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   let exclusiveStartKey: Record<string, unknown> | undefined;
   do {
@@ -173,7 +316,6 @@ export async function handler(): Promise<void> {
     );
     const items = (out.Items ?? []) as Partial<DeploymentItem>[];
 
-    const nowIso = new Date().toISOString();
     // 全 deployment を **並列** に check する。Lambda timeout 2 min 内に収まるよう、
     // sequential だと N × PROBE_TIMEOUT_MS で容易に超過する。1 deployment 失敗が
     // 他に波及しないよう catch して log に残す。
@@ -196,6 +338,10 @@ export async function handler(): Promise<void> {
     );
     exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (exclusiveStartKey);
+
+  // reconcile を最後に await して invocation 終了前に確実に完了させる
+  // (= Lambda が return すると未完了 Promise が中断される)。
+  await reconcilePromise;
 }
 
 export { joinUrl };

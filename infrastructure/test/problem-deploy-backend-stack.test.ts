@@ -107,8 +107,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(synthJson).toContain("IN_PROGRESS");
     });
 
-    it("EventBridge Rule を Create / Delete でそれぞれ 1 つずつ持つべき", () => {
-      tpl.resourceCountIs("AWS::Events::Rule", 2);
+    it("EventBridge Rule を Create / Delete / HealthCheck schedule で 3 つ持つべき", () => {
+      // 旧 2 (Create / Delete state-machine event rules) + HealthCheck schedule rate(1 min)
+      // = 3。HealthCheck は #557 / #539 reconciler で uptime 採点とは独立に常時 instantiate
+      // される (= 旧「scoring 0 件なら skip」ガード撤去)。
+      tpl.resourceCountIs("AWS::Events::Rule", 3);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -125,6 +128,13 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
             source: ["tenkacloud.deploy"],
             "detail-type": ["DeployDeleteRequested"],
           }),
+        }),
+      );
+      // HealthCheck の rate(1 minute) schedule (= #557 #539 reconciler + uptime 採点)
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          ScheduleExpression: "rate(1 minute)",
         }),
       );
     });
