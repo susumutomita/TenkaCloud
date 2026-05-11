@@ -96,5 +96,46 @@ describe("IdentityProvider", () => {
       const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
       expect(writeAttrs).toContain("email");
     });
+
+    it("#529: tenant admin 招待メールを日本語化し application-admin-console URL を埋め込むべき", () => {
+      const consoleUrl = "https://d123abc.cloudfront.net";
+      const { template } = synth("tenant-1", consoleUrl);
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPool",
+        Match.objectLike({
+          AdminCreateUserConfig: Match.objectLike({
+            InviteMessageTemplate: Match.objectLike({
+              EmailSubject: Match.stringLikeRegexp("TenkaCloud.*テナント管理コンソール"),
+              EmailMessage: Match.stringLikeRegexp("ようこそ TenkaCloud"),
+            }),
+          }),
+        }),
+      );
+      // body に {username} / {####} / console URL の 3 種 placeholder + 実値が含まれること
+      const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
+      const body =
+        (
+          userPool?.Properties as {
+            AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
+          }
+        )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
+      expect(body).toContain("{username}");
+      expect(body).toContain("{####}");
+      expect(body).toContain(consoleUrl);
+    });
+
+    it("#529: invitation の SMS message も Cognito API の必須要件なので置かれているべき", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPool",
+        Match.objectLike({
+          AdminCreateUserConfig: Match.objectLike({
+            InviteMessageTemplate: Match.objectLike({
+              SMSMessage: Match.stringLikeRegexp(".*\\{username\\}.*"),
+            }),
+          }),
+        }),
+      );
+    });
   });
 });

@@ -65,9 +65,42 @@ export class IdentityProvider extends Construct {
   constructor(scope: Construct, id: string, props: IdentityProviderProps) {
     super(scope, id);
 
+    // #529: tenant admin 招待メールを日本語化 + application-admin-console URL を埋め込む。
+    // Cognito の placeholder: `{username}` = `tenant-admin-<tenantId>` (provision-tenant.sh で
+    // admin-create-user 時に固定)、`{####}` = 一時パスワード (Cognito 自動生成、初回 sign-in
+    // で本パスワードに変更必須)。
+    //
+    // 後段で `provision-tenant.sh` の `aws cognito-idp admin-create-user` が CLI 経由で
+    // CustomMessage trigger を経由せず invitation メールを送るが、UserPool の AdminCreateUserConfig
+    // の InviteMessageTemplate に従って Cognito 側で render される (= テスト確認済の標準動作)。
+    const inviteEmailBody = [
+      "ようこそ TenkaCloud Battle / Challenge へ。",
+      "",
+      "テナント管理コンソールへサインインするための一時アカウントを発行しました。",
+      "",
+      "  ・ ユーザー名: {username}",
+      "  ・ 一時パスワード: {####}",
+      "",
+      `  ・ サインイン URL: ${props.applicationAdminConsoleUrl}`,
+      "",
+      "初回サインイン時に新しいパスワードを設定してください。",
+      "競技イベント (Event) の作成 / 競技者向け Portal URL の払い出しは",
+      "テナント管理コンソールから操作できます。",
+      "",
+      "本メールに心当たりがない場合はそのまま破棄してください。",
+      "",
+      "-- TenkaCloud 運営",
+    ].join("\n");
+
     this.tenantUserPool = new aws_cognito.UserPool(this, "tenantUserPool", {
       autoVerify: { email: true },
       accountRecovery: aws_cognito.AccountRecovery.EMAIL_ONLY,
+      userInvitation: {
+        emailSubject: "[TenkaCloud] テナント管理コンソール 招待 (一時パスワード付き)",
+        emailBody: inviteEmailBody,
+        // SMS は使わないが Cognito API の都合で何か必須。短く同等の案内を入れる。
+        smsMessage: "TenkaCloud 招待: {username} / 一時パスワード {####}",
+      },
       standardAttributes: {
         email: {
           required: true,
