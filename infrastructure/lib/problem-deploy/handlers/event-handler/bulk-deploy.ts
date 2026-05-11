@@ -93,13 +93,24 @@ export async function bulkDeployEvent(
 
   // teams × problems を全展開し、deployment 行 + publish entry を組み立てる。
   // shared.problemsCatalog (problemId → problemDir) に存在しない problemId は skip。
+  // #528: deploy target の awsAccountId は team から (= 各 team は自社 AWS account)、region は
+  // problem から (= 問題テンプレが特定 region 依存)。team.awsAccountId が無い旧 Event は
+  // problem.defaultAwsAccountId に fallback (Phase 2 で fallback も削除予定)。
   const items: DeploymentItem[] = [];
   const entries: PutEventsRequestEntry[] = [];
   let skipped = 0;
   for (const team of teams) {
+    const teamAwsAccountId = team.awsAccountId;
     for (const problem of problems) {
       const problemDir = shared.problemsCatalog[problem.problemId];
       if (!problemDir) {
+        skipped++;
+        continue;
+      }
+      // #528: team.awsAccountId が新 source-of-truth。旧 Event は problem.defaultAwsAccountId
+      // を fallback として使う。両方無いと deploy target を組めないので skip。
+      const awsAccountId = teamAwsAccountId ?? problem.defaultAwsAccountId;
+      if (!awsAccountId) {
         skipped++;
         continue;
       }
@@ -116,7 +127,7 @@ export async function bulkDeployEvent(
         jobId,
         problemId: problem.problemId,
         tenantId,
-        awsAccountId: problem.defaultAwsAccountId,
+        awsAccountId,
         region: problem.defaultRegion,
         teamName: team.internalSlug,
         namePrefix,
@@ -140,7 +151,7 @@ export async function bulkDeployEvent(
         teamSlug,
         namePrefix,
         region: problem.defaultRegion,
-        awsAccountId: problem.defaultAwsAccountId,
+        awsAccountId,
       };
       entries.push({
         EventBusName: shared.eventBusName,

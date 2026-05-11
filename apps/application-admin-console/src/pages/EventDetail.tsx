@@ -619,6 +619,19 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                   ),
               },
               {
+                // #528: team 単位の deploy 先 AWS Account ID。旧 Event は undefined。
+                id: "account",
+                header: "AWS Account ID",
+                cell: (t) =>
+                  t.awsAccountId ? (
+                    <code>{t.awsAccountId}</code>
+                  ) : (
+                    <Box variant="small" color="text-status-inactive">
+                      (旧 Event: problem 既定値を使用)
+                    </Box>
+                  ),
+              },
+              {
                 id: "key",
                 header: "teamLoginKey",
                 // #554: copy button を併設して text 選択 + Ctrl-C より早く配布できるように。

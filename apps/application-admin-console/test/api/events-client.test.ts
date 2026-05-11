@@ -88,11 +88,11 @@ describe("createEvent", () => {
     });
     await createEvent(client, {
       name: "Spring",
-      teams: [{ internalSlug: "team-1" }],
+      // #528: 各 team は自社 AWS account を持つ。problem からは defaultAwsAccountId が消えた
+      teams: [{ internalSlug: "team-1", awsAccountId: "111111111111" }],
       problems: [
         {
           problemId: "hello-world",
-          defaultAwsAccountId: "999999999999",
           defaultRegion: "ap-northeast-1",
         },
       ],

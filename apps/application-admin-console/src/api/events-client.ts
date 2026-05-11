@@ -6,7 +6,9 @@ export type EventStatus = "DRAFT" | "DEPLOYING" | "READY" | "ENDED" | "TEARDOWN"
 
 export interface EventProblemTarget {
   problemId: string;
-  defaultAwsAccountId: string;
+  /** @deprecated #528: AWS Account は team 単位 (= TeamSummary.awsAccountId) に移行。
+   *  旧 Event の fallback としてのみ残す。Phase 2 で削除予定。 */
+  defaultAwsAccountId?: string;
   defaultRegion: string;
 }
 
@@ -37,6 +39,8 @@ export interface TeamSummary {
   displayName?: string;
   /** 詳細経路 (`GET /events/{id}`) でのみ含まれる短命キー。 */
   teamLoginKey?: string;
+  /** #528: team の deploy 先 AWS Account ID (12 桁)。旧 Event は undefined。 */
+  awsAccountId?: string;
 }
 
 export type EventDeploymentStatus =
@@ -65,6 +69,8 @@ export interface EventDetail extends EventSummary {
 
 export interface CreateEventTeamInput {
   internalSlug: string;
+  /** #528: 各 team の deploy 先 AWS Account ID (12 桁数字)。必須。 */
+  awsAccountId: string;
 }
 
 export interface CreateEventRequest {

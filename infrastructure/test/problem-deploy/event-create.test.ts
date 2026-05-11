@@ -25,11 +25,15 @@ function buildShared(): {
 
 const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventRequest => ({
   name: "JAWS-UG 春の陣 2026",
-  teams: [{ internalSlug: "team-alpha" }, { internalSlug: "team-beta" }],
+  // #528: 各 team は自社 AWS account を持つ。test data は別 account を割り当て、
+  // 「team A が team B の account に deploy しない」を pin できるようにする。
+  teams: [
+    { internalSlug: "team-alpha", awsAccountId: "111111111111" },
+    { internalSlug: "team-beta", awsAccountId: "222222222222" },
+  ],
   problems: [
     {
       problemId: "hello-world-battle",
-      defaultAwsAccountId: "999999999999",
       defaultRegion: "ap-northeast-1",
     },
   ],
@@ -91,7 +95,10 @@ describe("createEvent", () => {
         shared,
         { tenantId: "tenant-acme", nowMs: NOW_MS },
         sampleRequest({
-          teams: [{ internalSlug: "dup" }, { internalSlug: "dup" }],
+          teams: [
+            { internalSlug: "dup", awsAccountId: "111111111111" },
+            { internalSlug: "dup", awsAccountId: "222222222222" },
+          ],
         }),
       ),
     ).rejects.toBeInstanceOf(DuplicateInternalSlugError);

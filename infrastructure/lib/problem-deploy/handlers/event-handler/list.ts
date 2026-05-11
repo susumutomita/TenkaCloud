@@ -198,6 +198,8 @@ export async function getEventDetail(
       // TeamsTable.displayName (operator 事前設定があれば)、それも無ければ undefined。
       displayName: displayNameByTeamId.get(teamId) ?? fromTeamsTable,
       teamLoginKey: typeof t.teamLoginKey === "string" ? t.teamLoginKey : undefined,
+      // #528: team の deploy 先 AWS Account ID。旧 Event は undefined。
+      awsAccountId: typeof t.awsAccountId === "string" ? t.awsAccountId : undefined,
     };
   });
 

@@ -66,6 +66,7 @@ export async function createEvent(
       tenantId: ctx.tenantId,
       internalSlug: t.internalSlug,
       teamLoginKey,
+      awsAccountId: t.awsAccountId,
       createdAt,
       updatedAt: createdAt,
       expiresAt,
