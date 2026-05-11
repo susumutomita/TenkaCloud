@@ -51,12 +51,23 @@ export const EventStatusSchema = z.enum([
 export type EventStatus = z.infer<typeof EventStatusSchema>;
 
 /**
- * Event 内の 1 問題ごとの **デフォルト deploy target**。Bulk Deploy 時に各 team に対して
- * この account / region で deploy する。team ごとに override したい場合は将来拡張。
+ * Event 内の 1 問題ごとの deploy target。region は問題テンプレが特定 region 依存の場合が
+ * あるため **problem 単位** で固定。AWS Account ID は #528 以降 **team 単位** に移行する
+ * (= 各 team は自社 AWS account で全問題を deploy する運用モデル)。
+ *
+ * `defaultAwsAccountId` は migration 期間中 optional に保つ:
+ *   - 新規 Event: 不要 (= team.awsAccountId を使う)
+ *   - 旧 Event: 既存値を fallback として使う (bulk-deploy.ts の `team.awsAccountId ??`)
+ *
+ * Phase 2 で `defaultAwsAccountId` を完全削除する予定。
  */
 export const EventProblemTargetSchema = z.object({
   problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
-  defaultAwsAccountId: z.string().regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字"),
+  /** @deprecated #528 で team 単位 (team.awsAccountId) に移行。旧 Event の fallback としてのみ残す */
+  defaultAwsAccountId: z
+    .string()
+    .regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字")
+    .optional(),
   defaultRegion: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です"),
 });
 export type EventProblemTarget = z.infer<typeof EventProblemTargetSchema>;
@@ -85,6 +96,9 @@ export interface TeamItem {
   internalSlug: string;
   /** 短命 bearer。team scope (1 key で event 内 N 問題にアクセス可)。 */
   teamLoginKey: string;
+  /** #528: team の deploy 先 AWS Account ID (12 桁数字)。Bulk Deploy で problem.defaultRegion と
+   *  組み合わせて使う。旧 Event は持たない (= bulk-deploy で problem.defaultAwsAccountId に fallback)。 */
+  awsAccountId?: string;
   createdAt: string;
   updatedAt: string;
   expiresAt: number;
@@ -109,6 +123,8 @@ export const CreateEventRequestSchema = z.object({
             /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
             "internalSlug は a-z0-9- (RFC1035-ish) のみ",
           ),
+        /** #528: 各 team の deploy 先 AWS Account ID。problem.defaultAwsAccountId 廃止に伴い必須化 */
+        awsAccountId: z.string().regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字"),
       }),
     )
     .min(1)
@@ -199,6 +215,8 @@ export const TeamSummarySchema = z.object({
   displayName: z.string().optional(),
   /** 詳細経路でのみ teamLoginKey を返す。一覧経路には含めない。 */
   teamLoginKey: z.string().optional(),
+  /** #528: team の deploy 先 AWS Account ID。旧 Event は undefined。 */
+  awsAccountId: z.string().optional(),
 });
 export type TeamSummary = z.infer<typeof TeamSummarySchema>;
 

@@ -61,6 +61,9 @@ const sampleTeams = (n: number) =>
     tenantId: "tenant-acme",
     internalSlug: `team-${i + 1}`,
     teamLoginKey: `key-${i + 1}`,
+    // #528: 各 team に独自 awsAccountId。test は 12 桁数字で 111... / 222... / ... と
+    // pad して別 account を pin する。fallback test では明示的に外す。
+    awsAccountId: `${i + 1}`.repeat(12).slice(0, 12),
   }));
 
 describe("bulkDeployEvent", () => {
@@ -226,6 +229,87 @@ describe("bulkDeployEvent", () => {
     for (const item of transactCmd.input.TransactItems ?? []) {
       expect(item.Put?.Item?.eventStartsAt).toBeUndefined();
     }
+  });
+
+  it("#528: deployment 行の awsAccountId は **team** の awsAccountId を使うべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    const transactCmd = ddbSend.mock.calls.find((c) => c[0] instanceof TransactWriteCommand)?.[0];
+    const items = (transactCmd as TransactWriteCommand).input.TransactItems ?? [];
+    // 2 teams × 2 problems = 4 items
+    expect(items).toHaveLength(4);
+    // T1 (awsAccountId=111111111111) と T2 (awsAccountId=222222222222) で別 account に
+    const accountsByTeam = new Map<string, Set<string>>();
+    for (const it of items) {
+      const teamId = String(it.Put?.Item?.teamId ?? "");
+      const acct = String(it.Put?.Item?.awsAccountId ?? "");
+      if (!accountsByTeam.has(teamId)) accountsByTeam.set(teamId, new Set());
+      accountsByTeam.get(teamId)?.add(acct);
+    }
+    // T1 の 2 deploy はすべて 111111111111、T2 の 2 deploy はすべて 222222222222
+    expect([...(accountsByTeam.get("T1") ?? [])]).toEqual(["111111111111"]);
+    expect([...(accountsByTeam.get("T2") ?? [])]).toEqual(["222222222222"]);
+  });
+
+  it("#528 migration: team.awsAccountId 無い旧 Event は problem.defaultAwsAccountId に fallback", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    // sampleTeams から awsAccountId を意図的に外す (旧 Event)
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          eventId: "EV1",
+          teamId: "T1",
+          tenantId: "tenant-acme",
+          internalSlug: "team-1",
+          teamLoginKey: "key-1",
+        },
+      ],
+    });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    const transactCmd = ddbSend.mock.calls.find((c) => c[0] instanceof TransactWriteCommand)?.[0];
+    const items = (transactCmd as TransactWriteCommand).input.TransactItems ?? [];
+    expect(items.length).toBeGreaterThan(0);
+    // problem.defaultAwsAccountId (= 999999999999、sampleEvent 内) に fallback
+    for (const it of items) {
+      expect(it.Put?.Item?.awsAccountId).toBe("999999999999");
+    }
+  });
+
+  it("#528: team.awsAccountId も problem.defaultAwsAccountId も無いと skip するべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    // problem.defaultAwsAccountId を外した event
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleEvent({
+        problems: [{ problemId: "hello-world", defaultRegion: "ap-northeast-1" }],
+      }),
+    });
+    // team.awsAccountId も無い旧 team
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          eventId: "EV1",
+          teamId: "T1",
+          tenantId: "tenant-acme",
+          internalSlug: "team-1",
+          teamLoginKey: "key-1",
+        },
+      ],
+    });
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    // 1 team × 1 problem = 1、awsAccountId 無いので全 skip
+    expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 0, skipped: 1 } });
+    expect(eventsSend).not.toHaveBeenCalled();
   });
 
   it("成功後に Event status を DRAFT → DEPLOYING に倒すべき (status badge 視認用)", async () => {
