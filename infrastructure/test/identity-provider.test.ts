@@ -96,5 +96,55 @@ describe("IdentityProvider", () => {
       const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
       expect(writeAttrs).toContain("email");
     });
+
+    it("#529 i18n: 招待メール body に JA / EN / ES / ZH 4 言語が含まれ console URL + placeholder も embed されるべき", () => {
+      const consoleUrl = "https://d123abc.cloudfront.net";
+      const { template } = synth("tenant-1", consoleUrl);
+      // Subject は 4 言語並列 (mail client preview での言語識別用)
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPool",
+        Match.objectLike({
+          AdminCreateUserConfig: Match.objectLike({
+            InviteMessageTemplate: Match.objectLike({
+              EmailSubject: Match.stringLikeRegexp(
+                "テナント管理コンソール招待.*Tenant Admin Invitation",
+              ),
+            }),
+          }),
+        }),
+      );
+      const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
+      const body =
+        (
+          userPool?.Properties as {
+            AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
+          }
+        )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
+      // 4 言語の greeting (= operator がどの言語でも 1 段落見つけられる)
+      expect(body).toContain("ようこそ TenkaCloud"); // JA
+      expect(body).toContain("Welcome to TenkaCloud"); // EN
+      expect(body).toContain("Bienvenido a TenkaCloud"); // ES
+      expect(body).toContain("欢迎使用 TenkaCloud"); // ZH
+      // Cognito placeholder と console URL
+      expect(body).toContain("{username}");
+      expect(body).toContain("{####}");
+      expect(body).toContain(consoleUrl);
+    });
+
+    it("#529: SMS message も InviteMessageTemplate 整合のため Cognito placeholder 込みで置かれるべき", () => {
+      // Cognito CFn は InviteMessageTemplate 設定時に SMSMessage の placeholder 整合性を
+      // check する (aws-cdk#30315 系)。SMS は使わないが空にできないので最短形で配置。
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPool",
+        Match.objectLike({
+          AdminCreateUserConfig: Match.objectLike({
+            InviteMessageTemplate: Match.objectLike({
+              SMSMessage: Match.stringLikeRegexp(".*\\{username\\}.*"),
+            }),
+          }),
+        }),
+      );
+    });
   });
 });

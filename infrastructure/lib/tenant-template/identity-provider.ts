@@ -2,6 +2,90 @@ import { aws_cognito, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details";
 
+// Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
+// 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。
+// admin-create-user 経路と CustomMessage Lambda trigger の双方で共通仕様。
+const COGNITO_USERNAME = "{username}";
+const COGNITO_TEMP_PASSWORD = "{####}";
+
+/**
+ * #529 i18n: 1 通の招待メールに 4 言語 (JA / EN / ES / ZH) を順に並べる。
+ *
+ * Cognito の `InviteMessageTemplate` は **UserPool あたり 1 言語**しか保持できないので、
+ * locale-aware 配信を実現するには CustomMessage Lambda Trigger を立てる必要がある (= Lambda
+ * 数増、コスト増)。代わりに「単一メール内で複数言語を縦に並べる」 multilingual fallback
+ * 方式を採用 — 受信者は自分が読める段落を選べばよい。
+ *
+ * 4 言語選定理由 (TenkaCloud 国際運用ターゲット):
+ *   - 日本語 (JA): 主開発者の母語、初期 user base
+ *   - 英語 (EN): de facto global lingua franca
+ *   - スペイン語 (ES): 第 2 多話者言語 (= LATAM / Spain)
+ *   - 中国語 (ZH): アジア圏での運用必須
+ *
+ * Phase 2 で `custom:locale` 属性 + CustomMessage Lambda Trigger に移行予定。
+ */
+function buildInviteEmailBody(consoleUrl: string): string {
+  const sections: string[][] = [
+    // --- 日本語 ---
+    [
+      "ようこそ TenkaCloud Battle / Challenge へ。",
+      "テナント管理コンソールへサインインするための一時アカウントを発行しました。",
+      "",
+      `  ・ ユーザー名: ${COGNITO_USERNAME}`,
+      `  ・ 一時パスワード: ${COGNITO_TEMP_PASSWORD}`,
+      `  ・ サインイン URL: ${consoleUrl}`,
+      "",
+      "初回サインイン時に新しいパスワードを設定してください。",
+      "競技イベント (Event) の作成 / 競技者向け Portal URL の払い出しは",
+      "テナント管理コンソールから操作できます。",
+    ],
+    // --- English ---
+    [
+      "Welcome to TenkaCloud Battle / Challenge.",
+      "A temporary account has been issued so you can sign in to the Tenant Admin Console.",
+      "",
+      `  - Username: ${COGNITO_USERNAME}`,
+      `  - Temporary password: ${COGNITO_TEMP_PASSWORD}`,
+      `  - Sign-in URL: ${consoleUrl}`,
+      "",
+      "Set a new password on first sign-in. From the Tenant Admin Console you can",
+      "create competition Events and hand out Participant Portal URLs.",
+    ],
+    // --- Español ---
+    [
+      "Bienvenido a TenkaCloud Battle / Challenge.",
+      "Se ha emitido una cuenta temporal para iniciar sesión en la consola de administración de inquilinos.",
+      "",
+      `  - Usuario: ${COGNITO_USERNAME}`,
+      `  - Contraseña temporal: ${COGNITO_TEMP_PASSWORD}`,
+      `  - URL de inicio de sesión: ${consoleUrl}`,
+      "",
+      "Establezca una nueva contraseña al iniciar sesión por primera vez. Desde la consola",
+      "puede crear eventos de competición y emitir URLs del portal para los participantes.",
+    ],
+    // --- 中文 (简体) ---
+    [
+      "欢迎使用 TenkaCloud Battle / Challenge。",
+      "已为您颁发临时账号,用于登录租户管理控制台。",
+      "",
+      `  · 用户名: ${COGNITO_USERNAME}`,
+      `  · 临时密码: ${COGNITO_TEMP_PASSWORD}`,
+      `  · 登录地址: ${consoleUrl}`,
+      "",
+      "首次登录时请设置新密码。在租户管理控制台中,",
+      "您可以创建比赛活动 (Event) 并发放参赛者门户 URL。",
+    ],
+  ];
+  const footer = [
+    "",
+    "If this email looks unfamiliar, please discard it. / 本メールに心当たりがない場合は破棄してください。",
+    "Si este correo no le resulta familiar, descártelo. / 如果您不认识此邮件,请忽略。",
+    "",
+    "-- TenkaCloud Operations / 運営 / Operaciones / 运营",
+  ];
+  return [...sections.map((s) => s.join("\n")), footer.join("\n")].join("\n\n");
+}
+
 interface IdentityProviderProps {
   /** テナント ID。pooled の場合は "pooled" */
   readonly tenantId: string;
@@ -65,9 +149,21 @@ export class IdentityProvider extends Construct {
   constructor(scope: Construct, id: string, props: IdentityProviderProps) {
     super(scope, id);
 
+    // #529: tenant admin 招待 — 4 言語の multilingual body (JA / EN / ES / ZH) を 1 通に並べる。
+    // Cognito は UserPool ごとに 1 template しか持てないため、locale 別配信は CustomMessage
+    // Lambda Trigger が要る (Phase 2)。MVP は 4 言語並列で各 operator が読める段落を選ぶ。
     this.tenantUserPool = new aws_cognito.UserPool(this, "tenantUserPool", {
       autoVerify: { email: true },
       accountRecovery: aws_cognito.AccountRecovery.EMAIL_ONLY,
+      userInvitation: {
+        // 多言語 subject (= mail client preview で言語識別できるよう全部入り)
+        emailSubject:
+          "[TenkaCloud] テナント管理コンソール招待 / Tenant Admin Invitation / Invitación / 租户管理控制台邀请",
+        emailBody: buildInviteEmailBody(props.applicationAdminConsoleUrl),
+        // Cognito CFn は `InviteMessageTemplate` 設定時に SMSMessage も整合性チェックする
+        // (aws-cdk#30315 系の挙動)。SMS は使わないが空にできないため最短形を入れる。
+        smsMessage: `TenkaCloud: ${COGNITO_USERNAME} / ${COGNITO_TEMP_PASSWORD}`,
+      },
       standardAttributes: {
         email: {
           required: true,
