@@ -56,7 +56,11 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
 - **マージ済みブランチに push しない**。PR を出す前に必ず `gh pr view --json state` で state を確認。`MERGED` / `CLOSED` なら新ブランチを切る。
 - 小さな意味単位で PR を分ける。`feat(...)` `fix(...)` `refactor(...)` `docs(...)` `test(...)` `chore(...)` のいずれか (Conventional Commits)。
 - PR タイトルは 70 文字以内。本文に Summary + Test plan を書く。
-- コミット / PR で `#番号` 形式の Issue 引用は **禁止** (auto-close されるため)。`(PR-F1)` `(#446)` 等の別記法を使う。
+- Issue 引用は GitHub の auto-close keyword に揃える:
+  - **解決して閉じる** = `Closes #553` / `Fixes #553` / `Resolves #553` (= merge 時に GitHub が auto-close)
+  - **関連だが閉じない (= partial fix / backlink)** = `Relates #553` または非 keyword 位置で `#553` を書く
+  - **PR 同士の参照** = `PR-565` のように番号 prefix
+  - 旧ルール (= `(#N)` の括弧で auto-close 抑止) は誤解だった。`Closes` などの keyword が無ければ `#N` 単独で auto-close されない (= backlink のみ作る)。
 
 ## コーディング規約
 
@@ -69,7 +73,6 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
 
 - `npx` → `bunx` または `nlx`
 - `rm` (環境破壊リスク) → `git rm`
-- `#番号` 形式の Issue 引用 (本文・コミット message)
 - HTTP status code の数値リテラル直書き — `StatusCodes.*` を使う
 - モック / スタブで握り潰す fallback / 空配列を返して見せかける処理
 - 設定ファイル (`biome.json`, `vitest.config.*`, `tsconfig.json`) の直接編集
