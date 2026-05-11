@@ -118,6 +118,58 @@ export function getDeployment(client: ApiClient, jobId: string): Promise<Deploym
   return client.get<DeploymentSummary>(`/deployments/${encodeURIComponent(jobId)}`);
 }
 
+/**
+ * #534: deploy job 詳細ページに CFn 進行状況を出すための DTO。Backend
+ * (`infrastructure/lib/problem-deploy/handlers/deploy-handler/stack-progress.ts`) の
+ * `StackProgress` と意味的に同一。新規 field を追加するときは両側で同期する。
+ */
+export interface StackProgressEvent {
+  readonly timestamp: string;
+  readonly logicalResourceId: string;
+  readonly resourceType: string;
+  readonly resourceStatus: string;
+  readonly resourceStatusReason?: string;
+}
+
+export interface StackProgressResource {
+  readonly logicalResourceId: string;
+  readonly resourceType: string;
+  readonly resourceStatus: string;
+  readonly resourceStatusReason?: string;
+  readonly physicalResourceId?: string;
+}
+
+export interface StackProgress {
+  readonly jobId: string;
+  readonly stackName: string;
+  readonly region: string;
+  readonly consoleUrl: string;
+  readonly events: readonly StackProgressEvent[];
+  readonly resources: readonly StackProgressResource[];
+  readonly stackStatus?: string;
+}
+
+export function getStackProgress(client: ApiClient, jobId: string): Promise<StackProgress> {
+  return client.get<StackProgress>(`/deployments/${encodeURIComponent(jobId)}/stack-progress`);
+}
+
+/**
+ * CFn ResourceStatus を Cloudscape の `StatusIndicator` type にマップする。
+ * 未知 status は "in-progress" にフォールバック (= 新しい CFn status が来ても落ちない)。
+ *
+ * 評価順は **specific → general**: `DELETE_COMPLETE` を先に判定しないと
+ * 「`_COMPLETE` で終わる」rule が拾ってしまう。
+ */
+export function statusToIndicator(
+  status: string,
+): "success" | "error" | "in-progress" | "warning" | "stopped" {
+  if (status === "DELETE_COMPLETE") return "stopped";
+  if (status.endsWith("_FAILED")) return "error";
+  if (status.includes("ROLLBACK")) return "warning";
+  if (status.endsWith("_COMPLETE")) return "success";
+  return "in-progress";
+}
+
 export function deleteDeployment(client: ApiClient, jobId: string): Promise<void> {
   return client.del(`/deployments/${encodeURIComponent(jobId)}`);
 }

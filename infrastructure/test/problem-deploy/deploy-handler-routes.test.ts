@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   listDeployments: vi.fn(),
   getDeployment: vi.fn(),
   requestTeardown: vi.fn(),
+  getStackProgress: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", () => ({
@@ -25,6 +26,11 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/list", () => ({
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/delete", () => ({
   requestTeardown: mocks.requestTeardown,
+}));
+
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/stack-progress", () => ({
+  getStackProgress: mocks.getStackProgress,
+  defaultCfnClient: vi.fn(),
 }));
 
 const { app } = await import("../../lib/problem-deploy/handlers/deploy-handler/index");
@@ -153,5 +159,70 @@ describe("DELETE /deployments/:jobId", () => {
     mocks.requestTeardown.mockRejectedValueOnce(new Error("boom"));
     const res = await app.request(`/deployments/${ULID}`, { method: "DELETE" });
     expect(res.status).toBe(500);
+  });
+});
+
+describe("GET /deployments/:jobId/stack-progress", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("正常系: 200 と progress を返すべき", async () => {
+    mocks.getStackProgress.mockResolvedValueOnce({
+      kind: "ok",
+      progress: {
+        jobId: ULID,
+        stackName: "tc-x-y",
+        region: "ap-northeast-1",
+        consoleUrl: "https://example.com/cfn",
+        events: [],
+        resources: [],
+        stackStatus: "CREATE_IN_PROGRESS",
+      },
+    });
+    const res = await app.request(`/deployments/${ULID}/stack-progress`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.jobId).toBe(ULID);
+    expect(body.stackStatus).toBe("CREATE_IN_PROGRESS");
+  });
+
+  it("不正な jobId (ULID 形式でない) は 400", async () => {
+    const res = await app.request("/deployments/not-a-ulid/stack-progress");
+    expect(res.status).toBe(400);
+    expect(mocks.getStackProgress).not.toHaveBeenCalled();
+  });
+
+  it("DDB 行不在は 404", async () => {
+    mocks.getStackProgress.mockResolvedValueOnce({ kind: "not_found" });
+    const res = await app.request(`/deployments/${ULID}/stack-progress`);
+    expect(res.status).toBe(404);
+  });
+
+  it("stack 未割当 (deploy 極初期) は 409 を返すべき", async () => {
+    mocks.getStackProgress.mockResolvedValueOnce({ kind: "stack_not_yet_created" });
+    const res = await app.request(`/deployments/${ULID}/stack-progress`);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe("stack_not_yet_created");
+  });
+
+  it("CFn 上で stack 未在は 200 + consoleUrl のみ返すべき", async () => {
+    mocks.getStackProgress.mockResolvedValueOnce({
+      kind: "stack_not_found_in_cfn",
+      consoleUrl: "https://example.com/cfn",
+    });
+    const res = await app.request(`/deployments/${ULID}/stack-progress`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.consoleUrl).toBe("https://example.com/cfn");
+    expect(body.events).toEqual([]);
+    expect(body.resources).toEqual([]);
+  });
+
+  it("内部エラーは 500", async () => {
+    mocks.getStackProgress.mockRejectedValueOnce(new Error("CFn throttling"));
+    const res = await app.request(`/deployments/${ULID}/stack-progress`);
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe("internal_error");
   });
 });

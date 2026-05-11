@@ -4,8 +4,10 @@ import {
   type DeployRequestBody,
   deleteDeployment,
   getDeployment,
+  getStackProgress,
   listDeployments,
   startDeployment,
+  statusToIndicator,
   TERMINAL_STATUSES,
 } from "../../src/api/deploy-client";
 
@@ -141,5 +143,62 @@ describe("TERMINAL_STATUSES", () => {
     expect(TERMINAL_STATUSES.has("PENDING")).toBe(false);
     expect(TERMINAL_STATUSES.has("IN_PROGRESS")).toBe(false);
     expect(TERMINAL_STATUSES.has("DELETING")).toBe(false);
+  });
+});
+
+describe("getStackProgress", () => {
+  it("GET /deployments/:jobId/stack-progress を呼ぶべき", async () => {
+    const { client, calls } = fakeClient({
+      jobId: "01H",
+      stackName: "tc-x-y",
+      region: "ap-northeast-1",
+      consoleUrl: "https://example.com",
+      events: [],
+      resources: [],
+    });
+    await getStackProgress(client, "01H");
+    expect(calls[0]).toEqual({ path: "/deployments/01H/stack-progress", method: "GET" });
+  });
+
+  it("jobId に特殊文字が来ても URL encode するべき", async () => {
+    const { client, calls } = fakeClient({
+      jobId: "a/b",
+      stackName: "x",
+      region: "r",
+      consoleUrl: "u",
+      events: [],
+      resources: [],
+    });
+    await getStackProgress(client, "a/b");
+    expect(calls[0]?.path).toBe("/deployments/a%2Fb/stack-progress");
+  });
+});
+
+describe("statusToIndicator", () => {
+  it("CREATE_COMPLETE は success にすべき", () => {
+    expect(statusToIndicator("CREATE_COMPLETE")).toBe("success");
+    expect(statusToIndicator("UPDATE_COMPLETE")).toBe("success");
+  });
+
+  it("CREATE_FAILED は error にすべき", () => {
+    expect(statusToIndicator("CREATE_FAILED")).toBe("error");
+    expect(statusToIndicator("UPDATE_FAILED")).toBe("error");
+  });
+
+  it("ROLLBACK 系は warning にすべき", () => {
+    expect(statusToIndicator("ROLLBACK_IN_PROGRESS")).toBe("warning");
+    expect(statusToIndicator("UPDATE_ROLLBACK_COMPLETE")).toBe("warning");
+  });
+
+  it("DELETE_COMPLETE は stopped にすべき", () => {
+    expect(statusToIndicator("DELETE_COMPLETE")).toBe("stopped");
+  });
+
+  it("CREATE_IN_PROGRESS は in-progress にすべき", () => {
+    expect(statusToIndicator("CREATE_IN_PROGRESS")).toBe("in-progress");
+  });
+
+  it("未知 status は in-progress にフォールバックすべき", () => {
+    expect(statusToIndicator("SOMETHING_NEW_FROM_FUTURE_CFN")).toBe("in-progress");
   });
 });
