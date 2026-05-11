@@ -293,17 +293,6 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               Deploy
             </Button>
             <Button
-              disabled={
-                !detail ||
-                detail.status === "DRAFT" ||
-                detail.status === "TEARDOWN" ||
-                detail.status === "ARCHIVED"
-              }
-              onClick={() => setNotifyModalOpen(true)}
-            >
-              通知を送る
-            </Button>
-            <Button
               loading={endInFlight}
               disabled={!detail || detail.status !== "READY"}
               onClick={() => setConfirmEnd(true)}
@@ -394,6 +383,56 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             </Field>
             <Field label="採点ステータス">{scoringBadge(detail.startsAt)}</Field>
           </ColumnLayout>
+        </Container>
+      )}
+
+      {/* #552: 通知の発見性を上げる専用 section。旧 UX では「通知を送る」 button が
+       *   Header actions (= Deploy / Delete 等と同列) に埋もれており、初見 operator から
+       *   見つけにくかった。説明文 + 単独 button にして「通知って何ができる?」が
+       *   1 画面で完結するようにする。過去履歴 list は別 PR で (= GET endpoint が要る)。 */}
+      {detail && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              description="競技中の全チームの Participant Portal にアナウンスを送ります。Portal の Notifications page に表示され、競技者は赤バッジで未読件数を確認できます。"
+              actions={
+                <Button
+                  variant="primary"
+                  iconName="notification"
+                  disabled={
+                    detail.status === "DRAFT" ||
+                    detail.status === "TEARDOWN" ||
+                    detail.status === "ARCHIVED"
+                  }
+                  onClick={() => setNotifyModalOpen(true)}
+                >
+                  通知を送る
+                </Button>
+              }
+            >
+              通知 (お知らせ)
+            </Header>
+          }
+        >
+          <SpaceBetween size="s">
+            <Box variant="small" color="text-status-inactive">
+              送信タイミング例: 「競技開始 5 分前」「Battle で攻撃検知が増えた」「問題ファイルに
+              typo があった」など。 送信内容は競技者全員に同時配信されます (=
+              チーム選択は不可、ADR-006)。
+            </Box>
+            {detail.status === "DRAFT" && (
+              <Alert type="info">
+                Event 作成直後 (DRAFT) は通知できません。Deploy 後に有効化されます。
+              </Alert>
+            )}
+            {(detail.status === "TEARDOWN" || detail.status === "ARCHIVED") && (
+              <Alert type="info">
+                {detail.status === "TEARDOWN" ? "削除中" : "アーカイブ済"} の Event
+                には通知できません。
+              </Alert>
+            )}
+          </SpaceBetween>
         </Container>
       )}
 
