@@ -1,5 +1,5 @@
 import Alert from "@cloudscape-design/components/alert";
-import Badge, { type BadgeProps } from "@cloudscape-design/components/badge";
+import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Header from "@cloudscape-design/components/header";
@@ -15,20 +15,10 @@ import {
   listTenants,
   parseTenantConfig,
   type Tenant,
-  type TenantStatus,
+  tenantStatusBadgeColor,
+  tierBadgeColor,
 } from "../api/tenants";
 import type { AppConfig } from "../config";
-
-const STATUS_BADGE_COLOR: Partial<Record<TenantStatus, BadgeProps["color"]>> = {
-  ACTIVE: "green",
-  PROVISIONING: "blue",
-  DEPROVISIONING: "grey",
-  DELETED: "grey",
-};
-
-function statusBadgeColor(tenantStatus: string): BadgeProps["color"] {
-  return STATUS_BADGE_COLOR[tenantStatus as TenantStatus] ?? "grey";
-}
 
 /**
  * deprovision 済みの tenant かどうかを判定する。
@@ -124,11 +114,17 @@ export function TenantListPage({ config }: { config: AppConfig }) {
           { id: "tenantId", header: "テナント ID", cell: (t) => t.tenantId },
           { id: "tenantName", header: "名称", cell: (t) => t.tenantName },
           { id: "email", header: "管理者メール", cell: (t) => t.email },
-          { id: "tier", header: "Tier", cell: (t) => <Badge>{t.tier}</Badge> },
+          {
+            id: "tier",
+            header: "Tier",
+            cell: (t) => <Badge color={tierBadgeColor(t.tier)}>{t.tier}</Badge>,
+          },
           {
             id: "status",
             header: "状態",
-            cell: (t) => <Badge color={statusBadgeColor(t.tenantStatus)}>{t.tenantStatus}</Badge>,
+            cell: (t) => (
+              <Badge color={tenantStatusBadgeColor(t.tenantStatus)}>{t.tenantStatus}</Badge>
+            ),
           },
           {
             id: "appConsole",

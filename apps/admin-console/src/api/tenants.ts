@@ -10,7 +10,68 @@ import type { ApiClient } from "./client";
  */
 export type Tier = "basic" | "advanced" | "platinum";
 
-export type TenantStatus = "In progress" | "Complete" | "Deleted" | string;
+/**
+ * Tenant の provisioning 状態。provision-tenant.sh / deprovision-tenant.sh が
+ * 実際に書き込む文字列リテラルを正本とする:
+ *   - "In progress" — SBT が POST /tenants で初期値として書く (createTenant 参照)
+ *   - "Complete"   — provision-tenant.sh:134 で BashJobRunner が export
+ *   - "Failed"     — BashJobRunner が exit non-zero のとき (SBT 内蔵)
+ *   - "Deleted"    — deprovision-tenant.sh:136 で export
+ * 比較は大文字 / 小文字非依存 (SBT が経路によって case を変えるため安全側に倒す)。
+ */
+export type TenantStatus = "In progress" | "Complete" | "Failed" | "Deleted" | string;
+
+/**
+ * Cloudscape Badge / StatusIndicator で使う色名 (BadgeProps["color"] と互換)。
+ * Badge component に直接渡せるよう値だけを返す軽量関数として export し、UI 層から
+ * 切り離して unit test 可能にする。
+ */
+export type StatusBadgeColor = "green" | "blue" | "red" | "grey";
+
+/**
+ * `tenantStatus` 文字列 → Badge 色のマッピング。`provision-tenant.sh` が
+ * `tenantStatus="Complete"`、`deprovision-tenant.sh` が `tenantStatus="Deleted"`、
+ * SBT 初期化が `"In progress"`、BashJobRunner 失敗時が `"Failed"` を書くので
+ * それを正本に色を決める。SBT 経路によって case が揺れるため case-insensitive。
+ *
+ * 既知でない値 (空 / undefined / 想定外文字列) は grey にフォールバックする
+ * (= 状態不明であることを UI 上で示すが、エラー扱いはしない)。
+ */
+export function tenantStatusBadgeColor(tenantStatus: string | undefined): StatusBadgeColor {
+  switch ((tenantStatus ?? "").toLowerCase()) {
+    case "complete":
+      return "green";
+    case "in progress":
+      return "blue";
+    case "failed":
+      return "red";
+    case "deleted":
+    case "deprovisioned":
+      return "grey";
+    default:
+      return "grey";
+  }
+}
+
+/**
+ * Tier → Badge 色のマッピング。silo 専用 stack を立てる "platinum" を最も目立つ色
+ * (green) に、pooled stack 共有の "basic" / "advanced" は控えめにする。
+ *
+ * `provision-tenant.sh` の `if [[ $TIER == "PLATINUM" ]]` 大文字比較に合わせて
+ * case-insensitive で判定する。未知の tier は grey フォールバック。
+ */
+export function tierBadgeColor(tier: string | undefined): StatusBadgeColor {
+  switch ((tier ?? "").toLowerCase()) {
+    case "platinum":
+      return "green";
+    case "advanced":
+      return "blue";
+    case "basic":
+      return "grey";
+    default:
+      return "grey";
+  }
+}
 
 export interface Tenant {
   tenantId: string;

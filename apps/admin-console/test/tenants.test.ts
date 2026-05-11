@@ -6,6 +6,8 @@ import {
   deleteTenant,
   listTenants,
   parseTenantConfig,
+  tenantStatusBadgeColor,
+  tierBadgeColor,
 } from "../src/api/tenants";
 
 function buildApiMock(overrides: Partial<ApiClient> = {}): {
@@ -298,6 +300,86 @@ describe("buildCodeBuildBuildUrl", () => {
           accountId: "111",
         }),
       ).toBeNull();
+    });
+  });
+});
+
+describe("tenantStatusBadgeColor", () => {
+  describe("provision-tenant.sh が書き込む実際の tenantStatus 値に対して", () => {
+    it("'Complete' を green にマップすべき (= provisioning 完了)", () => {
+      expect(tenantStatusBadgeColor("Complete")).toBe("green");
+    });
+
+    it("'In progress' を blue にマップすべき (= provisioning 進行中)", () => {
+      expect(tenantStatusBadgeColor("In progress")).toBe("blue");
+    });
+
+    it("'Failed' を red にマップすべき (= provisioning 失敗)", () => {
+      expect(tenantStatusBadgeColor("Failed")).toBe("red");
+    });
+
+    it("'Deleted' を grey にマップすべき (= deprovisioned tenant)", () => {
+      expect(tenantStatusBadgeColor("Deleted")).toBe("grey");
+    });
+  });
+
+  describe("大文字 / 小文字ゆれを吸収するとき", () => {
+    it("'complete' (小文字) でも green を返すべき", () => {
+      expect(tenantStatusBadgeColor("complete")).toBe("green");
+    });
+
+    it("'COMPLETE' (大文字) でも green を返すべき", () => {
+      expect(tenantStatusBadgeColor("COMPLETE")).toBe("green");
+    });
+
+    it("'failed' (小文字) でも red を返すべき", () => {
+      expect(tenantStatusBadgeColor("failed")).toBe("red");
+    });
+
+    it("'in progress' (小文字) でも blue を返すべき", () => {
+      expect(tenantStatusBadgeColor("in progress")).toBe("blue");
+    });
+  });
+
+  describe("未知の値が来たとき", () => {
+    it("grey にフォールバックすべき (= 未定義状態)", () => {
+      expect(tenantStatusBadgeColor("Unknown")).toBe("grey");
+    });
+
+    it("空文字でも grey を返すべき", () => {
+      expect(tenantStatusBadgeColor("")).toBe("grey");
+    });
+
+    it("undefined / null 相当の文字列でも grey を返すべき", () => {
+      expect(tenantStatusBadgeColor("undefined")).toBe("grey");
+    });
+  });
+});
+
+describe("tierBadgeColor", () => {
+  describe("各 tier に異なる色を割り当てるとき", () => {
+    it("basic は grey (= pooled の最小構成) であるべき", () => {
+      expect(tierBadgeColor("basic")).toBe("grey");
+    });
+
+    it("advanced は blue (= pooled の中間構成) であるべき", () => {
+      expect(tierBadgeColor("advanced")).toBe("blue");
+    });
+
+    it("platinum は green (= silo 専用 stack) であるべき", () => {
+      expect(tierBadgeColor("platinum")).toBe("green");
+    });
+  });
+
+  describe("大文字 / 小文字ゆれを吸収するとき", () => {
+    it("'PLATINUM' でも green を返すべき (provision-tenant.sh の TIER 大文字比較に整合)", () => {
+      expect(tierBadgeColor("PLATINUM")).toBe("green");
+    });
+  });
+
+  describe("未知の tier 値が来たとき", () => {
+    it("grey にフォールバックすべき", () => {
+      expect(tierBadgeColor("nonexistent")).toBe("grey");
     });
   });
 });
