@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-007: outside-in architecture — user observable scenario を PR ゲートにする</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  pre {
+    background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px;
+    overflow-x: auto; font-size: 0.85rem; line-height: 1.45;
+  }
+  .quote {
+    border-left: 3px solid var(--c-warn); background: #fff8c5;
+    padding: .5rem .9rem; margin: .8rem 0; border-radius: 0 4px 4px 0; font-size: 0.92rem;
+  }
+  .num-box {
+    display: inline-block; background: var(--c-link); color: #fff;
+    padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 700;
+    letter-spacing: 0.04em; margin-right: 0.4rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-007: outside-in architecture — user observable scenario を PR ゲートにする</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-11</div>
+    <div><b>Issue:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/561">#561</a></div>
+    <div><b>Related ADR:</b>
+      <a href="./adr-001-problem-deploy-crud.html">ADR-001</a>、
+      <a href="./adr-004-event-team-model.html">ADR-004</a>、
+      <a href="./adr-006-notifications.html">ADR-006</a>、
+      <a href="./harness.html">harness</a>
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>2026-05-10 の 1 日 dogfood で <strong>30+ 件の Issue</strong> が起票された。ほぼ全部「PR は
+merge 済 / unit test green / typecheck green」 にも関わらず、ブラウザで触ると次のような
+事象が観測された:</p>
+
+<ul>
+<li><b>配線忘れ</b> (#535 / #553 / #560): handler は書けたが API GW route / Lambda env / IAM 配線が抜け、frontend が 5xx</li>
+<li><b>用語 mismatch</b> (#549 / #531): 「<code>COMPLETE</code>」 を operator が「問題解いた」と誤解、Bulk Deploy が初見殺し</li>
+<li><b>affordance 不足</b> (#533 / #547): Badge を Link で wrap しただけだと click 可能か分からない、dropdown でなく button にすべきだった</li>
+<li><b>状態遷移漏れ</b> (#539 / #557 / #559): bulk deploy / teardown 後の Event status が手動操作必須、子集約から親遷移する経路なし</li>
+<li><b>初見 operator が次に何を押すか分からない</b> (#531): EventDetail の primary action 不明、ドキュメント読まないと正常運用に辿り着かない</li>
+</ul>
+
+<p><strong>共通根本</strong>: 各 layer (backend handler / CDK / frontend) が isolated に unit test を持ち、その層内では green。しかし「<strong>user が観察可能な outcome</strong> から逆算する scenario」がレポジトリに 1 本も無いため、layer 間の seam (= 配線) と user 視点の affordance が抜け落ちる。</p>
+
+<div class="quote">
+inside-out (現状) では「<b>動いた</b> = 各 layer の unit test が green」。outside-in では「<b>動いた</b> = browser を開いて user が目的を達成した」。前者は配線忘れ / 用語 mismatch / affordance 不足を顕在化しない。
+</div>
+
+<table>
+<thead><tr><th>制約</th><th>由来</th><th>本 ADR への影響</th></tr></thead>
+<tbody>
+<tr><td>polling over SSE</td><td>memory <code>feedback_polling_over_sse</code></td>
+    <td>scenario の wait 戦略は polling (= UI が prod と同じ挙動)</td></tr>
+<tr><td>cost 最小化 (DDB 1/1、Lambda 限定)</td><td>repo の経済設計</td>
+    <td>scenario 環境は ephemeral / per-PR を避け、shared staging に集約</td></tr>
+<tr><td>1 PR = 1 観察可能 increment</td><td><code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code></td>
+    <td>本 ADR で「scenario が観察可能 increment の判定基準」を確定</td></tr>
+<tr><td>HTML 設計ドキュメント</td><td>memory <code>feedback_design_docs_html</code></td>
+    <td>本 ADR も HTML、scenario 仕様も HTML で書く</td></tr>
+<tr><td>npx 禁止</td><td>memory <code>feedback_no_npx</code></td>
+    <td>scenario runner は <code>bunx playwright</code> 経由</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>解くべき設計判断</h2>
+
+<div class="decisions">
+  <div class="decision-card"><div class="num">D1</div><div class="title">scenario DSL / framework</div><div class="body">Playwright を選ぶか、Cypress / Selenium / Vitest+Testing-Library で済ますか</div></div>
+  <div class="decision-card"><div class="num">D2</div><div class="title">scenario 実行環境</div><div class="body">per-PR ephemeral stack / shared staging / LocalStack / mock</div></div>
+  <div class="decision-card"><div class="num">D3</div><div class="title">scenario 数の方針</div><div class="body">何が必須、何が optional。primary user journey の選定</div></div>
+  <div class="decision-card"><div class="num">D4</div><div class="title">flake 戦略</div><div class="body">retry / quarantine / fail-fast の組合せ</div></div>
+  <div class="decision-card"><div class="num">D5</div><div class="title">data setup / teardown</div><div class="body">test event の生成と cleanup 経路</div></div>
+  <div class="decision-card"><div class="num">D6</div><div class="title">既存 unit / CDK test との関係</div><div class="body">維持 / 削減 / 強化のバランス</div></div>
+  <div class="decision-card"><div class="num">D7</div><div class="title">PR ゲートとの結合</div><div class="body">scenario 不在 PR は reject か warn か</div></div>
+</div>
+
+<h3>D1. scenario DSL / framework</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th><th>欠点</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D1-A</b></td><td><span class="badge accept">採用</span></td>
+   <td><b>Playwright</b> + TypeScript。ブラウザ 3 種 (Chromium / Firefox / WebKit) の native runner、network mock / trace viewer / video recording 内蔵</td>
+   <td>scenario 1 本あたり container image 起動 5-10 秒</td></tr>
+<tr class="hide"><td>D1-B</td><td><span class="badge reject">却下</span></td>
+   <td>Cypress</td>
+   <td>同オリジン制約・iframe 制約があり Cognito Hosted UI redirect / cross-domain callback が扱いにくい</td></tr>
+<tr class="hide"><td>D1-C</td><td><span class="badge reject">却下</span></td>
+   <td>Selenium / Webdriver</td>
+   <td>flake 率が高く、scenario debug 体験が劣る</td></tr>
+<tr class="hide"><td>D1-D</td><td><span class="badge reject">却下</span></td>
+   <td>Vitest + Testing-Library のみ (= browser を起こさない component test)</td>
+   <td>jsdom 内なので「browser 上で実機 fetch して CFn が動く」を観測できない (= 配線忘れの検出不可)</td></tr>
+</tbody>
+</table>
+
+<details>
+<summary>Playwright 採用根拠の補足</summary>
+<ul>
+<li>TypeScript native — repo の他 code と type 共有可能 (= API response 型を scenario でも使える)</li>
+<li>Cognito Hosted UI の redirect / OAuth Code+PKCE flow を <code>page.waitForURL</code> で素直に書ける</li>
+<li>video / trace 自動取得で flake 解析が楽 (= CI で fail したら video を artifact 化)</li>
+<li>locator API が auto-wait 内蔵で polling-friendly (= setInterval を scenario 側で書かなくて済む)</li>
+<li>repo 既存の MCP server <code>mcp__playwright__*</code> と整合 (= AI agent も同じ DSL で操作できる)</li>
+</ul>
+</details>
+
+<h3>D2. scenario 実行環境</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th><th>欠点</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D2-A</b></td><td><span class="badge accept">採用</span></td>
+   <td><b>shared staging account</b> + <code>environment=staging</code> stack 一式。CI が main / 各 PR で同じ stack を共有、scenario の data setup は eventId / tenantId prefix で衝突回避</td>
+   <td>PR 並列実行で同一 tenant に対する race の可能性 → eventId に PR 番号を入れて scope 分離</td></tr>
+<tr class="hide"><td>D2-B</td><td><span class="badge reject">却下</span></td>
+   <td>per-PR ephemeral stack (CDK deploy → scenario → destroy)</td>
+   <td>1 PR あたり 15-30 分の deploy + destroy 時間、月数百ドルの CodeBuild / Lambda / CFn 課金。本 repo の cost 最小化制約と不整合</td></tr>
+<tr class="hide"><td>D2-C</td><td><span class="badge reject">却下</span></td>
+   <td>LocalStack で AWS をエミュレート</td>
+   <td>SBT / Cognito Hosted UI / CodePipeline / CodeBuild の挙動を完全には再現しない (= 配線忘れ検出の信頼度低下)。outside-in の目的に反する</td></tr>
+<tr class="hide"><td>D2-D</td><td><span class="badge reject">却下</span></td>
+   <td>production account をそのまま使う</td>
+   <td>scenario 中の事故が prod に波及するリスク。冪等 cleanup を間違えると課金累積</td></tr>
+</tbody>
+</table>
+
+<details>
+<summary>D2-A の前提 staging stack</summary>
+<ul>
+<li><code>infrastructure/environments/staging/config.json</code> と <code>.env.example</code> は既に存在</li>
+<li>本 ADR 実装時に <code>make deploy ENV=staging</code> で 3-phase 一気通貫が通ることを確認</li>
+<li>scenario は <code>STAGING_*_URL</code> 環境変数 (= GitHub Actions secrets) を読んで対象 URL を確定</li>
+<li>競技者 AWS account は別途 staging-competitor account を用意し、ExternalId は staging 専用値</li>
+</ul>
+</details>
+
+<h3>D3. scenario 数の方針</h3>
+
+<table>
+<thead><tr><th>tier</th><th>scenario 例</th><th>方針</th></tr></thead>
+<tbody>
+<tr><td><b>Tier 1 (= 必須)</b></td>
+    <td>operator: event 作成 → bulk deploy → status=READY → 即座に開始 → 終了 → teardown<br>
+        competitor: teamLoginKey login → 問題一覧 → flag 提出 → score 反映</td>
+    <td>5-7 本。<b>main への merge 前に必須通過</b>。落ちたら release / deploy ブロック</td></tr>
+<tr><td>Tier 2 (= 推奨)</td>
+    <td>operator: 部分 deploy / failed-only 再試行 (#555)、scoring lock/unlock (#558)<br>
+        competitor: Battle 攻撃通知 / Notifications</td>
+    <td>3-5 本。週次 build で実行、fail は warning。リリースは止めない</td></tr>
+<tr><td>Tier 3 (= optional)</td>
+    <td>edge cases: 30 問 × 10 team 同時、token expired retry、bulk teardown 並列度</td>
+    <td>nightly / 手動 trigger のみ。perf 系は別系列で計測</td></tr>
+</tbody>
+</table>
+
+<p><strong>初期 5 本 (Tier 1)</strong> を ADR-007 採択と同時に scaffolding する。残 Tier は機能追加と同 PR で増やす。</p>
+
+<h3>D4. flake 戦略</h3>
+
+<table>
+<thead><tr><th>分類</th><th>処理</th></tr></thead>
+<tbody>
+<tr><td>network transient (DDB ProvisionedThroughputExceeded、TLS handshake 失敗)</td>
+    <td><b>1 回 retry</b>。Playwright <code>retries: 1</code> を CI 固定</td></tr>
+<tr><td>polling 待ち (status 遷移、deploy 完了)</td>
+    <td>Playwright の <b>auto-wait + 明示 timeout</b>。Tier 1 は最大 10 分</td></tr>
+<tr><td>state machine race (= 同時更新)</td>
+    <td><b>quarantine</b>: 該当 scenario を <code>test.skip.fixme</code> で隔離し別 issue で扱う。<b>retry はしない</b> (隠蔽になる)</td></tr>
+<tr><td>unknown</td>
+    <td>video + trace artifact を CI に保存、scenario を quarantine、issue 起票</td></tr>
+</tbody>
+</table>
+
+<h3>D5. data setup / teardown</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D5-A</b></td><td><span class="badge accept">採用</span></td>
+   <td>scenario 毎に <b>fresh tenant + event</b> を作る (= SBT control plane API を direct invoke)。各 entity に <code>e2e-${PR}-${nanoid}</code> prefix を付けて衝突回避。afterAll で <b>tenant ごと delete</b></td></tr>
+<tr class="hide"><td>D5-B</td><td><span class="badge reject">却下</span></td>
+   <td>shared fixture tenant を再利用</td>
+   <td>scenario 間の state leak が flake の温床、debug が難しい</td></tr>
+<tr class="hide"><td>D5-C</td><td><span class="badge reject">却下</span></td>
+   <td>DDB 直書き seed</td>
+   <td>外部 API 層を skip するため「観察可能 outcome」を破壊する。outside-in の趣旨に反する</td></tr>
+</tbody>
+</table>
+
+<details>
+<summary>cleanup 失敗時の保険</summary>
+<ul>
+<li>tenant の expiresAt を 24 時間後に設定 (DDB TTL で自動 delete)</li>
+<li>nightly cron で <code>e2e-*</code> prefix の tenant を sweep する Lambda を別 ADR で追加検討</li>
+<li>cost guardrail: staging account に <b>Budget Alarm</b> (月 $50 上限) を入れる</li>
+</ul>
+</details>
+
+<h3>D6. 既存 unit / CDK test との関係</h3>
+
+<table>
+<thead><tr><th>layer</th><th>本 ADR 後</th><th>役割</th></tr></thead>
+<tbody>
+<tr><td>vitest unit (= 582 件)</td><td><b>維持 + 増加</b></td>
+    <td>handler / lib の純粋ロジックは unit で押さえる (= scenario が遅いので fast feedback loop を維持する役)</td></tr>
+<tr><td>CDK assertion (= Template.fromStack)</td><td><b>維持</b></td>
+    <td>resource property の細部 (DDB プロビジョン値 / IAM 最小権限 / route 配線) を pin する</td></tr>
+<tr><td>Playwright scenario (= 本 ADR で新設)</td><td><b>新規</b></td>
+    <td>layer seam (= 配線) + user observable affordance を保証する</td></tr>
+</tbody>
+</table>
+
+<p>方針: scenario は <b>unit を置き換えない</b>、補完する。unit を削る誘惑があるが「scenario の遅さ × CI 時間」を考えると unit を残した方が dev 体験が良い。</p>
+
+<h3>D7. PR ゲートとの結合</h3>
+
+<table>
+<thead><tr><th>案</th><th>採否</th><th>内容</th><th>欠点</th></tr></thead>
+<tbody>
+<tr class="show"><td><b>D7-A</b></td><td><span class="badge accept">採用</span></td>
+   <td><b>段階的 gate</b>: 採択直後は warn ( CI で run + fail でも block しない)、6 PR 経過後に <code>required check</code> に昇格</td>
+   <td>初期に scaffolding cost が下がる代わりに、不正引き返しの猶予がある</td></tr>
+<tr class="hide"><td>D7-B</td><td><span class="badge reject">却下</span></td>
+   <td>採択即 required check</td>
+   <td>既存 PR 流れが止まる。staging stack 安定化前にゲートを掛けると ROI が逆転する</td></tr>
+<tr class="hide"><td>D7-C</td><td><span class="badge reject">却下</span></td>
+   <td>warn のまま据え置く</td>
+   <td>軟弱化、結局 PR が爆増して 30+ 件 issue 再来する</td></tr>
+</tbody>
+</table>
+
+<p>追加で <strong>新 invariant <code>INVARIANT_PR_HAS_OUTSIDE_IN_SCENARIO</code></strong> を harness に追加する。最初は warn 出力のみ、Phase 2 で error 化する。harness の rule は <code>.claude/harness/src/architecture.ts</code> に新規 case を追加。</p>
+</section>
+
+<section>
+<h2>Decision (まとめ)</h2>
+
+<table>
+<thead><tr><th>#</th><th>決定</th><th>実装場所</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>Playwright + TypeScript</td><td>新規 <code>e2e/</code> workspace</td></tr>
+<tr><td>D2</td><td>shared staging account</td><td><code>infrastructure/environments/staging/</code> + GitHub Actions secrets</td></tr>
+<tr><td>D3</td><td>Tier 1 = 5-7 本必須、Tier 2 = 推奨、Tier 3 = nightly</td><td><code>e2e/tier1/</code>、<code>e2e/tier2/</code>、<code>e2e/tier3/</code></td></tr>
+<tr><td>D4</td><td>network transient のみ 1 retry、それ以外は quarantine + issue 起票</td><td><code>playwright.config.ts</code></td></tr>
+<tr><td>D5</td><td>scenario 毎 fresh tenant、prefix <code>e2e-${PR}-${nanoid}</code>、afterAll で tenant delete</td><td><code>e2e/fixtures/tenant.ts</code></td></tr>
+<tr><td>D6</td><td>unit / CDK assertion は維持。scenario は補完</td><td>既存維持 + 新規追加</td></tr>
+<tr><td>D7</td><td>段階的 gate: 採択直後 warn、6 PR 後 required check に昇格</td><td><code>.github/workflows/ci.yml</code> + harness invariant 追加</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>初期 5 本 (Tier 1)</h2>
+
+<table>
+<thead><tr><th>#</th><th>scenario (user 語彙)</th><th>触れる layer</th></tr></thead>
+<tbody>
+<tr><td>S1</td><td>operator が event を作って bulk deploy → READY → 即座に開始 → 競技中</td>
+    <td>application-admin-console + tenant API + EventBridge + ProblemDeployBackendStack + 競技者 account CFn</td></tr>
+<tr><td>S2</td><td>competitor が teamLoginKey で login → 問題一覧 → Challenge flag 提出 → score 反映</td>
+    <td>participant-portal + portal API + scoring engine</td></tr>
+<tr><td>S3</td><td>operator が Event を終了 → Bulk Teardown → ARCHIVED 自動遷移</td>
+    <td>EventDetail + bulk-teardown handler + HealthCheck reconciler</td></tr>
+<tr><td>S4</td><td>operator が通知を送信 → competitor の Portal で 60 秒以内に表示</td>
+    <td>EventDetail SendNotificationModal + Notifications API + Portal /notifications</td></tr>
+<tr><td>S5</td><td>System Admin が新 tenant を invite → tenant admin がメールから sign-in → application-admin-console に到達</td>
+    <td>admin-console + Control Plane SBT + ServerlessSaaSPipeline + tenant Cognito + application-admin-console</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>段階的 ロールアウト</h2>
+
+<table>
+<thead><tr><th>Phase</th><th>scope</th><th>gate</th></tr></thead>
+<tbody>
+<tr><td>Phase 1 (本 ADR PR)</td>
+    <td>ADR-007 確定、harness rule warn 追加、follow-up issue 起票</td>
+    <td>doc-only</td></tr>
+<tr><td>Phase 2</td>
+    <td><code>e2e/</code> workspace scaffolding、Playwright config、S1 (1 本) を PoC として実装</td>
+    <td>scenario fail は warn のみ、merge ブロックしない</td></tr>
+<tr><td>Phase 3</td>
+    <td>S2 〜 S5 を順次追加</td>
+    <td>warn のまま</td></tr>
+<tr><td>Phase 4</td>
+    <td><code>required check</code> 昇格 + harness rule を error 化</td>
+    <td>新規 PR は scenario が必須</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>positive</h3>
+<ul>
+<li><b>配線忘れ regression</b> が PR ゲートで止まる (#535 / #553 / #560 系の再来防止)</li>
+<li><b>UI affordance 不足</b> が scenario 実行で顕在化 (= 操作 sequence が描けないなら UI が間違っている)</li>
+<li><b>用語 mismatch</b> が「scenario が user 語彙で書かれる」 ことで運営側にとって読みやすい仕様書になる</li>
+<li><b>state machine 整合性</b> が end-to-end で保証される (#539 / #557 / #559 系)</li>
+<li>新人 / AI agent も <b>「scenario を読めば動作が分かる</b>」 のでオンボード時間短縮</li>
+</ul>
+
+<h3>negative</h3>
+<ul>
+<li>scenario 1 本あたり 5-15 分かかる。Tier 1 全体で 30-60 分 (= CI 時間が増える)</li>
+<li>staging account の AWS cost (= 月 $30-50 想定、Budget Alarm で抑止)</li>
+<li>scenario maintenance cost (= UI 変更で locator が壊れる → role-based locator 推奨)</li>
+<li>初期 setup 工数大 (= Phase 2-3 で計 5-10 PR 規模)</li>
+</ul>
+
+<h3>open questions (= follow-up issue)</h3>
+<ul>
+<li>staging account の cost 実測 (1 ヶ月計測)</li>
+<li>scenario の <b>data fixture を AI に書かせる</b> 仕組み (= MCP server <code>mcp__playwright__*</code> 経由)</li>
+<li>per-PR ephemeral stack の cost が下がれば D2 を再評価</li>
+<li>nightly e2e-* cleanup Lambda (D5 の保険)</li>
+</ul>
+</section>
+
+<section>
+<h2>関連リソース</h2>
+<ul>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/561">#561</a> (本 ADR 起票)</li>
+<li>本日起票 28 件 (#528〜#560 系) — outside-in があれば PR 段階で検出されたはずの代表例</li>
+<li><a href="./harness.html">harness.html</a> — 既存 invariant の正本。本 ADR 採択で <code>INVARIANT_PR_HAS_OUTSIDE_IN_SCENARIO</code> を追加</li>
+<li>memory <code>feedback_polling_over_sse</code> — scenario の wait 戦略にも反映</li>
+<li>memory <code>feedback_design_docs_html</code> — scenario 仕様 / レポートも HTML 化方針</li>
+</ul>
+</section>
+</body>
+</html>
