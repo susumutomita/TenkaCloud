@@ -5,20 +5,28 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
+import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Table from "@cloudscape-design/components/table";
+import { StatusCodes } from "http-status-codes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
-import { useApiClient } from "../api/client";
+import { ApiError, useApiClient } from "../api/client";
 import {
   DEPLOYMENT_STATUS_INDICATOR,
   type DeploymentSummary,
   deleteDeployment,
   getDeployment,
+  getStackProgress,
   JOB_ID_RE,
   parseStackOutputs,
+  type StackProgress,
+  type StackProgressEvent,
+  type StackProgressResource,
+  statusToIndicator,
   TERMINAL_STATUSES,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
@@ -35,6 +43,14 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const stopPollingRef = useRef(false);
+  // #534: StackEvents / Resources は基本情報と独立 state。CFn API が throttle / 権限不足で
+  // 落ちても基本情報まで巻き込まない (= 別 state に閉じる)。
+  const [stackProgress, setStackProgress] = useState<StackProgress | null>(null);
+  const [stackProgressError, setStackProgressError] = useState<{
+    message: string;
+    notYetCreated: boolean;
+  } | null>(null);
+  const [stackProgressPending, setStackProgressPending] = useState(false);
 
   // showSpinner=true は手動再読み込みボタンからの呼び出し時のみ。auto polling は
   // 5 秒ごとに spinner を点滅させずバックグラウンド更新する。
@@ -56,12 +72,33 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
     [apiClient, jobId],
   );
 
+  const fetchStackProgress = useCallback(async () => {
+    if (!apiClient || !jobId || !JOB_ID_RE.test(jobId)) return;
+    setStackProgressPending(true);
+    try {
+      const progress = await getStackProgress(apiClient, jobId);
+      setStackProgress(progress);
+      setStackProgressError(null);
+    } catch (err) {
+      // CFn 失敗は基本情報を巻き込まない (= 別 state に閉じる)。
+      // 409 (= stack 未割当 / deploy 極初期) は別 message に分けて「準備中」表示する。
+      const notYetCreated = err instanceof ApiError && err.status === StatusCodes.CONFLICT;
+      const message = err instanceof Error ? err.message : String(err);
+      setStackProgressError({ message, notYetCreated });
+    } finally {
+      setStackProgressPending(false);
+    }
+  }, [apiClient, jobId]);
+
   useEffect(() => {
     let cancelled = false;
     stopPollingRef.current = false;
     const tick = async () => {
       if (cancelled || stopPollingRef.current) return;
-      await fetchOnce();
+      // 基本情報 + stack-progress を並列に fetch。stack-progress の error は基本情報を
+      // 巻き込まない (= 別 state に閉じる)。Terminal 後も最終 stack 状態を 1 回 fetch するため
+      // stopPollingRef は両 promise の after に評価する。
+      await Promise.all([fetchOnce(), fetchStackProgress()]);
     };
     void tick();
     const interval = setInterval(tick, POLL_INTERVAL_MS);
@@ -69,7 +106,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [fetchOnce]);
+  }, [fetchOnce, fetchStackProgress]);
 
   const handleDelete = useCallback(async () => {
     if (!apiClient || !jobId) return;
@@ -188,6 +225,12 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         </ColumnLayout>
       </Container>
 
+      <StackProgressSection
+        progress={stackProgress}
+        error={stackProgressError}
+        pending={stackProgressPending}
+      />
+
       {teamLoginKey && (
         <Container
           header={
@@ -263,5 +306,180 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         </SpaceBetween>
       </Modal>
     </SpaceBetween>
+  );
+}
+
+/**
+ * #534: CFn 進行状況セクション。Events / Resources / Console deep link を出す。
+ *
+ * - 初回 fetch 待ち (= progress === null かつ pending) → Spinner
+ * - 取得失敗 → Alert (基本情報は別途表示済、ここの error は基本情報を汚さない)
+ * - stack 未割当 (= deploy 極初期 / DDB 行はあるが CFn CreateStack 前) → 控えめな notice
+ * - 成功 → Events / Resources の Table + 「CFn console を開く」link
+ *
+ * FAILED event があれば最上位に Alert で強調 (= operator が一目で原因を特定できる)。
+ */
+function StackProgressSection(props: {
+  readonly progress: StackProgress | null;
+  readonly error: { message: string; notYetCreated: boolean } | null;
+  readonly pending: boolean;
+}) {
+  const { progress, error, pending } = props;
+
+  // 初回ローディング: error も progress も無く、fetch in-flight。
+  if (!progress && !error && pending) {
+    return (
+      <Container header={<Header variant="h2">Stack 進行状況</Header>}>
+        <Box textAlign="center" padding="m">
+          <Spinner /> CFn から取得中...
+        </Box>
+      </Container>
+    );
+  }
+
+  // Error 表示。stack 未割当 (= API 側の `stack_not_yet_created` 409) は別 message に分ける。
+  if (error && !progress) {
+    return (
+      <Container header={<Header variant="h2">Stack 進行状況</Header>}>
+        {error.notYetCreated ? (
+          <Box color="text-status-info">
+            CFn Stack はまだ作成されていません。deploy worker (CodeBuild) が起動し次第、 ここに
+            StackEvents / Resources が表示されます。
+          </Box>
+        ) : (
+          <Alert type="warning" header="CFn の進行状況を取得できませんでした">
+            {error.message}
+          </Alert>
+        )}
+      </Container>
+    );
+  }
+
+  if (!progress) return null;
+
+  // 失敗 event を抽出 (= CREATE_FAILED / UPDATE_FAILED 等)。最初に検出した 1 件を Alert で
+  // 強調する: operator が AWS Console を開かずに原因 logical id + reason を読める。
+  const firstFailure = progress.events.find((e) => e.resourceStatus.endsWith("_FAILED"));
+
+  return (
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description={
+            progress.stackStatus
+              ? `現在の CFn Stack 状態: ${progress.stackStatus}`
+              : "CFn StackEvents / Resources を CFn API から直接取得しています。"
+          }
+          actions={
+            <Link href={progress.consoleUrl} external>
+              CFn console を開く
+            </Link>
+          }
+        >
+          Stack 進行状況
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        {firstFailure && (
+          <Alert type="error" header={`失敗: ${firstFailure.logicalResourceId}`}>
+            <Box>
+              <code>{firstFailure.resourceType}</code> が <code>{firstFailure.resourceStatus}</code>{" "}
+              になりました。
+            </Box>
+            {firstFailure.resourceStatusReason && (
+              <Box variant="small">{firstFailure.resourceStatusReason}</Box>
+            )}
+          </Alert>
+        )}
+
+        <Table<StackProgressEvent>
+          variant="embedded"
+          header={<Header variant="h3">StackEvents (最新 {progress.events.length} 件)</Header>}
+          items={[...progress.events]}
+          empty={
+            <Box textAlign="center" color="inherit" padding="l">
+              StackEvents はまだありません。
+            </Box>
+          }
+          columnDefinitions={[
+            {
+              id: "timestamp",
+              header: "時刻",
+              cell: (e) => e.timestamp,
+              width: 200,
+            },
+            {
+              id: "logicalResourceId",
+              header: "LogicalId",
+              cell: (e) => <code>{e.logicalResourceId}</code>,
+              width: 220,
+            },
+            {
+              id: "resourceType",
+              header: "Type",
+              cell: (e) => <code>{e.resourceType}</code>,
+              width: 220,
+            },
+            {
+              id: "status",
+              header: "Status",
+              cell: (e) => (
+                <StatusIndicator type={statusToIndicator(e.resourceStatus)}>
+                  {e.resourceStatus}
+                </StatusIndicator>
+              ),
+              width: 240,
+            },
+            {
+              id: "reason",
+              header: "Reason",
+              cell: (e) => e.resourceStatusReason ?? "",
+            },
+          ]}
+        />
+
+        <Table<StackProgressResource>
+          variant="embedded"
+          header={<Header variant="h3">Resources ({progress.resources.length} 件)</Header>}
+          items={[...progress.resources]}
+          empty={
+            <Box textAlign="center" color="inherit" padding="l">
+              Resources はまだ作成されていません。
+            </Box>
+          }
+          columnDefinitions={[
+            {
+              id: "logicalResourceId",
+              header: "LogicalId",
+              cell: (r) => <code>{r.logicalResourceId}</code>,
+              width: 220,
+            },
+            {
+              id: "resourceType",
+              header: "Type",
+              cell: (r) => <code>{r.resourceType}</code>,
+              width: 220,
+            },
+            {
+              id: "status",
+              header: "Status",
+              cell: (r) => (
+                <StatusIndicator type={statusToIndicator(r.resourceStatus)}>
+                  {r.resourceStatus}
+                </StatusIndicator>
+              ),
+              width: 240,
+            },
+            {
+              id: "physicalResourceId",
+              header: "PhysicalId",
+              cell: (r) => (r.physicalResourceId ? <code>{r.physicalResourceId}</code> : ""),
+            },
+          ]}
+        />
+      </SpaceBetween>
+    </Container>
   );
 }

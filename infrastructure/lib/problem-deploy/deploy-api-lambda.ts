@@ -2,6 +2,7 @@ import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
@@ -65,5 +66,17 @@ export class DeployApiLambda extends Construct {
     // 同一 account 内 deploy のみ)。
     props.deploymentsTable.grantReadWriteData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
+
+    // #534: deploy job 詳細ページから CFn StackEvents / StackResources を引く読み取り権限。
+    // MVP-1 は same-account のみなので Resource は account 内全 stack を許可するが、
+    // action は **Describe* read-only に限定** (= 副作用なし、最小権限)。Phase 2 で cross-account
+    // になったら ここを sts:AssumeRole に置き換え、target account 側で role に持たせる。
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["cloudformation:DescribeStackEvents", "cloudformation:DescribeStackResources"],
+        resources: ["*"],
+      }),
+    );
   }
 }

@@ -21,6 +21,7 @@ import {
   UnknownProblemError,
 } from "./deploy.js";
 import { getDeployment, listDeployments } from "./list.js";
+import { defaultCfnClient, getStackProgress } from "./stack-progress.js";
 import { DeployRequestSchema } from "./types.js";
 
 /**
@@ -167,6 +168,54 @@ app.get("/deployments/:jobId", async (c) => {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] getDeployment failed", { jobId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+// #534: CFn StackEvents / StackResources / console deep link を返す。
+// `getDeployment` と分離する理由は:
+//   - DDB 行は即返せるのに対し CFn API は ~300ms × 2 で遅い (= 別 endpoint で 5 秒 polling)
+//   - CFn API throttle / 権限不足は detail page の基本情報まで道連れにしない
+app.get("/deployments/:jobId/stack-progress", async (c) => {
+  const jobId = c.req.param("jobId");
+  if (!jobId || !JOB_ID_RE.test(jobId)) {
+    return c.json({ error: "invalid jobId" }, StatusCodes.BAD_REQUEST);
+  }
+  try {
+    const outcome = await getStackProgress(
+      shared,
+      { cfnClient: defaultCfnClient },
+      resolveTenantId(c),
+      jobId,
+    );
+    if (outcome.kind === "not_found") {
+      return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+    }
+    if (outcome.kind === "stack_not_yet_created") {
+      // CFn stack 未割当 (= deploy 進行極初期) は 409 で返し、UI 側で「準備中」表示にする。
+      // 200 + 空 events で返す案もあるが、不在を error 型で明示した方が UI 分岐がしやすい。
+      return c.json({ error: "stack_not_yet_created" }, StatusCodes.CONFLICT);
+    }
+    if (outcome.kind === "stack_not_found_in_cfn") {
+      // CFn API が「stack なし」を返したケース (= 削除済 / 未作成 race)。events / resources
+      // は空、console URL のみ提供して operator が手動確認可能にする。
+      return c.json(
+        {
+          jobId,
+          stackName: "",
+          region: "",
+          consoleUrl: outcome.consoleUrl,
+          events: [],
+          resources: [],
+          stackStatus: undefined,
+        },
+        StatusCodes.OK,
+      );
+    }
+    return c.json(outcome.progress, StatusCodes.OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[deploy] getStackProgress failed", { jobId, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 

@@ -73,6 +73,27 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         }),
       );
     });
+
+    // #534: CFn StackEvents / StackResources を読む IAM Allow を持つべき
+    // (= deploy job 詳細ページから直接 CFn API を叩くため)。
+    it("CFn DescribeStackEvents / DescribeStackResources を Allow にすべき", () => {
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: Match.arrayWith([
+                  "cloudformation:DescribeStackEvents",
+                  "cloudformation:DescribeStackResources",
+                ]),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
   });
 
   describe("CodeBuild Project (deploy-battles.sh を実行)", () => {
