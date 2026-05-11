@@ -285,6 +285,44 @@
 <li><input disabled="" type="checkbox"> CFn DeleteStack が成功するところまでを cleanup 完了とみなす (実リソース漏れは問題作者責任)</li>
 <li><input disabled="" type="checkbox"> 問題作者が TenkaCloud SaaS UI 上で次のループを回せる: 新規作成 → 1 件 deploy → テンプレ修正 → Update → 動作確認 → 公開</li>
 </ul>
+<h3>Bulk Deploy 並列度の hard cap (#538)</h3>
+<p>Bulk Deploy (<code>POST /events/:id/deploy</code>) の上流 (DDB write / EventBridge PutEvents /
+Step Functions execution) は完全並列化されており、N × M ぶんの deploy job が同時に
+発火する。実 throughput を決める hard cap は次の順で効く。</p>
+<table>
+<thead>
+<tr>
+<th>順</th>
+<th>layer</th>
+<th>default 値</th>
+<th>引き上げ方法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>CodeBuild concurrent build quota (region 単位、本 Project が握る)</td>
+<td><strong>60</strong></td>
+<td>AWS Service Quotas で <code>Concurrently running builds</code> を request</td>
+</tr>
+<tr>
+<td>2</td>
+<td>CFn <code>CreateStack</code> API rate (target account の region 単位)</td>
+<td>標準 throttle</td>
+<td>必要なら request、通常 60 並列なら詰まらない</td>
+</tr>
+<tr>
+<td>3</td>
+<td>AssumeRole が触る各 AWS サービスの API rate</td>
+<td>service 依存</td>
+<td>問題テンプレ作者責任</td>
+</tr>
+</tbody></table>
+<p>30 問 × 25 team = 750 stacks を 30 分以内に終わらせるには quota 60 では足りず、
+⌈750 / 60⌉ = 13 batch × 1〜15 min/batch (CFn テンプレの重さ次第) かかる。Service
+Quota を 200〜500 に引き上げた上で <code>CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT</code> で本
+Project の cap を明示すると「他 stack 用 CodeBuild が枯渇しない」安全弁になる。</p>
+<p>長期的には CodeBuild を捨てて Lambda + SDK で CFn 直叩きにする選択肢もある (Lambda
+quota 1000 / region がデフォルト)。実装スコープが大きいため別 ADR で扱う。</p>
 <h2>Open questions (要件レベルで未確定、ADR 着手前に確定が必要)</h2>
 <ol>
 <li><strong><code>org-shared</code> の &quot;組織&quot; の定義</strong> — tenant のグループか、tenant 内の team か、ACL 列か (ADR-003 候補)</li>

@@ -58,6 +58,16 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   readonly participantPortal?: {
     readonly runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock";
   };
+  /**
+   * Deploy CodeBuild Project の concurrent build 上限 (#538: Bulk Deploy 並列度)。
+   *
+   * 未指定 (= default) なら CFn property を出力せず、AWS account 全体の concurrent build
+   * quota (region default 60) をフル活用する。Bulk Deploy で 750 stacks 投入時の hard
+   * cap は account quota であり、本プロパティで明示的に下げない限り変わらない。
+   *
+   * 詳細は `DeployCodeBuildProjectProps.concurrentBuildLimit` の docs を参照。
+   */
+  readonly deployConcurrentBuildLimit?: number;
 }
 
 /**
@@ -118,10 +128,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.eventApiLambda = eventApi.fn;
 
     // CodeBuild Project: source.zip から `scripts/deploy-battles.sh` を実行する。
+    // #538: Bulk Deploy 並列度の hard cap は account-wide CodeBuild concurrent build
+    // quota (region default 60)。本 prop で project 単位に明示 cap を指定できる
+    // (= operator が Service Quota を引き上げた値を伝える経路 / sandbox で暴走防止)。
     const sourceBucket = Bucket.fromBucketName(this, "SourceBucket", props.sourceBucketName);
     const codeBuild = new DeployCodeBuildProject(this, "DeployCodeBuild", {
       sourceBucket,
       sourceObjectKey: props.sourceObjectKey,
+      concurrentBuildLimit: props.deployConcurrentBuildLimit,
     });
 
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {

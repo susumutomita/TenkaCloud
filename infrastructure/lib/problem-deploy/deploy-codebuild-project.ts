@@ -20,6 +20,29 @@ export interface DeployCodeBuildProjectProps {
   readonly sourceBucket: IBucket;
   /** `install.sh` が upload する zip key (default: `source.zip`)。 */
   readonly sourceObjectKey: string;
+  /**
+   * 本 Project 単体での concurrent build 上限 (issue #538: Bulk Deploy 並列度)。
+   *
+   * 未指定 (= default) なら CFn `ConcurrentBuildLimit` を出力しない = AWS account 全体の
+   * concurrent build quota (region default 60) を全部 本 Project で使い切れる挙動を
+   * 維持する。
+   *
+   * Bulk Deploy (`POST /events/:id/deploy`) は N × M (teams × problems) ぶんの
+   * `DeployCreateRequested` event を EventBridge に fan-out し、各 event が 1 Step
+   * Functions execution → 1 CodeBuild build を起動する (= 上流は完全並列)。実 throughput
+   * の hard cap は次の順で効く:
+   *   1. **CodeBuild concurrent build quota** (region default 60) — 本 Project が握る上限
+   *   2. CFn `CreateStack` API rate (target account の region 単位)
+   *   3. AssumeRole が触る各 AWS サービスの API rate
+   *
+   * 30 問 × 25 team = 750 stacks の deploy を 30 分以内に終わらせたい (issue #538 AC)
+   * 場合、quota 60 のままでは ⌈750 / 60⌉ = 13 batch 必要 = batch 1 つあたり 1-15 min
+   * (CFn の重さ次第)。Service Quota request で 200/500 に上げた上で、本プロパティに
+   * 同値以下の cap を渡すと「他 stack 用 CodeBuild が枯渇しない」ガードになる。
+   *
+   * dev / sandbox では小さい値 (例: 5) に絞ってコスト暴走を防ぐ用途にも使う。
+   */
+  readonly concurrentBuildLimit?: number;
 }
 
 /**
@@ -38,6 +61,11 @@ export interface DeployCodeBuildProjectProps {
  *
  * 同一 AWS account 内 deploy のみ (MVP-1 制約)。Phase 2 で cross-account になったら
  * IAM Role に `sts:AssumeRole` 等を足す。
+ *
+ * **並列度 (#538)**: 本 Project は `ConcurrentBuildLimit` 未指定が default で、AWS account
+ * 全体の concurrent build quota (region default 60) をフル活用する。Bulk Deploy で
+ * 750 stacks を投入しても、CodeBuild service 側で 60 並列に自動 throttle される。
+ * 詳細は `props.concurrentBuildLimit` の docs を参照。
  */
 export class DeployCodeBuildProject extends Construct {
   public readonly project: Project;
@@ -48,6 +76,11 @@ export class DeployCodeBuildProject extends Construct {
     this.project = new Project(this, "Project", {
       description: "TenkaCloud problem deploy executor (runs scripts/deploy-battles.sh).",
       timeout: Duration.minutes(60),
+      // #538: 並列 build 上限を operator が tune できるようにする。未指定なら CFn property
+      // 自体を出力しない = AWS account 全体の concurrent build quota をフル活用する挙動を維持。
+      ...(props.concurrentBuildLimit !== undefined
+        ? { concurrentBuildLimit: props.concurrentBuildLimit }
+        : {}),
       // S3 から source.zip を取って展開する。`install.sh` が事前に upload する。
       source: Source.s3({
         bucket: props.sourceBucket,
