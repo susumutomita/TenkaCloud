@@ -162,14 +162,22 @@ app.patch("/events/:eventId/schedule", async (c) => {
     return c.json({ error: "validation failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
   }
   const nowMs = Date.now();
-  // `startNow: true` は server now を ISO8601 化して採用 (= 即座に開始ボタンの裏挙動)。
-  const startsAt = "startNow" in parsed.data ? new Date(nowMs).toISOString() : parsed.data.startsAt;
+  // `startNow: true` は server now を ISO8601 化して startsAt に解決 (= 即座に開始)。
+  // #536: endsAt も同 endpoint で受け、predictive scheduling を可能に。
+  const resolvedStartsAt = parsed.data.startNow
+    ? new Date(nowMs).toISOString()
+    : parsed.data.startsAt;
+  const resolvedEndsAt = parsed.data.endsAt;
   try {
-    const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, startsAt, nowMs);
+    const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, {
+      startsAt: resolvedStartsAt,
+      endsAt: resolvedEndsAt,
+      nowMs,
+    });
     if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
     if (outcome.kind === "past_starts_at") {
-      // #537: 過去日時を frontend が迂回した場合の防御線。SLACK_MS (= 60s) より過去なら
-      // 「即座に開始」 button を使うべきなので reject。message は frontend で表示する。
+      // #537: 過去 startsAt を frontend が迂回した場合の防御線。SLACK (= 60s) より過去なら
+      // 「即座に開始」 button を使うべきなので reject。
       return c.json(
         {
           error: "past_starts_at",
@@ -181,8 +189,41 @@ app.patch("/events/:eventId/schedule", async (c) => {
         HTTP_BAD_REQUEST,
       );
     }
+    if (outcome.kind === "past_ends_at") {
+      // #536: 過去 endsAt を弾く。「Event を終了」 button (= 即終了) は別 endpoint なので、
+      // 本 schedule API には未来の endsAt のみ来る想定。
+      return c.json(
+        {
+          error: "past_ends_at",
+          message:
+            "endsAt が過去の時刻です。「Event を終了」 button (= 即時) を使うか、未来の時刻を指定してください。",
+          endsAt: outcome.endsAt,
+          serverNow: new Date(outcome.nowMs).toISOString(),
+        },
+        HTTP_BAD_REQUEST,
+      );
+    }
+    if (outcome.kind === "ends_before_starts") {
+      // #536: 競技時間 0 以下を弾く。
+      return c.json(
+        {
+          error: "ends_before_starts",
+          message: "endsAt は startsAt より後の時刻を指定してください。",
+          startsAt: outcome.startsAt,
+          endsAt: outcome.endsAt,
+        },
+        HTTP_BAD_REQUEST,
+      );
+    }
+    if (outcome.kind === "no_op") {
+      return c.json({ error: "no_op", message: "更新対象が指定されていません" }, HTTP_BAD_REQUEST);
+    }
     return c.json(
-      { startsAt: outcome.startsAt, updatedDeployments: outcome.updatedDeployments },
+      {
+        startsAt: outcome.startsAt,
+        endsAt: outcome.endsAt,
+        updatedDeployments: outcome.updatedDeployments,
+      },
       HTTP_OK,
     );
   } catch (err) {

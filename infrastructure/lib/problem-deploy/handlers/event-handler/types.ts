@@ -147,29 +147,50 @@ export const EventSummarySchema = z.object({
   updatedAt: z.string(),
   expiresAt: z.number(),
   startsAt: z.string().optional(),
+  /** 競技終了時刻 (#536)。HealthCheck が `now >= endsAt` で gate 閉。
+   *  「Event を終了」 button = now を書く / 「日時を指定して終了」 = 未来時刻を書く。 */
+  endsAt: z.string().optional(),
 });
 export type EventSummary = z.infer<typeof EventSummarySchema>;
 
 /**
  * `PATCH /events/:eventId/schedule` body。
- * - `{ startsAt: ISO8601 }`: operator 指定の日時 (分精度)
- * - `{ startNow: true }`: 即座に開始 (= server now を採用)
  *
- * `startsAt` は `+09:00` 等の non-Z オフセットも入力としては受け付けるが、
- * **canonical UTC Z 形式に transform して persist する** (Issue #497)。
- * 理由: HealthCheck の `isScoringActive` は ISO 8601 の辞書順比較を時系列比較として使うが、
- * `Z` (0x5A) と `+` (0x2B) は code point 順が逆転するので、混在すると
- * 「同年月日の異 timezone」の比較が壊れる。入り口で 1 形式に揃えてしまう。
+ * 3 種の field を組み合わせ:
+ * - `startsAt: ISO8601` — operator 指定の競技開始日時 (分精度)
+ * - `startNow: true` — 即座に開始 (= server now を採用)。`startsAt` とは同時指定不可
+ * - `endsAt: ISO8601` — 競技終了予約時刻 (#536)。HealthCheck が `now >= endsAt` で
+ *   採点 gate を閉じるので、operator は手動で「Event を終了」を押さなくてよい
+ *
+ * 少なくとも 1 つは指定必須。同時指定可能な組:
+ *   `{ startsAt }` / `{ startNow: true }` / `{ endsAt }` / `{ startsAt, endsAt }` /
+ *   `{ startNow: true, endsAt }`
+ *
+ * datetime は `+09:00` 等の non-Z オフセット入力も受け付けるが、**canonical UTC Z 形式
+ * に transform して persist する** (Issue #497)。理由: HealthCheck の `isScoringActive`
+ * は ISO 8601 の辞書順比較を時系列比較として使うが、`Z` (0x5A) と `+` (0x2B) は code point
+ * 順が逆転するので、混在すると「同年月日の異 timezone」の比較が壊れる。入り口で 1 形式に揃える。
  */
-export const ScheduleEventRequestSchema = z.union([
-  z.object({
+export const ScheduleEventRequestSchema = z
+  .object({
     startsAt: z
       .string()
       .datetime({ offset: true })
-      .transform((s) => new Date(s).toISOString()),
-  }),
-  z.object({ startNow: z.literal(true) }),
-]);
+      .transform((s) => new Date(s).toISOString())
+      .optional(),
+    startNow: z.literal(true).optional(),
+    endsAt: z
+      .string()
+      .datetime({ offset: true })
+      .transform((s) => new Date(s).toISOString())
+      .optional(),
+  })
+  .refine((v) => v.startsAt !== undefined || v.startNow === true || v.endsAt !== undefined, {
+    message: "startsAt / startNow / endsAt のいずれかは必須",
+  })
+  .refine((v) => !(v.startsAt !== undefined && v.startNow === true), {
+    message: "startsAt と startNow は同時指定不可",
+  });
 export type ScheduleEventRequest = z.infer<typeof ScheduleEventRequestSchema>;
 
 export const TeamSummarySchema = z.object({

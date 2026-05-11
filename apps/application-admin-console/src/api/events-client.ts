@@ -21,6 +21,9 @@ export interface EventSummary {
   expiresAt: number;
   /** 競技開始時刻 (ISO8601, UTC)。未設定なら HealthCheck は採点しない (= deploy 直後の誤加算防止)。 */
   startsAt?: string;
+  /** 競技終了時刻 (ISO8601, UTC、#536)。HealthCheck は `now >= endsAt` で採点 gate 閉。
+   *  「Event を終了」 button (= 即時終了) と「日時を指定して終了」 (= 予約) の両方が書き込む。 */
+  endsAt?: string;
 }
 
 export interface EventListResponse {
@@ -120,18 +123,29 @@ export async function bulkTeardownEvent(api: ApiClient, eventId: string): Promis
 }
 
 export interface SetScheduleResult {
-  startsAt: string;
+  /** #536: backend は指定された field のみ返す。startsAt 未指定なら undefined */
+  startsAt?: string;
+  /** #536: endsAt も同様 */
+  endsAt?: string;
   updatedDeployments: number;
 }
 
 /**
- * 競技開始時刻を設定する。`{ startsAt }` で日時指定、`{ startNow: true }` で server now 採用。
- * Event + 紐づく全 deployment 行に伝播する (eventStartsAt の denormalize)。
+ * 競技開始/終了時刻を設定する。`{ startsAt }` で日時指定、`{ startNow: true }` で server now 採用。
+ * #536: `{ endsAt }` も同 endpoint で受ける (= 終了予約)。組み合わせ可:
+ *   `{ startsAt }` / `{ startNow: true }` / `{ endsAt }` / `{ startsAt, endsAt }` /
+ *   `{ startNow: true, endsAt }`
+ * Event + 紐づく全 deployment 行に伝播する (eventStartsAt / eventEndsAt の denormalize)。
  */
+export interface SetEventScheduleBody {
+  startsAt?: string;
+  startNow?: true;
+  endsAt?: string;
+}
 export async function setEventSchedule(
   api: ApiClient,
   eventId: string,
-  body: { startsAt: string } | { startNow: true },
+  body: SetEventScheduleBody,
 ): Promise<SetScheduleResult> {
   return api.patch<SetScheduleResult>(`events/${encodeURIComponent(eventId)}/schedule`, body);
 }
