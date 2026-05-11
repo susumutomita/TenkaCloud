@@ -28,7 +28,9 @@ import {
   type EventStatus,
   endEvent,
   getEvent,
+  lockEventScoring,
   setEventSchedule,
+  unlockEventScoring,
 } from "../api/events-client";
 import { SendNotificationModal } from "../components/SendNotificationModal";
 import type { AppConfig } from "../config";
@@ -137,6 +139,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   const [notifyJustSent, setNotifyJustSent] = useState(false);
+  // #558: scoring lock/unlock の in-flight 状態。"lock" / "unlock" / null を持つ。
+  const [scoringLockInFlight, setScoringLockInFlight] = useState<"lock" | "unlock" | null>(null);
 
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
 
@@ -283,6 +287,47 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     }
   };
 
+  // #558: 採点を lock (= 表彰フェーズ、加点経路全停止)。
+  //   - server side: READY / ENDED の event のみ受理 (= 409 not_lockable for other)
+  //   - idempotent: 既に locked のときも 200 + idempotent=true
+  const handleLockScoring = async () => {
+    if (!apiClient || scoringLockInFlight) return;
+    setScoringLockInFlight("lock");
+    setError(null);
+    try {
+      await lockEventScoring(apiClient, eventId);
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
+        setError(
+          "Event は READY / ENDED 状態でのみ採点を lock できます。現在 status を確認してください。",
+        );
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setScoringLockInFlight(null);
+    }
+  };
+
+  const handleUnlockScoring = async () => {
+    if (!apiClient || scoringLockInFlight) return;
+    setScoringLockInFlight("unlock");
+    setError(null);
+    try {
+      await unlockEventScoring(apiClient, eventId);
+      await refresh();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
+        setError("採点 lock の解除は READY / ENDED 状態でのみ可能です。");
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setScoringLockInFlight(null);
+    }
+  };
+
   const handleEndEvent = async () => {
     if (!apiClient || endInFlight) return;
     setEndInFlight(true);
@@ -354,6 +399,17 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             >
               Event を終了
             </Button>
+            {/* #558: 採点 lock/unlock — READY / ENDED の event でのみ表示 (= 表彰フェーズ
+             *   用途)。現在 locked / unlocked で button label と loading 状態を分ける。 */}
+            {detail && (detail.status === "READY" || detail.status === "ENDED") && (
+              <Button
+                loading={scoringLockInFlight !== null}
+                disabled={!apiClient}
+                onClick={detail.scoringLocked === true ? handleUnlockScoring : handleLockScoring}
+              >
+                {detail.scoringLocked === true ? "採点 lock を解除" : "採点を lock"}
+              </Button>
+            )}
             <Button
               variant={wizard?.primary === "delete" ? "primary" : "normal"}
               loading={bulkInFlight === "teardown"}
@@ -419,14 +475,33 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
 
       {detail && (
         <Container header={<Header variant="h2">Event 概要</Header>}>
-          <ColumnLayout columns={4} variant="text-grid">
-            <Field label="ステータス">
-              <Badge color={STATUS_COLOR[detail.status]}>{detail.status}</Badge>
-            </Field>
-            <Field label="チーム数">{detail.teamCount}</Field>
-            <Field label="問題数">{detail.problems.length}</Field>
-            <Field label="作成">{detail.createdAt}</Field>
-          </ColumnLayout>
+          <SpaceBetween size="m">
+            {/* #558: 採点 lock 中の警告 banner (= 全体に視覚的に強く出す)。表彰フェーズの
+             *   競技者 / operator 双方への明示的通知。unlock するまで lock 中であることが
+             *   一目で分かるよう dismissible は付けない。 */}
+            {detail.scoringLocked === true && (
+              <Alert
+                type="warning"
+                statusIconAriaLabel="scoring locked"
+                header="採点 lock 中 (表彰フェーズ)"
+              >
+                加点経路 (flag 提出 / HealthCheck uptime) は全停止しています。leaderboard / score
+                events の閲覧は可能です。
+                {detail.scoringLockedAt && ` Locked at: ${detail.scoringLockedAt}`}
+              </Alert>
+            )}
+            <ColumnLayout columns={4} variant="text-grid">
+              <Field label="ステータス">
+                <SpaceBetween direction="horizontal" size="xxs">
+                  <Badge color={STATUS_COLOR[detail.status]}>{detail.status}</Badge>
+                  {detail.scoringLocked === true && <Badge color="red">SCORING LOCKED</Badge>}
+                </SpaceBetween>
+              </Field>
+              <Field label="チーム数">{detail.teamCount}</Field>
+              <Field label="問題数">{detail.problems.length}</Field>
+              <Field label="作成">{detail.createdAt}</Field>
+            </ColumnLayout>
+          </SpaceBetween>
         </Container>
       )}
 
