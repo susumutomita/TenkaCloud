@@ -147,14 +147,17 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       stateMachine: deleteStateMachine.stateMachine,
     });
 
-    // 1 分間隔で uptime 採点する Health Check Lambda。`scoring.kind=uptime` の問題のみが
-    // 対象。`flag` 形式は Portal Lambda が submit-flag 経路で採点するため別系統。
-    if (Object.keys(props.problemsScoring).length > 0) {
-      new HealthCheckLambda(this, "HealthCheck", {
-        deploymentsTable: deployments.table,
-        problemsScoring: props.problemsScoring,
-      });
-    }
+    // 1 分間隔の Health Check Lambda は 2 つの責務を持つ:
+    // - uptime 採点 (`scoring.kind=uptime` の問題のみ)。`flag` 形式は Portal Lambda の
+    //   submit-flag 経路で採点するため別系統。
+    // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED。
+    //   uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
+    //   `if (problemsScoring.length > 0)` ガードは撤去)。
+    new HealthCheckLambda(this, "HealthCheck", {
+      deploymentsTable: deployments.table,
+      eventsTable: events.table,
+      problemsScoring: props.problemsScoring,
+    });
 
     if (props.participantPortal) {
       const consoleViewerRole = new ConsoleViewerRole(this, "ConsoleViewerRole");
