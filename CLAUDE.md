@@ -130,13 +130,19 @@ describe("AdminConsoleHostingStack", () => {
 
 ### Issue 引用ルール
 
-コミットや PR 本文で `#番号` 形式は使わない（auto-close されてしまうので）。代わりに `(PR-F1)` `(#446)` のようにスペース区切りや別記法で指す。
+GitHub の auto-close keyword は **括弧なし** で書く。
+
+- **解決して issue を閉じる** = `Closes #553` / `Fixes #553` / `Resolves #553` (= merge 時に auto-close)
+- **関連だが閉じない (= partial fix / 単なる backlink)** = `Relates #553` または本文中で `#553` を非 keyword 位置で言及
+- **PR 同士の参照** = `PR-565` のように番号 prefix で書く (issue 番号と区別)
+
+旧ルール (= `(#N)` の括弧で囲って auto-close を抑止) は仕様誤解だった。`Closes` などの
+keyword が無ければ `#N` 単独でも auto-close されない (= backlink のみ作る)。
 
 ## 禁止事項
 
 - **`npx` 禁止** → `bunx` または `nlx` を使う
 - **`rm` コマンド禁止** → ファイル削除は `git rm` 経由で扱う
-- **コミット / PR で `#番号` 形式の Issue 引用禁止** — 自動クローズ防止
 - **モック / スタブで握り潰す fallback 禁止** — 失敗するなら明示的に失敗させる
 - **DynamoDB を on-demand (PAY_PER_REQUEST) で立てない** — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED に強制している。これを破る変更は CFn 出力で必ず引っかかる
 - **設定ファイル (`biome.json`, 各 `vitest.config.ts`, `tsconfig.json`) の直接変更禁止** — コード側を修正する

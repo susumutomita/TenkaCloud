@@ -25,6 +25,20 @@ end-user / operator が確認できる振る舞い。
 
 <!-- 2-3 文。無いと何に困るか、他の解との比較、優先度の根拠 -->
 
+## 関連 Issue
+
+<!--
+GitHub の auto-close keyword (= `Closes #N` / `Fixes #N` / `Resolves #N`) を **括弧なし** で
+書く。`(#N)` のように括弧で囲むと auto-close されない (= merge 後も Issue が開いたまま残る、
+手動で close 漏れの原因)。複数 issue は別行に書く。
+
+partial fix で issue を残したい場合は `Relates #N` (= auto-close されない) を使う。
+全 close 不要な PR (refactor / docs / chore 等) はこのセクションごと削除可。
+-->
+
+- Closes #
+- Relates #
+
 ## 変更前 → 変更後のフロー
 
 <!--
