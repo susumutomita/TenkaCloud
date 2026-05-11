@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-008: 問題カタログを Community Contribution Registry にする (DDB-backed catalog + S3 multi-tenant payload + GitHub PR 寄稿フロー)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+    --c-public: #0969da;
+    --c-private: #8250df;
+    --c-runtime: #1a7f37;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 1040px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-code-bg); padding: .8rem 1rem; border-radius: 4px; overflow-x: auto;
+        font-size: 0.85rem; line-height: 1.5; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .badge.public  { background: #cfe5ff; color: var(--c-public); }
+  .badge.private { background: #ece4ff; color: var(--c-private); }
+  .badge.runtime { background: #ddf4e0; color: var(--c-runtime); }
+  .badge.v1      { background: #f6f8fa; color: var(--c-muted); border: 1px solid var(--c-border); }
+  .badge.v2      { background: #cfe5ff; color: var(--c-link); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+               gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem;
+                   background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0;
+            border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  blockquote { margin: 0.6rem 0; padding: .6rem 1rem; border-left: 4px solid var(--c-warn);
+               background: #fff8c5; border-radius: 0 4px 4px 0; font-size: 0.92rem; }
+  .versionbar {
+    background: linear-gradient(90deg, #ece4ff 0%, #cfe5ff 100%);
+    border-radius: 4px; padding: .5rem .8rem; margin: .8rem 0 1.2rem;
+    font-size: 0.88rem; display: flex; gap: 1rem; align-items: center;
+  }
+  .versionbar .arrow { color: var(--c-muted); }
+
+  .arch-fig {
+    border: 1px solid var(--c-border); border-radius: 8px; background: #fff;
+    padding: 1rem 1.25rem 1.5rem; margin: 1rem 0 1.5rem;
+  }
+  .arch-fig .cap {
+    font-size: 0.78rem; font-weight: 700; color: var(--c-link);
+    letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: .6rem;
+  }
+  .arch-fig svg { display: block; max-width: 100%; height: auto; }
+
+  .seq {
+    background: var(--c-bg-soft); border: 1px solid var(--c-border);
+    border-radius: 6px; padding: .8rem 1rem; margin: .8rem 0;
+    font-family: monospace; font-size: 0.86rem; line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .repo-block {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;
+  }
+  .repo-card {
+    border: 2px solid var(--c-border); border-radius: 8px; padding: .8rem 1rem;
+    background: var(--c-bg-soft);
+  }
+  .repo-card.public  { border-color: var(--c-public); }
+  .repo-card.private { border-color: var(--c-private); background: #faf6ff; }
+  .repo-card h4 { margin: 0 0 .4rem; color: var(--c-text); }
+  .repo-card pre {
+    background: #fff; border: 1px solid var(--c-border); padding: .6rem .8rem;
+    margin: .4rem 0 0; font-size: 0.78rem; line-height: 1.45;
+  }
+  .repo-card .role {
+    font-size: 0.78rem; color: var(--c-muted); margin: .2rem 0 .6rem;
+  }
+
+  @media (max-width: 720px) {
+    .repo-block { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ADR-008: 問題カタログを Community Contribution Registry にする</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-11</div>
+    <div><b>Version:</b><span class="badge v2">v2</span> — community contribution model 中心に大幅改訂</div>
+    <div><b>Driver:</b><code>#572</code> (microservice-migration-battle) + user feedback「コミュニティでオリジナル問題を追加できる設計に」</div>
+    <div><b>Tracking:</b><code>#574</code></div>
+  </div>
+
+  <div class="versionbar">
+    <span class="badge v1">v1</span>
+    <span>「自分用 private repo + 答え漏れ防止」モデル</span>
+    <span class="arrow">→</span>
+    <span class="badge v2">v2</span>
+    <span><strong>寄稿モデルが本筋</strong>。v1 は「寄稿モデルの特殊ケース 1 つ」として吸収</span>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>v1 は <code>#572</code> (microservice-migration-battle) で「完成形のサービスコード自体が答え」となる
+Battle が起票され、答えが public repo にあると競技が成立しないという問題を解くために、
+「自分用 private repo + 運営 S3 publish + presigned URL fetch」を提案した。</p>
+
+<p>v1 を書いた直後 (2026-05-11)、ユーザーから次のフィードバックが入った:</p>
+
+<blockquote>
+要はオリジナル問題をコミュニティで追加できる設計になっていればいいんだけど。
+S3 とかにプッシュしてそこからロードしているとかならサードパーティーの問題もプッシュしてもらえばいい。
+</blockquote>
+
+<p>これを受けて v1 を見直すと、「自分が答え漏れを気にする」のは寄稿モデルの <strong>1 ユースケース</strong>
+にすぎず、本筋は「<strong>誰でも問題を追加できる仕組み</strong>」(= 答え漏れも結果として解決) である
+ことが分かった。本 ADR v2 はそれを設計する。</p>
+
+<h3>現状アーキテクチャの寄稿不可性</h3>
+
+<p>Explore agent で本体 repo の問題ロード経路を調査した結果 (= 2026-05-11 セッション):</p>
+
+<table>
+<tr><th>layer</th><th>現状</th><th>寄稿の障害</th></tr>
+<tr><td>カタログ表示</td>
+    <td><code>apps/application-admin-console/src/data/problems.ts:61-64</code> で Vite <code>import.meta.glob</code> が <strong>build 時に <code>problems/*/*/metadata.json</code> を bundle</strong></td>
+    <td>サードパーティー問題追加 = 本体 repo の rebuild & redeploy 必要</td></tr>
+<tr><td>CDK 配線</td>
+    <td><code>infrastructure/bin/infrastructure.ts:214</code> の <code>discoverProblemsCatalog()</code> が build 時に走査 → Lambda env <code>BATTLE_PROBLEMS_CATALOG</code> に inject</td>
+    <td>build 時固定、動的追加不可</td></tr>
+<tr><td>template.yaml の deploy</td>
+    <td><code>install.sh</code> が <strong>repo 全体を zip → S3</strong>、CodeBuild が <code>source.zip</code> 内の <code>problems/&lt;id&gt;/template.yaml</code> を <strong>直読</strong></td>
+    <td>問題が「本体 repo の一部」前提。S3 に他者が push しても CodeBuild は見ない</td></tr>
+<tr><td>validate-problems</td>
+    <td><code>scripts/validate-problems.ts</code> が <code>problems/SCHEMA.json</code> で全 metadata.json を JSON Schema 検証</td>
+    <td>本体 repo にあるものしか検証できない</td></tr>
+</table>
+
+<p>つまり現状は <strong>「問題 = TenkaCloud 本体のコードベース」</strong> が完全に前提で、
+寄稿の余地がない。寄稿モデル化は MVP-1 → ADR-003 Phase 2 (= DB-backed catalog) への
+移行と合流させる形で、本 ADR で前倒しする。</p>
+
+<h3>制約 (= 既存方針として動かさないもの)</h3>
+
+<ul>
+<li><strong>本体 repo は public OSS のまま</strong>(<code>CLAUDE.md</code>)</li>
+<li><strong>カタログ UX を維持</strong> — admin-console / participant-portal の表示・検索・フィルタが既存と等価以上に動く</li>
+<li><strong>deploy パイプラインの I/F を維持</strong> — Worker Lambda の <code>DeployRequested</code> 処理、ExternalId による cross-account AssumeRole (ADR-002) はそのまま</li>
+<li><strong>CFn ペライチ規約</strong> (<code>problems/README.md</code>) を維持</li>
+<li><strong>Free Tier 25 RCU/WCU 内</strong> (<code>DynamoDbLowCapacity</code> Aspect)</li>
+</ul>
+</section>
+
+<section>
+<h2>解くべき設計判断</h2>
+
+<h3>D1. カタログ storage</h3>
+
+<table>
+<tr><th>案</th><th>採否</th><th>概要</th><th>主な決め手</th></tr>
+<tr class="hide"><td>D1-A</td><td><span class="badge reject">却下</span></td>
+    <td>本体 repo の <code>problems/&lt;id&gt;/metadata.json</code> 静的ファイル (= 現状)</td>
+    <td>寄稿に rebuild 必要、寄稿者 PR を待つしかない</td></tr>
+<tr class="hide"><td>D1-B</td><td><span class="badge reject">却下</span></td>
+    <td>本体 repo の <code>problems/index.json</code> 集約 (= v1 案)</td>
+    <td>動的 CRUD ができない、寄稿者 metadata の attribution / 検索ができない</td></tr>
+<tr class="show"><td><b>D1-C</b></td><td><span class="badge accept">採用</span></td>
+    <td><strong>DDB <code>ProblemRegistry</code> table</strong> (= ADR-003 Phase 2 を前倒し)</td>
+    <td>動的 CRUD / 寄稿者 attribution / 検索 / フィルタ / 検証ステータス管理がすべて 1 ヶ所で完結</td></tr>
+</table>
+
+<h3>D2. 問題 payload (template.yaml + 実装ファイル) の storage</h3>
+
+<table>
+<tr><th>案</th><th>採否</th><th>概要</th><th>主な決め手</th></tr>
+<tr class="hide"><td>D2-A</td><td><span class="badge reject">却下</span></td>
+    <td>本体 repo の <code>problems/&lt;id&gt;/</code> (= 現状)</td>
+    <td>寄稿不可</td></tr>
+<tr class="hide"><td>D2-B</td><td><span class="badge reject">却下</span></td>
+    <td>GitHub Releases (寄稿者の repo の release artifact)</td>
+    <td>寄稿者ごとの GitHub 認証管理が複雑、CFn ペライチ規約と合わない</td></tr>
+<tr class="hide"><td>D2-C</td><td><span class="badge reject">却下</span></td>
+    <td>ECR private images にビルド済イメージを置く</td>
+    <td>CFn 規約と無関係、寄稿者ハードル高い</td></tr>
+<tr class="show"><td><b>D2-D</b></td><td><span class="badge accept">採用</span></td>
+    <td><strong>S3 multi-tenant prefix</strong> (<code>s3://tc-challenges-&lt;env&gt;/&lt;contributor&gt;/&lt;problem-id&gt;/&lt;version&gt;/</code>)</td>
+    <td>AWS-native / 寄稿者ごとに prefix 分離 / presigned URL 経路を流用 / 既存 S3 zip 配信モデルと自然に共存</td></tr>
+</table>
+
+<h3>D3. 寄稿フロー (= 寄稿者の入口)</h3>
+
+<table>
+<tr><th>案</th><th>採否</th><th>概要</th><th>主な決め手</th></tr>
+<tr class="show"><td><b>D3-A</b></td><td><span class="badge accept">採用 (MVP)</span></td>
+    <td><strong>GitHub PR ベース</strong>。寄稿者は本体 repo に <code>contributions/&lt;contributor&gt;/&lt;problem-id&gt;/{metadata.json,template.yaml}</code> + 実装ファイルを PR</td>
+    <td>OSS 慣習 / レビュー文化が継続 / MVP の実装最小 / 検証 = GitHub Actions に乗せられる</td></tr>
+<tr class="hide"><td>D3-B</td><td><span class="badge muted">後回し</span></td>
+    <td>Web UI (admin-console から template.yaml ドラッグ&ドロップ)</td>
+    <td>寄稿者ハードル低いが検証 UI / プレビューの実装重い、Phase 6+ で追加</td></tr>
+<tr class="hide"><td>D3-C</td><td><span class="badge muted">後回し</span></td>
+    <td>CLI (<code>tc challenge publish ./my-problem</code>)</td>
+    <td>git なしで投稿可能だが CLI 配布 / 認証が独立、Phase 7+ で追加</td></tr>
+</table>
+
+<p>MVP は <strong>A のみ</strong>。B / C は将来の追加経路として interface (= 検証 Lambda + S3 + DDB) を共有する設計にしておけば、後付けで足せる。</p>
+
+<h3>D4. 検証パイプライン</h3>
+
+<p>寄稿者が任意のテンプレートを投げてくる以上、運営アカウントが攻撃される / 課金爆弾を仕掛けられる
+リスクがある。完全マニュアルレビューは scale しないので、自動 + 人間承認の二段構成にする。</p>
+
+<table>
+<tr><th>レイヤー</th><th>内容</th><th>実装</th></tr>
+<tr><td>自動 (CI 段階)</td>
+    <td>① CFn lint (<code>cfn-lint</code>) / ② IAM 権限スキャン (<code>cfn-policy-validator</code> 相当) / ③ cost estimator (<code>infracost</code> or AWS Pricing API) / ④ 禁止リソース検査 (例: <code>AWS::Lambda::Function</code> の reserved concurrency 上限)</td>
+    <td>GitHub Actions on PR + 検証 Lambda</td></tr>
+<tr><td>運営承認</td>
+    <td>System Admin が PR を最終 review。問題説明 / scoring 設計 / 学習目的の妥当性</td>
+    <td>GitHub PR の review = merge 権限</td></tr>
+<tr><td>publish 後</td>
+    <td>S3 への upload は merge 後の Actions が OIDC role で実行</td>
+    <td>GitHub Actions OIDC + IAM</td></tr>
+</table>
+
+<p>「悪意ある寄稿者の deploy 一発で運営 acct が破綻する」事態を防ぐため、<strong>publish された
+template.yaml は競技者 acct 側にしか展開されない</strong> (= 運営 acct 側で展開しない)
+原則を厳守する。これは ADR-002 の cross-account federation で既に成立。</p>
+
+<h3>D5. 寄稿者 identity</h3>
+
+<table>
+<tr><th>案</th><th>採否</th><th>概要</th><th>主な決め手</th></tr>
+<tr class="show"><td><b>D5-A</b></td><td><span class="badge accept">採用</span></td>
+    <td><strong>GitHub OAuth / GitHub App</strong> (= 寄稿者は GitHub username で identify)</td>
+    <td>D3-A (GitHub PR フロー) と自然に整合 / 追加の認証基盤不要 / 寄稿者ハンドル = GitHub username</td></tr>
+<tr class="hide"><td>D5-B</td><td><span class="badge reject">却下</span></td>
+    <td>Cognito (= System Admin と同じプール)</td>
+    <td>寄稿者にとって sign-up ハードルが高い、外部寄稿促進に逆行</td></tr>
+<tr class="hide"><td>D5-C</td><td><span class="badge reject">却下</span></td>
+    <td>API token のみ</td>
+    <td>identity の attribution ができない (= 誰が投稿したか不明)</td></tr>
+</table>
+
+<h3>D6. 答え漏れ (= visibility)</h3>
+
+<table>
+<tr><th>案</th><th>採否</th><th>概要</th><th>主な決め手</th></tr>
+<tr class="hide"><td>D6-A</td><td><span class="badge reject">却下</span></td>
+    <td>全問題 public で OK (= 答え漏れ気にしない)</td>
+    <td><code>#572</code> 系の競技性問題が成立しない</td></tr>
+<tr class="show"><td><b>D6-B</b></td><td><span class="badge accept">採用</span></td>
+    <td><strong>寄稿時に <code>visibility: public | private</code> を選択</strong>。public = 全 file が見える / private = metadata + 説明だけ表示、payload は <strong>15 分 TTL presigned URL</strong> で deploy 時のみ取得</td>
+    <td>教材性のある問題と競技性のある問題が共存 / 寄稿者が選択責任</td></tr>
+<tr class="hide"><td>D6-C</td><td><span class="badge reject">却下</span></td>
+    <td>全問題 private (= 一切公開しない)</td>
+    <td>OSS 教材としての価値を失う / 既存 3 問題と矛盾</td></tr>
+</table>
+
+<p>private 問題の payload S3 URL は presigned URL 発行のみ。<strong>S3 bucket は BlockPublicAccess + bucket policy で Worker Lambda role からのみ read 可</strong>。</p>
+
+<h3>D7. 既存 <code>problems/</code> の扱い</h3>
+
+<table>
+<tr><th>案</th><th>採否</th><th>概要</th><th>主な決め手</th></tr>
+<tr class="hide"><td>D7-A</td><td><span class="badge reject">却下</span></td>
+    <td>削除して全部 DDB Registry に移行</td>
+    <td>OSS としての教材価値を失う / 既存 vitest / validate-problems が壊れる</td></tr>
+<tr class="show"><td><b>D7-B</b></td><td><span class="badge accept">採用</span></td>
+    <td><strong>既存 3 問題は public sample として残し、Registry には <code>contributor: "system"</code> として seed import</strong></td>
+    <td>既存資産を壊さず、Registry の動作確認の seed として使える / 「公式問題」と「寄稿問題」が同じ仕組みで共存</td></tr>
+<tr class="hide"><td>D7-C</td><td><span class="badge reject">却下</span></td>
+    <td>そのまま残し、Registry とは別管理</td>
+    <td>2 系統並列運用は複雑、カタログ表示の分岐が増える</td></tr>
+</table>
+
+<h3>D8. 検索 / フィルタリング UX</h3>
+
+<p>寄稿者が増えると問題数も増えるので、カタログ画面で facet 検索を提供する:</p>
+
+<ul>
+<li><strong>contributor</strong> (= GitHub username)</li>
+<li><strong>category</strong> (Battle / Challenge)</li>
+<li><strong>difficulty</strong> (1〜5)</li>
+<li><strong>tags</strong> (= metadata.json の tags)</li>
+<li><strong>validation status</strong> (validated / pending / rejected)</li>
+<li><strong>visibility</strong> (public / private)</li>
+</ul>
+
+<p>full-text search (= description 内容まで検索) は Phase 6+ で追加 (OpenSearch などを足す)。</p>
+
+<h3>D9. version 管理と stack 同一性</h3>
+
+<table>
+<tr><th>項目</th><th>決定</th></tr>
+<tr><td>version 識別子</td><td>git SHA 短縮 8 桁 + semver 任意 (例: <code>1.2.0+a1b2c3d4</code>)</td></tr>
+<tr><td>同一問題の version 上書き</td><td><span class="badge reject">禁止</span> — immutable</td></tr>
+<tr><td>競技中の version 固定</td><td><code>Deployments</code> DDB に <code>problemVersion</code> 列追加。teardown まで固定</td></tr>
+<tr><td>新 version 投稿</td><td>新 PR を立てて検証 → publish。古い version は deprecated にできるが、競技中の stack には影響なし</td></tr>
+<tr><td>S3 layout</td><td><code>s3://&lt;bucket&gt;/&lt;contributor&gt;/&lt;problem-id&gt;/&lt;version&gt;/{metadata.json,template.yaml,code.zip}</code></td></tr>
+</table>
+</section>
+
+<section>
+<h2>Decision (まとめ)</h2>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">D1</div>
+    <div class="title">カタログ storage</div>
+    <div class="body">DDB <code>ProblemRegistry</code> table。ADR-003 Phase 2 を前倒し</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D2</div>
+    <div class="title">payload storage</div>
+    <div class="body">S3 multi-tenant prefix <code>tc-challenges-&lt;env&gt;/&lt;contributor&gt;/&lt;problem-id&gt;/&lt;version&gt;/</code></div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D3</div>
+    <div class="title">寄稿フロー</div>
+    <div class="body">GitHub PR ベース MVP。Web UI / CLI は将来追加</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D4</div>
+    <div class="title">検証パイプライン</div>
+    <div class="body">CFn lint + IAM scan + cost estimator + 禁止リソース検査 (自動) + 運営承認 (人間)</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D5</div>
+    <div class="title">寄稿者 identity</div>
+    <div class="body">GitHub OAuth / GitHub App。寄稿者ハンドル = GitHub username</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D6</div>
+    <div class="title">答え漏れ</div>
+    <div class="body">寄稿時に <code>visibility: public | private</code> 選択。private は 15min TTL presigned URL</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D7</div>
+    <div class="title">既存 problems/</div>
+    <div class="body">既存 3 問題は public sample で残し、<code>contributor: "system"</code> として Registry に seed import</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D8</div>
+    <div class="title">検索 / フィルタ</div>
+    <div class="body">contributor / category / difficulty / tags / validation / visibility の facet 検索。full-text は後回し</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D9</div>
+    <div class="title">version 管理</div>
+    <div class="body">immutable, 上書き禁止。Deployments に <code>problemVersion</code> 列を追加し競技中固定</div>
+  </div>
+</div>
+</section>
+
+<section>
+<h2>アーキテクチャ図</h2>
+
+<div class="arch-fig">
+  <div class="cap">Figure 1 — 寄稿者 → 検証 → 配信 → deploy のライフサイクル</div>
+  <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg"
+       font-family="-apple-system,BlinkMacSystemFont,Hiragino Sans,Yu Gothic UI,sans-serif" font-size="13">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#59636e"/>
+      </marker>
+    </defs>
+
+    <rect x="20" y="30" width="200" height="100" rx="8" fill="#faf6ff" stroke="#8250df" stroke-width="2"/>
+    <text x="32" y="55" font-weight="700" fill="#8250df">① Contributor</text>
+    <text x="32" y="78" fill="#1f2328">GitHub user (任意)</text>
+    <text x="32" y="96" fill="#1f2328">自分の repo or 本体 fork</text>
+    <text x="32" y="114" fill="#1f2328">metadata + template + 実装</text>
+
+    <rect x="280" y="30" width="200" height="100" rx="8" fill="#fff8c5" stroke="#9a6700" stroke-width="2"/>
+    <text x="292" y="55" font-weight="700" fill="#9a6700">② GitHub PR</text>
+    <text x="292" y="78" fill="#1f2328">本体 repo に PR</text>
+    <text x="292" y="96" fill="#1f2328">contributions/&lt;user&gt;/&lt;id&gt;/</text>
+    <text x="292" y="114" fill="#1f2328">{metadata, template, code/}</text>
+
+    <rect x="540" y="30" width="200" height="100" rx="8" fill="#ddf4e0" stroke="#1a7f37" stroke-width="2"/>
+    <text x="552" y="55" font-weight="700" fill="#1a7f37">③ CI Validation</text>
+    <text x="552" y="78" fill="#1f2328">CFn lint / IAM scan</text>
+    <text x="552" y="96" fill="#1f2328">cost estimator</text>
+    <text x="552" y="114" fill="#1f2328">禁止リソース検査</text>
+
+    <rect x="800" y="30" width="180" height="100" rx="8" fill="#cfe5ff" stroke="#0969da" stroke-width="2"/>
+    <text x="812" y="55" font-weight="700" fill="#0969da">④ Operator Review</text>
+    <text x="812" y="78" fill="#1f2328">System Admin が</text>
+    <text x="812" y="96" fill="#1f2328">学習目的 / 妥当性</text>
+    <text x="812" y="114" fill="#1f2328">を最終 review → merge</text>
+
+    <line x1="220" y1="80" x2="280" y2="80" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="480" y1="80" x2="540" y2="80" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="740" y1="80" x2="800" y2="80" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <rect x="280" y="180" width="460" height="80" rx="8" fill="#fff8c5" stroke="#9a6700" stroke-width="2"/>
+    <text x="292" y="205" font-weight="700" fill="#9a6700">⑤ Post-merge GitHub Actions (OIDC)</text>
+    <text x="292" y="226" fill="#1f2328">1. zip code → 2. AssumeRole (短期 token)</text>
+    <text x="292" y="244" fill="#1f2328">3. s3 cp → 4. DDB ProblemRegistry に upsert (version, sha256, validatedAt)</text>
+
+    <line x1="510" y1="130" x2="510" y2="180" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <rect x="20" y="310" width="320" height="120" rx="8" fill="#cfe5ff" stroke="#0969da" stroke-width="2"/>
+    <text x="32" y="335" font-weight="700" fill="#0969da">⑥ DDB ProblemRegistry</text>
+    <text x="32" y="356" fill="#1f2328">PK: PROBLEM#&lt;id&gt;</text>
+    <text x="32" y="374" fill="#1f2328">SK: VERSION#&lt;version&gt;</text>
+    <text x="32" y="392" fill="#1f2328">attrs: contributor, visibility, sha256</text>
+    <text x="32" y="410" fill="#1f2328">       s3Bucket, s3KeyPrefix, status</text>
+
+    <rect x="380" y="310" width="320" height="120" rx="8" fill="#cfe5ff" stroke="#0969da" stroke-width="2"/>
+    <text x="392" y="335" font-weight="700" fill="#0969da">⑦ S3 tc-challenges-&lt;env&gt;</text>
+    <text x="392" y="356" fill="#1f2328">&lt;contributor&gt;/&lt;id&gt;/&lt;version&gt;/</text>
+    <text x="408" y="374" fill="#1f2328">  ├ metadata.json</text>
+    <text x="408" y="392" fill="#1f2328">  ├ template.yaml</text>
+    <text x="408" y="410" fill="#1f2328">  └ code.zip</text>
+
+    <line x1="450" y1="260" x2="450" y2="310" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <rect x="740" y="310" width="240" height="120" rx="8" fill="#ddf4e0" stroke="#1a7f37" stroke-width="2"/>
+    <text x="752" y="335" font-weight="700" fill="#1a7f37">⑧ Catalog UI</text>
+    <text x="752" y="356" fill="#1f2328">admin-console</text>
+    <text x="752" y="374" fill="#1f2328">application-admin-console</text>
+    <text x="752" y="392" fill="#1f2328">participant-portal</text>
+    <text x="752" y="410" fill="#1f2328">→ DDB から GET /problems</text>
+
+    <line x1="340" y1="370" x2="740" y2="370" stroke="#59636e" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+
+    <rect x="20" y="470" width="340" height="100" rx="8" fill="#ddf4e0" stroke="#1a7f37" stroke-width="2"/>
+    <text x="32" y="495" font-weight="700" fill="#1a7f37">⑨ ProblemDeploy Worker Lambda</text>
+    <text x="32" y="516" fill="#1f2328">DeployRequested → DDB lookup</text>
+    <text x="32" y="534" fill="#1f2328">→ S3 fetch template.yaml</text>
+    <text x="32" y="552" fill="#1f2328">→ presigned URL (15min) for code.zip</text>
+
+    <line x1="180" y1="430" x2="180" y2="470" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="540" y1="430" x2="290" y2="470" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <rect x="400" y="470" width="280" height="100" rx="8" fill="#f6f8fa" stroke="#59636e" stroke-width="2"/>
+    <text x="412" y="495" font-weight="700">⑩ 競技者 AWS account</text>
+    <text x="412" y="516" fill="#1f2328">CFn が template.yaml 展開</text>
+    <text x="412" y="534" fill="#1f2328">UserData curl &lt;presigned&gt; → code.zip</text>
+    <text x="412" y="552" fill="#1f2328">→ unzip → 起動</text>
+
+    <line x1="360" y1="520" x2="400" y2="520" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+    <rect x="720" y="470" width="260" height="100" rx="8" fill="#fff" stroke="#d1d9e0" stroke-width="2"/>
+    <text x="732" y="495" font-weight="700">⑪ 競技者 (browser)</text>
+    <text x="732" y="516" fill="#1f2328">participant-portal で問題を見る</text>
+    <text x="732" y="534" fill="#1f2328">問題 endpoint にアクセス</text>
+    <text x="732" y="552" fill="#1f2328">スコア獲得</text>
+
+    <line x1="680" y1="520" x2="720" y2="520" stroke="#59636e" stroke-width="1.5" marker-end="url(#arr)"/>
+  </svg>
+</div>
+
+<p><strong>図の読み方</strong>: ① の寄稿者は誰でも (自分含む)。② の PR が ③ の自動検証と ④ の運営承認の二段で merge される。⑤ で OIDC publish → ⑥ DDB と ⑦ S3 が更新。⑧ は DDB だけ見る。⑨ は deploy 時に DDB と S3 両方を見る。private 問題でも答えは ⑦ の S3 にしか存在せず、⑪ の競技者 browser からは見えない。</p>
+</section>
+
+<section>
+<h2>寄稿フロー (= MVP の入口、D3-A の詳細)</h2>
+
+<div class="seq">contributor 側:
+  $ git clone https://github.com/susumutomita/TenkaCloud
+  $ cd TenkaCloud
+  $ mkdir -p contributions/&lt;your-handle&gt;/&lt;problem-id&gt;/
+  $ cp problems/SCHEMA.json …  (= metadata.json を SCHEMA に沿って書く)
+  $ vim metadata.json  template.yaml  …
+  $ git checkout -b contrib/&lt;your-handle&gt;/&lt;problem-id&gt;
+  $ git push -u origin HEAD
+  $ gh pr create --title "feat(contrib): &lt;problem-name&gt; by &lt;your-handle&gt;" …
+
+CI (= 自動検証):
+  on pull_request:
+    .github/workflows/contrib-validate.yml が走る
+    ├─ cfn-lint contributions/&lt;handle&gt;/&lt;id&gt;/template.yaml
+    ├─ iam-scan (= 過剰権限 / wildcard resource 検出)
+    ├─ cost-estimate (= deploy の月額試算上限を 5 USD/team とか)
+    └─ schema validate metadata.json
+
+operator (= System Admin):
+  PR を開いて学習目的 / scoring / 説明の妥当性を review
+  → approve → merge
+
+post-merge (= GitHub Actions):
+  on push to main で contrib-publish.yml が走る (changed paths: contributions/**)
+    ├─ AssumeRole (OIDC, 短期 token)
+    ├─ zip contributions/&lt;handle&gt;/&lt;id&gt;/code/ → code.zip
+    ├─ aws s3 cp template.yaml metadata.json code.zip  (= s3://tc-challenges-&lt;env&gt;/&lt;handle&gt;/&lt;id&gt;/&lt;sha&gt;/)
+    └─ DDB upsert: ProblemRegistry に PROBLEM#&lt;id&gt; / VERSION#&lt;sha&gt; を入れる
+
+これ以降、catalog UI に「contributor: &lt;handle&gt;」付きで表示される。
+</div>
+
+<p>寄稿者の repo は <strong>本体 repo の fork で十分</strong> (= 別 repo でも可だが、PR 経路は本体 repo に投げる)。
+寄稿者は GitHub アカウントさえあれば追加の sign-up 不要。</p>
+</section>
+
+<section>
+<h2>DDB <code>ProblemRegistry</code> schema</h2>
+
+<table>
+<tr><th>属性</th><th>型</th><th>用途</th></tr>
+<tr><td><code>PK</code></td><td>S</td><td><code>PROBLEM#&lt;problem-id&gt;</code></td></tr>
+<tr><td><code>SK</code></td><td>S</td><td><code>VERSION#&lt;version&gt;</code> (= git SHA 短縮 + semver 任意)</td></tr>
+<tr><td><code>contributor</code></td><td>S</td><td>GitHub username (寄稿者ハンドル)。"system" = 公式</td></tr>
+<tr><td><code>category</code></td><td>S</td><td><code>Battle</code> | <code>Challenge</code></td></tr>
+<tr><td><code>visibility</code></td><td>S</td><td><code>public</code> | <code>private</code> (D6)</td></tr>
+<tr><td><code>status</code></td><td>S</td><td><code>validated</code> | <code>pending</code> | <code>rejected</code> | <code>deprecated</code></td></tr>
+<tr><td><code>metadata</code></td><td>M</td><td>SCHEMA.json 準拠の metadata 全体 (inline、UI 表示用)</td></tr>
+<tr><td><code>s3Bucket</code></td><td>S</td><td><code>tc-challenges-&lt;env&gt;</code></td></tr>
+<tr><td><code>s3KeyPrefix</code></td><td>S</td><td><code>&lt;contributor&gt;/&lt;problem-id&gt;/&lt;version&gt;/</code></td></tr>
+<tr><td><code>sha256</code></td><td>S</td><td>template.yaml + code.zip の SHA-256 (= immutable 証明)</td></tr>
+<tr><td><code>validatedAt</code></td><td>S</td><td>ISO 8601 timestamp</td></tr>
+<tr><td><code>publishedAt</code></td><td>S</td><td>ISO 8601</td></tr>
+<tr><td><code>tags</code></td><td>SS</td><td>tag set (= 検索 / フィルタ用)</td></tr>
+</table>
+
+<p>GSI:</p>
+
+<ul>
+<li><strong>GSI-1 (contributor-index)</strong>: PK = <code>contributor</code>, SK = <code>publishedAt</code> — 寄稿者ごとの問題一覧</li>
+<li><strong>GSI-2 (category-status-index)</strong>: PK = <code>category</code>, SK = <code>status#publishedAt</code> — カテゴリ別表示 / 検索</li>
+</ul>
+
+<p>RCU/WCU は 1/1 PROVISIONED (= <code>DynamoDbLowCapacity</code> Aspect 強制)。GSI も同じ。</p>
+</section>
+
+<section>
+<h2>Repo / Stack 構造</h2>
+
+<div class="repo-block">
+  <div class="repo-card public">
+    <h4><span class="badge public">public</span> TenkaCloud (本体)</h4>
+    <div class="role">プラットフォーム + カタログ + 寄稿受け入れ口</div>
+<pre>TenkaCloud/
+├── apps/                # SPA 群 (DDB API 経由のカタログに切替)
+├── infrastructure/lib/
+│   ├── problem-registry/        # ← 新設 stack
+│   │   ├── ddb.ts               # ProblemRegistry table
+│   │   ├── s3.ts                # tc-challenges-&lt;env&gt; bucket
+│   │   ├── validation-lambda/   # CI から叩く検証 Lambda
+│   │   └── github-oidc-role.ts  # contrib publish 用
+│   └── problem-deploy/
+│       └── handlers/deploy-handler/
+│           └── s3-fetcher.ts    # ← 新規 (DDB lookup + presigned)
+├── problems/                    # 公式 sample (= visibility:public, contributor:"system")
+│   ├── SCHEMA.json              # visibility / contributor field 追加
+│   ├── battles/{hello-world,security-battle-royale}/
+│   └── challenges/hello-world/
+├── contributions/               # ← 新ディレクトリ (= 寄稿者の PR 受け口)
+│   └── &lt;handle&gt;/&lt;problem-id&gt;/
+│       ├── metadata.json
+│       ├── template.yaml
+│       └── code/                # 実装ファイル
+├── docs/architecture/
+│   ├── adr-008-problem-payload-separation.html  # 本 ADR (= v2)
+│   └── ...
+└── .github/workflows/
+    ├── contrib-validate.yml     # PR validation
+    └── contrib-publish.yml      # post-merge S3 + DDB publish</pre>
+  </div>
+
+  <div class="repo-card private">
+    <h4><span class="badge private">private (任意)</span> 自分用 / 寄稿者の作業 repo</h4>
+    <div class="role">寄稿前の試作 / 内部設計の置き場</div>
+<pre>my-tenka-problem/  (= 例、各寄稿者が任意)
+├── &lt;problem-id&gt;/
+│   ├── metadata.json
+│   ├── template.yaml
+│   ├── services/                # 答えを含む実装
+│   └── design.html              # 内部設計 (= 答えあり)
+├── README.md
+└── .github/workflows/sync.yml   # 任意: 本体に PR を投げるヘルパー
+
+→ 本体 TenkaCloud に PR を投げる時に
+  contributions/&lt;handle&gt;/&lt;problem-id&gt;/ にコピーする</pre>
+  </div>
+</div>
+
+<p>v1 で提案した「自分用 <code>TenkaCloudChallenges</code> private repo」は v2 では「<strong>寄稿者の任意の作業 repo</strong>」に格下げ (= 必須ではなくなった)。本体 repo の <code>contributions/</code> 配下に直接 PR を出しても良いし、自分用の repo で試作してから本体に PR を出しても良い。</p>
+</section>
+
+<section>
+<h2>API 変更</h2>
+
+<h3>カタログ取得 API (新設)</h3>
+
+<table>
+<tr><th>endpoint</th><th>用途</th><th>権限</th></tr>
+<tr><td><code>GET /catalog/problems</code></td>
+    <td>カタログ全件 (filter: category / contributor / visibility / status)</td>
+    <td>Cognito JWT (System Admin / Tenant Admin / Participant)</td></tr>
+<tr><td><code>GET /catalog/problems/:id</code></td>
+    <td>特定問題の最新 version</td><td>同上</td></tr>
+<tr><td><code>GET /catalog/problems/:id/versions</code></td>
+    <td>version 一覧 (運営のみ)</td><td>System Admin のみ</td></tr>
+</table>
+
+<h3>Worker Lambda の変更</h3>
+
+<pre>// 現状 (= MVP-1, build-time bundle)
+const template = readFileSync(`./problems/${id}/template.yaml`);
+
+// 変更後 (= ADR-008 v2)
+const entry = await registry.lookup(id);  // DDB GetItem
+const { templateBody, codeBundleUrl } = await s3Fetcher.fetch(entry);
+//   ├ public 問題: codeBundleUrl は public S3 URL or 同梱
+//   └ private 問題: codeBundleUrl は 15min TTL presigned URL
+await cfn.createStack({
+  TemplateBody: templateBody,
+  Parameters: [
+    ...,
+    { ParameterKey: "CodeBundleUrl", ParameterValue: codeBundleUrl },
+  ],
+});</pre>
+
+<h3>検証 Lambda (新設)</h3>
+
+<p>GitHub Actions の <code>contrib-validate.yml</code> から API GW 経由で叩かれる。受け取った
+<code>template.yaml</code> + <code>metadata.json</code> を以下で検証:</p>
+
+<ul>
+<li>cfn-lint で構文 / リソース妥当性</li>
+<li>IAM ポリシー scan (= wildcard resource / 過剰 action 検出)</li>
+<li>cost estimator で月額上限超過チェック</li>
+<li>禁止リソース検査 (= reserved concurrency 上限など)</li>
+<li>SCHEMA.json で metadata.json validate</li>
+</ul>
+
+<p>結果を JSON で返し、Actions が PR にコメント。</p>
+</section>
+
+<section>
+<h2>Implementation ownership</h2>
+
+<table>
+<tr><th>タスク</th><th>担当</th><th>備考</th></tr>
+<tr><td>本 ADR v2 の review</td><td><span class="badge warn">user</span></td><td>方向確定</td></tr>
+<tr><td><code>ProblemRegistry</code> stack (DDB + S3 + GitHub OIDC role)</td>
+    <td><span class="badge warn">user</span></td>
+    <td><code>infrastructure/lib/problem-registry/</code> に新設、CDK</td></tr>
+<tr><td>GitHub App / OAuth App の登録 (= 認証用)</td>
+    <td><span class="badge warn">user</span></td><td>外部副作用 (GitHub 側の設定)</td></tr>
+<tr><td>検証 Lambda の実装</td><td><span class="badge accept">Claude</span></td>
+    <td>cfn-lint / iam scan / cost estimator のラッパ</td></tr>
+<tr><td>Worker Lambda の DDB lookup + S3 fetch + presigned URL</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td><code>handlers/deploy-handler/s3-fetcher.ts</code></td></tr>
+<tr><td>カタログ取得 API (Hono on Lambda)</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>新 handler + DDB query</td></tr>
+<tr><td>admin-console / app-admin / portal を DDB API に切替</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>Vite glob 廃止、API client 追加</td></tr>
+<tr><td><code>SCHEMA.json</code> に <code>visibility</code> / <code>contributor</code> 追加</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>後方互換 (default <code>public</code> / <code>"system"</code>)</td></tr>
+<tr><td>既存 3 問題の seed import script</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td><code>scripts/seed-problem-registry.ts</code></td></tr>
+<tr><td>GitHub Actions <code>contrib-validate.yml</code> + <code>contrib-publish.yml</code></td>
+    <td><span class="badge accept">Claude</span></td><td>OIDC 設定は user 担当</td></tr>
+<tr><td>microservice-migration-battle 本実装</td>
+    <td><span class="badge accept">Claude</span></td>
+    <td>本 ADR v2 と並行で <code>problems/battles/</code> に skeleton (= 寄稿問題第 1 号として後で <code>contributions/</code> に移動)</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Migration plan</h2>
+
+<ol>
+<li><strong>Phase 1</strong> — <code>ProblemRegistry</code> stack (CDK by user)
+  <ul>
+    <li>DDB <code>ProblemRegistry</code> + GSI 2 本</li>
+    <li>S3 <code>tc-challenges-&lt;env&gt;</code> bucket (BlockPublicAccess + bucket policy)</li>
+    <li>GitHub OIDC role (<code>tc-challenges-publisher</code>)</li>
+    <li>Worker Lambda role に S3 read 追加</li>
+  </ul>
+</li>
+<li><strong>Phase 2</strong> — schema 拡張 + seed (Claude)
+  <ul>
+    <li><code>SCHEMA.json</code> に <code>visibility</code> / <code>contributor</code> field 追加 (default 後方互換)</li>
+    <li><code>seed-problem-registry.ts</code> で既存 3 問題を <code>contributor: "system"</code> として DDB に upsert</li>
+    <li><code>validate-problems</code> を新 schema に対応</li>
+  </ul>
+</li>
+<li><strong>Phase 3</strong> — カタログ DDB 化 (Claude)
+  <ul>
+    <li>カタログ API (<code>GET /catalog/problems</code> 等) 新設</li>
+    <li>admin-console / app-admin / portal の Vite glob を API client に置換</li>
+    <li>Worker Lambda を DDB lookup + S3 fetch に切替 (= public 問題は従来パス互換、private は presigned URL)</li>
+  </ul>
+</li>
+<li><strong>Phase 4</strong> — 寄稿パイプライン (Claude + user)
+  <ul>
+    <li>検証 Lambda 実装</li>
+    <li><code>.github/workflows/contrib-validate.yml</code> + <code>contrib-publish.yml</code></li>
+    <li><code>contributions/&lt;handle&gt;/&lt;id&gt;/</code> ディレクトリ規約をドキュメント化</li>
+  </ul>
+</li>
+<li><strong>Phase 5</strong> — microservice-migration-battle 本実装 (Claude, <code>#572</code>)
+  <ul>
+    <li>本 ADR v2 と <strong>並行</strong>で <code>problems/battles/microservice-migration-battle/</code> に skeleton 作成 (= 後で <code>contributions/&lt;your-handle&gt;/</code> に移動)</li>
+    <li>3 サービス (users / orders / catalog) の FastAPI 実装 + slow endpoint 仕掛け</li>
+    <li>EC2 + docker compose の template.yaml</li>
+    <li>scoring engine は次 PR (= 共通基盤として切り出し)</li>
+  </ul>
+</li>
+</ol>
+
+<p>Phase 1〜4 を順次走らせている間に Phase 5 を並行で進められる
+(= 既存パイプラインで public 問題として動かせるので、Phase 1〜3 完了後に <code>contributions/</code> 配下に移動するだけ)。</p>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Pros</h3>
+<ul>
+<li><strong>コミュニティ寄稿が一級市民</strong> — 自分の問題も他人の問題も同じ仕組みで配信</li>
+<li><strong>答え漏れも結果として解決</strong> — private visibility + presigned URL で payload は本体 repo に出ない</li>
+<li><strong>ADR-003 Phase 2 (DB-backed catalog) を自然に達成</strong> — 既存の方向性と整合</li>
+<li><strong>カタログが動的</strong> — 寄稿のたびに本体 rebuild 不要</li>
+<li><strong>寄稿者 attribution</strong> — 誰の問題か分かる、コミュニティ評価が機能する</li>
+<li><strong>既存 deploy パイプライン互換</strong> — 公式 3 問題はそのまま動く (Phase 3 の Worker Lambda 改修で吸収)</li>
+</ul>
+
+<h3>Cons / 注意</h3>
+<ul>
+<li><strong>新 stack 増 (DDB + S3 + 検証 Lambda + OIDC)</strong> — Free Tier 範囲だが運用面は増える</li>
+<li><strong>検証パイプラインの実装コスト</strong> — Phase 4 が最大の工数</li>
+<li><strong>悪意ある寄稿リスク</strong> — 自動検証 + 運営承認の二段で防ぐが、完全ではない (例: 課金爆弾の new pattern)</li>
+<li><strong>カタログ API の遅延</strong> — DDB 経由で 1 段増、cache が必要かも</li>
+<li><strong>Vite glob 廃止</strong> — 既存 frontend のテスト書き換え</li>
+<li><strong>multi-version 管理の運用</strong> — 古い version の cleanup ポリシーが要る</li>
+</ul>
+</section>
+
+<section>
+<h2>Open Questions</h2>
+
+<ol>
+<li><strong>DDB schema 詳細</strong>: GSI を 2 本で足りるか / status の transition (pending → validated → deprecated) を別 attribute にすべきか</li>
+<li><strong>GitHub App vs OAuth App</strong>: 公式 review 自動化 (PR コメント) には App、寄稿者の identify には OAuth が便利。両方使う構成が自然か</li>
+<li><strong>cost estimator</strong>: AWS Pricing API 直接 / <code>infracost</code> ラップ / 自作。Free Tier 内に収まる手段</li>
+<li><strong>検証失敗時の UX</strong>: PR コメントだけ / Web UI dashboard / メール通知</li>
+<li><strong>寄稿者 rate limit</strong>: 1 寄稿者あたり PR 数 / S3 storage 上限</li>
+<li><strong>悪意ある寄稿者の ban</strong>: System Admin が GitHub username を blocklist に入れる UI が要るか</li>
+<li><strong>多言語対応</strong>: <code>metadata.json</code> の <code>name</code> / <code>description</code> を i18n マップにすべきか</li>
+<li><strong>バージョン deprecation の運用</strong>: 競技中の stack に影響しない前提で、いつ削除するか / S3 オブジェクトの lifecycle policy</li>
+<li><strong>full-text search の必要性</strong>: 問題数が増えたら OpenSearch / Algolia 連携を Phase 6+ で追加するか</li>
+</ol>
+</section>
+
+<section>
+<h2>関連リソース</h2>
+
+<ul>
+<li><strong>v1 ADR</strong> (= 同 ADR の前バージョン、本 v2 で上書き吸収)</li>
+<li><code>#572</code> — microservice-migration-battle (本 ADR の driver)</li>
+<li><code>#574</code> — ADR-008 tracking issue</li>
+<li>ADR-001 — Problem Deploy CRUD (= 本 ADR が拡張する deploy パイプライン)</li>
+<li>ADR-002 — Cross-account federation (= 競技者 acct への AssumeRole)</li>
+<li>ADR-003 — Problem Catalog DDB (= 本 ADR で Phase 2 を実現)</li>
+<li>ADR-007 候補 (<code>#561</code>) — outside-in architecture (= 寄稿パイプラインの E2E test 設計の指針)</li>
+<li><code>problems/SCHEMA.json</code> — Phase 2 で <code>visibility</code> / <code>contributor</code> field 追加</li>
+<li><code>infrastructure/lib/problem-deploy/handlers/deploy-handler/index.ts</code> — Phase 3 で S3 fetch 追加</li>
+<li><code>apps/application-admin-console/src/data/problems.ts</code> — Phase 3 で Vite glob 廃止</li>
+</ul>
+</section>
+
+</body>
+</html>

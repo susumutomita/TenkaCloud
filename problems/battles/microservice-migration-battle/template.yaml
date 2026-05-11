@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem — microservice-migration-battle.
+  Single-EC2 (Amazon Linux 2023) + docker compose で 3 サービス (users / orders / catalog)
+  を同居起動。競技者は時間内に各サービスを Lambda+APIGW / ECS Fargate / App Runner の
+  いずれかに分割して再ホスティングする。
+
+# 同一 (Account, Region) に複数チームの問題スタックが共存できるよう、すべての
+# リソース名は ${NamePrefix} (= "tc-{problemSlug}-{teamSlug}", UI 側 buildStackPrefix
+# と一致) を冠する。
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` 形式 (英小文字 / 数字 / ハイフン)。
+      application-admin-console の DeployForm が生成する prefix を渡す。
+    Description: >
+      すべてのリソース名に冠する共通 prefix。同一 Account / Region に複数チームの
+      スタックが共存しても衝突しないようにする。
+  AllowedCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+    Description: frontend (80) を許可する CIDR。
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 インスタンスタイプ。
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: SSM-backed Amazon Linux 2023 AMI (auto-resolved)。
+  RepoUrl:
+    Type: String
+    Default: https://github.com/susumutomita/TenkaCloud.git
+    Description: >
+      services/ ディレクトリを含む repo URL。
+      ADR-008 v2 (Phase 3) 完了後は S3 presigned URL に切替予定。
+  RepoRef:
+    Type: String
+    Default: main
+    Description: チェックアウトする branch / tag / commit。
+
+Resources:
+  # ----- VPC + Networking -----
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.99.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-vpc"
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.99.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-subnet"
+
+  Igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-igw"
+
+  IgwAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref Igw
+
+  Rt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-rt"
+
+  RtRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttach
+    Properties:
+      RouteTableId: !Ref Rt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Igw
+
+  RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Rt
+      SubnetId: !Ref PublicSubnet
+
+  # ----- Security Group -----
+  Sg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc
+      GroupDescription: !Sub "${NamePrefix} problem instance access"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref AllowedCidr
+          Description: frontend (nginx)
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-sg"
+
+  # ----- IAM (SSM Session Manager only) -----
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-instance-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${NamePrefix}-instance-profile"
+      Roles:
+        - !Ref InstanceRole
+
+  # ----- EC2 -----
+  Ec2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref Sg
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-ec2"
+        - Key: TenkaCloud:Problem
+          Value: microservice-migration-battle
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf update -y
+          dnf install -y docker git
+          systemctl enable --now docker
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" \
+            -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+          mkdir -p /opt/tenkacloud
+          cd /opt/tenkacloud
+          # branch / tag / commit いずれも指せるよう、shallow fetch + checkout 形式
+          git clone "${RepoUrl}" repo
+          cd repo
+          git fetch origin "${RepoRef}" || git fetch --all
+          git checkout "${RepoRef}" || git checkout FETCH_HEAD
+
+          PROBLEM_ROOT=/opt/tenkacloud/repo/problems/battles/microservice-migration-battle
+          cd "$PROBLEM_ROOT/services"
+
+          # 競技開始時は全サービス EC2 上で起動
+          TC_PLATFORM=ec2 docker compose up -d --build
+
+Outputs:
+  FrontendUrl:
+    Description: 参加者向け frontend (nginx) の入り口 URL。
+    Value: !Sub "http://${Ec2.PublicDnsName}"
+  UsersEndpoint:
+    Description: users サービスのスコア endpoint (= 採点対象として登録)。
+    Value: !Sub "http://${Ec2.PublicDnsName}/users/score"
+  OrdersEndpoint:
+    Description: orders サービスのスコア endpoint。
+    Value: !Sub "http://${Ec2.PublicDnsName}/orders/score"
+  CatalogEndpoint:
+    Description: catalog サービスのスコア endpoint。
+    Value: !Sub "http://${Ec2.PublicDnsName}/catalog/score"
+  InstanceId:
+    Description: EC2 インスタンス ID (運営者が SSM Session Manager から接続する際に使う)。
+    Value: !Ref Ec2
+  SsmStartSessionCommand:
+    Description: 運営者がインスタンスへ Session Manager で接続するコマンド。
+    Value: !Sub "aws ssm start-session --target ${Ec2}"
+  NamePrefix:
+    Description: 本スタックが利用した共通リソース prefix。
+    Value: !Ref NamePrefix

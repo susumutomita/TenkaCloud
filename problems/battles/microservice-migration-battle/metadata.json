@@ -1,0 +1,20 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "microservice-migration-battle",
+  "name": "Microservice Migration Battle",
+  "category": "Battle",
+  "status": "draft",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "EC2 同居の 3 サービスを Lambda+APIGW / ECS Fargate / App Runner に分割し、劣化前にマイクロサービス化を完了させる。",
+  "description": "EC2 1 台に同居する 3 サービス (users / orders / catalog) のモノリス構成を、競技時間内に Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner の 3 種の異なるホスティングに分割していく Battle 問題。\n\n参加者は競技開始時に「採点対象とするスコア endpoint」を 3 つ登録する。スコアエンジンが 1 分毎に各 endpoint を polling し、レスポンス内容と応答時間からスコアを加減算する。\n\n競技開始から一定時間 (= イベントパラメータ degradationMinutes / デフォルト 60 分) が経過すると EC2 上のサービスが劣化し、得点効率が大幅に下がる。さらに進行 (= legacySwitchMinutes / デフォルト 90 分) するとスコアエンジンがコード内に仕込まれた legacy endpoint を polling 対象に切り替える。参加者はコードを読み解き、不要な処理を取り除いて再デプロイする必要がある。\n\n3 種類のホスティングのトレードオフを実体験し、strangler fig パターンを段階的に体験するアウトカム重視の設計。",
+  "tags": ["microservices", "migration", "lambda", "ecs", "app-runner", "strangler-fig"],
+  "exposedPorts": [{ "port": 80, "name": "frontend (nginx → users / orders / catalog)" }],
+  "learningGoals": [
+    "モノリスからマイクロサービスへの段階的移行 (strangler fig パターン) を体験する",
+    "Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner のトレードオフを比較する",
+    "スコアが時間経過で劣化する制約下で「どのサービスから分離すべきか」の優先順位を判断する",
+    "コードを読み解き、意図的に仕込まれた遅延処理を取り除いて再デプロイで復旧する経験を積む"
+  ],
+  "cfnTemplate": "template.yaml"
+}

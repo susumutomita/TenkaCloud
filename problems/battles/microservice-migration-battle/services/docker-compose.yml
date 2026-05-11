@@ -1,0 +1,36 @@
+services:
+  users:
+    build: ./users
+    environment:
+      - TC_PLATFORM=${TC_PLATFORM:-ec2}
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  orders:
+    build: ./orders
+    environment:
+      - TC_PLATFORM=${TC_PLATFORM:-ec2}
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  catalog:
+    build: ./catalog
+    environment:
+      - TC_PLATFORM=${TC_PLATFORM:-ec2}
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - users
+      - orders
+      - catalog
+    restart: unless-stopped

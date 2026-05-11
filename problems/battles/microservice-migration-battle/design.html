@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Microservice Migration Battle — 内部設計 (答えを含む)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+    --c-spoiler: #ece4ff;
+    --c-spoiler-border: #8250df;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 1040px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-code-bg); padding: .8rem 1rem; border-radius: 4px; overflow-x: auto;
+        font-size: 0.85rem; line-height: 1.5; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.spoiler { background: var(--c-spoiler); color: var(--c-spoiler-border);
+                   border: 1px solid var(--c-spoiler-border); }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  blockquote { margin: 0.6rem 0; padding: .6rem 1rem; border-left: 4px solid var(--c-warn);
+               background: #fff8c5; border-radius: 0 4px 4px 0; font-size: 0.92rem; }
+  .spoiler-banner {
+    background: linear-gradient(90deg, #ece4ff 0%, #ffe9e9 100%);
+    border-radius: 4px; padding: .8rem 1rem; margin: 1rem 0;
+    font-weight: 600; color: var(--c-spoiler-border);
+    border: 1px solid var(--c-spoiler-border);
+  }
+
+  /* timeline */
+  .timeline {
+    border-left: 3px solid var(--c-link); padding-left: 1.2rem; margin: 1rem 0 1.5rem 1rem;
+  }
+  .timeline-item {
+    position: relative; margin-bottom: 1.2rem;
+  }
+  .timeline-item::before {
+    content: ""; position: absolute; left: -1.55rem; top: .45rem;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--c-link);
+  }
+  .timeline-item.warn::before { background: var(--c-warn); }
+  .timeline-item.danger::before { background: var(--c-reject); }
+  .timeline-item h4 { margin: 0 0 .2rem; font-size: 1rem; }
+  .timeline-item .when {
+    font-size: 0.78rem; color: var(--c-muted); margin-bottom: .3rem;
+  }
+
+  /* score table */
+  .score-table td.delta { text-align: right; font-family: monospace; font-weight: 600; }
+  .score-table td.delta.plus    { color: var(--c-accept); }
+  .score-table td.delta.minus   { color: var(--c-reject); }
+  .score-table td.delta.neutral { color: var(--c-muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Microservice Migration Battle — 内部設計</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Draft</span> 2026-05-11</div>
+    <div><b>Visibility:</b><span class="badge spoiler">private (= 答え含む)</span></div>
+    <div><b>関連:</b><code>#572</code> (起票) / ADR-008 v2 (寄稿問題第 1 号として登録)</div>
+  </div>
+
+  <div class="spoiler-banner">
+    ⚠ このドキュメントは <strong>競技者には見せない</strong>。<br>
+    ADR-008 v2 Phase 4 完了後は <code>contributions/&lt;handle&gt;/microservice-migration-battle/</code> に移動した上で、競技開始時に S3 private prefix にしか置かない (= 答え漏れ防止)。
+  </div>
+</header>
+
+<section>
+<h2>問題の物理構成</h2>
+
+<p>EC2 1 台 (t3.small / Amazon Linux 2023) に <strong>docker compose</strong> で 4 コンテナ:</p>
+
+<table>
+<tr><th>コンテナ</th><th>image</th><th>役割</th><th>port</th></tr>
+<tr><td><code>nginx</code></td><td><code>nginx:1.27-alpine</code></td>
+    <td>frontend (= 唯一の外部公開)、3 サービスへの reverse proxy</td><td>80</td></tr>
+<tr><td><code>users</code></td><td>build (Python 3.12)</td>
+    <td>FastAPI、score/meta/health endpoint</td><td>8000 (内部)</td></tr>
+<tr><td><code>orders</code></td><td>build (Python 3.12)</td>
+    <td>同上、ただし legacy は N+1 風 sleep</td><td>8000 (内部)</td></tr>
+<tr><td><code>catalog</code></td><td>build (Python 3.12)</td>
+    <td>同上、legacy は cache 同期 sleep</td><td>8000 (内部)</td></tr>
+</table>
+
+<p>nginx が <code>/users/</code> <code>/orders/</code> <code>/catalog/</code> を各サービス
+(<code>http://&lt;name&gt;:8000/</code>) に proxy。EC2 SG は port 80 のみ ingress。</p>
+
+<p>VPC は per-team で新規作成 (= 10.99.0.0/16)、Subnet 1 つ + IGW + Route Table。
+SSM Session Manager 用 IAM Role はあり (= 運営デバッグ用)、competitor 側からは触れない。</p>
+</section>
+
+<section>
+<h2>仕掛け (= "答え" の中身)</h2>
+
+<h3>① 各サービスに仕込んだ legacy endpoint</h3>
+
+<p>3 サービス共通インターフェイス:</p>
+
+<ul>
+<li><code>GET /score</code> — 高速経路。即座にレスポンス。</li>
+<li><code>GET /score?legacy=true</code> — <strong>意図的な遅延経路</strong>。スコアエンジンが切替フェーズで叩きにくる。</li>
+</ul>
+
+<table>
+<tr><th>サービス</th><th>遅延の仕組み</th><th>修正方針 (= 答え)</th><th>file</th></tr>
+<tr><td><code>users</code></td>
+    <td><code>time.sleep(2.0)</code> 単発</td>
+    <td><code>_legacy_score()</code> 内の <code>time.sleep</code> を削除して <code>_fast_score()</code> と統合</td>
+    <td><code>services/users/main.py:64</code></td></tr>
+<tr><td><code>orders</code></td>
+    <td>5 回ループで <code>time.sleep(0.45)</code> = 合計 2.25 秒 (= N+1 風)</td>
+    <td>ループ自体を削除し <code>random</code> ベースの集計を 1 回にまとめる</td>
+    <td><code>services/orders/main.py:65-72</code></td></tr>
+<tr><td><code>catalog</code></td>
+    <td>「外部キャッシュ更新」のフリをする <code>time.sleep(2.2)</code></td>
+    <td>cache を non-blocking にする (= sleep を削除、async タスクへ)</td>
+    <td><code>services/catalog/main.py:64</code></td></tr>
+</table>
+
+<p>3 つとも legacy 関数の <strong>戻り値は fast 関数と等価</strong> (= 機能的には同じ)。
+唯一の違いは応答時間。これにより「スコアエンジンが切り替えても返る値の妥当性チェックは
+通る、ただし応答時間からスコアが下がる」という設計になる。</p>
+
+<h3>② プラットフォーム自己申告</h3>
+
+<p><code>GET /meta</code> が <code>{"service": "...", "platform": "ec2|lambda|ecs|apprunner", "version": "..."}</code>
+を返す。<code>platform</code> は環境変数 <code>TC_PLATFORM</code> で制御。</p>
+
+<p>初期値 (= EC2 docker compose) では <code>TC_PLATFORM=ec2</code>。競技者が Lambda に
+移植したら <code>TC_PLATFORM=lambda</code> を設定すれば <code>/meta</code> が変わり、
+スコアエンジンが「Lambda にマイクロサービス化された」と判定して大幅加点に切り替わる。</p>
+
+<p>cross-validate (= DNS pattern や response header) は MVP ではしない。Battle は
+チーム間で互いを攻撃しないので緩めで良いと判断 (ADR-008 v2 D6 と整合)。</p>
+</section>
+
+<section>
+<h2>スコアリング仕様</h2>
+
+<p>スコアエンジンは 1 分毎に各登録 endpoint を polling し、以下のルールで加減算する。</p>
+
+<table class="score-table">
+<tr><th>状態</th><th>判定</th><th>1 check (1分) あたり</th></tr>
+<tr><td>endpoint 未登録 / 200 以外 / timeout</td>
+    <td>HTTP status != 200 or no response in 5s</td>
+    <td class="delta minus">-100</td></tr>
+<tr><td>EC2 上 (劣化前)</td>
+    <td><code>/meta.platform == "ec2"</code> and 応答 &lt; 500ms</td>
+    <td class="delta plus">+100</td></tr>
+<tr><td>EC2 上 (劣化後 = degradationMinutes 経過)</td>
+    <td>同上、ただしフェーズ判定で adjust</td>
+    <td class="delta plus">+10</td></tr>
+<tr><td>Lambda + API GW にマイグレ済</td>
+    <td><code>/meta.platform == "lambda"</code></td>
+    <td class="delta plus">+1,000</td></tr>
+<tr><td>ECS Fargate にマイグレ済</td>
+    <td><code>/meta.platform == "ecs"</code></td>
+    <td class="delta plus">+1,000</td></tr>
+<tr><td>App Runner にマイグレ済</td>
+    <td><code>/meta.platform == "apprunner"</code></td>
+    <td class="delta plus">+1,000</td></tr>
+<tr><td>3 サービス全分離達成 (= 一括ボーナス)</td>
+    <td>3 endpoint の <code>platform</code> が全て ec2 以外</td>
+    <td class="delta plus">+5,000 (1 回限り)</td></tr>
+<tr><td>遅延 endpoint (応答 &gt; 1.5s) を返した</td>
+    <td>切替フェーズ後の <code>/score?legacy=true</code> に対して</td>
+    <td class="delta plus">+10</td></tr>
+</table>
+
+<p>劣化前 1 時間放置 (3 endpoint 登録済): 60 × 100 × 3 = <strong>18,000 / h</strong><br>
+劣化後 1 時間放置: 60 × 10 × 3 = <strong>1,800 / h</strong> (= 10 分の 1)<br>
+30 分で 1 サービスを Lambda に移行: 30 × 100 × 3 + 30 × (100 × 2 + 1000 × 1) = <strong>9,000 + 36,000 = 45,000 / 1h</strong></p>
+
+<p>→ 1 サービスでも分離すれば EC2 滞在を大きく上回る = 強い移行インセンティブ。</p>
+
+<h3>イベントパラメータ (= 運営側で設定可)</h3>
+
+<table>
+<tr><th>パラメータ名</th><th>型</th><th>デフォルト</th><th>用途</th></tr>
+<tr><td><code>degradationMinutes</code></td><td>int</td><td>60</td>
+    <td>EC2 劣化フェーズ開始 (分)</td></tr>
+<tr><td><code>legacySwitchMinutes</code></td><td>int</td><td>90</td>
+    <td>遅延 endpoint 切替フェーズ開始 (分)</td></tr>
+<tr><td><code>scoreCheckIntervalSec</code></td><td>int</td><td>60</td>
+    <td>スコア polling 間隔</td></tr>
+<tr><td><code>emptyPenaltyPerCheck</code></td><td>int</td><td>-100</td>
+    <td>未登録 endpoint への減点</td></tr>
+<tr><td><code>microservicePoints</code></td><td>int</td><td>1000</td>
+    <td>マイクロサービス化 endpoint への加点</td></tr>
+<tr><td><code>fullMigrationBonus</code></td><td>int</td><td>5000</td>
+    <td>3 サービス全分離達成ボーナス</td></tr>
+</table>
+</section>
+
+<section>
+<h2>競技タイムライン (= デフォルト値)</h2>
+
+<div class="timeline">
+  <div class="timeline-item">
+    <h4>T+0 min — 競技開始</h4>
+    <div class="when">deploy 完了直後</div>
+    <p>3 サービスが EC2 で稼働中。endpoint URL が払い出され、競技者が participant-portal で 3 endpoint を登録する。<br>
+    <strong>登録しないと -100/min の出血</strong>。</p>
+  </div>
+
+  <div class="timeline-item">
+    <h4>T+0〜60 min — EC2 通常フェーズ</h4>
+    <div class="when">degradationMinutes まで</div>
+    <p>EC2 のままでも +100/min × 3 = 18,000/h の高加点。ただしマイクロサービス化すれば +1,000/min × 3 = 180,000/h で 10 倍差。<br>
+    <strong>最初の 1 サービス分離を 30 分以内に終わらせるのが目安。</strong></p>
+  </div>
+
+  <div class="timeline-item warn">
+    <h4>T+60 min — EC2 劣化フェーズ開始</h4>
+    <div class="when">degradationMinutes 到達</div>
+    <p>スコアエンジンが「EC2 上の endpoint」を発見すると加点を +10/min に下げる (= 90% 減)。EC2 残留チームのスコア急減。Battle Portal の timeline で「EC2 劣化フェーズに入りました」と通知。</p>
+  </div>
+
+  <div class="timeline-item warn">
+    <h4>T+87 min — 遅延切替の 3 分前告知</h4>
+    <div class="when">legacySwitchMinutes - 3</div>
+    <p>「3 分後に legacy endpoint への切替が起きます」と Battle Portal に告知。</p>
+  </div>
+
+  <div class="timeline-item danger">
+    <h4>T+90 min — 遅延 endpoint 切替フェーズ</h4>
+    <div class="when">legacySwitchMinutes 到達</div>
+    <p>スコアエンジンが polling 対象を <code>/score</code> → <code>/score?legacy=true</code> に切り替える。事前にコード修正していないと、応答 &gt; 1.5s 判定で +10/min まで落ちる。<br>
+    <strong>修正方針</strong>: コード読み → <code>time.sleep</code> / N+1 ループを取り除き → 再デプロイ。Lambda / ECS / App Runner どこに乗っていても作業は同じ (= ソース修正 + redeploy)。</p>
+  </div>
+
+  <div class="timeline-item">
+    <h4>T+120 min — 競技終了</h4>
+    <div class="when">合計 2 時間</div>
+    <p>累積スコアでランキング。3 サービスを早期に異なる 3 ホスティングに分離 + 遅延修正完了したチームが上位。</p>
+  </div>
+</div>
+</section>
+
+<section>
+<h2>期待される攻略順序 (= 想定解の 1 つ)</h2>
+
+<ol>
+<li><strong>T+0〜10 min</strong>: deploy 完了確認 / 3 endpoint を participant-portal に登録 / コードを cat (= 仕掛けの存在に気づく)</li>
+<li><strong>T+10〜30 min</strong>: 最も簡単な <code>users</code> サービスを <strong>AWS App Runner</strong> に乗せる (= source-deploy 1 発で公開可、最短)</li>
+<li><strong>T+30〜55 min</strong>: <code>orders</code> を <strong>Lambda + API Gateway</strong> に乗せる (= FastAPI を Mangum でラップして lambda handler 化)</li>
+<li><strong>T+55〜80 min</strong>: <code>catalog</code> を <strong>ECS Fargate</strong> に乗せる (= 一番設定が重いが、長時間稼働 / VPC 統合の練習になる)。3 サービス全分離ボーナス +5,000 を取りに行く</li>
+<li><strong>T+80〜90 min</strong>: 各サービスのコードから legacy 遅延処理を取り除く → 再デプロイ。切替前に間に合わせる</li>
+<li><strong>T+90〜120 min</strong>: 残時間で安定運用。失敗 endpoint があれば修正</li>
+</ol>
+
+<p>もちろん別解も可能 (= 全部 Lambda、全部 App Runner 等)。ホスティング多様性ボーナスは
+ない (= ADR レベルで「学習目的」に多様性を強く要請しているが、スコアでは強制しない)。</p>
+</section>
+
+<section>
+<h2>運営側スコアエンジン (= 別 PR、現時点未実装)</h2>
+
+<p>本 PR では <strong>問題テンプレート部分のみ</strong> 実装。スコアエンジン (= 1 分毎 polling Lambda + endpoint 登録 UI) は次 PR に分離する。理由:</p>
+
+<ul>
+<li>endpoint 登録 → polling → スコア event 配信は <strong>他 Battle でも使い回せる共通基盤</strong> になりうる (= microservice-migration-battle 専用にしない)</li>
+<li>本 PR の <code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code> は「3 サービスが立ち上がって <code>/score</code> が叩ける」で満たせる (= スコアエンジン無しでも観察可能)</li>
+<li>スコアエンジンの実装は ADR-008 v2 Phase 4 (= 検証パイプライン) と同じく独立した複雑性</li>
+</ul>
+
+<h3>次 PR で作るスコアエンジン (= 設計案)</h3>
+
+<ul>
+<li>EventBridge Scheduler で 1 分毎に Polling Lambda を起動</li>
+<li>DDB <code>EndpointRegistry</code> table (PK: <code>TenantId#TeamId</code>, SK: <code>SLOT#1|2|3</code>)</li>
+<li>Polling Lambda が各 endpoint を fetch → ScoreEvent 発行 → 既存 score stream に乗せる</li>
+<li>participant-portal に endpoint 登録 UI (3 slot)</li>
+<li>Battle Portal の timeline card に「次フェーズまでの残り時間」を表示</li>
+</ul>
+
+<p>microservice-migration-battle 以外の今後の Battle (= 「N 個の endpoint を polling
+してスコアを増減」型) でも同じ仕組みを使えるよう、<strong>generic な polling 基盤</strong>
+として切り出す。</p>
+</section>
+
+<section>
+<h2>ホスティング移植のヒント (= 競技者向けには公開しない)</h2>
+
+<h3>users → AWS App Runner</h3>
+
+<pre>$ apprunner create-service \
+    --service-name tc-users \
+    --source-configuration '{
+      "AutoDeploymentsEnabled": false,
+      "ImageRepository": {
+        "ImageIdentifier": "&lt;your-ecr&gt;/users:latest",
+        "ImageRepositoryType": "ECR",
+        "ImageConfiguration": {
+          "Port": "8000",
+          "RuntimeEnvironmentVariables": { "TC_PLATFORM": "apprunner" }
+        }
+      }
+    }'</pre>
+
+<p>App Runner は ECR から自動 pull → URL 即発行。所要 5〜10 分。</p>
+
+<h3>orders → Lambda + API Gateway</h3>
+
+<p>FastAPI を Lambda で動かすために <code>mangum</code> を入れる:</p>
+
+<pre># requirements.txt に追加
+mangum==0.17.0
+
+# main.py に追加
+from mangum import Mangum
+handler = Mangum(app)</pre>
+
+<p>Lambda は container image で deploy (Python 3.12 base image + uvicorn は不要、mangum が ASGI を Lambda event に変換)。</p>
+
+<h3>catalog → ECS Fargate</h3>
+
+<p>標準的な手順 (Task Definition + Service + ALB)。VPC / ENI / Target Group が必要な分、3 つの中で最も config が重い。</p>
+</section>
+
+<section>
+<h2>ADR-008 v2 への適合 (= 寄稿問題第 1 号としての位置づけ)</h2>
+
+<table>
+<tr><th>ADR-008 v2 上の field</th><th>本問題での値</th></tr>
+<tr><td><code>contributor</code></td><td><code>"system"</code> (= 公式問題、後で寄稿者ハンドルに変更可)</td></tr>
+<tr><td><code>visibility</code></td><td><code>"private"</code> (= 答えあり、competition 中に payload 漏洩防止)</td></tr>
+<tr><td><code>category</code></td><td><code>"Battle"</code></td></tr>
+<tr><td><code>status</code></td><td><code>"draft"</code> → ADR Phase 5 完了後 <code>"validated"</code></td></tr>
+<tr><td><code>version</code></td><td>初回 publish 時の git SHA 短縮 8 桁</td></tr>
+<tr><td>S3 path</td>
+    <td><code>s3://tc-challenges-&lt;env&gt;/system/microservice-migration-battle/&lt;version&gt;/</code></td></tr>
+</table>
+
+<p>本 design.html は <strong>S3 にも本体 repo にも置かない</strong> — private repo 側
+(= 寄稿者の作業 repo) または運営内の限定共有のみ。ADR-008 v2 Phase 4 完了後は
+<code>contributions/system/microservice-migration-battle/</code> に metadata + template + code/
+だけを移し、design.html は private 側に残す。</p>
+</section>
+
+<section>
+<h2>Open Questions</h2>
+
+<ol>
+<li><strong>遅延の閾値 1.5s が妥当か</strong>: orders の N+1 ループは合計 2.25s なので
+1.5s 閾値で正しく検出される。users / catalog の 2.0s / 2.2s も同様。閾値を 1.0s に
+下げると network jitter で false positive のリスクあり</li>
+<li><strong>EC2 劣化の実装方法</strong>: <code>tc qdisc</code> で latency 注入 vs サービス
+側で「<code>/var/run/tc-degraded</code> flag が存在したら sleep」分岐。後者は
+プラットフォーム移植性が高い (= Lambda / ECS でも動く) が、移植したら劣化の影響を
+受けないので「マイグレーションのインセンティブ」としては正しい</li>
+<li><strong>3 サービスの 1 つだけ移行した時のスコアバランス</strong>: 例の試算は妥当か
+<code>microservicePoints</code> を 800 に下げる / EC2 通常を 80 に下げる等で調整可</li>
+<li><strong>scoring engine を本問題に inline するか generic 基盤として切り出すか</strong>:
+本ドキュメントでは後者を推奨 (= 別 PR)。ただし microservice-migration-battle 専用の
+仕様 (= platform 判定 / フェーズ進行) もあるので、「generic polling + 問題ごとの scoring config」
+の分離設計が必要</li>
+<li><strong>競技者がコードを書き換える前提なので、本体 repo の services/ を直接書き換えると
+他チームに影響</strong>: 各チームは <strong>自分の AWS account 内で</strong> 編集
+(= EC2 上の <code>/opt/tenkacloud/repo/.../services/</code> を vim) するので影響なし。
+ただし git fetch がレースする可能性 → UserData は初回 clone 時のみ実行、再起動しても
+git pull しない設計にする</li>
+</ol>
+</section>
+
+</body>
+</html>
