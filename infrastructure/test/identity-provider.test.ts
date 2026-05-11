@@ -97,21 +97,22 @@ describe("IdentityProvider", () => {
       expect(writeAttrs).toContain("email");
     });
 
-    it("#529: tenant admin 招待メールを日本語化し application-admin-console URL を埋め込むべき", () => {
+    it("#529 i18n: 招待メール body に JA / EN / ES / ZH 4 言語が含まれ console URL + placeholder も embed されるべき", () => {
       const consoleUrl = "https://d123abc.cloudfront.net";
       const { template } = synth("tenant-1", consoleUrl);
+      // Subject は 4 言語並列 (mail client preview での言語識別用)
       template.hasResourceProperties(
         "AWS::Cognito::UserPool",
         Match.objectLike({
           AdminCreateUserConfig: Match.objectLike({
             InviteMessageTemplate: Match.objectLike({
-              EmailSubject: Match.stringLikeRegexp("TenkaCloud.*テナント管理コンソール"),
-              EmailMessage: Match.stringLikeRegexp("ようこそ TenkaCloud"),
+              EmailSubject: Match.stringLikeRegexp(
+                "テナント管理コンソール招待.*Tenant Admin Invitation",
+              ),
             }),
           }),
         }),
       );
-      // body に {username} / {####} / console URL の 3 種 placeholder + 実値が含まれること
       const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
       const body =
         (
@@ -119,12 +120,20 @@ describe("IdentityProvider", () => {
             AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
           }
         )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
+      // 4 言語の greeting (= operator がどの言語でも 1 段落見つけられる)
+      expect(body).toContain("ようこそ TenkaCloud"); // JA
+      expect(body).toContain("Welcome to TenkaCloud"); // EN
+      expect(body).toContain("Bienvenido a TenkaCloud"); // ES
+      expect(body).toContain("欢迎使用 TenkaCloud"); // ZH
+      // Cognito placeholder と console URL
       expect(body).toContain("{username}");
       expect(body).toContain("{####}");
       expect(body).toContain(consoleUrl);
     });
 
-    it("#529: invitation の SMS message も Cognito API の必須要件なので置かれているべき", () => {
+    it("#529: SMS message も InviteMessageTemplate 整合のため Cognito placeholder 込みで置かれるべき", () => {
+      // Cognito CFn は InviteMessageTemplate 設定時に SMSMessage の placeholder 整合性を
+      // check する (aws-cdk#30315 系)。SMS は使わないが空にできないので最短形で配置。
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.hasResourceProperties(
         "AWS::Cognito::UserPool",
