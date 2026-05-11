@@ -26,6 +26,10 @@ export interface EventSummary {
   /** 競技終了時刻 (ISO8601, UTC、#536)。HealthCheck は `now >= endsAt` で採点 gate 閉。
    *  「Event を終了」 button (= 即時終了) と「日時を指定して終了」 (= 予約) の両方が書き込む。 */
   endsAt?: string;
+  /** #558: 採点 lock flag。true なら加点経路全停止 (= 表彰フェーズ)、leaderboard read は許可。 */
+  scoringLocked?: boolean;
+  /** #558: scoringLocked=true にした時刻 (ISO 8601, UTC)。 */
+  scoringLockedAt?: string;
 }
 
 export interface EventListResponse {
@@ -171,6 +175,35 @@ export async function endEvent(api: ApiClient, eventId: string): Promise<EndEven
 
 export interface ArchiveEventResult {
   archivedAt: string;
+}
+
+export interface LockScoringResult {
+  scoringLocked: boolean;
+  scoringLockedAt?: string;
+  /** idempotent: 既に target 状態だった (= no-op で 200) のときに true。 */
+  idempotent?: boolean;
+}
+
+/**
+ * #558: Event の採点を lock (= 表彰フェーズ、加点経路全停止)。
+ * READY / ENDED のみ受理 (= 409 not_lockable for other statuses)。idempotent: 既に
+ * locked のときも 200 + `idempotent: true` で返す。
+ */
+export async function lockEventScoring(
+  api: ApiClient,
+  eventId: string,
+): Promise<LockScoringResult> {
+  return api.post<LockScoringResult>(`events/${encodeURIComponent(eventId)}/lock-scoring`, {});
+}
+
+/**
+ * #558: Event の採点 lock を解除 (= reversible)。同じく READY / ENDED のみ受理。
+ */
+export async function unlockEventScoring(
+  api: ApiClient,
+  eventId: string,
+): Promise<LockScoringResult> {
+  return api.delJson<LockScoringResult>(`events/${encodeURIComponent(eventId)}/lock-scoring`);
 }
 
 /**

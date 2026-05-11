@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import {
   HTTP_BAD_REQUEST,
+  HTTP_CONFLICT,
   HTTP_INTERNAL_ERROR,
   HTTP_NOT_FOUND,
   HTTP_UNAUTHORIZED,
@@ -27,6 +28,7 @@ const ERROR_STATUS = {
   no_outputs: HTTP_BAD_REQUEST,
   no_event: HTTP_NOT_FOUND,
   not_found: HTTP_NOT_FOUND,
+  scoring_locked: HTTP_CONFLICT,
   misconfigured: HTTP_INTERNAL_ERROR,
   internal_error: HTTP_INTERNAL_ERROR,
 } as const;

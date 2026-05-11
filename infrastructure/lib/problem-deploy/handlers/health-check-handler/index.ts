@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  BatchGetCommand,
   DynamoDBDocumentClient,
   QueryCommand,
   ScanCommand,
@@ -316,6 +317,12 @@ export async function handler(): Promise<void> {
     );
     const items = (out.Items ?? []) as Partial<DeploymentItem>[];
 
+    // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
+    // deployment ごとに Event GET すると 1 deployment × 1 Read = throughput を喰うが、
+    // 1 invocation あたり distinct eventId は通常 << 10 件なので 1-2 BatchGetItem (各 100 件
+    // まで) で済む。値は Map に cache して isScoringActive と並列に gate する。
+    const lockedMap = await fetchScoringLockedMap(items);
+
     // 全 deployment を **並列** に check する。Lambda timeout 2 min 内に収まるよう、
     // sequential だと N × PROBE_TIMEOUT_MS で容易に超過する。1 deployment 失敗が
     // 他に波及しないよう catch して log に残す。
@@ -327,6 +334,8 @@ export async function handler(): Promise<void> {
         //   - deploy 直後の意図しない加点を防ぐ (operator が「即座に開始」or 日時設定するまで停止)
         //   - 競技開始前の Lambda 呼び出し / outbound HTTP probe を抑制 (無駄なコスト削減)
         if (!isScoringActive(item, nowIso)) return;
+        // #558: scoring lock が立っている event は probe / 加点を skip (= 表彰フェーズ)
+        if (item.eventId && lockedMap.get(item.eventId) === true) return;
         try {
           await checkOne(item, scoring);
         } catch (err) {
@@ -361,4 +370,52 @@ export function isScoringActive(
   if (nowIso < item.eventStartsAt) return false;
   if (typeof item.eventEndsAt === "string" && nowIso >= item.eventEndsAt) return false;
   return true;
+}
+
+/**
+ * #558: 同 invocation 内 deployments の distinct eventId について Events table を BatchGet
+ * し、scoringLocked=true な eventId の Map を返す。lock されていない event は Map に入らない
+ * (= `lockedMap.get(eventId) === true` で gate 判定するのが API)。
+ *
+ * 1 BatchGet で 100 件まで。本 MVP 規模 (< 30 event/tenant) では 1 回で済むので分割は省略。
+ * 失敗は best-effort: BatchGet が throw したら警告 log + 空 Map を返す (= lock 中の event でも
+ * 採点続行する fail-open。lock が効かない方が "scoring が止まる" より運用上マシ)。
+ */
+async function fetchScoringLockedMap(
+  items: Partial<DeploymentItem>[],
+): Promise<Map<string, boolean>> {
+  const eventIds = Array.from(
+    new Set(
+      items
+        .map((i) => i.eventId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  );
+  if (eventIds.length === 0) return new Map();
+  try {
+    const out = await ddb.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [eventsTableName()]: {
+            Keys: eventIds.map((eventId) => ({ PK: `EVENT#${eventId}`, SK: "META" })),
+            ProjectionExpression: "eventId, scoringLocked",
+          },
+        },
+      }),
+    );
+    const rows = out.Responses?.[eventsTableName()] ?? [];
+    const map = new Map<string, boolean>();
+    for (const row of rows) {
+      const r = row as { eventId?: string; scoringLocked?: boolean };
+      if (typeof r.eventId === "string" && r.scoringLocked === true) {
+        map.set(r.eventId, true);
+      }
+    }
+    return map;
+  } catch (err) {
+    console.warn("[health-check] fetchScoringLockedMap failed (fail-open)", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return new Map();
+  }
 }
