@@ -14,7 +14,7 @@ import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
 import TimeInput from "@cloudscape-design/components/time-input";
 import { StatusCodes } from "http-status-codes";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { ApiError, useApiClient } from "../api/client";
 import {
@@ -32,6 +32,7 @@ import {
 } from "../api/events-client";
 import { SendNotificationModal } from "../components/SendNotificationModal";
 import type { AppConfig } from "../config";
+import { computeEventWizardState, WIZARD_STEPS } from "../lib/event-wizard";
 
 const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "grey" | "red"> = {
   PENDING: "grey",
@@ -318,6 +319,11 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     );
   }
 
+  // #531: 「今 operator が押すべき primary action」を 1 つだけ強調する。
+  // wizard.primary が一致した button のみ variant=primary、それ以外は default。
+  // 状態と一致しない button (= DRAFT で「即座に開始」など) は disabled で抑止する。
+  const wizard = detail ? computeEventWizardState(detail, Date.now()) : null;
+
   return (
     <SpaceBetween size="l">
       <Header
@@ -327,7 +333,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           <SpaceBetween direction="horizontal" size="xs">
             <Button onClick={() => navigate("/events")}>一覧へ戻る</Button>
             <Button
-              variant="primary"
+              variant={wizard?.primary === "deploy" ? "primary" : "normal"}
               loading={bulkInFlight === "deploy"}
               disabled={
                 !detail ||
@@ -349,6 +355,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               Event を終了
             </Button>
             <Button
+              variant={wizard?.primary === "delete" ? "primary" : "normal"}
               loading={bulkInFlight === "teardown"}
               disabled={!detail}
               onClick={() => setConfirmTeardown(true)}
@@ -360,6 +367,38 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       >
         {detail?.name ?? "(loading)"}
       </Header>
+
+      {/* #531: Wizard StepIndicator + CTA banner — 初見 operator が「次に何を押すか」を
+       *   1 画面で分かるようにする。Step 表示は 5 段固定 (作成 → Deploy → 開始時刻設定 →
+       *   競技中 → 終了)、CTA Alert は status 依存。primary button 表示は Header actions
+       *   / Schedule Container の既存 button と variant 同期。 */}
+      {wizard && (
+        <Container>
+          <SpaceBetween size="m">
+            <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+              {WIZARD_STEPS.map((step, i) => (
+                <Fragment key={step.key}>
+                  {i > 0 && (
+                    <Box color="text-status-inactive" variant="small">
+                      →
+                    </Box>
+                  )}
+                  <Badge
+                    color={
+                      i < wizard.stepIndex ? "green" : i === wizard.stepIndex ? "blue" : "grey"
+                    }
+                  >
+                    {i + 1}. {step.label}
+                  </Badge>
+                </Fragment>
+              ))}
+            </SpaceBetween>
+            <Alert type={wizard.alertType} header="次のアクション">
+              {wizard.cta}
+            </Alert>
+          </SpaceBetween>
+        </Container>
+      )}
 
       {error && (
         <Alert type="error" header="エラー">
@@ -420,7 +459,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     日時を指定して開始
                   </Button>
                   <Button
-                    variant="primary"
+                    variant={wizard?.primary === "start" ? "primary" : "normal"}
                     loading={scheduleInFlight === "now"}
                     disabled={!apiClient || scheduleInFlight === "scheduled"}
                     onClick={handleStartNow}
