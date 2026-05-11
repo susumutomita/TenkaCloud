@@ -9,6 +9,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
+import { StatusCodes } from "http-status-codes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
 import { type ApiClient, ApiError, useApiClient } from "../api/client";
@@ -143,7 +144,7 @@ export function EventListPage({ config }: { config: AppConfig }) {
       await archive(apiClient, target.eventId);
       await fetchOnce();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
         const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
         const current = match?.[1];
         setError(

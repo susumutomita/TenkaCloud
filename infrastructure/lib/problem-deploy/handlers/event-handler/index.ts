@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
+import { StatusCodes } from "http-status-codes";
 import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
@@ -74,7 +75,7 @@ app.use(
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[events] uncaught handler error", { path: c.req.path, message });
-  return c.json({ error: "internal_error" }, 500);
+  return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
 });
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));

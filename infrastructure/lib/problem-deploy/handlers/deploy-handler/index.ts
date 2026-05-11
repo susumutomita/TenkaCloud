@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
+import { StatusCodes } from "http-status-codes";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import {
   HTTP_ACCEPTED,
@@ -76,7 +77,7 @@ app.use(
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[deploy] uncaught handler error", { path: c.req.path, message });
-  return c.json({ error: "internal_error" }, 500);
+  return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
 });
 
 app.get("/healthz", (c) => c.json({ ok: true }));
