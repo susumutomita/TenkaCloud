@@ -20,6 +20,11 @@ export interface CompetitorAccountItem {
   verifiedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。
+   * 過去 row には存在しない (= undefined のときは「未 rotate = createdAt から経過」とみなす)。
+   */
+  rotatedAt?: string;
   /** Cognito sub (= operator 監査用)。`unknown` の場合は JWT 解決失敗 (test / dev fallback)。 */
   createdBy: string;
 }
@@ -60,6 +65,8 @@ export interface CompetitorAccountSummary {
   verifiedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。未 rotate なら undefined。 */
+  rotatedAt?: string;
 }
 
 export interface CreateCompetitorAccountResponse extends CompetitorAccountSummary {
@@ -79,4 +86,14 @@ export interface ListCompetitorAccountsResponse {
 export interface VerifyCompetitorAccountResponse extends CompetitorAccountSummary {
   /** STS AssumeRole が成功した時点の ISO 8601 (= `verifiedAt`)。 */
   verifiedAt: string;
+}
+
+/**
+ * Rotate response (Issue #596 / ADR-002 Phase 3.1)。
+ * Create と同じく `externalId` を 1 度だけ露出する。`rotatedAt` には rotate 時刻が入る。
+ */
+export interface RotateExternalIdResponse extends CompetitorAccountSummary {
+  externalId: string;
+  tenkaCloudAccountId: string;
+  rotatedAt: string;
 }

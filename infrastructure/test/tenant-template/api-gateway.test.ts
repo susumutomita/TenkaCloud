@@ -146,4 +146,19 @@ describe("tenant ApiGateway", () => {
       ResourceId: { Ref: caResourceId },
     });
   });
+
+  it("/admin/competitor-accounts/{awsAccountId}/rotate-external-id POST を持つべき (Issue #596)", () => {
+    // Issue #596 / ADR-002 Phase 3.1: ExternalId rotation route
+    expect(findResource("rotate-external-id")).toBeDefined();
+    const rotateResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { PathPart: "rotate-external-id" },
+      }),
+    )[0]?.[0];
+    expect(rotateResourceId).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "POST",
+      ResourceId: { Ref: rotateResourceId },
+    });
+  });
 });

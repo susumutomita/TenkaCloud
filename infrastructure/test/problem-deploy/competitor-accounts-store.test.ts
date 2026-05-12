@@ -1,7 +1,7 @@
 import { PutParameterCommand } from "@aws-sdk/client-ssm";
 import {
   DeleteCommand,
-  type GetCommand,
+  GetCommand,
   PutCommand,
   QueryCommand,
   UpdateCommand,
@@ -13,9 +13,11 @@ import {
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
+  ExternalIdMissingForRotationError,
   getCompetitorAccount,
   listCompetitorAccounts,
   markCompetitorAccountVerified,
+  rotateExternalIdForAccount,
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/store";
 
 const NOW_MS = 1_700_000_000_000;
@@ -284,5 +286,124 @@ describe("deleteCompetitorAccount", () => {
     await deleteCompetitorAccount(shared, "tenant-acme", "222222222222");
 
     expect(ssmSend.mock.calls.length).toBe(0);
+  });
+});
+
+describe("rotateExternalIdForAccount", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("SSM Parameter を Overwrite=true で Put し DDB の rotatedAt を更新するべき", async () => {
+    const { shared, ddbSend, ssmSend } = buildShared();
+    // 1. DDB Get で既存 row 確認 → Item あり
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        PK: "TENANT#tenant-acme",
+        SK: "ACCOUNT#222222222222",
+        tenantId: "tenant-acme",
+        awsAccountId: "222222222222",
+        region: "ap-northeast-1",
+        competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+        verified: true,
+        verifiedAt: NOW_ISO,
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+      },
+    });
+    // 2. SSM GetParameter で現値あり
+    ssmSend.mockResolvedValueOnce({ Parameter: { Value: "old-external-id" } });
+    // 3. SSM PutParameter (Overwrite=true)
+    ssmSend.mockResolvedValueOnce({});
+    // 4. DDB Update — Attributes には rotatedAt が乗る
+    ddbSend.mockResolvedValueOnce({
+      Attributes: {
+        tenantId: "tenant-acme",
+        awsAccountId: "222222222222",
+        region: "ap-northeast-1",
+        competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+        verified: true,
+        verifiedAt: NOW_ISO,
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+        rotatedAt: NOW_ISO,
+      },
+    });
+
+    const out = await rotateExternalIdForAccount(shared, {
+      tenantId: "tenant-acme",
+      awsAccountId: "222222222222",
+      nowMs: NOW_MS,
+    });
+
+    // SSM PutParameter 呼び出しを検査 (= Overwrite:true, SecureString, 64 文字 hex)
+    const putParamCall = ssmSend.mock.calls[1]?.[0] as PutParameterCommand;
+    expect(putParamCall).toBeInstanceOf(PutParameterCommand);
+    expect(putParamCall.input.Type).toBe("SecureString");
+    expect(putParamCall.input.Overwrite).toBe(true);
+    expect(putParamCall.input.Name).toBe("/development/tenants/tenant-acme/external-id");
+    expect(typeof putParamCall.input.Value).toBe("string");
+    expect((putParamCall.input.Value as string).length).toBe(64);
+
+    // DDB Update が rotatedAt を立てている
+    const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    expect(updateCmd).toBeInstanceOf(UpdateCommand);
+    expect(updateCmd.input.UpdateExpression).toContain("rotatedAt = :r");
+    expect(updateCmd.input.ExpressionAttributeValues?.[":r"]).toBe(NOW_ISO);
+    expect(updateCmd.input.ExpressionAttributeValues?.[":u"]).toBe(NOW_ISO);
+
+    // 戻り値: 新 ExternalId + tenkaCloudAccountId + rotatedAt
+    expect(out.externalId).toBe(putParamCall.input.Value);
+    expect(out.externalId).not.toBe("old-external-id");
+    expect(out.tenkaCloudAccountId).toBe("111111111111");
+    expect(out.rotatedAt).toBe(NOW_ISO);
+  });
+
+  it("row が無ければ CompetitorAccountNotFoundError を投げ SSM Put しないべき", async () => {
+    const { shared, ddbSend, ssmSend } = buildShared();
+    // Get が Item を返さない
+    ddbSend.mockResolvedValueOnce({});
+
+    await expect(
+      rotateExternalIdForAccount(shared, {
+        tenantId: "tenant-acme",
+        awsAccountId: "999999999999",
+        nowMs: NOW_MS,
+      }),
+    ).rejects.toBeInstanceOf(CompetitorAccountNotFoundError);
+
+    // GetCommand 1 度のみ。SSM は触らない。
+    expect(ddbSend.mock.calls.length).toBe(1);
+    expect(ddbSend.mock.calls[0]?.[0]).toBeInstanceOf(GetCommand);
+    expect(ssmSend.mock.calls.length).toBe(0);
+  });
+
+  it("SSM に現 ExternalId が無ければ ExternalIdMissingForRotationError を投げ Put しないべき", async () => {
+    const { shared, ddbSend, ssmSend } = buildShared();
+    // 1. Get Item OK
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        PK: "TENANT#tenant-acme",
+        SK: "ACCOUNT#222222222222",
+        tenantId: "tenant-acme",
+        awsAccountId: "222222222222",
+        region: "ap-northeast-1",
+        competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+        verified: true,
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+      },
+    });
+    // 2. SSM GetParameter で ParameterNotFound
+    ssmSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "ParameterNotFound" }));
+
+    await expect(
+      rotateExternalIdForAccount(shared, {
+        tenantId: "tenant-acme",
+        awsAccountId: "222222222222",
+        nowMs: NOW_MS,
+      }),
+    ).rejects.toBeInstanceOf(ExternalIdMissingForRotationError);
+
+    // SSM Get 1 度のみ、Put は呼ばない
+    expect(ssmSend.mock.calls.length).toBe(1);
   });
 });

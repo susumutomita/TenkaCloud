@@ -18,9 +18,12 @@ import {
   createCompetitorAccount,
   deleteCompetitorAccount,
   listCompetitorAccounts,
+  type RotateExternalIdResponse,
+  rotateExternalId,
   verifyCompetitorAccount,
 } from "../api/competitor-accounts-client";
 import type { AppConfig } from "../config";
+import { computeRotationAge, ROTATION_AGE_WARNING_DAYS } from "../lib/rotation-age";
 
 const ACCOUNT_ID_RE = /^\d{12}$/;
 const ALIAS_MAX = 120;
@@ -40,9 +43,13 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const [error, setError] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<CompetitorAccountSummary | null>(null);
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
-  const [showSecret, setShowSecret] = useState<CreateCompetitorAccountResponse | null>(null);
+  const [rotateInFlight, setRotateInFlight] = useState(false);
+  const [showSecret, setShowSecret] = useState<
+    CreateCompetitorAccountResponse | RotateExternalIdResponse | null
+  >(null);
 
   const reload = useCallback(async () => {
     if (!apiClient) return;
@@ -91,6 +98,26 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
     }
   }, [apiClient, deleteTarget, reload]);
 
+  const handleConfirmRotate = useCallback(async () => {
+    if (!apiClient || !rotateTarget) return;
+    setRotateInFlight(true);
+    try {
+      const res = await rotateExternalId(apiClient, rotateTarget.awsAccountId);
+      setRotateTarget(null);
+      setShowSecret(res);
+      await reload();
+    } catch (err) {
+      const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
+      setError(message);
+    } finally {
+      setRotateInFlight(false);
+    }
+  }, [apiClient, rotateTarget, reload]);
+
+  // 一覧 mount 時の wall clock。re-render ごとに揺らがないよう state 化する
+  // (= 1 秒未満の差で age 表示が点滅するのを防ぐ)。
+  const [nowMs] = useState(() => Date.now());
+
   const columnDefinitions = useMemo<TableProps.ColumnDefinition<CompetitorAccountSummary>[]>(
     () => [
       {
@@ -124,6 +151,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
           ),
       },
       {
+        id: "rotationAge",
+        header: "Rotation 経過",
+        cell: (item) => <RotationAgeBadge item={item} nowMs={nowMs} />,
+      },
+      {
         id: "actions",
         header: "操作",
         cell: (item) => (
@@ -136,6 +168,14 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
             >
               {item.verified ? "再 Verify" : "Verify"}
             </Button>
+            <Button
+              variant="normal"
+              iconName="refresh"
+              onClick={() => setRotateTarget(item)}
+              data-testid={`rotate-${item.awsAccountId}`}
+            >
+              Rotate ExternalId
+            </Button>
             <Button variant="link" onClick={() => setDeleteTarget(item)}>
               削除
             </Button>
@@ -143,7 +183,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         ),
       },
     ],
-    [handleVerify, verifyInFlight],
+    [handleVerify, verifyInFlight, nowMs],
   );
 
   if (!items && !error) {
@@ -222,8 +262,66 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
           鍵漏洩リスク削減)。
         </p>
       </Modal>
+
+      <Modal
+        visible={rotateTarget !== null}
+        onDismiss={() => (rotateInFlight ? undefined : setRotateTarget(null))}
+        header="ExternalId を rotate"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setRotateTarget(null)} disabled={rotateInFlight}>
+                キャンセル
+              </Button>
+              <Button
+                variant="primary"
+                loading={rotateInFlight}
+                onClick={handleConfirmRotate}
+                data-testid="rotate-confirm"
+              >
+                Rotate する
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Alert type="warning" header="現在の ExternalId は即時失効します">
+          AWS Account <code>{rotateTarget?.awsAccountId}</code> に紐付く tenant の ExternalId
+          を新値で 上書きします。この操作後、競技者は <code>competitor-bootstrap.yaml</code> stack
+          の Parameter を <strong>新 ExternalId</strong> で update する必要があります (= 古い値での
+          AssumeRole は 失敗するようになります)。
+        </Alert>
+        <p>
+          同 tenant 配下の他 account も同じ ExternalId を共有するため、tenant に複数 account が
+          登録されている場合は <strong>全 competitor に新値を共有</strong>してください。
+        </p>
+      </Modal>
     </SpaceBetween>
   );
+}
+
+interface RotationAgeBadgeProps {
+  item: CompetitorAccountSummary;
+  nowMs: number;
+}
+
+function RotationAgeBadge({ item, nowMs }: RotationAgeBadgeProps) {
+  const age = computeRotationAge({
+    createdAt: item.createdAt,
+    rotatedAt: item.rotatedAt,
+    nowMs,
+  });
+  const label = age.hasRotated
+    ? `${age.ageDays} 日前 rotate`
+    : `${age.ageDays} 日前作成 (未 rotate)`;
+  if (age.isStale) {
+    return (
+      <Badge color="severity-medium">
+        {label} (要 rotation: {ROTATION_AGE_WARNING_DAYS} 日超)
+      </Badge>
+    );
+  }
+  return <Box color="text-status-inactive">{label}</Box>;
 }
 
 interface AddAccountModalProps {
@@ -352,7 +450,7 @@ function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountMo
 }
 
 interface SecretRevealModalProps {
-  details: CreateCompetitorAccountResponse | null;
+  details: CreateCompetitorAccountResponse | RotateExternalIdResponse | null;
   onDismiss: () => void;
 }
 
