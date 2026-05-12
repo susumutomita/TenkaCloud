@@ -16,6 +16,21 @@ import { deleteOverride, putOverride, queryOverrides } from "./store.js";
  *      (= 別チームの problemId を指定しても unauthorized 扱い)。
  */
 
+/**
+ * deployment 行から teamId / tenantId を取り出す前段 guard。 cross-tenant PK collision を
+ * 物理的に防ぐため両方の string 非空を要求。 narrow した後の caller は `?? ""` 不要。
+ */
+type AuthorizedDeployment = DeploymentItem & { teamId: string; tenantId: string };
+function isAuthorizedDeployment(d: Partial<DeploymentItem> | undefined): d is AuthorizedDeployment {
+  return (
+    !!d &&
+    typeof d.teamId === "string" &&
+    d.teamId.length > 0 &&
+    typeof d.tenantId === "string" &&
+    d.tenantId.length > 0
+  );
+}
+
 export type ListEndpointsOutcome =
   | { kind: "ok"; endpoints: ResolvedEndpoint[]; teamId: string }
   | { kind: "unauthorized" }
@@ -41,16 +56,7 @@ export async function listProblemEndpoints(
   if (items.length === 0) return { kind: "unauthorized" };
 
   const deployment = items.find((i) => i.problemId === problemId);
-  // tenantId / teamId 両方の存在を要求 (= cross-tenant PK collision の defense-in-depth)。
-  if (
-    !deployment ||
-    typeof deployment.teamId !== "string" ||
-    deployment.teamId.length === 0 ||
-    typeof deployment.tenantId !== "string" ||
-    deployment.tenantId.length === 0
-  ) {
-    return { kind: "unauthorized" };
-  }
+  if (!isAuthorizedDeployment(deployment)) return { kind: "unauthorized" };
 
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
@@ -83,24 +89,15 @@ export type PutOverrideOutcome =
   | { kind: "no_endpoints" }
   | { kind: "misconfigured" };
 
-// SSRF defense-in-depth: write 時に host を拒否する blocklist。
-// Phase 3.B の fetcher (= 別 PR) で DNS-rebinding-safe な resolve-then-connect が要るが、
-// それまでも write 時に明白な metadata / loopback literal を弾いて attack surface を絞る。
-// 競技者が自分の AWS account 内 endpoint を登録する用途では public DNS / private VPC IP は許容、
-// 以下の host literal だけは「競技者所有 endpoint ではあり得ない」 ので拒否。
+// SSRF defense-in-depth blocklist (Phase 3.B fetcher で DNS-rebinding-safe な
+// resolve-then-connect を実装するまでの暫定)。 host は IPv6 bracket を剥がし lowercase
+// 化した bare form に正規化してから lookup する。
 const SSRF_BLOCKED_HOSTS = new Set([
-  // AWS EC2 / EKS / Fargate IMDS
-  "169.254.169.254",
-  "[fd00:ec2::254]",
-  "fd00:ec2::254",
-  // GCE metadata
-  "metadata.google.internal",
+  "169.254.169.254", // AWS / Azure IMDS v4
+  "fd00:ec2::254", // AWS IMDS v6
+  "metadata.google.internal", // GCE metadata
   "metadata",
-  // Azure IMDS
-  "169.254.169.254", // same literal、 set なので dedupe される
-  // loopback
   "127.0.0.1",
-  "[::1]",
   "::1",
   "localhost",
 ]);
@@ -108,9 +105,7 @@ const SSRF_BLOCKED_HOSTS = new Set([
 /**
  * 競技者向け URL validation。`https?://...` のみ許容、 private IP / VPC 内 endpoint は許容
  * (= Battle で参加者が自分の AWS account 内 endpoint を登録するため public/private は問わない)。
- *
- * ただし SSRF 対策として **metadata service / loopback literal は拒否**。 Phase 3.B fetcher で
- * DNS-rebinding-safe な resolve-then-connect を行うまでの defense-in-depth。
+ * SSRF 対策として metadata service / loopback literal は拒否。
  */
 function isValidOverrideUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -119,11 +114,9 @@ function isValidOverrideUrl(value: unknown): value is string {
   try {
     const u = new URL(trimmed);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
-    if (SSRF_BLOCKED_HOSTS.has(host)) return false;
-    // bracketed IPv6 literal も block
-    if (SSRF_BLOCKED_HOSTS.has(`[${host}]`)) return false;
-    return true;
+    // Node の `URL.hostname` は IPv6 で `[::1]` のように bracket を含む。 lookup 前に strip。
+    const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return !SSRF_BLOCKED_HOSTS.has(host);
   } catch {
     return false;
   }
@@ -150,15 +143,7 @@ export async function upsertProblemEndpointOverride(
   const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
   const deployment = items.find((i) => i.problemId === problemId);
-  if (
-    !deployment ||
-    typeof deployment.teamId !== "string" ||
-    deployment.teamId.length === 0 ||
-    typeof deployment.tenantId !== "string" ||
-    deployment.tenantId.length === 0
-  ) {
-    return { kind: "unauthorized" };
-  }
+  if (!isAuthorizedDeployment(deployment)) return { kind: "unauthorized" };
 
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
@@ -218,15 +203,7 @@ export async function deleteProblemEndpointOverride(
   const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
   const deployment = items.find((i) => i.problemId === problemId);
-  if (
-    !deployment ||
-    typeof deployment.teamId !== "string" ||
-    deployment.teamId.length === 0 ||
-    typeof deployment.tenantId !== "string" ||
-    deployment.tenantId.length === 0
-  ) {
-    return { kind: "unauthorized" };
-  }
+  if (!isAuthorizedDeployment(deployment)) return { kind: "unauthorized" };
 
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
