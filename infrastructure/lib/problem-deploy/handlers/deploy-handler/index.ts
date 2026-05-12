@@ -19,9 +19,14 @@ import {
   buildSharedResources,
   startDeployment,
   UnknownProblemError,
+  UnverifiedCompetitorAccountError,
 } from "./deploy.js";
 import { getDeployment, listDeployments } from "./list.js";
-import { defaultCfnClient, getStackProgress } from "./stack-progress.js";
+import {
+  defaultCfnClient,
+  defaultCfnClientForCompetitor,
+  getStackProgress,
+} from "./stack-progress.js";
 import { DeployRequestSchema } from "./types.js";
 
 /**
@@ -110,6 +115,20 @@ app.post("/problems/:problemId/deploy", async (c) => {
     if (err instanceof UnknownProblemError) {
       return c.json({ error: "unknown_problem", problemId }, HTTP_NOT_FOUND);
     }
+    // Phase 2.2 (Issue #459): verified=true 行が無い account への deploy は 422 (semantically
+    // 適切: request 自体は well-formed だが、business invariant が満たされない)。operator は
+    // CompetitorAccounts ページで verify を済ませてから retry する。
+    if (err instanceof UnverifiedCompetitorAccountError) {
+      return c.json(
+        {
+          error: "unverified_competitor_account",
+          awsAccountId: err.awsAccountId,
+          message:
+            "AWS Account ID が CompetitorAccounts table で verified=true 状態でないため deploy できません。",
+        },
+        StatusCodes.UNPROCESSABLE_ENTITY,
+      );
+    }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] startDeployment failed", { problemId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
@@ -183,7 +202,7 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
   try {
     const outcome = await getStackProgress(
       shared,
-      { cfnClient: defaultCfnClient },
+      { cfnClient: defaultCfnClient, cfnClientForCompetitor: defaultCfnClientForCompetitor },
       resolveTenantId(c),
       jobId,
     );

@@ -14,9 +14,12 @@ function buildShared(): {
   const ddbSend = vi.fn();
   const shared: DeploySharedResources = {
     tableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
+    env: "development",
     eventBusName: "test-bus",
     ddb: { send: ddbSend } as unknown as DeploySharedResources["ddb"],
     events: {} as unknown as DeploySharedResources["events"],
+    problemsCatalog: {},
   };
   return { shared, ddbSend };
 }

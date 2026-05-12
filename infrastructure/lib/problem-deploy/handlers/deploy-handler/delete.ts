@@ -1,4 +1,5 @@
 import { GetCommand, UpdateCommand, type UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
+import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
@@ -86,12 +87,27 @@ export async function requestTeardown(
     throw err;
   }
 
+  // Phase 2.2 (Issue #459): delete も cross-account 化。verified=true 行が見つかった
+  // 場合のみ AssumeRole 用 metadata を詰める (= 旧 deployment 行で competitor が未登録の
+  // ケースは undefined のまま — CodeBuild は同 account 経路に倒れる)。
+  const verified = await resolveVerifiedCompetitorAccount(
+    {
+      ddb: shared.ddb,
+      competitorAccountsTableName: shared.competitorAccountsTableName,
+      env: shared.env,
+    },
+    tenantId,
+    awsAccountId,
+  );
+
   const detail: DeployDeleteRequestedDetail = {
     jobId,
     tenantId,
     stackName,
     region,
     awsAccountId,
+    competitorRoleArn: verified?.competitorRoleArn,
+    externalIdParameterName: verified?.externalIdParameterName,
   };
   try {
     await publishProblemEvent({

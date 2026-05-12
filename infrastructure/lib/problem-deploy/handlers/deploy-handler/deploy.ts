@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
+import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
@@ -15,6 +16,12 @@ import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
 
 export interface DeployContext {
   readonly tableName: string;
+  /**
+   * Phase 2.2 (Issue #459): CompetitorAccounts table 名 + SSM SecureString path env 名。
+   * `startDeployment` が verified=true gate と AssumeRole metadata 注入に使う。
+   */
+  readonly competitorAccountsTableName: string;
+  readonly env: string;
   readonly eventBusName: string;
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
@@ -26,7 +33,7 @@ export interface DeployContext {
   readonly tenantId: string;
   /**
    * problemId → problemDir のマップ (例: `{"hello-world": "problems/challenges/hello-world"}`)。
-   * MVP-1 で env (`BATTLE_PROBLEMS_CATALOG` JSON) から injected される hard-coded catalog。
+   * MVP-1 で env (`BATTLE_PROBLEMS_CATALOG` JSON) from inject される hard-coded catalog。
    * Phase 2 (ADR-003) で DDB ベースの問題カタログに置換する。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
@@ -48,6 +55,18 @@ export class UnknownProblemError extends Error {
 }
 
 /**
+ * Phase 2.2 (Issue #459): verified=true 行が CompetitorAccounts table に無い (tenantId,
+ * awsAccountId) 組への deploy を reject するために throw する error。
+ * handler 側で 409 Conflict / 422 Unprocessable に変換する。
+ */
+export class UnverifiedCompetitorAccountError extends Error {
+  constructor(public readonly awsAccountId: string) {
+    super(`competitor account ${awsAccountId} is not verified for this tenant`);
+    this.name = "UnverifiedCompetitorAccountError";
+  }
+}
+
+/**
  * 1 件の deploy job を起動する。
  *
  * DDB Put → EventBridge Publish の順序は失敗セマンティクスが要求する: PutEvents が
@@ -59,6 +78,19 @@ export async function startDeployment(
 ): Promise<DeployResponse> {
   const problemDir = ctx.problemsCatalog[request.problemId];
   if (!problemDir) throw new UnknownProblemError(request.problemId);
+
+  // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
+  // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
+  const verified = await resolveVerifiedCompetitorAccount(
+    {
+      ddb: ctx.ddb,
+      competitorAccountsTableName: ctx.competitorAccountsTableName,
+      env: ctx.env,
+    },
+    ctx.tenantId,
+    request.awsAccountId,
+  );
+  if (!verified) throw new UnverifiedCompetitorAccountError(request.awsAccountId);
 
   const jobId = ulid();
   const teamLoginKey = generateTeamLoginKey();
@@ -108,6 +140,11 @@ export async function startDeployment(
     namePrefix: item.namePrefix,
     region: item.region,
     awsAccountId: item.awsAccountId,
+    // Phase 2.2: AssumeRole 用 metadata。`resolveVerifiedCompetitorAccount` の戻り値から
+    // そのまま詰める。CodeBuild script (deploy-battles.sh wrapper) が SSM ExternalId を
+    // fetch して AssumeRole する。
+    competitorRoleArn: verified.competitorRoleArn,
+    externalIdParameterName: verified.externalIdParameterName,
   };
   await publishProblemEvent({
     client: ctx.events,
@@ -132,6 +169,8 @@ export async function startDeployment(
  */
 export interface DeploySharedResources {
   readonly tableName: string;
+  readonly competitorAccountsTableName: string;
+  readonly env: string;
   readonly eventBusName: string;
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
@@ -141,6 +180,8 @@ export interface DeploySharedResources {
 export function buildSharedResources(): DeploySharedResources {
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
+    env: getEnv("DEPLOY_ENVIRONMENT"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),

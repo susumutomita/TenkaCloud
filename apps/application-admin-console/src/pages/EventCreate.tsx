@@ -7,13 +7,18 @@ import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
+import Link from "@cloudscape-design/components/link";
 import Multiselect, { type MultiselectProps } from "@cloudscape-design/components/multiselect";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { useApiClient } from "../api/client";
+import { type ApiClient, useApiClient } from "../api/client";
+import {
+  type CompetitorAccountSummary,
+  listCompetitorAccounts,
+} from "../api/competitor-accounts-client";
 import { createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
@@ -24,7 +29,6 @@ const NAME_MAX = 120;
 // drift すると frontend が通した値を backend が reject する。
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 const ACCOUNT_ID_RE = /^\d{12}$/;
-const ACCOUNT_ID_MAX_LEN = 12;
 const TEAMS_MIN = 1;
 const TEAMS_MAX = 99;
 const TEAM_COUNT_INPUT_MAX_LEN = 3; // TEAMS_MAX が 99 = 2 桁、+1 余裕で 3 桁まで入力受理
@@ -71,6 +75,40 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const problemOptions: MultiselectProps.Option[] = useMemo(
     () => allProblems.map((p) => ({ value: p.id, label: `${p.name} (${p.id})` })),
     [allProblems],
+  );
+
+  // Phase 2.2 (Issue #459): verified=true な CompetitorAccounts のみを Select の選択肢にする。
+  // 自由入力の Input は廃止 (= operator が verified 済 account しか選べない fail-closed UX)。
+  const [competitorAccounts, setCompetitorAccounts] = useState<
+    readonly CompetitorAccountSummary[] | null
+  >(null);
+  const [accountsLoadError, setAccountsLoadError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!apiClient) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listCompetitorAccounts(apiClient as ApiClient);
+        if (!cancelled) setCompetitorAccounts(res.items);
+      } catch (err) {
+        if (!cancelled) setAccountsLoadError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiClient]);
+  const verifiedAccounts = useMemo(
+    () => (competitorAccounts ?? []).filter((a) => a.verified === true),
+    [competitorAccounts],
+  );
+  const accountOptions: SelectProps.Option[] = useMemo(
+    () =>
+      verifiedAccounts.map((a) => ({
+        value: a.awsAccountId,
+        label: a.alias ? `${a.alias} (${a.awsAccountId})` : a.awsAccountId,
+      })),
+    [verifiedAccounts],
   );
 
   const [name, setName] = useState("");
@@ -239,12 +277,33 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
           {/* #528: Teams section — 各 team の internalSlug + AWS Account ID を per-team で入力。
            *   旧 UX は problem 単位で 1 account 共有だったが、real competition では各 team が
-           *   自社 account を持つため per-team 入力にする。 */}
+           *   自社 account を持つため per-team 入力にする。
+           *   Phase 2.2 (Issue #459): account は verified=true な CompetitorAccounts のみ選択
+           *   できる drop-down。0 件のときは Competitor Accounts ページへの導線を出す。 */}
+          {accountsLoadError && (
+            <Alert type="error" header="Competitor Accounts の取得に失敗しました">
+              {accountsLoadError}
+            </Alert>
+          )}
+          {competitorAccounts !== null && verifiedAccounts.length === 0 && !accountsLoadError && (
+            <Alert
+              type="warning"
+              header="verified=true な Competitor Account がありません"
+              action={
+                <Link href="#/competitor-accounts" external={false}>
+                  Competitor Accounts へ移動
+                </Link>
+              }
+            >
+              Event 作成前に Competitor Accounts ページで AWS Account を追加 → STS Verify を実行
+              してください。verified=true でない account には deploy できません。
+            </Alert>
+          )}
           <Container
             header={
               <Header
                 variant="h2"
-                description="各 team の deploy 先 AWS Account ID を入力します (12 桁数字)。internalSlug は CFn StackName 由来になり deploy 後 immutable。"
+                description="各 team の deploy 先 AWS Account を選択します (verified=true 行のみ)。internalSlug は CFn StackName 由来になり deploy 後 immutable。"
               >
                 Teams ({teamRows.length})
               </Header>
@@ -275,22 +334,30 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                   },
                   {
                     id: "account",
-                    header: "AWS Account ID",
-                    cell: (t) => (
-                      <Input
-                        value={t.awsAccountId}
-                        placeholder="123456789012"
-                        inputMode="numeric"
-                        invalid={t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)}
-                        onChange={({ detail }) =>
-                          updateTeamRow(t.idx, {
-                            awsAccountId: detail.value
-                              .replace(/\D/g, "")
-                              .slice(0, ACCOUNT_ID_MAX_LEN),
-                          })
-                        }
-                      />
-                    ),
+                    header: "AWS Account ID (verified)",
+                    cell: (t) => {
+                      const selected =
+                        accountOptions.find((o) => o.value === t.awsAccountId) ?? null;
+                      return (
+                        <Select
+                          selectedOption={selected}
+                          options={accountOptions}
+                          placeholder={
+                            accountOptions.length === 0
+                              ? "verified account 未登録"
+                              : "verified account を選択"
+                          }
+                          disabled={accountOptions.length === 0}
+                          empty="verified=true な競技者 account がありません"
+                          onChange={({ detail }) =>
+                            updateTeamRow(t.idx, {
+                              awsAccountId: detail.selectedOption?.value ?? "",
+                            })
+                          }
+                          invalid={t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)}
+                        />
+                      );
+                    },
                   },
                 ]}
               />

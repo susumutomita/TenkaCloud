@@ -38,6 +38,19 @@ export const DeployCreateRequestedDetailSchema = z.object({
   namePrefix: z.string().regex(/^tc-[a-z0-9]+(?:-[a-z0-9]+)+$/),
   region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
   awsAccountId: z.string().regex(/^\d{12}$/),
+  /**
+   * Phase 2.2 (Issue #459): cross-account deploy 用の AssumeRole 対象 RoleArn
+   * (= `arn:aws:iam::<awsAccountId>:role/<competitorRoleName>`)。CodeBuild が
+   * `aws sts assume-role` を実行するときに使う。verified=true な行が CompetitorAccounts
+   * DDB にあるときのみ詰める。同 account deploy (= dev fallback) では undefined。
+   */
+  competitorRoleArn: z.string().optional(),
+  /**
+   * Phase 2.2: SSM SecureString path (`/<env>/tenants/<tenantId>/external-id`)。
+   * CodeBuild が `aws ssm get-parameter --with-decryption` で ExternalId を取り、
+   * AssumeRole の `--external-id` に渡す。`competitorRoleArn` と同時にのみ詰める。
+   */
+  externalIdParameterName: z.string().optional(),
 });
 export type DeployCreateRequestedDetail = z.infer<typeof DeployCreateRequestedDetailSchema>;
 
@@ -56,6 +69,10 @@ export const DeployDeleteRequestedDetailSchema = z.object({
   stackName: z.string().min(1),
   region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
   awsAccountId: z.string().regex(/^\d{12}$/),
+  /** Phase 2.2: AssumeRole 対象 RoleArn (delete 経路。`DeployCreateRequestedDetail` と同じ役割)。 */
+  competitorRoleArn: z.string().optional(),
+  /** Phase 2.2: SSM SecureString path (delete 経路)。 */
+  externalIdParameterName: z.string().optional(),
 });
 export type DeployDeleteRequestedDetail = z.infer<typeof DeployDeleteRequestedDetailSchema>;
 

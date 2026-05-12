@@ -8,16 +8,29 @@ const mocks = vi.hoisted(() => ({
   getStackProgress: vi.fn(),
 }));
 
-vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", () => ({
-  buildSharedResources: () => ({
-    tableName: "TestDeployments",
-    eventBusName: "test-bus",
-    ddb: { send: vi.fn() },
-    events: { send: vi.fn() },
-  }),
-  buildContext: (shared: unknown, tenantId: string) => ({ ...(shared as object), tenantId }),
-  startDeployment: mocks.startDeployment,
-}));
+// `UnknownProblemError` / `UnverifiedCompetitorAccountError` は handler の instanceof 判定
+// で使われるため、本物の class 実装を mock の factory 内で `importActual` して露出する (=
+// class identity が production と一致する)。`vi.mock` は hoisted されるので body 内で
+// `importActual` を呼ぶ async factory にする。
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../lib/problem-deploy/handlers/deploy-handler/deploy")
+  >("../../lib/problem-deploy/handlers/deploy-handler/deploy");
+  return {
+    buildSharedResources: () => ({
+      tableName: "TestDeployments",
+      competitorAccountsTableName: "TestCompetitorAccounts",
+      env: "development",
+      eventBusName: "test-bus",
+      ddb: { send: vi.fn() },
+      events: { send: vi.fn() },
+    }),
+    buildContext: (shared: unknown, tenantId: string) => ({ ...(shared as object), tenantId }),
+    startDeployment: mocks.startDeployment,
+    UnknownProblemError: actual.UnknownProblemError,
+    UnverifiedCompetitorAccountError: actual.UnverifiedCompetitorAccountError,
+  };
+});
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/list", () => ({
   listDeployments: mocks.listDeployments,
@@ -31,11 +44,44 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/delete", () => ({
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/stack-progress", () => ({
   getStackProgress: mocks.getStackProgress,
   defaultCfnClient: vi.fn(),
+  // Phase 2.2 (Issue #459): index.ts が `defaultCfnClientForCompetitor` も import するため、
+  // mock 経由でも露出する。test では実 STS / SSM を呼ばないよう dummy で返す。
+  defaultCfnClientForCompetitor: vi.fn(),
 }));
 
+// `app` import を mock 設定後に行う必要がある (= hoisted vi.mock の後)。
 const { app } = await import("../../lib/problem-deploy/handlers/deploy-handler/index");
+// real deploy module を test 側からも touch して error class を共有する。
+const { UnverifiedCompetitorAccountError } = await import(
+  "../../lib/problem-deploy/handlers/deploy-handler/deploy"
+);
 
 const ULID = "01H8XGJWBWBAQ4N6RZHM4S2KMV";
+
+const VALID_DEPLOY_BODY = {
+  region: "ap-northeast-1",
+  awsAccountId: "123456789012",
+  teamName: "Alpha Team",
+};
+
+describe("POST /problems/:problemId/deploy", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("Phase 2.2: UnverifiedCompetitorAccountError は 422 + awsAccountId を返すべき", async () => {
+    mocks.startDeployment.mockRejectedValueOnce(
+      new UnverifiedCompetitorAccountError("123456789012"),
+    );
+    const res = await app.request("/problems/security-battle-royale/deploy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(VALID_DEPLOY_BODY),
+    });
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe("unverified_competitor_account");
+    expect(body.awsAccountId).toBe("123456789012");
+  });
+});
 
 describe("GET /problems/:problemId/deployments", () => {
   beforeEach(() => vi.clearAllMocks());

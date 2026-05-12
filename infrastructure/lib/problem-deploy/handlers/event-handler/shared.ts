@@ -13,12 +13,18 @@ import { parseProblemsCatalog } from "../shared/catalog.js";
  * への書き込み + EventBridge publish (DeployCreateRequested / DeployDeleteRequested)
  * が必要になったため拡張する。problemsCatalog は bulk deploy 時に problemId → problemDir
  * を解決するため env (BATTLE_PROBLEMS_CATALOG) から JSON parse する。
+ *
+ * Issue #459 / ADR-002 Phase 2.2: bulk-deploy が verified=true 行のみを許可する
+ * gate を持つため、`CompetitorAccounts` table 名と SSM SecureString path 構築用の
+ * `env` を share する。
  */
 export interface EventSharedResources {
   readonly eventsTableName: string;
   readonly teamsTableName: string;
   readonly deploymentsTableName: string;
+  readonly competitorAccountsTableName: string;
   readonly eventBusName: string;
+  readonly env: string;
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
@@ -29,7 +35,9 @@ export function buildEventSharedResources(): EventSharedResources {
     eventsTableName: getEnv("EVENTS_TABLE_NAME"),
     teamsTableName: getEnv("TEAMS_TABLE_NAME"),
     deploymentsTableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
+    env: getEnv("DEPLOY_ENVIRONMENT"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),

@@ -10,6 +10,10 @@ import { ulid } from "ulid";
 import { buildStackPrefix, slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
+  resolveVerifiedCompetitorAccount,
+  type VerifiedCompetitorAccount,
+} from "../shared/competitor-account-lookup.js";
+import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
@@ -26,6 +30,14 @@ export interface BulkDeployResult {
   readonly enqueued: number;
   /** 既存 deployment 行と問題 ID 衝突で skip された組み合わせ数 (再 deploy 防止)。 */
   readonly skipped: number;
+  /**
+   * Phase 2.2 (Issue #459): verified=false / 未登録の awsAccountId のため reject された
+   * team 数。`unverifiedAccounts` には実 awsAccountId を入れて operator が補正できるよう
+   * 通知する。
+   */
+  readonly unverified?: number;
+  /** Phase 2.2: 上記の補足情報。重複は除く (Set 化)。 */
+  readonly unverifiedAccounts?: readonly string[];
 }
 
 export type BulkDeployOutcome = { kind: "ok"; result: BulkDeployResult } | { kind: "not_found" };
@@ -135,6 +147,33 @@ export async function bulkDeployEvent(
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
   }
 
+  // Phase 2.2 (Issue #459): bulk-deploy 前に CompetitorAccounts table で verified=true 行が
+  // ある (tenantId, awsAccountId) のみ許可する。verified=false / 未登録の team は plan から
+  // 落ちる (= unverified にカウント、`unverifiedAccounts` で operator に通知)。
+  //
+  // teams × problems の plan ループに入る前に 1 度だけ解決して in-memory map 化する。
+  // problem.defaultAwsAccountId fallback 経路も同じ map で評価できるよう、unique な
+  // awsAccountId set を作って一度に解決する。
+  const candidateAccountIds = new Set<string>();
+  for (const t of teams) if (t.awsAccountId) candidateAccountIds.add(t.awsAccountId);
+  for (const p of problems)
+    if (p.defaultAwsAccountId) candidateAccountIds.add(p.defaultAwsAccountId);
+  const verifiedByAccount = new Map<string, VerifiedCompetitorAccount>();
+  await Promise.all(
+    Array.from(candidateAccountIds).map(async (aId) => {
+      const v = await resolveVerifiedCompetitorAccount(
+        {
+          ddb: shared.ddb,
+          competitorAccountsTableName: shared.competitorAccountsTableName,
+          env: shared.env,
+        },
+        tenantId,
+        aId,
+      );
+      if (v) verifiedByAccount.set(aId, v);
+    }),
+  );
+
   const createdAt = new Date(nowMs).toISOString();
   const expiresAt = toEpochSeconds(nowMs + DEFAULT_TTL_MS);
   // Event.startsAt が未設定 = 競技開始時刻が決まっていないので採点開始しない gate に倒す。
@@ -157,6 +196,7 @@ export async function bulkDeployEvent(
   }
   const plan: PlanEntry[] = [];
   let skipped = 0;
+  const unverifiedAccounts = new Set<string>();
   for (const team of teams) {
     const teamAwsAccountId = team.awsAccountId;
     for (const problem of problems) {
@@ -179,6 +219,13 @@ export async function bulkDeployEvent(
       const awsAccountId = teamAwsAccountId ?? problem.defaultAwsAccountId;
       if (!awsAccountId) {
         skipped++;
+        continue;
+      }
+      // Phase 2.2 (Issue #459): verified=true な行が無い account は reject。
+      // plan に乗せない (= worker が走らない) ため fail-closed。
+      const verified = verifiedByAccount.get(awsAccountId);
+      if (!verified) {
+        unverifiedAccounts.add(awsAccountId);
         continue;
       }
       const jobId = ulid();
@@ -217,6 +264,10 @@ export async function bulkDeployEvent(
         namePrefix,
         region: problem.defaultRegion,
         awsAccountId,
+        // Phase 2.2: cross-account 経路で CodeBuild が AssumeRole に使う metadata。
+        // verified=true 行が解決できたときのみ詰める (= 未指定なら same-account fallback)。
+        competitorRoleArn: verified.competitorRoleArn,
+        externalIdParameterName: verified.externalIdParameterName,
       };
       const entry: PutEventsRequestEntry = {
         EventBusName: shared.eventBusName,
@@ -234,7 +285,10 @@ export async function bulkDeployEvent(
   }
 
   if (plan.length === 0) {
-    return { kind: "ok", result: { eventId, enqueued: 0, skipped } };
+    return {
+      kind: "ok",
+      result: buildResult({ eventId, enqueued: 0, skipped, unverifiedAccounts }),
+    };
   }
 
   // DDB TransactWrite は 1 call 25 items まで (Put + Delete を合算)。retryFailedOnly では
@@ -314,5 +368,32 @@ export async function bulkDeployEvent(
     });
   await Promise.all([...putChunks, updateStatus]);
 
-  return { kind: "ok", result: { eventId, enqueued: items.length, skipped } };
+  return {
+    kind: "ok",
+    result: buildResult({ eventId, enqueued: items.length, skipped, unverifiedAccounts }),
+  };
+}
+
+/**
+ * Phase 2.2 (Issue #459): result builder。`unverifiedAccounts` が空のときは
+ * `unverified` / `unverifiedAccounts` フィールド自体を出さない (= 既存 client が
+ * 後方互換)。あるときは sorted array で安定出力する (= operator UI 表示用)。
+ */
+function buildResult(args: {
+  readonly eventId: string;
+  readonly enqueued: number;
+  readonly skipped: number;
+  readonly unverifiedAccounts: Set<string>;
+}): BulkDeployResult {
+  const base: BulkDeployResult = {
+    eventId: args.eventId,
+    enqueued: args.enqueued,
+    skipped: args.skipped,
+  };
+  if (args.unverifiedAccounts.size === 0) return base;
+  return {
+    ...base,
+    unverified: args.unverifiedAccounts.size,
+    unverifiedAccounts: Array.from(args.unverifiedAccounts).sort(),
+  };
 }

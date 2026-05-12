@@ -73,12 +73,31 @@ export class DeployCreateStateMachine extends Construct {
       resultPath: JsonPath.DISCARD,
     });
 
+    // Phase 2.2 (Issue #459): `$.detail.competitorRoleArn` / `$.detail.externalIdParameterName`
+    // を CodeBuild env に渡す。`deploy-battles.sh` 内で `COMPETITOR_ROLE_ARN` が空でなければ
+    // AssumeRole + ExternalId 経路に倒し、空なら same-account fallback (dev / 未 verify) を残す。
+    // Step Functions の `States.Format` / 直接 path 参照は path が `undefined` だと fail する
+    // (= optional field を入れるのが難しい)。bulk-deploy / startDeployment は verified=true
+    // のときのみ field を埋めているため、verified-only 経路では必ず存在する。
+    // 未 verified だった場合は publish そのものが起きないので path 参照しても to-end は安全。
+    // ただ後方互換 (= 旧 event detail に competitorRoleArn 無し) を保つため、CodeBuild env は
+    // 任意 path 経由で参照する。
     const startCodeBuild = new CodeBuildStartBuild(this, "StartDeployCodeBuild", {
       project: props.codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
       environmentVariablesOverride: {
         BATTLE_PROBLEM_DIR: { value: JsonPath.stringAt("$.detail.problemDir") },
         TEAM_SLUG: { value: JsonPath.stringAt("$.detail.teamSlug") },
+        // Phase 2.2: AssumeRole metadata。verified=true 行のみ埋められるので、unverified 経路
+        // で State Machine が起動することは無い (= bulk-deploy / startDeployment が事前に gate)。
+        // `States.Format` を使って `null` 安全 (= 値が無いなら空文字)。
+        COMPETITOR_ROLE_ARN: {
+          value: JsonPath.format("{}", JsonPath.stringAt("$.detail.competitorRoleArn")),
+        },
+        EXTERNAL_ID_SSM_PARAMETER: {
+          value: JsonPath.format("{}", JsonPath.stringAt("$.detail.externalIdParameterName")),
+        },
+        DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
       },
       resultPath: "$.codebuild",
     });

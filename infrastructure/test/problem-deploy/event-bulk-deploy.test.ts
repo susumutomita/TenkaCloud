@@ -11,19 +11,65 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
 
 const NOW_MS = 1_700_000_000_000;
 
-function buildShared(over: Partial<EventSharedResources> = {}): {
+/**
+ * Phase 2.2 (Issue #459): bulk-deploy が CompetitorAccounts table を引いて verified=true
+ * のみ許可するようになった。test helper 側で「verified account の集合」を default で
+ * 「全 awsAccountId を許可」に倒し、unverified を試す test だけ override する形にする。
+ *
+ * 既存 test の `mockResolvedValueOnce` で順次 Event Get / Teams Query / 既存 deployments
+ * Query / TransactWrite / UpdateCommand を返す順序は保てない (CompetitorAccounts Get が
+ * Promise.all で並列に挟まる)。helper で `mockImplementation` を 1 度だけ仕掛け、
+ * Command 種別 + TableName で振り分ける形に切り替える。
+ */
+const VERIFIED_ALL = Symbol("verified-all");
+type VerifiedSet = Set<string> | typeof VERIFIED_ALL;
+
+function buildShared(
+  over: Partial<EventSharedResources> = {},
+  verifiedAccounts: VerifiedSet = VERIFIED_ALL,
+): {
   shared: EventSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
   eventsSend: ReturnType<typeof vi.fn>;
+  setVerifiedAccounts: (next: VerifiedSet) => void;
 } {
   const ddbSend = vi.fn();
   const eventsSend = vi.fn();
+  let verified = verifiedAccounts;
+  // CompetitorAccounts Get を `mockResolvedValueOnce` queue とは別経路で処理する。
+  // ddbSend の queue が空 or 一致しない場合は CompetitorAccounts 用の verified record を返す。
+  const originalSend = ddbSend;
+  const wrappedSend = vi.fn(async (cmd: unknown) => {
+    if (cmd instanceof GetCommand) {
+      const tn = (cmd as GetCommand).input.TableName;
+      if (tn === "TestCompetitorAccounts") {
+        const key = (cmd as GetCommand).input.Key ?? {};
+        const sk = String(key.SK ?? "");
+        const awsAccountId = sk.replace(/^ACCOUNT#/, "");
+        const isVerified = verified === VERIFIED_ALL || verified.has(awsAccountId);
+        if (!isVerified) return { Item: undefined };
+        return {
+          Item: {
+            PK: key.PK,
+            SK: key.SK,
+            awsAccountId,
+            region: "ap-northeast-1",
+            competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+            verified: true,
+          },
+        };
+      }
+    }
+    return originalSend(cmd);
+  });
   const shared: EventSharedResources = {
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
     eventBusName: "test-bus",
-    ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
+    env: "development",
+    ddb: { send: wrappedSend } as unknown as EventSharedResources["ddb"],
     events: { send: eventsSend } as unknown as EventSharedResources["events"],
     problemsCatalog: {
       "hello-world": "problems/challenges/hello-world",
@@ -31,7 +77,14 @@ function buildShared(over: Partial<EventSharedResources> = {}): {
     },
     ...over,
   };
-  return { shared, ddbSend, eventsSend };
+  return {
+    shared,
+    ddbSend,
+    eventsSend,
+    setVerifiedAccounts: (next) => {
+      verified = next;
+    },
+  };
 }
 
 const sampleEvent = (over: Record<string, unknown> = {}) => ({
@@ -514,5 +567,77 @@ describe("bulkDeployEvent", () => {
     expect(put?.Put?.Item?.teamId).toBe("T1");
     const del = items.find((it) => it.Delete);
     expect(del?.Delete?.Key?.PK).toBe("DEPLOYMENT#F1");
+  });
+
+  // Phase 2.2 (Issue #459) Worker cross-account 化:
+  // CompetitorAccounts table で verified=true 行が無い awsAccountId は reject されるべき
+  it("verified=false / 未登録の awsAccountId は plan から落ちて unverified に計上するべき", async () => {
+    const { shared, ddbSend, eventsSend, setVerifiedAccounts } = buildShared();
+    // T1 (111111111111) のみ verified、T2 (222222222222) は未登録
+    setVerifiedAccounts(new Set(["111111111111"]));
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // T1, T2
+    ddbSend.mockResolvedValueOnce({ Items: [] }); // 既存 deployments 空
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    // T1×2 problems = 2 enqueue、T2×2 problems = 2 reject、unverified set は {222...}
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(2);
+    expect(out.result.unverified).toBe(1);
+    expect(out.result.unverifiedAccounts).toEqual(["222222222222"]);
+
+    // sampleEvent の problem.defaultAwsAccountId (= 999999999999) もあるが、team.awsAccountId
+    // が両 team とも埋まっているので fallback は使われない → 999... は plan に来ない。
+    const transactCmd = ddbSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is TransactWriteCommand => c instanceof TransactWriteCommand);
+    const items = transactCmd?.input.TransactItems ?? [];
+    for (const it of items) {
+      expect(it.Put?.Item?.awsAccountId).toBe("111111111111");
+    }
+  });
+
+  // Phase 2.2: 全 team が unverified なら write も publish もしない (fail-closed)
+  it("全 team が unverified なら write / publish せず enqueued=0 で返すべき", async () => {
+    const { shared, ddbSend, eventsSend, setVerifiedAccounts } = buildShared();
+    setVerifiedAccounts(new Set()); // verified なし
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(0);
+    expect(out.result.unverified).toBe(2);
+    expect(out.result.unverifiedAccounts).toEqual(["111111111111", "222222222222"]);
+    expect(ddbSend.mock.calls.filter((c) => c[0] instanceof TransactWriteCommand)).toHaveLength(0);
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  // Phase 2.2: DeployCreateRequested の detail に competitorRoleArn / externalIdParameterName を埋めるべき
+  it("DeployCreateRequested detail に AssumeRole 用の competitorRoleArn と externalIdParameterName を含めるべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) }); // T1 only
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    const putCmd = eventsSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is PutEventsCommand => c instanceof PutEventsCommand);
+    const detailRaw = putCmd?.input.Entries?.[0]?.Detail;
+    expect(detailRaw).toBeDefined();
+    const detail = JSON.parse(String(detailRaw ?? "{}"));
+    // T1 awsAccountId は 111111111111、SSM path は `/development/tenants/tenant-acme/external-id`
+    expect(detail.competitorRoleArn).toBe(
+      "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
+    );
+    expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
 });

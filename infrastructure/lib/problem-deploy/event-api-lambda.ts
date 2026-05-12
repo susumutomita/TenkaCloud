@@ -15,6 +15,11 @@ export interface EventApiLambdaProps {
    */
   readonly deploymentsTable: Table;
   /**
+   * Phase 2.2 (Issue #459): Bulk Deploy が deploy 前に verified=true 行のみ許可する
+   * gate のため、CompetitorAccounts table を Read する。
+   */
+  readonly competitorAccountsTable: Table;
+  /**
    * Phase 2a で `DeployCreateRequested` / `DeployDeleteRequested` を fan-out publish
    * するため、ControlPlane の共通 EventBus への PutEvents 権限を grant する。
    */
@@ -29,6 +34,12 @@ export interface EventApiLambdaProps {
    * Cognito JWT 結線後は JWT claim から取る。
    */
   readonly defaultTenantId?: string;
+  /**
+   * SSM SecureString path 構築用の env 名 (Phase 2.2)。Bulk Deploy が DeployCreate-
+   * Requested detail に詰める `externalIdParameterName` のために必要 (= CompetitorAccountsApi
+   * Lambda と同じ env 名)。
+   */
+  readonly environmentName: string;
 }
 
 /**
@@ -61,6 +72,10 @@ export class EventApiLambda extends Construct {
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         TEAMS_TABLE_NAME: props.teamsTable.tableName,
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Phase 2.2 (Issue #459): bulk-deploy が CompetitorAccounts table を引いて verified-only
+        // gate を実現するため、table 名と SSM path 構築用 env 名を Lambda 環境に注入する。
+        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        DEPLOY_ENVIRONMENT: props.environmentName,
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         DEFAULT_TENANT_ID: props.defaultTenantId ?? "unknown-tenant",
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
@@ -79,6 +94,10 @@ export class EventApiLambda extends Construct {
     props.eventsTable.grantReadWriteData(this.fn);
     props.teamsTable.grantReadWriteData(this.fn);
     props.deploymentsTable.grantReadWriteData(this.fn);
+    // Phase 2.2 (Issue #459): CompetitorAccounts は read-only (verified gate のみ)。
+    // verify / Put / Delete は CompetitorAccountsApiLambda 側で行うので、本 Lambda には
+    // RW を付与しない (= 最小権限)。
+    props.competitorAccountsTable.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
   }
 }
