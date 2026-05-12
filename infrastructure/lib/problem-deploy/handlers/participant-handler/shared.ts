@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
@@ -18,17 +19,32 @@ export interface ParticipantSharedResources {
    * Query する。CDK 側で IAM `dynamodb:Query` を Events table にも付与する。
    */
   readonly eventsTableName: string;
+  /**
+   * ADR-012 Phase 3.A: Endpoint registry table 名 (= ProblemEndpoints)。
+   * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
+   * 未配線時 (= 古い deploy / Phase 3.A 適用前) は空文字、route 側で 503 ガード。
+   */
+  readonly endpointsTableName: string;
   readonly ddb: DynamoDBDocumentClient;
   /** `{ [problemId]: ProblemScoringMetadata }`。submit-flag が採点に使う。 */
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
+  /**
+   * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }`。endpoint registry
+   * route が default URL 算出に使う。`endpoints[]` 宣言の無い problem は key ごと不在。
+   */
+  readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
 }
 
 export function buildParticipantSharedResources(): ParticipantSharedResources {
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     eventsTableName: getEnv("EVENTS_TABLE_NAME"),
+    // 未配線時 (= legacy stack) でも import が落ちないよう env 必須にしない (= 空文字)。
+    // route 側で空チェックして 503 を返す経路にする。
+    endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
+    problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
   };
 }
 

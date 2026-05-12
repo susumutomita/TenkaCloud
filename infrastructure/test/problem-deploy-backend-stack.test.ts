@@ -16,6 +16,7 @@ function synthDefault(): Template {
       "hello-world": "problems/challenges/hello-world",
     },
     problemsScoring: {},
+    problemsEndpoints: {},
     environmentName: "development",
   });
   return Template.fromStack(stack);
@@ -25,10 +26,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
   describe("Deployments DDB table", () => {
-    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts の 4 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
-      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts。
-      // 4 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 4);
+    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts / ProblemEndpoints の 5 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
+      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts、
+      // ADR-012 Phase 3.A で ProblemEndpoints。
+      // 5 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 5);
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
@@ -135,6 +137,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         sourceObjectKey: "source.zip",
         problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
         problemsScoring: {},
+        problemsEndpoints: {},
         deployConcurrentBuildLimit: 200,
         environmentName: "development",
       });
@@ -207,6 +210,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(Object.keys(outputs)).toEqual(
         expect.arrayContaining(["DeploymentsTableName", "DeployCreateStateMachineArn"]),
       );
+    });
+
+    it("ADR-012 Phase 3.A: ProblemEndpointsTableName を Output として持つべき", () => {
+      const outputs = tpl.findOutputs("*");
+      expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["ProblemEndpointsTableName"]));
     });
   });
 
@@ -353,10 +361,16 @@ function synthParticipantPortalLambdaOnly(): Template {
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
     sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
   });
+  const endpoints = new cdk.aws_dynamodb.Table(stack, "ProblemEndpoints", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
   new ParticipantPortalLambda(stack, "ParticipantPortal", {
     deploymentsTable: deployments,
     eventsTable: events,
+    endpointsTable: endpoints,
     problemsScoring: {},
+    problemsEndpoints: {},
     consoleViewerRoleArn: "arn:aws:iam::123456789012:role/console-viewer",
   });
   return Template.fromStack(stack);
@@ -396,6 +410,45 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
               Statement: Match.arrayWith([
                 Match.objectLike({
                   Action: "dynamodb:Query",
+                  Effect: "Allow",
+                }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("ADR-012 Phase 3.A: environment に PROBLEM_ENDPOINTS_TABLE_NAME + PROBLEM_ENDPOINTS を持つべき", () => {
+    tpl.hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({
+            PROBLEM_ENDPOINTS_TABLE_NAME: Match.anyValue(),
+            PROBLEM_ENDPOINTS: Match.anyValue(),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("ADR-012 Phase 3.A: IAM Role に Endpoints table の Query / PutItem / DeleteItem 権限を付与するべき", () => {
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "EndpointsRW",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({
+                  Action: Match.arrayWith([
+                    "dynamodb:Query",
+                    "dynamodb:PutItem",
+                    "dynamodb:DeleteItem",
+                  ]),
                   Effect: "Allow",
                 }),
               ]),

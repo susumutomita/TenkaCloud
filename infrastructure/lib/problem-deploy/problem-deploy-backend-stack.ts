@@ -24,6 +24,7 @@ import {
   type ParticipantPortalRuntimeConfig,
 } from "./participant-portal-hosting";
 import { ParticipantPortalLambda } from "./participant-portal-lambda";
+import { ProblemEndpointsTable } from "./problem-endpoints-table";
 import { TeamsTable } from "./teams-table";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
@@ -53,6 +54,13 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * このキーが無い (= 採点無効)。
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
+  /**
+   * ADR-012 Phase 3.A: `problemId → endpoints[]` の map。`discoverProblemsEndpoints`
+   * で metadata.json から自動収集して synth 時に注入する。Participant Portal の
+   * `/portal/me/problems/:problemId/endpoints` route が default URL を CFn output から
+   * 算出するために参照する。`endpoints[]` を持たない問題はこのキーが無い。
+   */
+  readonly problemsEndpoints: Readonly<Record<string, unknown>>;
   /**
    * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
    * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
@@ -131,6 +139,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
     const events = new EventsTable(this, "Events");
     const teams = new TeamsTable(this, "Teams");
+    // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
+    // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
+    const endpoints = new ProblemEndpointsTable(this, "ProblemEndpoints");
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
     this.deploymentsTable = deployments.table;
     this.eventsTable = events.table;
@@ -237,7 +248,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
         deploymentsTable: deployments.table,
         eventsTable: events.table,
+        endpointsTable: endpoints.table,
         problemsScoring: props.problemsScoring,
+        problemsEndpoints: props.problemsEndpoints,
         consoleViewerRoleArn: consoleViewerRole.role.roleArn,
       });
       // Lambda role に AssumeRole 権限を付与 (= federation flow の前提)。
@@ -284,6 +297,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: stateMachine.stateMachine.stateMachineArn,
       description: "Deploy 起動を司る Step Functions State Machine の ARN。",
+    });
+    new CfnOutput(this, "ProblemEndpointsTableName", {
+      value: endpoints.table.tableName,
+      description:
+        "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     });
   }
 }

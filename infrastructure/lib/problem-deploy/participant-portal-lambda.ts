@@ -26,11 +26,22 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly eventsTable: ITable;
   /**
+   * ADR-012 Phase 3.A: Endpoint registry テーブル。
+   * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
+   */
+  readonly endpointsTable: ITable;
+  /**
    * `{ [problemId]: { kind, flagOutputKey, points, ... } }` 形の scoring 設定。
    * `discoverProblemsScoring` で metadata.json から自動収集して synth 時に注入する。
    * 競技者が submit-flag したとき、この map を参照して採点する。
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
+  /**
+   * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }` 形の endpoint 宣言。
+   * `discoverProblemsEndpoints` で metadata.json から自動収集して synth 時に注入する。
+   * GET /endpoints が default URL を CFn output から read-through 算出するため参照。
+   */
+  readonly problemsEndpoints: Readonly<Record<string, unknown>>;
   /**
    * `ConsoleViewerRole` の ARN。AWS Console federation login URL 発行のため
    * Lambda が `sts:AssumeRole` する。caller side で IAM grant も付与する。
@@ -84,6 +95,21 @@ export class ParticipantPortalLambda extends Construct {
             }),
           ],
         }),
+        // ADR-012 Phase 3.A: Endpoint registry の override 行 R/W。
+        // PutItem / DeleteItem / Query で 1 (tenant, team, problem, slot) を扱う。
+        EndpointsRW: new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              actions: [
+                "dynamodb:Query",
+                "dynamodb:PutItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:GetItem",
+              ],
+              resources: [props.endpointsTable.tableArn],
+            }),
+          ],
+        }),
       },
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
@@ -101,7 +127,9 @@ export class ParticipantPortalLambda extends Construct {
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
+        PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
         BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
+        PROBLEM_ENDPOINTS: JSON.stringify(props.problemsEndpoints),
         CONSOLE_VIEWER_ROLE_ARN: props.consoleViewerRoleArn,
         NODE_OPTIONS: "--enable-source-maps",
       },
@@ -117,7 +145,8 @@ export class ParticipantPortalLambda extends Construct {
       authType: FunctionUrlAuthType.NONE,
       cors: {
         allowedOrigins: ["*"],
-        allowedMethods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.POST],
+        // ADR-012 Phase 3.A: DELETE は endpoint override 解除 (= default に戻す) で必要。
+        allowedMethods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.POST, HttpMethod.DELETE],
         allowedHeaders: ["content-type", "authorization"],
         maxAge: Duration.minutes(10),
       },
