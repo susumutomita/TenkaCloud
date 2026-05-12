@@ -5,7 +5,8 @@
   "private": true,
   "workspaces": [
     "infrastructure",
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "build": "bun run --filter @TenkaCloud/infrastructure build && bun run --filter @TenkaCloud/admin-console build && bun run --filter @TenkaCloud/application-admin-console build && bun run --filter @TenkaCloud/participant-portal build",

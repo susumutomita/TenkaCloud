@@ -14,6 +14,13 @@ export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
 
 /**
+ * ADR-012 Phase 5: 1 problem に紐づく portal plugin slot map。 `dashboard.slots[slotName]`
+ * の各 entry は metadata.json で `portal/<SlotName>.tsx` 形式の相対 path を持つ。 portal
+ * の plugin loader (= src/plugins/loader.ts) がこれを glob で照合して該当 chunk を lazy load する。
+ */
+export type ProblemDashboardSlots = Readonly<Record<string, string>>;
+
+/**
  * Portal で表示する問題メタ情報。`cfnTemplate` / `cfnParameters` 等の deploy 内部情報は
  * 含めない (= 答えのヒントを意図せず露出させないため)。
  */
@@ -28,6 +35,8 @@ export interface ProblemCatalogEntry {
   readonly description: string;
   readonly learningGoals: readonly string[];
   readonly tags: readonly string[];
+  /** ADR-012 Phase 5: dashboard.slots[slotName] = portal/<file>.tsx 相対 path の map。 */
+  readonly dashboardSlots?: ProblemDashboardSlots;
 }
 
 interface ProblemMetadata {
@@ -45,6 +54,9 @@ interface ProblemMetadata {
   exposedPorts?: { port: number; name: string }[];
   cfnTemplate?: string;
   cfnParameters?: Record<string, string>;
+  dashboard?: {
+    slots?: Record<string, string>;
+  };
 }
 
 const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
@@ -53,6 +65,9 @@ const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
 );
 
 function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
+  // dashboard.slots は metadata から透過的に passthrough。 1 file 1 slot 1 component 規約 (= 値は
+  // "portal/<file>.tsx" 形式の相対 path) で plugin loader が glob 照合する。
+  const dashboardSlots = metadata.dashboard?.slots;
   return {
     id: metadata.id,
     name: metadata.name,
@@ -64,6 +79,9 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
     description: metadata.description,
     learningGoals: metadata.learningGoals,
     tags: metadata.tags,
+    ...(dashboardSlots && Object.keys(dashboardSlots).length > 0
+      ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
+      : {}),
   };
 }
 
