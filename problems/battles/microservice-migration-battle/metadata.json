@@ -1,0 +1,30 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "microservice-migration-battle",
+  "name": "Microservice Migration Battle",
+  "category": "Battle",
+  "status": "draft",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "EC2 1 台に同居する 3 サービス (users / orders / catalog) を Lambda + API Gateway / ECS Fargate / App Runner の 3 種ホスティングに分割するレース。",
+  "description": "EC2 1 台に同居する 3 サービス (users / orders / catalog) のモノリスを、競技時間内に Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner の 3 種類の異なるホスティングへマイクロサービスとして分割していく Battle。\n\nDeploy 完了後、各チームには EC2 上で動くモノリスのベース URL が払い出される。3 つのスコア対象エンドポイント (`/users/score` / `/orders/score` / `/catalog/score`) を運営側スコアエンジンが 1 分毎に polling し、レスポンスに応じてポイントを加減算する。\n\n## 学習目的\n\n- モノリスからマイクロサービスへの段階的移行 (strangler fig パターン) を実体験する\n- Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate) の 3 段階を比較する\n- どのサービスから分離すべきかをスコア最大化の観点で判断する\n- コード内に意図的に仕込まれた「遅延コードパス」を読み解いて取り除く\n\n## アーキテクチャ (Phase 1 = この PR の deploy 範囲)\n\n```\n┌─────────────── EC2 (t3.small) ───────────────┐\n│  nginx :80  →  /users/* → users:3001           │\n│              →  /orders/* → orders:3002        │\n│              →  /catalog/* → catalog:3003      │\n│         docker compose で 3 サービス + nginx │\n└──────────────────────────────────────────────┘\n         ↑ Score Engine が 1 分毎 polling\n```\n\n各サービスは Node.js 20 + Hono の最小 HTTP サーバーで、`GET /meta` (= platform 自己申告) と `GET /score` を公開する。Dockerfile は Lambda / App Runner / ECS Fargate のいずれにもそのまま乗せ替え可能。\n\n## 採点ルール (Phase 2 で score engine を実装)\n\n| 状態                                       | 1 check あたり |\n| ------------------------------------------ | -------------- |\n| 未登録 / 200 以外 / timeout                | -100           |\n| EC2 上のレスポンス (劣化前)                | +100           |\n| EC2 上のレスポンス (劣化後 = 開始 60 分後) | +10            |\n| Lambda + API GW にホスティング済           | +1,000         |\n| ECS Fargate にホスティング済               | +1,000         |\n| App Runner にホスティング済                | +1,000         |\n| 3 サービス全て分離完了                     | +5,000 (1 回)  |\n\n## フェーズタイムライン\n\n- 0 分: deploy 完了 → 競技開始\n- 60 分: EC2 劣化 (`tc qdisc` 注入予定 / Phase 2)\n- 90 分: スコアエンジンが `/score` → `/score?legacy=true` へ切替 → 各サービスコードに仕込まれた遅延コードパスを取り除いて再デプロイする必要あり\n\n## 制約 / 既知の制限\n\n- 遅延コードパス (`?legacy=true` で 2 秒 sleep) は本リポジトリ内で公開されているため、ADR-008 (= 問題実装の private repo 化) が ship するまで仕掛けは事前に読まれる可能性がある。Phase 2 ship までに ADR-008 を解決する。\n- Phase 1 では score engine / endpoint 登録 UI / EC2 劣化 cron / フェーズ進行 logic は未実装 (= Phase 2 / Phase 3 で追加)。",
+  "tags": ["microservices", "migration", "lambda", "ecs", "apprunner", "ec2", "docker"],
+  "exposedPorts": [{ "port": 80, "name": "nginx reverse proxy (users / orders / catalog)" }],
+  "learningGoals": [
+    "モノリスから 3 ホスティング (Lambda / ECS Fargate / App Runner) へのマイクロサービス分割を体験する",
+    "サーバレス / マネージドコンテナ / オーケストレーションのトレードオフを実機で比較する",
+    "EC2 劣化と遅延コードパスというスコア制約下で、移行優先順位を判断する",
+    "意図的に仕込まれた遅延コードパスを読み解いて取り除く"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "scoring": {
+    "kind": "uptime",
+    "endpoints": [
+      { "outputKey": "BaseUrl", "path": "/users/score", "expectStatus": [200] },
+      { "outputKey": "BaseUrl", "path": "/orders/score", "expectStatus": [200] },
+      { "outputKey": "BaseUrl", "path": "/catalog/score", "expectStatus": [200] }
+    ],
+    "pointsPerSuccess": 100
+  }
+}
