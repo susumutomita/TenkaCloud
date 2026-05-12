@@ -261,6 +261,32 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       const outputs = tpl.findOutputs("*");
       expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["CompetitorAccountsTableName"]));
     });
+
+    it("KMS policy は StringLike + Decrypt/GenerateDataKey を持つべき (= SSM SecureString GET/PUT 双方を動かす)", () => {
+      // **regression 防止**: 旧実装は StringEquals + Decrypt/Encrypt の組合せだった (PR-594
+      // /security-review Vuln 1)。`StringEquals` は wildcard 展開しないので Condition が
+      // 永久に false で fail-closed、Encrypt は SecureString PUT に不適合 (GenerateDataKey 必要)。
+      // この test で StringLike + Decrypt + GenerateDataKey の組合せを pin する。
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: Match.arrayWith(["kms:Decrypt", "kms:GenerateDataKey"]),
+                Resource: "*",
+                Condition: Match.objectLike({
+                  StringLike: Match.objectLike({
+                    "kms:EncryptionContext:PARAMETER_ARN": Match.anyValue(),
+                  }),
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
   });
 });
 

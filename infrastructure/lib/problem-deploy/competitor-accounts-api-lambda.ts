@@ -81,16 +81,20 @@ export class CompetitorAccountsApiLambda extends Construct {
       }),
     );
     // SSM SecureString は AWS managed key (alias/aws/ssm) で暗号化される。
-    // 復号には KMS Decrypt 権限が要る。AWS managed key の Resource ARN は account/region から
-    // 構築できないので、`Encryption Context: PARAMETER_ARN` で絞り込む。
+    //   - GetParameter(WithDecryption=true) → `kms:Decrypt` を要求
+    //   - PutParameter(Type=SecureString)  → `kms:GenerateDataKey` を要求 (envelope encryption)
+    // AWS managed key の Resource ARN は account/region から構築できないので Resource:* + Condition で絞る。
+    //
+    // **StringLike** が必須: SSM が runtime に渡してくる EncryptionContext は **具体 tenantId** に
+    // 展開された ARN (= `.../tenants/01HXYZ.../external-id`)。`StringEquals` だと wildcard を
+    // 文字 `*` として扱い literal 比較に倒れ Condition が永遠に false で fail-closed になる。
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ["kms:Decrypt", "kms:Encrypt"],
-        // Resource は `*` だが Condition で SSM context に限定 (= AWS managed key のみ実質効く)。
+        actions: ["kms:Decrypt", "kms:GenerateDataKey"],
         resources: ["*"],
         conditions: {
-          StringEquals: {
+          StringLike: {
             "kms:EncryptionContext:PARAMETER_ARN": ssmArn,
           },
         },
