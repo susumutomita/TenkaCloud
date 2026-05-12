@@ -33,6 +33,8 @@ export interface VerifyCompetitorAccountContext {
 }
 
 const SANITY_CHECK_SESSION_NAME = "TenkaCloud-CompetitorAccount-Verify";
+// 最短 session 長 (= STS の最小値)。verify は credentials を実際に使わないので即破棄で良い。
+const MIN_ASSUME_ROLE_SESSION_SECONDS = 900;
 
 /**
  * `(tenantId, awsAccountId)` の競技者 IAM Role に対して STS AssumeRole を 1 度だけ発行し
@@ -51,10 +53,12 @@ export async function verifyCompetitorAccount(
   shared: CompetitorAccountsSharedResources,
   ctx: VerifyCompetitorAccountContext,
 ): Promise<CompetitorAccountSummary> {
-  const account = await getCompetitorAccount(shared, ctx.tenantId, ctx.awsAccountId);
+  // DDB Get と SSM GetParameter は互いに独立 (= tenantId / awsAccountId が確定済) なので並列発火。
+  const [account, externalId] = await Promise.all([
+    getCompetitorAccount(shared, ctx.tenantId, ctx.awsAccountId),
+    getExternalId({ ssm: shared.ssm, env: shared.env }, ctx.tenantId),
+  ]);
   if (!account) throw new CompetitorAccountNotFoundError(ctx.awsAccountId);
-
-  const externalId = await getExternalId({ ssm: shared.ssm, env: shared.env }, ctx.tenantId);
   if (!externalId) throw new ExternalIdMissingError(ctx.tenantId);
 
   const roleArn = `arn:aws:iam::${ctx.awsAccountId}:role/${account.competitorRoleName}`;
@@ -64,8 +68,7 @@ export async function verifyCompetitorAccount(
         RoleArn: roleArn,
         RoleSessionName: SANITY_CHECK_SESSION_NAME,
         ExternalId: externalId,
-        // 最短 15 分。verify は credentials を実際に使わないので即破棄して良い。
-        DurationSeconds: 900,
+        DurationSeconds: MIN_ASSUME_ROLE_SESSION_SECONDS,
       }),
     );
   } catch (err) {

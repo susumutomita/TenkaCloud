@@ -179,28 +179,40 @@ export async function markCompetitorAccountVerified(
 /**
  * row を削除。**同 tenant の最後の row** だった場合は SSM の ExternalId も削除する (= clean rotation)。
  *
- * 既に存在しない row の DELETE は idempotent: 削除前に `getCompetitorAccount` で確認し、
- * 無ければ `CompetitorAccountNotFoundError`。
+ * `ConditionExpression` で行不在を atomic 検出 (= TOCTOU 回避、1 round-trip 削減)。
+ * 残行確認は `Select: COUNT` + `Limit: 1` で wire payload を最小化する。
  */
 export async function deleteCompetitorAccount(
   shared: CompetitorAccountsSharedResources,
   tenantId: string,
   awsAccountId: string,
 ): Promise<void> {
-  // 削除前に存在確認 (= 404 を caller が返せるように)。
-  const existing = await getCompetitorAccount(shared, tenantId, awsAccountId);
-  if (!existing) throw new CompetitorAccountNotFoundError(awsAccountId);
+  try {
+    await shared.ddb.send(
+      new DeleteCommand({
+        TableName: shared.tableName,
+        Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
+        ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
+      }),
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
+      throw new CompetitorAccountNotFoundError(awsAccountId);
+    }
+    throw err;
+  }
 
-  await shared.ddb.send(
-    new DeleteCommand({
+  // 残行ゼロなら SSM の ExternalId も掃除する (= 鍵漏洩リスク減)。
+  const remaining = await shared.ddb.send(
+    new QueryCommand({
       TableName: shared.tableName,
-      Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: { ":pk": PK(tenantId), ":sk": "ACCOUNT#" },
+      Select: "COUNT",
+      Limit: 1,
     }),
   );
-
-  // 残り行を確認し、tenant に 1 行も無くなれば SSM の ExternalId も掃除する (= 鍵漏洩リスク減)。
-  const remaining = await listCompetitorAccounts(shared, tenantId);
-  if (remaining.length === 0) {
+  if ((remaining.Count ?? 0) === 0) {
     await deleteExternalId({ ssm: shared.ssm as SSMClient, env: shared.env }, tenantId);
   }
 }

@@ -244,13 +244,16 @@ describe("deleteCompetitorAccount", () => {
 
   it("row が存在しなければ CompetitorAccountNotFoundError を投げるべき", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({}); // Get → not found
+    // ConditionExpression が落ちて ConditionalCheckFailedException を SDK が投げる挙動。
+    ddbSend.mockRejectedValueOnce(
+      Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" }),
+    );
 
     await expect(
       deleteCompetitorAccount(shared, "tenant-acme", "999999999999"),
     ).rejects.toBeInstanceOf(CompetitorAccountNotFoundError);
 
-    // DeleteCommand は呼ばれない
+    // 残行 Count Query は呼ばない (= Delete 失敗で短絡)
     expect(ddbSend.mock.calls.length).toBe(1);
     expect(ssmSend.mock.calls.length).toBe(0);
   });
@@ -258,56 +261,25 @@ describe("deleteCompetitorAccount", () => {
   it("最後の 1 行を消したら SSM の ExternalId も削除するべき", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     ddbSend
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: "tenant-acme",
-          awsAccountId: "222222222222",
-          region: "ap-northeast-1",
-          competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
-          verified: true,
-          createdAt: NOW_ISO,
-          updatedAt: NOW_ISO,
-        },
-      })
       // DeleteCommand 成功
       .mockResolvedValueOnce({})
-      // QueryCommand で残行 0 件
-      .mockResolvedValueOnce({ Items: [] });
+      // QueryCommand (Select=COUNT) で残行 0 件
+      .mockResolvedValueOnce({ Count: 0 });
     // SSM DeleteParameter
     ssmSend.mockResolvedValueOnce({});
 
     await deleteCompetitorAccount(shared, "tenant-acme", "222222222222");
 
-    expect(ddbSend.mock.calls[1]?.[0]).toBeInstanceOf(DeleteCommand);
+    expect(ddbSend.mock.calls[0]?.[0]).toBeInstanceOf(DeleteCommand);
     expect(ssmSend.mock.calls.length).toBe(1);
   });
 
   it("他の row が残っていれば SSM の ExternalId は触らないべき", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     ddbSend
-      .mockResolvedValueOnce({
-        Item: {
-          tenantId: "tenant-acme",
-          awsAccountId: "222222222222",
-          region: "ap-northeast-1",
-          competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
-          verified: true,
-          createdAt: NOW_ISO,
-          updatedAt: NOW_ISO,
-        },
-      })
       .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({
-        Items: [
-          {
-            tenantId: "tenant-acme",
-            awsAccountId: "333333333333",
-            verified: false,
-            createdAt: NOW_ISO,
-            updatedAt: NOW_ISO,
-          },
-        ],
-      });
+      // COUNT=1 (= 残行あり)
+      .mockResolvedValueOnce({ Count: 1 });
 
     await deleteCompetitorAccount(shared, "tenant-acme", "222222222222");
 

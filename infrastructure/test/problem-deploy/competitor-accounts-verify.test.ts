@@ -85,8 +85,10 @@ describe("verifyCompetitorAccount", () => {
   });
 
   it("row が無ければ CompetitorAccountNotFoundError を投げるべき", async () => {
-    const { shared, ddbSend, stsSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({});
+    const { shared, ddbSend, ssmSend, stsSend } = buildShared();
+    // DDB Get + SSM GetParameter は Promise.all で並列発火されるので両方 mock 必要
+    ddbSend.mockResolvedValueOnce({}); // not found
+    ssmSend.mockResolvedValueOnce({ Parameter: { Value: "external-id-abc" } });
 
     await expect(
       verifyCompetitorAccount(shared, {

@@ -23,6 +23,12 @@ import {
 /** SSM の許容 char class (`[A-Za-z0-9_=,.@:/-]`) + 長さ要件を満たす 64 文字の random hex。 */
 const EXTERNAL_ID_BYTE_LENGTH = 32; // hex 化で 64 文字 → competitor-bootstrap.yaml の MaxLength=128 内、MinLength=16 を満たす
 
+// SSM SDK は ParameterNotFound を class でも err.name でも投げる (= 環境 / version 依存の挙動を吸収)。
+function isParameterNotFound(err: unknown): boolean {
+  if (err instanceof ParameterNotFound) return true;
+  return err instanceof Error && err.name === "ParameterNotFound";
+}
+
 export function buildExternalIdParameterName(env: string, tenantId: string): string {
   // env / tenantId は POSIX 風 path の segment に直接埋めるため、許容 charclass の事前 sanitize は caller 側責任。
   // 実運用では env={development,staging,production}, tenantId は ULID なので問題なし。
@@ -63,10 +69,7 @@ export async function getExternalId(
     const out = await deps.ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true }));
     return out.Parameter?.Value;
   } catch (err) {
-    if (err instanceof ParameterNotFound) return undefined;
-    // SSM client は MissingParameter / ParameterNotFound のどちらかを投げる場合があるため name 確認も併用。
-    const name = err instanceof Error ? err.name : "";
-    if (name === "ParameterNotFound") return undefined;
+    if (isParameterNotFound(err)) return undefined;
     throw err;
   }
 }
@@ -107,8 +110,7 @@ export async function deleteExternalId(deps: ExternalIdStoreDeps, tenantId: stri
   try {
     await deps.ssm.send(new DeleteParameterCommand({ Name: name }));
   } catch (err) {
-    if (err instanceof ParameterNotFound) return;
-    if (err instanceof Error && err.name === "ParameterNotFound") return;
+    if (isParameterNotFound(err)) return;
     throw err;
   }
 }
