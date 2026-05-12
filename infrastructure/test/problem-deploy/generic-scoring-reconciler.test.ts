@@ -15,42 +15,42 @@ import {
  */
 
 describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
-  it("DEPLOYING + 全 COMPLETE → READY", () => {
+  it("DEPLOYING + 全 COMPLETE なら READY に遷移すべき", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "COMPLETE"])).toBe("READY");
   });
 
-  it("DEPLOYING + COMPLETE/FAILED 混在 → READY (FAILED も terminal 扱い)", () => {
+  it("DEPLOYING + COMPLETE/FAILED 混在なら READY に遷移すべき (FAILED も terminal 扱い)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "FAILED", "COMPLETE"])).toBe(
       "READY",
     );
   });
 
-  it("DEPLOYING + PENDING が 1 件でも残る → undefined (= まだ動かさない)", () => {
+  it("DEPLOYING + PENDING が 1 件でも残るなら undefined を返すべき (= まだ動かさない)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "PENDING"])).toBeUndefined();
   });
 
-  it("DEPLOYING + IN_PROGRESS が残る → undefined", () => {
+  it("DEPLOYING + IN_PROGRESS が残るなら undefined を返すべき", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "IN_PROGRESS"])).toBeUndefined();
   });
 
-  it("TEARDOWN + 全 DELETED → ARCHIVED", () => {
+  it("TEARDOWN + 全 DELETED なら ARCHIVED に遷移すべき", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "DELETED"])).toBe("ARCHIVED");
   });
 
-  it("TEARDOWN + DELETED/FAILED 混在 → ARCHIVED (= teardown 失敗行も引きずらない)", () => {
+  it("TEARDOWN + DELETED/FAILED 混在なら ARCHIVED に遷移すべき (= teardown 失敗行も引きずらない)", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "FAILED"])).toBe("ARCHIVED");
   });
 
-  it("TEARDOWN + DELETING が残る → undefined (= まだ削除中)", () => {
+  it("TEARDOWN + DELETING が残るなら undefined を返すべき (= まだ削除中)", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "DELETING"])).toBeUndefined();
   });
 
-  it("子 deployment 0 件 → undefined (= bulk-deploy/delete 前の race state、 触らない)", () => {
+  it("子 deployment 0 件なら undefined を返すべき (= bulk-deploy/delete 前の race state、 触らない)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", [])).toBeUndefined();
     expect(resolveEventStatusTransition("TEARDOWN", [])).toBeUndefined();
   });
 
-  it("対象外 status (DRAFT / READY / ENDED / ARCHIVED) は defense-in-depth で undefined", () => {
+  it("対象外 status (DRAFT / READY / ENDED / ARCHIVED) は defense-in-depth で undefined を返すべき", () => {
     expect(resolveEventStatusTransition("DRAFT", ["COMPLETE"])).toBeUndefined();
     expect(resolveEventStatusTransition("READY", ["COMPLETE"])).toBeUndefined();
     expect(resolveEventStatusTransition("ENDED", ["DELETED"])).toBeUndefined();

@@ -24,8 +24,14 @@ export function runAttackDetectionKind(
   const rawValue = outputs[scoring.statsOutputKey];
   if (rawValue === undefined) return noopKindResult();
 
-  const current = Number(rawValue);
-  if (!Number.isFinite(current) || current < 0) return noopKindResult();
+  // 問題側の CFn Output は string なので Number() で coerce する。 ただし `""` → 0、
+  // `"1.5"` → 1.5 のような falsy/fractional case は不正データ扱いで noop (= baseline 汚染防止)。
+  const normalized = typeof rawValue === "string" ? rawValue.trim() : rawValue;
+  if (normalized === "") return noopKindResult();
+  const current = Number(normalized);
+  if (!Number.isFinite(current) || !Number.isInteger(current) || current < 0) {
+    return noopKindResult();
+  }
 
   const prev = prevState.attackCount;
   // 初回 tick: baseline 記録のみで加点しない (= deploy 後の counter 既存値を新検知扱いしない)

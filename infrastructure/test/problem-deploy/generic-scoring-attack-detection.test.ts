@@ -78,20 +78,31 @@ describe("attack-detection kind", () => {
     expect(result.newState).toEqual({ attackCount: 3 });
   });
 
-  it("statsOutputKey が stackOutputs に無いと noop (= deploy 未完了 / output 不在)", () => {
+  it("statsOutputKey が stackOutputs に無いと noop になるべき (= deploy 未完了 / output 不在)", () => {
     const result = runAttackDetectionKind(buildInput(undefined, undefined));
     expect(result.scoreDelta).toBe(0);
     expect(result.scoreEvents).toEqual([]);
     expect(result.newState).toBeUndefined();
   });
 
-  it("counter が数値以外なら noop (= 不正データ防御)", () => {
+  it("counter が数値以外なら noop になるべき (= 不正データ防御)", () => {
     const result = runAttackDetectionKind(buildInput("not-a-number", 5));
     expect(result.scoreDelta).toBe(0);
   });
 
-  it("counter が負値なら noop (= 不正データ防御)", () => {
+  it("counter が負値なら noop になるべき (= 不正データ防御)", () => {
     const result = runAttackDetectionKind(buildInput("-1", 0));
+    expect(result.scoreDelta).toBe(0);
+  });
+
+  it("counter が空文字なら noop になるべき (= Number('') = 0 で baseline 汚染防止)", () => {
+    const result = runAttackDetectionKind(buildInput("", 5));
+    expect(result.scoreDelta).toBe(0);
+    expect(result.newState).toBeUndefined();
+  });
+
+  it("counter が小数なら noop になるべき (= 不正データ防御)", () => {
+    const result = runAttackDetectionKind(buildInput("1.5", 1));
     expect(result.scoreDelta).toBe(0);
   });
 });

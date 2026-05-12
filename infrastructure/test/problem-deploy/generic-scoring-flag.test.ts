@@ -35,7 +35,7 @@ describe("flag kind in polling dispatcher", () => {
 });
 
 describe("flagMatches (shared helper、 submit-flag と共有)", () => {
-  it("一致するなら true", () => {
+  it("一致するなら true を返すべき", () => {
     expect(flagMatches("hello", "hello")).toBe(true);
   });
 

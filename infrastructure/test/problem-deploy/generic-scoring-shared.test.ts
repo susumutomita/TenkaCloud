@@ -18,30 +18,30 @@ import {
 describe("isScoringActive (relocated from health-check-handler)", () => {
   const NOW = "2026-05-08T10:00:00.000Z";
 
-  it("eventStartsAt 未設定なら false (= deploy 直後の意図しない加点を防ぐ)", () => {
+  it("eventStartsAt 未設定なら false を返すべき (= deploy 直後の意図しない加点を防ぐ)", () => {
     expect(isScoringActive({}, NOW)).toBe(false);
     expect(isScoringActive({ eventStartsAt: undefined }, NOW)).toBe(false);
   });
 
-  it("eventStartsAt が現在時刻より未来なら false (= operator が schedule 済だが時刻未到達)", () => {
+  it("eventStartsAt が現在時刻より未来なら false を返すべき (= operator が schedule 済だが時刻未到達)", () => {
     expect(isScoringActive({ eventStartsAt: "2026-05-08T10:00:00.001Z" }, NOW)).toBe(false);
     expect(isScoringActive({ eventStartsAt: "2026-05-08T11:00:00.000Z" }, NOW)).toBe(false);
   });
 
-  it("eventStartsAt が現在時刻と同じか過去なら true (= 競技開始済、採点 active)", () => {
+  it("eventStartsAt が現在時刻と同じか過去なら true を返すべき (= 競技開始済、採点 active)", () => {
     expect(isScoringActive({ eventStartsAt: NOW }, NOW)).toBe(true);
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
     expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(true);
   });
 
-  it("eventEndsAt 未設定は終了 gate 無し (= 旧 deployment / 終了未指示の event の既存挙動)", () => {
+  it("eventEndsAt 未設定は終了 gate 無しで true を返すべき (= 旧 deployment / 終了未指示の event の既存挙動)", () => {
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: undefined }, NOW),
     ).toBe(true);
   });
 
-  it("eventEndsAt が設定済で now < eventEndsAt なら true (= まだ競技中)", () => {
+  it("eventEndsAt が設定済で now < eventEndsAt なら true を返すべき (= まだ競技中)", () => {
     expect(
       isScoringActive(
         {
@@ -53,7 +53,7 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
     ).toBe(true);
   });
 
-  it("eventEndsAt 設定済で now >= eventEndsAt なら false (= operator が終了済、採点停止)", () => {
+  it("eventEndsAt 設定済で now >= eventEndsAt なら false を返すべき (= operator が終了済、採点停止)", () => {
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: NOW }, NOW),
     ).toBe(false);
@@ -68,7 +68,7 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
     ).toBe(false);
   });
 
-  it("eventStartsAt 未到達なら eventEndsAt が未設定でも false (= 開始 gate が優先)", () => {
+  it("eventStartsAt 未到達なら eventEndsAt が未設定でも false を返すべき (= 開始 gate が優先)", () => {
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T11:00:00.000Z", eventEndsAt: undefined }, NOW),
     ).toBe(false);
@@ -94,7 +94,7 @@ describe("joinUrl (relocated from health-check-handler)", () => {
     );
   });
 
-  it("通常 case: 末尾 / 無し base + 先頭 / path", () => {
+  it("通常 case (末尾 / 無し base + 先頭 / path) は base/path で結合すべき", () => {
     expect(joinUrl("https://x.example.com", "/healthz")).toBe("https://x.example.com/healthz");
   });
 });

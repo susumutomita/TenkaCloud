@@ -154,7 +154,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://my-override.example.com/");
   });
 
-  it("stackOutputs が無いと noop (= deploy 未完了で probe しない)", async () => {
+  it("stackOutputs が無いと noop になるべき (= deploy 未完了で probe しない)", async () => {
     const input = buildInput({
       deployment: { ...buildInput().deployment, stackOutputs: undefined },
     });

@@ -278,10 +278,13 @@ export async function queryOverridesForDeployment(
       )
       .map((i) => ({ slot: i.slot, overrideUrl: i.overrideUrl }));
   } catch (err) {
-    console.warn("[generic-scoring] queryOverrides failed (treat as no override)", {
-      message: err instanceof Error ? err.message : String(err),
+    // 旧: return [] (= 採点を default URL で続行) は、 競技者が override 済なのに古い
+    // default に対して silent-wrong-data scoring が走るリスクがある。 throw して outer
+    // processDeployment の .catch (= 1 tick skip + warn log) に委ねる (= 次 tick で retry)。
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`queryOverrides failed for ${tenantId}/${teamId}/${problemId}: ${msg}`, {
+      cause: err,
     });
-    return [];
   }
 }
 
@@ -324,10 +327,18 @@ async function fetchScoringLockedMap(
     }
     return map;
   } catch (err) {
-    console.warn("[generic-scoring] fetchScoringLockedMap failed (fail-open)", {
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return new Map();
+    // #558 の scoring lock 契約: operator が「ロック中」とマークした event に points を加算
+    // しないことを保証する。 lock 状態が読めない (= transient DDB error) ときに fail-open
+    // で「全 event 未ロック扱い」してしまうと、 ロック中 event にも加点してしまう。
+    // fail-closed として本 batch の全 eventId を locked 扱いにし、 該当 deployment の
+    // 採点を 1 tick skip させる (= 次 tick で retry)。
+    console.warn(
+      "[generic-scoring] fetchScoringLockedMap failed (fail-closed: treat batch as locked)",
+      {
+        message: err instanceof Error ? err.message : String(err),
+      },
+    );
+    return new Map(eventIds.map((id) => [id, true] as const));
   }
 }
 

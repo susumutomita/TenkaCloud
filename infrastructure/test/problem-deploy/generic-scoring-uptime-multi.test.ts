@@ -97,7 +97,7 @@ describe("uptime-multi kind", () => {
     expect(result.lastResult).toBe("fail");
   });
 
-  it("全 slot が解決不可なら noop (= deploy 未完了 / stack output 不在)", async () => {
+  it("全 slot が解決不可なら noop になるべき (= deploy 未完了 / stack output 不在)", async () => {
     const input = buildInput({
       deployment: { ...buildInput().deployment, stackOutputs: JSON.stringify({}) },
     });
