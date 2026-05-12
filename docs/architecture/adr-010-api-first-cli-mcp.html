@@ -101,11 +101,11 @@
 <table>
 <thead><tr><th>制約</th><th>由来</th><th>本 ADR への影響</th></tr></thead>
 <tbody>
-<tr><td>polling over SSE</td><td>memory <code>feedback_polling_over_sse</code></td>
-    <td>CLI / MCP の状態取得も polling、subscription API は作らない</td></tr>
-<tr><td>cost 最小化 (Lambda + DDB 1/1)</td><td>repo 設計</td>
-    <td>CLI 専用 backend を立てず、既存 tenant API GW を流用</td></tr>
-<tr><td>npx 禁止</td><td>memory <code>feedback_no_npx</code></td>
+<tr><td>polling over SSE</td><td>Lambda は long-lived connection を持てないため real-time は polling で実装する設計原則</td>
+    <td>CLI / MCP の状態取得も polling、 subscription API は作らない</td></tr>
+<tr><td>cost 最小化 (Lambda + DDB 1/1)</td><td>repo の経済設計</td>
+    <td>CLI 専用 backend を立てず、 既存 tenant API GW を流用</td></tr>
+<tr><td>npx 禁止</td><td>レポジトリの dependency 規約。 <code>bunx</code> または <code>nlx</code> を使う</td>
     <td>CLI は <code>bunx tenkacloud</code> / <code>nlx tenkacloud</code> で起動可能に</td></tr>
 <tr><td>tenant 分離はインフラ層</td><td><code>INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER</code></td>
     <td>M2M token も per-tenant scope、cross-tenant call 不可</td></tr>
@@ -373,7 +373,7 @@ spec:
 
 <h3>positive</h3>
 <ul>
-<li><b>AI agent (Claude Code / Cursor / Codex) から operator 操作可能</b>。本 repo 自体の dogfood に dogfood 経路が増える</li>
+<li><b>AI agent (Claude Code / Cursor / Codex) から operator 操作可能</b>。 自己使用検証 (= 開発者自身が運用) でも CLI 経路を経由できる</li>
 <li><b>OpenAPI 化で typed client / SDK 自動生成</b>。CLI / MCP / 他言語 client が同一 spec から再現可能</li>
 <li><b>競技運営の自動化</b> (= event を YAML で declare、git で版数管理、CI で apply)</li>
 <li><b>新 operator のオンボード時間短縮</b> (= CLI <code>--help</code> + OpenAPI spec で API 表面を発見可能)</li>
@@ -403,8 +403,6 @@ spec:
 <ul>
 <li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/578">#578</a> — 本 ADR 起票元</li>
 <li><a href="./adr-007-outside-in.html">ADR-007</a> — outside-in scenario は CLI でも記述可能 (= scenario language として相補)</li>
-<li>memory <code>feedback_polling_over_sse</code> — CLI / MCP も polling</li>
-<li>memory <code>feedback_no_npx</code> — CLI は <code>bunx</code> / <code>nlx</code> で起動</li>
 <li><a href="https://github.com/honojs/middleware/tree/main/packages/zod-openapi"><code>@hono/zod-openapi</code></a> — Phase 1 で採用</li>
 <li><a href="https://modelcontextprotocol.io/">Model Context Protocol</a> — Phase 4 で採用</li>
 </ul>

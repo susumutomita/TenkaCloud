@@ -80,9 +80,9 @@ PR-588 (#534) で application-admin-console (Tenant Admin) の deploy job 詳細
     <td>System Admin だけが超える正規経路を本 ADR で設計</td></tr>
 <tr><td>cost 最小化</td><td>repo 経済設計</td>
     <td>新 Lambda 1 個 + 既存 DDB read で完結、新 table は追加しない</td></tr>
-<tr><td>polling over SSE</td><td>memory <code>feedback_polling_over_sse</code></td>
+<tr><td>polling over SSE</td><td>Lambda は long-lived connection を持てないため real-time は polling で実装する設計原則</td>
     <td>tenant 一覧の auto-refresh は 60s polling</td></tr>
-<tr><td>HTTP status は enum</td><td>memory `StatusCodes.*`</td>
+<tr><td>HTTP status は enum</td><td>repo 規約: 数値リテラル直書き禁止、 <code>http-status-codes</code> ライブラリの <code>StatusCodes.*</code> を使う</td>
     <td>新 endpoint も <code>StatusCodes.*</code> 規約遵守</td></tr>
 <tr><td>SystemAdmin group は SBT 標準</td><td>SBT 0.3.9</td>
     <td>Cognito authorizer は SystemAdmin group のみ受理</td></tr>
@@ -228,7 +228,7 @@ PR-588 (#534) で application-admin-console (Tenant Admin) の deploy job 詳細
     <td>Phase 1 完了</td></tr>
 <tr><td><b>Phase 4</b></td>
     <td>write 操作 (= operator 介入: deploy 中止 / lock-scoring / 再 deploy)。要別 ADR</td>
-    <td>Phase 1-3 dogfood で実需要が見えてから</td></tr>
+    <td>Phase 1-3 の実運用で要求が見えてから着手</td></tr>
 </tbody>
 </table>
 </section>

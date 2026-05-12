@@ -99,11 +99,11 @@ Battle に固有の「自チームへの攻撃が今どう進行しているか�
     <td>「どの endpoint が 503」と教えるとゲーム性破壊 → 隠す</td></tr>
 <tr><td><b>観戦者体験</b>: Scoreboard で他チームの状況も見たい</td><td>運用想定</td>
     <td>aggregate (uptime%) は OK / 内部状態は NG</td></tr>
-<tr><td><b>polling over SSE</b></td><td>memory <code>feedback_polling_over_sse</code></td>
+<tr><td><b>polling over SSE</b></td><td>Lambda は long-lived connection を持てないため、 real-time 更新は polling で実装する設計原則</td>
     <td>real-time は polling、SSE 不使用</td></tr>
-<tr><td><b>DDB は 1 RCU/1 WCU PROVISIONED</b></td><td>memory <code>feedback_dynamodb_provisioned</code> + Aspect</td>
+<tr><td><b>DDB は 1 RCU/1 WCU PROVISIONED</b></td><td>コスト最小化の設計原則。 全 DDB table を <code>DynamoDbLowCapacity</code> Aspect で強制</td>
     <td>新 DDB は立てない方向</td></tr>
-<tr><td><b>Battle / Challenge は完全分離しない</b></td><td>memory <code>project_battle_challenge_hybrid</code></td>
+<tr><td><b>Battle / Challenge は完全分離しない</b></td><td>Battle 内部に Challenge 風 sub-quest を持つ問題があり、 scoring / flag / UI を共有する設計</td>
     <td>ProblemDetail に Tabs 追加で対応、別画面化しない</td></tr>
 </tbody>
 </table>
@@ -773,7 +773,7 @@ Battle のゲーム性 (= 「気づいて調査して直す」) はもともと�
 <tr><td><code>GET /portal/leaderboard</code></td><td>不変</td>
     <td>D5 撤回により Scoreboard は既存仕様のまま (= rank / teamName / score)</td></tr>
 <tr><td><code>POST /portal/me/submit-flag</code></td><td>不変</td>
-    <td>Battle 内 sub-quest も既存 flag 提出 path と同じ (memory <code>project_battle_challenge_hybrid</code> 整合)</td></tr>
+    <td>Battle 内 sub-quest も既存 flag 提出 path と同じ (Battle / Challenge を完全分離しない設計原則と整合)</td></tr>
 </tbody>
 </table>
 

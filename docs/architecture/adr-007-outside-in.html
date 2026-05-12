@@ -83,36 +83,34 @@
 <section>
 <h2>Context</h2>
 
-<p>2026-05-10 の 1 日 dogfood で <strong>30+ 件の Issue</strong> が起票された。ほぼ全部「PR は
-merge 済 / unit test green / typecheck green」 にも関わらず、ブラウザで触ると次のような
-事象が観測された:</p>
+<p>初期 dogfood 期間で、 全 PR が unit test / typecheck / lint で green であるにも関わらず、 ブラウザで触ると次のような事象が複数観測された:</p>
 
 <ul>
-<li><b>配線忘れ</b> (#535 / #553 / #560): handler は書けたが API GW route / Lambda env / IAM 配線が抜け、frontend が 5xx</li>
-<li><b>用語 mismatch</b> (#549 / #531): 「<code>COMPLETE</code>」 を operator が「問題解いた」と誤解、Bulk Deploy が初見殺し</li>
-<li><b>affordance 不足</b> (#533 / #547): Badge を Link で wrap しただけだと click 可能か分からない、dropdown でなく button にすべきだった</li>
-<li><b>状態遷移漏れ</b> (#539 / #557 / #559): bulk deploy / teardown 後の Event status が手動操作必須、子集約から親遷移する経路なし</li>
-<li><b>初見 operator が次に何を押すか分からない</b> (#531): EventDetail の primary action 不明、ドキュメント読まないと正常運用に辿り着かない</li>
+<li><b>配線忘れ</b>: handler は書けたが API GW route / Lambda env / IAM 配線が抜け、 frontend が 5xx</li>
+<li><b>用語 mismatch</b>: 「<code>COMPLETE</code>」 を operator が「問題を解いた」 と誤解 / Bulk Deploy が初見殺し</li>
+<li><b>affordance 不足</b>: Badge を Link で wrap しただけでは click 可能か分からない / dropdown でなく button にすべき箇所がある</li>
+<li><b>状態遷移漏れ</b>: bulk deploy / teardown 後の Event status が手動操作必須、 子集約から親遷移する経路がない</li>
+<li><b>初見 operator が次に何を押すか分からない</b>: 画面に primary action 不明、 ドキュメント読まないと正常運用に辿り着かない</li>
 </ul>
 
-<p><strong>共通根本</strong>: 各 layer (backend handler / CDK / frontend) が isolated に unit test を持ち、その層内では green。しかし「<strong>user が観察可能な outcome</strong> から逆算する scenario」がレポジトリに 1 本も無いため、layer 間の seam (= 配線) と user 視点の affordance が抜け落ちる。</p>
+<p><strong>共通根本</strong>: 各 layer (backend handler / CDK / frontend) が isolated に unit test を持ち、 その層内では green。 しかし「<strong>user が観察可能な outcome</strong> から逆算する scenario」 がレポジトリに 1 本も無いため、 layer 間の seam (= 配線) と user 視点の affordance が抜け落ちる。</p>
 
 <div class="quote">
-inside-out (現状) では「<b>動いた</b> = 各 layer の unit test が green」。outside-in では「<b>動いた</b> = browser を開いて user が目的を達成した」。前者は配線忘れ / 用語 mismatch / affordance 不足を顕在化しない。
+inside-out (現状) では「<b>動いた</b> = 各 layer の unit test が green」。 outside-in では「<b>動いた</b> = browser を開いて user が目的を達成した」。 前者は配線忘れ / 用語 mismatch / affordance 不足を顕在化しない。
 </div>
 
 <table>
-<thead><tr><th>制約</th><th>由来</th><th>本 ADR への影響</th></tr></thead>
+<thead><tr><th>制約</th><th>根拠</th><th>本 ADR への影響</th></tr></thead>
 <tbody>
-<tr><td>polling over SSE</td><td>memory <code>feedback_polling_over_sse</code></td>
+<tr><td>polling over SSE</td><td>Lambda は long-lived connection を持てないため real-time は polling で実装する設計原則</td>
     <td>scenario の wait 戦略は polling (= UI が prod と同じ挙動)</td></tr>
-<tr><td>cost 最小化 (DDB 1/1、Lambda 限定)</td><td>repo の経済設計</td>
-    <td>scenario 環境は ephemeral / per-PR を避け、shared staging に集約</td></tr>
+<tr><td>cost 最小化 (DDB 1/1、 Lambda 限定)</td><td>repo の経済設計</td>
+    <td>scenario 環境は ephemeral / per-PR を避け、 shared staging に集約</td></tr>
 <tr><td>1 PR = 1 観察可能 increment</td><td><code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code></td>
-    <td>本 ADR で「scenario が観察可能 increment の判定基準」を確定</td></tr>
-<tr><td>HTML 設計ドキュメント</td><td>memory <code>feedback_design_docs_html</code></td>
-    <td>本 ADR も HTML、scenario 仕様も HTML で書く</td></tr>
-<tr><td>npx 禁止</td><td>memory <code>feedback_no_npx</code></td>
+    <td>本 ADR で「scenario が観察可能 increment の判定基準」 を確定</td></tr>
+<tr><td>HTML 設計ドキュメント</td><td>ADR 含む設計資産は HTML で書き、 表現力 (row span / color / SVG / collapsible) を活かす方針</td>
+    <td>本 ADR も HTML、 scenario 仕様も HTML で書く</td></tr>
+<tr><td>npx 禁止</td><td>レポジトリの dependency 規約。 <code>bunx</code> または <code>nlx</code> を使う</td>
     <td>scenario runner は <code>bunx playwright</code> 経由</td></tr>
 </tbody>
 </table>
@@ -283,7 +281,7 @@ inside-out (現状) では「<b>動いた</b> = 各 layer の unit test が gree
    <td>既存 PR 流れが止まる。staging stack 安定化前にゲートを掛けると ROI が逆転する</td></tr>
 <tr class="hide"><td>D7-C</td><td><span class="badge reject">却下</span></td>
    <td>warn のまま据え置く</td>
-   <td>軟弱化、結局 PR が爆増して 30+ 件 issue 再来する</td></tr>
+   <td>軟弱化、 結局 Context で挙げた配線忘れ / 用語 mismatch / affordance 不足が再発する</td></tr>
 </tbody>
 </table>
 
@@ -381,11 +379,8 @@ inside-out (現状) では「<b>動いた</b> = 各 layer の unit test が gree
 <section>
 <h2>関連リソース</h2>
 <ul>
-<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/561">#561</a> (本 ADR 起票)</li>
-<li>本日起票 28 件 (#528〜#560 系) — outside-in があれば PR 段階で検出されたはずの代表例</li>
-<li><a href="./harness.html">harness.html</a> — 既存 invariant の正本。本 ADR 採択で <code>INVARIANT_PR_HAS_OUTSIDE_IN_SCENARIO</code> を追加</li>
-<li>memory <code>feedback_polling_over_sse</code> — scenario の wait 戦略にも反映</li>
-<li>memory <code>feedback_design_docs_html</code> — scenario 仕様 / レポートも HTML 化方針</li>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/561">#561</a> (本 ADR 起票元)</li>
+<li><a href="./harness.html">harness.html</a> — 既存 invariant の正本。 本 ADR 採択で <code>INVARIANT_PR_HAS_OUTSIDE_IN_SCENARIO</code> を追加</li>
 </ul>
 </section>
 </body>

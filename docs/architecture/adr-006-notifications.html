@@ -163,7 +163,7 @@
 <table>
 <thead><tr><th>制約</th><th>由来</th><th>本 ADR への影響</th></tr></thead>
 <tbody>
-<tr><td>polling over SSE</td><td>memory <code>feedback_polling_over_sse</code></td>
+<tr><td>polling over SSE</td><td>Lambda は long-lived connection を持てないため real-time 更新は polling で実装する設計原則</td>
     <td>Web Push / WebSocket / SSE は使わない</td></tr>
 <tr><td>polling 60s 統一</td><td>ADR-005 D4</td>
     <td>notifications 専用 polling も 60s で統一</td></tr>
