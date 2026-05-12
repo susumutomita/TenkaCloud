@@ -3,20 +3,22 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import StatusIndicator, {
+  type StatusIndicatorProps,
+} from "@cloudscape-design/components/status-indicator";
 import Table from "@cloudscape-design/components/table";
 import { StatusCodes } from "http-status-codes";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { ApiError, useApiClient } from "../api/client";
 import {
-  DEPLOYMENT_STATUS_INDICATOR,
   type DeploymentSummary,
   deleteDeployment,
   getDeployment,
@@ -30,8 +32,34 @@ import {
   TERMINAL_STATUSES,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
+import {
+  buildTerminalLog,
+  type DeployPhase,
+  deploySummaryTitle,
+  derivePhases,
+  formatLogTimestamp,
+  type LogLine,
+  type PhaseStatus,
+} from "../lib/deploy-phases";
 
 const POLL_INTERVAL_MS = 5_000;
+
+/** Phase status を Cloudscape StatusIndicator にマップ。Netlify と意味的に揃える。 */
+const PHASE_STATUS_INDICATOR: Record<PhaseStatus, StatusIndicatorProps.Type> = {
+  complete: "success",
+  "in-progress": "in-progress",
+  failed: "error",
+  skipped: "stopped",
+  pending: "pending",
+};
+
+const PHASE_STATUS_LABEL: Record<PhaseStatus, string> = {
+  complete: "Complete",
+  "in-progress": "In Progress",
+  failed: "Failed",
+  skipped: "Skipped",
+  pending: "Pending",
+};
 
 export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const { jobId } = useParams<{ jobId: string }>();
@@ -42,7 +70,9 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [logModalOpen, setLogModalOpen] = useState(false);
   const stopPollingRef = useRef(false);
+  const deployLogRef = useRef<HTMLDivElement | null>(null);
   // #534: StackEvents / Resources は基本情報と独立 state。CFn API が throttle / 権限不足で
   // 落ちても基本情報まで巻き込まない (= 別 state に閉じる)。
   const [stackProgress, setStackProgress] = useState<StackProgress | null>(null);
@@ -126,6 +156,21 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
     }
   }, [apiClient, jobId, fetchOnce]);
 
+  const phases = useMemo(
+    () => (item ? derivePhases(item, stackProgress) : []),
+    [item, stackProgress],
+  );
+  const terminalLog = useMemo(
+    () => (item ? buildTerminalLog(item, stackProgress, phases) : []),
+    [item, stackProgress, phases],
+  );
+
+  const scrollDeployLog = useCallback((direction: "top" | "bottom") => {
+    const el = deployLogRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: direction === "top" ? "start" : "end", behavior: "smooth" });
+  }, []);
+
   if (!jobId || !JOB_ID_RE.test(jobId)) {
     return <Alert type="error">不正な Job ID です。</Alert>;
   }
@@ -151,51 +196,106 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const outputs = parseStackOutputs(item.stackOutputs);
   const canDelete = item.status !== "DELETING" && item.status !== "DELETED";
   const teamLoginKey = item.teamLoginKey;
+  const summaryTitle = deploySummaryTitle(item);
 
   return (
     <SpaceBetween size="l">
-      <Header
-        variant="h1"
-        actions={
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
-              再読み込み
-            </Button>
-            <Button
-              variant="normal"
-              iconName="delete-marker"
-              disabled={!canDelete}
-              onClick={() => {
-                setDeleteError(null);
-                setDeleteModalOpen(true);
-              }}
-            >
-              削除
-            </Button>
-          </SpaceBetween>
-        }
-        description={`Job ID: ${item.jobId}`}
-      >
-        デプロイジョブ「{item.displayTeamName ?? item.teamName}」
-      </Header>
-
-      <Container header={<Header variant="h2">ステータス</Header>}>
-        <SpaceBetween size="m">
-          <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
-            {item.status}
-          </StatusIndicator>
-          {item.status === "FAILED" && item.failureReason && (
-            <Alert type="error" header="失敗理由">
-              {item.failureReason}
-            </Alert>
-          )}
-          {!TERMINAL_STATUSES.has(item.status) && (
-            <Box variant="small" color="text-status-info">
-              {POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。
+      {/* Top summary card (Netlify 風)。Cloudscape Container を dark background で
+          stylize する。Job ID + 主要メタを 1 枚で見せる。 */}
+      <Container disableContentPaddings>
+        <div className="tc-deploy-summary">
+          <SpaceBetween size="xs">
+            <Box variant="h1" color="inherit">
+              {summaryTitle}
             </Box>
-          )}
-        </SpaceBetween>
+            <Box variant="p" color="inherit">
+              {item.problemId} · {item.displayTeamName ?? item.teamName}
+            </Box>
+            <Box variant="small" color="inherit">
+              {formatLogTimestamp(item.createdAt)} · Job <code>{item.jobId}</code> · Tenant{" "}
+              <code>{item.tenantId}</code>
+            </Box>
+            <div className="tc-deploy-summary-actions">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
+                  再読み込み
+                </Button>
+                <Button
+                  variant="normal"
+                  iconName="delete-marker"
+                  disabled={!canDelete}
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteModalOpen(true);
+                  }}
+                >
+                  削除
+                </Button>
+              </SpaceBetween>
+            </div>
+          </SpaceBetween>
+        </div>
       </Container>
+
+      {item.status === "FAILED" && item.failureReason && (
+        <Alert type="error" header="失敗理由">
+          {item.failureReason}
+        </Alert>
+      )}
+
+      {/* Deploy log (= phase list)。Netlify の collapsed phase 列を模す。 */}
+      <div ref={deployLogRef}>
+        <Container
+          header={
+            <Header
+              variant="h2"
+              actions={
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    variant="icon"
+                    iconName="angle-up"
+                    ariaLabel="ログの先頭にスクロール"
+                    onClick={() => scrollDeployLog("top")}
+                  />
+                  <Button
+                    variant="icon"
+                    iconName="angle-down"
+                    ariaLabel="ログの末尾にスクロール"
+                    onClick={() => scrollDeployLog("bottom")}
+                  />
+                  <Button
+                    iconName="expand"
+                    onClick={() => setLogModalOpen(true)}
+                    data-testid="maximize-log"
+                  >
+                    Maximize log
+                  </Button>
+                </SpaceBetween>
+              }
+              description={
+                !TERMINAL_STATUSES.has(item.status)
+                  ? `${POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。`
+                  : undefined
+              }
+            >
+              Deploy log
+            </Header>
+          }
+        >
+          <SpaceBetween size="xxs">
+            {phases.map((phase) => (
+              <PhaseRow
+                key={phase.id}
+                phase={phase}
+                deployment={item}
+                stackProgress={stackProgress}
+                stackProgressError={stackProgressError}
+                stackProgressPending={stackProgressPending}
+              />
+            ))}
+          </SpaceBetween>
+        </Container>
+      </div>
 
       <Container header={<Header variant="h2">基本情報</Header>}>
         <ColumnLayout columns={2} variant="text-grid">
@@ -224,12 +324,6 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
           />
         </ColumnLayout>
       </Container>
-
-      <StackProgressSection
-        progress={stackProgress}
-        error={stackProgressError}
-        pending={stackProgressPending}
-      />
 
       {teamLoginKey && (
         <Container
@@ -305,21 +399,136 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
           {deleteError && <Alert type="error">{deleteError}</Alert>}
         </SpaceBetween>
       </Modal>
+
+      {/* Maximize log: terminal-style 全 phase の log。Cloudscape の Modal size="max"。 */}
+      <Modal
+        visible={logModalOpen}
+        onDismiss={() => setLogModalOpen(false)}
+        header="Deploy log"
+        size="max"
+        data-testid="deploy-log-modal"
+      >
+        <TerminalLogView lines={terminalLog} />
+      </Modal>
+
+      <DeploySummaryStyles />
     </SpaceBetween>
   );
 }
 
 /**
- * #534: CFn 進行状況セクション。Events / Resources / Console deep link を出す。
- *
- * - 初回 fetch 待ち (= progress === null かつ pending) → Spinner
- * - 取得失敗 → Alert (基本情報は別途表示済、ここの error は基本情報を汚さない)
- * - stack 未割当 (= deploy 極初期 / DDB 行はあるが CFn CreateStack 前) → 控えめな notice
- * - 成功 → Events / Resources の Table + 「CFn console を開く」link
- *
- * FAILED event があれば最上位に Alert で強調 (= operator が一目で原因を特定できる)。
+ * 1 phase 行。ExpandableSection で `>` chevron + 展開を Cloudscape に任せる。
+ * Header に phase 名 + StatusIndicator を並べる。Body は phase ごとに切替。
  */
-function StackProgressSection(props: {
+function PhaseRow(props: {
+  readonly phase: DeployPhase;
+  readonly deployment: DeploymentSummary;
+  readonly stackProgress: StackProgress | null;
+  readonly stackProgressError: { message: string; notYetCreated: boolean } | null;
+  readonly stackProgressPending: boolean;
+}) {
+  const { phase, deployment, stackProgress, stackProgressError, stackProgressPending } = props;
+
+  return (
+    <ExpandableSection
+      variant="default"
+      headerText={
+        <span className="tc-phase-header" data-testid={`phase-${phase.id}`}>
+          <span className="tc-phase-name">{phase.name}</span>
+          <span className="tc-phase-status">
+            <StatusIndicator type={PHASE_STATUS_INDICATOR[phase.status]}>
+              {PHASE_STATUS_LABEL[phase.status]}
+            </StatusIndicator>
+          </span>
+        </span>
+      }
+    >
+      <PhaseBody
+        phase={phase}
+        deployment={deployment}
+        stackProgress={stackProgress}
+        stackProgressError={stackProgressError}
+        stackProgressPending={stackProgressPending}
+      />
+    </ExpandableSection>
+  );
+}
+
+function PhaseBody(props: {
+  readonly phase: DeployPhase;
+  readonly deployment: DeploymentSummary;
+  readonly stackProgress: StackProgress | null;
+  readonly stackProgressError: { message: string; notYetCreated: boolean } | null;
+  readonly stackProgressPending: boolean;
+}) {
+  const { phase, deployment, stackProgress, stackProgressError, stackProgressPending } = props;
+
+  switch (phase.id) {
+    case "enqueued":
+      return (
+        <KeyValuePairs
+          items={[
+            { label: "Enqueued at", value: deployment.createdAt },
+            { label: "Tenant ID", value: <code>{deployment.tenantId}</code> },
+            { label: "Problem ID", value: <code>{deployment.problemId}</code> },
+            {
+              label: "Team",
+              value: deployment.displayTeamName ?? deployment.teamName,
+            },
+          ]}
+        />
+      );
+    case "building":
+      return (
+        <SpaceBetween size="s">
+          <Box variant="p">
+            CodeBuild が問題テンプレートを競技者アカウントへ deploy するための CFn を組み立てます。
+          </Box>
+          {stackProgress?.consoleUrl ? (
+            <Link href={stackProgress.consoleUrl} external>
+              Open CodeBuild / CloudFormation logs in AWS Console
+            </Link>
+          ) : (
+            <Box variant="small" color="text-status-info">
+              CodeBuild console URL is not yet available.
+            </Box>
+          )}
+        </SpaceBetween>
+      );
+    case "cfn-deploy":
+      return (
+        <StackProgressBody
+          progress={stackProgress}
+          error={stackProgressError}
+          pending={stackProgressPending}
+        />
+      );
+    case "health-check":
+      return (
+        <Box variant="p" color="text-status-info">
+          {phase.note ?? "Skipped"}
+        </Box>
+      );
+    case "complete":
+      return (
+        <KeyValuePairs
+          items={[
+            { label: "Final status", value: <code>{deployment.status}</code> },
+            { label: "Last updated", value: deployment.updatedAt },
+            ...(deployment.failureReason
+              ? [{ label: "Failure reason", value: deployment.failureReason }]
+              : []),
+          ]}
+        />
+      );
+  }
+}
+
+/**
+ * #534: CFn 進行状況セクション。Events / Resources / Console deep link を出す。
+ * Phase 3 (CloudFormation Deploy) の body として PhaseBody から呼ばれる。
+ */
+function StackProgressBody(props: {
   readonly progress: StackProgress | null;
   readonly error: { message: string; notYetCreated: boolean } | null;
   readonly pending: boolean;
@@ -329,157 +538,257 @@ function StackProgressSection(props: {
   // 初回ローディング: error も progress も無く、fetch in-flight。
   if (!progress && !error && pending) {
     return (
-      <Container header={<Header variant="h2">Stack 進行状況</Header>}>
-        <Box textAlign="center" padding="m">
-          <Spinner /> CFn から取得中...
-        </Box>
-      </Container>
+      <Box textAlign="center" padding="m">
+        <Spinner /> CFn から取得中...
+      </Box>
     );
   }
 
   // Error 表示。stack 未割当 (= API 側の `stack_not_yet_created` 409) は別 message に分ける。
   if (error && !progress) {
-    return (
-      <Container header={<Header variant="h2">Stack 進行状況</Header>}>
-        {error.notYetCreated ? (
-          <Box color="text-status-info">
-            CFn Stack はまだ作成されていません。deploy worker (CodeBuild) が起動し次第、 ここに
-            StackEvents / Resources が表示されます。
-          </Box>
-        ) : (
-          <Alert type="warning" header="CFn の進行状況を取得できませんでした">
-            {error.message}
-          </Alert>
-        )}
-      </Container>
+    return error.notYetCreated ? (
+      <Box color="text-status-info">
+        CFn Stack はまだ作成されていません。deploy worker (CodeBuild) が起動し次第、 ここに
+        StackEvents / Resources が表示されます。
+      </Box>
+    ) : (
+      <Alert type="warning" header="CFn の進行状況を取得できませんでした">
+        {error.message}
+      </Alert>
     );
   }
 
   if (!progress) return null;
 
-  // 失敗 event を抽出 (= CREATE_FAILED / UPDATE_FAILED 等)。最初に検出した 1 件を Alert で
-  // 強調する: operator が AWS Console を開かずに原因 logical id + reason を読める。
+  // 失敗 event を抽出 (= CREATE_FAILED / UPDATE_FAILED 等)。
   const firstFailure = progress.events.find((e) => e.resourceStatus.endsWith("_FAILED"));
 
   return (
-    <Container
-      header={
-        <Header
-          variant="h2"
-          description={
-            progress.stackStatus
-              ? `現在の CFn Stack 状態: ${progress.stackStatus}`
-              : "CFn StackEvents / Resources を CFn API から直接取得しています。"
-          }
-          actions={
-            <Link href={progress.consoleUrl} external>
-              CFn console を開く
-            </Link>
-          }
-        >
-          Stack 進行状況
-        </Header>
-      }
-    >
-      <SpaceBetween size="m">
-        {firstFailure && (
-          <Alert type="error" header={`失敗: ${firstFailure.logicalResourceId}`}>
-            <Box>
-              <code>{firstFailure.resourceType}</code> が <code>{firstFailure.resourceStatus}</code>{" "}
-              になりました。
-            </Box>
-            {firstFailure.resourceStatusReason && (
-              <Box variant="small">{firstFailure.resourceStatusReason}</Box>
-            )}
-          </Alert>
+    <SpaceBetween size="m">
+      <Box>
+        <Link href={progress.consoleUrl} external>
+          Open CloudFormation console
+        </Link>
+        {progress.stackStatus && (
+          <Box variant="small" margin={{ top: "xxs" }}>
+            現在の CFn Stack 状態: <code>{progress.stackStatus}</code>
+          </Box>
         )}
+      </Box>
 
-        <Table<StackProgressEvent>
-          variant="embedded"
-          header={<Header variant="h3">StackEvents (最新 {progress.events.length} 件)</Header>}
-          items={[...progress.events]}
-          empty={
-            <Box textAlign="center" color="inherit" padding="l">
-              StackEvents はまだありません。
-            </Box>
-          }
-          columnDefinitions={[
-            {
-              id: "timestamp",
-              header: "時刻",
-              cell: (e) => e.timestamp,
-              width: 200,
-            },
-            {
-              id: "logicalResourceId",
-              header: "LogicalId",
-              cell: (e) => <code>{e.logicalResourceId}</code>,
-              width: 220,
-            },
-            {
-              id: "resourceType",
-              header: "Type",
-              cell: (e) => <code>{e.resourceType}</code>,
-              width: 220,
-            },
-            {
-              id: "status",
-              header: "Status",
-              cell: (e) => (
-                <StatusIndicator type={statusToIndicator(e.resourceStatus)}>
-                  {e.resourceStatus}
-                </StatusIndicator>
-              ),
-              width: 240,
-            },
-            {
-              id: "reason",
-              header: "Reason",
-              cell: (e) => e.resourceStatusReason ?? "",
-            },
-          ]}
-        />
+      {firstFailure && (
+        <Alert type="error" header={`失敗: ${firstFailure.logicalResourceId}`}>
+          <Box>
+            <code>{firstFailure.resourceType}</code> が <code>{firstFailure.resourceStatus}</code>{" "}
+            になりました。
+          </Box>
+          {firstFailure.resourceStatusReason && (
+            <Box variant="small">{firstFailure.resourceStatusReason}</Box>
+          )}
+        </Alert>
+      )}
 
-        <Table<StackProgressResource>
-          variant="embedded"
-          header={<Header variant="h3">Resources ({progress.resources.length} 件)</Header>}
-          items={[...progress.resources]}
-          empty={
-            <Box textAlign="center" color="inherit" padding="l">
-              Resources はまだ作成されていません。
-            </Box>
-          }
-          columnDefinitions={[
-            {
-              id: "logicalResourceId",
-              header: "LogicalId",
-              cell: (r) => <code>{r.logicalResourceId}</code>,
-              width: 220,
-            },
-            {
-              id: "resourceType",
-              header: "Type",
-              cell: (r) => <code>{r.resourceType}</code>,
-              width: 220,
-            },
-            {
-              id: "status",
-              header: "Status",
-              cell: (r) => (
-                <StatusIndicator type={statusToIndicator(r.resourceStatus)}>
-                  {r.resourceStatus}
-                </StatusIndicator>
-              ),
-              width: 240,
-            },
-            {
-              id: "physicalResourceId",
-              header: "PhysicalId",
-              cell: (r) => (r.physicalResourceId ? <code>{r.physicalResourceId}</code> : ""),
-            },
-          ]}
-        />
-      </SpaceBetween>
-    </Container>
+      <Table<StackProgressEvent>
+        variant="embedded"
+        header={<Header variant="h3">StackEvents (最新 {progress.events.length} 件)</Header>}
+        items={[...progress.events]}
+        empty={
+          <Box textAlign="center" color="inherit" padding="l">
+            StackEvents はまだありません。
+          </Box>
+        }
+        columnDefinitions={[
+          {
+            id: "timestamp",
+            header: "時刻",
+            cell: (e) => e.timestamp,
+            width: 200,
+          },
+          {
+            id: "logicalResourceId",
+            header: "LogicalId",
+            cell: (e) => <code>{e.logicalResourceId}</code>,
+            width: 220,
+          },
+          {
+            id: "resourceType",
+            header: "Type",
+            cell: (e) => <code>{e.resourceType}</code>,
+            width: 220,
+          },
+          {
+            id: "status",
+            header: "Status",
+            cell: (e) => (
+              <StatusIndicator type={statusToIndicator(e.resourceStatus)}>
+                {e.resourceStatus}
+              </StatusIndicator>
+            ),
+            width: 240,
+          },
+          {
+            id: "reason",
+            header: "Reason",
+            cell: (e) => e.resourceStatusReason ?? "",
+          },
+        ]}
+      />
+
+      <Table<StackProgressResource>
+        variant="embedded"
+        header={<Header variant="h3">Resources ({progress.resources.length} 件)</Header>}
+        items={[...progress.resources]}
+        empty={
+          <Box textAlign="center" color="inherit" padding="l">
+            Resources はまだ作成されていません。
+          </Box>
+        }
+        columnDefinitions={[
+          {
+            id: "logicalResourceId",
+            header: "LogicalId",
+            cell: (r) => <code>{r.logicalResourceId}</code>,
+            width: 220,
+          },
+          {
+            id: "resourceType",
+            header: "Type",
+            cell: (r) => <code>{r.resourceType}</code>,
+            width: 220,
+          },
+          {
+            id: "status",
+            header: "Status",
+            cell: (r) => (
+              <StatusIndicator type={statusToIndicator(r.resourceStatus)}>
+                {r.resourceStatus}
+              </StatusIndicator>
+            ),
+            width: 240,
+          },
+          {
+            id: "physicalResourceId",
+            header: "PhysicalId",
+            cell: (r) => (r.physicalResourceId ? <code>{r.physicalResourceId}</code> : ""),
+          },
+        ]}
+      />
+    </SpaceBetween>
+  );
+}
+
+/**
+ * Terminal-style log renderer。Netlify の expanded log view を模す。
+ * - 左 gutter: 行番号 (right-aligned, dim)
+ * - 中央 gutter: timestamp
+ * - 右: log text (section header は cyan)
+ */
+function TerminalLogView({ lines }: { lines: readonly LogLine[] }) {
+  // 行番号は append-only な log なので index で問題ないが、key には text + ts を
+  // 組み合わせた stable な値を使う (biome の useArrayKey 規約)。同一行が重複するケース
+  // のために locallyUnique counter を ts+text で消化する。
+  const keys = (() => {
+    const seen = new Map<string, number>();
+    return lines.map((line) => {
+      const base = `${line.timestamp ?? ""}|${line.header ? "H" : "L"}|${line.text}`;
+      const dup = seen.get(base) ?? 0;
+      seen.set(base, dup + 1);
+      return dup === 0 ? base : `${base}#${dup}`;
+    });
+  })();
+  return (
+    <div className="tc-terminal-log" data-testid="terminal-log">
+      <pre className="tc-terminal-log-pre">
+        {lines.map((line, idx) => {
+          const number = String(idx + 1).padStart(3, " ");
+          const ts = line.timestamp ?? "";
+          return (
+            <div
+              key={keys[idx]}
+              className={line.header ? "tc-log-line tc-log-header" : "tc-log-line"}
+            >
+              <span className="tc-log-number">{number}</span>
+              <span className="tc-log-ts">{ts && `${ts}:`}</span>
+              <span className="tc-log-text">{line.text}</span>
+            </div>
+          );
+        })}
+      </pre>
+    </div>
+  );
+}
+
+/**
+ * Component-scoped CSS。Cloudscape primitive で表現しきれない:
+ *   - dark background の summary card
+ *   - terminal-style log の三列 grid
+ * をここで閉じる。global stylesheet を汚さない。
+ */
+function DeploySummaryStyles() {
+  return (
+    <style>{`
+.tc-deploy-summary {
+  background: #0f1419;
+  color: #e8eaed;
+  padding: 24px 32px;
+  border-radius: 12px;
+}
+.tc-deploy-summary code {
+  color: #9ad3ff;
+}
+.tc-deploy-summary-actions {
+  margin-top: 12px;
+}
+.tc-phase-header {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+.tc-phase-name {
+  font-weight: 600;
+}
+.tc-phase-status {
+  margin-left: auto;
+}
+.tc-terminal-log {
+  background: #0f1419;
+  color: #e8eaed;
+  padding: 16px;
+  border-radius: 8px;
+  max-height: 80vh;
+  overflow: auto;
+}
+.tc-terminal-log-pre {
+  margin: 0;
+  font-family: "SF Mono", Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tc-log-line {
+  display: grid;
+  grid-template-columns: 4ch 11ch 1fr;
+  gap: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tc-log-number {
+  text-align: right;
+  color: #5a6470;
+  font-variant-numeric: tabular-nums;
+}
+.tc-log-ts {
+  color: #8a99a8;
+  font-variant-numeric: tabular-nums;
+}
+.tc-log-text {
+  color: #e8eaed;
+}
+.tc-log-header .tc-log-text {
+  color: #66d9ef;
+  font-weight: 600;
+}
+`}</style>
   );
 }
