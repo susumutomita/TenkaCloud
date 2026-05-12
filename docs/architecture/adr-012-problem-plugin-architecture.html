@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>ADR-012: Problem plugin architecture — 4 アセット (resources / scoring / engine / portal) + generic dispatcher</title>
+<title>ADR-012: Problem plugin architecture — 3 アセット + metadata DSL + platform 内 generic scoring Lambda</title>
 <style>
   :root {
     --c-text: #1f2328;
@@ -29,9 +29,6 @@
   table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
   th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
   th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
-  tr.show td { background: #ddf4e0; }
-  tr.hide td { background: #ffe9e9; }
-  tr.warn td { background: #fff8c5; }
   .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
           border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
   .meta b { color: var(--c-muted); margin-right: .3rem; }
@@ -44,16 +41,11 @@
   .quote { border-left: 3px solid var(--c-warn); background: #fff8c5; padding: .5rem .9rem; margin: .8rem 0; border-radius: 0 4px 4px 0; font-size: 0.92rem; }
   details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
   details > summary { cursor: pointer; font-weight: 600; }
-  .asset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; margin: 1rem 0; }
-  .asset-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
-  .asset-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
-  .asset-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
-  .asset-card .body { font-size: 0.88rem; }
 </style>
 </head>
 <body>
 <header>
-  <h1>ADR-012: Problem plugin architecture — 4 アセット (resources / scoring / engine / portal) + generic dispatcher</h1>
+  <h1>ADR-012: Problem plugin architecture — 3 アセット + 厚 metadata DSL + platform 1 つの generic scoring Lambda</h1>
   <div class="meta">
     <div><b>Status:</b><span class="badge accept">Proposed</span> 2026-05-12</div>
     <div><b>Trigger:</b> PR-608 (#606 Phase 2 score engine) close</div>
@@ -70,25 +62,163 @@
 </header>
 
 <section>
-<h2>欲しい姿 (= 一目で分かる version)</h2>
-
-<p>1 問題は <strong>4 つのアセット</strong> を持つ。Platform は 4 つを <strong>generic に host するだけ</strong>。</p>
+<h2>1 枚で分かる構造</h2>
 
 <pre>problems/&lt;id&gt;/
-├── metadata.json    # 宣言 (既存)
-├── template.yaml    # ①リソース      = 競技者 AWS account に立つ CFn
-├── scoring/         # ②採点          = 観測 → スコア計算
-│   └── index.ts
-├── engine/          # ③攻撃 / 仕組み = 時間駆動の active な変化 (Battle 主用途)
-│   └── index.ts
-└── portal/          # ④ダッシュボード = 競技者の画面
-    └── index.tsx</pre>
+├── metadata.json    # 厚 DSL    = endpoint slot / 採点 rule / phase / 攻撃 / dashboard slot を全部宣言
+├── template.yaml    # ①リソース = 競技者 AWS account に立つ CFn。passive 仕掛け (= cron 等) 同梱可
+└── portal/          # ②ダッシュボード = Battle 固有 UI (Challenge は不要、generic 流用)</pre>
 
-<p><strong>新問題を足す = この dir を 1 個 git add するだけ</strong>。 platform は触らない。 差し替えも同 dir を更新するだけ。</p>
+<table>
+<thead><tr><th></th><th>採点 (= 観測 → score)</th><th>攻撃 (= 時間駆動の状態変化)</th></tr></thead>
+<tbody>
+<tr><td><strong>誰が宣言</strong></td><td>問題側 <code>metadata.json</code></td><td>問題側 (template.yaml or metadata.json)</td></tr>
+<tr><td><strong>誰が実行</strong></td><td>platform 内 1 つの generic scoring Lambda</td><td>passive: 競技者 account 内の cron/Lambda (= template.yaml 同梱) / active: platform scoring Lambda が metadata phase 宣言に従って分岐</td></tr>
+<tr><td><strong>問題側の Lambda コード</strong></td><td><strong>なし</strong> (= 問題ごとに Lambda 立てるとぐちゃぐちゃになる、ユーザー指摘 5 / 2026-05-12)</td><td>なし</td></tr>
+</tbody>
+</table>
+
+<p><strong>新問題追加 = この dir 1 個 git add するだけ</strong>。platform は触らない。 metadata DSL が表現できる範囲なら code 0 行で新問題が動く。</p>
+</section>
+
+<section>
+<h2>ユーザー指摘 (= 設計の制約)</h2>
 
 <div class="quote">
-ユーザー指摘 (2026-05-12): 「<b>攻撃とかの仕組みは問題側のコードで作ればいい</b>」 + 「<b>Challenge は共通化できるが、Battle は柔軟性が必要</b>」 = この ADR の根本方針。
+2026-05-12 順序付きで:<br>
+<b>1.</b>「採点 / リソース / ダッシュボードが欲しい機能」<br>
+<b>2.</b>「攻撃とかの仕組みは問題側のコード (= template / metadata) で作ればいい」<br>
+<b>3.</b>「Challenge は共通化できる、Battle は柔軟性が必要」<br>
+<b>4.</b>「endpoint は default を問題で指定、競技者が override 可能」<br>
+<b>5.</b>「採点 Lambda は platform 側に 1 個、問題ごとに立てない (= ぐちゃぐちゃ防止)」<br>
+<b>6.</b>「endpoint 数と default 値 (= deploy 時 CFn output から team ごと set) を指定できないといけない」<br>
+<b>7.</b>「だからかなり metadata の作り込みをしないといけない」
 </div>
+
+<p>= <strong>厚 metadata DSL で問題固有性を吸収し、platform は generic 1 個に保つ</strong>。</p>
+</section>
+
+<section>
+<h2>厚 metadata DSL (= 本 ADR の主役)</h2>
+
+<h3>骨子</h3>
+
+<p>metadata.json で次を宣言できる必要がある:</p>
+
+<table>
+<thead><tr><th>領域</th><th>宣言する内容</th><th>例 (microservice-migration)</th></tr></thead>
+<tbody>
+<tr><td>endpoint slot</td><td>N 個の slot 名 / default URL の取得元 / override 可否</td><td>3 slot (users / orders / catalog)、deploy 時 CFn output <code>Ec2BaseUrl</code> + appendPath で default を team ごとに set、競技者は override 可</td></tr>
+<tr><td>採点 kind</td><td>5 つの builtin から選択 (flag / uptime-flat / uptime-multi / phased-polling / attack-detection)</td><td><code>phased-polling</code></td></tr>
+<tr><td>採点 rule</td><td>kind に応じた detail パラメータ (= 配点表 / platform 分類 / bonus 条件 等)</td><td>下記 "phased-polling" の details</td></tr>
+<tr><td>phase 進行</td><td>deploy からの経過時間で switch する rule</td><td>60 min: EC2 degradation 開始 / 90 min: scoring path を <code>/score?legacy=true</code> に切替</td></tr>
+<tr><td>dashboard slot</td><td>portal の標準 slot に対する custom component の有無 (= "RegistrationPanel" / "StatusPanel" 等)</td><td>StatusPanel + RegistrationPanel に custom 指定</td></tr>
+</tbody>
+</table>
+
+<h3>具体例: microservice-migration-battle</h3>
+
+<pre>{
+  "id": "microservice-migration-battle",
+  "category": "Battle",
+  "difficulty": 4,
+  "estimatedMinutes": 120,
+
+  "endpoints": [
+    {
+      "slot": "users",
+      "default":   { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/users" },
+      "overridable": true,
+      "label": "users service URL"
+    },
+    {
+      "slot": "orders",
+      "default":   { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/orders" },
+      "overridable": true
+    },
+    {
+      "slot": "catalog",
+      "default":   { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/catalog" },
+      "overridable": true
+    }
+  ],
+
+  "scoring": {
+    "kind": "phased-polling",
+    "intervalMinutes": 1,
+    "probe": {
+      "metaPath": "/meta",          // 各 slot で platform 自己申告を読む
+      "scorePath": "/score"
+    },
+    "platformRules": {
+      "ec2":       { "points": 100,  "degradedPoints": 10 },
+      "lambda":    { "points": 1000 },
+      "ecs":       { "points": 1000 },
+      "apprunner": { "points": 1000 }
+    },
+    "failurePenalty": -100,
+    "responsePenalties": [
+      { "if": "responseTimeMs > 1500", "points": 10 }
+    ],
+    "bonuses": [
+      { "kind": "all-slots-on-platforms", "platforms": ["lambda","ecs","apprunner"], "points": 5000, "once": true }
+    ]
+  },
+
+  "phases": [
+    {
+      "name":  "degraded",
+      "afterMinutes": 60,
+      "effect": { "switchPlatformToDegraded": ["ec2"] }
+    },
+    {
+      "name":  "legacy",
+      "afterMinutes": 90,
+      "effect": { "scorePathOverride": "/score?legacy=true" }
+    }
+  ],
+
+  "dashboard": {
+    "slots": {
+      "RegistrationPanel": "portal/RegistrationPanel.tsx",
+      "StatusPanel":       "portal/StatusPanel.tsx"
+    },
+    "routes": [
+      { "path": "/migration-help", "component": "portal/MigrationGuide.tsx" }
+    ]
+  }
+}</pre>
+
+<p>= <strong>~50 行 JSON で問題の全ロジックが宣言される</strong>。Platform 側に問題固有 Lambda は一切要らない。</p>
+
+<h3>採点 kind の 5 つ (= MVP set、必要なら拡張)</h3>
+
+<table>
+<thead><tr><th>kind</th><th>用途</th><th>例</th></tr></thead>
+<tbody>
+<tr><td><code>flag</code></td><td>1 回提出型、StackOutput 値と比較</td><td><code>hello-world</code></td></tr>
+<tr><td><code>uptime-flat</code></td><td>固定 endpoint 群を polling、ok=+pt / fail=skip</td><td><code>hello-world-battle</code></td></tr>
+<tr><td><code>uptime-multi</code></td><td>N 個の endpoint を全部 probe、 全 OK で配点</td><td><code>security-battle-royale</code> (= main + admin の両方が生きてないと点取れない)</td></tr>
+<tr><td><code>phased-polling</code></td><td>時間で score 計算 rule が変わる、platform 分類 / bonus 対応</td><td><code>microservice-migration-battle</code></td></tr>
+<tr><td><code>attack-detection</code></td><td>CloudWatch Logs / stack output の counter を読んで攻撃数で配点</td><td><code>security-battle-royale</code> の attack 検知部分</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Platform 側 = 1 つの generic scoring Lambda + endpoint registry + portal loader</h2>
+
+<table>
+<thead><tr><th>platform 機能</th><th>役割</th><th>備考</th></tr></thead>
+<tbody>
+<tr><td><strong>Deploy</strong></td><td>template.yaml を競技者 account に CFn deploy</td><td>既存 (ADR-001 / ADR-002)</td></tr>
+<tr><td><strong>Endpoint registry</strong></td><td>(1) deploy 時に CFn output から default URL を抽出して per-team で書き込む (2) 競技者の override を受け付ける (3) effective URL (override || default) を scoring に渡す</td><td>新規。1 つの DDB <code>ProblemEndpoints</code></td></tr>
+<tr><td><strong>Generic scoring Lambda</strong></td><td>1 min 毎に全 (tenant × team × problem × slot) を iterate。各問題の metadata <code>scoring.kind</code> を読んで分岐 (= 5 kind の builtin handler)。phase 進行は metadata の <code>phases</code> 配列から経過時間で評価。ScoreEvent を発行</td><td><strong>新規・platform 1 つ・全問題で共有</strong>。 既存 health-check-handler を refactor して取り込む</td></tr>
+<tr><td><strong>Portal plugin loader</strong></td><td>participant-portal が metadata.<code>dashboard.slots</code> を読んで該当 component を S3 から <code>React.lazy</code> 動的 load</td><td>新規、Battle 用</td></tr>
+</tbody>
+</table>
+
+<p><strong>Platform は 5 kind の builtin scoring を持つだけで全問題に対応</strong>。問題が 5 kind で表現できなければ ADR を 1 個増やす (= 6 つ目の kind を足す)。Lambda は増えない。</p>
 </section>
 
 <section>
@@ -98,292 +228,52 @@
 <thead><tr><th></th><th>Challenge</th><th>Battle</th></tr></thead>
 <tbody>
 <tr><td>性格</td>
-    <td>静的・個別演習。flag 提出 or 単純 uptime</td>
-    <td>動的・対戦型。時間駆動の攻撃 / 妨害 / 多段 phase</td></tr>
-<tr><td>採点 (②)</td>
-    <td><strong>宣言で十分</strong> (= 80% case)。metadata.json の <code>scoring.kind = "flag"</code> or <code>"uptime-flat"</code> で platform 内蔵 evaluator が動く。<code>scoring/index.ts</code> は <strong>不要</strong></td>
-    <td><strong>カスタム Lambda 推奨</strong> (= 80% case)。<code>scoring/index.ts</code> を問題側で書き、phase / platform 分類 / 多段配点 / bonus を自由に表現</td></tr>
-<tr><td>攻撃 / 仕組み (③)</td>
-    <td><strong>原則無し</strong>。Challenge は時間駆動の active 攻撃を持たない</td>
-    <td><strong>必須</strong> (= 多くの Battle で)。<code>engine/index.ts</code> を schedule で invoke、競技者環境を能動的に変える (= EC2 latency 注入 / phase flag flip / 攻撃発動)</td></tr>
-<tr><td>portal (④)</td>
-    <td><strong>generic で十分</strong>。flag 提出 form + score 表示は platform 内蔵 component を流用。<code>portal/</code> は<strong>不要</strong></td>
-    <td><strong>カスタム推奨</strong>。Battle 固有 UX (= phase countdown / 攻撃 timeline / multi-slot 登録 form) を <code>portal/index.tsx</code> で書く</td></tr>
-<tr><td>具体例</td>
-    <td><code>hello-world</code> (flag) / <code>hello-world-battle</code> (uptime-flat 中身は実は Challenge 寄り)</td>
-    <td><code>security-battle-royale</code> / <code>microservice-migration-battle</code></td></tr>
+    <td>静的・個別演習</td>
+    <td>動的・対戦型、時間駆動の攻撃 / phase / 多段</td></tr>
+<tr><td>metadata の厚さ</td>
+    <td><strong>薄い</strong> (= <code>kind: flag</code> + flagOutputKey 等の数 field)</td>
+    <td><strong>厚い</strong> (= endpoint slot 多段 / phase / platform 分類 / bonus / dashboard slot を詰める)</td></tr>
+<tr><td>template.yaml</td>
+    <td>flag を出す CFn のみ</td>
+    <td>CFn + passive 仕掛け cron 同梱可</td></tr>
+<tr><td>portal/</td>
+    <td><strong>不要</strong> (generic flag form 流用)</td>
+    <td><strong>必要</strong> (Battle 固有 UI を custom component で)</td></tr>
+<tr><td>新問題追加コスト</td>
+    <td>metadata + template ほぼコピペ</td>
+    <td>metadata 厚く書く + portal component 数本 + template の仕掛け設計</td></tr>
 </tbody>
 </table>
-
-<p><strong>運用ルール</strong>: Challenge は metadata + template だけで完結 (= 雛形がほぼコピペ)。Battle は 4 つ揃える前提で書く (= 個別 build / test が必要)。Platform はどちらにも対応する generic dispatcher。</p>
 </section>
 
 <section>
-<h2>4 アセットの contract</h2>
+<h2>portal plugin contract (= ② asset の中身)</h2>
 
-<h3>① リソース (<code>template.yaml</code>) — 既存</h3>
+<p>participant-portal が runtime で動的 load する React module。metadata の <code>dashboard.slots</code> で「どの標準 slot に custom component を挿すか」を宣言。</p>
 
-<p>CFn template。競技者 AWS account に deploy される。<strong>passive な仕掛け</strong> (= EC2 user-data 内の cron / EventBridge Scheduler rule 等で deploy 直後から自動進行する妨害) はここに同梱して良い。</p>
+<pre>// problems/&lt;id&gt;/portal/StatusPanel.tsx (= 例)
+import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 
-<details>
-<summary>例: microservice-migration-battle の passive 仕掛け</summary>
-<pre>Resources:
-  Ec2Instance:
-    Type: AWS::EC2::Instance
-    Properties:
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          # 60 min 後に tc qdisc で 200ms latency 注入 (= EC2 劣化攻撃)
-          echo "0 */60 * * * /usr/sbin/tc qdisc add dev eth0 root netem delay 200ms" | crontab -</pre>
-<p>UserData 内なので platform は知らない、ただ deploy するだけ。</p>
-</details>
-
-<h3>endpoint = default + override 可能な slot (= 統一モデル)</h3>
-
-<p>全 endpoint は <strong>1 つの統一モデル</strong> で扱う:</p>
-
-<table>
-<thead><tr><th>要素</th><th>内容</th></tr></thead>
-<tbody>
-<tr><td><strong>slot</strong></td><td>問題が宣言する endpoint の役割名 (例: <code>main</code> / <code>admin</code> / <code>users</code>)</td></tr>
-<tr><td><strong>default URL</strong></td><td>CFn output から自動取得 or 固定値。deploy 直後はこれが使われる</td></tr>
-<tr><td><strong>override</strong></td><td>競技者が portal UI で別 URL に変更可能。 <strong>effective URL = override || default</strong></td></tr>
-</tbody>
-</table>
-
-<p><strong>なぜこの形か</strong>: Battle 問題では競技者が deploy 直後の構成を <strong>変えていく</strong> ことが本質的:</p>
-
-<ul>
-<li><code>security-battle-royale</code>: default は S3 直 URL → 競技者が CloudFront を前段に置いたら新 URL で override</li>
-<li><code>microservice-migration-battle</code>: default は EC2 の 3 path → Lambda / ECS / App Runner に切り出したら slot ごとに override</li>
-<li><code>hello-world-battle</code>: default の EC2 URL のまま (= override 不要)、あるいは CDN を被せて override</li>
-</ul>
-
-<pre>// problems/&lt;id&gt;/metadata.json (= security-battle-royale 例)
-{
-  "endpoints": [
-    {
-      "slot": "main",
-      "default": { "from": "cfn-output", "key": "EndpointUrl" },
-      "overridable": true,
-      "label": "メイン endpoint",
-      "description": "deploy 直後は S3 直、CDN / WAF 等を被せて変更可能"
-    },
-    {
-      "slot": "admin",
-      "default": { "from": "cfn-output", "key": "AdminUrl" },
-      "overridable": true
-    }
-  ]
+export default function StatusPanel({ team, endpoints, scores, phase, nextPhaseAt }: PortalSlotProps) {
+  return (
+    &lt;Container&gt;
+      &lt;Header&gt;3 slot 状態&lt;/Header&gt;
+      {Object.entries(endpoints).map(([slot, url]) =&gt; (
+        &lt;Box key={slot}&gt;{slot}: {url} / score {scores[slot]}&lt;/Box&gt;
+      ))}
+      &lt;Box&gt;次フェーズまで残り {formatCountdown(nextPhaseAt)}&lt;/Box&gt;
+    &lt;/Container&gt;
+  );
 }</pre>
-
-<pre>// microservice-migration-battle 例 (= 3 slot、各 slot を別 hosting に切り出す)
-{
-  "endpoints": [
-    { "slot": "users",   "default": { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/users" },   "overridable": true },
-    { "slot": "orders",  "default": { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/orders" },  "overridable": true },
-    { "slot": "catalog", "default": { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/catalog" }, "overridable": true }
-  ]
-}</pre>
-
-<p>Platform は <strong>3 機能の generic な endpoint registry</strong> を提供:</p>
-
-<ol>
-<li>deploy 直後に CFn output から default URL を抽出して各 slot に書き込む</li>
-<li>競技者の override (<code>POST /problems/:id/endpoints { slot, url }</code>) を受け付ける</li>
-<li>effective URL (= override があれば override、無ければ default) を scoring / engine に渡す</li>
-</ol>
-
-<p><code>scoring/index.ts</code> / <code>engine/index.ts</code> には統一形で渡る:</p>
-
-<pre>event.endpoints = {
-  users:   "https://d12345.cloudfront.net/users",     // ← competitor が CDN 被せて override
-  orders:  "http://ec2-abc.amazonaws.com/orders",     // ← default のまま (未 override)
-  catalog: "https://api-gw.execute-api.../catalog"    // ← Lambda + API GW に移して override
-}</pre>
-
-<p>問題側は slot 名で endpoint を引いて probe するだけ。endpoint が <strong>1 つでも N 個でも</strong>同じ contract。</p>
-
-<p><strong>Challenge (flag 系)</strong> は endpoint 概念を持たない (= 提出 form 経由)。<code>metadata.json</code> の <code>endpoints</code> 配列を省略するだけ。</p>
-
-<h3>② 採点 (<code>scoring/index.ts</code>) — Battle 主用途、Challenge は省略可</h3>
-
-<p><strong>Platform から 1 分毎に invoke される Lambda</strong>。観測 → スコア delta を返す pure function。 副作用 (= state 書き換え / 攻撃発動) は ③ engine に分離。</p>
-
-<pre>// problems/&lt;id&gt;/scoring/index.ts
-import type { ProblemScoringHandler } from "@tenkacloud/scoring-sdk";
-
-export const score: ProblemScoringHandler = async (event) =&gt; {
-  // event: { tenantId, teamId, deployedAt, registeredEndpoints, prevState, phaseElapsedMin }
-  // 戻り値: { delta: number, source: string, emitEvent: boolean, newState?: object }
-
-  // 例: microservice-migration の phase-aware 採点
-  if (event.phaseElapsedMin &gt; 90) {
-    const ok = await probe(`${event.registeredEndpoints.users}/score?legacy=true`);
-    return { delta: ok ? 1000 : -100, source: "users-legacy", emitEvent: true };
-  }
-  // ... 通常採点
-};</pre>
 
 <table>
 <thead><tr><th>項目</th><th>仕様</th></tr></thead>
 <tbody>
-<tr><td>signature</td><td>固定 (<code>@tenkacloud/scoring-sdk</code> が型を export)</td></tr>
-<tr><td>呼出し頻度</td><td>1 min 間隔 (= ADR-005 の polling 統一)</td></tr>
-<tr><td>状態</td><td><code>prevState</code> / <code>newState</code> 経由で per-team の小さな state を platform DDB に保管。問題は直接 DDB を触らない</td></tr>
-<tr><td>IAM</td><td>per-problem 専用 role。外部 HTTP allow (= 競技者 endpoint probe)、AWS SDK は限定 (cross-tenant 不可)</td></tr>
-<tr><td>戻り値</td><td><code>delta</code> を ScoreEvent stream に乗せる。<code>source</code> は問題ごと unique にして集計を分離</td></tr>
-</tbody>
-</table>
-
-<h3>③ 攻撃 / 仕組み (<code>engine/index.ts</code>) — Battle 主用途</h3>
-
-<p><strong>Platform が schedule (cron / time-of-day) で invoke する Lambda</strong>。state を変える / 競技者環境を能動的に揺らす。 採点と分離する理由は (a) 副作用と純粋関数を分けたい (b) 1 min より粗い頻度で十分なことが多い (c) state 変更の権限が要る (= IAM scope を採点と分離)。</p>
-
-<pre>// problems/&lt;id&gt;/engine/index.ts
-import type { ProblemEngineHandler, ProblemEngineSchedule } from "@tenkacloud/scoring-sdk";
-
-export const schedule: ProblemEngineSchedule = [
-  { name: "ec2-degradation", afterDeployMinutes: 60 },
-  { name: "legacy-switch",   afterDeployMinutes: 90 },
-];
-
-export const tick: ProblemEngineHandler = async (event) =&gt; {
-  // event: { tenantId, teamId, deployedAt, scheduleName, registeredEndpoints, prevState }
-  if (event.scheduleName === "ec2-degradation") {
-    // SSM RunCommand で competitor EC2 に tc qdisc を追加 (= 攻撃発動)
-    await ssm.send(new SendCommandCommand({ ... }));
-    return { newState: { ec2Degraded: true } };
-  }
-  if (event.scheduleName === "legacy-switch") {
-    return { newState: { legacyMode: true } };  // scoring がこれを読んで挙動を変える
-  }
-};</pre>
-
-<table>
-<thead><tr><th>項目</th><th>仕様</th></tr></thead>
-<tbody>
-<tr><td>signature</td><td><code>schedule</code> 配列 (= いつ呼ぶか) + <code>tick</code> 関数 (= 何をやるか)</td></tr>
-<tr><td>呼出し</td><td>Platform が EventBridge Scheduler で時刻指定 invoke (deploy 時刻 + offset)</td></tr>
-<tr><td>権限</td><td>per-problem role。SSM RunCommand / EC2 stop / Lambda invoke / DDB write 等を明示許可。<strong>cross-tenant 不可</strong>、自分が deploy した resources にのみ触れる</td></tr>
-<tr><td>state</td><td>scoring と共有 (<code>prevState</code> / <code>newState</code> per-team)</td></tr>
-</tbody>
-</table>
-
-<h3>④ ダッシュボード (<code>portal/index.tsx</code>) — Battle 主用途、Challenge は generic flow 流用</h3>
-
-<p>participant-portal が <strong>動的に load する React モジュール</strong>。問題固有 UI を提供。</p>
-
-<pre>// problems/&lt;id&gt;/portal/index.tsx
-import type { ProblemPortalPlugin } from "@tenkacloud/portal-plugin-sdk";
-
-export default {
-  problemId: "microservice-migration-battle",
-  slots: {
-    // 既定 slot に問題固有 component を挿す
-    StatusPanel:       ({ team, scores, phase }) =&gt; (...),  // 各 slot の現状 + phase countdown
-    RegistrationPanel: ({ slots, onRegister })   =&gt; (...),  // 3 endpoint URL 登録 form
-  },
-  routes: [
-    { path: "/migration-help", element: &lt;MigrationGuide /&gt; },
-  ],
-} satisfies ProblemPortalPlugin;</pre>
-
-<table>
-<thead><tr><th>項目</th><th>仕様</th></tr></thead>
-<tbody>
-<tr><td>build</td><td>Vite で plugin 単体を ESM bundle 化 (target ~50 KB)、S3 配信</td></tr>
-<tr><td>load</td><td>portal が runtime-config の <code>problems[].pluginUrl</code> から <code>React.lazy(() =&gt; import(url))</code></td></tr>
+<tr><td>build</td><td>Vite で plugin 単体を ESM bundle 化 (~50 KB target)、S3 配信</td></tr>
+<tr><td>load</td><td>portal が <code>React.lazy(() =&gt; import(/* @vite-ignore */ pluginUrl))</code></td></tr>
 <tr><td>共有 design system</td><td>Cloudscape は SDK 経由で peer-dep (= bundle 二重化を避ける)</td></tr>
 <tr><td>CSP</td><td>portal hosting で plugin URL を <code>script-src</code> 許可リスト化</td></tr>
-</tbody>
-</table>
-</section>
-
-<section>
-<h2>Platform 側 = generic dispatcher</h2>
-
-<p>Platform はこの 4 つの contract を満たす generic な host だけ実装する。問題固有のことは <strong>一切しない</strong>。</p>
-
-<table>
-<thead><tr><th>platform 機能</th><th>役割</th><th>新規 / 既存</th></tr></thead>
-<tbody>
-<tr><td><strong>Deploy</strong></td>
-    <td><code>template.yaml</code> を競技者 account に CFn deploy</td>
-    <td>既存 (ADR-001 / ADR-002)</td></tr>
-<tr><td><strong>Scoring runtime</strong></td>
-    <td>(a) Challenge: metadata の <code>scoring.kind</code> を解釈する 内蔵 evaluator (= flag / uptime-flat)<br>
-        (b) Battle: per-problem <code>scoring/index.ts</code> Lambda を 1 min 毎に invoke</td>
-    <td>新規 (Phase 2-3)</td></tr>
-<tr><td><strong>Engine runtime</strong></td>
-    <td>per-problem <code>engine/index.ts</code> の <code>schedule</code> 宣言を読んで EventBridge Scheduler rule を立てる。時刻になったら invoke</td>
-    <td>新規 (Phase 4)</td></tr>
-<tr><td><strong>State store</strong></td>
-    <td>per-(problem, tenant, team) の小さな state を保管する generic DDB (= scoring / engine が <code>prevState</code> / <code>newState</code> で出し入れ)</td>
-    <td>新規 (Phase 3)</td></tr>
-<tr><td><strong>Portal mount</strong></td>
-    <td>portal が起動時に runtime-config から plugin URL 一覧を読み、 該当画面で <code>React.lazy</code> 動的 load</td>
-    <td>新規 (Phase 5)</td></tr>
-<tr><td><strong>IAM 発行</strong></td>
-    <td>per-problem Lambda role を problem deploy 時に発行、最小権限</td>
-    <td>新規 (Phase 4)</td></tr>
-</tbody>
-</table>
-</section>
-
-<section>
-<h2>具体例 — 既存 + 新規 問題のマッピング</h2>
-
-<table>
-<thead><tr><th>問題</th><th>カテゴリ</th><th>①template</th><th>②scoring</th><th>③engine</th><th>④portal</th></tr></thead>
-<tbody>
-<tr><td><code>hello-world</code></td><td>Challenge</td>
-    <td>flag を出力する CFn (=既存)</td>
-    <td><strong>不要</strong> (metadata <code>kind: flag</code>)</td>
-    <td>不要</td>
-    <td><strong>不要</strong> (generic flag form 流用)</td></tr>
-<tr><td><code>hello-world-battle</code></td><td>Battle (sample)</td>
-    <td>endpoint を出す CFn (=既存)</td>
-    <td><strong>不要</strong> (metadata <code>kind: uptime-flat</code>)</td>
-    <td>不要</td>
-    <td><strong>不要</strong> (generic uptime widget 流用)</td></tr>
-<tr><td><code>security-battle-royale</code></td><td>Battle</td>
-    <td>攻撃可能な web app CFn (=既存)</td>
-    <td><strong>必要</strong> (攻撃検知ロジック を問題側で)</td>
-    <td><strong>必要</strong> (攻撃 trigger / mitigation)</td>
-    <td><strong>必要</strong> (攻撃 timeline UI)</td></tr>
-<tr><td><code>microservice-migration-battle</code></td><td>Battle</td>
-    <td>EC2 + docker compose (=PR-605)</td>
-    <td><strong>必要</strong> (phased-polling + platform 分類 + bonus)</td>
-    <td><strong>必要</strong> (60min EC2 劣化 / 90min legacy switch)</td>
-    <td><strong>必要</strong> (3-slot 登録 form + phase countdown)</td></tr>
-</tbody>
-</table>
-</section>
-
-<section>
-<h2>SDK が定める contract</h2>
-
-<p>plugin 作者が import する型を <code>@tenkacloud/scoring-sdk</code> + <code>@tenkacloud/portal-plugin-sdk</code> として packages で公開。<strong>SDK が問題側コードと platform を decouple する唯一の接面</strong>。</p>
-
-<table>
-<thead><tr><th>SDK</th><th>export</th><th>説明</th></tr></thead>
-<tbody>
-<tr><td rowspan="3"><code>@tenkacloud/scoring-sdk</code></td>
-    <td><code>type ProblemScoringHandler</code></td>
-    <td>② signature</td></tr>
-<tr><td><code>type ProblemEngineSchedule</code></td>
-    <td>③ schedule 宣言型</td></tr>
-<tr><td><code>type ProblemEngineHandler</code></td>
-    <td>③ tick signature</td></tr>
-<tr><td rowspan="3"><code>@tenkacloud/portal-plugin-sdk</code></td>
-    <td><code>type ProblemPortalPlugin</code></td>
-    <td>④ default export 型</td></tr>
-<tr><td><code>type PortalSlotComponents</code></td>
-    <td>portal 標準 slot 群 (= StatusPanel / RegistrationPanel / HelpDrawer 等)</td></tr>
-<tr><td><code>type PortalRouteDef</code></td>
-    <td>問題固有 sub-route</td></tr>
+<tr><td>SDK</td><td><code>@tenkacloud/portal-plugin-sdk</code> が <code>PortalSlotProps</code> 等の型を export</td></tr>
 </tbody>
 </table>
 </section>
@@ -392,26 +282,14 @@ export default {
 <h2>段階的ロールアウト</h2>
 
 <table>
-<thead><tr><th>Phase</th><th>scope</th><th>影響</th></tr></thead>
+<thead><tr><th>Phase</th><th>scope</th></tr></thead>
 <tbody>
-<tr><td>1 (本 PR)</td>
-    <td>本 ADR 採択 + 4 アセットの contract + SDK 型定義の skeleton</td>
-    <td>doc のみ</td></tr>
-<tr><td>2</td>
-    <td><code>problems/SCHEMA.json</code> 拡張 (= Challenge 用の declarative <code>kind</code> 5 種を formalize) + 既存 hello-world / hello-world-battle metadata を新 schema に rewrite (挙動 unchanged)</td>
-    <td>既存 Challenge 系を新 schema に乗せる、platform 既存 evaluator はそのまま</td></tr>
-<tr><td>3</td>
-    <td>per-problem state 用 DDB <code>ProblemPluginState</code> + scoring runtime (= Battle 用の <code>scoring/index.ts</code> Lambda を invoke する dispatcher)。SDK package <code>@tenkacloud/scoring-sdk</code> 公開</td>
-    <td>新 DDB + 新 dispatcher Lambda。既存 health-check-handler を refactor して dispatcher に統合</td></tr>
-<tr><td>4</td>
-    <td>engine runtime (= <code>engine/index.ts</code> schedule から EventBridge rule を生成し時刻 invoke)。 microservice-migration-battle を本 architecture で再実装 (= PR-608 の代替)</td>
-    <td>#572 完結。<code>security-battle-royale</code> の platform-bleed を audit + migrate</td></tr>
-<tr><td>5</td>
-    <td>portal plugin runtime (= participant-portal の動的 load + Cloudscape peer dep + CSP)。SDK package <code>@tenkacloud/portal-plugin-sdk</code> 公開。 microservice-migration の 3-slot 登録 UI を plugin で実装</td>
-    <td>portal hosting に plugin URL config 追加。 既存問題は generic flow 流用で UI 変更なし</td></tr>
-<tr><td>6</td>
-    <td>ADR-008 (#574) 統合: plugin code (= scoring / engine / portal) を private repo の S3 経由 presigned URL で配信。public 同梱は dev / sample のみ</td>
-    <td>本格運用問題の答え漏れ防止 (= microservice-migration の slow endpoint コード等)</td></tr>
+<tr><td>1 (本 PR)</td><td>ADR 採択。metadata DSL の schema 詳細を確定 (= JSON schema 草案 + 5 kind 各々の rule field)</td></tr>
+<tr><td>2</td><td><code>problems/SCHEMA.json</code> を拡張。既存 3 問題 (hello-world / hello-world-battle / security-battle-royale) の metadata を新 DSL に書き直す (= 既存挙動 unchanged)</td></tr>
+<tr><td>3</td><td>endpoint registry (DDB + API) と generic scoring Lambda (5 kind builtin handler) を実装。 既存 health-check-handler / submit-flag handler を generic scoring Lambda に統合 refactor</td></tr>
+<tr><td>4</td><td><code>microservice-migration-battle</code> の Phase 2 (= score engine) を本 DSL で再実装 (= PR-608 の代替)。 problem dir に <code>portal/</code> 追加</td></tr>
+<tr><td>5</td><td>portal plugin loader 実装 (= React.lazy + CSP + SDK package <code>@tenkacloud/portal-plugin-sdk</code> 公開)</td></tr>
+<tr><td>6</td><td>ADR-008 (#574) 統合 — metadata + template + portal の private 配信 (= 答え漏れ防止)</td></tr>
 </tbody>
 </table>
 </section>
@@ -421,44 +299,38 @@ export default {
 
 <h3>positive</h3>
 <ul>
-<li><strong>新問題追加は dir 1 個 + git add</strong>。platform に手を入れる必要なし</li>
-<li><strong>問題の差し替えが容易</strong>。同 problemId で 4 アセットを update するだけ</li>
-<li><strong>Battle の柔軟性 = 問題作者が好きに書ける</strong>。攻撃の発動タイミング / 採点ロジック / UI 全部 plugin で</li>
-<li><strong>Challenge の共通化 = 雛形で済む</strong>。metadata + template だけで動く、SDK 学習不要</li>
-<li><strong>ADR-008 と統合可能</strong>: plugin code が private repo + S3 + presigned URL に乗れば答え漏れ対策完了</li>
-<li><strong>Community contribution の準備</strong>: 第三者が問題を寄稿する場合、 SDK で contract が明確なので review が機械化しやすい</li>
+<li>新問題追加が <strong>dir 1 個 git add</strong> で済む。platform に手を入れる必要なし</li>
+<li>採点 Lambda は <strong>1 つ</strong>。IAM / CFn / lifecycle がぐちゃぐちゃにならない</li>
+<li>metadata DSL が型 (JSON Schema) で固まるので、 PR review が機械化可</li>
+<li>community contribution 時、寄稿者は問題 dir だけ理解すれば OK</li>
+<li>Phase 3 で既存 health-check-handler / submit-flag handler を refactor 統合できる (= 同じ generic dispatcher に乗る)</li>
 </ul>
 
 <h3>negative</h3>
 <ul>
-<li>SDK の ABI 安定が必要 (= 一度公開した signature を不用意に変えると全 problem PR が壊れる)</li>
-<li>per-problem Lambda の cold start (1 min 毎 invoke、~1s × 60 = 60s/h を許容)</li>
-<li>UI plugin の lazy load による初回 200ms 程度の表示遅延 (= preload で緩和可)</li>
-<li>初期 setup: Phase 2-5 で計 ~5 PR 規模</li>
-<li><strong>既存 security-battle-royale の platform-bleed audit</strong> が必要 (= 隠れた問題固有 logic が platform にある可能性)</li>
+<li>metadata DSL <strong>作り込みコストが大きい</strong> (= ユーザー指摘 7)。5 kind 各々の rule field を精緻に設計しないと、後から breaking 拡張で全問題の metadata を直すことになる</li>
+<li>5 kind の builtin で表現できない問題が出たら、 新 kind を ADR 1 個増やして足す必要 (= 拡張コスト)</li>
+<li>generic scoring Lambda が問題ごとの分岐を 1 つの Lambda に背負うので、 PR review で慎重さが要る (= regression risk が問題横断)</li>
 </ul>
 
 <h3>open questions</h3>
 <ul>
-<li>scoring Lambda の <strong>言語</strong>: TypeScript 縛り or Python も許容 (Container Image 化)</li>
-<li>engine の権限上限: SSM RunCommand まで許可するか / EC2 stop / Lambda invoke 等の暴れ枠</li>
-<li>operator (= 競技運営) 側に問題固有 UI が要るか (= application-admin-console plugin slot を追加するか、本 ADR の scope 外)</li>
-<li>scoring / engine の同 lambda 統合 vs 分離: 副作用の有無で物理 Lambda を分けるか、1 Lambda の export を 2 つにするか</li>
-<li>ADR-008 確定との順序: 待たずに Phase 2-5 を進めて Phase 6 で後付け、で OK か</li>
-<li>同 problemId の versioning (= A/B 並走運用)</li>
+<li>metadata DSL の <strong>5 kind が真に MVP として十分か</strong> (= security-battle-royale 既存ロジックを <code>uptime-multi</code> + <code>attack-detection</code> 2 kind で全部表現できるか、 audit が必要)</li>
+<li>phase 進行で expressible でない非定常な攻撃 (= 競技者の行動依存で trigger される攻撃) が要るか、 要るならどう宣言するか</li>
+<li>operator (= 競技運営) 側にも problem 固有 UI が要るか (= application-admin-console plugin slot は本 ADR の scope 外)</li>
+<li>ADR-008 確定との順序 (= 待たずに Phase 2-5 を進めて Phase 6 で後付け、で OK か)</li>
+<li>同 problemId の versioning (= 同 event で複数 version 並走可能性)</li>
 </ul>
 </section>
 
 <section>
 <h2>関連リソース</h2>
 <ul>
-<li>PR-608 (close 済) — 本 ADR の trigger となった platform-bleed の実例</li>
-<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/606">#606</a> — Phase 4 で再実装する対象</li>
-<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/572">#572</a> — Microservices Migration Battle 親 issue (= Phase 4 で 4 アセット揃って完結)</li>
-<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/574">#574</a> — ADR-008 (user WIP)、本 ADR Phase 6 で統合する private repo + S3 配信</li>
-<li>ADR <a href="./adr-005-battle-portal-ui.html">ADR-005</a> — Battle Portal UI 基盤 (= ④ Portal plugin の host)</li>
-<li>ADR <a href="./adr-001-problem-deploy-crud.html">ADR-001</a> — Problem Deploy 基盤 (= ① template.yaml の deploy 経路)</li>
-<li>memory <code>feedback_problems_as_plugins</code> — 本 ADR のトリガー</li>
+<li>PR-608 (close 済) — 本 ADR の trigger</li>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/606">#606</a> — Phase 4 で再実装</li>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/572">#572</a> — Microservices Migration Battle 親 issue (= Phase 4 + Phase 5 で完結)</li>
+<li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/574">#574</a> — ADR-008 (user WIP)、本 ADR Phase 6 で統合</li>
+<li>memory <code>feedback_problems_as_plugins</code></li>
 </ul>
 </section>
 </body>
