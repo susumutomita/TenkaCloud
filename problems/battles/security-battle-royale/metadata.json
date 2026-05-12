@@ -21,5 +21,30 @@
   "cfnTemplate": "template.yaml",
   "cfnParameters": {
     "DbPassword": "__RANDOM_PASSWORD__"
+  },
+  "endpoints": [
+    {
+      "slot": "frontend",
+      "default": { "from": "cfn-output", "key": "FrontendUrl" },
+      "overridable": true,
+      "label": "Frontend (nginx)",
+      "description": "競技者が公開する商品ページ。 防御側は WAF / CDN を被せて override 可能。"
+    },
+    {
+      "slot": "api",
+      "default": { "from": "cfn-output", "key": "ApiUrl" },
+      "overridable": true,
+      "label": "API (Flask)",
+      "description": "JSON API endpoint。 SQL injection 等の標的。"
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-multi",
+    "probedSlots": [
+      { "slot": "frontend", "path": "/", "expectStatus": [200] },
+      { "slot": "api", "path": "/healthz", "expectStatus": [200] }
+    ],
+    "pointsAllOk": 100,
+    "failurePenalty": 0
   }
 }
