@@ -20,6 +20,12 @@ export interface AppConfig {
   readonly awsRegion: string;
   /** AWS account ID。CodeBuild console URL の {accountId} に埋める。 */
   readonly awsAccountId: string;
+  /**
+   * Admin Insight API のエンドポイント (ADR-011 / #590 Phase 1.A)。tenant 一覧の
+   * deploy 集計 column (activeDeploys / failedDeploys) を取得するのに使う。
+   * 空文字なら admin-console は集計 fetch をスキップする (= phase 2 初回 deploy の race 対策)。
+   */
+  readonly adminInsightApiUrl: string;
 }
 
 /**
@@ -34,6 +40,7 @@ interface RuntimeConfig {
   readonly provisioningCodeBuildProject?: string;
   readonly awsRegion?: string;
   readonly awsAccountId?: string;
+  readonly adminInsightApiUrl?: string;
 }
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
@@ -50,6 +57,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       provisioningCodeBuildProject: data.provisioningCodeBuildProject,
       awsRegion: data.awsRegion,
       awsAccountId: data.awsAccountId,
+      adminInsightApiUrl: data.adminInsightApiUrl,
     };
   } catch {
     return null;
@@ -86,6 +94,7 @@ export async function loadConfig(
       provisioningCodeBuildProject: runtime.provisioningCodeBuildProject ?? "unknown",
       awsRegion: runtime.awsRegion ?? "",
       awsAccountId: runtime.awsAccountId ?? "",
+      adminInsightApiUrl: runtime.adminInsightApiUrl ?? "",
     };
   }
 
@@ -106,5 +115,7 @@ export async function loadConfig(
     provisioningCodeBuildProject: "unknown",
     awsRegion: "",
     awsAccountId: "",
+    // ADR-011 #590: dev では admin-insight API も未配線 (= 集計 column を skip)
+    adminInsightApiUrl: env.VITE_ADMIN_INSIGHT_API_URL ?? "",
   };
 }

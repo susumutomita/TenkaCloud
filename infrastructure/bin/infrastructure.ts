@@ -5,6 +5,7 @@ import * as cdk from "aws-cdk-lib";
 import { BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import * as dotenv from "dotenv";
 import { AdminConsoleHostingStack } from "../lib/admin-console-hosting";
+import { AdminConsoleInsightStack } from "../lib/admin-insight/admin-console-insight-stack";
 import { BootstrapTemplateStack } from "../lib/bootstrap-template/bootstrap-template-stack";
 import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms";
 import { DestroyPolicySetter } from "../lib/cdk-aspect/destroy-policy-setter";
@@ -244,6 +245,28 @@ cdk.Aspects.of(problemDeployBackendStack).add(
   new DynamoDbLowCapacity(dynamoReadCapacity, dynamoWriteCapacity),
 );
 
+// AdminConsoleInsightStack (ADR-011 / issue #590 Phase 1.A): System Admin が tenant 横断で
+// deploy 進捗を観察するための新 HTTP API + Lambda。ControlPlane の Cognito UserPool +
+// ProblemDeployBackend の DDB tables を cross-stack で参照する。
+// 本 stack の出力 (AdminInsightApiUrl) は admin-console の runtime-config.json に注入される
+// — phase 2 deploy 時点で本 stack が立っている必要があるため、phase 1 で作る (= 常に instantiate)。
+const adminConsoleOriginForCors = process.env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN;
+const adminConsoleInsightStack = new AdminConsoleInsightStack(
+  app,
+  "tenkacloud-admin-console-insight",
+  {
+    ...stackEnv,
+    cognitoUserPool: controlPlaneStack.cognitoUserPool,
+    cognitoUserClientId: controlPlaneStack.cognitoUserClientId,
+    deploymentsTable: problemDeployBackendStack.deploymentsTable,
+    eventsTable: problemDeployBackendStack.eventsTable,
+    teamsTable: problemDeployBackendStack.teamsTable,
+    adminConsoleOrigin: adminConsoleOriginForCors,
+  },
+);
+adminConsoleInsightStack.addDependency(controlPlaneStack);
+adminConsoleInsightStack.addDependency(problemDeployBackendStack);
+
 const bootstrapTemplateStack = new BootstrapTemplateStack(app, "tenkacloud-bootstrap", {
   ...stackEnv,
   systemAdminEmail,
@@ -305,6 +328,11 @@ const provisioningCodeBuildProject =
   process.env.CDK_PARAM_PROVISIONING_CODEBUILD_PROJECT ?? "unknown";
 // awsRegion / awsAccountId は TenantTemplateStack のために前倒しで定義済み (上を参照)。
 
+// ADR-011 / #590 Phase 1.A: AdminConsoleInsight HTTP API URL を runtime-config に注入する。
+// install.sh phase 2 が `tenkacloud-admin-console-insight` stack の output を読んで本 env に
+// export する。未設定なら admin-console 側で「未発行」表示にする (空文字 fallback)。
+const adminInsightApiUrl = process.env.CDK_PARAM_ADMIN_INSIGHT_API_URL ?? "";
+
 if (adminConsoleApiUrl && adminConsoleCognitoDomain && adminConsoleUserClientId) {
   const adminConsoleHosting = new AdminConsoleHostingStack(
     app,
@@ -318,6 +346,7 @@ if (adminConsoleApiUrl && adminConsoleCognitoDomain && adminConsoleUserClientId)
       provisioningCodeBuildProject,
       awsRegion,
       awsAccountId,
+      adminInsightApiUrl,
     },
   );
   cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());

@@ -38,6 +38,15 @@ export interface AdminConsoleHostingStackProps extends cdk.StackProps {
    * AWS account ID。CodeBuild console URL の {accountId} に埋める。
    */
   readonly awsAccountId: string;
+  /**
+   * Admin Insight API のエンドポイント (ADR-011 / #590 Phase 1.A)。System Admin が
+   * tenant 横断で deploy 進捗を read する経路。phase 1.A では tenant 一覧の deploy 集計 column
+   * (= activeDeploys / failedDeploys) を表示するのに使う。
+   *
+   * 空文字 fallback は admin-console 側で「未発行」表示にしてリクエスト送信をスキップする
+   * (= phase 2 初回 deploy の race 状態でも UI が壊れない安全装置)。
+   */
+  readonly adminInsightApiUrl: string;
 }
 
 /**
@@ -107,6 +116,8 @@ export class AdminConsoleHostingStack extends cdk.Stack {
       provisioningCodeBuildProject: props.provisioningCodeBuildProject,
       awsRegion: props.awsRegion,
       awsAccountId: props.awsAccountId,
+      // ADR-011 #590 Phase 1.A
+      adminInsightApiUrl: props.adminInsightApiUrl.replace(/\/$/, ""),
     };
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", runtimeConfig)],

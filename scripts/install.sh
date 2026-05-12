@@ -132,6 +132,7 @@ bunx cdk deploy \
   tenkacloud-control-plane \
   tenkacloud-bootstrap \
   tenkacloud-problem-deploy \
+  tenkacloud-admin-console-insight \
   tenkacloud-tenant-template-pooled \
   tenkacloud-saas-pipeline \
   --require-approval never --concurrency 4
@@ -188,6 +189,18 @@ if [ -z "${PROVISIONING_CODEBUILD_PROJECT}" ]; then
 fi
 echo "  Provisioning CodeBuild Project: ${PROVISIONING_CODEBUILD_PROJECT}"
 
+# ADR-011 #590 Phase 1.A: AdminConsole Insight API URL を runtime-config に注入する。
+# Phase 1 で立てた tenkacloud-admin-console-insight stack の CFn output を取得。
+ADMIN_INSIGHT_API_URL=$(aws cloudformation describe-stacks \
+  --stack-name "tenkacloud-admin-console-insight" \
+  --query "Stacks[0].Outputs[?OutputKey=='AdminInsightApiUrl'].OutputValue" \
+  --output text 2>/dev/null || echo "")
+if [ -z "${ADMIN_INSIGHT_API_URL}" ]; then
+  echo "  Warning: AdminInsightApiUrl が解決できない (admin-console の集計 column は無効化される)"
+  ADMIN_INSIGHT_API_URL=""
+fi
+echo "  AdminInsight API URL: ${ADMIN_INSIGHT_API_URL}"
+
 # AdminConsoleHostingStack deploy: backend outputs を CDK_PARAM_* env に渡す
 # (stack が runtime-config.json に書いて S3 に配置する)
 cd "${TenkaCloud_ROOT}/infrastructure"
@@ -198,6 +211,7 @@ export CDK_PARAM_POOLED_APP_CONSOLE_URL="${POOLED_APP_CONSOLE_URL}"
 export CDK_PARAM_PROVISIONING_CODEBUILD_PROJECT="${PROVISIONING_CODEBUILD_PROJECT}"
 export CDK_PARAM_AWS_REGION="${REGION}"
 export CDK_PARAM_AWS_ACCOUNT_ID="${ACCOUNT_ID}"
+export CDK_PARAM_ADMIN_INSIGHT_API_URL="${ADMIN_INSIGHT_API_URL}"
 bunx cdk deploy tenkacloud-admin-console-hosting --require-approval never
 
 # ============================================================================

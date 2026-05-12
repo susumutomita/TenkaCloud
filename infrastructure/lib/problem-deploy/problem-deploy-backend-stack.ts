@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { CfnOutput } from "aws-cdk-lib";
+import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
@@ -95,6 +96,18 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * 注入するため publicly export する (兄弟 deployApiLambda / eventApiLambda と同 pattern)。
    */
   public readonly participantPortalUrl?: string;
+  /**
+   * Deployments table (ADR-011 #590 で AdminConsoleInsightStack が read-only に
+   * 跨ぐため公開)。grantReadData は呼び出し側で行う。
+   */
+  public readonly deploymentsTable: Table;
+  /** Events table (ADR-011 #590 で AdminConsoleInsightStack が cross-stack read する)。 */
+  public readonly eventsTable: Table;
+  /**
+   * Teams table (ADR-011 Phase 1.B 以降で drill-down 用に読む)。Phase 1.A では
+   * 参照のみ (read 権限は付与しない)。
+   */
+  public readonly teamsTable: Table;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -104,6 +117,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
     const events = new EventsTable(this, "Events");
     const teams = new TeamsTable(this, "Teams");
+    // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
+    this.deploymentsTable = deployments.table;
+    this.eventsTable = events.table;
+    this.teamsTable = teams.table;
     const eventBus = EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn);
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。

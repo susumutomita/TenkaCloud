@@ -12,6 +12,7 @@ const config: AppConfig = {
   provisioningCodeBuildProject: "unknown",
   awsRegion: "",
   awsAccountId: "",
+  adminInsightApiUrl: "",
 };
 
 describe("createApiClient", () => {
