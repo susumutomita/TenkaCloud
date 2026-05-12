@@ -1,6 +1,6 @@
 import { CognitoAuth, ControlPlane } from "@cdklabs/sbt-aws";
 import * as cdk from "aws-cdk-lib";
-import type { CfnUserPoolClient, UserPoolClient } from "aws-cdk-lib/aws-cognito";
+import type { CfnUserPoolClient, IUserPool, UserPoolClient } from "aws-cdk-lib/aws-cognito";
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
@@ -31,6 +31,17 @@ const LOCALHOST_CORS_ORIGINS = [
 export class ControlPlaneStack extends cdk.Stack {
   public readonly regApiGatewayUrl: string;
   public readonly eventBusArn: string;
+  /**
+   * SBT 内蔵 Cognito UserPool (= System Admin が登録される pool)。
+   * Issue #590 / ADR-011 (Phase 1.A) で AdminInsight HTTP API の JWT Authorizer に渡す。
+   * 同 pool の SystemAdmin group claim を required scope として扱う。
+   */
+  public readonly cognitoUserPool: IUserPool;
+  /**
+   * SBT 内蔵 UserPoolUserClient の client ID (= admin-console が OAuth Code+PKCE で使う)。
+   * AdminInsight HTTP API の JWT Authorizer も同 client を audience とみなす。
+   */
+  public readonly cognitoUserClientId: string;
 
   constructor(scope: Construct, id: string, props: ControlPlaneStackProps) {
     super(scope, id, props);
@@ -96,5 +107,9 @@ export class ControlPlaneStack extends cdk.Stack {
 
     this.eventBusArn = controlPlane.eventManager.busArn;
     this.regApiGatewayUrl = controlPlane.controlPlaneAPIGatewayUrl;
+    // SBT CognitoAuth が払い出した UserPool / UserClient を兄弟 stack
+    // (AdminConsoleInsightStack) の JWT Authorizer 用に export する。
+    this.cognitoUserPool = cognitoAuth.userPool;
+    this.cognitoUserClientId = cognitoAuth.userClientId;
   }
 }

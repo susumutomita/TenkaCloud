@@ -10,6 +10,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
 import {
+  fetchTenantsInsightSummary,
+  indexSummaryByTenantId,
+  type TenantInsightSummary,
+} from "../api/insight";
+import {
   buildCodeBuildBuildUrl,
   deleteTenant,
   listTenants,
@@ -18,7 +23,15 @@ import {
   tenantStatusBadgeColor,
   tierBadgeColor,
 } from "../api/tenants";
+import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+
+/**
+ * ADR-011 #590 Phase 1.A: 60s polling 周期。SSE / WebSocket は禁止 (Lambda 運用と整合せず)。
+ * 5 tenants × ~50 deployments を 60s ごとに refresh して RCU 消費は 1 tenant あたり ~1 query。
+ * Phase 3 dashboard で tenant 数が伸びるなら pre-aggregation table に置き換え。
+ */
+const INSIGHT_POLLING_INTERVAL_MS = 60 * 1000;
 
 /**
  * deprovision 済みの tenant かどうかを判定する。
@@ -46,9 +59,17 @@ function inactiveCell(label = "(deprovisioned)") {
 export function TenantListPage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const api = useApiClient(config);
+  const auth = useAuth();
   const [tenants, setTenants] = useState<Tenant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDeprovision, setPendingDeprovision] = useState<Tenant | null>(null);
+  // ADR-011 #590 Phase 1.A: tenantId → 集計 の lookup。
+  // - null = まだ fetch していない / AdminInsight API が未配線 (= column hide)
+  // - {} = fetch 済みで対象 tenant が無い (= 集計 0 表示)
+  const [insightByTenantId, setInsightByTenantId] = useState<Record<
+    string,
+    TenantInsightSummary
+  > | null>(null);
 
   const refresh = useCallback(async () => {
     if (!api) return;
@@ -63,6 +84,36 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // tenants が解決済みなら AdminInsight API を叩いて集計を join する。
+  // tokens が無い / config.adminInsightApiUrl 未設定なら fetch を skip して null のまま
+  // にしておく (= column 自体を表示しない、UI に「未配線」状態を持ち込まない安全装置)。
+  useEffect(() => {
+    const idToken = auth.tokens?.idToken;
+    if (!idToken || !tenants || !config.adminInsightApiUrl) return;
+    const tenantIds = tenants.map((t) => t.tenantId);
+
+    let cancelled = false;
+    const fetchInsight = async () => {
+      try {
+        const summary = await fetchTenantsInsightSummary(config, idToken, tenantIds);
+        if (cancelled) return;
+        // null = 403 forbidden 等 (= SystemAdmin claim 無し)。column hide のため state も null。
+        setInsightByTenantId(summary ? indexSummaryByTenantId(summary) : null);
+      } catch {
+        // tenant 一覧の primary 表示は壊さない。集計列だけ未取得扱いにする (= null)。
+        if (!cancelled) setInsightByTenantId(null);
+      }
+    };
+    void fetchInsight();
+    const handle = window.setInterval(() => {
+      void fetchInsight();
+    }, INSIGHT_POLLING_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [auth.tokens?.idToken, tenants, config]);
 
   const confirmDeprovision = async () => {
     if (!api || !pendingDeprovision) return;
@@ -125,6 +176,36 @@ export function TenantListPage({ config }: { config: AppConfig }) {
             cell: (t) => (
               <Badge color={tenantStatusBadgeColor(t.tenantStatus)}>{t.tenantStatus}</Badge>
             ),
+          },
+          // ADR-011 #590 Phase 1.A: AdminInsight 集計 column。insightByTenantId が null
+          // (= API 未配線 / fetch 失敗 / 403) なら cell は "—" を返し、deprovision 済みは
+          // 灰色 "(deprovisioned)" にする。背景色 / badge で異常 (failed > 0) を識別可能。
+          {
+            id: "activeDeploys",
+            header: "稼働中 deploy",
+            cell: (t) => {
+              if (isDeprovisioned(t)) return inactiveCell();
+              if (insightByTenantId === null) {
+                return <Box color="text-status-inactive">—</Box>;
+              }
+              const summary = insightByTenantId[t.tenantId];
+              const count = summary?.activeDeploys ?? 0;
+              return <Badge color={count > 0 ? "blue" : "grey"}>{count}</Badge>;
+            },
+          },
+          {
+            id: "failedDeploys",
+            header: "失敗 deploy",
+            cell: (t) => {
+              if (isDeprovisioned(t)) return inactiveCell();
+              if (insightByTenantId === null) {
+                return <Box color="text-status-inactive">—</Box>;
+              }
+              const summary = insightByTenantId[t.tenantId];
+              const count = summary?.failedDeploys ?? 0;
+              // 0 件は灰色 (= 正常)、>0 は赤 badge (= 運営要対応のシグナル)。
+              return <Badge color={count > 0 ? "red" : "grey"}>{count}</Badge>;
+            },
           },
           {
             id: "appConsole",
