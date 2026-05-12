@@ -160,11 +160,12 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(synthJson).toContain("IN_PROGRESS");
     });
 
-    it("EventBridge Rule を Create / Delete / HealthCheck schedule で 3 つ持つべき", () => {
-      // 旧 2 (Create / Delete state-machine event rules) + HealthCheck schedule rate(1 min)
-      // = 3。HealthCheck は #557 / #539 reconciler で uptime 採点とは独立に常時 instantiate
-      // される (= 旧「scoring 0 件なら skip」ガード撤去)。
-      tpl.resourceCountIs("AWS::Events::Rule", 3);
+    it("EventBridge Rule を Create / Delete / HealthCheck / ExternalIdAudit schedule で 4 つ持つべき", () => {
+      // 旧 2 (Create / Delete state-machine event rules)
+      //   + HealthCheck schedule rate(1 minute) (= #557 #539 reconciler + uptime 採点)
+      //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
+      // = 4。HealthCheck は uptime 採点とは独立に常時 instantiate される。
+      tpl.resourceCountIs("AWS::Events::Rule", 4);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -188,6 +189,13 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         "AWS::Events::Rule",
         Match.objectLike({
           ScheduleExpression: "rate(1 minute)",
+        }),
+      );
+      // ExternalIdAudit の rate(1 day) schedule (Phase 3.2 / Issue #603)
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          ScheduleExpression: "rate(1 day)",
         }),
       );
     });
@@ -260,6 +268,42 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
     it("Output に CompetitorAccountsTableName を含むべき", () => {
       const outputs = tpl.findOutputs("*");
       expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["CompetitorAccountsTableName"]));
+    });
+
+    it("Phase 3.2 / Issue #603: ExternalIdAudit Lambda が rate(1 day) で起動し PutMetricData (namespace 絞り込み) を持つべき", () => {
+      // rate(1 day) schedule は上の resourceCountIs(Rule, 4) の test でも assert 済だが、ここでは
+      // ExternalIdAudit 経路の代表 evidence (COMPETITOR_ACCOUNTS_TABLE_NAME env + namespace 絞り込み IAM) を pin する。
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              COMPETITOR_ACCOUNTS_TABLE_NAME: Match.anyValue(),
+              DEPLOY_ENVIRONMENT: "development",
+            }),
+          }),
+        }),
+      );
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: "cloudwatch:PutMetricData",
+                Resource: "*",
+                Condition: Match.objectLike({
+                  StringEquals: Match.objectLike({
+                    "cloudwatch:namespace": "TenkaCloud/CompetitorAccounts",
+                  }),
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
     });
 
     it("KMS policy は StringLike + Decrypt/GenerateDataKey を持つべき (= SSM SecureString GET/PUT 双方を動かす)", () => {

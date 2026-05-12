@@ -75,6 +75,59 @@ export async function getExternalId(
 }
 
 /**
+ * tenant の ExternalId を **現 version 番号付き** で取得 (Phase 3.2 / Issue #603)。
+ *
+ * `GetParameter` は `Parameter.Version` を返すので、それを caller に伝えて grace fallback
+ * (= version-1 で再取得) に使う。version は 1 起点で `Overwrite: true` 毎にインクリメント
+ * される (= SSM 仕様)。
+ *
+ * 未登録は `undefined`。`isParameterNotFound` で吸収する点は `getExternalId` と同じ。
+ */
+export async function getExternalIdWithVersion(
+  deps: ExternalIdStoreDeps,
+  tenantId: string,
+): Promise<{ readonly value: string; readonly version: number } | undefined> {
+  const name = buildExternalIdParameterName(deps.env, tenantId);
+  try {
+    const out = await deps.ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true }));
+    const value = out.Parameter?.Value;
+    const version = out.Parameter?.Version;
+    if (typeof value !== "string" || typeof version !== "number") return undefined;
+    return { value, version };
+  } catch (err) {
+    if (isParameterNotFound(err)) return undefined;
+    throw err;
+  }
+}
+
+/**
+ * 旧 version の ExternalId を取得 (Phase 3.2 grace fallback / Issue #603)。
+ *
+ * `SSM` は `Name` に `:<version>` を付けると pinned version の値を返す。1 generation 前まで
+ * しか fallback しない (= AGENTS.md の指針: 旧値 long tail で grace を引き伸ばさない)。
+ *
+ * `version <= 0` (= 直前 version が存在しない、= rotate 未経験) なら `undefined`。
+ * `ParameterVersionNotFound` (= 100 version cap で auto-drop 済) も `undefined` 扱い。
+ */
+export async function getExternalIdByVersion(
+  deps: ExternalIdStoreDeps,
+  tenantId: string,
+  version: number,
+): Promise<string | undefined> {
+  if (!Number.isInteger(version) || version <= 0) return undefined;
+  const name = `${buildExternalIdParameterName(deps.env, tenantId)}:${version}`;
+  try {
+    const out = await deps.ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true }));
+    return out.Parameter?.Value;
+  } catch (err) {
+    if (isParameterNotFound(err)) return undefined;
+    // ParameterVersionNotFound: SSM が 100 version cap で auto-drop 済 (= 旧 version が消えた)。
+    if (err instanceof Error && err.name === "ParameterVersionNotFound") return undefined;
+    throw err;
+  }
+}
+
+/**
  * tenant の ExternalId が無ければ生成 + Put して返す。既存なら既存値を返す (= 冪等)。
  *
  * 「Add account」を 2 回目以降に押しても ExternalId は **回さない** (ADR-002 Decision 3.1)。

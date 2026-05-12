@@ -40,6 +40,12 @@ resolve_aws_region() {
 # 副作用: 上記 3 env をシェルに export する。caller の sub-shell scope 内で呼び、
 # 別アカウントへ切り替えたあと元に戻す必要があれば `AWS_*` env を退避すること。
 #
+# Phase 3.2 (Issue #603): rotate 直後の grace fallback を実装。
+# 現 ExternalId で AssumeRole が `AccessDenied` 系 error で失敗したら、SSM Parameter Store の
+# **1 つ前の version** で 1 度だけ再試行する。これは「rotate UI で更新 → 競技者が CFn stack
+# を update しきる」までの数分〜数日の grace を埋める安全網。**N-1 のみ** (= 1 generation
+# back) で打ち止め (= 旧 ExternalId で deploy がいつまでも通る状態を作らない)。
+#
 # 失敗時は非ゼロで return (caller の `set -e` で fail-fast)。
 assume_competitor_role_if_configured() {
   local role_arn="${COMPETITOR_ROLE_ARN:-}"
@@ -58,24 +64,73 @@ assume_competitor_role_if_configured() {
 
   echo "[cross-account] Assuming role: ${role_arn} (ExternalId from SSM: ${ssm_param})"
 
-  local external_id
-  external_id="$(aws ssm get-parameter --name "${ssm_param}" --with-decryption --query "Parameter.Value" --output text)"
-  if [[ -z "${external_id}" || "${external_id}" == "None" ]]; then
+  # 現 version の値 + version 番号を 1 回の API call で取り出す (= grace fallback 用)。
+  local current_json current_external_id current_version
+  current_json="$(aws ssm get-parameter --name "${ssm_param}" --with-decryption --output json 2>/dev/null)"
+  current_external_id="$(echo "${current_json}" | jq -r '.Parameter.Value // empty')"
+  current_version="$(echo "${current_json}" | jq -r '.Parameter.Version // 0')"
+  if [[ -z "${current_external_id}" || "${current_external_id}" == "None" ]]; then
     echo "error: ExternalId not found in SSM SecureString: ${ssm_param}" >&2
     return 1
   fi
 
-  # 15 分は AWS STS の minimum session duration。短くするほど token 漏洩リスクが小さい。
+  if _try_assume_role_with_external_id "${role_arn}" "${current_external_id}"; then
+    echo "[cross-account] AssumeRole succeeded (session valid for 900s)."
+    _apply_assumed_credentials
+    return 0
+  fi
+
+  # 現 version で失敗。grace fallback を 1 generation back で 1 回だけ試す。
+  local previous_version=$((current_version - 1))
+  if [[ "${previous_version}" -le 0 ]]; then
+    echo "error: AssumeRole failed with current ExternalId (version=${current_version}) and no previous version is available." >&2
+    return 1
+  fi
+
+  echo "[cross-account] AssumeRole failed with current ExternalId; trying previous version ${previous_version} (grace fallback)."
+  local previous_external_id
+  previous_external_id="$(aws ssm get-parameter --name "${ssm_param}:${previous_version}" --with-decryption --query "Parameter.Value" --output text 2>/dev/null || echo "")"
+  if [[ -z "${previous_external_id}" || "${previous_external_id}" == "None" ]]; then
+    echo "error: AssumeRole failed and previous SSM version ${previous_version} is unavailable (auto-dropped or never existed)." >&2
+    return 1
+  fi
+
+  if _try_assume_role_with_external_id "${role_arn}" "${previous_external_id}"; then
+    # grace fallback の利用は **warning level で必ず log** する (= operator が dashboard /
+    # CloudWatch Logs Insights で「rotate 後 grace を使った deploy」を観察できる)。
+    echo "[cross-account][WARN] grace_fallback_used: AssumeRole succeeded with previous ExternalId version=${previous_version} (= rotate 直後で競技者 stack 未更新の可能性)。"
+    _apply_assumed_credentials
+    return 0
+  fi
+
+  echo "error: AssumeRole failed with both current and previous (version=${previous_version}) ExternalId. Competitor stack の Update が必要、または rotate が誤って行われた可能性。" >&2
+  return 1
+}
+
+# Internal helper: 指定 ExternalId で sts:AssumeRole を 1 回試す。
+# 成功時: `__ASSUME_ROLE_JSON` シェル変数に response JSON を格納し 0 を返す。
+# 失敗時: 非ゼロを返す (= caller が次の version で retry する余地を残す)。
+_try_assume_role_with_external_id() {
+  local role_arn="$1"
+  local external_id="$2"
   local sts_json
-  sts_json="$(aws sts assume-role \
+  if ! sts_json="$(aws sts assume-role \
     --role-arn "${role_arn}" \
     --role-session-name "tenkacloud-deploy-$(date +%s)" \
     --external-id "${external_id}" \
-    --duration-seconds 900)"
+    --duration-seconds 900 \
+    --output json 2>&1)"; then
+    return 1
+  fi
+  __ASSUME_ROLE_JSON="${sts_json}"
+  return 0
+}
 
-  AWS_ACCESS_KEY_ID="$(echo "${sts_json}" | jq -r '.Credentials.AccessKeyId')"
-  AWS_SECRET_ACCESS_KEY="$(echo "${sts_json}" | jq -r '.Credentials.SecretAccessKey')"
-  AWS_SESSION_TOKEN="$(echo "${sts_json}" | jq -r '.Credentials.SessionToken')"
+# Internal helper: `__ASSUME_ROLE_JSON` から Credentials を AWS_* env に export する。
+_apply_assumed_credentials() {
+  AWS_ACCESS_KEY_ID="$(echo "${__ASSUME_ROLE_JSON}" | jq -r '.Credentials.AccessKeyId')"
+  AWS_SECRET_ACCESS_KEY="$(echo "${__ASSUME_ROLE_JSON}" | jq -r '.Credentials.SecretAccessKey')"
+  AWS_SESSION_TOKEN="$(echo "${__ASSUME_ROLE_JSON}" | jq -r '.Credentials.SessionToken')"
   export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   # CodeBuild Project が `AWS_DEFAULT_REGION` を inject していないと target account の
   # region 解決が空になる事故があるので、明示的に DEPLOY_REGION (= event detail.region) を反映。
@@ -83,5 +138,4 @@ assume_competitor_role_if_configured() {
     export AWS_REGION="${DEPLOY_REGION}"
     export AWS_DEFAULT_REGION="${DEPLOY_REGION}"
   fi
-  echo "[cross-account] AssumeRole succeeded (session valid for 900s)."
 }

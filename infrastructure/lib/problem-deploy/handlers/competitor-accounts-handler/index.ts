@@ -152,12 +152,29 @@ app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c
   if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
     return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
   }
+  const tenantId = resolveTenantId(c);
+  const rotatedBy = resolveCognitoSub(c);
   try {
     const response = await rotateExternalIdForAccount(shared, {
-      tenantId: resolveTenantId(c),
+      tenantId,
       awsAccountId,
       nowMs: Date.now(),
     });
+    // Phase 3.2 / Issue #603: rotation 監査ログ (structured 1-line)。
+    //
+    // CloudWatch Logs Insights で `event = "competitor-accounts.rotate"` を grep し、
+    // 「いつ・どの operator (Cognito sub) が・どの (tenant, account) を rotate したか」を
+    // 後追いできる。DDB の専用 audit table を作らない代わりに log を正本にする
+    // (= ZERO 新 infra、operator 監査は infrequent なので Logs Insights で十分)。
+    console.log(
+      JSON.stringify({
+        event: "competitor-accounts.rotate",
+        tenantId,
+        awsAccountId,
+        rotatedBy,
+        rotatedAt: response.rotatedAt,
+      }),
+    );
     return c.json(response, StatusCodes.OK);
   } catch (err) {
     if (err instanceof CompetitorAccountNotFoundError) {

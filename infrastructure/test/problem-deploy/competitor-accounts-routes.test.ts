@@ -264,6 +264,61 @@ describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id", () 
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect(mocks.rotateExternalIdForAccount).not.toHaveBeenCalled();
   });
+
+  it("Phase 3.2 / Issue #603: rotate 成功時に structured audit log を 1 行出力するべき", async () => {
+    mocks.rotateExternalIdForAccount.mockResolvedValueOnce({
+      awsAccountId: "222222222222",
+      region: "ap-northeast-1",
+      competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+      verified: true,
+      verifiedAt: "2026-05-11T00:00:00.000Z",
+      createdAt: "2026-05-11T00:00:00.000Z",
+      updatedAt: "2026-05-12T00:00:00.000Z",
+      rotatedAt: "2026-05-12T00:00:00.000Z",
+      externalId: "new-rotated-id",
+      tenkaCloudAccountId: "111111111111",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const res = await app.request("/admin/competitor-accounts/222222222222/rotate-external-id", {
+        method: "POST",
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+      // 「event=competitor-accounts.rotate」を含む structured 1-line log がちょうど 1 つ出ること。
+      const auditLines = logSpy.mock.calls
+        .map((args) => String(args[0] ?? ""))
+        .filter((line) => line.includes("competitor-accounts.rotate"));
+      expect(auditLines).toHaveLength(1);
+      const parsed = JSON.parse(auditLines[0] as string) as Record<string, unknown>;
+      expect(parsed.event).toBe("competitor-accounts.rotate");
+      expect(parsed.awsAccountId).toBe("222222222222");
+      expect(parsed.rotatedAt).toBe("2026-05-12T00:00:00.000Z");
+      // tenantId / rotatedBy は test 環境では JWT 解決 fallback (= "unknown-tenant" / "unknown") を取る。
+      expect(typeof parsed.tenantId).toBe("string");
+      expect(typeof parsed.rotatedBy).toBe("string");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("Phase 3.2 / Issue #603: rotate 失敗時には audit log を出さないべき", async () => {
+    mocks.rotateExternalIdForAccount.mockRejectedValueOnce(
+      new mocks.CompetitorAccountNotFoundError("999999999999"),
+    );
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const res = await app.request("/admin/competitor-accounts/999999999999/rotate-external-id", {
+        method: "POST",
+      });
+      expect(res.status).toBe(StatusCodes.NOT_FOUND);
+      const auditLines = logSpy.mock.calls
+        .map((args) => String(args[0] ?? ""))
+        .filter((line) => line.includes("competitor-accounts.rotate"));
+      expect(auditLines).toHaveLength(0);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });
 
 describe("DELETE /admin/competitor-accounts/:awsAccountId", () => {

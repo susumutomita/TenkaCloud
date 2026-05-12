@@ -16,6 +16,7 @@ import { DeployDeleteEventRule, DeployEventRule } from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
 import { EventApiLambda } from "./event-api-lambda";
 import { EventsTable } from "./events-table";
+import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
 import { HealthCheckLambda } from "./health-check-lambda";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
@@ -219,6 +220,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       deploymentsTable: deployments.table,
       eventsTable: events.table,
       problemsScoring: props.problemsScoring,
+    });
+
+    // Phase 3.2 / Issue #603: ExternalId rotation age 監査 Lambda。1 日 1 回起動して
+    // CompetitorAccounts table を Scan し、各 (tenantId, awsAccountId) の rotation age を
+    // CloudWatch メトリクス `TenkaCloud/CompetitorAccounts/RotationAge` に publish する。
+    // SSM Parameter Store は 100 version で auto-drop するため明示的な cleanup Lambda は
+    // 入れない (= 説明は `external-id-audit-lambda.ts` の docblock を参照)。
+    new ExternalIdAuditLambda(this, "ExternalIdAudit", {
+      competitorAccountsTable: competitorAccounts.table,
+      environmentName: props.environmentName,
     });
 
     if (props.participantPortal) {
