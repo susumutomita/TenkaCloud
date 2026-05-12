@@ -536,6 +536,10 @@
           "eventDetailType": {
             "type": "string",
             "description": "EventBridge event の detail-type 値。 platform からの動的 trigger (Phase 2 = self-fire Scheduler) で参照される予定。"
+          },
+          "description": {
+            "type": "string",
+            "description": "disruption の動作 / 戦術的影響を participant 向けに説明する文章。 portal の予告 panel で countdown と一緒に表示される (= player への hint)。"
           }
         }
       }
