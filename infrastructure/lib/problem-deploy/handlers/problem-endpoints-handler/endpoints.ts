@@ -41,7 +41,14 @@ export async function listProblemEndpoints(
   if (items.length === 0) return { kind: "unauthorized" };
 
   const deployment = items.find((i) => i.problemId === problemId);
-  if (!deployment || typeof deployment.teamId !== "string" || deployment.teamId.length === 0) {
+  // tenantId / teamId 両方の存在を要求 (= cross-tenant PK collision の defense-in-depth)。
+  if (
+    !deployment ||
+    typeof deployment.teamId !== "string" ||
+    deployment.teamId.length === 0 ||
+    typeof deployment.tenantId !== "string" ||
+    deployment.tenantId.length === 0
+  ) {
     return { kind: "unauthorized" };
   }
 
@@ -51,7 +58,7 @@ export async function listProblemEndpoints(
   const overrides = await queryOverrides(
     shared.ddb,
     shared.endpointsTableName,
-    deployment.tenantId ?? "",
+    deployment.tenantId,
     deployment.teamId,
     problemId,
   );
@@ -76,11 +83,34 @@ export type PutOverrideOutcome =
   | { kind: "no_endpoints" }
   | { kind: "misconfigured" };
 
+// SSRF defense-in-depth: write 時に host を拒否する blocklist。
+// Phase 3.B の fetcher (= 別 PR) で DNS-rebinding-safe な resolve-then-connect が要るが、
+// それまでも write 時に明白な metadata / loopback literal を弾いて attack surface を絞る。
+// 競技者が自分の AWS account 内 endpoint を登録する用途では public DNS / private VPC IP は許容、
+// 以下の host literal だけは「競技者所有 endpoint ではあり得ない」 ので拒否。
+const SSRF_BLOCKED_HOSTS = new Set([
+  // AWS EC2 / EKS / Fargate IMDS
+  "169.254.169.254",
+  "[fd00:ec2::254]",
+  "fd00:ec2::254",
+  // GCE metadata
+  "metadata.google.internal",
+  "metadata",
+  // Azure IMDS
+  "169.254.169.254", // same literal、 set なので dedupe される
+  // loopback
+  "127.0.0.1",
+  "[::1]",
+  "::1",
+  "localhost",
+]);
+
 /**
- * 競技者向け URL validation。`https?://...` のみ許容、private IP / localhost も許容する
+ * 競技者向け URL validation。`https?://...` のみ許容、 private IP / VPC 内 endpoint は許容
  * (= Battle で参加者が自分の AWS account 内 endpoint を登録するため public/private は問わない)。
  *
- * Phase 3.A の主な目的は「文字列が URL 形式か」「scheme が http(s) か」「長さが妥当か」の 3 点。
+ * ただし SSRF 対策として **metadata service / loopback literal は拒否**。 Phase 3.B fetcher で
+ * DNS-rebinding-safe な resolve-then-connect を行うまでの defense-in-depth。
  */
 function isValidOverrideUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -88,7 +118,12 @@ function isValidOverrideUrl(value: unknown): value is string {
   if (trimmed.length === 0 || trimmed.length > 2048) return false;
   try {
     const u = new URL(trimmed);
-    return u.protocol === "http:" || u.protocol === "https:";
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (SSRF_BLOCKED_HOSTS.has(host)) return false;
+    // bracketed IPv6 literal も block
+    if (SSRF_BLOCKED_HOSTS.has(`[${host}]`)) return false;
+    return true;
   } catch {
     return false;
   }
@@ -115,7 +150,13 @@ export async function upsertProblemEndpointOverride(
   const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
   const deployment = items.find((i) => i.problemId === problemId);
-  if (!deployment || typeof deployment.teamId !== "string" || deployment.teamId.length === 0) {
+  if (
+    !deployment ||
+    typeof deployment.teamId !== "string" ||
+    deployment.teamId.length === 0 ||
+    typeof deployment.tenantId !== "string" ||
+    deployment.tenantId.length === 0
+  ) {
     return { kind: "unauthorized" };
   }
 
@@ -127,7 +168,7 @@ export async function upsertProblemEndpointOverride(
   if (!slotDef.overridable) return { kind: "slot_not_overridable" };
   if (!isValidOverrideUrl(urlValue)) return { kind: "invalid_url" };
 
-  const tenantId = deployment.tenantId ?? "";
+  const tenantId = deployment.tenantId;
   await putOverride(shared.ddb, shared.endpointsTableName, {
     tenantId,
     teamId: deployment.teamId,
@@ -177,7 +218,13 @@ export async function deleteProblemEndpointOverride(
   const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
   const deployment = items.find((i) => i.problemId === problemId);
-  if (!deployment || typeof deployment.teamId !== "string" || deployment.teamId.length === 0) {
+  if (
+    !deployment ||
+    typeof deployment.teamId !== "string" ||
+    deployment.teamId.length === 0 ||
+    typeof deployment.tenantId !== "string" ||
+    deployment.tenantId.length === 0
+  ) {
     return { kind: "unauthorized" };
   }
 
@@ -185,7 +232,7 @@ export async function deleteProblemEndpointOverride(
   if (slots.length === 0) return { kind: "no_endpoints" };
   if (!slots.some((s) => s.slot === slot)) return { kind: "unknown_slot" };
 
-  const tenantId = deployment.tenantId ?? "";
+  const tenantId = deployment.tenantId;
   await deleteOverride(shared.ddb, shared.endpointsTableName, {
     tenantId,
     teamId: deployment.teamId,

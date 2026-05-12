@@ -189,4 +189,22 @@ describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
     });
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
   });
+
+  it("no_endpoints outcome は 404 を返すべき", async () => {
+    mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({ kind: "no_endpoints" });
+    const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
+      method: "DELETE",
+      headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+    });
+    expect(res.status).toBe(StatusCodes.NOT_FOUND);
+  });
+
+  it("unauthorized outcome は 401 を返すべき", async () => {
+    mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({ kind: "unauthorized" });
+    const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
+      method: "DELETE",
+      headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+    });
+    expect(res.status).toBe(StatusCodes.UNAUTHORIZED);
+  });
 });

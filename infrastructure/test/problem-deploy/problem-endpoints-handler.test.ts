@@ -199,6 +199,34 @@ describe("upsertProblemEndpointOverride", () => {
     expect(r.kind).toBe("invalid_url");
   });
 
+  // SSRF defense-in-depth: metadata service / loopback literal を write 時に拒否する。
+  // Phase 3.B fetcher で DNS-rebinding-safe resolve-then-connect を行うまでの blocklist。
+  it.each([
+    ["AWS IMDS v4", "http://169.254.169.254/latest/meta-data/iam/security-credentials/"],
+    ["AWS IMDS v6", "http://[fd00:ec2::254]/latest/meta-data/"],
+    ["GCE metadata", "http://metadata.google.internal/computeMetadata/v1/"],
+    ["loopback IPv4", "http://127.0.0.1:9001/admin"],
+    ["loopback IPv6", "http://[::1]/"],
+    ["localhost literal", "http://localhost/"],
+  ])("SSRF blocklist: %s host は invalid_url を返すべき", async (_, url) => {
+    mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
+    const ddbSend = vi.fn();
+    const shared = buildShared({
+      problemsEndpoints: { "battle-1": [SLOT_FRONTEND] },
+      ddbSend,
+    });
+    const r = await upsertProblemEndpointOverride(
+      shared,
+      "key",
+      "battle-1",
+      "frontend",
+      url,
+      "2026-05-12T00:00:00.000Z",
+    );
+    expect(r.kind).toBe("invalid_url");
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
   it("metadata に無い slot は unknown_slot を返すべき", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const shared = buildShared({

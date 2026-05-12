@@ -99,11 +99,18 @@ export function parseEndpointsEnv(
  * 合成 (= base が "https://x/" なら "/a" / "a" 両方とも "https://x/a" になる、URL
  * spec の resolution)。base 自体に末尾 "/" が無い場合に備えて補う。
  */
-export function resolveDefaultUrl(base: string, appendPath?: string): string {
+export function resolveDefaultUrl(base: string, appendPath?: string): string | undefined {
   if (!appendPath) return base;
   try {
     return new URL(appendPath).toString();
   } catch {
-    return new URL(appendPath, base.endsWith("/") ? base : `${base}/`).toString();
+    // appendPath が absolute URL でない場合は base に対する relative resolve を試みる。
+    // base 自体が malformed (= 非 URL 文字列) なら resolve も crash するので caller に
+    // undefined を返して degrade させる (= 「default URL 未確定」 として UI 側で扱う)。
+    try {
+      return new URL(appendPath, base.endsWith("/") ? base : `${base}/`).toString();
+    } catch {
+      return undefined;
+    }
   }
 }
