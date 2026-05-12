@@ -48,6 +48,16 @@ Parameters:
     Type: String
     Default: main
     Description: チェックアウトする branch / tag / commit。
+  DegradationMinutes:
+    Type: Number
+    Default: 60
+    MinValue: 1
+    MaxValue: 1440
+    Description: >
+      競技開始から EC2 ネットワーク劣化を起動するまでの分数 (Phase 2 / Issue #606)。
+      score engine の `MICROSERVICE_MIGRATION_DEGRADATION_MINUTES` と同値にすること。
+      EC2 UserData の cron が boot から本値分後に `tc qdisc` を流し、200ms の遅延を注入する
+      (= EC2 残置への penalty を実機で再現)。デフォルト 60 分。
 
 Resources:
   # ----- VPC + Networking -----
@@ -169,7 +179,8 @@ Resources:
           #!/bin/bash
           set -euxo pipefail
           dnf update -y
-          dnf install -y docker git
+          # iproute-tc は `tc qdisc` (Phase 2 / Issue #606 ネットワーク劣化 cron) で使う。
+          dnf install -y docker git iproute-tc
           systemctl enable --now docker
           mkdir -p /usr/local/lib/docker/cli-plugins
           curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-x86_64" \
@@ -193,6 +204,70 @@ Resources:
           ENVEOF
 
           docker compose up -d --build
+
+          # ----- Phase 2 / Issue #606: EC2 劣化シミュレーション (= ネットワーク遅延注入) -----
+          #
+          # マイクロサービス分割の incentive (= EC2 残置の penalty) を実機で再現する。
+          # `DegradationMinutes` 分後に primary NIC へ `tc qdisc ... netem delay 200ms` を
+          # 流し、EC2 上の `/score` 応答時間が 1500ms threshold を超えやすくする
+          # (= polling Lambda 側で score < migration platform スコアに沈める)。
+          #
+          # ⚠️ 本 cron は **問題の仕掛け** であって malware ではない。再起動でも仕掛けが
+          #    効くように systemd timer に書き込み、`docker compose` 起動後の独立 unit
+          #    にしてある (= compose 失敗時は劣化を起こさない、運営トラブルシュート簡易化)。
+          PRIMARY_NIC="$(ip -o -4 route show to default | awk '{print $5}' | head -n1)"
+          if [[ -z "$PRIMARY_NIC" ]]; then
+            echo "[degradation] PRIMARY_NIC could not be detected, skip degradation setup" >&2
+          else
+            mkdir -p /opt/tenkacloud/degradation
+
+            # inject.sh は heredoc を 'INJECT' (quoted) で囲い、shell expansion を防ぐ。
+            cat > /opt/tenkacloud/degradation/inject.sh <<'INJECT'
+          #!/bin/bash
+          # 本 script は Phase 2 / Issue #606 の劣化シミュレーション。
+          # 200ms 遅延を primary NIC root qdisc に注入する。`add` が ALREADY EXISTS の
+          # 場合は `change` で冪等に上書きする (= timer 再 trigger でも崩れない)。
+          NIC="$1"
+          if [[ -z "$NIC" ]]; then
+            echo "[degradation] NIC unset, skip" >&2
+            exit 0
+          fi
+          /sbin/tc qdisc add dev "$NIC" root netem delay 200ms 2>/dev/null || \
+            /sbin/tc qdisc change dev "$NIC" root netem delay 200ms
+          echo "[degradation] netem delay 200ms applied on $NIC at $(date -Is)"
+          INJECT
+            chmod +x /opt/tenkacloud/degradation/inject.sh
+
+            # NIC 値を unit に焼き込む (= systemd は shell expansion しないので、書き出し時に展開)。
+            cat > /etc/systemd/system/tenkacloud-degradation.service <<UNIT
+          [Unit]
+          Description=TenkaCloud Microservice Migration Battle - EC2 network degradation (Phase 2 / #606)
+          After=docker.service network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/opt/tenkacloud/degradation/inject.sh $PRIMARY_NIC
+          UNIT
+
+            # OnBootSec で `DegradationMinutes` 分後に oneshot service を発火する。
+            # CFn `${DegradationMinutes}` は Fn::Sub で展開済 (= 例 60min)。
+            cat > /etc/systemd/system/tenkacloud-degradation.timer <<TIMER
+          [Unit]
+          Description=TenkaCloud Microservice Migration Battle - degradation trigger (boot + ${DegradationMinutes} min)
+
+          [Timer]
+          OnBootSec=${DegradationMinutes}min
+          Unit=tenkacloud-degradation.service
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+          TIMER
+
+            systemctl daemon-reload
+            systemctl enable --now tenkacloud-degradation.timer
+          fi
 
 Outputs:
   BaseUrl:

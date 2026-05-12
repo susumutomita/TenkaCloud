@@ -28,17 +28,28 @@ export interface ScoreEventItem {
    * - `flag`: 競技者の flag 提出が正解
    * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
    *   Battle Portal の Attack Statistics / History で使う)
+   * - `microservice-migration`: Microservice Migration Battle (Phase 2 / #606) の 1 tick
+   *   probe 結果 (`platform` / `phase` 別に points が変動)。`uptime` と分けて持つことで
+   *   Battle Portal の history / leaderboard 側で混入を防ぐ。
+   * - `microservice-migration-bonus`: 3 slot 全分離達成の +5000 lump-sum bonus (1 度のみ)。
    */
-  source: "uptime" | "flag" | "attack-detected";
+  source:
+    | "uptime"
+    | "flag"
+    | "attack-detected"
+    | "microservice-migration"
+    | "microservice-migration-bonus";
   /**
    * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
-   * `attack-detected` = 0 (= イベント marker のみ、score 加算なし)。
+   * `attack-detected` = 0 (= イベント marker のみ、score 加算なし)、
+   * `microservice-migration*` = scoring.ts が計算する platform / phase 別ポイント。
    */
   points: number;
   /**
    * 結果。
-   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解
-   * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた)
+   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解 or `microservice-migration` で +score
+   * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた) or `microservice-migration`
+   *   で probe 失敗 (= -100 減点)
    *
    * Phase 2 以前の event 行は `"ok"` のみ書かれているので backward compatible。
    */
@@ -54,7 +65,10 @@ export interface ScoreEventItem {
  * 整合性が崩れるが、caller が catch して log のみ残す方針 (= MVP は best-effort)。
  *
  * `parent` から jobId / teamId / eventId / expiresAt を継承して event row を組む。
- * `result` は source に応じて自動決定 (= attack-detected なら "down"、それ以外は "ok")。
+ * `result` は source / points に応じて自動決定:
+ *   - `attack-detected` → "down" (固定)
+ *   - `microservice-migration` → points が負 (= probe 失敗減点) なら "down"、正なら "ok"
+ *   - その他 (uptime / flag / microservice-migration-bonus) → "ok"
  */
 export async function writeScoreEvent(
   ddb: DynamoDBDocumentClient,
@@ -73,9 +87,15 @@ export async function writeScoreEvent(
     eventId: parent.eventId,
     source,
     points,
-    result: source === "attack-detected" ? "down" : "ok",
+    result: resolveResult(source, points),
     occurredAt,
     expiresAt: Number(parent.expiresAt ?? 0),
   };
   await ddb.send(new PutCommand({ TableName: tableName, Item: item }));
+}
+
+function resolveResult(source: ScoreEventItem["source"], points: number): "ok" | "down" {
+  if (source === "attack-detected") return "down";
+  if (source === "microservice-migration" && points < 0) return "down";
+  return "ok";
 }

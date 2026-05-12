@@ -50,6 +50,63 @@ describe("writeScoreEvent (ADR-005 Phase 3.1: source extension)", () => {
     });
   });
 
+  it("source=microservice-migration + points>0 のとき result=ok で書き込む (#606 Phase 2)", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const ddb = { send } as unknown as Parameters<typeof writeScoreEvent>[0];
+    await writeScoreEvent(
+      ddb,
+      "T",
+      parent,
+      "microservice-migration",
+      1_000,
+      "2026-05-10T10:00:00.000Z",
+    );
+    const cmd = send.mock.calls[0]?.[0] as PutCommand;
+    expect(cmd.input.Item).toMatchObject({
+      source: "microservice-migration",
+      points: 1_000,
+      result: "ok",
+    });
+  });
+
+  it("source=microservice-migration + points<0 (probe 失敗) のとき result=down で書き込む (#606 Phase 2)", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const ddb = { send } as unknown as Parameters<typeof writeScoreEvent>[0];
+    await writeScoreEvent(
+      ddb,
+      "T",
+      parent,
+      "microservice-migration",
+      -100,
+      "2026-05-10T10:00:00.000Z",
+    );
+    const cmd = send.mock.calls[0]?.[0] as PutCommand;
+    expect(cmd.input.Item).toMatchObject({
+      source: "microservice-migration",
+      points: -100,
+      result: "down",
+    });
+  });
+
+  it("source=microservice-migration-bonus は常に result=ok で書き込む (#606 Phase 2、+5000 lump-sum)", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const ddb = { send } as unknown as Parameters<typeof writeScoreEvent>[0];
+    await writeScoreEvent(
+      ddb,
+      "T",
+      parent,
+      "microservice-migration-bonus",
+      5_000,
+      "2026-05-10T10:00:00.000Z",
+    );
+    const cmd = send.mock.calls[0]?.[0] as PutCommand;
+    expect(cmd.input.Item).toMatchObject({
+      source: "microservice-migration-bonus",
+      points: 5_000,
+      result: "ok",
+    });
+  });
+
   it("PK / SK が DEPLOYMENT#<jobId> / EVENT#<ts>#<ulid> 形になる", async () => {
     const send = vi.fn().mockResolvedValue({});
     const ddb = { send } as unknown as Parameters<typeof writeScoreEvent>[0];

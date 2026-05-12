@@ -300,6 +300,8 @@ const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-temp
   deployApiLambda: problemDeployBackendStack.deployApiLambda,
   eventApiLambda: problemDeployBackendStack.eventApiLambda,
   competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
+  microserviceMigrationRegistrationApiLambda:
+    problemDeployBackendStack.microserviceMigrationRegistrationApiLambda,
   participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
 });
 

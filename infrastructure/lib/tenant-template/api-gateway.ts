@@ -34,6 +34,11 @@ interface ApiGatewayProps {
    * (Issue #459 / ADR-002 Phase 2.1)。`/admin/competitor-accounts*` routes を proxy する。
    */
   competitorAccountsApiLambda: IFunction;
+  /**
+   * `ProblemDeployBackendStack.microserviceMigrationRegistrationApiLambda` のクロススタック参照
+   * (Issue #606 Phase 2)。`/problems/microservice-migration-battle/endpoints` route を proxy する。
+   */
+  microserviceMigrationRegistrationApiLambda: IFunction;
   apiKeyBasicTier: CustomApiKey;
   apiKeyStandardTier: CustomApiKey;
   apiKeyPremiumTier: CustomApiKey;
@@ -79,6 +84,26 @@ export class ApiGateway extends Construct {
     const problem = problems.addResource("{problemId}");
     problem.addResource("deploy").addMethod("POST", deployIntegration, deployMethodOptions);
     problem.addResource("deployments").addMethod("GET", deployIntegration, deployMethodOptions);
+
+    // Issue #606 Phase 2: Microservice Migration Battle 専用の endpoint 登録 routes。
+    //   /problems/microservice-migration-battle/endpoints  POST=登録 / GET=一覧 + 観測結果
+    // tenant API GW の Cognito JWT authorizer を共有。registration Lambda 自体は
+    // ProblemDeployBackendStack 側に置き、本 API GW は LambdaIntegration で proxy する。
+    const microserviceMigrationIntegration = new LambdaIntegration(
+      props.microserviceMigrationRegistrationApiLambda,
+    );
+    const microserviceMigrationProblem = problems.addResource("microservice-migration-battle");
+    const microserviceMigrationEndpoints = microserviceMigrationProblem.addResource("endpoints");
+    microserviceMigrationEndpoints.addMethod(
+      "POST",
+      microserviceMigrationIntegration,
+      deployMethodOptions,
+    );
+    microserviceMigrationEndpoints.addMethod(
+      "GET",
+      microserviceMigrationIntegration,
+      deployMethodOptions,
+    );
 
     // /deployments — tenant 内全 deploy job 一覧 (サイドバー「デプロイ履歴」用)
     // /deployments/{jobId} — 1 件の取得 / 削除

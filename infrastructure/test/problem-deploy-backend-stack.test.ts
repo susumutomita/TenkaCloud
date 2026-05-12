@@ -25,10 +25,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
   describe("Deployments DDB table", () => {
-    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts の 4 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
-      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts。
-      // 4 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 4);
+    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts / MicroserviceMigrationScores の 5 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
+      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts、
+      // Issue #606 Phase 2 で MicroserviceMigrationScores。
+      // 5 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 5);
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
@@ -160,12 +161,13 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(synthJson).toContain("IN_PROGRESS");
     });
 
-    it("EventBridge Rule を Create / Delete / HealthCheck / ExternalIdAudit schedule で 4 つ持つべき", () => {
+    it("EventBridge Rule を Create / Delete / HealthCheck / ExternalIdAudit / MicroserviceMigrationPoller schedule で 5 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
       //   + HealthCheck schedule rate(1 minute) (= #557 #539 reconciler + uptime 採点)
-      //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
-      // = 4。HealthCheck は uptime 採点とは独立に常時 instantiate される。
-      tpl.resourceCountIs("AWS::Events::Rule", 4);
+      //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603)
+      //   + MicroserviceMigrationPoller schedule rate(1 minute) (= Issue #606 Phase 2)
+      // = 5。HealthCheck と MicroserviceMigrationPoller は責務分離のため別 cron。
+      tpl.resourceCountIs("AWS::Events::Rule", 5);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -303,6 +305,41 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
             ]),
           }),
         }),
+      );
+    });
+
+    it("Issue #606 Phase 2: Microservice Migration Battle 用に scoresTable + 2 Lambda + 1 schedule を持つべき", () => {
+      // Registration Lambda + Poller Lambda の env を pin する (= MICROSERVICE_MIGRATION_SCORES_TABLE_NAME 必須)
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              MICROSERVICE_MIGRATION_SCORES_TABLE_NAME: Match.anyValue(),
+            }),
+          }),
+        }),
+      );
+      // Poller Lambda は degradation / legacy switch 分数 env を持つ
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              MICROSERVICE_MIGRATION_DEGRADATION_MINUTES: "60",
+              MICROSERVICE_MIGRATION_LEGACY_SWITCH_MINUTES: "90",
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("Issue #606 Phase 2: Output に MicroserviceMigrationScoresTableName を含むべき", () => {
+      const outputs = tpl.findOutputs("*");
+      expect(Object.keys(outputs)).toEqual(
+        expect.arrayContaining(["MicroserviceMigrationScoresTableName"]),
       );
     });
 

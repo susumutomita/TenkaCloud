@@ -18,6 +18,9 @@ import { EventApiLambda } from "./event-api-lambda";
 import { EventsTable } from "./events-table";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
 import { HealthCheckLambda } from "./health-check-lambda";
+import { MicroserviceMigrationPollerLambda } from "./microservice-migration-poller-lambda";
+import { MicroserviceMigrationRegistrationApiLambda } from "./microservice-migration-registration-api-lambda";
+import { MicroserviceMigrationScoresTable } from "./microservice-migration-scores-table";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
@@ -78,6 +81,18 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * 例: `development` / `staging` / `production`。
    */
   readonly environmentName: string;
+  /**
+   * Microservice Migration Battle (Phase 2 / Issue #606) の EC2 劣化フェーズ突入までの分数。
+   * polling Lambda が `degradationMinutes` 経過後に EC2 score を +100 → +10 に切替える。
+   * 未指定なら default 60 を Lambda 内で使う。problem template の cron 設定と一致させること
+   * (= EC2 内 cron は CFn parameter で同値を受け取る)。
+   */
+  readonly microserviceMigrationDegradationMinutes?: number;
+  /**
+   * Microservice Migration Battle (Phase 2 / #606) の `/score?legacy=true` 切替までの分数。
+   * 未指定なら default 90。
+   */
+  readonly microserviceMigrationLegacySwitchMinutes?: number;
 }
 
 /**
@@ -104,6 +119,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * tenant API の `/admin/competitor-accounts*` route から invoke される。
    */
   public readonly competitorAccountsApiLambda: IFunction;
+  /**
+   * Microservice Migration Battle (Phase 2 / Issue #606) の endpoint 登録 API Lambda。
+   * tenant API の `/problems/microservice-migration-battle/endpoints` route から invoke される。
+   */
+  public readonly microserviceMigrationRegistrationApiLambda: IFunction;
   /**
    * Participant Portal の CloudFront URL。Participant Portal が無効化された tenant
    * では undefined。`TenantTemplateStack` が application-admin-console の runtime-config に
@@ -174,6 +194,29 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
+
+    // Issue #606 Phase 2: Microservice Migration Battle 用 score engine の 3 構成要素。
+    //   1. MicroserviceMigrationScoresTable (DDB, 1/1 PROVISIONED)
+    //   2. Registration API Lambda (tenant API 経由で /problems/.../endpoints を持つ)
+    //   3. Polling Lambda (rate(1 minute) で probe + ScoreEvent 発行)
+    // テーブル + 2 Lambda を分けて IAM scope を最小化する (= 登録 API は scoresTable のみ、
+    // polling Lambda は scoresTable + Deployments table の RW)。
+    const microserviceMigrationScores = new MicroserviceMigrationScoresTable(
+      this,
+      "MicroserviceMigrationScores",
+    );
+    const microserviceMigrationRegistrationApi = new MicroserviceMigrationRegistrationApiLambda(
+      this,
+      "MicroserviceMigrationRegistrationApi",
+      { scoresTable: microserviceMigrationScores.table },
+    );
+    this.microserviceMigrationRegistrationApiLambda = microserviceMigrationRegistrationApi.fn;
+    new MicroserviceMigrationPollerLambda(this, "MicroserviceMigrationPoller", {
+      scoresTable: microserviceMigrationScores.table,
+      deploymentsTable: deployments.table,
+      degradationMinutes: props.microserviceMigrationDegradationMinutes,
+      legacySwitchMinutes: props.microserviceMigrationLegacySwitchMinutes,
+    });
 
     // CodeBuild Project: source.zip から `scripts/deploy-battles.sh` を実行する。
     // #538: Bulk Deploy 並列度の hard cap は account-wide CodeBuild concurrent build
@@ -280,6 +323,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       value: competitorAccounts.table.tableName,
       description:
         "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
+    });
+    new CfnOutput(this, "MicroserviceMigrationScoresTableName", {
+      value: microserviceMigrationScores.table.tableName,
+      description:
+        "Issue #606 Phase 2 Microservice Migration Battle の slot 登録 + 観測テーブル名。",
     });
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: stateMachine.stateMachine.stateMachineArn,

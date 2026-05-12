@@ -52,6 +52,12 @@ interface TenantTemplateStackProps extends StackProps {
    */
   competitorAccountsApiLambda: IFunction;
   /**
+   * `ProblemDeployBackendStack.microserviceMigrationRegistrationApiLambda` をクロススタック参照で受ける
+   * (Issue #606 Phase 2)。tenant API の `/problems/microservice-migration-battle/endpoints` route が
+   * 本 Lambda を invoke する。
+   */
+  microserviceMigrationRegistrationApiLambda: IFunction;
+  /**
    * Participant Portal の CloudFront URL。`ProblemDeployBackendStack` の
    * `participantPortalUrl` をクロススタック参照で受け、application-admin-console の
    * runtime-config.json に注入する (operator が EventDetail 等で「Portal URL を共有」
@@ -101,6 +107,7 @@ export class TenantTemplateStack extends Stack {
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
+      microserviceMigrationRegistrationApiLambda: props.microserviceMigrationRegistrationApiLambda,
       apiKeyBasicTier: {
         apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.basic.keyId),
         value: this.ssmLookup(props.ApiKeySSMParameterNames.basic.value),

@@ -32,6 +32,15 @@ function buildHarness() {
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
+  const microserviceMigrationRegistrationFn = new LambdaFunction(
+    stack,
+    "MicroserviceMigrationRegistrationApi",
+    {
+      runtime: Runtime.NODEJS_20_X,
+      code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
+      handler: "index.handler",
+    },
+  );
   const apiKey: CustomApiKey = {
     id: "key-id",
     apiKey: { keyId: "k", keyArn: "arn:aws:apigateway:::/apikeys/k", keyName: "k" },
@@ -54,6 +63,7 @@ function buildHarness() {
     deployApiLambda: fn,
     eventApiLambda: eventFn,
     competitorAccountsApiLambda: competitorAccountsFn,
+    microserviceMigrationRegistrationApiLambda: microserviceMigrationRegistrationFn,
     apiKeyBasicTier: apiKey,
     apiKeyStandardTier: apiKey,
     apiKeyPremiumTier: apiKey,
