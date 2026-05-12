@@ -139,45 +139,73 @@
 <p>UserData 内なので platform は知らない、ただ deploy するだけ。</p>
 </details>
 
-<h3>endpoint 多様性 — 1 / N / N slot の 3 パターンを統一</h3>
+<h3>endpoint = default + override 可能な slot (= 統一モデル)</h3>
 
-<p>採点対象 endpoint は問題により <strong>数が違う</strong>。<code>metadata.json</code> で 2 種類を併用宣言:</p>
+<p>全 endpoint は <strong>1 つの統一モデル</strong> で扱う:</p>
 
 <table>
-<thead><tr><th>パターン</th><th>例</th><th>由来</th></tr></thead>
+<thead><tr><th>要素</th><th>内容</th></tr></thead>
 <tbody>
-<tr><td>1 endpoint (単一)</td><td><code>hello-world-battle</code></td><td>CFn output から 1 つ</td></tr>
-<tr><td>N endpoint (複数監視)</td><td><code>security-battle-royale</code></td><td>CFn output から N 個 (例: <code>/admin</code> + <code>/api</code> を両方 probe)</td></tr>
-<tr><td>N slot (競技者登録)</td><td><code>microservice-migration-battle</code></td><td>競技者が portal UI から N URL を登録</td></tr>
+<tr><td><strong>slot</strong></td><td>問題が宣言する endpoint の役割名 (例: <code>main</code> / <code>admin</code> / <code>users</code>)</td></tr>
+<tr><td><strong>default URL</strong></td><td>CFn output から自動取得 or 固定値。deploy 直後はこれが使われる</td></tr>
+<tr><td><strong>override</strong></td><td>競技者が portal UI で別 URL に変更可能。 <strong>effective URL = override || default</strong></td></tr>
 </tbody>
 </table>
 
-<pre>// problems/&lt;id&gt;/metadata.json
+<p><strong>なぜこの形か</strong>: Battle 問題では競技者が deploy 直後の構成を <strong>変えていく</strong> ことが本質的:</p>
+
+<ul>
+<li><code>security-battle-royale</code>: default は S3 直 URL → 競技者が CloudFront を前段に置いたら新 URL で override</li>
+<li><code>microservice-migration-battle</code>: default は EC2 の 3 path → Lambda / ECS / App Runner に切り出したら slot ごとに override</li>
+<li><code>hello-world-battle</code>: default の EC2 URL のまま (= override 不要)、あるいは CDN を被せて override</li>
+</ul>
+
+<pre>// problems/&lt;id&gt;/metadata.json (= security-battle-royale 例)
 {
-  "endpoints": {
-    "static": [
-      // CFn output 経由の fixed endpoints (= 問題の deploy 直後から確定)
-      { "outputKey": "EndpointUrl", "name": "main", "path": "/health" }
-    ],
-    "registered": [
-      // 競技者が portal UI で URL を入れる slot (= 動的、後追い登録)
-      { "slot": "users",   "required": true,  "label": "users service URL" },
-      { "slot": "orders",  "required": true },
-      { "slot": "catalog", "required": true }
-    ]
-  }
+  "endpoints": [
+    {
+      "slot": "main",
+      "default": { "from": "cfn-output", "key": "EndpointUrl" },
+      "overridable": true,
+      "label": "メイン endpoint",
+      "description": "deploy 直後は S3 直、CDN / WAF 等を被せて変更可能"
+    },
+    {
+      "slot": "admin",
+      "default": { "from": "cfn-output", "key": "AdminUrl" },
+      "overridable": true
+    }
+  ]
 }</pre>
 
-<p>Platform は <strong>generic な endpoint registry API</strong> (= <code>POST /problems/:id/endpoints { slot, url }</code>) を提供。problem 固有 route は不要。<code>scoring/index.ts</code> には統一形で渡される:</p>
+<pre>// microservice-migration-battle 例 (= 3 slot、各 slot を別 hosting に切り出す)
+{
+  "endpoints": [
+    { "slot": "users",   "default": { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/users" },   "overridable": true },
+    { "slot": "orders",  "default": { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/orders" },  "overridable": true },
+    { "slot": "catalog", "default": { "from": "cfn-output", "key": "Ec2BaseUrl", "appendPath": "/catalog" }, "overridable": true }
+  ]
+}</pre>
+
+<p>Platform は <strong>3 機能の generic な endpoint registry</strong> を提供:</p>
+
+<ol>
+<li>deploy 直後に CFn output から default URL を抽出して各 slot に書き込む</li>
+<li>競技者の override (<code>POST /problems/:id/endpoints { slot, url }</code>) を受け付ける</li>
+<li>effective URL (= override があれば override、無ければ default) を scoring / engine に渡す</li>
+</ol>
+
+<p><code>scoring/index.ts</code> / <code>engine/index.ts</code> には統一形で渡る:</p>
 
 <pre>event.endpoints = {
-  static:     { main:    "https://abc.execute-api.../" },
-  registered: { users:   "https://...",
-                orders:  undefined,       // 未登録
-                catalog: "https://..." }
+  users:   "https://d12345.cloudfront.net/users",     // ← competitor が CDN 被せて override
+  orders:  "http://ec2-abc.amazonaws.com/orders",     // ← default のまま (未 override)
+  catalog: "https://api-gw.execute-api.../catalog"    // ← Lambda + API GW に移して override
 }</pre>
 
-<p>問題側は必要な数だけ probe する (1 / N / N slot を同じ contract で扱える)。</p>
+<p>問題側は slot 名で endpoint を引いて probe するだけ。endpoint が <strong>1 つでも N 個でも</strong>同じ contract。</p>
+
+<p><strong>Challenge (flag 系)</strong> は endpoint 概念を持たない (= 提出 form 経由)。<code>metadata.json</code> の <code>endpoints</code> 配列を省略するだけ。</p>
 
 <h3>② 採点 (<code>scoring/index.ts</code>) — Battle 主用途、Challenge は省略可</h3>
 
