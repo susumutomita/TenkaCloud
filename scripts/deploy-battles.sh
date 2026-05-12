@@ -55,6 +55,11 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 TEAM_SLUG="${TEAM_SLUG:-demo-team}"
+
+# Phase 2.2 (Issue #459): COMPETITOR_ROLE_ARN が set されているなら、aws CLI 呼び出し前に
+# AssumeRole + ExternalId で tmp credentials に切り替える。空なら same-account 経路で動く。
+assume_competitor_role_if_configured
+
 AWS_REGION="$(resolve_aws_region)"
 
 # metadata.json の cfnParameters を `Key=Value` 形式の配列に展開する。`__RANDOM_PASSWORD__`

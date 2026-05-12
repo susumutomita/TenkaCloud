@@ -1,15 +1,21 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface DeployApiLambdaProps {
   readonly deploymentsTable: Table;
   readonly eventBus: IEventBus;
+  /**
+   * Phase 2.2 (Issue #459): single-deploy / stack-progress が verified=true 行のみ
+   * 許可する gate のため、CompetitorAccounts table を Read する。
+   */
+  readonly competitorAccountsTable: Table;
   /**
    * tenantId として handler に渡す `DEFAULT_TENANT_ID` env。Cognito JWT authorizer
    * 結線後は JWT claim から取るが、Function URL 直叩き / dev / unit test では本値を使う。
@@ -22,6 +28,10 @@ export interface DeployApiLambdaProps {
    * 入力 (`detail.problemDir`) に詰める。Phase 2 (ADR-003) で DDB ベースの catalog に置換。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /**
+   * SSM SecureString path 構築用の env 名 (Phase 2.2、`/<environmentName>/tenants/...`)。
+   */
+  readonly environmentName: string;
 }
 
 /**
@@ -49,6 +59,9 @@ export class DeployApiLambda extends Construct {
       memorySize: 256,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Phase 2.2 (Issue #459)
+        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        DEPLOY_ENVIRONMENT: props.environmentName,
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         DEFAULT_TENANT_ID: props.defaultTenantId ?? "unknown-tenant",
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
@@ -62,20 +75,59 @@ export class DeployApiLambda extends Construct {
       },
     });
 
-    // 必要な権限: DDB CRUD + EventBus PutEvents (cross-account AssumeRole は不要、MVP-1 は
-    // 同一 account 内 deploy のみ)。
+    // 必要な権限: DDB CRUD + EventBus PutEvents + CompetitorAccounts Read。
+    // Phase 2.2 (Issue #459): verified-only gate のために CompetitorAccounts は read-only で
+    // 引く。AssumeRole / SSM SecureString は CompetitorAccountsApiLambda + State Machine 経由
+    // (= 本 Lambda は同期 API 経路のみ担う)。
     props.deploymentsTable.grantReadWriteData(this.fn);
+    props.competitorAccountsTable.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
 
     // #534: deploy job 詳細ページから CFn StackEvents / StackResources を引く読み取り権限。
-    // MVP-1 は same-account のみなので Resource は account 内全 stack を許可するが、
-    // action は **Describe* read-only に限定** (= 副作用なし、最小権限)。Phase 2 で cross-account
-    // になったら ここを sts:AssumeRole に置き換え、target account 側で role に持たせる。
+    // same-account 経路 (= dev / 旧 deployment 行) では本 Lambda Role が直接呼ぶため Describe*
+    // を ALLOW する。Phase 2.2 (Issue #459) の cross-account では AssumeRole 経由になるが、
+    // verified=true 行が無いケースで fallback として残るので削除しない。
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["cloudformation:DescribeStackEvents", "cloudformation:DescribeStackResources"],
         resources: ["*"],
+      }),
+    );
+
+    // Phase 2.2 (Issue #459): stack-progress の cross-account 経路で必要な権限。
+    //   - SSM SecureString Read (= tenant path prefix scope)
+    //   - kms:Decrypt (= SSM SecureString 復号、AWS managed key + EncryptionContext で絞る)
+    //   - sts:AssumeRole (= 競技者 IAM Role `TenkaCloud-*`)
+    // CompetitorAccountsApiLambda と同じ pattern (= 最小権限 + path prefix scope)。
+    const stack = Stack.of(this);
+    const ssmArn = buildExternalIdParameterArnPattern(
+      stack.region,
+      stack.account,
+      props.environmentName,
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["ssm:GetParameter"],
+        resources: [ssmArn],
+      }),
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["kms:Decrypt"],
+        resources: ["*"],
+        conditions: {
+          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn },
+        },
+      }),
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["sts:AssumeRole"],
+        resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
       }),
     );
   }

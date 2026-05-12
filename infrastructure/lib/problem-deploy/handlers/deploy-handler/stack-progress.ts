@@ -5,7 +5,10 @@ import {
   type StackEvent,
   type StackResource,
 } from "@aws-sdk/client-cloudformation";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import type { DeploySharedResources } from "./deploy.js";
 import type { DeploymentItem } from "./types.js";
 
@@ -98,10 +101,22 @@ function isStackNotFoundError(err: unknown): boolean {
 
 export interface StackProgressDeps {
   /**
-   * region 別の CFn client を返す factory。region は同一 account に固定 (MVP-1) なので
-   * AssumeRole は不要。テスト時には mock client を返す stub に差し替える。
+   * region 別の CFn client を返す factory。same-account fallback で使う。
+   * Phase 2.2 (Issue #459) cross-account 経路では `cfnClientForCompetitor` 経由で
+   * AssumeRole 済 credentials で client を組む (= 本 factory は dev / 未 verify 用)。
    */
   readonly cfnClient: (region: string) => CloudFormationClient;
+  /**
+   * Phase 2.2: cross-account 用 CFn client を返す factory (default impl は同 module 内
+   * `defaultCfnClientForCompetitor`)。tenantId + awsAccountId + region + competitorRoleArn +
+   * SSM path から AssumeRole + ExternalId fetch を行い、tmp credentials の CFn client を作る。
+   * テスト時には mock client を返す stub に差し替える (= STS call を握り潰す)。
+   */
+  readonly cfnClientForCompetitor?: (params: {
+    readonly region: string;
+    readonly competitorRoleArn: string;
+    readonly externalIdParameterName: string;
+  }) => Promise<CloudFormationClient>;
 }
 
 /** module-scope の lazy cache。region ごとに 1 度だけ build する (warm invoke で再利用)。 */
@@ -114,6 +129,55 @@ export const defaultCfnClient = (region: string): CloudFormationClient => {
   }
   return c;
 };
+
+/**
+ * Phase 2.2 (Issue #459): cross-account CFn client factory の default 実装。
+ *
+ * 1. SSM SecureString から ExternalId を取得 (= `kms:Decrypt` で復号)
+ * 2. STS AssumeRole (with ExternalId) で 15 分 tmp credentials を取得
+ * 3. credentials を CloudFormationClient に注入して返す
+ *
+ * caller (= `getStackProgress`) は session 内で 1 度 build した client を `Promise.all` で
+ * 並列に使う (= DescribeStackEvents + DescribeStackResources)。15 分 session 内なら 1 回の
+ * AssumeRole で複数 API を捌ける。session を warm Lambda invoke 跨ぎでキャッシュすると鍵
+ * 漏洩リスクが上がるので、本実装ではキャッシュしない (cold session every request)。
+ */
+const moduleSts = new STSClient({});
+const moduleSsm = new SSMClient({});
+
+export async function defaultCfnClientForCompetitor(params: {
+  readonly region: string;
+  readonly competitorRoleArn: string;
+  readonly externalIdParameterName: string;
+}): Promise<CloudFormationClient> {
+  const ssmOut = await moduleSsm.send(
+    new GetParameterCommand({ Name: params.externalIdParameterName, WithDecryption: true }),
+  );
+  const externalId = ssmOut.Parameter?.Value;
+  if (!externalId) {
+    throw new Error(`ExternalId not found in SSM SecureString: ${params.externalIdParameterName}`);
+  }
+  const stsOut = await moduleSts.send(
+    new AssumeRoleCommand({
+      RoleArn: params.competitorRoleArn,
+      RoleSessionName: `tenkacloud-stack-progress-${Date.now()}`,
+      ExternalId: externalId,
+      DurationSeconds: 900,
+    }),
+  );
+  const creds = stsOut.Credentials;
+  if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
+    throw new Error("AssumeRole returned incomplete credentials");
+  }
+  return new CloudFormationClient({
+    region: params.region,
+    credentials: {
+      accessKeyId: creds.AccessKeyId,
+      secretAccessKey: creds.SecretAccessKey,
+      sessionToken: creds.SessionToken,
+    },
+  });
+}
 
 /**
  * 指定 jobId の deploy job について、CFn StackEvents / StackResources を取得して
@@ -152,7 +216,26 @@ export async function getStackProgress(
   // CFn は StackName / StackId のどちらでも引ける。stackId が確定済ならそれを使う
   // (= 万一 stack を delete → 同名再作成した場合に旧 stack の events に混入しない)。
   const stackRef = item.stackId ?? stackName;
-  const cfn = deps.cfnClient(region);
+  // Phase 2.2 (Issue #459): verified=true 行が CompetitorAccounts table にあれば
+  // AssumeRole 経由で cross-account client を組む。無ければ同 account 経路 (= dev /
+  // 旧 deployment 行 / 未 verify) で従来通り。
+  const verified = await resolveVerifiedCompetitorAccount(
+    {
+      ddb: shared.ddb,
+      competitorAccountsTableName: shared.competitorAccountsTableName,
+      env: shared.env,
+    },
+    tenantId,
+    String(item.awsAccountId ?? ""),
+  );
+  const cfn: CloudFormationClient =
+    verified && deps.cfnClientForCompetitor
+      ? await deps.cfnClientForCompetitor({
+          region,
+          competitorRoleArn: verified.competitorRoleArn,
+          externalIdParameterName: verified.externalIdParameterName,
+        })
+      : deps.cfnClient(region);
 
   let events: StackEvent[];
   let resources: StackResource[];

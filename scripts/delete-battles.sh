@@ -25,6 +25,12 @@ STACK_NAME="$1"
 # 第 2 引数 > AWS_REGION env > aws cli config の順 (resolve_aws_region は env/cli config を見る)。
 REGION="${2:-$(resolve_aws_region)}"
 
+# Phase 2.2 (Issue #459): cross-account 化。`COMPETITOR_ROLE_ARN` が set されていれば
+# AssumeRole + ExternalId で tmp credentials に切り替える。
+# DEPLOY_REGION も export し直す (delete でも target region を AssumeRole 後に固定する)。
+export DEPLOY_REGION="${REGION}"
+assume_competitor_role_if_configured
+
 echo "=========================================="
 echo "Deleting stack"
 echo "  StackName : ${STACK_NAME}"

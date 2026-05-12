@@ -16,12 +16,16 @@ import { DeployCodeBuildProject } from "../../lib/problem-deploy/deploy-codebuil
  */
 function synth(props?: { concurrentBuildLimit?: number }): Template {
   const app = new App();
-  const stack = new Stack(app, "TestStack");
+  // ssm:GetParameter ARN を build するため account / region を pin する。
+  const stack = new Stack(app, "TestStack", {
+    env: { account: "123456789012", region: "ap-northeast-1" },
+  });
   const sourceBucket = Bucket.fromBucketName(stack, "SourceBucket", "test-source-bucket");
   new DeployCodeBuildProject(stack, "DeployCodeBuild", {
     sourceBucket,
     sourceObjectKey: "source.zip",
     concurrentBuildLimit: props?.concurrentBuildLimit,
+    environmentName: "development",
   });
   return Template.fromStack(stack);
 }
@@ -56,6 +60,61 @@ describe("DeployCodeBuildProject — concurrent build limit (#538)", () => {
     tpl.hasResourceProperties(
       "AWS::CodeBuild::Project",
       Match.objectLike({ ConcurrentBuildLimit: 60 }),
+    );
+  });
+});
+
+describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)", () => {
+  it("CodeBuild Project Role に sts:AssumeRole (`arn:aws:iam::*:role/TenkaCloud-*`) を付与するべき", () => {
+    const tpl = synth();
+    // Project Role の inline policy に AssumeRole を含む statement が出るべき。
+    tpl.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Action: "sts:AssumeRole",
+              Resource: "arn:aws:iam::*:role/TenkaCloud-*",
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("CodeBuild Project Role に SSM SecureString Read (= tenant path prefix scope) を付与するべき", () => {
+    const tpl = synth();
+    tpl.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Action: "ssm:GetParameter",
+              Resource:
+                "arn:aws:ssm:ap-northeast-1:123456789012:parameter/development/tenants/*/external-id",
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("CodeBuild env variables に COMPETITOR_ROLE_ARN / EXTERNAL_ID_SSM_PARAMETER を宣言するべき", () => {
+    const tpl = synth();
+    tpl.hasResourceProperties(
+      "AWS::CodeBuild::Project",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          EnvironmentVariables: Match.arrayWith([
+            Match.objectLike({ Name: "COMPETITOR_ROLE_ARN" }),
+            Match.objectLike({ Name: "EXTERNAL_ID_SSM_PARAMETER" }),
+          ]),
+        }),
+      }),
     );
   });
 });

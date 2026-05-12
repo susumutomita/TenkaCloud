@@ -1,21 +1,53 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DeployContext,
   type DeployInvocation,
   startDeployment,
+  UnverifiedCompetitorAccountError,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 
-function buildContext(overrides: Partial<DeployContext> = {}): {
+/**
+ * Phase 2.2 (Issue #459): startDeployment が事前に CompetitorAccounts table を Get
+ * (verified=true gate) するようになった。test では default で「verified=true」を返し、
+ * `unverified=true` option で「verified=false」を pin する。
+ */
+function buildContext(
+  overrides: Partial<DeployContext> = {},
+  options: { unverified?: boolean } = {},
+): {
   ctx: DeployContext;
-  ddbSend: ReturnType<typeof vi.fn>;
+  putSend: ReturnType<typeof vi.fn>;
   eventsSend: ReturnType<typeof vi.fn>;
 } {
-  const ddbSend = vi.fn().mockResolvedValue({});
+  const putSend = vi.fn().mockResolvedValue({});
   const eventsSend = vi.fn().mockResolvedValue({});
+  // GetCommand (CompetitorAccounts) を verified=true / unverified=false に振り分け、
+  // それ以外 (PutCommand 等) は putSend に流す。test 側 assertion は putSend の最後の
+  // call を見るのが基本。
+  const ddbSend = vi.fn(async (cmd: unknown) => {
+    if (cmd instanceof GetCommand && cmd.input.TableName === "TestCompetitorAccounts") {
+      if (options.unverified) return { Item: undefined };
+      const sk = String(cmd.input.Key?.SK ?? "");
+      const awsAccountId = sk.replace(/^ACCOUNT#/, "");
+      return {
+        Item: {
+          PK: cmd.input.Key?.PK,
+          SK: cmd.input.Key?.SK,
+          awsAccountId,
+          region: "ap-northeast-1",
+          competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+          verified: true,
+        },
+      };
+    }
+    return putSend(cmd);
+  });
   const ctx: DeployContext = {
     tableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
+    env: "development",
     eventBusName: "test-bus",
     ddb: { send: ddbSend } as unknown as DeployContext["ddb"],
     events: { send: eventsSend } as unknown as DeployContext["events"],
@@ -28,7 +60,7 @@ function buildContext(overrides: Partial<DeployContext> = {}): {
     },
     ...overrides,
   };
-  return { ctx, ddbSend, eventsSend };
+  return { ctx, putSend, eventsSend };
 }
 
 const sampleRequest = (overrides: Partial<DeployInvocation> = {}): DeployInvocation => ({
@@ -43,10 +75,10 @@ describe("startDeployment", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("DDB に PutItem を 1 回 送るべき", async () => {
-    const { ctx, ddbSend } = buildContext();
+    const { ctx, putSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
-    expect(ddbSend).toHaveBeenCalledOnce();
-    const cmd = ddbSend.mock.calls[0]?.[0] as PutCommand;
+    expect(putSend).toHaveBeenCalledOnce();
+    const cmd = putSend.mock.calls[0]?.[0] as PutCommand;
     expect(cmd).toBeInstanceOf(PutCommand);
     const item = cmd.input.Item;
     expect(cmd.input.TableName).toBe("TestDeployments");
@@ -59,9 +91,9 @@ describe("startDeployment", () => {
   });
 
   it("GSI2PK = TEAMKEY#<teamLoginKey> を sparse index 用に書き込むべき", async () => {
-    const { ctx, ddbSend } = buildContext();
+    const { ctx, putSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
-    const cmd = ddbSend.mock.calls[0]?.[0] as PutCommand;
+    const cmd = putSend.mock.calls[0]?.[0] as PutCommand;
     const item = cmd.input.Item;
     expect(typeof item?.teamLoginKey).toBe("string");
     expect(item?.GSI2PK).toBe(`TEAMKEY#${item?.teamLoginKey}`);
@@ -103,25 +135,48 @@ describe("startDeployment", () => {
   });
 
   it("DDB Put が失敗したら EventBridge を呼ばずに throw するべき", async () => {
-    const { ctx, eventsSend } = buildContext();
-    (ctx.ddb.send as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("DDB down"));
+    const { ctx, putSend, eventsSend } = buildContext();
+    putSend.mockRejectedValueOnce(new Error("DDB down"));
     await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow("DDB down");
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
   it("forward-compat フィールド (accountGroupId / problemSetId) も保存するべき", async () => {
-    const { ctx, ddbSend } = buildContext();
+    const { ctx, putSend } = buildContext();
     await startDeployment(ctx, sampleRequest({ accountGroupId: "group-1", problemSetId: "set-1" }));
-    const cmd = ddbSend.mock.calls[0]?.[0] as PutCommand;
+    const cmd = putSend.mock.calls[0]?.[0] as PutCommand;
     expect(cmd.input.Item?.accountGroupId).toBe("group-1");
     expect(cmd.input.Item?.problemSetId).toBe("set-1");
   });
 
   it("default TTL は 8 時間 (秒単位)", async () => {
     const fixedNow = 1_700_000_000_000;
-    const { ctx, ddbSend } = buildContext({ ttlMs: undefined, now: () => fixedNow });
+    const { ctx, putSend } = buildContext({ ttlMs: undefined, now: () => fixedNow });
     await startDeployment(ctx, sampleRequest());
-    const cmd = ddbSend.mock.calls[0]?.[0] as PutCommand;
+    const cmd = putSend.mock.calls[0]?.[0] as PutCommand;
     expect(cmd.input.Item?.expiresAt).toBe(Math.floor((fixedNow + 8 * 60 * 60 * 1000) / 1000));
+  });
+
+  // Phase 2.2 (Issue #459): verified=true 行が無いと UnverifiedCompetitorAccountError を投げるべき
+  it("CompetitorAccounts に verified=true 行が無い awsAccountId は reject (Unverified… throw) するべき", async () => {
+    const { ctx, putSend, eventsSend } = buildContext({}, { unverified: true });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      UnverifiedCompetitorAccountError,
+    );
+    expect(putSend).not.toHaveBeenCalled();
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  // Phase 2.2: DeployCreateRequested detail に competitorRoleArn / externalIdParameterName を含めるべき
+  it("DeployCreateRequested detail に AssumeRole 用 competitorRoleArn / externalIdParameterName を詰めるべき", async () => {
+    const { ctx, eventsSend } = buildContext();
+    await startDeployment(ctx, sampleRequest());
+    const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const entry = cmd.input.Entries?.[0];
+    const detail = JSON.parse(entry?.Detail ?? "{}");
+    expect(detail.competitorRoleArn).toBe(
+      "arn:aws:iam::123456789012:role/TenkaCloud-CompetitorDeploy-Role",
+    );
+    expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
 });

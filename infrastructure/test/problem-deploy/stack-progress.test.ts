@@ -11,16 +11,49 @@ const STACK_NAME = "tc-hello-world-team-alpha";
 const STACK_ID = `arn:aws:cloudformation:ap-northeast-1:999999999999:stack/${STACK_NAME}/uuid`;
 const REGION = "ap-northeast-1";
 
-function buildShared(): {
+/**
+ * Phase 2.2 (Issue #459): getStackProgress は CompetitorAccounts table も Get するため、
+ * GetCommand を TableName で振り分ける wrapper を使う。default は「未登録」(= verified 行
+ * 無し) に倒し、cross-account を試したい test だけ override する。
+ */
+function buildShared(options: { verified?: boolean } = {}): {
   shared: DeploySharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
 } {
   const ddbSend = vi.fn();
+  const wrappedSend = vi.fn(async (cmd: unknown) => {
+    type GetLike = { input: { TableName?: string; Key?: { PK?: string; SK?: string } } };
+    if (
+      typeof cmd === "object" &&
+      cmd !== null &&
+      "input" in cmd &&
+      (cmd as GetLike).input?.TableName === "TestCompetitorAccounts"
+    ) {
+      if (!options.verified) return { Item: undefined };
+      const key = (cmd as GetLike).input.Key ?? {};
+      const sk = String(key.SK ?? "");
+      const awsAccountId = sk.replace(/^ACCOUNT#/, "");
+      return {
+        Item: {
+          PK: key.PK,
+          SK: key.SK,
+          awsAccountId,
+          region: "ap-northeast-1",
+          competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+          verified: true,
+        },
+      };
+    }
+    return ddbSend(cmd);
+  });
   const shared: DeploySharedResources = {
     tableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
+    env: "development",
     eventBusName: "test-bus",
-    ddb: { send: ddbSend } as unknown as DeploySharedResources["ddb"],
+    ddb: { send: wrappedSend } as unknown as DeploySharedResources["ddb"],
     events: {} as unknown as DeploySharedResources["events"],
+    problemsCatalog: {},
   };
   return { shared, ddbSend };
 }

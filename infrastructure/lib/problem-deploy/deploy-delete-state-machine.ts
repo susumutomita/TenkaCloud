@@ -65,6 +65,14 @@ export class DeployDeleteStateMachine extends Construct {
         OPERATION: { value: "delete" },
         DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
         DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+        // Phase 2.2 (Issue #459): cross-account delete でも AssumeRole metadata を渡す。
+        // detail に値が無いケース (旧 deployment 行) は `States.Format` で空文字に倒れる。
+        COMPETITOR_ROLE_ARN: {
+          value: JsonPath.format("{}", JsonPath.stringAt("$.detail.competitorRoleArn")),
+        },
+        EXTERNAL_ID_SSM_PARAMETER: {
+          value: JsonPath.format("{}", JsonPath.stringAt("$.detail.externalIdParameterName")),
+        },
       },
       resultPath: "$.codebuild",
     });

@@ -140,23 +140,29 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const eventBus = EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn);
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
+    // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
     const deployApi = new DeployApiLambda(this, "DeployApi", {
       deploymentsTable: deployments.table,
+      competitorAccountsTable: competitorAccounts.table,
       eventBus,
       defaultTenantId: props.defaultTenantId,
       problemsCatalog: props.problemsCatalog,
+      environmentName: props.environmentName,
     });
     this.deployApiLambda = deployApi.fn;
 
     // ADR-004 Phase 1+2a: Event / Team CRUD + Bulk Deploy/Teardown Lambda。
     // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
+    // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
     const eventApi = new EventApiLambda(this, "EventApi", {
       eventsTable: events.table,
       teamsTable: teams.table,
       deploymentsTable: deployments.table,
+      competitorAccountsTable: competitorAccounts.table,
       eventBus,
       problemsCatalog: props.problemsCatalog,
       defaultTenantId: props.defaultTenantId,
+      environmentName: props.environmentName,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -177,6 +183,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       sourceBucket,
       sourceObjectKey: props.sourceObjectKey,
       concurrentBuildLimit: props.deployConcurrentBuildLimit,
+      environmentName: props.environmentName,
     });
 
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {

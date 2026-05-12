@@ -1,4 +1,4 @@
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import {
   BuildEnvironmentVariableType,
   BuildSpec,
@@ -10,6 +10,7 @@ import {
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
+import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface DeployCodeBuildProjectProps {
   /**
@@ -43,6 +44,11 @@ export interface DeployCodeBuildProjectProps {
    * dev / sandbox では小さい値 (例: 5) に絞ってコスト暴走を防ぐ用途にも使う。
    */
   readonly concurrentBuildLimit?: number;
+  /**
+   * Phase 2.2 (Issue #459): SSM SecureString path 構築用 env (例: `development`)。
+   * CodeBuild Role に `ssm:GetParameter` を付与する scope (= 同 tenant prefix) を作る。
+   */
+  readonly environmentName: string;
 }
 
 /**
@@ -114,6 +120,20 @@ export class DeployCodeBuildProject extends Construct {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "<unset-overridden-by-step-functions>",
         },
+        // Phase 2.2 (Issue #459): cross-account AssumeRole metadata。State Machine が
+        // event detail から override する。空文字 default = same-account fallback。
+        COMPETITOR_ROLE_ARN: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "",
+        },
+        EXTERNAL_ID_SSM_PARAMETER: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "",
+        },
+        DEPLOY_REGION: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "",
+        },
       },
       buildSpec: BuildSpec.fromObject({
         version: "0.2",
@@ -165,6 +185,45 @@ export class DeployCodeBuildProject extends Construct {
         effect: iam.Effect.ALLOW,
         actions: ["ec2:*", "iam:*", "ssm:*", "logs:*", "s3:*", "events:*", "lambda:*"],
         resources: ["*"],
+      }),
+    );
+
+    // Phase 2.2 (Issue #459): cross-account 経路。CodeBuild script (deploy-battles.sh /
+    // delete-battles.sh) が:
+    //   1. SSM SecureString から ExternalId を read (= `ssm:GetParameter` + `kms:Decrypt`)
+    //   2. `arn:aws:iam::<account>:role/TenkaCloud-*` に AssumeRole (with ExternalId)
+    //   3. 取得した tmp credentials で `aws cloudformation deploy` を target account に実行
+    // を行うため、本 Project Role に各権限を付与する。
+    const stack = Stack.of(this);
+    const ssmArn = buildExternalIdParameterArnPattern(
+      stack.region,
+      stack.account,
+      props.environmentName,
+    );
+    this.project.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["ssm:GetParameter"],
+        resources: [ssmArn],
+      }),
+    );
+    this.project.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["kms:Decrypt"],
+        resources: ["*"],
+        conditions: {
+          // CompetitorAccountsApiLambda と同じ pattern。StringLike で wildcard を許容。
+          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn },
+        },
+      }),
+    );
+    this.project.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["sts:AssumeRole"],
+        // 競技者アカウントの IAM Role 名 pattern (= `TenkaCloud-*` prefix 必須)。
+        resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
       }),
     );
   }

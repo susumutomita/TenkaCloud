@@ -6,17 +6,43 @@ import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/de
 
 const NOW_MS = 1_700_000_000_000;
 
-function buildShared(): {
+/**
+ * Phase 2.2 (Issue #459): requestTeardown は CompetitorAccounts table も Get するため、
+ * GetCommand を TableName で振り分けて mock する。verified 行は default で常に存在 (=
+ * 旧 deploy 行を delete する際に「verified=true 行が無い」状態を pin したいときだけ
+ * `unverified` option を渡す)。
+ */
+function buildShared(options: { unverified?: boolean } = {}): {
   shared: DeploySharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
   eventsSend: ReturnType<typeof vi.fn>;
 } {
   const ddbSend = vi.fn();
   const eventsSend = vi.fn();
+  const wrappedSend = vi.fn(async (cmd: unknown) => {
+    if (cmd instanceof GetCommand && cmd.input.TableName === "TestCompetitorAccounts") {
+      if (options.unverified) return { Item: undefined };
+      const sk = String(cmd.input.Key?.SK ?? "");
+      const awsAccountId = sk.replace(/^ACCOUNT#/, "");
+      return {
+        Item: {
+          PK: cmd.input.Key?.PK,
+          SK: cmd.input.Key?.SK,
+          awsAccountId,
+          region: "ap-northeast-1",
+          competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+          verified: true,
+        },
+      };
+    }
+    return ddbSend(cmd);
+  });
   const shared: DeploySharedResources = {
     tableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
+    env: "development",
     eventBusName: "test-bus",
-    ddb: { send: ddbSend } as unknown as DeploySharedResources["ddb"],
+    ddb: { send: wrappedSend } as unknown as DeploySharedResources["ddb"],
     events: { send: eventsSend } as unknown as DeploySharedResources["events"],
     problemsCatalog: {},
   };
