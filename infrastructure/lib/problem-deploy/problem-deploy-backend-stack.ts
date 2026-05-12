@@ -17,7 +17,7 @@ import { DeploymentsTable } from "./deployments-table";
 import { EventApiLambda } from "./event-api-lambda";
 import { EventsTable } from "./events-table";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
-import { HealthCheckLambda } from "./health-check-lambda";
+import { GenericScoringLambda } from "./generic-scoring-lambda";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
@@ -61,6 +61,14 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * 算出するために参照する。`endpoints[]` を持たない問題はこのキーが無い。
    */
   readonly problemsEndpoints: Readonly<Record<string, unknown>>;
+  /**
+   * ADR-012 Phase 3.B: `problemId → phases[]` の map。`discoverProblemsPhases` で
+   * metadata.json から自動収集して synth 時に注入する。Generic scoring Lambda の
+   * `phased-polling` kind dispatcher が time-based rule 切替に参照する。`phases[]` を
+   * 持たない問題はこのキーが無い。 default 空 map (= 既存 hello-world / hello-world-battle
+   * 等が `phases` を持たないので) で受ける。
+   */
+  readonly problemsPhases?: Readonly<Record<string, unknown>>;
   /**
    * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
    * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
@@ -221,16 +229,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       stateMachine: deleteStateMachine.stateMachine,
     });
 
-    // 1 分間隔の Health Check Lambda は 2 つの責務を持つ:
-    // - uptime 採点 (`scoring.kind=uptime` の問題のみ)。`flag` 形式は Portal Lambda の
-    //   submit-flag 経路で採点するため別系統。
-    // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED。
-    //   uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
-    //   `if (problemsScoring.length > 0)` ガードは撤去)。
-    new HealthCheckLambda(this, "HealthCheck", {
+    // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
+    // 2 つの責務を持つ:
+    // - 採点 dispatch (= 5 種 builtin kind の handler に dispatch、`flag` は polling では no-op)
+    // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED
+    //
+    // uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
+    // `if (problemsScoring.length > 0)` ガードは撤去のまま継続)。
+    new GenericScoringLambda(this, "GenericScoring", {
       deploymentsTable: deployments.table,
       eventsTable: events.table,
+      endpointsTable: endpoints.table,
       problemsScoring: props.problemsScoring,
+      problemsEndpoints: props.problemsEndpoints,
+      problemsPhases: props.problemsPhases ?? {},
     });
 
     // Phase 3.2 / Issue #603: ExternalId rotation age 監査 Lambda。1 日 1 回起動して

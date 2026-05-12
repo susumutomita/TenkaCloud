@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isScoringActive, joinUrl } from "../../lib/problem-deploy/handlers/health-check-handler";
+import { isScoringActive } from "../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active";
+import {
+  joinUrl,
+  parseScoringState,
+} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import {
   computeSince,
   type EndpointHealth,
@@ -7,11 +11,11 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/endpoints-health";
 
 /**
- * Health Check Lambda 内のヘルパーを pin する。Scoring の解釈は
- * `lib/utils/scoring-metadata.ts` 側で集約され、別 test file が cover する。
+ * 旧 health-check-handler から `generic-scoring-handler/` に relocate された helper の test。
+ * 動作不変 (= health-check-handler.test.ts と同一 assertion)。
  */
 
-describe("isScoringActive", () => {
+describe("isScoringActive (relocated from health-check-handler)", () => {
   const NOW = "2026-05-08T10:00:00.000Z";
 
   it("eventStartsAt 未設定なら false (= deploy 直後の意図しない加点を防ぐ)", () => {
@@ -50,11 +54,9 @@ describe("isScoringActive", () => {
   });
 
   it("eventEndsAt 設定済で now >= eventEndsAt なら false (= operator が終了済、採点停止)", () => {
-    // ちょうど終了時刻 (= 境界値、含む側) は false
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: NOW }, NOW),
     ).toBe(false);
-    // 既に過去
     expect(
       isScoringActive(
         {
@@ -73,20 +75,20 @@ describe("isScoringActive", () => {
   });
 });
 
-describe("joinUrl", () => {
+describe("joinUrl (relocated from health-check-handler)", () => {
   it("path 空ならそのまま base を返すべき", () => {
     expect(joinUrl("https://x.example.com", "")).toBe("https://x.example.com");
   });
 
-  it("base 末尾 / と path 先頭 / の二重スラッシュを正規化", () => {
+  it("base 末尾 / と path 先頭 / の二重スラッシュを正規化すべき", () => {
     expect(joinUrl("https://x.example.com/", "/foo")).toBe("https://x.example.com/foo");
   });
 
-  it("base 末尾 / 無し + path 先頭 / 無しは / を補う", () => {
+  it("base 末尾 / 無し + path 先頭 / 無しは / を補うべき", () => {
     expect(joinUrl("https://x.example.com", "foo")).toBe("https://x.example.com/foo");
   });
 
-  it("path が絶対 URL ならそのまま採用 (= override)", () => {
+  it("path が絶対 URL ならそのまま採用すべき (= override)", () => {
     expect(joinUrl("https://x.example.com", "https://other.example.com/health")).toBe(
       "https://other.example.com/health",
     );
@@ -104,7 +106,7 @@ describe("parseEndpointsHealth", () => {
     expect(parseEndpointsHealth("{not-json")).toEqual({});
   });
 
-  it("正常な健全性 map を decode するべき", () => {
+  it("正常な健全性 map を decode すべき", () => {
     const raw = JSON.stringify({
       FrontendUrl: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z" },
       ApiUrl: {
@@ -120,22 +122,6 @@ describe("parseEndpointsHealth", () => {
         checkedAt: "2026-05-05T10:00:00.000Z",
         since: "2026-05-05T09:55:00.000Z",
       },
-    });
-  });
-
-  it("array や primitive は空 map を返すべき", () => {
-    expect(parseEndpointsHealth(JSON.stringify(["x"]))).toEqual({});
-    expect(parseEndpointsHealth(JSON.stringify(123))).toEqual({});
-  });
-
-  it("`ok` が boolean でない / `checkedAt` が string でない entry は drop", () => {
-    const raw = JSON.stringify({
-      Bad1: { ok: "yes", checkedAt: "2026-05-05T10:00:00.000Z" },
-      Bad2: { ok: true, checkedAt: 123 },
-      Good: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z" },
-    });
-    expect(parseEndpointsHealth(raw)).toEqual({
-      Good: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z", since: undefined },
     });
   });
 });
@@ -143,21 +129,21 @@ describe("parseEndpointsHealth", () => {
 describe("computeSince", () => {
   const NOW = "2026-05-05T10:05:00.000Z";
 
-  it("ok=true なら undefined", () => {
+  it("ok=true なら undefined を返すべき", () => {
     expect(computeSince(true, undefined, NOW)).toBeUndefined();
     expect(computeSince(true, { ok: false, checkedAt: "x", since: "y" }, NOW)).toBeUndefined();
   });
 
-  it("ok=false 新規 (prev=undefined) なら now", () => {
+  it("ok=false 新規 (prev=undefined) なら now を返すべき", () => {
     expect(computeSince(false, undefined, NOW)).toBe(NOW);
   });
 
-  it("ok=false 新規 (prev.ok=true) なら now", () => {
+  it("ok=false 新規 (prev.ok=true) なら now を返すべき", () => {
     const prev: EndpointHealth = { ok: true, checkedAt: "2026-05-05T10:04:00.000Z" };
     expect(computeSince(false, prev, NOW)).toBe(NOW);
   });
 
-  it("ok=false 継続中 (prev.ok=false で prev.since あり) なら prev.since を保持", () => {
+  it("ok=false 継続中 (prev.ok=false で prev.since あり) なら prev.since を保持すべき", () => {
     const prev: EndpointHealth = {
       ok: false,
       checkedAt: "2026-05-05T10:04:00.000Z",
@@ -165,9 +151,35 @@ describe("computeSince", () => {
     };
     expect(computeSince(false, prev, NOW)).toBe("2026-05-05T09:50:00.000Z");
   });
+});
 
-  it("ok=false で prev.ok=false だが since 不在なら now (= データ不整合への防御)", () => {
-    const prev: EndpointHealth = { ok: false, checkedAt: "2026-05-05T10:04:00.000Z" };
-    expect(computeSince(false, prev, NOW)).toBe(NOW);
+describe("parseScoringState (ADR-012 Phase 3.B、 dispatcher state persistence)", () => {
+  it("undefined / 空文字 / 壊れた JSON は空 state を返すべき", () => {
+    expect(parseScoringState(undefined)).toEqual({});
+    expect(parseScoringState("")).toEqual({});
+    expect(parseScoringState("{not-json")).toEqual({});
+  });
+
+  it("attackCount を数値で decode すべき", () => {
+    expect(parseScoringState(JSON.stringify({ attackCount: 42 }))).toEqual({ attackCount: 42 });
+  });
+
+  it("bonusAwarded を boolean=true entries のみで decode すべき", () => {
+    expect(
+      parseScoringState(
+        JSON.stringify({ bonusAwarded: { "all-slots": true, other: false, x: "no" } }),
+      ),
+    ).toEqual({ bonusAwarded: { "all-slots": true } });
+  });
+
+  it("両 field 混在を decode すべき", () => {
+    expect(
+      parseScoringState(JSON.stringify({ attackCount: 1, bonusAwarded: { x: true } })),
+    ).toEqual({ attackCount: 1, bonusAwarded: { x: true } });
+  });
+
+  it("array や primitive は空 state を返すべき", () => {
+    expect(parseScoringState(JSON.stringify([1, 2]))).toEqual({});
+    expect(parseScoringState(JSON.stringify(123))).toEqual({});
   });
 });

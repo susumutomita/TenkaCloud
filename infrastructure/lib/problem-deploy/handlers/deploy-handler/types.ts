@@ -126,6 +126,15 @@ export interface DeploymentItem {
    * Battle 防御側が「どの endpoint が何分前から落ちている」を画面で見るため。
    */
   endpointsHealth?: string;
+  /**
+   * ADR-012 Phase 3.B: 5 種 builtin kind の中で polling 越しに per-deployment で保持する
+   * scoring state の JSON 文字列。
+   * - `attack-detection` の前回 counter (= 差分加算の baseline)
+   * - `phased-polling` の bonus once 制御 flag map
+   * shape: `{ attackCount?: number, bonusAwarded?: Record<string, true> }`。
+   * dispatcher が UpdateItem で書き戻し、 次 tick で read-through に復元する。
+   */
+  scoringState?: string;
 }
 
 export const DeployResponseSchema = z.object({

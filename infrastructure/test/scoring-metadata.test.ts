@@ -47,7 +47,7 @@ describe("parseScoringMetadata", () => {
     });
   });
 
-  describe("uptime 形式", () => {
+  describe("uptime 形式 (legacy alias of uptime-flat)", () => {
     it("endpoints が array + pointsPerSuccess が number なら narrow するべき", () => {
       const cfg = {
         kind: "uptime",
@@ -60,6 +60,120 @@ describe("parseScoringMetadata", () => {
     it("endpoints が array でない / pointsPerSuccess が無いと undefined", () => {
       expect(parseScoringMetadata({ kind: "uptime", pointsPerSuccess: 50 })).toBeUndefined();
       expect(parseScoringMetadata({ kind: "uptime", endpoints: [] })).toBeUndefined();
+    });
+  });
+
+  describe("uptime-flat 形式 (ADR-012 Phase 3.B 新名)", () => {
+    it("slot 経由の endpoint を narrow するべき", () => {
+      const cfg = {
+        kind: "uptime-flat",
+        endpoints: [{ slot: "frontend", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 50,
+      };
+      expect(parseScoringMetadata(cfg)).toEqual(cfg);
+    });
+
+    it("slot も outputKey も無い endpoint は drop すべき", () => {
+      expect(
+        parseScoringMetadata({
+          kind: "uptime-flat",
+          endpoints: [{ path: "/", expectStatus: [200] }],
+          pointsPerSuccess: 50,
+        }),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("uptime-multi 形式", () => {
+    it("probedSlots + pointsAllOk が揃っていれば narrow すべき", () => {
+      const cfg = {
+        kind: "uptime-multi",
+        probedSlots: [{ slot: "frontend", path: "/", expectStatus: [200] }],
+        pointsAllOk: 100,
+        failurePenalty: -50,
+      };
+      expect(parseScoringMetadata(cfg)).toEqual(cfg);
+    });
+
+    it("probedSlots が空 / pointsAllOk が無いと undefined", () => {
+      expect(
+        parseScoringMetadata({ kind: "uptime-multi", probedSlots: [], pointsAllOk: 100 }),
+      ).toBeUndefined();
+      expect(
+        parseScoringMetadata({
+          kind: "uptime-multi",
+          probedSlots: [{ slot: "x", path: "/", expectStatus: [200] }],
+        }),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("phased-polling 形式", () => {
+    it("intervalMinutes + probe + platformRules が揃っていれば narrow すべき", () => {
+      const cfg = {
+        kind: "phased-polling",
+        intervalMinutes: 1,
+        probe: { metaPath: "/meta", scorePath: "/score" },
+        platformRules: { ec2: { points: 100, degradedPoints: 10 }, lambda: { points: 1000 } },
+        failurePenalty: -100,
+        responsePenalties: [{ if: "responseTimeMs > 1500", points: -10 }],
+        bonuses: [
+          {
+            kind: "all-slots-on-platforms",
+            platforms: ["lambda"],
+            points: 5000,
+            once: true,
+          },
+        ],
+      };
+      expect(parseScoringMetadata(cfg)).toEqual(cfg);
+    });
+
+    it("platformRules が空オブジェクトなら undefined", () => {
+      expect(
+        parseScoringMetadata({
+          kind: "phased-polling",
+          intervalMinutes: 1,
+          probe: { metaPath: "/meta", scorePath: "/score" },
+          platformRules: {},
+        }),
+      ).toBeUndefined();
+    });
+
+    it("probe.metaPath / scorePath が string でないと undefined", () => {
+      expect(
+        parseScoringMetadata({
+          kind: "phased-polling",
+          intervalMinutes: 1,
+          probe: { metaPath: 123, scorePath: "/score" },
+          platformRules: { ec2: { points: 100 } },
+        }),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("attack-detection 形式", () => {
+    it("statsOutputKey + pointsPerAttack が揃っていれば narrow すべき", () => {
+      const cfg = {
+        kind: "attack-detection",
+        statsOutputKey: "AttackCounter",
+        pointsPerAttack: 50,
+        categories: [{ name: "sql-injection", pointsPerAttack: 100 }],
+      };
+      expect(parseScoringMetadata(cfg)).toEqual(cfg);
+    });
+
+    it("statsOutputKey 無し / pointsPerAttack が 0 以下なら undefined", () => {
+      expect(
+        parseScoringMetadata({ kind: "attack-detection", pointsPerAttack: 50 }),
+      ).toBeUndefined();
+      expect(
+        parseScoringMetadata({
+          kind: "attack-detection",
+          statsOutputKey: "X",
+          pointsPerAttack: 0,
+        }),
+      ).toBeUndefined();
     });
   });
 

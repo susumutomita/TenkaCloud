@@ -1,36 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  type ReconcileEventStatusesContext,
+  reconcileEventStatuses,
+  resolveEventStatusTransition,
+} from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
 
 /**
- * #557 / #539: HealthCheck Lambda の Event status auto-transition reconciler の test。
+ * #557 / #539: Event status auto-transition reconciler の test (ADR-012 Phase 3.B で
+ * health-check-handler から `generic-scoring-handler/event-reconciler.ts` に relocate)。
  *
  * 2 階層に分けて test する:
- *   1. `resolveEventStatusTransition` (pure function、入出力のみ) — 8 ケース
- *   2. `reconcileEventStatuses` (DDB mock 越し) — Scan → Query × N → conditional Update の
- *      シーケンスを pin
- *
- * mock した DDB に対して Scan / Query / Update Command を発行する順序と引数を assert する。
+ *   1. `resolveEventStatusTransition` (pure function)
+ *   2. `reconcileEventStatuses` (DDB mock 越し)
  */
-
-const ddbSend = vi.fn();
-
-vi.mock("@aws-sdk/lib-dynamodb", async () => {
-  const actual =
-    await vi.importActual<typeof import("@aws-sdk/lib-dynamodb")>("@aws-sdk/lib-dynamodb");
-  return {
-    ...actual,
-    DynamoDBDocumentClient: {
-      from: () => ({ send: ddbSend }),
-    },
-  };
-});
-
-// env を読む関数は遅延 lookup なので、module load 時に env が無くてもよい。test 内で set。
-process.env.DEPLOYMENTS_TABLE_NAME = "TestDeployments";
-process.env.EVENTS_TABLE_NAME = "TestEvents";
-
-const { reconcileEventStatuses, resolveEventStatusTransition } = await import(
-  "../../lib/problem-deploy/handlers/health-check-handler/index"
-);
 
 describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
   it("DEPLOYING + 全 COMPLETE → READY", () => {
@@ -63,7 +45,7 @@ describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "DELETING"])).toBeUndefined();
   });
 
-  it("子 deployment 0 件 → undefined (= bulk-deploy/delete 前の race state、触らない)", () => {
+  it("子 deployment 0 件 → undefined (= bulk-deploy/delete 前の race state、 触らない)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", [])).toBeUndefined();
     expect(resolveEventStatusTransition("TEARDOWN", [])).toBeUndefined();
   });
@@ -78,24 +60,37 @@ describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
 
 const NOW_ISO = "2026-05-11T00:00:00.000Z";
 
+function buildCtx(): { ctx: ReconcileEventStatusesContext; ddbSend: ReturnType<typeof vi.fn> } {
+  const ddbSend = vi.fn();
+  const ctx: ReconcileEventStatusesContext = {
+    ddb: { send: ddbSend } as unknown as ReconcileEventStatusesContext["ddb"],
+    eventsTableName: "TestEvents",
+    deploymentsTableName: "TestDeployments",
+  };
+  return { ctx, ddbSend };
+}
+
 describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
-  beforeEach(() => ddbSend.mockReset());
+  let ctx: ReconcileEventStatusesContext;
+  let ddbSend: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    const built = buildCtx();
+    ctx = built.ctx;
+    ddbSend = built.ddbSend;
+  });
   afterEach(() => ddbSend.mockReset());
 
-  it("DEPLOYING で子 deployments 全 COMPLETE → Update で READY に遷移", async () => {
-    // 1. Scan Events: 1 件 DEPLOYING を返す
+  it("DEPLOYING で子 deployments 全 COMPLETE → Update で READY に遷移すべき", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV1", tenantId: "tenant-acme", eventId: "EV1", status: "DEPLOYING" }],
       LastEvaluatedKey: undefined,
     });
-    // 2. Query Deployments: 2 件 COMPLETE
     ddbSend.mockResolvedValueOnce({
       Items: [{ status: "COMPLETE" }, { status: "COMPLETE" }],
     });
-    // 3. Update Events: 成功
     ddbSend.mockResolvedValueOnce({});
 
-    await reconcileEventStatuses(NOW_ISO);
+    await reconcileEventStatuses(ctx, NOW_ISO);
 
     expect(ddbSend).toHaveBeenCalledTimes(3);
     const updateCmd = ddbSend.mock.calls[2]?.[0] as {
@@ -112,7 +107,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(updateCmd.input.ConditionExpression).toContain("#status = :current");
   });
 
-  it("TEARDOWN で子 deployments 全 DELETED → Update で ARCHIVED に遷移", async () => {
+  it("TEARDOWN で子 deployments 全 DELETED → Update で ARCHIVED に遷移すべき", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV2", tenantId: "tenant-acme", eventId: "EV2", status: "TEARDOWN" }],
     });
@@ -121,7 +116,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     });
     ddbSend.mockResolvedValueOnce({});
 
-    await reconcileEventStatuses(NOW_ISO);
+    await reconcileEventStatuses(ctx, NOW_ISO);
 
     const updateCmd = ddbSend.mock.calls[2]?.[0] as {
       input: { ExpressionAttributeValues: Record<string, string> };
@@ -130,7 +125,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(updateCmd.input.ExpressionAttributeValues[":current"]).toBe("TEARDOWN");
   });
 
-  it("DEPLOYING で PENDING が残る → Update を発行しない (= まだ READY ではない)", async () => {
+  it("DEPLOYING で PENDING が残る → Update を発行しないべき (= まだ READY ではない)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV3", tenantId: "tenant-acme", eventId: "EV3", status: "DEPLOYING" }],
     });
@@ -138,79 +133,63 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
       Items: [{ status: "COMPLETE" }, { status: "PENDING" }],
     });
 
-    await reconcileEventStatuses(NOW_ISO);
-
-    // 2 calls (Scan + Query)。Update は走らない
+    await reconcileEventStatuses(ctx, NOW_ISO);
     expect(ddbSend).toHaveBeenCalledTimes(2);
   });
 
-  it("複数 Event を **並列** に処理する (= 1 件遅延が他を block しない)", async () => {
-    // Scan: 2 Event (DEPLOYING + TEARDOWN、それぞれ READY / ARCHIVED 候補)
+  it("複数 Event を **並列** に処理すべき (= 1 件遅延が他を block しない)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [
         { PK: "EVENT#A", tenantId: "tenant-acme", eventId: "A", status: "DEPLOYING" },
         { PK: "EVENT#B", tenantId: "tenant-acme", eventId: "B", status: "TEARDOWN" },
       ],
     });
-    // Query を Command 内容で出し分け: Event A は COMPLETE、Event B は DELETED
     ddbSend.mockImplementation(
       async (cmd: { input?: { ExpressionAttributeValues?: Record<string, string> } }) => {
         const ev = cmd.input?.ExpressionAttributeValues?.[":ev"];
         if (ev === "A") return { Items: [{ status: "COMPLETE" }] };
         if (ev === "B") return { Items: [{ status: "DELETED" }] };
-        return {}; // Update 等の他 command は無事返す
+        return {};
       },
     );
 
-    await reconcileEventStatuses(NOW_ISO);
-
-    // 1 Scan + 2 Query + 2 Update = 5 calls (= 並列 fan-out が走った証拠)
+    await reconcileEventStatuses(ctx, NOW_ISO);
     expect(ddbSend).toHaveBeenCalledTimes(5);
   });
 
-  it("Event 更新の CCF (= operator race) は throw せず silent skip", async () => {
+  it("Event 更新の CCF (= operator race) は throw せず silent skip すべき", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV4", tenantId: "tenant-acme", eventId: "EV4", status: "DEPLOYING" }],
     });
     ddbSend.mockResolvedValueOnce({ Items: [{ status: "COMPLETE" }] });
-    // Update が CCF を throw — race 状態
     ddbSend.mockImplementationOnce(async () => {
       const err: Error & { name?: string } = new Error("conditional check failed");
       err.name = "ConditionalCheckFailedException";
       throw err;
     });
-
-    // 例外が外に漏れずに完了する
-    await expect(reconcileEventStatuses(NOW_ISO)).resolves.toBeUndefined();
+    await expect(reconcileEventStatuses(ctx, NOW_ISO)).resolves.toBeUndefined();
   });
 
-  it("Scan が pagination する (= LastEvaluatedKey 有り → 次 Scan)", async () => {
-    // 1 ページ目: 1 Event + LastEvaluatedKey 有り
+  it("Scan が pagination するべき (= LastEvaluatedKey 有り → 次 Scan)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#P1", tenantId: "t", eventId: "P1", status: "DEPLOYING" }],
       LastEvaluatedKey: { PK: "cursor" },
     });
     ddbSend.mockResolvedValueOnce({ Items: [{ status: "COMPLETE" }] });
-    ddbSend.mockResolvedValueOnce({}); // Update
-    // 2 ページ目: 0 件 + LastEvaluatedKey 無し
+    ddbSend.mockResolvedValueOnce({});
     ddbSend.mockResolvedValueOnce({ Items: [] });
 
-    await reconcileEventStatuses(NOW_ISO);
-
-    // 1 Scan + 1 Query + 1 Update + 1 Scan = 4 calls
+    await reconcileEventStatuses(ctx, NOW_ISO);
     expect(ddbSend).toHaveBeenCalledTimes(4);
-    // 2 回目 Scan の ExclusiveStartKey が 1 回目の LastEvaluatedKey と一致
     const scan2 = ddbSend.mock.calls[3]?.[0] as {
       input: { ExclusiveStartKey?: Record<string, unknown> };
     };
     expect(scan2.input.ExclusiveStartKey).toEqual({ PK: "cursor" });
   });
 
-  it("Event filter は DEPLOYING または TEARDOWN のみ (= READY / ENDED は触らない)", async () => {
+  it("Event filter は DEPLOYING または TEARDOWN のみであるべき (= READY / ENDED は触らない)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
-
-    await reconcileEventStatuses(NOW_ISO);
-
+    await reconcileEventStatuses(ctx, NOW_ISO);
     const scanCmd = ddbSend.mock.calls[0]?.[0] as {
       input: {
         FilterExpression: string;
