@@ -20,6 +20,7 @@ import { TenantTemplateStack } from "../lib/tenant-template/tenant-template-stac
 import { loadConfig } from "../lib/utils/config-loader";
 import {
   discoverProblemsCatalog,
+  discoverProblemsEndpoints,
   discoverProblemsScoring,
 } from "../lib/utils/discover-problems-catalog";
 
@@ -214,6 +215,8 @@ const participantPortal = enableParticipantPortal
 const problemsRoot = path.resolve(__dirname, "..", "..", "problems");
 const problemsCatalog = discoverProblemsCatalog(problemsRoot);
 const problemsScoring = discoverProblemsScoring(problemsRoot);
+// ADR-012 Phase 3.A: `endpoints[]` を持つ問題のみ集まる (= flag-only Challenge は不在キー)。
+const problemsEndpoints = discoverProblemsEndpoints(problemsRoot);
 
 // #538: Bulk Deploy 並列度 (CodeBuild concurrent build cap)。
 // `CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT` env で operator が tune する。未設定なら
@@ -238,6 +241,7 @@ const problemDeployBackendStack = new ProblemDeployBackendStack(app, "tenkacloud
   sourceObjectKey: sourceZip,
   problemsCatalog,
   problemsScoring,
+  problemsEndpoints,
   participantPortal,
   deployConcurrentBuildLimit,
   // Issue #459 / ADR-002: SSM SecureString path `/{environmentName}/tenants/{tenantId}/external-id`

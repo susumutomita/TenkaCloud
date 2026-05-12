@@ -1,6 +1,12 @@
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
+import { StatusCodes } from "http-status-codes";
+import {
+  deleteProblemEndpointOverride,
+  listProblemEndpoints,
+  upsertProblemEndpointOverride,
+} from "../problem-endpoints-handler/endpoints.js";
 import { PROBLEM_ID_RE } from "../shared/constants.js";
 import { HTTP_OK } from "../shared/http-status.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
@@ -13,6 +19,9 @@ import { buildParticipantSharedResources } from "./shared.js";
 import { getConsoleSigninUrl } from "./sso.js";
 import { submitFlag } from "./submit-flag.js";
 import { setDisplayTeamName } from "./update.js";
+
+/** ADR-012 Phase 3.A: slot 名は kebab-case (= metadata.endpoints[].slot pattern と同じ)。 */
+const SLOT_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * Participant Portal backend Lambda の Hono app (Phase 2c で team scope)。routes:
@@ -126,6 +135,72 @@ app.post("/portal/me/submit-flag", (c) =>
     if (outcome.kind === "no_outputs") return respondError(c, "no_outputs");
     if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
     return c.json(outcome, HTTP_OK);
+  }),
+);
+
+// ADR-012 Phase 3.A: Endpoint registry (override) routes — 競技者が自 team の slot URL を
+// 再ホスト先 (Lambda / ECS / App Runner 等) に切り替えるための CRUD。auth は teamLoginKey
+// bearer (= submit-flag と同じ scope)。
+//
+//   GET    /portal/me/problems/:problemId/endpoints
+//   POST   /portal/me/problems/:problemId/endpoints/:slot  { url }
+//   DELETE /portal/me/problems/:problemId/endpoints/:slot
+app.get("/portal/me/problems/:problemId/endpoints", (c) =>
+  withBearerAuth(c, "list-endpoints", async (token) => {
+    const problemId = c.req.param("problemId");
+    if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
+      return respondError(c, "invalid_problem_id");
+    }
+    const outcome = await listProblemEndpoints(shared, token, problemId);
+    if (outcome.kind === "ok") {
+      return c.json({ endpoints: outcome.endpoints, teamId: outcome.teamId }, StatusCodes.OK);
+    }
+    return respondError(c, outcome.kind);
+  }),
+);
+
+app.post("/portal/me/problems/:problemId/endpoints/:slot", (c) =>
+  withBearerAuth(c, "put-endpoint", async (token) => {
+    const problemId = c.req.param("problemId");
+    if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
+      return respondError(c, "invalid_problem_id");
+    }
+    const slot = c.req.param("slot");
+    if (!slot || !SLOT_NAME_RE.test(slot)) {
+      return respondError(c, "invalid_slot");
+    }
+    const body = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
+    if (body === null) return respondError(c, "invalid_body");
+    const outcome = await upsertProblemEndpointOverride(
+      shared,
+      token,
+      problemId,
+      slot,
+      body.url,
+      new Date().toISOString(),
+    );
+    if (outcome.kind === "ok") {
+      return c.json({ endpoints: outcome.endpoints, teamId: outcome.teamId }, StatusCodes.OK);
+    }
+    return respondError(c, outcome.kind);
+  }),
+);
+
+app.delete("/portal/me/problems/:problemId/endpoints/:slot", (c) =>
+  withBearerAuth(c, "delete-endpoint", async (token) => {
+    const problemId = c.req.param("problemId");
+    if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
+      return respondError(c, "invalid_problem_id");
+    }
+    const slot = c.req.param("slot");
+    if (!slot || !SLOT_NAME_RE.test(slot)) {
+      return respondError(c, "invalid_slot");
+    }
+    const outcome = await deleteProblemEndpointOverride(shared, token, problemId, slot);
+    if (outcome.kind === "ok") {
+      return c.json({ endpoints: outcome.endpoints, teamId: outcome.teamId }, StatusCodes.OK);
+    }
+    return respondError(c, outcome.kind);
   }),
 );
 

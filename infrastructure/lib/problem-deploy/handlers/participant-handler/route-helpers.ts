@@ -31,6 +31,12 @@ const ERROR_STATUS = {
   scoring_locked: HTTP_CONFLICT,
   misconfigured: HTTP_INTERNAL_ERROR,
   internal_error: HTTP_INTERNAL_ERROR,
+  // ADR-012 Phase 3.A: endpoint registry
+  no_endpoints: HTTP_NOT_FOUND,
+  unknown_slot: HTTP_BAD_REQUEST,
+  slot_not_overridable: HTTP_CONFLICT,
+  invalid_url: HTTP_BAD_REQUEST,
+  invalid_slot: HTTP_BAD_REQUEST,
 } as const;
 
 export type ErrorKind = keyof typeof ERROR_STATUS;

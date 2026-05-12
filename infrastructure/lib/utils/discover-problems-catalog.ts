@@ -1,8 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata";
 import { type ProblemScoringMetadata, parseScoringMetadata } from "./scoring-metadata";
 
-export type { ProblemScoringMetadata };
+export type { ProblemEndpointSlot, ProblemScoringMetadata };
 
 /**
  * `problems/<category>/<id>/metadata.json` を持つディレクトリを列挙し、
@@ -35,11 +36,36 @@ export function discoverProblemsScoring(
   return result;
 }
 
+/**
+ * `discoverProblemsCatalog` の sibling (ADR-012 Phase 3.A)。`endpoints[]` section を抜き、
+ * `{ [problemId]: ProblemEndpointSlot[] }` の map を返す。`endpoints` を持たない問題は
+ * キーごと出さない (= endpoint 無効、Challenge 系 flag-only 問題が該当)。
+ *
+ * Lambda env (`PROBLEM_ENDPOINTS`) として Participant Portal handler / scoring dispatcher
+ * に渡し、各 Lambda が default URL を CFn output から read-through 算出する。
+ */
+export function discoverProblemsEndpoints(
+  problemsRoot: string,
+): Record<string, readonly ProblemEndpointSlot[]> {
+  const result: Record<string, readonly ProblemEndpointSlot[]> = {};
+  for (const meta of iterateProblemsMetadata(problemsRoot)) {
+    if (!Array.isArray(meta.endpoints)) continue;
+    const slots: ProblemEndpointSlot[] = [];
+    for (const entry of meta.endpoints) {
+      const slot = parseEndpointSlot(entry);
+      if (slot) slots.push(slot);
+    }
+    if (slots.length > 0) result[meta.id] = slots;
+  }
+  return result;
+}
+
 interface ProblemMetadataEntry {
   id: string;
   category: string;
   dirName: string;
   scoring: unknown;
+  endpoints: unknown;
 }
 
 function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetadataEntry> {
@@ -61,6 +87,7 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
         const meta = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as {
           id?: unknown;
           scoring?: unknown;
+          endpoints?: unknown;
         };
         if (typeof meta.id !== "string" || meta.id.length === 0) {
           console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
@@ -71,6 +98,7 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
           category: category.name,
           dirName: problem.name,
           scoring: meta.scoring,
+          endpoints: meta.endpoints,
         };
       } catch (err) {
         console.warn(
