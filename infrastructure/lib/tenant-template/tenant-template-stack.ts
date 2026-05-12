@@ -46,6 +46,12 @@ interface TenantTemplateStackProps extends StackProps {
    */
   eventApiLambda: IFunction;
   /**
+   * `ProblemDeployBackendStack.competitorAccountsApiLambda` をクロススタック参照で受ける
+   * (Issue #459 / ADR-002 Phase 2.1)。tenant API の `/admin/competitor-accounts*` routes が
+   * 本 Lambda を invoke する。
+   */
+  competitorAccountsApiLambda: IFunction;
+  /**
    * Participant Portal の CloudFront URL。`ProblemDeployBackendStack` の
    * `participantPortalUrl` をクロススタック参照で受け、application-admin-console の
    * runtime-config.json に注入する (operator が EventDetail 等で「Portal URL を共有」
@@ -94,6 +100,7 @@ export class TenantTemplateStack extends Stack {
       userPool: identityProvider.tenantUserPool,
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
+      competitorAccountsApiLambda: props.competitorAccountsApiLambda,
       apiKeyBasicTier: {
         apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.basic.keyId),
         value: this.ssmLookup(props.ApiKeySSMParameterNames.basic.value),

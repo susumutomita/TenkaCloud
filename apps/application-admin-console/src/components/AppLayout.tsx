@@ -54,6 +54,7 @@ export function ShellLayout({
               { type: "link", href: "/events", text: "イベント" },
               { type: "link", href: "/problems", text: "問題カタログ" },
               { type: "link", href: "/deployments", text: "デプロイ履歴" },
+              { type: "link", href: "/competitor-accounts", text: "Competitor Accounts" },
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {

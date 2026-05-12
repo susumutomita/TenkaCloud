@@ -5,6 +5,8 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda";
+import { CompetitorAccountsTable } from "./competitor-accounts-table";
 import { ConsoleViewerRole } from "./console-viewer-role";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project";
@@ -69,6 +71,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * 詳細は `DeployCodeBuildProjectProps.concurrentBuildLimit` の docs を参照。
    */
   readonly deployConcurrentBuildLimit?: number;
+  /**
+   * SSM SecureString path 構築用の environment 名 (Issue #459 / ADR-002 Phase 2.1)。
+   * `/{environmentName}/tenants/{tenantId}/external-id` の prefix として使う。
+   * 例: `development` / `staging` / `production`。
+   */
+  readonly environmentName: string;
 }
 
 /**
@@ -90,6 +98,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * Event / Team CRUD 用の Lambda (ADR-004 Phase 1)。tenant API から invoke される。
    */
   public readonly eventApiLambda: IFunction;
+  /**
+   * Competitor Accounts CRUD + verify 用 Lambda (Issue #459 / ADR-002 Phase 2.1)。
+   * tenant API の `/admin/competitor-accounts*` route から invoke される。
+   */
+  public readonly competitorAccountsApiLambda: IFunction;
   /**
    * Participant Portal の CloudFront URL。Participant Portal が無効化された tenant
    * では undefined。`TenantTemplateStack` が application-admin-console の runtime-config に
@@ -121,6 +134,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.deploymentsTable = deployments.table;
     this.eventsTable = events.table;
     this.teamsTable = teams.table;
+    // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
+    // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
+    const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
     const eventBus = EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn);
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
@@ -143,6 +159,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       defaultTenantId: props.defaultTenantId,
     });
     this.eventApiLambda = eventApi.fn;
+
+    // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
+    // 独立 Lambda にする理由: SSM SecureString R/W + STS AssumeRole の IAM scope を最小化するため。
+    const competitorAccountsApi = new CompetitorAccountsApiLambda(this, "CompetitorAccountsApi", {
+      competitorAccountsTable: competitorAccounts.table,
+      environmentName: props.environmentName,
+    });
+    this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 
     // CodeBuild Project: source.zip から `scripts/deploy-battles.sh` を実行する。
     // #538: Bulk Deploy 並列度の hard cap は account-wide CodeBuild concurrent build
@@ -233,6 +257,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     new CfnOutput(this, "TeamsTableName", {
       value: teams.table.tableName,
       description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
+    });
+    new CfnOutput(this, "CompetitorAccountsTableName", {
+      value: competitorAccounts.table.tableName,
+      description:
+        "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
     });
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: stateMachine.stateMachine.stateMachineArn,

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { CallbackPage } from "./pages/Callback";
+import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
 import { DeploymentsPage } from "./pages/Deployments";
 import { EventCreatePage } from "./pages/EventCreate";
@@ -45,6 +46,10 @@ export function App({ config }: { config: AppConfig }) {
         <Route
           path="/deployments/:jobId"
           element={guarded(config, <DeploymentDetailPage config={config} />)}
+        />
+        <Route
+          path="/competitor-accounts"
+          element={guarded(config, <CompetitorAccountsPage config={config} />)}
         />
         <Route path="/events" element={guarded(config, <EventListPage config={config} />)} />
         <Route path="/events/new" element={guarded(config, <EventCreatePage config={config} />)} />
