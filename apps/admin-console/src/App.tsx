@@ -3,9 +3,12 @@ import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
+import { AdminDeploymentDetailPage } from "./pages/AdminDeploymentDetail";
+import { AdminEventDetailPage } from "./pages/AdminEventDetail";
 import { CallbackPage } from "./pages/Callback";
 import { LoginPage } from "./pages/Login";
 import { TenantCreatePage } from "./pages/TenantCreate";
+import { TenantEventsPage } from "./pages/TenantEvents";
 import { TenantListPage } from "./pages/TenantList";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -37,6 +40,37 @@ export function App({ config }: { config: AppConfig }) {
             <RequireAuth>
               <ShellLayout>
                 <TenantCreatePage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        {/* Phase 1.B drill-down (ADR-011 / #598) */}
+        <Route
+          path="/tenants/:tenantId/events"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <TenantEventsPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/tenants/:tenantId/events/:eventId"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <AdminEventDetailPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/tenants/:tenantId/deployments/:jobId"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <AdminDeploymentDetailPage config={config} />
               </ShellLayout>
             </RequireAuth>
           }

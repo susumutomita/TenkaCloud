@@ -104,6 +104,26 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       expect(route.Properties.AuthorizerId).toBeDefined();
     });
 
+    it("Phase 1.B drill-down 4 route (events / event detail / deployment / stack-progress) を持つべき", () => {
+      const tpl = synthInsightStack();
+      const expected = [
+        "GET /admin/insight/tenants/{tenantId}/events",
+        "GET /admin/insight/tenants/{tenantId}/events/{eventId}",
+        "GET /admin/insight/tenants/{tenantId}/deployments/{jobId}",
+        "GET /admin/insight/tenants/{tenantId}/deployments/{jobId}/stack-progress",
+      ];
+      for (const routeKey of expected) {
+        const routes = tpl.findResources("AWS::ApiGatewayV2::Route", {
+          Properties: { RouteKey: routeKey },
+        });
+        expect(Object.keys(routes), `route ${routeKey} should exist`).toHaveLength(1);
+        const route = Object.values(routes)[0] as {
+          Properties: { AuthorizationType: string };
+        };
+        expect(route.Properties.AuthorizationType).toBe("JWT");
+      }
+    });
+
     it("CORS allowOrigins に localhost dev を入れるべき", () => {
       const tpl = synthInsightStack();
       tpl.hasResourceProperties(
@@ -135,12 +155,8 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   });
 
   describe("IAM 権限 (ADR-011 D6 read-only)", () => {
-    it("Deployments / Events Table の read のみを Allow するべき (write は禁止)", () => {
-      const tpl = synthInsightStack();
-      // Lambda role に attach された IAM Policy の中に DynamoDB write action が無いことを
-      // 強めに検証する (= 旧 grantReadWriteData で誤 wire したら test が落ちる)。
+    function collectActions(tpl: Template): string[] {
       const policies = tpl.findResources("AWS::IAM::Policy");
-      const writeActions = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"];
       const allActions: string[] = [];
       for (const p of Object.values(policies)) {
         const statements = (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } })
@@ -151,11 +167,38 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
           else if (typeof action === "string") allActions.push(action);
         }
       }
+      return allActions;
+    }
+
+    it("Deployments / Events / Teams Table の read のみを Allow するべき (write は禁止)", () => {
+      const tpl = synthInsightStack();
+      // Lambda role に attach された IAM Policy の中に DynamoDB write action が無いことを
+      // 強めに検証する (= 旧 grantReadWriteData で誤 wire したら test が落ちる)。
+      const writeActions = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"];
+      const allActions = collectActions(tpl);
       for (const w of writeActions) {
         expect(allActions).not.toContain(w);
       }
       // 同時に read action は最低 1 つ (Query / GetItem) 含むこと。
       expect(allActions.some((a) => a === "dynamodb:Query" || a === "dynamodb:GetItem")).toBe(true);
+    });
+
+    it("Phase 1.B: Teams table の read を grant するべき (#598)", () => {
+      const tpl = synthInsightStack();
+      // Teams は Phase 1.A では env 注入のみだったが、Phase 1.B drill-down で read 権限を
+      // 追加する。Policy が Teams table の ARN を参照する Statement を 1 つ以上持つこと。
+      const policies = tpl.findResources("AWS::IAM::Policy");
+      const policyJsonAll = JSON.stringify(policies);
+      // CDK は Table.tableArn を Fn::GetAtt で参照するので、policy JSON 内に Teams<HashSuffix>
+      // / TeamsResource 等のリソース名が含まれる。tableName よりも logicalId で固定。
+      expect(policyJsonAll).toContain("Teams");
+    });
+
+    it("Phase 1.B: CFn DescribeStackEvents / DescribeStackResources を grant するべき (#598)", () => {
+      const tpl = synthInsightStack();
+      const allActions = collectActions(tpl);
+      expect(allActions).toContain("cloudformation:DescribeStackEvents");
+      expect(allActions).toContain("cloudformation:DescribeStackResources");
     });
   });
 
