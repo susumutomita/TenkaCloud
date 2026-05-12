@@ -129,6 +129,8 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("CodeBuild Project concurrent build limit (#538)", () => {
+    // synth が 5 個の NodejsFunction (= esbuild bundling) を走らせるため、default 5s では足りない。
+    // 共有 fixture (`tpl = synthDefault()`) と別 props を渡すので別 instance での synth が必要。
     it("`deployConcurrentBuildLimit: 200` を渡したら CFn property に反映されるべき", () => {
       const app = new cdk.App();
       const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
@@ -146,7 +148,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         "AWS::CodeBuild::Project",
         Match.objectLike({ ConcurrentBuildLimit: 200 }),
       );
-    });
+    }, 30_000);
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
