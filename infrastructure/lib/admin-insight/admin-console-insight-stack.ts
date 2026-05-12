@@ -117,6 +117,30 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       integration,
     });
 
+    // Phase 1.B drill-down routes (#598)。
+    // 全 route は同じ Lambda integration / JWT Authorizer に接続される (= 1 Lambda で
+    // 全 path を受ける Hono ルーティング)。
+    httpApi.addRoutes({
+      path: "/admin/insight/tenants/{tenantId}/events",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+    httpApi.addRoutes({
+      path: "/admin/insight/tenants/{tenantId}/events/{eventId}",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+    httpApi.addRoutes({
+      path: "/admin/insight/tenants/{tenantId}/deployments/{jobId}",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+    httpApi.addRoutes({
+      path: "/admin/insight/tenants/{tenantId}/deployments/{jobId}/stack-progress",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+
     this.apiUrl = httpApi.apiEndpoint;
 
     new CfnOutput(this, "AdminInsightApiUrl", {

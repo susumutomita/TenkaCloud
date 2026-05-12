@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
+import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
@@ -17,8 +18,10 @@ export interface AdminInsightApiLambdaProps {
    */
   readonly eventsTable: Table;
   /**
-   * Phase 1.B 以降の drill-down 拡張 (team 別 / event 詳細) で読み取り対象になる Teams table。
-   * Phase 1.A では env として注入のみ行い、read 権限は付与しない (= 最小権限)。
+   * Phase 1.B drill-down で読み取り対象になる Teams table (#598)。
+   * EventDetail の teams[] を組み立てるのに read 権限を付与する (= read-only)。
+   * teamLoginKey は handler 層で undefined に潰すため、本 IAM では projection 制限を
+   * かけない (= GetItem/Query レベルで全 attribute を引けるが、handler が出口で塗りつぶす)。
    */
   readonly teamsTable: Table;
 }
@@ -65,11 +68,25 @@ export class AdminInsightApiLambda extends Construct {
       },
     });
 
-    // ADR-011 Phase 1 D6: read-only に限定。Deployments / Events への read のみ grant し、
-    // Teams は Phase 1.B 以降で drill-down が要るときに read 追加する。
+    // ADR-011 Phase 1 D6: read-only に限定。Phase 1.A は Deployments / Events のみだったが、
+    // Phase 1.B drill-down (#598) で Teams も読む必要が出たため read を追加する。
     // GSI も含めて read できる必要があるので grantReadData (= GetItem / Query / Scan + index)
     // を使う (= 個別 PolicyStatement で限定するより SBT 同型の grantRead で十分)。
     props.deploymentsTable.grantReadData(this.fn);
     props.eventsTable.grantReadData(this.fn);
+    props.teamsTable.grantReadData(this.fn);
+
+    // Phase 1.B (#598) CFn Describe: deploy job 詳細ページの "Stack 進行状況" セクションが
+    // DescribeStackEvents / DescribeStackResources を直接叩く。Resource:* なのは、CFn の
+    // これら API は ARN ベースの IAM 絞り込みをサポートしていない (= account 内全 stack に
+    // 同列で適用される) ため。同一 account 内のみで、cross-account は ExternalId 経由の
+    // AssumeRole が別途必要 (= Phase 2 ADR-011 D4 で実装)。
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["cloudformation:DescribeStackEvents", "cloudformation:DescribeStackResources"],
+        resources: ["*"],
+      }),
+    );
   }
 }

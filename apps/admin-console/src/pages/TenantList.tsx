@@ -3,6 +3,7 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Header from "@cloudscape-design/components/header";
+import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
@@ -163,7 +164,30 @@ export function TenantListPage({ config }: { config: AppConfig }) {
         }
         columnDefinitions={[
           { id: "tenantId", header: "テナント ID", cell: (t) => t.tenantId },
-          { id: "tenantName", header: "名称", cell: (t) => t.tenantName },
+          {
+            id: "tenantName",
+            header: "名称",
+            // Phase 1.B drill-down (#598): 名称 cell を Link 化し、tenant の Event 一覧へ
+            // ナビゲートする。deprovisioned tenant は link を出さず灰色テキスト表示。
+            cell: (t) => {
+              if (isDeprovisioned(t)) {
+                return <Box color="text-status-inactive">{t.tenantName}</Box>;
+              }
+              const href = `/tenants/${encodeURIComponent(t.tenantId)}/events`;
+              return (
+                <Link
+                  fontSize="body-m"
+                  href={href}
+                  onFollow={(e) => {
+                    e.preventDefault();
+                    navigate(href);
+                  }}
+                >
+                  {t.tenantName}
+                </Link>
+              );
+            },
+          },
           { id: "email", header: "管理者メール", cell: (t) => t.email },
           {
             id: "tier",
