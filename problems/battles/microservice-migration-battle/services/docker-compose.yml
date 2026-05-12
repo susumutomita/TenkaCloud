@@ -1,0 +1,55 @@
+# Microservice Migration Battle (Phase 1) — EC2 上で動かす docker compose 構成
+#
+# 3 Node.js + Hono サービス + nginx reverse proxy。
+# 競技者は EC2 にこのまま deploy されたモノリスを、競技中に Lambda / ECS Fargate /
+# App Runner に分割していく (= 各サービスのコードはそのまま流用可能)。
+#
+# Score Engine (Phase 2) は nginx 配下の `/{service}/score` を 1 分毎 polling する。
+# `NAME_PREFIX` は CFn template 側の UserData から .env 経由で注入される。
+
+services:
+  users:
+    build:
+      context: ./users
+    container_name: users
+    environment:
+      - PORT=3001
+      - PLATFORM=ec2
+    expose:
+      - "3001"
+    restart: unless-stopped
+
+  orders:
+    build:
+      context: ./orders
+    container_name: orders
+    environment:
+      - PORT=3002
+      - PLATFORM=ec2
+    expose:
+      - "3002"
+    restart: unless-stopped
+
+  catalog:
+    build:
+      context: ./catalog
+    container_name: catalog
+    environment:
+      - PORT=3003
+      - PLATFORM=ec2
+    expose:
+      - "3003"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    depends_on:
+      - users
+      - orders
+      - catalog
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
