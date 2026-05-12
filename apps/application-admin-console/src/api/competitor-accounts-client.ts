@@ -16,6 +16,8 @@ export interface CompetitorAccountSummary {
   verifiedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。未 rotate なら undefined。 */
+  rotatedAt?: string;
 }
 
 export interface CreateCompetitorAccountRequest {
@@ -30,6 +32,16 @@ export interface CreateCompetitorAccountResponse extends CompetitorAccountSummar
   externalId: string;
   /** 競技者に伝える TenkaCloud 側の AWS Account ID (CFn Parameter として要る)。 */
   tenkaCloudAccountId: string;
+}
+
+/**
+ * `/admin/competitor-accounts/{awsAccountId}/rotate-external-id` の response (Issue #596 / Phase 3.1)。
+ * Create と同じく `externalId` を 1 度きり露出する。`rotatedAt` は rotation 時刻 ISO 8601。
+ */
+export interface RotateExternalIdResponse extends CompetitorAccountSummary {
+  externalId: string;
+  tenkaCloudAccountId: string;
+  rotatedAt: string;
 }
 
 export interface ListCompetitorAccountsResponse {
@@ -61,4 +73,18 @@ export async function verifyCompetitorAccount(
 
 export async function deleteCompetitorAccount(api: ApiClient, awsAccountId: string): Promise<void> {
   return api.del(`admin/competitor-accounts/${encodeURIComponent(awsAccountId)}`);
+}
+
+/**
+ * 既存 account に紐付く tenant の ExternalId を rotate する (Issue #596 / ADR-002 Phase 3.1)。
+ * 新 ExternalId は response の `externalId` で 1 度だけ露出する。
+ */
+export async function rotateExternalId(
+  api: ApiClient,
+  awsAccountId: string,
+): Promise<RotateExternalIdResponse> {
+  return api.post<RotateExternalIdResponse>(
+    `admin/competitor-accounts/${encodeURIComponent(awsAccountId)}/rotate-external-id`,
+    {},
+  );
 }

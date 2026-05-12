@@ -4,6 +4,7 @@ import {
   createCompetitorAccount,
   deleteCompetitorAccount,
   listCompetitorAccounts,
+  rotateExternalId,
   verifyCompetitorAccount,
 } from "../../src/api/competitor-accounts-client";
 
@@ -95,5 +96,28 @@ describe("deleteCompetitorAccount", () => {
     await deleteCompetitorAccount(client, "222222222222");
     expect(calls[0]?.path).toBe("admin/competitor-accounts/222222222222");
     expect(calls[0]?.method).toBe("DELETE");
+  });
+});
+
+describe("rotateExternalId", () => {
+  it("POST /admin/competitor-accounts/{awsAccountId}/rotate-external-id を呼び新 externalId を返すべき", async () => {
+    const { client, calls } = fakeClient({
+      awsAccountId: "222222222222",
+      region: "ap-northeast-1",
+      competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+      verified: true,
+      verifiedAt: "2026-05-11T00:00:00.000Z",
+      createdAt: "2026-05-11T00:00:00.000Z",
+      updatedAt: "2026-05-12T00:00:00.000Z",
+      rotatedAt: "2026-05-12T00:00:00.000Z",
+      externalId: "rotated-new-value",
+      tenkaCloudAccountId: "111111111111",
+    });
+    const res = await rotateExternalId(client, "222222222222");
+    expect(calls[0]?.path).toBe("admin/competitor-accounts/222222222222/rotate-external-id");
+    expect(calls[0]?.method).toBe("POST");
+    expect(res.externalId).toBe("rotated-new-value");
+    expect(res.rotatedAt).toBe("2026-05-12T00:00:00.000Z");
+    expect(res.tenkaCloudAccountId).toBe("111111111111");
   });
 });

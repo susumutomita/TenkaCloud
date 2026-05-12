@@ -100,6 +100,35 @@ export async function ensureExternalId(
 }
 
 /**
+ * tenant の ExternalId を強制的に rotate する (Issue #596 / ADR-002 Phase 3.1)。
+ *
+ * 既存の SSM SecureString を `Overwrite: true` で上書きする。SSM は内部で
+ * version 履歴 (最大 100 version) を保持するので、grace 期間の旧値 fallback が
+ * 必要になったときは `$LATEST` 以外の version 指定で取り出せる
+ * (= 旧値 fallback の実装は Phase 3.2 で別 PR)。
+ *
+ * `ensureExternalId` と違って必ず新 ExternalId を発行する。caller (handler) は
+ * 「該当 tenant に競技者 account が登録されている」ことを事前に保証すること
+ * (= 未登録 tenant に新 SSM Parameter を作るのは create path の責任)。
+ */
+export async function rotateExternalId(
+  deps: ExternalIdStoreDeps,
+  tenantId: string,
+): Promise<{ readonly externalId: string }> {
+  const name = buildExternalIdParameterName(deps.env, tenantId);
+  const externalId = generateExternalId();
+  await deps.ssm.send(
+    new PutParameterCommand({
+      Name: name,
+      Value: externalId,
+      Type: ParameterType.SECURE_STRING,
+      Overwrite: true,
+    }),
+  );
+  return { externalId };
+}
+
+/**
  * tenant の ExternalId を削除。存在しない場合は no-op (= idempotent)。
  *
  * 注意: 同 tenant 配下に **他の verified account が残っている場合は呼ぶべきでない** (= caller 責任)。

@@ -113,9 +113,10 @@ export class ApiGateway extends Construct {
     lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
 
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
-    //   /admin/competitor-accounts                       POST=register, GET=list
-    //   /admin/competitor-accounts/{awsAccountId}        DELETE=remove (last row なら SSM 鍵も掃除)
-    //   /admin/competitor-accounts/{awsAccountId}/verify POST=STS AssumeRole sanity check
+    //   /admin/competitor-accounts                                     POST=register, GET=list
+    //   /admin/competitor-accounts/{awsAccountId}                      DELETE=remove (last row なら SSM 鍵も掃除)
+    //   /admin/competitor-accounts/{awsAccountId}/verify               POST=STS AssumeRole sanity check
+    //   /admin/competitor-accounts/{awsAccountId}/rotate-external-id   POST=ExternalId rotation (Issue #596 / Phase 3.1)
     const competitorAccountsIntegration = new LambdaIntegration(props.competitorAccountsApiLambda);
     const admin = this.restApi.root.addResource("admin");
     const competitorAccounts = admin.addResource("competitor-accounts");
@@ -125,6 +126,9 @@ export class ApiGateway extends Construct {
     competitorAccount.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
     competitorAccount
       .addResource("verify")
+      .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
+    competitorAccount
+      .addResource("rotate-external-id")
       .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
   }
 }

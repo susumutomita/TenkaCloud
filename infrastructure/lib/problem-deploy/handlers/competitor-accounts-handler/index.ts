@@ -10,7 +10,9 @@ import {
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
+  ExternalIdMissingForRotationError,
   listCompetitorAccounts,
+  rotateExternalIdForAccount,
 } from "./store.js";
 import { CreateCompetitorAccountRequestSchema } from "./types.js";
 import {
@@ -23,10 +25,11 @@ import {
  * Competitor Accounts API Lambda の Hono app (Issue #459 / ADR-002 Phase 2.1)。
  *
  * routes (すべて tenant API + Cognito JWT authorizer 経由):
- *   POST   /admin/competitor-accounts                       — register (= SSM Put + DDB Put)
- *   GET    /admin/competitor-accounts                       — list (verified / unverified 両方)
- *   POST   /admin/competitor-accounts/{awsAccountId}/verify — STS AssumeRole sanity check
- *   DELETE /admin/competitor-accounts/{awsAccountId}        — remove (last row なら SSM 鍵も削除)
+ *   POST   /admin/competitor-accounts                                    — register (= SSM Put + DDB Put)
+ *   GET    /admin/competitor-accounts                                    — list (verified / unverified 両方)
+ *   POST   /admin/competitor-accounts/{awsAccountId}/verify              — STS AssumeRole sanity check
+ *   POST   /admin/competitor-accounts/{awsAccountId}/rotate-external-id  — ExternalId rotation (Phase 3.1)
+ *   DELETE /admin/competitor-accounts/{awsAccountId}                     — remove (last row なら SSM 鍵も削除)
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId(c)` で抽出する。**request body の tenantId は信頼しない** (= IAM 越境攻撃の防止)。
@@ -140,6 +143,31 @@ app.post("/admin/competitor-accounts/:awsAccountId/verify", async (c) => {
     }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[competitor-accounts] verify failed", { awsAccountId, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c) => {
+  const awsAccountId = c.req.param("awsAccountId");
+  if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
+    return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
+  }
+  try {
+    const response = await rotateExternalIdForAccount(shared, {
+      tenantId: resolveTenantId(c),
+      awsAccountId,
+      nowMs: Date.now(),
+    });
+    return c.json(response, StatusCodes.OK);
+  } catch (err) {
+    if (err instanceof CompetitorAccountNotFoundError) {
+      return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+    }
+    if (err instanceof ExternalIdMissingForRotationError) {
+      return c.json({ error: "external_id_missing" }, StatusCodes.CONFLICT);
+    }
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[competitor-accounts] rotate failed", { awsAccountId, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });

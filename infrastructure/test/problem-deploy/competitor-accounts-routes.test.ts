@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   listCompetitorAccounts: vi.fn(),
   deleteCompetitorAccount: vi.fn(),
   verifyCompetitorAccount: vi.fn(),
+  rotateExternalIdForAccount: vi.fn(),
   DuplicateCompetitorAccountError: class extends Error {
     constructor(public readonly awsAccountId: string) {
       super("dup");
@@ -16,6 +17,12 @@ const mocks = vi.hoisted(() => ({
     constructor(public readonly awsAccountId: string) {
       super("404");
       this.name = "CompetitorAccountNotFoundError";
+    }
+  },
+  ExternalIdMissingForRotationError: class extends Error {
+    constructor(public readonly tenantId: string) {
+      super("missing");
+      this.name = "ExternalIdMissingForRotationError";
     }
   },
   AssumeRoleSanityCheckFailedError: class extends Error {
@@ -51,8 +58,10 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/store", (
   createCompetitorAccount: mocks.createCompetitorAccount,
   listCompetitorAccounts: mocks.listCompetitorAccounts,
   deleteCompetitorAccount: mocks.deleteCompetitorAccount,
+  rotateExternalIdForAccount: mocks.rotateExternalIdForAccount,
   DuplicateCompetitorAccountError: mocks.DuplicateCompetitorAccountError,
   CompetitorAccountNotFoundError: mocks.CompetitorAccountNotFoundError,
+  ExternalIdMissingForRotationError: mocks.ExternalIdMissingForRotationError,
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/verify", () => ({
@@ -197,6 +206,63 @@ describe("POST /admin/competitor-accounts/:awsAccountId/verify", () => {
     const res = await app.request("/admin/competitor-accounts/abc/verify", { method: "POST" });
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect(mocks.verifyCompetitorAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("200 + 新 externalId + tenkaCloudAccountId を含む Reveal payload を返すべき", async () => {
+    mocks.rotateExternalIdForAccount.mockResolvedValueOnce({
+      awsAccountId: "222222222222",
+      region: "ap-northeast-1",
+      competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+      verified: true,
+      verifiedAt: "2026-05-11T00:00:00.000Z",
+      createdAt: "2026-05-11T00:00:00.000Z",
+      updatedAt: "2026-05-12T00:00:00.000Z",
+      rotatedAt: "2026-05-12T00:00:00.000Z",
+      externalId: "new-rotated-id",
+      tenkaCloudAccountId: "111111111111",
+    });
+    const res = await app.request("/admin/competitor-accounts/222222222222/rotate-external-id", {
+      method: "POST",
+    });
+    expect(res.status).toBe(StatusCodes.OK);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.externalId).toBe("new-rotated-id");
+    expect(body.tenkaCloudAccountId).toBe("111111111111");
+    expect(body.rotatedAt).toBe("2026-05-12T00:00:00.000Z");
+  });
+
+  it("row なしは 404 を返すべき", async () => {
+    mocks.rotateExternalIdForAccount.mockRejectedValueOnce(
+      new mocks.CompetitorAccountNotFoundError("999999999999"),
+    );
+    const res = await app.request("/admin/competitor-accounts/999999999999/rotate-external-id", {
+      method: "POST",
+    });
+    expect(res.status).toBe(StatusCodes.NOT_FOUND);
+  });
+
+  it("SSM に現 ExternalId が無いと 409 (external_id_missing) を返すべき", async () => {
+    mocks.rotateExternalIdForAccount.mockRejectedValueOnce(
+      new mocks.ExternalIdMissingForRotationError("tenant-acme"),
+    );
+    const res = await app.request("/admin/competitor-accounts/222222222222/rotate-external-id", {
+      method: "POST",
+    });
+    expect(res.status).toBe(StatusCodes.CONFLICT);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe("external_id_missing");
+  });
+
+  it("awsAccountId が 12 桁でないと 400", async () => {
+    const res = await app.request("/admin/competitor-accounts/abc/rotate-external-id", {
+      method: "POST",
+    });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.rotateExternalIdForAccount).not.toHaveBeenCalled();
   });
 });
 
