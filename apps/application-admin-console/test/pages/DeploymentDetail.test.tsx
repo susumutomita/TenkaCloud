@@ -1,0 +1,227 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  useApiClient: vi.fn(),
+  getDeployment: vi.fn(),
+  getStackProgress: vi.fn(),
+  deleteDeployment: vi.fn(),
+}));
+
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/api/client")>();
+  return {
+    ...actual,
+    useApiClient: mocks.useApiClient,
+  };
+});
+
+vi.mock("../../src/api/deploy-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/api/deploy-client")>();
+  return {
+    ...actual,
+    getDeployment: mocks.getDeployment,
+    getStackProgress: mocks.getStackProgress,
+    deleteDeployment: mocks.deleteDeployment,
+  };
+});
+
+import type { DeploymentSummary, StackProgress } from "../../src/api/deploy-client";
+import type { AppConfig } from "../../src/config";
+
+const config: AppConfig = {
+  cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
+  cognitoClientId: "abc",
+  redirectUri: "http://localhost:5174/callback",
+  scope: "openid email profile",
+  tenantId: "tenant-test",
+  tenantName: "Test Tenant",
+  apiBaseUrl: "https://api.example.com/prod",
+};
+
+const JOB_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
+
+const baseDeployment: DeploymentSummary = {
+  jobId: JOB_ID,
+  problemId: "hello-world-battle",
+  tenantId: "tenant-test",
+  awsAccountId: "111122223333",
+  region: "ap-northeast-1",
+  teamName: "team-alpha",
+  displayTeamName: "Alpha Team",
+  namePrefix: "tc-team-alpha",
+  status: "PENDING",
+  createdAt: "2026-05-11T01:08:58.000Z",
+  updatedAt: "2026-05-11T01:09:30.000Z",
+  expiresAt: 0,
+};
+
+const emptyProgress: StackProgress = {
+  jobId: JOB_ID,
+  stackName: "tc-team-alpha-stack",
+  region: "ap-northeast-1",
+  consoleUrl: "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1",
+  events: [],
+  resources: [],
+};
+
+const { DeploymentDetailPage } = await import("../../src/pages/DeploymentDetail");
+
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={[`/deployments/${JOB_ID}`]}>
+      <Routes>
+        <Route path="/deployments/:jobId" element={<DeploymentDetailPage config={config} />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.useApiClient.mockReturnValue({});
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
+  it("deployment status=COMPLETE のとき 5 phase が全部 Complete (or Skipped) で表示されるべき", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "COMPLETE" });
+    mocks.getStackProgress.mockResolvedValue({
+      ...emptyProgress,
+      events: [
+        {
+          timestamp: "2026-05-11T01:09:00.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_COMPLETE",
+        },
+      ],
+      resources: [
+        {
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_COMPLETE",
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(mocks.getDeployment).toHaveBeenCalled());
+    await screen.findByTestId("phase-enqueued");
+
+    // 5 phase が表示されているべき
+    for (const id of ["enqueued", "building", "cfn-deploy", "health-check", "complete"]) {
+      expect(screen.getByTestId(`phase-${id}`)).toBeInTheDocument();
+    }
+
+    // それぞれの phase に Complete または Skipped status が出る
+    const enqueued = within(screen.getByTestId("phase-enqueued"));
+    expect(enqueued.getByText("Complete")).toBeInTheDocument();
+
+    const building = within(screen.getByTestId("phase-building"));
+    expect(building.getByText("Complete")).toBeInTheDocument();
+
+    const cfn = within(screen.getByTestId("phase-cfn-deploy"));
+    expect(cfn.getByText("Complete")).toBeInTheDocument();
+
+    const health = within(screen.getByTestId("phase-health-check"));
+    expect(health.getByText("Skipped")).toBeInTheDocument();
+
+    const completePhase = within(screen.getByTestId("phase-complete"));
+    expect(completePhase.getByText("Complete")).toBeInTheDocument();
+  });
+
+  it("deployment status=FAILED のとき Building / CloudFormation Deploy phase が Failed で表示されるべき", async () => {
+    mocks.getDeployment.mockResolvedValue({
+      ...baseDeployment,
+      status: "FAILED",
+      failureReason: "CodeBuild failed",
+    });
+    // 空 progress (= CFn 観測なし) → Building が Failed になる
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    await waitFor(() => expect(mocks.getDeployment).toHaveBeenCalled());
+    await screen.findByTestId("phase-building");
+
+    const building = within(screen.getByTestId("phase-building"));
+    expect(building.getByText("Failed")).toBeInTheDocument();
+
+    // CFn 観測なし + status=FAILED → CFn phase は Pending
+    const cfn = within(screen.getByTestId("phase-cfn-deploy"));
+    expect(cfn.getByText("Pending")).toBeInTheDocument();
+
+    // Top に failureReason の Alert (Complete phase の body にも出る可能性があるので getAllByText)
+    expect(screen.getAllByText(/CodeBuild failed/).length).toBeGreaterThan(0);
+  });
+
+  it("deployment status=IN_PROGRESS のとき 該当 phase が In Progress で表示されるべき", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
+    mocks.getStackProgress.mockResolvedValue({
+      ...emptyProgress,
+      events: [
+        {
+          timestamp: "2026-05-11T01:09:00.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_IN_PROGRESS",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByTestId("phase-cfn-deploy");
+
+    const cfn = within(screen.getByTestId("phase-cfn-deploy"));
+    expect(cfn.getByText("In Progress")).toBeInTheDocument();
+  });
+
+  it("stackEvents が空のとき CloudFormation Deploy phase は Pending で表示されるべき", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    await screen.findByTestId("phase-cfn-deploy");
+    const cfn = within(screen.getByTestId("phase-cfn-deploy"));
+    expect(cfn.getByText("Pending")).toBeInTheDocument();
+  });
+
+  it("Maximize log button を押すと modal が開いて terminal-style log が表示されるべき", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
+    mocks.getStackProgress.mockResolvedValue({
+      ...emptyProgress,
+      events: [
+        {
+          timestamp: "2026-05-11T01:09:00.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_IN_PROGRESS",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByTestId("maximize-log");
+
+    fireEvent.click(screen.getByTestId("maximize-log"));
+
+    const terminalLog = await screen.findByTestId("terminal-log");
+    expect(terminalLog).toBeInTheDocument();
+    // phase header 行が含まれる
+    expect(within(terminalLog).getByText(/> Enqueued/)).toBeInTheDocument();
+    expect(within(terminalLog).getByText(/> CloudFormation Deploy/)).toBeInTheDocument();
+    // CFn event 行が含まれる
+    expect(within(terminalLog).getByText(/CREATE_IN_PROGRESS MyBucket/)).toBeInTheDocument();
+  });
+
+  it("consoleUrl があるとき Building phase 内に CodeBuild console link が出るべき", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
+    mocks.getStackProgress.mockResolvedValue({
+      ...emptyProgress,
+      consoleUrl: "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1",
+    });
+    renderPage();
+    await screen.findByTestId("phase-building");
+
+    // ExpandableSection の body は collapsed でも DOM には存在する (Cloudscape spec)。
+    // Building phase body 内の link を text で拾う。
+    expect(screen.getByText(/Open CodeBuild \/ CloudFormation logs/)).toBeInTheDocument();
+  });
+});
