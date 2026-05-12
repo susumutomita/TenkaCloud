@@ -18,13 +18,68 @@
   ],
   "cfnTemplate": "template.yaml",
   "cfnParameters": {},
+  "endpoints": [
+    {
+      "slot": "users",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/users" },
+      "overridable": true,
+      "label": "Users service",
+      "description": "初期は EC2 上の nginx reverse proxy 経由。 Lambda / ECS / App Runner に切り出したら override で登録する。"
+    },
+    {
+      "slot": "orders",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/orders" },
+      "overridable": true,
+      "label": "Orders service",
+      "description": "初期は EC2 上の nginx reverse proxy 経由。 移行先の新 endpoint を override で登録。"
+    },
+    {
+      "slot": "catalog",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/catalog" },
+      "overridable": true,
+      "label": "Catalog service",
+      "description": "初期は EC2 上の nginx reverse proxy 経由。 移行先の新 endpoint を override で登録。"
+    }
+  ],
   "scoring": {
-    "kind": "uptime",
-    "endpoints": [
-      { "outputKey": "BaseUrl", "path": "/users/score", "expectStatus": [200] },
-      { "outputKey": "BaseUrl", "path": "/orders/score", "expectStatus": [200] },
-      { "outputKey": "BaseUrl", "path": "/catalog/score", "expectStatus": [200] }
-    ],
-    "pointsPerSuccess": 100
+    "kind": "phased-polling",
+    "intervalMinutes": 1,
+    "probe": { "metaPath": "/meta", "scorePath": "/score" },
+    "platformRules": {
+      "ec2": { "points": 100, "degradedPoints": 10 },
+      "lambda": { "points": 1000 },
+      "ecs": { "points": 1000 },
+      "apprunner": { "points": 1000 }
+    },
+    "failurePenalty": -100,
+    "responsePenalties": [{ "if": "responseTimeMs > 1500", "points": -10 }],
+    "bonuses": [
+      {
+        "kind": "all-slots-on-platforms",
+        "platforms": ["lambda", "ecs", "apprunner"],
+        "points": 5000,
+        "once": true
+      }
+    ]
+  },
+  "phases": [
+    {
+      "name": "degraded",
+      "afterMinutes": 60,
+      "effect": { "switchPlatformToDegraded": ["ec2"] },
+      "description": "EC2 上の劣化フェーズ。 EC2 hosting platform の加点が degradedPoints (= 10) に切り替わる。"
+    },
+    {
+      "name": "legacy",
+      "afterMinutes": 90,
+      "effect": { "scorePathOverride": "/score?legacy=true" },
+      "description": "Legacy code path フェーズ。 各サービスに仕込まれた遅延 code path を取り除く必要が出る。"
+    }
+  ],
+  "dashboard": {
+    "slots": {
+      "RegistrationPanel": "portal/RegistrationPanel.tsx",
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
   }
 }

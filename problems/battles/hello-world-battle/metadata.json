@@ -20,6 +20,22 @@
   ],
   "cfnTemplate": "template.yaml",
   "cfnParameters": {},
+  "endpoints": [
+    {
+      "slot": "frontend",
+      "default": { "from": "cfn-output", "key": "FrontendUrl" },
+      "overridable": false,
+      "label": "Frontend (nginx)",
+      "description": "EC2 上の nginx (port 80)。 防御側が落とすとスコア停止。"
+    },
+    {
+      "slot": "api",
+      "default": { "from": "cfn-output", "key": "ApiUrl" },
+      "overridable": false,
+      "label": "API (python http.server)",
+      "description": "EC2 上の python http.server (port 8080)。 `/healthz` で 200 を返す。"
+    }
+  ],
   "scoring": {
     "kind": "uptime",
     "endpoints": [
