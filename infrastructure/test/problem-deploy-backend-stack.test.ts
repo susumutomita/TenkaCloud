@@ -129,6 +129,8 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("CodeBuild Project concurrent build limit (#538)", () => {
+    // synth が 5 個の NodejsFunction (= esbuild bundling) を走らせるため、default 5s では足りない。
+    // 共有 fixture (`tpl = synthDefault()`) と別 props を渡すので別 instance での synth が必要。
     it("`deployConcurrentBuildLimit: 200` を渡したら CFn property に反映されるべき", () => {
       const app = new cdk.App();
       const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
@@ -146,7 +148,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         "AWS::CodeBuild::Project",
         Match.objectLike({ ConcurrentBuildLimit: 200 }),
       );
-    });
+    }, 30_000);
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
@@ -163,11 +165,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(synthJson).toContain("IN_PROGRESS");
     });
 
-    it("EventBridge Rule を Create / Delete / HealthCheck / ExternalIdAudit schedule で 4 つ持つべき", () => {
+    it("EventBridge Rule を Create / Delete / GenericScoring / ExternalIdAudit schedule で 4 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
-      //   + HealthCheck schedule rate(1 minute) (= #557 #539 reconciler + uptime 採点)
+      //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
       //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
-      // = 4。HealthCheck は uptime 採点とは独立に常時 instantiate される。
+      // = 4。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
       tpl.resourceCountIs("AWS::Events::Rule", 4);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
@@ -187,7 +189,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
           }),
         }),
       );
-      // HealthCheck の rate(1 minute) schedule (= #557 #539 reconciler + uptime 採点)
+      // GenericScoring の rate(1 minute) schedule (= ADR-012 Phase 3.B dispatcher + reconciler)
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -199,6 +201,28 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         "AWS::Events::Rule",
         Match.objectLike({
           ScheduleExpression: "rate(1 day)",
+        }),
+      );
+    });
+
+    it("GenericScoring Lambda が PROBLEM_ENDPOINTS_TABLE_NAME / BATTLE_PROBLEMS_PHASES env を持つべき", () => {
+      // ADR-012 Phase 3.B: 旧 HealthCheck Lambda は scoring 設定のみ持っていたが、
+      // GenericScoring は Endpoint registry (Phase 3.A) と Phase 定義 (Phase 3.B) を併せて受ける。
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Architectures: ["arm64"],
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
+              EVENTS_TABLE_NAME: Match.anyValue(),
+              PROBLEM_ENDPOINTS_TABLE_NAME: Match.anyValue(),
+              BATTLE_PROBLEMS_SCORING: Match.anyValue(),
+              PROBLEM_ENDPOINTS: Match.anyValue(),
+              BATTLE_PROBLEMS_PHASES: Match.anyValue(),
+            }),
+          }),
         }),
       );
     });
