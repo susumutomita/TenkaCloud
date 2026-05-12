@@ -1,5 +1,6 @@
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
+import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
@@ -12,11 +13,6 @@ export type SubmitFlagOutcome =
   | { kind: "no_outputs" }
   | { kind: "scoring_locked" }
   | { kind: "unauthorized" };
-
-/** 競技者 input と stack output 値を比較。両端 trim、case-sensitive。 */
-function flagMatches(submitted: string, expected: string): boolean {
-  return submitted.trim() === expected.trim();
-}
 
 /**
  * #558: Event の scoringLocked flag を read-through で取得する。

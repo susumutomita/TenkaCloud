@@ -12,10 +12,23 @@ import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
  * `flagOutputKey` で指定された field は **競技者に出さない** (= 当てる対象なので)。
  */
 
+/**
+ * Participant 側に出してよい scoring 情報の view。`kind` は 5 種 builtin DSL のいずれか
+ * (ADR-012 Phase 3.B)。kind ごとに見える field は最小限 (= 答えとなる flagOutputKey の
+ * 値 / 攻撃 counter の生値 / 内部 platformRules の細部は出さない)。
+ */
 export interface ParticipantScoringInfo {
-  readonly kind: "flag" | "uptime";
+  readonly kind:
+    | "flag"
+    | "uptime"
+    | "uptime-flat"
+    | "uptime-multi"
+    | "phased-polling"
+    | "attack-detection";
   readonly points?: number;
   readonly pointsPerSuccess?: number;
+  readonly pointsAllOk?: number;
+  readonly pointsPerAttack?: number;
   readonly hints?: readonly string[];
   /** Challenge / flag のとき、提出済みなら true。再提出は加点されない。 */
   readonly flagSubmitted?: boolean;
@@ -112,20 +125,59 @@ export function toProblemView(
     score: Number(item.score ?? 0),
     lastScoredAt: typeof item.lastScoredAt === "string" ? item.lastScoredAt : undefined,
     lastResult: item.lastResult,
-    scoring: scoring
-      ? {
-          kind: scoring.kind,
-          ...(scoring.kind === "flag"
-            ? {
-                points: scoring.points,
-                hints: scoring.hints,
-                flagSubmitted: item.flagSubmitted === true,
-              }
-            : { pointsPerSuccess: scoring.pointsPerSuccess }),
-        }
-      : undefined,
-    applicationStatus: scoring?.kind === "uptime" ? toApplicationStatus(item) : undefined,
+    scoring: scoring ? toScoringInfo(scoring, item) : undefined,
+    // 全 uptime 系 (= legacy uptime + uptime-flat + uptime-multi + phased-polling) で
+    // endpointsHealth aggregate を出す (ADR-005 D1: per-endpoint URL は隠す)。
+    // attack-detection / flag では undefined (= probe しない kind)。
+    applicationStatus: isUptimeKind(scoring?.kind) ? toApplicationStatus(item) : undefined,
   };
+}
+
+function isUptimeKind(kind: string | undefined): boolean {
+  return (
+    kind === "uptime" ||
+    kind === "uptime-flat" ||
+    kind === "uptime-multi" ||
+    kind === "phased-polling"
+  );
+}
+
+/**
+ * Server-internal scoring metadata から participant 向け safe view を組み立てる。
+ * 「答え」になる field (flagOutputKey 値 / statsOutputKey / platformRules の細部) は
+ * 出さない。kind と配点ベースだけを露出する。
+ */
+function toScoringInfo(
+  scoring: ProblemScoringMetadata,
+  item: Partial<DeploymentItem>,
+): ParticipantScoringInfo {
+  if (scoring.kind === "flag") {
+    return {
+      kind: "flag",
+      points: scoring.points,
+      ...(scoring.hints ? { hints: scoring.hints } : {}),
+      flagSubmitted: item.flagSubmitted === true,
+    };
+  }
+  if (scoring.kind === "uptime" || scoring.kind === "uptime-flat") {
+    // 旧 view (legacy "uptime") との互換のため、metadata で書かれた kind 値をそのまま返す。
+    // 現行 frontend は `kind === "uptime"` を Battle 判定の signal に使うので、新規問題が
+    // `uptime-flat` を書いた場合だけ新名で露出する。
+    return { kind: scoring.kind, pointsPerSuccess: scoring.pointsPerSuccess };
+  }
+  if (scoring.kind === "uptime-multi") {
+    return { kind: "uptime-multi", pointsAllOk: scoring.pointsAllOk };
+  }
+  if (scoring.kind === "phased-polling") {
+    // platformRules / phases の細部は出さない。最大配点だけ参考値で出す。
+    const points = Math.max(...Object.values(scoring.platformRules).map((r) => r.points));
+    return { kind: "phased-polling", pointsPerSuccess: points };
+  }
+  if (scoring.kind === "attack-detection") {
+    return { kind: "attack-detection", pointsPerAttack: scoring.pointsPerAttack };
+  }
+  // unreachable: 5 kind を全網羅。
+  return { kind: scoring.kind } as never;
 }
 
 /**

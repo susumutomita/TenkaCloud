@@ -17,13 +17,14 @@ import { DeploymentsTable } from "./deployments-table";
 import { EventApiLambda } from "./event-api-lambda";
 import { EventsTable } from "./events-table";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
-import { HealthCheckLambda } from "./health-check-lambda";
+import { GenericScoringLambda } from "./generic-scoring-lambda";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
   type ParticipantPortalRuntimeConfig,
 } from "./participant-portal-hosting";
 import { ParticipantPortalLambda } from "./participant-portal-lambda";
+import { ProblemEndpointsTable } from "./problem-endpoints-table";
 import { TeamsTable } from "./teams-table";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
@@ -53,6 +54,21 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * このキーが無い (= 採点無効)。
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
+  /**
+   * ADR-012 Phase 3.A: `problemId → endpoints[]` の map。`discoverProblemsEndpoints`
+   * で metadata.json から自動収集して synth 時に注入する。Participant Portal の
+   * `/portal/me/problems/:problemId/endpoints` route が default URL を CFn output から
+   * 算出するために参照する。`endpoints[]` を持たない問題はこのキーが無い。
+   */
+  readonly problemsEndpoints: Readonly<Record<string, unknown>>;
+  /**
+   * ADR-012 Phase 3.B: `problemId → phases[]` の map。`discoverProblemsPhases` で
+   * metadata.json から自動収集して synth 時に注入する。Generic scoring Lambda の
+   * `phased-polling` kind dispatcher が time-based rule 切替に参照する。`phases[]` を
+   * 持たない問題はこのキーが無い。 default 空 map (= 既存 hello-world / hello-world-battle
+   * 等が `phases` を持たないので) で受ける。
+   */
+  readonly problemsPhases?: Readonly<Record<string, unknown>>;
   /**
    * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
    * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
@@ -131,6 +147,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
     const events = new EventsTable(this, "Events");
     const teams = new TeamsTable(this, "Teams");
+    // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
+    // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
+    const endpoints = new ProblemEndpointsTable(this, "ProblemEndpoints");
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
     this.deploymentsTable = deployments.table;
     this.eventsTable = events.table;
@@ -210,16 +229,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       stateMachine: deleteStateMachine.stateMachine,
     });
 
-    // 1 分間隔の Health Check Lambda は 2 つの責務を持つ:
-    // - uptime 採点 (`scoring.kind=uptime` の問題のみ)。`flag` 形式は Portal Lambda の
-    //   submit-flag 経路で採点するため別系統。
-    // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED。
-    //   uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
-    //   `if (problemsScoring.length > 0)` ガードは撤去)。
-    new HealthCheckLambda(this, "HealthCheck", {
+    // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
+    // 2 つの責務を持つ:
+    // - 採点 dispatch (= 5 種 builtin kind の handler に dispatch、`flag` は polling では no-op)
+    // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED
+    //
+    // uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
+    // `if (problemsScoring.length > 0)` ガードは撤去のまま継続)。
+    new GenericScoringLambda(this, "GenericScoring", {
       deploymentsTable: deployments.table,
       eventsTable: events.table,
+      endpointsTable: endpoints.table,
       problemsScoring: props.problemsScoring,
+      problemsEndpoints: props.problemsEndpoints,
+      problemsPhases: props.problemsPhases ?? {},
     });
 
     // Phase 3.2 / Issue #603: ExternalId rotation age 監査 Lambda。1 日 1 回起動して
@@ -237,7 +260,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
         deploymentsTable: deployments.table,
         eventsTable: events.table,
+        endpointsTable: endpoints.table,
         problemsScoring: props.problemsScoring,
+        problemsEndpoints: props.problemsEndpoints,
         consoleViewerRoleArn: consoleViewerRole.role.roleArn,
       });
       // Lambda role に AssumeRole 権限を付与 (= federation flow の前提)。
@@ -284,6 +309,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: stateMachine.stateMachine.stateMachineArn,
       description: "Deploy 起動を司る Step Functions State Machine の ARN。",
+    });
+    new CfnOutput(this, "ProblemEndpointsTableName", {
+      value: endpoints.table.tableName,
+      description:
+        "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     });
   }
 }

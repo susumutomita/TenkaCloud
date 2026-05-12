@@ -16,6 +16,7 @@ function synthDefault(): Template {
       "hello-world": "problems/challenges/hello-world",
     },
     problemsScoring: {},
+    problemsEndpoints: {},
     environmentName: "development",
   });
   return Template.fromStack(stack);
@@ -25,10 +26,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
   describe("Deployments DDB table", () => {
-    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts の 4 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
-      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts。
-      // 4 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 4);
+    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts / ProblemEndpoints の 5 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
+      // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts、
+      // ADR-012 Phase 3.A で ProblemEndpoints。
+      // 5 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 5);
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({
@@ -127,6 +129,8 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("CodeBuild Project concurrent build limit (#538)", () => {
+    // synth が 5 個の NodejsFunction (= esbuild bundling) を走らせるため、default 5s では足りない。
+    // 共有 fixture (`tpl = synthDefault()`) と別 props を渡すので別 instance での synth が必要。
     it("`deployConcurrentBuildLimit: 200` を渡したら CFn property に反映されるべき", () => {
       const app = new cdk.App();
       const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
@@ -135,6 +139,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         sourceObjectKey: "source.zip",
         problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
         problemsScoring: {},
+        problemsEndpoints: {},
         deployConcurrentBuildLimit: 200,
         environmentName: "development",
       });
@@ -143,7 +148,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         "AWS::CodeBuild::Project",
         Match.objectLike({ ConcurrentBuildLimit: 200 }),
       );
-    });
+    }, 30_000);
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
@@ -160,11 +165,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(synthJson).toContain("IN_PROGRESS");
     });
 
-    it("EventBridge Rule を Create / Delete / HealthCheck / ExternalIdAudit schedule で 4 つ持つべき", () => {
+    it("EventBridge Rule を Create / Delete / GenericScoring / ExternalIdAudit schedule で 4 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
-      //   + HealthCheck schedule rate(1 minute) (= #557 #539 reconciler + uptime 採点)
+      //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
       //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
-      // = 4。HealthCheck は uptime 採点とは独立に常時 instantiate される。
+      // = 4。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
       tpl.resourceCountIs("AWS::Events::Rule", 4);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
@@ -184,7 +189,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
           }),
         }),
       );
-      // HealthCheck の rate(1 minute) schedule (= #557 #539 reconciler + uptime 採点)
+      // GenericScoring の rate(1 minute) schedule (= ADR-012 Phase 3.B dispatcher + reconciler)
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -199,6 +204,28 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
         }),
       );
     });
+
+    it("GenericScoring Lambda が PROBLEM_ENDPOINTS_TABLE_NAME / BATTLE_PROBLEMS_PHASES env を持つべき", () => {
+      // ADR-012 Phase 3.B: 旧 HealthCheck Lambda は scoring 設定のみ持っていたが、
+      // GenericScoring は Endpoint registry (Phase 3.A) と Phase 定義 (Phase 3.B) を併せて受ける。
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs20.x",
+          Architectures: ["arm64"],
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
+              EVENTS_TABLE_NAME: Match.anyValue(),
+              PROBLEM_ENDPOINTS_TABLE_NAME: Match.anyValue(),
+              BATTLE_PROBLEMS_SCORING: Match.anyValue(),
+              PROBLEM_ENDPOINTS: Match.anyValue(),
+              BATTLE_PROBLEMS_PHASES: Match.anyValue(),
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   describe("Outputs", () => {
@@ -207,6 +234,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(Object.keys(outputs)).toEqual(
         expect.arrayContaining(["DeploymentsTableName", "DeployCreateStateMachineArn"]),
       );
+    });
+
+    it("ADR-012 Phase 3.A: ProblemEndpointsTableName を Output として持つべき", () => {
+      const outputs = tpl.findOutputs("*");
+      expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["ProblemEndpointsTableName"]));
     });
   });
 
@@ -353,10 +385,16 @@ function synthParticipantPortalLambdaOnly(): Template {
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
     sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
   });
+  const endpoints = new cdk.aws_dynamodb.Table(stack, "ProblemEndpoints", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
   new ParticipantPortalLambda(stack, "ParticipantPortal", {
     deploymentsTable: deployments,
     eventsTable: events,
+    endpointsTable: endpoints,
     problemsScoring: {},
+    problemsEndpoints: {},
     consoleViewerRoleArn: "arn:aws:iam::123456789012:role/console-viewer",
   });
   return Template.fromStack(stack);
@@ -396,6 +434,45 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
               Statement: Match.arrayWith([
                 Match.objectLike({
                   Action: "dynamodb:Query",
+                  Effect: "Allow",
+                }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("ADR-012 Phase 3.A: environment に PROBLEM_ENDPOINTS_TABLE_NAME + PROBLEM_ENDPOINTS を持つべき", () => {
+    tpl.hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({
+            PROBLEM_ENDPOINTS_TABLE_NAME: Match.anyValue(),
+            PROBLEM_ENDPOINTS: Match.anyValue(),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("ADR-012 Phase 3.A: IAM Role に Endpoints table の Query / PutItem / DeleteItem 権限を付与するべき", () => {
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "EndpointsRW",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({
+                  Action: Match.arrayWith([
+                    "dynamodb:Query",
+                    "dynamodb:PutItem",
+                    "dynamodb:DeleteItem",
+                  ]),
                   Effect: "Allow",
                 }),
               ]),
