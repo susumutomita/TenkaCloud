@@ -18,6 +18,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { ApiError, useApiClient } from "../api/client";
 import {
+  type BulkDeployBody,
   type BulkResult,
   bulkDeployEvent,
   bulkTeardownEvent,
@@ -124,7 +125,10 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
-  const [bulkInFlight, setBulkInFlight] = useState<"deploy" | "teardown" | null>(null);
+  // #555: 「失敗分を再実行」も同じ POST /deploy 経路。in-flight 状態を 3 値に拡張。
+  const [bulkInFlight, setBulkInFlight] = useState<"deploy" | "teardown" | "retry-failed" | null>(
+    null,
+  );
   const [confirmTeardown, setConfirmTeardown] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -163,12 +167,12 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     return <Navigate to="/events" replace />;
   }
 
-  const handleBulkDeploy = async () => {
+  const handleBulkDeploy = async (body: BulkDeployBody = {}) => {
     if (!apiClient || bulkInFlight) return;
-    setBulkInFlight("deploy");
+    setBulkInFlight(body.retryFailedOnly ? "retry-failed" : "deploy");
     setError(null);
     try {
-      const res = await bulkDeployEvent(apiClient, eventId);
+      const res = await bulkDeployEvent(apiClient, eventId, body);
       setBulkResult(res);
       await refresh();
     } catch (err) {
@@ -369,6 +373,15 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   // 状態と一致しない button (= DRAFT で「即座に開始」など) は disabled で抑止する。
   const wizard = detail ? computeEventWizardState(detail, Date.now()) : null;
 
+  // #555: FAILED 状態の deployment 件数を全 problem 横断で集計。> 0 なら
+  // 「失敗分を再実行」 button を表示し、operator が部分 retry できるようにする (FR-3)。
+  const failedCount = detail
+    ? Object.values(detail.deploymentsByProblem).reduce(
+        (acc, list) => acc + list.filter((d) => d.status === "FAILED").length,
+        0,
+      )
+    : 0;
+
   return (
     <SpaceBetween size="l">
       <Header
@@ -388,10 +401,28 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 detail.status === "TEARDOWN" ||
                 detail.status === "ARCHIVED"
               }
-              onClick={handleBulkDeploy}
+              onClick={() => handleBulkDeploy()}
             >
               Deploy
             </Button>
+            {/* #555: FAILED の deployment がある場合のみ「失敗分を再実行」 button を出す
+             *   (= 要件 FR-3「N 件失敗」の retry path)。同じ POST /deploy 経路を retryFailedOnly:
+             *   true で呼ぶ。旧 FAILED 行は backend で DELETE → 新 PENDING で CREATE される。 */}
+            {failedCount > 0 && (
+              <Button
+                loading={bulkInFlight === "retry-failed"}
+                disabled={
+                  !detail ||
+                  detail.status === "TEARDOWN" ||
+                  detail.status === "ARCHIVED" ||
+                  bulkInFlight !== null
+                }
+                iconName="refresh"
+                onClick={() => handleBulkDeploy({ retryFailedOnly: true })}
+              >
+                失敗分を再実行 ({failedCount} 件)
+              </Button>
+            )}
             <Button
               loading={endInFlight}
               disabled={!detail || detail.status !== "READY"}
