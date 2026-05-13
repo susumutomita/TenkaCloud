@@ -36,6 +36,9 @@ function loginAs(claims: Record<string, string>) {
 
 function renderApp(initialPath: string) {
   // i18n Phase 1.C: main.tsx で I18nProvider が App を包むので test でも wrap する。
+  // Phase 2: jsdom の navigator.language = "en-US" だと auto-detect で en が走り、
+  // test 内の日本語 string と乖離するため ja を明示 pin する。
+  localStorage.setItem("tenkacloud.application-admin.locale", "ja");
   return render(
     <I18nProvider>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -46,7 +49,10 @@ function renderApp(initialPath: string) {
 }
 
 describe("App", () => {
-  afterEach(() => sessionStorage.clear());
+  afterEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+  });
 
   describe("/login に直接アクセスしたとき", () => {
     it("LoginPage が表示されサインインボタンを持つべき", async () => {

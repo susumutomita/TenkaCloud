@@ -18,5 +18,15 @@
   },
   "errors": {
     "generic": "エラーが発生しました"
+  },
+  "login": {
+    "header": "Application Admin Console",
+    "description": "テナント開発者としてサインインしてください。Cognito の Hosted UI に遷移します。",
+    "submit": "サインイン"
+  },
+  "home": {
+    "header_description": "TenkaCloud Battle / Challenge — テナント管理コンソール",
+    "open_catalog": "問題カタログを開く",
+    "welcome": "ようこそ、{displayName} さん"
   }
 }

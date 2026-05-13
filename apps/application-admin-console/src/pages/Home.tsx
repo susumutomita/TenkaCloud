@@ -10,6 +10,7 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
 import { listProblemSummaries } from "../data/problems";
+import { useT } from "../i18n";
 
 // #542: 初回 operator 向けの onboarding section を dismiss 可能にするための localStorage key。
 // 2 回目以降の visit では「次のアクション」 section を出さず、画面上半分を進行中 Event 一覧
@@ -49,6 +50,7 @@ function writeOnboardingDismissed(value: boolean): void {
 export function HomePage() {
   const navigate = useNavigate();
   const auth = useAuth();
+  const t = useT();
   const claims = auth.tokens ? decodeIdToken(auth.tokens.idToken) : null;
   const tenantName = claims?.["custom:tenantName"];
   const tenantId = claims?.["custom:tenantId"];
@@ -68,14 +70,14 @@ export function HomePage() {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="TenkaCloud Battle / Challenge — テナント管理コンソール"
+        description={t("home.header_description")}
         actions={
           <Button variant="primary" onClick={() => navigate("/problems")}>
-            問題カタログを開く
+            {t("home.open_catalog")}
           </Button>
         }
       >
-        ようこそ、{displayName} さん
+        {t("home.welcome", { displayName })}
       </Header>
 
       <Container header={<Header variant="h2">問題カタログ</Header>}>

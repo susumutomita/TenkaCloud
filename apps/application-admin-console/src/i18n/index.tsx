@@ -90,7 +90,15 @@ function resolveKey(dict: Record<string, unknown>, key: string): string | undefi
 interface I18nContextValue {
   readonly locale: LocaleCode;
   readonly setLocale: (code: LocaleCode) => void;
-  readonly t: (key: string) => string;
+  readonly t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
+}
+
+function interpolate(template: string, params?: Readonly<Record<string, string | number>>): string {
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name) => {
+    const v = params[name];
+    return v === undefined ? match : String(v);
+  });
 }
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
@@ -112,12 +120,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: string): string => {
+    (key: string, params?: Readonly<Record<string, string | number>>): string => {
       // 1) 指定 locale で lookup → 2) en で fallback → 3) raw key
       const v = resolveKey(LOCALE_DICTIONARIES[locale], key);
-      if (v !== undefined) return v;
-      const fallback = resolveKey(LOCALE_DICTIONARIES.en, key);
-      return fallback ?? key;
+      const template = v ?? resolveKey(LOCALE_DICTIONARIES.en, key) ?? key;
+      return interpolate(template, params);
     },
     [locale],
   );
@@ -134,9 +141,12 @@ export function useI18n(): I18nContextValue {
 }
 
 /** 翻訳関数だけが必要な hot path 用 shortcut。 */
-export function useT(): (key: string) => string {
+export function useT(): (
+  key: string,
+  params?: Readonly<Record<string, string | number>>,
+) => string {
   return useI18n().t;
 }
 
 /** Tests / debug 用に dictionaries を露出。 portal 本体からは使わない。 */
-export const _testInternals = { LOCALE_DICTIONARIES, resolveKey, detectBrowserLocale };
+export const _testInternals = { LOCALE_DICTIONARIES, resolveKey, detectBrowserLocale, interpolate };

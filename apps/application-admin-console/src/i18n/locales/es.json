@@ -18,5 +18,15 @@
   },
   "errors": {
     "generic": "Se produjo un error"
+  },
+  "login": {
+    "header": "Application Admin Console",
+    "description": "Inicia sesión como desarrollador del tenant. Serás redirigido a la Hosted UI de Cognito.",
+    "submit": "Iniciar sesión"
+  },
+  "home": {
+    "header_description": "TenkaCloud Battle / Challenge — Consola de administración del tenant",
+    "open_catalog": "Abrir catálogo de problemas",
+    "welcome": "Bienvenido, {displayName}"
   }
 }
