@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  deleteProblemEndpointOverride,
   getNotifications,
   getPortalMe,
+  listProblemEndpoints,
   PortalAuthError,
   PortalNetworkError,
+  PortalValidationError,
+  putProblemEndpointOverride,
   TERMINAL_STATUSES,
 } from "../../src/api/portal-client";
 
@@ -144,6 +148,128 @@ describe("getNotifications", () => {
     await getNotifications("https://x", KEY, 50);
     const [url] = fetchMock.mock.calls[0] as [URL];
     expect(url.searchParams.get("limit")).toBe("50");
+  });
+});
+
+describe("listProblemEndpoints (ADR-012 Phase 3.A / Issue #607)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("/portal/me/problems/<id>/endpoints を Bearer 付きで GET すべき", async () => {
+    const payload = {
+      teamId: "team-x",
+      endpoints: [
+        {
+          slot: "users",
+          overridable: true,
+          defaultUrl: "https://ec2.example.com/users",
+          effectiveUrl: "https://ec2.example.com/users",
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await listProblemEndpoints("https://api.x", KEY, "microservice-migration-battle");
+    expect(out.endpoints[0]?.slot).toBe("users");
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      "https://api.x/portal/me/problems/microservice-migration-battle/endpoints",
+    );
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
+  });
+
+  it("problemId に special char を含むときも URL encode して送るべき", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ teamId: "t", endpoints: [] }), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    // pattern 違反だが encode は client が責任を持つ
+    await listProblemEndpoints("https://x", KEY, "a/b");
+    const [url] = fetchMock.mock.calls[0] as [URL];
+    expect(url.pathname).toBe("/portal/me/problems/a%2Fb/endpoints");
+  });
+});
+
+describe("putProblemEndpointOverride", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("POST /portal/me/problems/<id>/endpoints/<slot> { url } を送り response を返すべき", async () => {
+    const payload = {
+      teamId: "team-x",
+      endpoints: [{ slot: "users", overridable: true, effectiveUrl: "https://my-lambda.example/" }],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const out = await putProblemEndpointOverride(
+      "https://api.x",
+      KEY,
+      "p1",
+      "users",
+      "https://my-lambda.example/",
+    );
+    expect(out.endpoints[0]?.effectiveUrl).toBe("https://my-lambda.example/");
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ url: "https://my-lambda.example/" });
+  });
+
+  it("400 invalid_url は PortalValidationError(errorCode=invalid_url) を投げるべき", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "invalid_url" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    try {
+      await putProblemEndpointOverride("https://x", KEY, "p1", "users", "garbage");
+      throw new Error("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PortalValidationError);
+      expect((err as PortalValidationError).errorCode).toBe("invalid_url");
+    }
+  });
+
+  it("409 slot_not_overridable も PortalValidationError として扱うべき", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "slot_not_overridable" }), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    await expect(
+      putProblemEndpointOverride("https://x", KEY, "p1", "fixed-slot", "https://x.com"),
+    ).rejects.toBeInstanceOf(PortalValidationError);
+  });
+});
+
+describe("deleteProblemEndpointOverride", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("DELETE /portal/me/problems/<id>/endpoints/<slot> を送り response を返すべき", async () => {
+    const payload = { teamId: "team-x", endpoints: [{ slot: "users", overridable: true }] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const out = await deleteProblemEndpointOverride("https://api.x", KEY, "p1", "users");
+    expect(out.endpoints[0]?.slot).toBe("users");
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.method).toBe("DELETE");
   });
 });
 

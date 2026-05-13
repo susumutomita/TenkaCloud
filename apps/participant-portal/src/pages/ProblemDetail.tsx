@@ -9,6 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
 import { PhaseCountdown, type PhaseCountdownEntry } from "../components/PhaseCountdown";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
@@ -87,6 +88,16 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
           onScored={refresh}
+        />
+      )}
+
+      {/* Issue #607 ADR-012 Phase 3.A UI: endpoints[] が宣言された Battle 問題で override 登録
+       *   form を表示。 endpoints 空 / 不在の問題 (= flag-only Challenge 等) は内部で skip。 */}
+      {problem && metadata && metadata.endpoints.length > 0 && (
+        <EndpointOverrideForm
+          apiBaseUrl={config.apiBaseUrl}
+          teamLoginKey={sessionToken ?? ""}
+          problemId={problem.problemId}
         />
       )}
 
