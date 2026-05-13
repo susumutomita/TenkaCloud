@@ -21,7 +21,9 @@ import type { AppConfig } from "../config";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 
-const POLL_INTERVAL_MS = 5_000;
+// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/team で過多、 競技中に
+// N 競技者 = N team × 12 = N×12 req/min で participant-portal Lambda + DDB を圧迫していた)。
+const POLL_INTERVAL_MS = 30_000;
 /**
  * Notifications だけは 60 秒間隔で polling する (ADR-006 D3 + codex review)。
  * Events table は 1 RCU PROVISIONED なので、N 競技者 × 5 秒 polling で簡単に throttle

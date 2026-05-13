@@ -17,7 +17,8 @@ import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
 
-const POLL_INTERVAL_MS = 5_000;
+// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
+const POLL_INTERVAL_MS = 30_000;
 
 const SOURCE_LABEL: Record<ScoreEventView["source"], string> = {
   uptime: "Battle (uptime)",

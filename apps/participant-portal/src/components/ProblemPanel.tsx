@@ -46,7 +46,8 @@ const FALLBACK_KIND_LABEL = "(未設定)";
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
-const POLL_INTERVAL_MS = 5_000;
+// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
+const POLL_INTERVAL_MS = 30_000;
 
 /**
  * 1 problem 単位の詳細パネル。Home (= 全 problem を縦並べ) と ProblemDetail

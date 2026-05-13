@@ -39,7 +39,8 @@ import type { AppConfig } from "../config";
  * polling 5s で基本情報 + CFn StackProgress を更新する (= operator UX を Tenant Admin
  * console と揃える)。Terminal status (COMPLETE / FAILED / DELETED) に遷移したら停止。
  */
-const POLL_INTERVAL_MS = 5_000;
+// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
+const POLL_INTERVAL_MS = 30_000;
 const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const TERMINAL_STATUSES = new Set(["COMPLETE", "FAILED", "DELETED"]);
 
