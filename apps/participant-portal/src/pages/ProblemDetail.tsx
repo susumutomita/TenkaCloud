@@ -20,6 +20,7 @@ import {
   resolveLocalizedNarrative,
 } from "../data/problems";
 import { useI18n } from "../i18n";
+import { renderMarkdownToSafeHtml } from "../lib/markdown";
 import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
@@ -189,9 +190,14 @@ function ProblemInfoSection({
 
         <div>
           <Box variant="awsui-key-label">問題説明</Box>
-          <Box variant="p">
-            <span style={{ whiteSpace: "pre-wrap" }}>{narrative.description}</span>
-          </Box>
+          {/* Issue #661: metadata.json の description は markdown source。 marked → DOMPurify
+           *   で sanitize した HTML を render する。 ADR-008 で community contributor 経由の
+           *   metadata 受け入れを想定して必ず XSS sanitize を通す。 */}
+          <div
+            className="problem-description-markdown"
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: DOMPurify sanitized in renderMarkdownToSafeHtml
+            dangerouslySetInnerHTML={{ __html: renderMarkdownToSafeHtml(narrative.description) }}
+          />
         </div>
 
         {narrative.learningGoals.length > 0 && (
