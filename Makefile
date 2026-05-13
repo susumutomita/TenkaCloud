@@ -9,7 +9,7 @@ export JSII_DEPRECATED := quiet
 .DEFAULT_GOAL := help
 
 .PHONY: help install install_ci build typecheck test check before-commit beforecommit \
-        build-docs check-docs \
+        build-docs check-docs audit-deps \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -22,7 +22,13 @@ help:
 	      /^[a-z][a-zA-Z0-9_-]*:/ && !/^help:/ {sub(/:.*/, ""); printf "  %s\n", $$0}' Makefile
 
 # ===== Setup / Build =====
-install:       ; bun install
+install:
+	# --ignore-scripts: defuse mini-shai-hulud 2nd wave (Flatt Tech, 2026-05-12).
+	# bun does not honour npm_config_ignore_scripts or .npmrc's ignore-scripts,
+	# so the flag is required on every invocation. Husky's `prepare` is skipped
+	# along with everything else, so we re-bootstrap it explicitly afterwards.
+	bun install --ignore-scripts
+	bun x husky
 install_ci:    ; bun install --frozen-lockfile --ignore-scripts
 build:         ; bun run build
 typecheck:     ; bun run typecheck
@@ -31,8 +37,9 @@ validate-problems: ; bun run validate:problems
 build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
-check:         install lint test validate-problems check-docs check-http-status
-before-commit: lint test validate-problems check-docs check-http-status
+audit-deps:    ; bun run audit:dependencies
+check:         install lint test validate-problems check-docs check-http-status audit-deps
+before-commit: lint test validate-problems check-docs check-http-status audit-deps
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format

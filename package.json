@@ -14,6 +14,7 @@
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
     "test": "bun run --filter @TenkaCloud/infrastructure test && bun run --filter @TenkaCloud/admin-console test && bun run --filter @TenkaCloud/application-admin-console test && bun run --filter @TenkaCloud/participant-portal test",
     "validate:problems": "bun run scripts/validate-problems.ts",
+    "audit:dependencies": "bun run scripts/audit-dependencies.ts",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist'",
     "lint:text": "textlint '**/*.md'",
     "lint:format": "biome check",
@@ -22,6 +23,7 @@
     "fix:format": "biome check --write",
     "prepare": "husky"
   },
+  "trustedDependencies": [],
   "keywords": [],
   "packageManager": "bun@1.3.11",
   "engines": {

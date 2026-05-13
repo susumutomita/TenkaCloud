@@ -14,6 +14,23 @@ export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
 
 /**
+ * ADR-012 Phase 4 portal predict: 問題 metadata で宣言された phase / disruption の予告 entry。
+ * 競技者向けに「いつ何が起きるか」を見せるためだけの shape (= effect の中身 / score 値は隠す)。
+ */
+export interface ProblemPhaseEntry {
+  readonly name: string;
+  readonly afterMinutes: number;
+  readonly description?: string;
+}
+
+export interface ProblemDisruptionEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly defaultAfterMinutes?: number;
+  readonly description?: string;
+}
+
+/**
  * ADR-012 Phase 5: 1 problem に紐づく portal plugin slot map。 `dashboard.slots[slotName]`
  * の各 entry は metadata.json で `portal/<SlotName>.tsx` 形式の相対 path を持つ。 portal
  * の plugin loader (= src/plugins/loader.ts) がこれを glob で照合して該当 chunk を lazy load する。
@@ -35,6 +52,10 @@ export interface ProblemCatalogEntry {
   readonly description: string;
   readonly learningGoals: readonly string[];
   readonly tags: readonly string[];
+  /** ADR-012 Phase 4: 段階制の予告 (= afterMinutes で portal が countdown / status pill 表示)。 */
+  readonly phases: readonly ProblemPhaseEntry[];
+  /** ADR-012 Phase 4: 「妨害」予告 (= template.yaml-bundled self-triggered Scheduler)。 */
+  readonly disruptions: readonly ProblemDisruptionEntry[];
   /** ADR-012 Phase 5: dashboard.slots[slotName] = portal/<file>.tsx 相対 path の map。 */
   readonly dashboardSlots?: ProblemDashboardSlots;
 }
@@ -54,6 +75,21 @@ interface ProblemMetadata {
   exposedPorts?: { port: number; name: string }[];
   cfnTemplate?: string;
   cfnParameters?: Record<string, string>;
+  phases?: {
+    name: string;
+    afterMinutes: number;
+    effect?: Record<string, unknown>;
+    description?: string;
+  }[];
+  disruptions?: {
+    id: string;
+    name: string;
+    defaultAfterMinutes?: number;
+    operatorEditable?: string[];
+    parameters?: Record<string, unknown>;
+    eventDetailType?: string;
+    description?: string;
+  }[];
   dashboard?: {
     slots?: Record<string, string>;
   };
@@ -79,6 +115,24 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
     description: metadata.description,
     learningGoals: metadata.learningGoals,
     tags: metadata.tags,
+    // 競技者向けには effect の中身 (= switchPlatformToDegraded / scorePathOverride 等の
+    // 採点 internals) は隠して、 name / afterMinutes / description だけ露出する。
+    phases:
+      metadata.phases?.map((p) => ({
+        name: p.name,
+        afterMinutes: p.afterMinutes,
+        ...(p.description ? { description: p.description } : {}),
+      })) ?? [],
+    // 同じく eventDetailType / parameters / operatorEditable 等の operator 向け internals は隠す。
+    disruptions:
+      metadata.disruptions?.map((d) => ({
+        id: d.id,
+        name: d.name,
+        ...(typeof d.defaultAfterMinutes === "number"
+          ? { defaultAfterMinutes: d.defaultAfterMinutes }
+          : {}),
+        ...(d.description ? { description: d.description } : {}),
+      })) ?? [],
     ...(dashboardSlots && Object.keys(dashboardSlots).length > 0
       ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
       : {}),
