@@ -138,5 +138,20 @@ export function useT(): (key: string) => string {
   return useI18n().t;
 }
 
+/**
+ * 翻訳テンプレートに `{name}` 形式の placeholder を埋め込む helper。
+ *
+ * 単純な `template.replace("{x}", vars.x).replace("{y}", vars.y)` だと
+ * `vars.x = "{y}"` のような病的 input で意図しない 2 重置換が起きる。 1 pass の regex
+ * replacement で safety を担保する (= 各 placeholder は元 template 上の 1 度しか展開されない)。
+ *
+ * 未定義 key は空文字列に置換 (= raw `{name}` を UI に漏らさない fail-closed)。
+ *
+ * 使用例: `interpolate(t("modal.body"), { tenantName: "Acme", tenantId: "abc" })`
+ */
+export function interpolate(template: string, vars: Readonly<Record<string, string>>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => (key in vars ? vars[key] : ""));
+}
+
 /** Tests / debug 用に dictionaries を露出。 portal 本体からは使わない。 */
 export const _testInternals = { LOCALE_DICTIONARIES, resolveKey, detectBrowserLocale };

@@ -26,7 +26,7 @@ import {
 } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
-import { useT } from "../i18n";
+import { interpolate, useT } from "../i18n";
 import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
 
 /**
@@ -282,10 +282,9 @@ export function TenantListPage({ config }: { config: AppConfig }) {
                   variant="inline-link"
                   href={url}
                   target="_blank"
-                  ariaLabel={t("tenant_list.open_console_aria").replace(
-                    "{tenantName}",
-                    row.tenantName,
-                  )}
+                  ariaLabel={interpolate(t("tenant_list.open_console_aria"), {
+                    tenantName: row.tenantName,
+                  })}
                 >
                   {isSilo ? t("tenant_list.open_console") : t("tenant_list.open_console_pooled")}
                 </Button>
@@ -315,10 +314,9 @@ export function TenantListPage({ config }: { config: AppConfig }) {
                   variant="inline-link"
                   href={url}
                   target="_blank"
-                  ariaLabel={t("tenant_list.logs_codebuild_aria").replace(
-                    "{tenantName}",
-                    row.tenantName,
-                  )}
+                  ariaLabel={interpolate(t("tenant_list.logs_codebuild_aria"), {
+                    tenantName: row.tenantName,
+                  })}
                 >
                   {t("tenant_list.logs_codebuild")}
                 </Button>
@@ -359,9 +357,10 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       >
         {pendingDeprovision && (
           <Box variant="p">
-            {t("tenant_list.deprovision_modal_body")
-              .replace("{tenantName}", pendingDeprovision.tenantName)
-              .replace("{tenantId}", pendingDeprovision.tenantId)}
+            {interpolate(t("tenant_list.deprovision_modal_body"), {
+              tenantName: pendingDeprovision.tenantName,
+              tenantId: pendingDeprovision.tenantId,
+            })}
           </Box>
         )}
       </Modal>
