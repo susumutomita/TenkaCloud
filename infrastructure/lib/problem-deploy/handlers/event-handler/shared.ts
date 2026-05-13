@@ -61,6 +61,10 @@ export async function queryDeploymentsByEvent(
   eventId: string,
   projectionExpression?: string,
 ): Promise<Partial<DeploymentItem>[]> {
+  // Issue #670: DDB は `status` 等の reserved word を ProjectionExpression / FilterExpression
+  // / UpdateExpression 全てで alias 必須。 caller が `#s` を含む projection を渡すケース
+  // (= bulk-deploy.ts が `jobId, teamId, problemId, #s` で呼ぶ) を黙ってサポートするため、
+  // alias を本 helper 側で定義する。 caller が `#s` を使わなくても extra alias は ignored。
   const out = await shared.ddb.send(
     new QueryCommand({
       TableName: shared.deploymentsTableName,
@@ -71,7 +75,14 @@ export async function queryDeploymentsByEvent(
         ":pk": `TENANT#${tenantId}`,
         ":ev": eventId,
       },
-      ...(projectionExpression ? { ProjectionExpression: projectionExpression } : {}),
+      ...(projectionExpression
+        ? {
+            ProjectionExpression: projectionExpression,
+            ...(projectionExpression.includes("#s")
+              ? { ExpressionAttributeNames: { "#s": "status" } }
+              : {}),
+          }
+        : {}),
     }),
   );
   return (out.Items ?? []) as Partial<DeploymentItem>[];

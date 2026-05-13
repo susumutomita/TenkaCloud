@@ -122,7 +122,10 @@ export class ParticipantPortalLambda extends Construct {
       entry: path.resolve(__dirname, "handlers/participant-handler/index.ts"),
       handler: "handler",
       timeout: Duration.seconds(10),
-      memorySize: 256,
+      // Issue #672: bundle が 33MB と巨大 (= AWS SDK / Hono / zod 等が含まれる) で
+      // 256MB だと Init Duration 1693ms で OOM → 502 Internal Server Error。
+      // 512MB に拡張 (= cold start 後の steady state Max Memory Used は 136MB 程度)。
+      memorySize: 512,
       role,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
