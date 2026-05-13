@@ -230,6 +230,39 @@ export async function fetchTenantStackProgress(
 }
 
 /**
+ * Issue #658: Provisioning Jobs page 用の execution item。
+ * `GET /admin/insight/pipeline-executions` の response item shape。
+ */
+export interface PipelineExecutionItem {
+  readonly executionId: string;
+  readonly status: string;
+  readonly startTimeIso: string | undefined;
+  readonly lastUpdateTimeIso: string | undefined;
+  readonly consoleUrl: string;
+}
+
+export interface ListPipelineExecutionsResponse {
+  readonly pipelineName: string;
+  readonly items: readonly PipelineExecutionItem[];
+}
+
+/**
+ * `GET /admin/insight/pipeline-executions` を叩いて tenkacloud-saas-pipeline の execution
+ * 履歴を取得する。 admin-console の Provisioning Jobs page (= /jobs) で使う。
+ */
+export async function fetchPipelineExecutions(
+  config: AppConfig,
+  idToken: string,
+  options: { limit?: number } = {},
+): Promise<ListPipelineExecutionsResponse | null> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const qs = params.toString();
+  const path = `admin/insight/pipeline-executions${qs ? `?${qs}` : ""}`;
+  return adminInsightGet<ListPipelineExecutionsResponse>(config, idToken, path);
+}
+
+/**
  * CFn ResourceStatus を Cloudscape の StatusIndicator type に map する。
  * application-admin-console の `statusToIndicator` と同じセマンティクス。
  */

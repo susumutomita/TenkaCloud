@@ -9,7 +9,8 @@
   "nav": {
     "menu": "Admin menu",
     "tenants": "Tenants",
-    "tenants_new": "Create tenant"
+    "tenants_new": "Create tenant",
+    "jobs": "Provisioning Jobs"
   },
   "auth": {
     "sign_out": "Sign out"

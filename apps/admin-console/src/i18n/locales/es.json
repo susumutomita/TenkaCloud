@@ -9,7 +9,8 @@
   "nav": {
     "menu": "Menú de administración",
     "tenants": "Tenants",
-    "tenants_new": "Crear tenant"
+    "tenants_new": "Crear tenant",
+    "jobs": "Trabajos de aprovisionamiento"
   },
   "auth": {
     "sign_out": "Cerrar sesión"
