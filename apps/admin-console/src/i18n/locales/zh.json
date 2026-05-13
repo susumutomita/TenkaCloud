@@ -72,6 +72,23 @@
     "tier_advanced": "Advanced — 共享环境 (Pooled)",
     "tier_platinum": "Platinum — 专用环境 (Silo: 专用 Cognito / 应用控制台)"
   },
+  "jobs_page": {
+    "header": "配置作业",
+    "description": "tenkacloud-saas-pipeline 最近 50 次执行。每 60 秒自动刷新一次。",
+    "not_configured_header": "AdminInsight API 未配置",
+    "not_configured_body": "本环境的 runtime-config 中没有设置 admin-insight API URL。请完成 Phase 2 部署。",
+    "forbidden_header": "无权限",
+    "forbidden_body": "此功能仅 SystemAdmin 组成员可查看。请重新登录。",
+    "error_header": "加载失败",
+    "loading": "正在加载…",
+    "empty": "暂无 pipeline execution 历史 — 可能尚未创建租户。",
+    "col_execution_id": "Execution ID",
+    "col_status": "状态",
+    "col_start_time": "开始时间",
+    "col_elapsed": "耗时",
+    "col_last_update": "最后更新",
+    "open_console_aria": "在 AWS 控制台打开 execution {executionId}"
+  },
   "tenant_events": {
     "missing_tenant_id": "未指定 tenantId。",
     "not_configured_header": "AdminInsight API 未配置",

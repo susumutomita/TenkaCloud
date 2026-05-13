@@ -72,6 +72,23 @@
     "tier_advanced": "Advanced — compartido (Pooled)",
     "tier_platinum": "Platinum — dedicado (Silo: Cognito y Consola de aplicación dedicados)"
   },
+  "jobs_page": {
+    "header": "Trabajos de aprovisionamiento",
+    "description": "Últimas 50 ejecuciones de tenkacloud-saas-pipeline. Se actualiza cada 60 segundos.",
+    "not_configured_header": "AdminInsight API no está configurado",
+    "not_configured_body": "La URL de admin-insight API no está definida en runtime-config. Completa el deploy de Phase 2.",
+    "forbidden_header": "Sin permisos",
+    "forbidden_body": "Solo los miembros del grupo SystemAdmin pueden verlo. Vuelve a iniciar sesión.",
+    "error_header": "Error al cargar",
+    "loading": "Cargando…",
+    "empty": "Aún no hay ejecuciones de pipeline — es posible que aún no hayas creado un tenant.",
+    "col_execution_id": "ID de ejecución",
+    "col_status": "Estado",
+    "col_start_time": "Inicio",
+    "col_elapsed": "Tiempo transcurrido",
+    "col_last_update": "Última actualización",
+    "open_console_aria": "Abrir la ejecución {executionId} en la consola de AWS"
+  },
   "tenant_events": {
     "missing_tenant_id": "Falta el tenantId.",
     "not_configured_header": "AdminInsight API no está configurado",
