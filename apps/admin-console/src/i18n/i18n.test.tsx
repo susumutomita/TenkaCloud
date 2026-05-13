@@ -1,6 +1,6 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { _testInternals, I18nProvider, type LocaleCode, useI18n, useT } from "./index";
+import { _testInternals, I18nProvider, interpolate, type LocaleCode, useI18n, useT } from "./index";
 
 /**
  * Issue #583 i18n Phase 1.B: admin-console の自前 i18n の pin。
@@ -87,5 +87,34 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     // ja default で「読み込み中|Loading|Cargando|正在加载…」 が出る (navigator.language が ja/en どちらでも fallback で en に行く)
     const el = screen.getByText(/(状態を取得中|Loading|Cargando|正在加载)…/);
     expect(el).toBeInTheDocument();
+  });
+});
+
+describe("interpolate (#655)", () => {
+  it("単一 placeholder を埋め込むべき", () => {
+    expect(interpolate("Hello {name}!", { name: "World" })).toBe("Hello World!");
+  });
+
+  it("複数 placeholder を 1 pass で埋め込むべき", () => {
+    expect(interpolate("{a} - {b} - {a}", { a: "X", b: "Y" })).toBe("X - Y - X");
+  });
+
+  it("値に placeholder と同形 string が含まれても 2 重置換しないべき (= 病的 input 防御)", () => {
+    // 旧来の .replace().replace() chain だと {tenantName} = "{tenantId}" のとき
+    // 続く tenantId 置換で意図せず展開された。 1 pass regex なら問題なし。
+    expect(
+      interpolate("name={tenantName} id={tenantId}", {
+        tenantName: "{tenantId}",
+        tenantId: "abc-123",
+      }),
+    ).toBe("name={tenantId} id=abc-123");
+  });
+
+  it("未定義 key は空文字列に置換し raw {name} を UI に漏らさないべき", () => {
+    expect(interpolate("Hello {missing}!", {})).toBe("Hello !");
+  });
+
+  it("placeholder が無い template はそのまま返すべき", () => {
+    expect(interpolate("no placeholder", { a: "X" })).toBe("no placeholder");
   });
 });
