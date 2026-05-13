@@ -43,6 +43,14 @@ jobs:
           CI: "true"
         run: make install_ci
 
+      # Supply Chain Security: dependency lifecycle script auditor。
+      # scripts/audit-baseline.json と比較し、 新規 lifecycle script 付き package /
+      # 既存 dep の新規 hook 追加を検出して fail させる (= mini Shai-Hulud 2nd 対策、
+      # https://blog.flatt.tech/entry/mini_shai_hulud_2nd)。
+      - name: Audit dependency lifecycle scripts
+        run: |
+          make audit-deps
+
       - name: Run textlint
         run: |
           make lint_text
