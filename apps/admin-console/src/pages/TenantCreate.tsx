@@ -7,25 +7,32 @@ import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
 import { createTenant, type Tier } from "../api/tenants";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
-const TIERS = [
-  { value: "basic", label: "Basic — 共有環境 (Pooled)" },
-  { value: "advanced", label: "Advanced — 共有環境 (Pooled)" },
-  { value: "platinum", label: "Platinum — 専用環境 (Silo: 専用 Cognito / Application Console)" },
-] as const satisfies readonly { value: Tier; label: string }[];
+const TIER_VALUES: readonly Tier[] = ["basic", "advanced", "platinum"];
 
 export function TenantCreatePage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const api = useApiClient(config);
+  const t = useT();
+
+  const tierOptions = useMemo(
+    () =>
+      TIER_VALUES.map((value) => ({
+        value,
+        label: t(`tenant_create.tier_${value}`),
+      })),
+    [t],
+  );
 
   const [tenantName, setTenantName] = useState("");
   const [email, setEmail] = useState("");
-  const [tier, setTier] = useState<(typeof TIERS)[number]>(TIERS[0]);
+  const [tier, setTier] = useState<(typeof tierOptions)[number]>(tierOptions[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isSubmitDisabled = tenantName.trim().length === 0 || email.trim().length === 0;
@@ -49,11 +56,11 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
 
   return (
     <Form
-      header={<Header variant="h1">テナント作成</Header>}
+      header={<Header variant="h1">{t("tenant_create.header")}</Header>}
       actions={
         <SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => navigate("/tenants")}>
-            キャンセル
+            {t("tenant_create.cancel")}
           </Button>
           <Button
             variant="primary"
@@ -61,7 +68,7 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
             disabled={isSubmitDisabled}
             onClick={onSubmit}
           >
-            作成
+            {t("tenant_create.submit")}
           </Button>
         </SpaceBetween>
       }
@@ -69,36 +76,38 @@ export function TenantCreatePage({ config }: { config: AppConfig }) {
       <Container>
         <SpaceBetween size="l">
           {error && (
-            <Alert type="error" header="作成に失敗しました">
+            <Alert type="error" header={t("tenant_create.error_header")}>
               {error}
             </Alert>
           )}
           <FormField
-            label="テナント名"
-            description="競技を主催する組織の表示名 (テナント分離単位として記録される)"
+            label={t("tenant_create.name_label")}
+            description={t("tenant_create.name_description")}
           >
             <Input
               value={tenantName}
               onChange={({ detail }) => setTenantName(detail.value)}
-              placeholder="例: ACME 株式会社"
+              placeholder={t("tenant_create.name_placeholder")}
             />
           </FormField>
           <FormField
-            label="テナント管理者メール"
-            description="このテナントの管理者として、Cognito の招待メールを受け取るアドレス"
+            label={t("tenant_create.email_label")}
+            description={t("tenant_create.email_description")}
           >
             <Input
               value={email}
               type="email"
               onChange={({ detail }) => setEmail(detail.value)}
-              placeholder="admin@example.com"
+              placeholder={t("tenant_create.email_placeholder")}
             />
           </FormField>
-          <FormField label="プラン">
+          <FormField label={t("tenant_create.tier_label")}>
             <Select
               selectedOption={tier}
-              options={TIERS}
-              onChange={({ detail }) => setTier(detail.selectedOption as (typeof TIERS)[number])}
+              options={tierOptions}
+              onChange={({ detail }) =>
+                setTier(detail.selectedOption as (typeof tierOptions)[number])
+              }
             />
           </FormField>
         </SpaceBetween>

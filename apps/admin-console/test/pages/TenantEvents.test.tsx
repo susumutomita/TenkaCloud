@@ -35,19 +35,26 @@ const config: AppConfig = {
 };
 
 const { TenantEventsPage } = await import("../../src/pages/TenantEvents");
+const { I18nProvider } = await import("../../src/i18n");
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/tenants/t-acme/events"]}>
-      <Routes>
-        <Route path="/tenants/:tenantId/events" element={<TenantEventsPage config={config} />} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={["/tenants/t-acme/events"]}>
+        <Routes>
+          <Route path="/tenants/:tenantId/events" element={<TenantEventsPage config={config} />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Force JA locale for deterministic assertions on i18n strings.
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("tenkacloud.admin.locale", "ja");
+  }
   mocks.useAuth.mockReturnValue({
     tokens: { idToken: "id-token", accessToken: "a", expiresAt: 0 },
     ready: true,

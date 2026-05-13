@@ -54,5 +54,42 @@
     "deprovision_modal_cancel": "取消",
     "deprovision_modal_confirm": "确认",
     "deprovision_modal_body": "将对 {tenantName} ({tenantId}) 执行 deprovision。相关的 CloudFormation 堆栈和 DynamoDB 记录将被删除。"
+  },
+  "tenant_create": {
+    "header": "创建租户",
+    "cancel": "取消",
+    "submit": "创建",
+    "error_header": "创建失败",
+    "name_label": "租户名称",
+    "name_description": "举办竞赛的组织的显示名称 (作为租户隔离单元记录)",
+    "name_placeholder": "例如: ACME 株式会社",
+    "email_label": "租户管理员邮箱",
+    "email_description": "作为该租户的管理员接收 Cognito 邀请邮件的地址",
+    "email_placeholder": "admin@example.com",
+    "tier_label": "套餐",
+    "tier_basic": "Basic — 共享环境 (Pooled)",
+    "tier_advanced": "Advanced — 共享环境 (Pooled)",
+    "tier_platinum": "Platinum — 专用环境 (Silo: 专用 Cognito / 应用控制台)"
+  },
+  "tenant_events": {
+    "missing_tenant_id": "未指定 tenantId。",
+    "not_configured_header": "AdminInsight API 未配置",
+    "not_configured_body": "本环境的 runtime-config 中没有设置 admin-insight API URL。请完成 Phase 2 部署。",
+    "forbidden_header": "无权限",
+    "forbidden_body": "此功能仅 SystemAdmin 组成员可查看。请重新登录。",
+    "header": "租户 Event 列表",
+    "back_button": "返回租户列表",
+    "provisioning_header": "正在准备租户",
+    "provisioning_body": "该租户的 API 仍在部署中,因此暂时无法获取 Event 列表。配置通常需要 5–10 分钟,每 30 秒自动重试一次。",
+    "provisioning_spinner": "等待连接中…",
+    "error_header": "加载失败",
+    "loading": "正在加载…",
+    "empty": "该租户尚未创建 Event。",
+    "col_name": "Event 名称",
+    "col_status": "状态",
+    "col_team_count": "团队数",
+    "col_problem_count": "问题数",
+    "col_created_at": "创建时间",
+    "col_updated_at": "更新时间"
   }
 }

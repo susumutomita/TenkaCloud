@@ -54,5 +54,42 @@
     "deprovision_modal_cancel": "Cancelar",
     "deprovision_modal_confirm": "Confirmar",
     "deprovision_modal_body": "Se deprovisionará {tenantName} ({tenantId}). Se eliminarán su stack de CloudFormation y los registros de DynamoDB."
+  },
+  "tenant_create": {
+    "header": "Crear tenant",
+    "cancel": "Cancelar",
+    "submit": "Crear",
+    "error_header": "Error al crear",
+    "name_label": "Nombre del tenant",
+    "name_description": "Nombre visible de la organización que aloja la competición (se registra como unidad de aislamiento del tenant)",
+    "name_placeholder": "ej. ACME S.A.",
+    "email_label": "Correo del administrador",
+    "email_description": "Dirección que recibe la invitación de Cognito como administrador de este tenant",
+    "email_placeholder": "admin@example.com",
+    "tier_label": "Plan",
+    "tier_basic": "Basic — compartido (Pooled)",
+    "tier_advanced": "Advanced — compartido (Pooled)",
+    "tier_platinum": "Platinum — dedicado (Silo: Cognito y Consola de aplicación dedicados)"
+  },
+  "tenant_events": {
+    "missing_tenant_id": "Falta el tenantId.",
+    "not_configured_header": "AdminInsight API no está configurado",
+    "not_configured_body": "La URL de admin-insight API no está definida en runtime-config. Completa el deploy de Phase 2.",
+    "forbidden_header": "Sin permisos",
+    "forbidden_body": "Solo los miembros del grupo SystemAdmin pueden verlo. Vuelve a iniciar sesión.",
+    "header": "Eventos del tenant",
+    "back_button": "Volver a tenants",
+    "provisioning_header": "El tenant se está aprovisionando",
+    "provisioning_body": "La API de este tenant aún se está desplegando, por lo que la lista de eventos todavía no está disponible. El aprovisionamiento suele tardar 5–10 minutos; reintentamos cada 30 segundos.",
+    "provisioning_spinner": "Esperando conexión…",
+    "error_header": "Error al cargar",
+    "loading": "Cargando…",
+    "empty": "Aún no hay eventos para este tenant.",
+    "col_name": "Nombre del evento",
+    "col_status": "Estado",
+    "col_team_count": "Equipos",
+    "col_problem_count": "Problemas",
+    "col_created_at": "Creado",
+    "col_updated_at": "Actualizado"
   }
 }

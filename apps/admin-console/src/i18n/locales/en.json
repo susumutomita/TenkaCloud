@@ -54,5 +54,42 @@
     "deprovision_modal_cancel": "Cancel",
     "deprovision_modal_confirm": "Confirm",
     "deprovision_modal_body": "Deprovisioning {tenantName} ({tenantId}). Its CloudFormation stack and DynamoDB records will be removed."
+  },
+  "tenant_create": {
+    "header": "Create tenant",
+    "cancel": "Cancel",
+    "submit": "Create",
+    "error_header": "Failed to create",
+    "name_label": "Tenant name",
+    "name_description": "Display name of the organisation hosting the competition (recorded as the tenant isolation unit)",
+    "name_placeholder": "e.g. ACME Inc.",
+    "email_label": "Tenant admin email",
+    "email_description": "Address that receives the Cognito invitation as the admin of this tenant",
+    "email_placeholder": "admin@example.com",
+    "tier_label": "Plan",
+    "tier_basic": "Basic — shared (Pooled)",
+    "tier_advanced": "Advanced — shared (Pooled)",
+    "tier_platinum": "Platinum — dedicated (Silo: dedicated Cognito / Application Console)"
+  },
+  "tenant_events": {
+    "missing_tenant_id": "tenantId is required.",
+    "not_configured_header": "AdminInsight API is not configured",
+    "not_configured_body": "The admin-insight API URL is not set in runtime-config. Complete Phase 2 deploy.",
+    "forbidden_header": "Not authorised",
+    "forbidden_body": "Only members of the SystemAdmin group can view this. Please sign in again.",
+    "header": "Tenant events",
+    "back_button": "Back to tenants",
+    "provisioning_header": "Tenant is being provisioned",
+    "provisioning_body": "This tenant's API is still being deployed, so the event list isn't available yet. Provisioning typically completes in 5–10 minutes; we retry every 30 seconds.",
+    "provisioning_spinner": "Waiting to connect…",
+    "error_header": "Failed to load",
+    "loading": "Loading…",
+    "empty": "No events have been created for this tenant yet.",
+    "col_name": "Event name",
+    "col_status": "Status",
+    "col_team_count": "Teams",
+    "col_problem_count": "Problems",
+    "col_created_at": "Created",
+    "col_updated_at": "Updated"
   }
 }

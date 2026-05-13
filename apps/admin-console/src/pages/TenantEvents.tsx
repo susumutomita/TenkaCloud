@@ -18,26 +18,14 @@ import {
 } from "../api/admin-drill-down";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
 /**
- * Phase 1.B drill-down (ADR-011 / #598)。
- *
- * System Admin が tenant 一覧から行を click し、その tenant に紐づく Event の一覧に到達
- * するページ。Event 行 click で `AdminEventDetail` に遷移。
- *
- * 設計:
- *   - polling 30s (= read-only / SystemAdmin scope なので high-freq は不要)
- *   - 403 (= claim 不足) は専用 Alert で表示。再ログインで復旧することを案内する
- *   - Tenant Admin の EventList は write 操作 (archive 等) を持つが、本 page は **read-only**
+ * Phase 1.B drill-down (ADR-011 / #598)。 i18n: #655 Phase 5.C で 4 言語化済。
  */
 const POLL_INTERVAL_MS = 30_000;
 const PAGE_SIZE = 50;
 
-/**
- * Issue #656: tenant API が provisioning 中 (= CodePipeline 進行中で API Gateway 未存在)
- * のとき fetch が `TypeError: Failed to fetch` を起こす or backend が 502/503/504 を返す。
- * このいずれかなら "プロビジョニング中" UI を出し、 raw error を隠す。
- */
 function isLikelyProvisioning(err: unknown): boolean {
   if (err instanceof AdminInsightApiError) {
     return (
@@ -64,6 +52,7 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
   const { tenantId } = useParams<{ tenantId: string }>();
   const auth = useAuth();
   const navigate = useNavigate();
+  const t = useT();
   const [items, setItems] = useState<readonly EventSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -113,22 +102,21 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
   }, [fetchOnce]);
 
   if (!tenantId) {
-    return <Alert type="error">tenantId が指定されていません。</Alert>;
+    return <Alert type="error">{t("tenant_events.missing_tenant_id")}</Alert>;
   }
 
   if (notConfigured) {
     return (
-      <Alert type="info" header="AdminInsight API が未配線です">
-        本環境では admin-insight API URL が runtime-config に設定されていません。Phase 2 deploy
-        を完了してください。
+      <Alert type="info" header={t("tenant_events.not_configured_header")}>
+        {t("tenant_events.not_configured_body")}
       </Alert>
     );
   }
 
   if (forbidden) {
     return (
-      <Alert type="error" header="権限がありません">
-        この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。
+      <Alert type="error" header={t("tenant_events.forbidden_header")}>
+        {t("tenant_events.forbidden_body")}
       </Alert>
     );
   }
@@ -141,18 +129,17 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
           description={`Tenant ID: ${tenantId}`}
           actions={
             <Button variant="normal" onClick={() => navigate("/tenants")}>
-              テナント一覧に戻る
+              {t("tenant_events.back_button")}
             </Button>
           }
         >
-          テナント Event 一覧
+          {t("tenant_events.header")}
         </Header>
-        <Alert type="info" header="テナントを準備中です">
-          この tenant の API はまだ deploy 中のため Event 一覧を取得できません。 provisioning は通常
-          5〜10 分で完了します。 30 秒ごとに自動で再試行します。
+        <Alert type="info" header={t("tenant_events.provisioning_header")}>
+          {t("tenant_events.provisioning_body")}
         </Alert>
         <Box textAlign="center" padding="l">
-          <Spinner /> 接続待機中…
+          <Spinner /> {t("tenant_events.provisioning_spinner")}
         </Box>
       </SpaceBetween>
     );
@@ -165,17 +152,17 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
         description={`Tenant ID: ${tenantId}`}
         actions={
           <Button variant="normal" onClick={() => navigate("/tenants")}>
-            テナント一覧に戻る
+            {t("tenant_events.back_button")}
           </Button>
         }
       >
-        テナント Event 一覧
+        {t("tenant_events.header")}
       </Header>
 
       {error && (
         <Alert
           type="error"
-          header="読み込みに失敗しました"
+          header={t("tenant_events.error_header")}
           dismissible
           onDismiss={() => setError(null)}
         >
@@ -185,7 +172,7 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
 
       {items === null && !error ? (
         <Box textAlign="center" padding="l">
-          <Spinner /> 読み込み中…
+          <Spinner /> {t("tenant_events.loading")}
         </Box>
       ) : (
         <Table<EventSummary>
@@ -194,13 +181,13 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
           trackBy="eventId"
           empty={
             <Box textAlign="center" color="inherit" padding="xxl">
-              この tenant にはまだ Event がありません。
+              {t("tenant_events.empty")}
             </Box>
           }
           columnDefinitions={[
             {
               id: "name",
-              header: "Event 名",
+              header: t("tenant_events.col_name"),
               cell: (item) => (
                 <Link
                   fontSize="body-m"
@@ -218,13 +205,29 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
             },
             {
               id: "status",
-              header: "ステータス",
+              header: t("tenant_events.col_status"),
               cell: (item) => <Badge color={STATUS_COLOR[item.status]}>{item.status}</Badge>,
             },
-            { id: "teamCount", header: "チーム数", cell: (item) => item.teamCount },
-            { id: "problemCount", header: "問題数", cell: (item) => item.problemCount },
-            { id: "createdAt", header: "作成", cell: (item) => item.createdAt },
-            { id: "updatedAt", header: "更新", cell: (item) => item.updatedAt },
+            {
+              id: "teamCount",
+              header: t("tenant_events.col_team_count"),
+              cell: (item) => item.teamCount,
+            },
+            {
+              id: "problemCount",
+              header: t("tenant_events.col_problem_count"),
+              cell: (item) => item.problemCount,
+            },
+            {
+              id: "createdAt",
+              header: t("tenant_events.col_created_at"),
+              cell: (item) => item.createdAt,
+            },
+            {
+              id: "updatedAt",
+              header: t("tenant_events.col_updated_at"),
+              cell: (item) => item.updatedAt,
+            },
           ]}
         />
       )}
