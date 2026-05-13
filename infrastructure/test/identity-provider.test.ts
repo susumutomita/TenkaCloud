@@ -131,6 +131,31 @@ describe("IdentityProvider", () => {
       expect(body).toContain(consoleUrl);
     });
 
+    it("#660: 各 field (ユーザー名 / 一時パスワード / URL) が paragraph break (= 二重改行) で区切られるべき", () => {
+      // Gmail / Outlook は単一改行を space に re-flow するので、 fields は \n\n で区切らないと
+      // 1 行に潰れて読めなくなる (= PR-582 で起きた regression)。
+      const consoleUrl = "https://d123abc.cloudfront.net";
+      const { template } = synth("tenant-1", consoleUrl);
+      const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
+      const body =
+        (
+          userPool?.Properties as {
+            AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
+          }
+        )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
+      // 各 field の前後に \n\n がある (= paragraph break)
+      expect(body).toMatch(/\n\n■ ユーザー名: \{username\}\n\n/);
+      expect(body).toMatch(/\n\n■ 一時パスワード: \{####\}\n\n/);
+      expect(body).toMatch(/\n\n■ Username: \{username\}\n\n/);
+      // 言語間の divider が存在する (= 視覚的セクション区切り)
+      expect(body).toContain("═══");
+      // 言語 prefix が各セクション冒頭にある (= 受信者が読める段落をすぐ見つけられる)
+      expect(body).toContain("▼ 日本語");
+      expect(body).toContain("▼ English");
+      expect(body).toContain("▼ Español");
+      expect(body).toContain("▼ 中文 (简体)");
+    });
+
     it("#529: SMS message も InviteMessageTemplate 整合のため Cognito placeholder 込みで置かれるべき", () => {
       // Cognito CFn は InviteMessageTemplate 設定時に SMSMessage の placeholder 整合性を
       // check する (aws-cdk#30315 系)。SMS は使わないが空にできないので最短形で配置。

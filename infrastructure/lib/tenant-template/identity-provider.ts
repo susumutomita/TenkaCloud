@@ -9,81 +9,99 @@ const COGNITO_USERNAME = "{username}";
 const COGNITO_TEMP_PASSWORD = "{####}";
 
 /**
- * #529 i18n: 1 通の招待メールに 4 言語 (JA / EN / ES / ZH) を順に並べる。
+ * #529 i18n + #660: 1 通の招待メールに 4 言語 (JA / EN / ES / ZH) を順に並べる + Gmail 等で
+ * 単一改行が space に re-flow される問題を回避するため、 各 field を `\n\n` (paragraph
+ * break) で区切る。
  *
- * Cognito の `InviteMessageTemplate` は **UserPool あたり 1 言語**しか保持できないので、
- * locale-aware 配信を実現するには CustomMessage Lambda Trigger を立てる必要がある (= Lambda
- * 数増、コスト増)。代わりに「単一メール内で複数言語を縦に並べる」 multilingual fallback
- * 方式を採用 — 受信者は自分が読める段落を選べばよい。
+ * Cognito の `InviteMessageTemplate` は **UserPool あたり 1 言語**しか保持できない (= 4 言語
+ * 同梱で送る理由)、 かつ Cognito default 送信は **plain text** で HTML タグが literal text
+ * になる (= Option A: HTML 化 は SES verified identity が必要で infra 影響大、 ここでは
+ * Option B: plain text 整形強化 を採用)。
  *
- * 4 言語選定理由 (TenkaCloud 国際運用ターゲット):
- *   - 日本語 (JA): 主開発者の母語、初期 user base
- *   - 英語 (EN): de facto global lingua franca
- *   - スペイン語 (ES): 第 2 多話者言語 (= LATAM / Spain)
- *   - 中国語 (ZH): アジア圏での運用必須
- *
- * Phase 2 で `custom:locale` 属性 + CustomMessage Lambda Trigger に移行予定。
+ * Phase 2 で `custom:locale` 属性 + CustomMessage Lambda Trigger + SES への移行を予定。
  */
 function buildInviteEmailBody(consoleUrl: string): string {
-  const sections: string[][] = [
+  const divider = "═══════════════════════════════════════════";
+  const sections: readonly string[] = [
     // --- 日本語 ---
     [
+      "▼ 日本語",
+      "",
       "ようこそ TenkaCloud Battle / Challenge へ。",
+      "",
       "テナント管理コンソールへサインインするための一時アカウントを発行しました。",
       "",
-      `  ・ ユーザー名: ${COGNITO_USERNAME}`,
-      `  ・ 一時パスワード: ${COGNITO_TEMP_PASSWORD}`,
-      `  ・ サインイン URL: ${consoleUrl}`,
+      `■ ユーザー名: ${COGNITO_USERNAME}`,
       "",
-      "初回サインイン時に新しいパスワードを設定してください。",
-      "競技イベント (Event) の作成 / 競技者向け Portal URL の払い出しは",
-      "テナント管理コンソールから操作できます。",
-    ],
+      `■ 一時パスワード: ${COGNITO_TEMP_PASSWORD}`,
+      "",
+      `■ サインイン URL: ${consoleUrl}`,
+      "",
+      "初回サインイン時に新しいパスワードを設定してください。 競技イベント (Event) の作成 / 競技者向け Portal URL の払い出しは、 テナント管理コンソールから操作できます。",
+    ].join("\n"),
+
     // --- English ---
     [
+      "▼ English",
+      "",
       "Welcome to TenkaCloud Battle / Challenge.",
+      "",
       "A temporary account has been issued so you can sign in to the Tenant Admin Console.",
       "",
-      `  - Username: ${COGNITO_USERNAME}`,
-      `  - Temporary password: ${COGNITO_TEMP_PASSWORD}`,
-      `  - Sign-in URL: ${consoleUrl}`,
+      `■ Username: ${COGNITO_USERNAME}`,
       "",
-      "Set a new password on first sign-in. From the Tenant Admin Console you can",
-      "create competition Events and hand out Participant Portal URLs.",
-    ],
+      `■ Temporary password: ${COGNITO_TEMP_PASSWORD}`,
+      "",
+      `■ Sign-in URL: ${consoleUrl}`,
+      "",
+      "Set a new password on first sign-in. From the Tenant Admin Console you can create competition Events and hand out Participant Portal URLs.",
+    ].join("\n"),
+
     // --- Español ---
     [
+      "▼ Español",
+      "",
       "Bienvenido a TenkaCloud Battle / Challenge.",
+      "",
       "Se ha emitido una cuenta temporal para iniciar sesión en la consola de administración de inquilinos.",
       "",
-      `  - Usuario: ${COGNITO_USERNAME}`,
-      `  - Contraseña temporal: ${COGNITO_TEMP_PASSWORD}`,
-      `  - URL de inicio de sesión: ${consoleUrl}`,
+      `■ Usuario: ${COGNITO_USERNAME}`,
       "",
-      "Establezca una nueva contraseña al iniciar sesión por primera vez. Desde la consola",
-      "puede crear eventos de competición y emitir URLs del portal para los participantes.",
-    ],
+      `■ Contraseña temporal: ${COGNITO_TEMP_PASSWORD}`,
+      "",
+      `■ URL de inicio de sesión: ${consoleUrl}`,
+      "",
+      "Establezca una nueva contraseña al iniciar sesión por primera vez. Desde la consola puede crear eventos de competición y emitir URLs del portal para los participantes.",
+    ].join("\n"),
+
     // --- 中文 (简体) ---
     [
+      "▼ 中文 (简体)",
+      "",
       "欢迎使用 TenkaCloud Battle / Challenge。",
+      "",
       "已为您颁发临时账号,用于登录租户管理控制台。",
       "",
-      `  · 用户名: ${COGNITO_USERNAME}`,
-      `  · 临时密码: ${COGNITO_TEMP_PASSWORD}`,
-      `  · 登录地址: ${consoleUrl}`,
+      `■ 用户名: ${COGNITO_USERNAME}`,
       "",
-      "首次登录时请设置新密码。在租户管理控制台中,",
-      "您可以创建比赛活动 (Event) 并发放参赛者门户 URL。",
-    ],
+      `■ 临时密码: ${COGNITO_TEMP_PASSWORD}`,
+      "",
+      `■ 登录地址: ${consoleUrl}`,
+      "",
+      "首次登录时请设置新密码。 在租户管理控制台中,您可以创建比赛活动 (Event) 并发放参赛者门户 URL。",
+    ].join("\n"),
   ];
+
   const footer = [
-    "",
-    "If this email looks unfamiliar, please discard it. / 本メールに心当たりがない場合は破棄してください。",
-    "Si este correo no le resulta familiar, descártelo. / 如果您不认识此邮件,请忽略。",
+    "If this email looks unfamiliar, please discard it.",
+    "本メールに心当たりがない場合は破棄してください。",
+    "Si este correo no le resulta familiar, descártelo.",
+    "如果您不认识此邮件,请忽略。",
     "",
     "-- TenkaCloud Operations / 運営 / Operaciones / 运营",
-  ];
-  return [...sections.map((s) => s.join("\n")), footer.join("\n")].join("\n\n");
+  ].join("\n");
+
+  return [...sections, footer].join(`\n\n${divider}\n\n`);
 }
 
 interface IdentityProviderProps {
