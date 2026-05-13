@@ -141,6 +141,15 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       integration,
     });
 
+    // Issue #658: Provisioning Jobs page が叩く CodePipeline 実行履歴 route。
+    // PR-683 で Lambda handler / IAM は追加したが API GW route 登録漏れで "Failed to fetch"
+    // (= CORS preflight が 404 に当たって TypeError) が出ていた。本 PR で追加。
+    httpApi.addRoutes({
+      path: "/admin/insight/pipeline-executions",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+
     this.apiUrl = httpApi.apiEndpoint;
 
     new CfnOutput(this, "AdminInsightApiUrl", {

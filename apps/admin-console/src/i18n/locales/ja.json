@@ -72,6 +72,23 @@
     "tier_advanced": "Advanced — 共有環境 (Pooled)",
     "tier_platinum": "Platinum — 専用環境 (Silo: 専用 Cognito / Application Console)"
   },
+  "jobs_page": {
+    "header": "Provisioning Jobs",
+    "description": "tenkacloud-saas-pipeline の最近 50 件の execution。60 秒ごとに自動更新します。",
+    "not_configured_header": "AdminInsight API が未配線です",
+    "not_configured_body": "本環境では admin-insight API URL が runtime-config に設定されていません。Phase 2 deploy を完了してください。",
+    "forbidden_header": "権限がありません",
+    "forbidden_body": "この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。",
+    "error_header": "読み込みに失敗しました",
+    "loading": "読み込み中…",
+    "empty": "Pipeline execution の履歴がありません。tenant をまだ作成していない可能性があります。",
+    "col_execution_id": "Execution ID",
+    "col_status": "状態",
+    "col_start_time": "開始時刻",
+    "col_elapsed": "経過時間",
+    "col_last_update": "最終更新",
+    "open_console_aria": "Execution {executionId} を AWS Console で開く"
+  },
   "tenant_events": {
     "missing_tenant_id": "tenantId が指定されていません。",
     "not_configured_header": "AdminInsight API が未配線です",

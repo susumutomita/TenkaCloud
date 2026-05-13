@@ -15,6 +15,7 @@ import {
 } from "../api/admin-drill-down";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { interpolate, useT } from "../i18n";
 
 /**
  * Issue #658: admin-console の Tenant Provisioning Jobs 一覧 page。
@@ -61,6 +62,7 @@ function formatElapsed(startIso: string | undefined, endIso: string | undefined)
 
 export function JobsPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const t = useT();
   const [items, setItems] = useState<readonly PipelineExecutionItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -108,13 +110,15 @@ export function JobsPage({ config }: { config: AppConfig }) {
     () => [
       {
         id: "executionId",
-        header: "Execution ID",
+        header: t("jobs_page.col_execution_id"),
         cell: (item: PipelineExecutionItem) => (
           <Button
             variant="inline-link"
             href={item.consoleUrl}
             target="_blank"
-            ariaLabel={`Open execution ${item.executionId} in AWS Console`}
+            ariaLabel={interpolate(t("jobs_page.open_console_aria"), {
+              executionId: item.executionId,
+            })}
           >
             <code>{item.executionId.slice(0, 12)}…</code> ↗
           </Button>
@@ -122,61 +126,57 @@ export function JobsPage({ config }: { config: AppConfig }) {
       },
       {
         id: "status",
-        header: "状態",
+        header: t("jobs_page.col_status"),
         cell: (item: PipelineExecutionItem) => (
           <Badge color={colorFor(item.status)}>{item.status}</Badge>
         ),
       },
       {
         id: "startTime",
-        header: "開始時刻",
+        header: t("jobs_page.col_start_time"),
         cell: (item: PipelineExecutionItem) => item.startTimeIso ?? "—",
       },
       {
         id: "elapsed",
-        header: "経過時間",
+        header: t("jobs_page.col_elapsed"),
         cell: (item: PipelineExecutionItem) =>
           formatElapsed(item.startTimeIso, item.lastUpdateTimeIso),
       },
       {
         id: "lastUpdate",
-        header: "最終更新",
+        header: t("jobs_page.col_last_update"),
         cell: (item: PipelineExecutionItem) => item.lastUpdateTimeIso ?? "—",
       },
     ],
-    [],
+    [t],
   );
 
   if (notConfigured) {
     return (
-      <Alert type="info" header="AdminInsight API が未配線です">
-        本環境では admin-insight API URL が runtime-config に設定されていません。Phase 2 deploy
-        を完了してください。
+      <Alert type="info" header={t("jobs_page.not_configured_header")}>
+        {t("jobs_page.not_configured_body")}
       </Alert>
     );
   }
 
   if (forbidden) {
     return (
-      <Alert type="error" header="権限がありません">
-        この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。
+      <Alert type="error" header={t("jobs_page.forbidden_header")}>
+        {t("jobs_page.forbidden_body")}
       </Alert>
     );
   }
 
   return (
     <SpaceBetween size="l">
-      <Header
-        variant="h1"
-        description="tenkacloud-saas-pipeline の最近 50 件の execution。60 秒ごとに自動更新します。"
-      >
-        Provisioning Jobs
+      <Header variant="h1" description={t("jobs_page.description")}>
+        {t("jobs_page.header")}
       </Header>
 
       {error && (
         <Alert
           type="error"
-          header="読み込みに失敗しました"
+          header={t("jobs_page.error_header")}
           dismissible
           onDismiss={() => setError(null)}
         >
@@ -186,7 +186,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
 
       {items === null && !error ? (
         <Box textAlign="center" padding="l">
-          <Spinner /> 読み込み中…
+          <Spinner /> {t("jobs_page.loading")}
         </Box>
       ) : (
         <Table<PipelineExecutionItem>
@@ -195,7 +195,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
           trackBy="executionId"
           empty={
             <Box textAlign="center" color="inherit" padding="xxl">
-              Pipeline execution の履歴がありません。tenant をまだ作成していない可能性があります。
+              {t("jobs_page.empty")}
             </Box>
           }
           columnDefinitions={columns}
