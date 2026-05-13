@@ -26,6 +26,7 @@ import {
 } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
 
 /**
  * ADR-011 #590 Phase 1.A: 60s polling 周期。SSE / WebSocket は禁止 (Lambda 運用と整合せず)。
@@ -64,6 +65,8 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   const [tenants, setTenants] = useState<Tenant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDeprovision, setPendingDeprovision] = useState<Tenant | null>(null);
+  // #657: "In progress" の経過時間表示用 wall clock。 60 秒ごとに更新し severity 再評価。
+  const [nowMs, setNowMs] = useState(() => Date.now());
   // ADR-011 #590 Phase 1.A: tenantId → 集計 の lookup。
   // - null = まだ fetch していない / AdminInsight API が未配線 (= column hide)
   // - {} = fetch 済みで対象 tenant が無い (= 集計 0 表示)
@@ -115,6 +118,12 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       window.clearInterval(handle);
     };
   }, [auth.tokens?.idToken, tenants, config]);
+
+  // #657: 経過時間の severity を 60 秒周期で再評価。 setInterval は cleanup 必須。
+  useEffect(() => {
+    const handle = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(handle);
+  }, []);
 
   const confirmDeprovision = async () => {
     if (!api || !pendingDeprovision) return;
@@ -197,9 +206,29 @@ export function TenantListPage({ config }: { config: AppConfig }) {
           {
             id: "status",
             header: "状態",
-            cell: (t) => (
-              <Badge color={tenantStatusBadgeColor(t.tenantStatus)}>{t.tenantStatus}</Badge>
-            ),
+            cell: (t) => {
+              const badge = (
+                <Badge color={tenantStatusBadgeColor(t.tenantStatus)}>{t.tenantStatus}</Badge>
+              );
+              if (!isInProgress(t.tenantStatus)) return badge;
+              const progress = computeTenantProgress({ createdAt: t.createdAt, nowMs });
+              const progressColor =
+                progress.severity === "danger"
+                  ? "text-status-error"
+                  : progress.severity === "warning"
+                    ? "text-status-warning"
+                    : "text-status-info";
+              return (
+                <SpaceBetween direction="vertical" size="xxs">
+                  {badge}
+                  <Box variant="small" color={progressColor}>
+                    {progress.label}
+                    {progress.severity === "danger" ? " · 失敗の可能性" : ""}
+                    {progress.severity === "warning" ? " · 想定より長い" : ""}
+                  </Box>
+                </SpaceBetween>
+              );
+            },
           },
           // ADR-011 #590 Phase 1.A: AdminInsight 集計 column。insightByTenantId が null
           // (= API 未配線 / fetch 失敗 / 403) なら cell は "—" を返し、deprovision 済みは
