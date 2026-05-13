@@ -1,4 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// #686: route tests は `app.request()` で JWT を bypass するため DEFAULT_TENANT_ID env で
+// tenantId を inject する。 prod では Cognito JWT が必ず claim を載せる前提。
+beforeAll(() => {
+  process.env.DEFAULT_TENANT_ID = "tenant-test";
+});
 
 const mocks = vi.hoisted(() => ({
   startDeployment: vi.fn(),

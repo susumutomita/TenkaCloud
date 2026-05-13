@@ -1,5 +1,12 @@
 import { StatusCodes } from "http-status-codes";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// #686: `resolveTenantId` は JWT claim 欠落で MissingTenantClaimError を throw する。
+// route tests は `app.request()` で JWT を bypass するため、 dev override env で tenantId を
+// inject する。 prod では Cognito JWT が必ず claim を載せる前提なのでこの env は使わない。
+beforeAll(() => {
+  process.env.DEFAULT_TENANT_ID = "tenant-test";
+});
 
 const mocks = vi.hoisted(() => ({
   createCompetitorAccount: vi.fn(),
