@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-013: Disruption Phase 2 — condition-triggered runtime disruption</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-013: Disruption Phase 2 — condition-triggered runtime disruption</h1>
+  <p><em>platform が観測条件で sub-second に disruption を trigger する設計</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Draft</span> 2026-05-13</div>
+    <div><b>Related:</b>
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (Disruption Phase 1 = self-triggered Scheduler)
+    </div>
+    <div><b>Tracking:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/615">#615</a></div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>ADR-012 で確立した Disruption Phase 1 は <strong>self-triggered</strong> パターン: 問題の <code>template.yaml</code> に bake された EventBridge Scheduler + Disruption Lambda が <code>deploy 時刻 + offset</code> で発火する。 platform は cross-account write 権限を持たず、 全ロジックが競技者 account 内で完結する。</p>
+
+<p>Phase 1 の制約:</p>
+
+<ul>
+<li><strong>静的 timing</strong>: 発火タイミングは deploy 時刻 + CFn parameter の固定 offset。 deploy 後に動的変更不可 (= CFn update が要る)</li>
+<li><strong>条件に反応できない</strong>: 競技者のスコアが伸びすぎたら難度を上げる / 攻撃が止まったら spike を入れる、 のような condition-triggered な disruption を組めない</li>
+<li><strong>runtime 強度調整不可</strong>: operator が runtime に「latency を 200ms → 400ms に」 のような動的調整ができない</li>
+</ul>
+
+<p>これらは Battle のゲーム性を強化する上で重要だが、 ADR-012 では「まず動くものを ship する」 ため Phase 1 (self-triggered) で MVP 化し、 condition-triggered は本 ADR で扱う方針にした。</p>
+</section>
+
+<section>
+<h2>Goals</h2>
+
+<ol>
+<li><strong>observation → action loop</strong>: platform scoring Lambda が観測条件 (= 競技者 score / 経過時間 / endpoint health / 任意 CW metric) を検知し、 該当 deployment の disruption を sub-second で発火させる</li>
+<li><strong>cross-account 発火</strong>: 競技者 account 内の Disruption Lambda を、 operator account 側から (EventBridge cross-account bus 経由で) trigger する</li>
+<li><strong>runtime 動的 parameter</strong>: operator UI から「latency を変える」 「disruption を一時 disable する」 等の調整を行える</li>
+<li><strong>blast radius は 1 team 1 deploy</strong>: Phase 1 と同じく、 1 競技者 deployment にしか影響しない</li>
+<li><strong>fail-safe</strong>: platform から trigger できなくなったら自動 fallback で Phase 1 の Scheduler だけ動作する (= 重要 disruption は確定で発火する)</li>
+</ol>
+</section>
+
+<section>
+<h2>Decision (= 仮)</h2>
+
+<h3>D1: trigger 経路は cross-account EventBridge bus + Disruption Lambda 直起動</h3>
+
+<p>platform 側 scoring Lambda が「発火条件」 を満たすと、 operator account の専用 EventBridge bus (= <code>tc-disruption-trigger</code>) に <code>{ detailType: &lt;eventDetailType&gt;, detail: { competitorAccountId, deploymentId, parameters } }</code> 形式 event を put する。 cross-account rule が競技者 account の bus に forward し、 competitor 側の rule が disruption Lambda を invoke する。 disruption Lambda の I/F は Phase 1 と同じ (= 同 Lambda が両 path をサポート)。</p>
+
+<p>metadata <code>disruptions[].eventDetailType</code> は本 Phase で初めて意味を持つ (= Phase 1 では将来枠 placeholder だった)。</p>
+
+<h3>D2: 観測条件は scoring Lambda 内 DSL (= metadata 拡張)</h3>
+
+<p><code>metadata.disruptions[].triggers[]</code> を新設し、 観測条件を宣言的に書く:</p>
+
+<pre>"disruptions": [
+  {
+    "id": "ec2-latency-injection",
+    "name": "EC2 ネットワーク遅延注入",
+    "eventDetailType": "DegradedDisruptionFired",
+    "parameters": { "delayMs": 200, "device": "eth0" },
+    "triggers": [
+      // (a) Phase 1 と同じ self-fire (= fallback)
+      { "kind": "after-deploy", "afterMinutes": 60 },
+      // (b) 新: condition-triggered
+      { "kind": "team-score-above", "threshold": 5000 },
+      { "kind": "phase-entered", "phaseName": "degraded" }
+    ]
+  }
+]</pre>
+
+<p>scoring Lambda は per-tick で各 deployment の trigger 条件を eval し、 condition 真化のタイミングで cross-account event を put する。 同一 disruption の重複発火は idempotency token (= <code>${deploymentId}#${disruptionId}</code>) で抑制。</p>
+
+<h3>D3: cross-account 信頼境界は EventBridge resource policy</h3>
+
+<p>operator account の bus に <code>events:PutEvents</code> を許可する resource policy を、 競技者 account の bus 側に書く。 つまり cross-account から event を流す権利は <code>arn:aws:iam::&lt;operator&gt;:role/TenkaCloud-*</code> に限定。 競技者の bus 側 rule が detailType match で Lambda を invoke する。 Lambda の execution role は Phase 1 で既に minimum 必要 IAM (SSM RunCommand / S3 / 等) を持っているため再利用。</p>
+
+<h3>D4: operator UI で runtime parameter 調整</h3>
+
+<p>application-admin-console に「Disruption console」 page を追加。 deployment 単位で当該 disruption の parameters を viewing / editing する。 編集は DDB (新規 <code>DisruptionOverrides</code> table)、 scoring Lambda が tick で読んで cross-account event の parameters field に反映する (= 競技者 Lambda は metadata の値ではなく event detail の値を使う)。</p>
+
+<h3>D5: fail-safe = Phase 1 Scheduler は常に保持</h3>
+
+<p>operator 側 trigger 経路が機能不全になった場合 (= cross-account permission 切れ、 scoring Lambda crash 等) でも、 Phase 1 の self-fire Scheduler が deploy 時刻 + offset で確定発火する。 重要 disruption (= microservice-migration の <code>tc qdisc</code> 等) は 「両方の経路がある」 状態を維持し、 condition-triggered は augmentation として位置付ける。</p>
+</section>
+
+<section>
+<h2>Open Questions</h2>
+
+<ol>
+<li><strong>idempotency 保証</strong>: cross-account event が重複到達するケース (= EventBridge at-least-once 配信) に対し、 競技者 Lambda 側でどう冪等にするか。 SSM Parameter で「最後の発火 idempotency token」 を読むか、 event ID + S3 GetObject で重複検出するか。</li>
+<li><strong>operator UI の権限境界</strong>: tenant admin が他 tenant の disruption を弄れないよう RBAC を細かく切る必要があるか (= multi-tenant 環境での切替)。</li>
+<li><strong>observation latency</strong>: scoring Lambda が 1 分 polling なので最短発火は 1 分後。 sub-second 反応が必要なら scoring を SQS-based event-driven に変える必要あり (= 別 ADR)。</li>
+<li><strong>metadata version</strong>: <code>triggers[]</code> 追加は SCHEMA 拡張なので問題 metadata の version 互換性が要る。 Phase 1-only 問題 (= triggers 未宣言) は self-fire のみ動く。 新規問題は条件付きで triggers を追加可能。</li>
+<li><strong>同一 disruption × 複数 triggers の semantics</strong>: 「after-deploy 60 分」 と 「team-score-above 5000」 が両方 OR で発火するのか AND か。 OR で「最初に true になった方」 が trigger される仕様にする (= 直感的) を提案。</li>
+<li><strong>無効化 trigger</strong>: 一度発火した disruption を「rollback」 する逆 trigger (= 例: latency 撤去) は本 Phase 2 で扱うか、 Phase 3 で扱うか。</li>
+<li><strong>事前告知 UI</strong>: condition-triggered は portal の countdown timeline (= Phase 4 で実装) と整合しない。 「team-score-above 5000」 のような条件は competitor から見えづらい。 portal で 「次の disruption は score 4500 で発火 (今 4200)」 のような可視化を出すか、 隠すか。</li>
+</ol>
+</section>
+
+<section>
+<h2>Rollout</h2>
+
+<table>
+<thead><tr><th>Phase</th><th>内容</th><th>担当</th></tr></thead>
+<tbody>
+  <tr>
+    <td>0</td>
+    <td>本 ADR の Open questions を user と一緒に解消、 Status を Draft → Proposed に移す</td>
+    <td>Claude (= ADR 改訂)</td>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>SCHEMA に <code>triggers[]</code> 追加 (Schema 互換性: optional)、 既存 Phase 1 metadata は無変更で OK</td>
+    <td>Claude</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>cross-account EventBridge bus + resource policy + 競技者 account 側 Rule の CDK</td>
+    <td>user (= インフラ)</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>scoring Lambda に triggers eval + cross-account PutEvents 実装</td>
+    <td>Claude</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>application-admin-console に Disruption console page + <code>DisruptionOverrides</code> table</td>
+    <td>Claude</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>microservice-migration-battle の disruption に condition trigger を追加 (= POC integration)</td>
+    <td>Claude</td>
+  </tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Positive</h3>
+
+<ul>
+<li>Battle のゲーム性が高まる (= 競技者の行動に reactive な disruption)</li>
+<li>operator が runtime に競技難度を調整できる</li>
+<li>self-fire fallback で「platform 障害でも重要 disruption は確定発火」 が保たれる</li>
+</ul>
+
+<h3>Negative</h3>
+
+<ul>
+<li>cross-account permission の設計が増える (= operator account → 競技者 account に PutEvents 権限を渡す、 セキュリティレビュー対象)</li>
+<li>metadata 表現が複雑化 (= <code>triggers[]</code> の semantics を author に学習させる)</li>
+<li>competitor 側から見ると 「いつ発火するか分からない」 disruption が出るので、 ゲームバランス調整が難しくなる</li>
+</ul>
+
+<h3>Risks</h3>
+
+<ul>
+<li><strong>operator account compromise</strong>: cross-account 経路を使うため、 operator account の侵害が直ちに全競技者 account の disruption Lambda 起動権限を渡す。 minimum-privilege + IAM resource policy + GuardDuty 監視で緩和する。</li>
+<li><strong>cross-account bus 障害</strong>: EventBridge cross-account 配信は SLA 99.99% だが、 障害時には condition-triggered だけが停止する (= self-fire は引き続き発火、 D5 fail-safe 設計)。</li>
+</ul>
+</section>
+
+<section>
+<h2>References</h2>
+
+<ul>
+<li><a href="./adr-012-problem-plugin-architecture.html">ADR-012: Problem plugin architecture</a> — Phase 1 (self-triggered Scheduler) を含む</li>
+<li><a href="https://github.com/susumutomita/TenkaCloud/issues/615">Issue #615</a> — 本 ADR の tracking issue</li>
+<li>AWS docs: <a href="https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-cross-account.html">EventBridge cross-account events</a></li>
+</ul>
+</section>
+
+</body>
+</html>
