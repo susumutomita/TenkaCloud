@@ -16,6 +16,12 @@ export interface ResolvedEndpoint {
   readonly label?: string;
   readonly description?: string;
   readonly overridable: boolean;
+  /**
+   * 競技者画面の診断用 (#703): 該当 slot の default URL が引かれる元 CFn Output key。
+   * `defaultUrl` が未取得時に「(CFn Outputs.${defaultKey} 待ち)」 と表示するため UI に露出。
+   * key 自体は metadata.json に既に公開済 (= 機密情報ではない)。
+   */
+  readonly defaultKey: string;
   readonly defaultUrl?: string;
   readonly overrideUrl?: string;
   readonly effectiveUrl?: string;
@@ -52,6 +58,7 @@ export function resolveEndpoints(args: {
       ...(slot.label !== undefined ? { label: slot.label } : {}),
       ...(slot.description !== undefined ? { description: slot.description } : {}),
       overridable: slot.overridable,
+      defaultKey: slot.default.key,
       ...(defaultUrl !== undefined ? { defaultUrl } : {}),
       ...(overrideUrl !== undefined ? { overrideUrl } : {}),
       ...(effectiveUrl !== undefined ? { effectiveUrl } : {}),
