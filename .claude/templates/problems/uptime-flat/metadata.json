@@ -4,6 +4,7 @@
   "name": "__PROBLEM_NAME__",
   "category": "Battle",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "60〜90 分",
   "shortDescription": "1 endpoint を稼働させ続けて defense する Battle 問題の skeleton (uptime-flat 採点)。",
