@@ -1,17 +1,21 @@
 /**
- * Issue #653: SBT default の SystemAdmin 招待メール本文 (`http://localhost` を埋める)
+ * Issue #653 / #714: SBT default の SystemAdmin 招待メール本文 (`http://localhost` を埋める)
  * を override するためのテンプレ生成。 admin-console origin が解決できないときは
  * 運営連絡先を促す fallback 文面を返す (= Phase 1 deploy 時)、 解決済なら CloudFront
  * URL を本文に埋める (= Phase 3 再 deploy 後)。
+ *
+ * #714: 旧実装は ja + en を `—` で連結した 1 通だったが、 Gmail 等で改行が collapse されて
+ * 「1 段落の長文」 になり可読性が低かった。 English-only に統一し、 各セクションを空行で
+ * 分離する (= preview で改行が落ちても各 key:value が独立可読)。
  */
 
-const FALLBACK_URL_PLACEHOLDER = "(deploy 完了後の admin-console URL は運営にお問い合わせください)";
+const FALLBACK_URL_PLACEHOLDER =
+  "(Admin console URL will be provided after deploy. Please contact your operator.)";
 
-export const INVITE_EMAIL_SUBJECT =
-  "TenkaCloud Admin Console 招待 / Your TenkaCloud Admin Console invitation";
+export const INVITE_EMAIL_SUBJECT = "Your TenkaCloud Admin Console invitation";
 
 /**
- * 招待メール本文を組み立てる。 ja + en 並列で 1 通に並べる (PR-582 同様の方針)。
+ * 招待メール本文を組み立てる。 English 単一ロケール、 各 key を 1 行ずつ。
  * Cognito placeholder の `{username}` / `{####}` はそのまま埋め、 Cognito 側で展開させる。
  */
 export function buildInviteEmailBody(adminConsoleOrigin: string | undefined): string {
@@ -20,15 +24,6 @@ export function buildInviteEmailBody(adminConsoleOrigin: string | undefined): st
       ? adminConsoleOrigin
       : FALLBACK_URL_PLACEHOLDER;
   return [
-    "TenkaCloud Admin Console へようこそ。",
-    "",
-    `URL: ${url}`,
-    "ユーザー名: {username}",
-    "仮パスワード: {####}",
-    "",
-    "初回ログイン時に新しいパスワードの設定を求められます。",
-    "",
-    "—",
     "Welcome to TenkaCloud Admin Console.",
     "",
     `URL: ${url}`,
