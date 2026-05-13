@@ -19,6 +19,41 @@
   ],
   "cfnTemplate": "template.yaml",
   "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Microservice Migration Battle",
+      "shortDescription": "Race to split a 3-service monolith (users / orders / catalog) on EC2 into Lambda + API Gateway / ECS Fargate / App Runner hosting tiers.",
+      "description": "A Battle problem where teams split a monolith of 3 services (users / orders / catalog) running on a single EC2 into 3 different hosting platforms — Lambda + API Gateway, Amazon ECS (Fargate), and AWS App Runner — within the competition time.\n\nAfter deploy completes, each team receives the base URL of the monolith running on EC2. The operator scoring engine polls the 3 scoring endpoints (`/users/score` / `/orders/score` / `/catalog/score`) every minute and adds/subtracts points based on responses.\n\n## Learning goals\n\n- Experience progressive monolith → microservices migration (strangler fig pattern)\n- Compare Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate)\n- Decide which service to split first to maximize score\n- Find and remove the intentionally-planted slow code path",
+      "learningGoals": [
+        "Experience splitting a monolith into 3 hosting tiers (Lambda / ECS Fargate / App Runner)",
+        "Compare serverless / managed containers / orchestration tradeoffs on real infrastructure",
+        "Judge migration priority under EC2 degradation and legacy-codepath constraints",
+        "Find and remove the intentionally-planted slow code paths"
+      ]
+    },
+    "es": {
+      "name": "Microservice Migration Battle",
+      "shortDescription": "Carrera para dividir un monolito de 3 servicios (users / orders / catalog) en EC2 a hospedajes Lambda + API Gateway / ECS Fargate / App Runner.",
+      "description": "Battle donde los equipos dividen un monolito de 3 servicios (users / orders / catalog) en un solo EC2 a 3 plataformas de hospedaje diferentes — Lambda + API Gateway, Amazon ECS (Fargate), y AWS App Runner — dentro del tiempo de competición.\n\nTras el despliegue, cada equipo recibe la URL base del monolito en EC2. El motor de puntuación del operador hace polling de los 3 endpoints de puntuación (`/users/score` / `/orders/score` / `/catalog/score`) cada minuto y suma / resta puntos según las respuestas.\n\n## Objetivos de aprendizaje\n\n- Experimentar la migración progresiva monolito → microservicios (patrón strangler fig)\n- Comparar Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate)\n- Decidir qué servicio dividir primero para maximizar puntuación\n- Encontrar y eliminar el slow code path intencionalmente plantado",
+      "learningGoals": [
+        "Experimentar la división de un monolito en 3 hospedajes (Lambda / ECS Fargate / App Runner)",
+        "Comparar tradeoffs de serverless / contenedores gestionados / orquestación en infraestructura real",
+        "Juzgar la prioridad de migración bajo restricciones de degradación de EC2 y legacy-codepath",
+        "Encontrar y eliminar slow code paths plantados intencionalmente"
+      ]
+    },
+    "zh": {
+      "name": "Microservice Migration Battle (微服务迁移大战)",
+      "shortDescription": "在 EC2 上共存的 3 个服务 (users / orders / catalog) 拆分到 Lambda + API Gateway / ECS Fargate / App Runner 的 3 种托管的竞赛。",
+      "description": "在竞赛时间内,将 EC2 上共存的 3 个服务 (users / orders / catalog) 单体拆分到 Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner 三种不同托管的 Battle 题目。\n\n部署完成后,每个团队会获得 EC2 上运行的单体的基础 URL。运营方评分引擎每分钟 polling 3 个评分端点 (`/users/score` / `/orders/score` / `/catalog/score`),根据响应加减分。\n\n## 学习目标\n\n- 实践单体到微服务的逐步迁移 (strangler fig 模式)\n- 对比 Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate)\n- 从评分最大化的角度判断应优先拆分哪个服务\n- 解读并移除代码中故意植入的「慢速代码路径」",
+      "learningGoals": [
+        "体验单体到 3 种托管 (Lambda / ECS Fargate / App Runner) 的微服务拆分",
+        "在真实基础设施上比较 serverless / 托管容器 / orchestration 的权衡",
+        "在 EC2 劣化和 legacy code path 约束下判断迁移优先级",
+        "解读并移除故意植入的慢速代码路径"
+      ]
+    }
+  },
   "endpoints": [
     {
       "slot": "users",

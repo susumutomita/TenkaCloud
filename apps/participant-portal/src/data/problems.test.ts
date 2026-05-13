@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findProblemMetadata } from "./problems";
+import { findProblemMetadata, resolveLocalizedNarrative } from "./problems";
 
 /**
  * #550: Portal の build-time catalog が `problems/<category>/<id>/metadata.json` を
@@ -96,5 +96,56 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       const m = findProblemMetadata(id);
       expect(m?.visibility).toBe("public");
     }
+  });
+
+  // Issue #583 Phase 5: i18n override の locale fallback chain。
+  describe("resolveLocalizedNarrative (Phase 5)", () => {
+    it("locale='ja' なら top-level の値をそのまま返すべき", () => {
+      const m = findProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m!, "ja");
+      expect(r.name).toBe("Hello World (Sample)");
+      expect(r.description).toContain("Challenge / flag 提出形式");
+    });
+
+    it("locale='en' の override が宣言されていれば英語を返すべき (hello-world)", () => {
+      const m = findProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m!, "en");
+      expect(r.shortDescription).toMatch(/Minimal Challenge/);
+      expect(r.description).toMatch(/Deploying creates a single SSM Parameter/);
+      expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("locale='zh' の override が宣言されていれば中文を返すべき (hello-world)", () => {
+      const m = findProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m!, "zh");
+      expect(r.name).toContain("示例");
+    });
+
+    it("全 4 既存問題が en / es / zh の翻訳を持つべき (Phase 5.A + 5.C 完了)", () => {
+      for (const id of [
+        "hello-world",
+        "hello-world-battle",
+        "security-battle-royale",
+        "microservice-migration-battle",
+      ]) {
+        const m = findProblemMetadata(id);
+        expect(m?.i18n?.en?.name).toBeTruthy();
+        expect(m?.i18n?.es?.name).toBeTruthy();
+        expect(m?.i18n?.zh?.name).toBeTruthy();
+        expect(m?.i18n?.en?.learningGoals?.length ?? 0).toBeGreaterThan(0);
+      }
+    });
+
+    it("security-battle-royale の locale='en' で英語翻訳を返すべき", () => {
+      const m = findProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m!, "en");
+      expect(r.shortDescription).toMatch(/Attack\/defend/);
+    });
+
+    it("locale='es' で security-battle-royale もスペイン語翻訳を返すべき", () => {
+      const m = findProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m!, "es");
+      expect(r.shortDescription).toMatch(/Ataca\/defiende/);
+    });
   });
 });
