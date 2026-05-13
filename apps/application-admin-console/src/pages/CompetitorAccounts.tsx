@@ -11,7 +11,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, useApiClient } from "../api/client";
+import { useApiClient } from "../api/client";
 import {
   type CompetitorAccountSummary,
   type CreateCompetitorAccountResponse,
@@ -23,12 +23,14 @@ import {
   verifyCompetitorAccount,
 } from "../api/competitor-accounts-client";
 import { CopyableField } from "../components/CopyableField";
+import { FriendlyErrorAlert } from "../components/FriendlyErrorAlert";
 import type { AppConfig } from "../config";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
 } from "../lib/competitor-bootstrap";
+import { type FriendlyError, toFriendlyError } from "../lib/friendly-error";
 import { computeRotationAge, ROTATION_AGE_WARNING_DAYS } from "../lib/rotation-age";
 
 const ACCOUNT_ID_RE = /^\d{12}$/;
@@ -46,7 +48,7 @@ const ALIAS_MAX = 120;
 export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const [items, setItems] = useState<readonly CompetitorAccountSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
   const [rotateTarget, setRotateTarget] = useState<CompetitorAccountSummary | null>(null);
@@ -64,7 +66,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       setItems(res.items);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toFriendlyError(err));
     }
   }, [apiClient]);
 
@@ -80,8 +82,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         await verifyCompetitorAccount(apiClient, awsAccountId);
         await reload();
       } catch (err) {
-        const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
-        setError(message);
+        setError(toFriendlyError(err));
       } finally {
         setVerifyInFlight(null);
       }
@@ -97,8 +98,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       setDeleteTarget(null);
       await reload();
     } catch (err) {
-      const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
-      setError(message);
+      setError(toFriendlyError(err));
     } finally {
       setDeleteInFlight(false);
     }
@@ -113,8 +113,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       setShowSecret(res);
       await reload();
     } catch (err) {
-      const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
-      setError(message);
+      setError(toFriendlyError(err));
     } finally {
       setRotateInFlight(false);
     }
@@ -214,11 +213,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         Competitor Accounts
       </Header>
 
-      {error && (
-        <Alert type="error" header="エラー">
-          {error}
-        </Alert>
-      )}
+      {error && <FriendlyErrorAlert error={error} />}
 
       <Table
         items={items ?? []}
@@ -344,7 +339,7 @@ function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountMo
   const [region, setRegion] = useState("ap-northeast-1");
   const [competitorRoleName, setCompetitorRoleName] = useState("TenkaCloud-CompetitorDeploy-Role");
   const [inFlight, setInFlight] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
 
   const reset = () => {
     setAwsAccountId("");
@@ -379,8 +374,7 @@ function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountMo
       reset();
       onSuccess(res);
     } catch (err) {
-      const message = err instanceof ApiError ? `${err.status}: ${err.message}` : String(err);
-      setError(message);
+      setError(toFriendlyError(err));
     } finally {
       setInFlight(false);
     }
@@ -410,11 +404,7 @@ function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountMo
       }
     >
       <SpaceBetween size="m">
-        {error && (
-          <Alert type="error" header="登録に失敗しました">
-            {error}
-          </Alert>
-        )}
+        {error && <FriendlyErrorAlert error={error} />}
         <FormField
           label="AWS Account ID"
           description="12 桁の数字"
