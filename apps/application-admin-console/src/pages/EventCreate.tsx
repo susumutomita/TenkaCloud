@@ -12,7 +12,7 @@ import Multiselect, { type MultiselectProps } from "@cloudscape-design/component
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { type ApiClient, useApiClient } from "../api/client";
 import {
@@ -23,6 +23,7 @@ import { createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
+import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
 
 const NAME_MAX = 120;
 // MUST match infrastructure/lib/problem-deploy/handlers/event-handler/types.ts (zod schema)。
@@ -83,23 +84,38 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     readonly CompetitorAccountSummary[] | null
   >(null);
   const [accountsLoadError, setAccountsLoadError] = useState<string | null>(null);
-  useEffect(() => {
+  const [accountsLoading, setAccountsLoading] = useState(false);
+
+  const fetchAccounts = useCallback(async () => {
     if (!apiClient) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await listCompetitorAccounts(apiClient as ApiClient);
-        if (!cancelled) setCompetitorAccounts(res.items);
-      } catch (err) {
-        if (!cancelled) setAccountsLoadError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setAccountsLoading(true);
+    setAccountsLoadError(null);
+    try {
+      const res = await listCompetitorAccounts(apiClient as ApiClient);
+      setCompetitorAccounts(res.items);
+    } catch (err) {
+      setAccountsLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAccountsLoading(false);
+    }
   }, [apiClient]);
+
+  useEffect(() => {
+    void fetchAccounts();
+  }, [fetchAccounts]);
+
+  // #671: window focus 時に再取得する。 別タブで Verify した直後に戻ったとき、
+  // dropdown が古い空配列のまま動かない問題への対処。
+  useEffect(() => {
+    const onFocus = () => {
+      void fetchAccounts();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchAccounts]);
+
   const verifiedAccounts = useMemo(
-    () => (competitorAccounts ?? []).filter((a) => a.verified === true),
+    () => filterVerifiedAccounts(competitorAccounts),
     [competitorAccounts],
   );
   const accountOptions: SelectProps.Option[] = useMemo(
@@ -281,8 +297,25 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
            *   Phase 2.2 (Issue #459): account は verified=true な CompetitorAccounts のみ選択
            *   できる drop-down。0 件のときは Competitor Accounts ページへの導線を出す。 */}
           {accountsLoadError && (
-            <Alert type="error" header="Competitor Accounts の取得に失敗しました">
+            <Alert
+              type="error"
+              header="Competitor Accounts の取得に失敗しました"
+              action={
+                <Button
+                  iconName="refresh"
+                  onClick={() => void fetchAccounts()}
+                  loading={accountsLoading}
+                >
+                  再読込
+                </Button>
+              }
+            >
               {accountsLoadError}
+            </Alert>
+          )}
+          {competitorAccounts === null && accountsLoading && !accountsLoadError && (
+            <Alert type="info" header="Competitor Accounts を読み込み中…">
+              dropdown に選択肢が出るまで数秒お待ちください。
             </Alert>
           )}
           {competitorAccounts !== null && verifiedAccounts.length === 0 && !accountsLoadError && (
@@ -290,13 +323,23 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
               type="warning"
               header="verified=true な Competitor Account がありません"
               action={
-                <Link href="#/competitor-accounts" external={false}>
-                  Competitor Accounts へ移動
-                </Link>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    iconName="refresh"
+                    onClick={() => void fetchAccounts()}
+                    loading={accountsLoading}
+                  >
+                    再読込
+                  </Button>
+                  <Link href="#/competitor-accounts" external={false}>
+                    Competitor Accounts へ移動
+                  </Link>
+                </SpaceBetween>
               }
             >
               Event 作成前に Competitor Accounts ページで AWS Account を追加 → STS Verify を実行
-              してください。verified=true でない account には deploy できません。
+              してください。verified=true でない account には deploy できません。 別タブで Verify
+              した直後は「再読込」 で反映されます。
             </Alert>
           )}
           <Container
