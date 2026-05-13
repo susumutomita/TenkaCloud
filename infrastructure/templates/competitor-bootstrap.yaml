@@ -1,50 +1,57 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  TenkaCloud Competitor Bootstrap. 競技者 (= 問題 deploy 先) AWS アカウントが
-  事前に 1 回だけ deploy する。TenkaCloud control-plane の Deploy Lambda が
-  AssumeRole するための IAM Role を作る。trust は TenkaCloud アカウント ID +
-  ExternalId に限定し、Confused Deputy を防ぐ。
+  TenkaCloud Competitor Bootstrap. Deployed once by the competitor (= the AWS
+  account that hosts the problem stacks) to grant the TenkaCloud control plane
+  AssumeRole access. Trust is restricted to the TenkaCloud account ID + ExternalId
+  combo to prevent Confused Deputy attacks.
 
-# このスタックを deploy した後、出力された RoleArn を TenkaCloud の TenantAdmin に
-# 伝えると、TenkaCloud から問題 CFn を本アカウントへ deploy できるようになる。
-# スタック削除すると Role も消えるので、TenkaCloud からのアクセス権を一括撤回できる。
+# After deploying this stack, share the RoleArn output with the TenkaCloud
+# operator. The operator can then deploy problem CFn templates into this account.
+# Deleting the stack removes the role and revokes TenkaCloud access in one shot.
+
+# NOTE: IAM Role / Policy Description fields only allow tab/LF/CR + printable
+# ASCII (0x20-0x7E) + Latin-1 supplement (0xA1-0xFF). CJK characters cause
+# CREATE_FAILED with InvalidRequest. Keep all Description fields ASCII-only.
 
 Parameters:
   TenkaCloudAccountId:
     Type: String
     AllowedPattern: "^[0-9]{12}$"
-    ConstraintDescription: 12 桁の AWS アカウント ID。
-    Description: >
-      AssumeRole を許可する TenkaCloud control-plane の AWS アカウント ID。
-      TenkaCloud 運営者から事前に共有される。
+    ConstraintDescription: Must be a 12-digit AWS account ID.
+    Description: >-
+      AWS account ID of the TenkaCloud control plane that is allowed to
+      AssumeRole into this account. Shared by the operator in advance.
   ExternalId:
     Type: String
     NoEcho: true
     MinLength: 16
     MaxLength: 128
     AllowedPattern: "^[A-Za-z0-9_=,.@:/-]+$"
-    Description: >
-      AssumeRole 時に TenkaCloud から渡される External ID。Confused Deputy 攻撃を
-      防ぐためのテナント固有 secret。TenkaCloud 運営者から事前に共有される。
+    Description: >-
+      ExternalId secret passed by TenkaCloud when assuming the role.
+      Tenant-specific secret used to defend against Confused Deputy attacks.
+      Shared by the operator in advance and must be kept secret.
   RoleName:
     Type: String
     Default: TenkaCloud-CompetitorDeploy-Role
     AllowedPattern: "^[A-Za-z0-9_+=,.@-]{1,64}$"
-    Description: >
-      作成する IAM Role 名。TenkaCloud 側の deploy 設定とずれないよう default を使う想定。
+    Description: >-
+      IAM Role name to create. Keep the default unless coordinated with the
+      operator (TenkaCloud expects this exact name).
 
 Resources:
-  # 問題 CFn が触るリソース全方位の権限を持つ Role。
-  # 各問題は VPC + EC2 + IAM (instance profile / role) + CFn 自身を作るため、
-  # この程度の広さがないと Create / Update / Delete どれかでこける。
-  # 最小権限化は問題テンプレが固まってから別途。
+  # Role with broad permissions over the surfaces touched by problem CFn templates.
+  # Each problem may create VPC + EC2 + IAM (instance profile / role) + the CFn
+  # stack itself; this scope is wide enough for Create / Update / Delete.
+  # Tightening to least-privilege is deferred until problem templates stabilize.
   CompetitorDeployRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref RoleName
       Description: >-
-        TenkaCloud が問題 CFn (security-battle-royale 等) を本アカウントへ deploy するときに
-        AssumeRole される。trust = TenkaCloud account + ExternalId。
+        AssumeRole target used by TenkaCloud to deploy problem CFn stacks
+        (security-battle-royale, etc.) into this account. Trust = TenkaCloud
+        account + ExternalId.
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -62,21 +69,21 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              # CloudFormation 全般 (deploy / update / delete / describe)
+              # CloudFormation umbrella (deploy / update / delete / describe).
               - Sid: CloudFormationFull
                 Effect: Allow
                 Action:
                   - cloudformation:*
                 Resource: "*"
 
-              # 問題 CFn が作る EC2 / VPC リソース
+              # EC2 / VPC resources created by problem CFn templates.
               - Sid: Ec2Vpc
                 Effect: Allow
                 Action:
                   - ec2:*
                 Resource: "*"
 
-              # SSM (AMI 解決 + Session Manager) + ParameterStore
+              # SSM (AMI resolution + Session Manager) + Parameter Store.
               - Sid: Ssm
                 Effect: Allow
                 Action:
@@ -86,8 +93,8 @@ Resources:
                   - ssm:DescribeParameters
                 Resource: "*"
 
-              # IAM (問題 CFn が instance profile / role を作る)
-              # 問題 CFn が作る role / policy のみ触れるよう Path / Name で絞る。
+              # IAM scope is narrowed to the `tc-*` Path / Name prefix that
+              # problem CFn templates use for their instance profile / role.
               - Sid: IamForProblemRoles
                 Effect: Allow
                 Action:
@@ -113,7 +120,8 @@ Resources:
                   - !Sub "arn:aws:iam::${AWS::AccountId}:role/tc-*"
                   - !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/tc-*"
 
-              # 問題 CFn が S3 を使う場合の余地 (今は使ってないが将来用)
+              # S3 headroom for future problem templates (= unused today,
+              # kept narrow via `tc-*` bucket prefix).
               - Sid: S3ForProblemBuckets
                 Effect: Allow
                 Action:
@@ -129,7 +137,7 @@ Resources:
                   - "arn:aws:s3:::tc-*"
                   - "arn:aws:s3:::tc-*/*"
 
-              # CloudWatch Logs (UserData / 問題アプリの diag 用)
+              # CloudWatch Logs for problem app / UserData diagnostics.
               - Sid: CloudWatchLogs
                 Effect: Allow
                 Action:
@@ -149,14 +157,14 @@ Resources:
 Outputs:
   RoleArn:
     Description: >-
-      作成された Role の ARN。TenkaCloud 運営者にこの値を共有すると、TenkaCloud から
-      問題を本アカウントへ deploy できるようになる。
+      ARN of the created Role. Share this value with the TenkaCloud operator;
+      TenkaCloud will then be able to deploy problem stacks into this account.
     Value: !GetAtt CompetitorDeployRole.Arn
     Export:
       Name: !Sub "${AWS::StackName}-RoleArn"
   AccountId:
-    Description: 競技者 AWS アカウント ID (UI に入力する値)。
+    Description: Competitor AWS account ID (value to enter in the TenkaCloud UI).
     Value: !Ref AWS::AccountId
   RoleName:
-    Description: Role 名 (TenkaCloud 側 default と一致するか確認用)。
+    Description: Role name (for verifying that it matches the TenkaCloud default).
     Value: !Ref RoleName
