@@ -24,58 +24,94 @@ const FEDERATION_SESSION_DURATION_SEC = 3600;
 const TENKACLOUD_ISSUER = "https://tenkacloud.example/portal";
 
 /**
- * AssumeRole 時の inline session policy。`ConsoleViewerRole` の `ReadOnlyAccess` を
- * 「stack の状態が見れる + 競技対象 service の Describe」だけに**さらに絞る**ための gate。
+ * AssumeRole 時の inline session policy を namePrefix scope で組み立てる。
  *
- * 必要: 競技者は自分の deployment の CFn / EC2 / Logs だけ見えればよい。
- * 危険: ReadOnlyAccess 単体だと operator account の DDB Deployments テーブル
- * (= 全チームの teamLoginKey が入っている) を Scan されて bearer token が漏れる。
- * → `dynamodb:*` / `secretsmanager:*` / `ssm:Get*` / `kms:Decrypt` / `iam:*` を Deny で殺す。
+ * 旧実装は Allow Resource を `"*"` で broad に開いていた (#704)。Role 側の
+ * `ReadOnlyAccess` を外し `tc-*` 接頭辞に絞ったので、 さらに本 session policy で
+ * **当該 team の `tc-{problemSlug}-{teamSlug}` だけ**に narrow する。
  *
  * セッションポリシーは Role の policy との **AND** で評価される (= Allow の和集合では
- * なく交差) なので、ここで Allow したものは元 Role に無ければ通らない。
+ * なく交差) ため、ここで Allow した範囲しか操作できない。
+ *
+ * Deny:
+ *   - codepipeline:* / codebuild:* → operator の deploy job (= 他テナント問題の進行) を遮蔽
+ *   - cognito-idp:* / cognito-identity:* → tenant UserPool 名 leak 防止
+ *   - dynamodb / secretsmanager / ssm:Get-Describe / kms:Decrypt / iam / sts:AssumeRole
+ *     → operator account の bearer token / KMS / 他 Role への乗り換えを禁止
  */
-const SESSION_POLICY = JSON.stringify({
-  Version: "2012-10-17",
-  Statement: [
-    {
-      Effect: "Allow",
-      Action: [
-        "cloudformation:DescribeStacks",
-        "cloudformation:GetTemplate",
-        "cloudformation:ListStackResources",
-        "cloudformation:DescribeStackEvents",
-        "cloudformation:DescribeStackResource",
-        "cloudformation:DescribeStackResources",
-        "ec2:Describe*",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams",
-        "logs:GetLogEvents",
-        "logs:FilterLogEvents",
-        "lambda:GetFunction",
-        "lambda:ListFunctions",
-        "apigateway:GET",
-        "s3:GetBucketLocation",
-        "s3:ListBucket",
-      ],
-      Resource: "*",
-    },
-    {
-      Effect: "Deny",
-      Action: [
-        "dynamodb:*",
-        "secretsmanager:*",
-        "ssm:Get*",
-        "ssm:Describe*",
-        "kms:Decrypt",
-        "kms:GenerateDataKey",
-        "iam:*",
-        "sts:AssumeRole",
-      ],
-      Resource: "*",
-    },
-  ],
-});
+function buildSessionPolicy(namePrefix: string): string {
+  return JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: [
+          "cloudformation:DescribeStacks",
+          "cloudformation:GetTemplate",
+          "cloudformation:ListStackResources",
+          "cloudformation:DescribeStackEvents",
+          "cloudformation:DescribeStackResource",
+          "cloudformation:DescribeStackResources",
+        ],
+        Resource: [`arn:aws:cloudformation:*:*:stack/${namePrefix}/*`],
+      },
+      // ListStacks は ARN 制約不可。 Console UI の stack 一覧表示に必要なので Allow するが、
+      // events / resources の閲覧は上の per-namePrefix Allow で gate される (= 他チームの
+      // stack 詳細は AccessDenied)。
+      { Effect: "Allow", Action: "cloudformation:ListStacks", Resource: "*" },
+      {
+        Effect: "Allow",
+        Action: [
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+        ],
+        Resource: [
+          `arn:aws:logs:*:*:log-group:/aws/lambda/${namePrefix}*`,
+          `arn:aws:logs:*:*:log-group:/aws/lambda/${namePrefix}*:log-stream:*`,
+        ],
+      },
+      {
+        Effect: "Allow",
+        Action: ["lambda:GetFunction", "lambda:ListFunctions"],
+        Resource: [`arn:aws:lambda:*:*:function:${namePrefix}*`],
+      },
+      {
+        Effect: "Allow",
+        Action: ["s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"],
+        Resource: [`arn:aws:s3:::${namePrefix}*`, `arn:aws:s3:::${namePrefix}*/*`],
+      },
+      // ec2 Describe* は ARN 制約が効かない API があるため、 必要な subset だけ Allow。
+      // namePrefix tag による更なる絞り込みは template 側で `TenkaCloud:NamePrefix` tag が
+      // 必須化された Phase で導入予定。
+      {
+        Effect: "Allow",
+        Action: ["ec2:DescribeInstances", "ec2:DescribeSecurityGroups", "ec2:DescribeVpcs"],
+        Resource: "*",
+      },
+      { Effect: "Allow", Action: "apigateway:GET", Resource: "*" },
+      {
+        Effect: "Deny",
+        Action: [
+          "codepipeline:*",
+          "codebuild:*",
+          "cognito-idp:*",
+          "cognito-identity:*",
+          "dynamodb:*",
+          "secretsmanager:*",
+          "ssm:Get*",
+          "ssm:Describe*",
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "iam:*",
+          "sts:AssumeRole",
+        ],
+        Resource: "*",
+      },
+    ],
+  });
+}
 
 const sts = new STSClient({});
 
@@ -114,7 +150,7 @@ export async function getConsoleSigninUrl(
   const region = typeof deployment.region === "string" ? deployment.region : undefined;
   if (!region) return { kind: "not_ready" };
 
-  // STS AssumeRole + inline session policy で `ReadOnlyAccess` をさらに絞る。
+  // STS AssumeRole + inline session policy で当該 team の namePrefix だけに絞る。
   // ExternalId は同 account 内なので省略 (cross-account は別 Role でカバー)。
   let session: {
     Credentials?: { AccessKeyId?: string; SecretAccessKey?: string; SessionToken?: string };
@@ -125,7 +161,7 @@ export async function getConsoleSigninUrl(
         RoleArn: roleArn,
         RoleSessionName: `participant-${jobId}`,
         DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
-        Policy: SESSION_POLICY,
+        Policy: buildSessionPolicy(deployment.namePrefix),
       }),
     );
   } catch (err) {
