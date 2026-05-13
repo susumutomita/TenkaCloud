@@ -541,6 +541,57 @@
           "description": {
             "type": "string",
             "description": "disruption の動作 / 戦術的影響を participant 向けに説明する文章。 portal の予告 panel で countdown と一緒に表示される (= player への hint)。"
+          },
+          "triggers": {
+            "type": "array",
+            "description": "[ADR-013 Phase 1 / Issue #615] disruption の発火条件宣言。 省略時は ADR-012 Phase 1 の self-fire (= `defaultAfterMinutes` で template.yaml-bundled Scheduler から起動) のみ。 triggers[] が宣言されると ADR-013 Phase 2 で導入される condition-triggered 発火が有効化される (= scoring Lambda 側 eval、 cross-account EventBridge bus 経由)。 複数 trigger は OR で結合 (= 最初に true になった条件で発火)。 同一 disruption の重複発火は idempotency key で抑制。",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "afterMinutes"],
+                  "properties": {
+                    "kind": {
+                      "const": "after-deploy",
+                      "description": "deploy 時刻 + offset で発火 (= ADR-012 Phase 1 の self-fire 等価)。 fail-safe として常に含めることを推奨。"
+                    },
+                    "afterMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "deploy からの経過分数。"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "threshold"],
+                  "properties": {
+                    "kind": {
+                      "const": "team-score-above",
+                      "description": "team の累計 score が threshold を上回ったら発火 (= 強チームへの handicap、 ゲームバランス調整用)。"
+                    },
+                    "threshold": { "type": "integer", "minimum": 0 }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "phaseName"],
+                  "properties": {
+                    "kind": {
+                      "const": "phase-entered",
+                      "description": "phases[].name == phaseName のフェーズに突入したら発火 (= phased-polling 系で phase 遷移と同期した disruption)。"
+                    },
+                    "phaseName": {
+                      "type": "string",
+                      "description": "metadata.phases[].name の値を指す。"
+                    }
+                  }
+                }
+              ]
+            }
           }
         }
       }
