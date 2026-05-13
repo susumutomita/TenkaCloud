@@ -4,6 +4,7 @@
   "name": "Microservice Migration Battle",
   "category": "Battle",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
   "shortDescription": "EC2 1 台に同居する 3 サービス (users / orders / catalog) を Lambda + API Gateway / ECS Fargate / App Runner の 3 種ホスティングに分割するレース。",

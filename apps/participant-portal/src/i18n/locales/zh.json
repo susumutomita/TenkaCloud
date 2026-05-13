@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "中文"
+  },
+  "app": {
+    "title": "TenkaCloud 参赛者门户",
+    "loading": "正在加载…"
+  },
+  "nav": {
+    "problems": "题目",
+    "leaderboard": "排行榜",
+    "notifications": "通知"
+  },
+  "errors": {
+    "generic": "发生错误",
+    "auth_expired": "团队登录密钥无效或部署已被删除。",
+    "invalid_url": "URL 格式无效(必须是以 http:// 或 https:// 开头的绝对 URL)。",
+    "slot_not_overridable": "此槽位不可覆盖。",
+    "unknown_slot": "此槽位未在 metadata 中声明。",
+    "no_endpoints": "此题目未声明任何 endpoint。"
+  }
+}

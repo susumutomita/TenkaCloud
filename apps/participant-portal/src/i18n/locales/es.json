@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "Español"
+  },
+  "app": {
+    "title": "Portal de Participantes TenkaCloud",
+    "loading": "Cargando…"
+  },
+  "nav": {
+    "problems": "Problemas",
+    "leaderboard": "Clasificación",
+    "notifications": "Notificaciones"
+  },
+  "errors": {
+    "generic": "Se produjo un error",
+    "auth_expired": "La clave de inicio de sesión del equipo no es válida o el despliegue ha sido eliminado.",
+    "invalid_url": "Formato de URL no válido (debe ser una URL absoluta que comience con http:// o https://).",
+    "slot_not_overridable": "Este slot no se puede sobrescribir.",
+    "unknown_slot": "Este slot no está declarado en metadata.",
+    "no_endpoints": "Este problema no tiene endpoints declarados."
+  }
+}

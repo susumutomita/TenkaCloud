@@ -85,6 +85,19 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(findProblemMetadata("hello-world")?.endpoints).toEqual([]);
   });
 
+  // ADR-008 / Issue #574 Phase 1: visibility field を catalog に露出する。
+  it("既存 4 問題はすべて visibility='public' で露出されるべき", () => {
+    for (const id of [
+      "hello-world",
+      "hello-world-battle",
+      "security-battle-royale",
+      "microservice-migration-battle",
+    ]) {
+      const m = findProblemMetadata(id);
+      expect(m?.visibility).toBe("public");
+    }
+  });
+
   // Issue #583 Phase 5: i18n override の locale fallback chain。
   describe("resolveLocalizedNarrative (Phase 5)", () => {
     it("locale='ja' なら top-level の値をそのまま返すべき", () => {

@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "中文"
+  },
+  "app": {
+    "title": "TenkaCloud 应用管理控制台",
+    "loading": "正在加载…"
+  },
+  "nav": {
+    "menu": "菜单",
+    "events": "活动",
+    "teams": "团队",
+    "problems": "题目",
+    "deployments": "部署"
+  },
+  "auth": {
+    "sign_out": "退出登录"
+  },
+  "errors": {
+    "generic": "发生错误"
+  }
+}

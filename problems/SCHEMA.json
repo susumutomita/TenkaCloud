@@ -45,6 +45,11 @@
       "enum": ["ready", "draft", "deprecated"],
       "description": "公開ステータス。ready = 参加者向けデプロイ可能 / draft = 開発中 / deprecated = 廃止予定。"
     },
+    "visibility": {
+      "type": "string",
+      "enum": ["public", "private"],
+      "description": "[ADR-008] 問題実装の公開境界。 public = 本体 repo 内に template.yaml / api / frontend を持つ教材用 (= 答えが open でも成立する問題、 hello-world 系)。 private = TenkaCloudChallenges 別 private repo に payload を置き S3 + 15min presigned URL で配信する本格競技用 (= 答えが open だと成立しない microservice-migration-battle 系)。 省略時 public (= 既存 metadata との互換)。 Phase 1 では UI 表示のみ、 Phase 3 で Worker Lambda の S3 fetch 分岐を入れる。"
+    },
     "difficulty": {
       "type": "integer",
       "minimum": 1,

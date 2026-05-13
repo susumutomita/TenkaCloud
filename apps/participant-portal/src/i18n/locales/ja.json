@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "日本語"
+  },
+  "app": {
+    "title": "TenkaCloud 競技者ポータル",
+    "loading": "状態を取得中…"
+  },
+  "nav": {
+    "problems": "問題一覧",
+    "leaderboard": "ランキング",
+    "notifications": "お知らせ"
+  },
+  "errors": {
+    "generic": "エラーが発生しました",
+    "auth_expired": "チームログインキーが無効か、デプロイが既に削除されています。",
+    "invalid_url": "URL の形式が不正です (http:// または https:// で始まる絶対 URL を指定)。",
+    "slot_not_overridable": "この slot は override 不可です。",
+    "unknown_slot": "この slot は metadata に存在しません。",
+    "no_endpoints": "この問題には endpoint が宣言されていません。"
+  }
+}

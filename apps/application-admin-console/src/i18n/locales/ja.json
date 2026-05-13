@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "日本語"
+  },
+  "app": {
+    "title": "TenkaCloud アプリケーション管理コンソール",
+    "loading": "読み込み中…"
+  },
+  "nav": {
+    "menu": "メニュー",
+    "events": "イベント",
+    "teams": "チーム",
+    "problems": "問題",
+    "deployments": "デプロイ"
+  },
+  "auth": {
+    "sign_out": "サインアウト"
+  },
+  "errors": {
+    "generic": "エラーが発生しました"
+  }
+}
