@@ -25,6 +25,8 @@ export interface ProblemPhaseEntry {
   readonly name: string;
   readonly afterMinutes: number;
   readonly description?: string;
+  /** Issue #689 / ADR-013 OQ#7: true のみ portal に流す (= ネタバレ防止)。 */
+  readonly publicHint?: boolean;
 }
 
 export interface ProblemDisruptionEntry {
@@ -32,6 +34,8 @@ export interface ProblemDisruptionEntry {
   readonly name: string;
   readonly defaultAfterMinutes?: number;
   readonly description?: string;
+  /** Issue #689 / ADR-013 OQ#7: true のみ portal に流す (= ネタバレ防止)。 */
+  readonly publicHint?: boolean;
 }
 
 /**
@@ -119,6 +123,7 @@ interface ProblemMetadata {
     afterMinutes: number;
     effect?: Record<string, unknown>;
     description?: string;
+    publicHint?: boolean;
   }[];
   disruptions?: {
     id: string;
@@ -128,6 +133,7 @@ interface ProblemMetadata {
     parameters?: Record<string, unknown>;
     eventDetailType?: string;
     description?: string;
+    publicHint?: boolean;
   }[];
   dashboard?: {
     slots?: Record<string, string>;
@@ -204,6 +210,7 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
             name: p.name,
             afterMinutes: p.afterMinutes,
             description: p.description,
+            publicHint: p.publicHint,
           }) as ProblemPhaseEntry,
       ) ?? [],
     disruptions:
@@ -214,6 +221,7 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
             name: d.name,
             defaultAfterMinutes: d.defaultAfterMinutes,
             description: d.description,
+            publicHint: d.publicHint,
           }) as ProblemDisruptionEntry,
       ) ?? [],
     ...(dashboardSlots && Object.keys(dashboardSlots).length > 0

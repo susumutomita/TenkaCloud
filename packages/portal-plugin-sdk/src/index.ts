@@ -59,10 +59,16 @@ export interface PortalEndpoint {
   readonly effectiveUrl?: string;
 }
 
+/**
+ * Issue #689 (ADR-013 OQ#7): `publicHint=true` の entry のみ portal に流す前提で plugin
+ * は受け取る。 false / undefined は portal layer (= props-builder) で fail-closed に
+ * filter される。 plugin 側で publicHint flag を見る必要は無い (= 既に絞り込み済が来る)。
+ */
 export interface PortalPhaseEntry {
   readonly name: string;
   readonly afterMinutes: number;
   readonly description?: string;
+  readonly publicHint?: boolean;
 }
 
 export interface PortalDisruptionEntry {
@@ -70,6 +76,7 @@ export interface PortalDisruptionEntry {
   readonly name: string;
   readonly defaultAfterMinutes?: number;
   readonly description?: string;
+  readonly publicHint?: boolean;
 }
 
 /**
