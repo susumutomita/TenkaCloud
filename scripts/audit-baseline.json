@@ -28,6 +28,7 @@
     "cliui": ["prepare"],
     "colorette": ["prepare"],
     "cookie": ["prepare"],
+    "dompurify": ["prepare"],
     "enhanced-resolve": ["prepare"],
     "entities": ["prepare"],
     "esbuild": ["postinstall"],

@@ -59,7 +59,7 @@ for (const file of walk(TEMPLATES_DIR)) {
 
 if (errors.length > 0) {
   console.error("NG: CFn テンプレに CJK / 非 Latin-1 文字が含まれています (#664)");
-  for (const e of errors) console.error("  " + e);
+  for (const e of errors) console.error(`  ${e}`);
   console.error(
     "\nIAM Role / Policy Description は ASCII (0x20-0x7E) + Latin-1 supplement (0xA1-0xFF)\n" +
       "のみ許容します。 CJK / 日本語を ASCII の英語に置換してください。",
