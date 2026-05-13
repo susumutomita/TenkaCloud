@@ -77,6 +77,12 @@ export interface ProblemCatalogEntry {
   readonly disruptions: readonly ProblemDisruptionEntry[];
   /** ADR-012 Phase 5: dashboard.slots[slotName] = portal/<file>.tsx 相対 path の map。 */
   readonly dashboardSlots?: ProblemDashboardSlots;
+  /** Issue #583 Phase 5: 競技者向け field の locale override (en / es / zh)。 ja は top-level。 */
+  readonly i18n?: {
+    readonly en?: ProblemI18nOverride;
+    readonly es?: ProblemI18nOverride;
+    readonly zh?: ProblemI18nOverride;
+  };
 }
 
 interface ProblemMetadata {
@@ -119,6 +125,23 @@ interface ProblemMetadata {
   dashboard?: {
     slots?: Record<string, string>;
   };
+  /** ADR Issue #583 Phase 5: 競技者向け field の locale override。 ja 自体は top-level が正本。 */
+  i18n?: {
+    en?: ProblemI18nOverride;
+    es?: ProblemI18nOverride;
+    zh?: ProblemI18nOverride;
+  };
+}
+
+/**
+ * Issue #583 Phase 5: 1 locale 分の override。 各 field 省略時は ja (= top-level の値) に fallback。
+ * portal の locale switcher (= "ja" / "en" / "es" / "zh") と対応。
+ */
+export interface ProblemI18nOverride {
+  readonly name?: string;
+  readonly shortDescription?: string;
+  readonly description?: string;
+  readonly learningGoals?: readonly string[];
 }
 
 const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
@@ -187,6 +210,7 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
     ...(dashboardSlots && Object.keys(dashboardSlots).length > 0
       ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
       : {}),
+    ...(metadata.i18n && Object.keys(metadata.i18n).length > 0 ? { i18n: metadata.i18n } : {}),
   };
 }
 
@@ -202,4 +226,46 @@ const PROBLEM_CATALOG_BY_ID: ReadonlyMap<string, ProblemCatalogEntry> = new Map(
 /** `problemId` (= metadata.json の `id` field) で問題を引く。無ければ undefined。 */
 export function findProblemMetadata(problemId: string): ProblemCatalogEntry | undefined {
   return PROBLEM_CATALOG_BY_ID.get(problemId);
+}
+
+/**
+ * Issue #583 Phase 5: locale を適用した narrative view を返す。 fallback chain:
+ *   1. 指定 locale (= en/es/zh) の override
+ *   2. top-level (= ja の正本)
+ *
+ * locale="ja" / metadata.i18n 不在 / 該当 field 不在は静かに ja を返す。 caller (= ProblemDetail
+ * の useI18n から locale を取って呼ぶ) は常に non-undefined string を受け取る。
+ */
+export function resolveLocalizedNarrative(
+  entry: ProblemCatalogEntry,
+  locale: "ja" | "en" | "es" | "zh",
+): {
+  readonly name: string;
+  readonly shortDescription: string;
+  readonly description: string;
+  readonly learningGoals: readonly string[];
+} {
+  if (locale === "ja" || !entry.i18n) {
+    return {
+      name: entry.name,
+      shortDescription: entry.shortDescription,
+      description: entry.description,
+      learningGoals: entry.learningGoals,
+    };
+  }
+  const override = entry.i18n[locale];
+  if (!override) {
+    return {
+      name: entry.name,
+      shortDescription: entry.shortDescription,
+      description: entry.description,
+      learningGoals: entry.learningGoals,
+    };
+  }
+  return {
+    name: override.name ?? entry.name,
+    shortDescription: override.shortDescription ?? entry.shortDescription,
+    description: override.description ?? entry.description,
+    learningGoals: override.learningGoals ?? entry.learningGoals,
+  };
 }

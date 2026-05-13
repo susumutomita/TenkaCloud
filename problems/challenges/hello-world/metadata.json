@@ -16,6 +16,35 @@
   ],
   "cfnTemplate": "template.yaml",
   "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Hello World (Sample)",
+      "shortDescription": "Minimal Challenge / flag-submission sample. Read a value from SSM Parameter Store and submit it to earn 100 points.",
+      "description": "Minimal sample of Challenge / flag-submission form.\n\nDeploying creates a single SSM Parameter `/{NamePrefix}/hello` in the competitor's AWS account. The value follows `Hello from {NamePrefix}`. Competitors read the parameter from AWS Console / CLI, paste the value into the Participant Portal submission field, and earn +100 points on match.\n\nZero-cost (SSM Standard tier, no EC2 / VPC / public endpoint). Use for sanity-checking problem authoring + scoring engine.",
+      "learningGoals": [
+        "Experience reading a value from SSM Parameter Store via AWS Console / CLI",
+        "Verify that TenkaCloud's deploy → flag-submission → score pipeline works end-to-end"
+      ]
+    },
+    "es": {
+      "name": "Hello World (Muestra)",
+      "shortDescription": "Muestra mínima de Challenge con envío de flag. Lee un valor del SSM Parameter Store y envíalo para obtener 100 puntos.",
+      "description": "Muestra mínima del formato Challenge con envío de flag.\n\nAl desplegar se crea un único SSM Parameter `/{NamePrefix}/hello` en la cuenta AWS del competidor. El valor sigue el formato `Hello from {NamePrefix}`. Los competidores leen el parámetro desde AWS Console / CLI, pegan el valor en el campo de envío del Participant Portal y ganan +100 puntos si coincide.\n\nCoste cero (SSM Standard tier, sin EC2 / VPC / endpoint público). Útil para verificar el flujo de autoría de problemas + motor de puntuación.",
+      "learningGoals": [
+        "Experimentar la lectura de un valor desde SSM Parameter Store vía AWS Console / CLI",
+        "Verificar que la cadena de despliegue → envío de flag → puntuación de TenkaCloud funciona end-to-end"
+      ]
+    },
+    "zh": {
+      "name": "Hello World (示例)",
+      "shortDescription": "Challenge / flag 提交格式的最小示例。读取 SSM Parameter Store 中写入的值并提交即可获得 100 分。",
+      "description": "Challenge / flag 提交格式的最小示例。\n\n部署后会在参赛者的 AWS 账户中创建一个 SSM Parameter `/{NamePrefix}/hello`。其值的格式为 `Hello from {NamePrefix}`。参赛者通过 AWS Console / CLI 读取该参数,将值粘贴到 Participant Portal 的输入框中提交,若匹配则获得 +100 分。\n\n成本为零 (SSM 标准层,无 EC2 / VPC / 公开端点)。用于验证问题创作 + 评分引擎的可用性。",
+      "learningGoals": [
+        "体验通过 AWS Console / CLI 从 SSM Parameter Store 读取值的路径",
+        "验证 TenkaCloud 的 deploy → flag 提交 → 加分 路径 end-to-end 工作正常"
+      ]
+    }
+  },
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "ParameterValue",

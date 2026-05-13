@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findProblemMetadata } from "./problems";
+import { findProblemMetadata, resolveLocalizedNarrative } from "./problems";
 
 /**
  * #550: Portal の build-time catalog が `problems/<category>/<id>/metadata.json` を
@@ -83,5 +83,41 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
 
   it("endpoints[] が無い問題は空配列を返すべき", () => {
     expect(findProblemMetadata("hello-world")?.endpoints).toEqual([]);
+  });
+
+  // Issue #583 Phase 5: i18n override の locale fallback chain。
+  describe("resolveLocalizedNarrative (Phase 5)", () => {
+    it("locale='ja' なら top-level の値をそのまま返すべき", () => {
+      const m = findProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m!, "ja");
+      expect(r.name).toBe("Hello World (Sample)");
+      expect(r.description).toContain("Challenge / flag 提出形式");
+    });
+
+    it("locale='en' の override が宣言されていれば英語を返すべき (hello-world)", () => {
+      const m = findProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m!, "en");
+      expect(r.shortDescription).toMatch(/Minimal Challenge/);
+      expect(r.description).toMatch(/Deploying creates a single SSM Parameter/);
+      expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("locale='zh' の override が宣言されていれば中文を返すべき (hello-world)", () => {
+      const m = findProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m!, "zh");
+      expect(r.name).toContain("示例");
+    });
+
+    it("i18n override 未宣言の問題は ja に fallback すべき (security-battle-royale)", () => {
+      const m = findProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m!, "en");
+      expect(r.name).toBe("Security Battle Royale"); // top-level (= ja) と同じ
+    });
+
+    it("locale='es' で override が無いなら ja に fallback すべき", () => {
+      const m = findProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m!, "es");
+      expect(r.shortDescription).toContain("意図的に脆弱性を仕込んだ");
+    });
   });
 });
