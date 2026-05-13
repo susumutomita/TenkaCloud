@@ -12,6 +12,7 @@ import { useTeamView } from "../auth/TeamViewProvider";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import { findProblemMetadata, type ProblemCatalogEntry } from "../data/problems";
+import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
   1: "入門",
@@ -83,6 +84,18 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
           onScored={refresh}
+        />
+      )}
+
+      {/* ADR-012 Phase 5: problem 側 portal plugin (= metadata.dashboard.slots で宣言) を
+       *   render する。 該当 slot が無い問題は section 全体が render されない。 */}
+      {problem && metadata?.dashboardSlots && view?.team && (
+        <PortalPluginSlots
+          problemId={problem.problemId}
+          jobId={problem.jobId}
+          score={problem.score}
+          team={view.team}
+          stackOutputs={problem.stackOutputs}
         />
       )}
     </SpaceBetween>

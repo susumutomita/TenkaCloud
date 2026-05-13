@@ -133,7 +133,8 @@
               },
               "appendPath": {
                 "type": "string",
-                "description": "OutputKey 値の末尾に追加する path (例: '/users')。1 つの CFn Output (例: BaseUrl) を複数 slot で path 違いで使い回す時に使う。"
+                "pattern": "^/",
+                "description": "OutputKey 値の末尾に追加する path (例: '/users')。1 つの CFn Output (例: BaseUrl) を複数 slot で path 違いで使い回す時に使う。 必ず `/` で始める (= `new URL('users', 'http://host/api/')` は `/api/users` を含むが、 `'/users'` は `/users` で base path を捨てるという URL spec の振る舞い差を回避するため、 明示性優先)。"
               }
             },
             "description": "default URL の宣言。deploy 時に Endpoint registry が CFn output を読んで team ごとに記録する。"
@@ -553,10 +554,13 @@
           "type": "object",
           "additionalProperties": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9._/-]+\\.tsx$",
-            "description": "問題 dir からの相対 path で portal component (.tsx) を指す。"
+            "pattern": "^portal/[A-Za-z0-9._-]+\\.tsx$",
+            "description": "問題 dir からの相対 path で portal component (.tsx) を指す。 plugin loader (= apps/participant-portal/src/plugins/loader.ts) の glob が `problems/<category>/<id>/portal/*.tsx` のみ discover するため、 `portal/<file>.tsx` 形式に限定する。"
           },
-          "description": "slot 名 → component path の map。 slot 名は portal が予約した名前 (StatusPanel / RegistrationPanel / LeaderboardPanel 等、 Phase 5 で固める) を使う。"
+          "propertyNames": {
+            "enum": ["StatusPanel", "RegistrationPanel", "HelpDrawer"]
+          },
+          "description": "slot 名 → component path の map。 slot 名は portal が予約した literal (= StatusPanel / RegistrationPanel / HelpDrawer) のみ valid。 unknown slot 名は plugin loader が iterate しない (= 黙って drop) ので SCHEMA で reject する。 SDK の `PORTAL_SLOT_NAMES` literal と同期。"
         }
       }
     }
