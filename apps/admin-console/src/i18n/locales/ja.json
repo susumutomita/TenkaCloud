@@ -55,5 +55,42 @@
     "deprovision_modal_cancel": "キャンセル",
     "deprovision_modal_confirm": "実行",
     "deprovision_modal_body": "{tenantName} ({tenantId}) を deprovision します。関連する CloudFormation スタックと DynamoDB レコードが削除されます。"
+  },
+  "tenant_create": {
+    "header": "テナント作成",
+    "cancel": "キャンセル",
+    "submit": "作成",
+    "error_header": "作成に失敗しました",
+    "name_label": "テナント名",
+    "name_description": "競技を主催する組織の表示名 (テナント分離単位として記録される)",
+    "name_placeholder": "例: ACME 株式会社",
+    "email_label": "テナント管理者メール",
+    "email_description": "このテナントの管理者として、Cognito の招待メールを受け取るアドレス",
+    "email_placeholder": "admin@example.com",
+    "tier_label": "プラン",
+    "tier_basic": "Basic — 共有環境 (Pooled)",
+    "tier_advanced": "Advanced — 共有環境 (Pooled)",
+    "tier_platinum": "Platinum — 専用環境 (Silo: 専用 Cognito / Application Console)"
+  },
+  "tenant_events": {
+    "missing_tenant_id": "tenantId が指定されていません。",
+    "not_configured_header": "AdminInsight API が未配線です",
+    "not_configured_body": "本環境では admin-insight API URL が runtime-config に設定されていません。Phase 2 deploy を完了してください。",
+    "forbidden_header": "権限がありません",
+    "forbidden_body": "この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。",
+    "header": "テナント Event 一覧",
+    "back_button": "テナント一覧に戻る",
+    "provisioning_header": "テナントを準備中です",
+    "provisioning_body": "この tenant の API はまだ deploy 中のため Event 一覧を取得できません。 provisioning は通常 5〜10 分で完了します。 30 秒ごとに自動で再試行します。",
+    "provisioning_spinner": "接続待機中…",
+    "error_header": "読み込みに失敗しました",
+    "loading": "読み込み中…",
+    "empty": "この tenant にはまだ Event がありません。",
+    "col_name": "Event 名",
+    "col_status": "ステータス",
+    "col_team_count": "チーム数",
+    "col_problem_count": "問題数",
+    "col_created_at": "作成",
+    "col_updated_at": "更新"
   }
 }
