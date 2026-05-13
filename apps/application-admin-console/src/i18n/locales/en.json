@@ -18,5 +18,15 @@
   },
   "errors": {
     "generic": "An error occurred"
+  },
+  "login": {
+    "header": "Application Admin Console",
+    "description": "Sign in as a tenant developer. You will be redirected to the Cognito Hosted UI.",
+    "submit": "Sign in"
+  },
+  "home": {
+    "header_description": "TenkaCloud Battle / Challenge — Tenant admin console",
+    "open_catalog": "Open problem catalog",
+    "welcome": "Welcome, {displayName}"
   }
 }

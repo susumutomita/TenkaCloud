@@ -18,5 +18,15 @@
   },
   "errors": {
     "generic": "发生错误"
+  },
+  "login": {
+    "header": "Application Admin Console",
+    "description": "请以租户开发者身份登录。系统将跳转到 Cognito Hosted UI。",
+    "submit": "登录"
+  },
+  "home": {
+    "header_description": "TenkaCloud Battle / Challenge — 租户管理控制台",
+    "open_catalog": "打开题目目录",
+    "welcome": "欢迎, {displayName}"
   }
 }

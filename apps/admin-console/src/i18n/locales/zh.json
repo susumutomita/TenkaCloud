@@ -16,5 +16,10 @@
   },
   "errors": {
     "generic": "发生错误"
+  },
+  "login": {
+    "header": "TenkaCloud Admin Console",
+    "description": "请以系统管理员身份登录。系统将跳转到 Cognito Hosted UI。",
+    "submit": "登录"
   }
 }

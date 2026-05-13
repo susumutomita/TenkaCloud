@@ -16,5 +16,10 @@
   },
   "errors": {
     "generic": "Se produjo un error"
+  },
+  "login": {
+    "header": "TenkaCloud Admin Console",
+    "description": "Inicia sesión como administrador del sistema. Serás redirigido a la Hosted UI de Cognito.",
+    "submit": "Iniciar sesión"
   }
 }
