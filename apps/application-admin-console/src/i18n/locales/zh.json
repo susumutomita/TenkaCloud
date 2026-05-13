@@ -28,5 +28,30 @@
     "header_description": "TenkaCloud Battle / Challenge — 租户管理控制台",
     "open_catalog": "打开题目目录",
     "welcome": "欢迎, {displayName}"
+  },
+  "event_list": {
+    "header": "Event 列表",
+    "description": "比赛活动 (Event) 列表。一个 event = N 个团队 × M 个题目,可批量 deploy / teardown。",
+    "create_button": "新建 Event",
+    "error_header": "错误",
+    "loading": "正在加载…",
+    "show_archived": "显示已归档 ({count})",
+    "empty_no_event": "尚无 Event。点击 \"新建 Event\" 开始。",
+    "empty_all_archived": "没有符合条件的 Event。 勾选上方复选框可显示已归档项。",
+    "col_name": "Event 名称",
+    "col_status": "状态",
+    "col_team_count": "团队数",
+    "col_problem_count": "题目数",
+    "col_created_at": "创建时间",
+    "col_actions": "操作",
+    "archive_action": "归档",
+    "archive_aria": "归档 Event {name}",
+    "archive_modal_header": "是否归档此 Event?",
+    "archive_modal_body": "归档 Event {name} 后将从默认视图中移除。",
+    "archive_modal_note": "归档无法撤销,但其下的 deployment / Team 行由 TTL 自动清理。如尚未 Bulk Teardown,请先执行。",
+    "archive_modal_cancel": "取消",
+    "archive_modal_confirm": "归档",
+    "archive_conflict_known": "Event \"{name}\" 无法归档 (当前: {current},允许: DRAFT / ENDED / TEARDOWN)",
+    "archive_conflict_unknown": "Event \"{name}\" 无法归档"
   }
 }

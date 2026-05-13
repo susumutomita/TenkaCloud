@@ -28,5 +28,30 @@
     "header_description": "TenkaCloud Battle / Challenge — Consola de administración del tenant",
     "open_catalog": "Abrir catálogo de problemas",
     "welcome": "Bienvenido, {displayName}"
+  },
+  "event_list": {
+    "header": "Eventos",
+    "description": "Eventos de competición. Un evento = N equipos x M problemas que se despliegan y desmontan en bloque.",
+    "create_button": "Crear evento",
+    "error_header": "Error",
+    "loading": "Cargando…",
+    "show_archived": "Mostrar archivados ({count})",
+    "empty_no_event": "Aún no hay eventos. Empieza con \"Crear evento\".",
+    "empty_all_archived": "Ningún evento coincide. Marca la casilla de arriba para incluir los archivados.",
+    "col_name": "Nombre del evento",
+    "col_status": "Estado",
+    "col_team_count": "Equipos",
+    "col_problem_count": "Problemas",
+    "col_created_at": "Creado",
+    "col_actions": "Acciones",
+    "archive_action": "Archivar",
+    "archive_aria": "Archivar evento {name}",
+    "archive_modal_header": "¿Archivar este evento?",
+    "archive_modal_body": "Al archivar el evento {name} se retira de la vista por defecto.",
+    "archive_modal_note": "No es posible desarchivar, pero las filas hijas de deployment / Team se eliminan automáticamente por TTL. Ejecuta Bulk Teardown primero si todavía no lo has hecho.",
+    "archive_modal_cancel": "Cancelar",
+    "archive_modal_confirm": "Archivar",
+    "archive_conflict_known": "El evento \"{name}\" no se puede archivar (actual: {current}, permitidos: DRAFT / ENDED / TEARDOWN)",
+    "archive_conflict_unknown": "El evento \"{name}\" no se puede archivar"
   }
 }
