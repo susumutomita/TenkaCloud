@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "Español"
+  },
+  "app": {
+    "title": "Consola de Administración de Aplicación TenkaCloud",
+    "loading": "Cargando…"
+  },
+  "nav": {
+    "menu": "Menú",
+    "events": "Eventos",
+    "teams": "Equipos",
+    "problems": "Problemas",
+    "deployments": "Despliegues"
+  },
+  "auth": {
+    "sign_out": "Cerrar sesión"
+  },
+  "errors": {
+    "generic": "Se produjo un error"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "English"
+  },
+  "app": {
+    "title": "TenkaCloud Application Admin Console",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "menu": "Menu",
+    "events": "Events",
+    "teams": "Teams",
+    "problems": "Problems",
+    "deployments": "Deployments"
+  },
+  "auth": {
+    "sign_out": "Sign out"
+  },
+  "errors": {
+    "generic": "An error occurred"
+  }
+}

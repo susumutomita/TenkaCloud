@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../src/App";
 import type { AppConfig } from "../src/config";
+import { I18nProvider } from "../src/i18n";
 
 const config: AppConfig = {
   cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
@@ -34,10 +35,13 @@ function loginAs(claims: Record<string, string>) {
 }
 
 function renderApp(initialPath: string) {
+  // i18n Phase 1.C: main.tsx で I18nProvider が App を包むので test でも wrap する。
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <App config={config} />
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <App config={config} />
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
