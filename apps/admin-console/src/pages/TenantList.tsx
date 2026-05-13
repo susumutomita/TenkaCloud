@@ -26,6 +26,7 @@ import {
 } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
 
 /**
@@ -50,7 +51,7 @@ function isDeprovisioned(t: Tenant): boolean {
   return false;
 }
 
-function inactiveCell(label = "(deprovisioned)") {
+function inactiveCell(label: string) {
   return (
     <Box color="text-status-inactive" variant="small">
       {label}
@@ -62,6 +63,7 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const api = useApiClient(config);
   const auth = useAuth();
+  const t = useT();
   const [tenants, setTenants] = useState<Tenant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDeprovision, setPendingDeprovision] = useState<Tenant | null>(null);
@@ -136,23 +138,24 @@ export function TenantListPage({ config }: { config: AppConfig }) {
     }
   };
 
+  const deprovisionedLabel = t("tenant_list.deprovisioned");
   return (
     <SpaceBetween size="l">
       <Header
         variant="h1"
         actions={
           <Button variant="primary" onClick={() => navigate("/tenants/new")}>
-            新規テナント作成
+            {t("tenant_list.create_button")}
           </Button>
         }
       >
-        テナント一覧
+        {t("tenant_list.header")}
       </Header>
 
       {error && (
         <Alert
           type="error"
-          header="取得に失敗しました"
+          header={t("tenant_list.fetch_error_header")}
           dismissible
           onDismiss={() => setError(null)}
         >
@@ -163,26 +166,24 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       <Table
         variant="container"
         loading={tenants === null && error === null}
-        loadingText="読み込み中..."
+        loadingText={t("tenant_list.loading")}
         items={tenants ?? []}
         trackBy="tenantId"
         empty={
           <Box textAlign="center" color="inherit">
-            テナントがまだ登録されていません。
+            {t("tenant_list.empty")}
           </Box>
         }
         columnDefinitions={[
-          { id: "tenantId", header: "テナント ID", cell: (t) => t.tenantId },
+          { id: "tenantId", header: t("tenant_list.col_tenant_id"), cell: (row) => row.tenantId },
           {
             id: "tenantName",
-            header: "名称",
-            // Phase 1.B drill-down (#598): 名称 cell を Link 化し、tenant の Event 一覧へ
-            // ナビゲートする。deprovisioned tenant は link を出さず灰色テキスト表示。
-            cell: (t) => {
-              if (isDeprovisioned(t)) {
-                return <Box color="text-status-inactive">{t.tenantName}</Box>;
+            header: t("tenant_list.col_tenant_name"),
+            cell: (row) => {
+              if (isDeprovisioned(row)) {
+                return <Box color="text-status-inactive">{row.tenantName}</Box>;
               }
-              const href = `/tenants/${encodeURIComponent(t.tenantId)}/events`;
+              const href = `/tenants/${encodeURIComponent(row.tenantId)}/events`;
               return (
                 <Link
                   fontSize="body-m"
@@ -192,39 +193,44 @@ export function TenantListPage({ config }: { config: AppConfig }) {
                     navigate(href);
                   }}
                 >
-                  {t.tenantName}
+                  {row.tenantName}
                 </Link>
               );
             },
           },
-          { id: "email", header: "管理者メール", cell: (t) => t.email },
+          { id: "email", header: t("tenant_list.col_email"), cell: (row) => row.email },
           {
             id: "tier",
-            header: "Tier",
-            cell: (t) => <Badge color={tierBadgeColor(t.tier)}>{t.tier}</Badge>,
+            header: t("tenant_list.col_tier"),
+            cell: (row) => <Badge color={tierBadgeColor(row.tier)}>{row.tier}</Badge>,
           },
           {
             id: "status",
-            header: "状態",
-            cell: (t) => {
+            header: t("tenant_list.col_status"),
+            cell: (row) => {
               const badge = (
-                <Badge color={tenantStatusBadgeColor(t.tenantStatus)}>{t.tenantStatus}</Badge>
+                <Badge color={tenantStatusBadgeColor(row.tenantStatus)}>{row.tenantStatus}</Badge>
               );
-              if (!isInProgress(t.tenantStatus)) return badge;
-              const progress = computeTenantProgress({ createdAt: t.createdAt, nowMs });
+              if (!isInProgress(row.tenantStatus)) return badge;
+              const progress = computeTenantProgress({ createdAt: row.createdAt, nowMs });
               const progressColor =
                 progress.severity === "danger"
                   ? "text-status-error"
                   : progress.severity === "warning"
                     ? "text-status-warning"
                     : "text-status-info";
+              const suffix =
+                progress.severity === "danger"
+                  ? ` · ${t("tenant_list.progress_danger_suffix")}`
+                  : progress.severity === "warning"
+                    ? ` · ${t("tenant_list.progress_warning_suffix")}`
+                    : "";
               return (
                 <SpaceBetween direction="vertical" size="xxs">
                   {badge}
                   <Box variant="small" color={progressColor}>
                     {progress.label}
-                    {progress.severity === "danger" ? " · 失敗の可能性" : ""}
-                    {progress.severity === "warning" ? " · 想定より長い" : ""}
+                    {suffix}
                   </Box>
                 </SpaceBetween>
               );
@@ -235,44 +241,40 @@ export function TenantListPage({ config }: { config: AppConfig }) {
           // 灰色 "(deprovisioned)" にする。背景色 / badge で異常 (failed > 0) を識別可能。
           {
             id: "activeDeploys",
-            header: "稼働中 deploy",
-            cell: (t) => {
-              if (isDeprovisioned(t)) return inactiveCell();
+            header: t("tenant_list.col_active_deploys"),
+            cell: (row) => {
+              if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
               if (insightByTenantId === null) {
                 return <Box color="text-status-inactive">—</Box>;
               }
-              const summary = insightByTenantId[t.tenantId];
+              const summary = insightByTenantId[row.tenantId];
               const count = summary?.activeDeploys ?? 0;
               return <Badge color={count > 0 ? "blue" : "grey"}>{count}</Badge>;
             },
           },
           {
             id: "failedDeploys",
-            header: "失敗 deploy",
-            cell: (t) => {
-              if (isDeprovisioned(t)) return inactiveCell();
+            header: t("tenant_list.col_failed_deploys"),
+            cell: (row) => {
+              if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
               if (insightByTenantId === null) {
                 return <Box color="text-status-inactive">—</Box>;
               }
-              const summary = insightByTenantId[t.tenantId];
+              const summary = insightByTenantId[row.tenantId];
               const count = summary?.failedDeploys ?? 0;
-              // 0 件は灰色 (= 正常)、>0 は赤 badge (= 運営要対応のシグナル)。
               return <Badge color={count > 0 ? "red" : "grey"}>{count}</Badge>;
             },
           },
           {
             id: "appConsole",
-            header: "Application Console",
-            cell: (t) => {
-              if (isDeprovisioned(t)) return inactiveCell();
-              const parsed = parseTenantConfig(t.tenantConfig);
-              // silo 判定は tier label ではなく URL の実存で行う (旧 premium tier との
-              // 後方互換も同時に解決される)。tenantConfig に applicationAdminConsoleUrl
-              // が乗っていれば silo deploy 済み。無ければ pooled stack の共有 URL を使う。
+            header: t("tenant_list.col_app_console"),
+            cell: (row) => {
+              if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
+              const parsed = parseTenantConfig(row.tenantConfig);
               const siloUrl = parsed.applicationAdminConsoleUrl;
               const url = siloUrl || config.pooledApplicationAdminConsoleUrl || undefined;
               if (!url) {
-                return inactiveCell("未発行 (deploy 完了後に表示)");
+                return inactiveCell(t("tenant_list.not_issued_yet"));
               }
               const isSilo = Boolean(siloUrl);
               return (
@@ -280,19 +282,22 @@ export function TenantListPage({ config }: { config: AppConfig }) {
                   variant="inline-link"
                   href={url}
                   target="_blank"
-                  ariaLabel={`${t.tenantName} の Application Admin Console を新規タブで開く`}
+                  ariaLabel={t("tenant_list.open_console_aria").replace(
+                    "{tenantName}",
+                    row.tenantName,
+                  )}
                 >
-                  開く ↗{isSilo ? "" : " (pooled 共有)"}
+                  {isSilo ? t("tenant_list.open_console") : t("tenant_list.open_console_pooled")}
                 </Button>
               );
             },
           },
           {
             id: "logs",
-            header: "ログ",
-            cell: (t) => {
-              if (isDeprovisioned(t)) return inactiveCell();
-              const parsed = parseTenantConfig(t.tenantConfig);
+            header: t("tenant_list.col_logs"),
+            cell: (row) => {
+              if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
+              const parsed = parseTenantConfig(row.tenantConfig);
               const url = buildCodeBuildBuildUrl({
                 buildId: parsed.provisioningBuildId,
                 projectName: parsed.provisioningProjectName ?? config.provisioningCodeBuildProject,
@@ -300,30 +305,34 @@ export function TenantListPage({ config }: { config: AppConfig }) {
                 accountId: parsed.provisioningAccountId ?? config.awsAccountId,
               });
               if (!url) {
-                // silo (= tenantConfig に build 情報あり) でないと build deep link 出せない
                 const isSilo = Boolean(parsed.applicationAdminConsoleUrl);
-                return inactiveCell(isSilo ? "未発行" : "(pooled)");
+                return inactiveCell(
+                  isSilo ? t("tenant_list.logs_not_issued") : t("tenant_list.logs_pooled"),
+                );
               }
               return (
                 <Button
                   variant="inline-link"
                   href={url}
                   target="_blank"
-                  ariaLabel={`${t.tenantName} の provisioning build を AWS Console で開く`}
+                  ariaLabel={t("tenant_list.logs_codebuild_aria").replace(
+                    "{tenantName}",
+                    row.tenantName,
+                  )}
                 >
-                  CodeBuild ↗
+                  {t("tenant_list.logs_codebuild")}
                 </Button>
               );
             },
           },
           {
             id: "actions",
-            header: "操作",
-            cell: (t) => {
-              if (isDeprovisioned(t)) return inactiveCell();
+            header: t("tenant_list.col_actions"),
+            cell: (row) => {
+              if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
               return (
-                <Button variant="inline-link" onClick={() => setPendingDeprovision(t)}>
-                  deprovision
+                <Button variant="inline-link" onClick={() => setPendingDeprovision(row)}>
+                  {t("tenant_list.deprovision_action")}
                 </Button>
               );
             },
@@ -333,16 +342,16 @@ export function TenantListPage({ config }: { config: AppConfig }) {
 
       <Modal
         visible={pendingDeprovision !== null}
-        header={`テナントを deprovision しますか？`}
+        header={t("tenant_list.deprovision_modal_header")}
         onDismiss={() => setPendingDeprovision(null)}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setPendingDeprovision(null)}>
-                キャンセル
+                {t("tenant_list.deprovision_modal_cancel")}
               </Button>
               <Button variant="primary" onClick={confirmDeprovision}>
-                実行
+                {t("tenant_list.deprovision_modal_confirm")}
               </Button>
             </SpaceBetween>
           </Box>
@@ -350,8 +359,9 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       >
         {pendingDeprovision && (
           <Box variant="p">
-            {pendingDeprovision.tenantName} ({pendingDeprovision.tenantId}) を deprovision します。
-            関連する CloudFormation スタックと DynamoDB レコードが削除されます。
+            {t("tenant_list.deprovision_modal_body")
+              .replace("{tenantName}", pendingDeprovision.tenantName)
+              .replace("{tenantId}", pendingDeprovision.tenantId)}
           </Box>
         )}
       </Modal>
