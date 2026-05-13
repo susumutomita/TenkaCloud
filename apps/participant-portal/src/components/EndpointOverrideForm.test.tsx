@@ -90,6 +90,28 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     expect(container.textContent).not.toContain("Endpoint 登録");
   });
 
+  it("#703: effectiveUrl 未取得 (= deploy 未完) なら raw `-` ではなく CFn Output key 名入りの hint を出すべき", async () => {
+    mockList.mockResolvedValue({
+      teamId: "t1",
+      endpoints: [
+        {
+          slot: "users",
+          overridable: true,
+          label: "Users service",
+          defaultKey: "BaseUrl",
+          // defaultUrl / effectiveUrl は undefined (= stackOutputs に BaseUrl がまだ無い)
+        },
+      ],
+    });
+    render(<EndpointOverrideForm {...baseProps} />);
+    await waitFor(() => expect(screen.getByText("Users service")).toBeInTheDocument());
+    // raw em-dash は表示しない
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    // CFn Output key 名は表示する (= operator 切り分け diagnostic)
+    expect(screen.getByText("BaseUrl")).toBeInTheDocument();
+    expect(screen.getByText(/まだ取得できていません/)).toBeInTheDocument();
+  });
+
   it("登録ボタンで putProblemEndpointOverride を呼び、 response の endpoints で再描画すべき", async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue({

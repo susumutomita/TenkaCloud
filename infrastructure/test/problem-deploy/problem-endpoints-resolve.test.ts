@@ -44,6 +44,7 @@ describe("resolveEndpoints", () => {
       {
         slot: "frontend",
         overridable: false,
+        defaultKey: "FrontendUrl",
         defaultUrl: "https://front.example.com/",
         effectiveUrl: "https://front.example.com/",
       },
@@ -56,7 +57,8 @@ describe("resolveEndpoints", () => {
       stackOutputs: JSON.stringify([]),
       overrides: [],
     });
-    expect(result).toEqual([{ slot: "api", overridable: false }]);
+    // #703: defaultKey は metadata 由来なので stackOutputs に無くても露出して UI 側 hint に使う
+    expect(result).toEqual([{ slot: "api", overridable: false, defaultKey: "MissingKey" }]);
   });
 
   it("override がある slot は effectiveUrl が override で埋まるべき", () => {

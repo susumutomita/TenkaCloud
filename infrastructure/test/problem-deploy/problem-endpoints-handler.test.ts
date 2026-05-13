@@ -141,6 +141,29 @@ describe("listProblemEndpoints", () => {
     expect(r.kind).toBe("misconfigured");
     expect(mockedQueryTeamItems).not.toHaveBeenCalled();
   });
+
+  it("#703: defaultKey は常に metadata の default.key で埋まり、stackOutputs 無しでも UI が hint を出せるべき", async () => {
+    mockedQueryTeamItems.mockResolvedValueOnce([
+      { ...teamRow, stackOutputs: undefined, problemId: "battle-1" },
+    ]);
+    const ddbSend = vi.fn().mockResolvedValueOnce({ Items: [] });
+    const shared = buildShared({
+      problemsEndpoints: { "battle-1": [SLOT_FRONTEND, SLOT_API] },
+      ddbSend,
+    });
+    const r = await listProblemEndpoints(shared, "key", "battle-1");
+    expect(r.kind).toBe("ok");
+    if (r.kind !== "ok") return;
+    expect(r.endpoints[0]).toMatchObject({
+      slot: "frontend",
+      defaultKey: "FrontendUrl",
+      overridable: true,
+    });
+    // defaultUrl / effectiveUrl は stackOutputs 不在のため undefined
+    expect(r.endpoints[0]?.defaultUrl).toBeUndefined();
+    expect(r.endpoints[0]?.effectiveUrl).toBeUndefined();
+    expect(r.endpoints[1]?.defaultKey).toBe("ApiUrl");
+  });
 });
 
 describe("upsertProblemEndpointOverride", () => {

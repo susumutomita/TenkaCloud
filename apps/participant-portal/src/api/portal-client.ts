@@ -406,6 +406,12 @@ export interface ParticipantEndpointView {
   readonly overridable: boolean;
   readonly label?: string;
   readonly description?: string;
+  /**
+   * #703 診断用: 該当 slot の default URL を引く元 CFn Output key (= metadata.endpoints[i].default.key)。
+   * defaultUrl が undefined (= deploy 未完 / template Output 未宣言) のとき UI で「{key} 待ち」と
+   * 表示するために露出。 metadata.json 由来なので機密ではない。
+   */
+  readonly defaultKey: string;
   readonly defaultUrl?: string;
   readonly overrideUrl?: string;
   readonly effectiveUrl?: string;

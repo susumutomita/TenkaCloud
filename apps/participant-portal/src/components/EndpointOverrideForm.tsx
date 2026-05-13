@@ -165,7 +165,6 @@ export function EndpointOverrideForm({
         <SpaceBetween size="m">
           {endpoints.map((ep) => {
             const state = editState[ep.slot] ?? EMPTY_SLOT_STATE;
-            const effective = ep.effectiveUrl ?? "—";
             return (
               <Container
                 key={ep.slot}
@@ -177,7 +176,18 @@ export function EndpointOverrideForm({
               >
                 <SpaceBetween size="s">
                   <Box variant="awsui-key-label">Effective URL</Box>
-                  <Box variant="code">{effective}</Box>
+                  {ep.effectiveUrl ? (
+                    <Box variant="code">{ep.effectiveUrl}</Box>
+                  ) : (
+                    // #703: raw `—` を出すと competitor が「何が probe されているか」を判断できない。
+                    // deploy 未完 / template Output 未宣言で defaultUrl が引けない状態であることと、
+                    // どの CFn Output key を待っているかを併記する (= operator 切り分けも兼ねる)。
+                    <Box variant="small" color="text-status-info">
+                      まだ取得できていません — deploy 完了後に CFn Outputs.
+                      <code>{ep.defaultKey}</code> から自動取得します。 今すぐ自前の URL
+                      を登録するなら 下の「新しい URL を登録」 から override してください。
+                    </Box>
+                  )}
                   {ep.overrideUrl && (
                     <Box variant="small" color="text-status-info">
                       override 中 (default: <code>{ep.defaultUrl ?? "—"}</code>)
