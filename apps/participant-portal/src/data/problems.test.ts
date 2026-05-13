@@ -108,16 +108,31 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       expect(r.name).toContain("示例");
     });
 
-    it("i18n override 未宣言の問題は ja に fallback すべき (security-battle-royale)", () => {
-      const m = findProblemMetadata("security-battle-royale");
-      const r = resolveLocalizedNarrative(m!, "en");
-      expect(r.name).toBe("Security Battle Royale"); // top-level (= ja) と同じ
+    it("全 4 既存問題が en / es / zh の翻訳を持つべき (Phase 5.A + 5.C 完了)", () => {
+      for (const id of [
+        "hello-world",
+        "hello-world-battle",
+        "security-battle-royale",
+        "microservice-migration-battle",
+      ]) {
+        const m = findProblemMetadata(id);
+        expect(m?.i18n?.en?.name).toBeTruthy();
+        expect(m?.i18n?.es?.name).toBeTruthy();
+        expect(m?.i18n?.zh?.name).toBeTruthy();
+        expect(m?.i18n?.en?.learningGoals?.length ?? 0).toBeGreaterThan(0);
+      }
     });
 
-    it("locale='es' で override が無いなら ja に fallback すべき", () => {
+    it("security-battle-royale の locale='en' で英語翻訳を返すべき", () => {
+      const m = findProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m!, "en");
+      expect(r.shortDescription).toMatch(/Attack\/defend/);
+    });
+
+    it("locale='es' で security-battle-royale もスペイン語翻訳を返すべき", () => {
       const m = findProblemMetadata("security-battle-royale");
       const r = resolveLocalizedNarrative(m!, "es");
-      expect(r.shortDescription).toContain("意図的に脆弱性を仕込んだ");
+      expect(r.shortDescription).toMatch(/Ataca\/defiende/);
     });
   });
 });
