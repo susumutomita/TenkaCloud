@@ -93,7 +93,10 @@ interface I18nContextValue {
   readonly t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }
 
-function interpolate(template: string, params?: Readonly<Record<string, string | number>>): string {
+export function interpolate(
+  template: string,
+  params?: Readonly<Record<string, string | number>>,
+): string {
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name) => {
     const v = params[name];

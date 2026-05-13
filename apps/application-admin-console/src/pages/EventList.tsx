@@ -20,6 +20,7 @@ import {
   listEvents,
 } from "../api/events-client";
 import type { AppConfig } from "../config";
+import { interpolate, useT } from "../i18n";
 
 const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",
@@ -40,13 +41,14 @@ interface ColumnContext {
   navigate: NavigateFunction;
   onArchiveClick: (item: EventSummary) => void;
   archivingId: string | null;
+  t: (key: string) => string;
 }
 
 function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSummary>[] {
   return [
     {
       id: "name",
-      header: "Event 名",
+      header: ctx.t("event_list.col_name"),
       cell: (item) => (
         <Link
           fontSize="body-m"
@@ -62,24 +64,32 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
     },
     {
       id: "status",
-      header: "ステータス",
+      header: ctx.t("event_list.col_status"),
       cell: (item) => <Badge color={STATUS_COLOR[item.status]}>{item.status}</Badge>,
     },
-    { id: "teamCount", header: "チーム数", cell: (item) => item.teamCount },
-    { id: "problemCount", header: "問題数", cell: (item) => item.problemCount },
-    { id: "createdAt", header: "作成", cell: (item) => item.createdAt },
+    {
+      id: "teamCount",
+      header: ctx.t("event_list.col_team_count"),
+      cell: (item) => item.teamCount,
+    },
+    {
+      id: "problemCount",
+      header: ctx.t("event_list.col_problem_count"),
+      cell: (item) => item.problemCount,
+    },
+    { id: "createdAt", header: ctx.t("event_list.col_created_at"), cell: (item) => item.createdAt },
     {
       id: "actions",
-      header: "操作",
+      header: ctx.t("event_list.col_actions"),
       cell: (item) => (
         <Button
           variant="link"
           loading={ctx.archivingId === item.eventId}
           disabled={!ARCHIVABLE_STATUSES.has(item.status)}
           onClick={() => ctx.onArchiveClick(item)}
-          ariaLabel={`Event ${item.name} をアーカイブ`}
+          ariaLabel={interpolate(ctx.t("event_list.archive_aria"), { name: item.name })}
         >
-          アーカイブ
+          {ctx.t("event_list.archive_action")}
         </Button>
       ),
     },
@@ -89,6 +99,7 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
 export function EventListPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
+  const t = useT();
   const [items, setItems] = useState<readonly EventSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -149,8 +160,8 @@ export function EventListPage({ config }: { config: AppConfig }) {
         const current = match?.[1];
         setError(
           current
-            ? `Event "${target.name}" はアーカイブできません (現在: ${current}、許可: DRAFT / ENDED / TEARDOWN)`
-            : `Event "${target.name}" はアーカイブできません`,
+            ? interpolate(t("event_list.archive_conflict_known"), { name: target.name, current })
+            : interpolate(t("event_list.archive_conflict_unknown"), { name: target.name }),
         );
       } else {
         setError(err instanceof Error ? err.message : String(err));
@@ -161,14 +172,14 @@ export function EventListPage({ config }: { config: AppConfig }) {
   };
 
   const columns = useMemo(
-    () => buildColumns({ navigate, onArchiveClick, archivingId }),
-    [navigate, onArchiveClick, archivingId],
+    () => buildColumns({ navigate, onArchiveClick, archivingId, t }),
+    [navigate, onArchiveClick, archivingId, t],
   );
 
   if (!items && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> 読み込み中…
+        <Spinner /> {t("event_list.loading")}
       </Box>
     );
   }
@@ -177,53 +188,58 @@ export function EventListPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="競技イベント (Event) 一覧。1 event = N teams × M problems を一括 deploy / teardown できます。"
+        description={t("event_list.description")}
         actions={
           <Button variant="primary" onClick={() => navigate("/events/new")}>
-            新規 Event 作成
+            {t("event_list.create_button")}
           </Button>
         }
       >
-        Event 一覧
+        {t("event_list.header")}
       </Header>
 
       {error && (
-        <Alert type="error" header="エラー" dismissible onDismiss={() => setError(null)}>
+        <Alert
+          type="error"
+          header={t("event_list.error_header")}
+          dismissible
+          onDismiss={() => setError(null)}
+        >
           {error}
         </Alert>
       )}
 
       {archivedCount > 0 && (
         <Checkbox checked={showArchived} onChange={({ detail }) => setShowArchived(detail.checked)}>
-          アーカイブ済 ({archivedCount}) も表示
+          {interpolate(t("event_list.show_archived"), { count: String(archivedCount) })}
         </Checkbox>
       )}
 
       <Table
         items={visible}
         columnDefinitions={columns}
-        loadingText="読み込み中"
+        loadingText={t("event_list.loading")}
         empty={
           <Box textAlign="center" color="inherit" padding="xxl">
-            {showArchived
-              ? "まだ Event はありません。「新規 Event 作成」から始めてください。"
-              : archivedCount > 0
-                ? "表示対象の Event はありません (アーカイブ済を含めるには上のチェックボックスを ON)。"
-                : "まだ Event はありません。「新規 Event 作成」から始めてください。"}
+            {showArchived || archivedCount === 0
+              ? t("event_list.empty_no_event")
+              : t("event_list.empty_all_archived")}
           </Box>
         }
       />
 
       <Modal
         visible={archiveTarget !== null}
-        header="Event をアーカイブしますか?"
+        header={t("event_list.archive_modal_header")}
         onDismiss={() => setArchiveTarget(null)}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setArchiveTarget(null)}>キャンセル</Button>
+              <Button onClick={() => setArchiveTarget(null)}>
+                {t("event_list.archive_modal_cancel")}
+              </Button>
               <Button variant="primary" onClick={handleArchiveConfirm}>
-                アーカイブ
+                {t("event_list.archive_modal_confirm")}
               </Button>
             </SpaceBetween>
           </Box>
@@ -231,12 +247,12 @@ export function EventListPage({ config }: { config: AppConfig }) {
       >
         <SpaceBetween size="s">
           <Box>
-            Event <Box variant="strong">{archiveTarget?.name}</Box> をアーカイブし、 一覧の default
-            view から外します。
+            {interpolate(t("event_list.archive_modal_body"), {
+              name: archiveTarget?.name ?? "",
+            })}
           </Box>
           <Box variant="small" color="text-status-info">
-            ARCHIVED から戻すことはできませんが、配下の deployment / Team 行は TTL で
-            自動消去されます。Bulk Teardown が未済の場合は先に実施してください。
+            {t("event_list.archive_modal_note")}
           </Box>
         </SpaceBetween>
       </Modal>

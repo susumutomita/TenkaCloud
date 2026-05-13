@@ -28,5 +28,30 @@
     "header_description": "TenkaCloud Battle / Challenge — Tenant admin console",
     "open_catalog": "Open problem catalog",
     "welcome": "Welcome, {displayName}"
+  },
+  "event_list": {
+    "header": "Events",
+    "description": "Competition events. One event = N teams x M problems that can be deployed and torn down in bulk.",
+    "create_button": "Create event",
+    "error_header": "Error",
+    "loading": "Loading…",
+    "show_archived": "Show archived ({count})",
+    "empty_no_event": "No events yet. Start by clicking \"Create event\".",
+    "empty_all_archived": "No events match. Tick the checkbox above to include archived ones.",
+    "col_name": "Event name",
+    "col_status": "Status",
+    "col_team_count": "Teams",
+    "col_problem_count": "Problems",
+    "col_created_at": "Created",
+    "col_actions": "Actions",
+    "archive_action": "Archive",
+    "archive_aria": "Archive event {name}",
+    "archive_modal_header": "Archive this event?",
+    "archive_modal_body": "Archiving event {name} removes it from the default view.",
+    "archive_modal_note": "You cannot un-archive, but child deployment / Team rows are auto-removed by TTL. Run Bulk Teardown first if you haven't.",
+    "archive_modal_cancel": "Cancel",
+    "archive_modal_confirm": "Archive",
+    "archive_conflict_known": "Event \"{name}\" cannot be archived (current: {current}, allowed: DRAFT / ENDED / TEARDOWN)",
+    "archive_conflict_unknown": "Event \"{name}\" cannot be archived"
   }
 }

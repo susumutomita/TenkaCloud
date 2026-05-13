@@ -28,5 +28,30 @@
     "header_description": "TenkaCloud Battle / Challenge — テナント管理コンソール",
     "open_catalog": "問題カタログを開く",
     "welcome": "ようこそ、{displayName} さん"
+  },
+  "event_list": {
+    "header": "Event 一覧",
+    "description": "競技イベント (Event) 一覧。1 event = N teams × M problems を一括 deploy / teardown できます。",
+    "create_button": "新規 Event 作成",
+    "error_header": "エラー",
+    "loading": "読み込み中…",
+    "show_archived": "アーカイブ済 ({count}) も表示",
+    "empty_no_event": "まだ Event はありません。「新規 Event 作成」から始めてください。",
+    "empty_all_archived": "表示対象の Event はありません (アーカイブ済を含めるには上のチェックボックスを ON)。",
+    "col_name": "Event 名",
+    "col_status": "ステータス",
+    "col_team_count": "チーム数",
+    "col_problem_count": "問題数",
+    "col_created_at": "作成",
+    "col_actions": "操作",
+    "archive_action": "アーカイブ",
+    "archive_aria": "Event {name} をアーカイブ",
+    "archive_modal_header": "Event をアーカイブしますか?",
+    "archive_modal_body": "Event {name} をアーカイブし、 一覧の default view から外します。",
+    "archive_modal_note": "ARCHIVED から戻すことはできませんが、配下の deployment / Team 行は TTL で自動消去されます。Bulk Teardown が未済の場合は先に実施してください。",
+    "archive_modal_cancel": "キャンセル",
+    "archive_modal_confirm": "アーカイブ",
+    "archive_conflict_known": "Event \"{name}\" はアーカイブできません (現在: {current}、許可: DRAFT / ENDED / TEARDOWN)",
+    "archive_conflict_unknown": "Event \"{name}\" はアーカイブできません"
   }
 }
