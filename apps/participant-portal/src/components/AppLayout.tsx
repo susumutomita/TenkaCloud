@@ -40,34 +40,34 @@ const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
  * SideNavigation items (notifications 未読 badge 用に動的構築)。`unread` を渡して
  * `info` バッジに件数を出す。> 99 は "99+" にクランプして badge 横幅を一定にする。
  */
-function buildSideNavItems(unread: number): SideNavigationProps.Item[] {
+function buildSideNavItems(unread: number, t: (key: string) => string): SideNavigationProps.Item[] {
   const notificationsLink: SideNavigationProps.Link = {
     type: "link",
     href: "/notifications",
-    text: "Notifications",
+    text: t("nav.notifications"),
     info:
       unread > 0 ? <Badge color="red">{unread > 99 ? "99+" : String(unread)}</Badge> : undefined,
   };
   return [
     {
       type: "section",
-      text: "Event",
+      text: t("nav.event_section"),
       items: [
-        { type: "link", href: "/", text: "Home" },
-        { type: "link", href: "/scoreboard", text: "Scoreboard" },
-        { type: "link", href: "/score-events", text: "Score events" },
+        { type: "link", href: "/", text: t("nav.home") },
+        { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
+        { type: "link", href: "/score-events", text: t("nav.score_events") },
         notificationsLink,
       ],
     },
     {
       type: "section",
-      text: "Quests",
-      items: [{ type: "link", href: "/problems", text: "問題一覧" }],
+      text: t("nav.quests_section"),
+      items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
     },
     {
       type: "section",
-      text: "Tools",
-      items: [{ type: "link", href: "/tools/sso", text: "SSO Credentials" }],
+      text: t("nav.tools_section"),
+      items: [{ type: "link", href: "/tools/sso", text: t("nav.sso_credentials") }],
     },
   ];
 }
@@ -86,7 +86,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   const navigate = useNavigate();
   const teamView = useTeamView();
 
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
 
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
     // Issue #583 Phase 1.A: locale switcher utility は session 有無に依存しない (= ログイン
@@ -94,7 +94,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     const localeUtility: TopNavigationProps.Utility = {
       type: "menu-dropdown",
       iconName: "globe",
-      ariaLabel: "言語切替 / Language",
+      ariaLabel: t("switcher.aria_label"),
       text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
       items: SUPPORTED_LOCALES.map((code) => ({
         id: code,
@@ -143,7 +143,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         type: "menu-dropdown",
         text: auth.session.teamName,
         iconName: "user-profile",
-        items: [{ id: "logout", text: "サインアウト" }],
+        items: [{ id: "logout", text: t("nav.sign_out") }],
         onItemClick: ({ detail }) => {
           if (detail.id === "logout") {
             auth.logout();
@@ -162,11 +162,12 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     config.mode,
     locale,
     setLocale,
+    t,
   ]);
 
   const sideNavItems = useMemo(
-    () => buildSideNavItems(teamView.unreadNotificationCount),
-    [teamView.unreadNotificationCount],
+    () => buildSideNavItems(teamView.unreadNotificationCount, t),
+    [teamView.unreadNotificationCount, t],
   );
 
   return (
@@ -179,7 +180,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         navigation={
           <SideNavigation
             activeHref={location.pathname}
-            header={{ href: "/", text: "メニュー" }}
+            header={{ href: "/", text: t("nav.menu_header") }}
             items={sideNavItems}
             onFollow={(e) => {
               if (!e.detail.external) {
@@ -193,7 +194,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
           <SpaceBetween size="m">
             {auth.session === null ? (
               <Box variant="strong" color="text-status-warning">
-                セッションがありません。再ログインしてください。
+                {t("app.no_session")}
               </Box>
             ) : null}
             {children}

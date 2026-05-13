@@ -4,12 +4,25 @@
   },
   "app": {
     "title": "TenkaCloud Participant Portal",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "no_session": "No active session. Please sign in again."
   },
   "nav": {
     "problems": "Problems",
     "leaderboard": "Leaderboard",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "menu_header": "Menu",
+    "event_section": "Event",
+    "quests_section": "Quests",
+    "tools_section": "Tools",
+    "home": "Home",
+    "scoreboard": "Scoreboard",
+    "score_events": "Score events",
+    "sso_credentials": "SSO Credentials",
+    "sign_out": "Sign out"
+  },
+  "switcher": {
+    "aria_label": "Language switcher"
   },
   "errors": {
     "generic": "An error occurred",

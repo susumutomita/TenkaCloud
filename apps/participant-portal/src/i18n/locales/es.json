@@ -4,12 +4,25 @@
   },
   "app": {
     "title": "Portal de Participantes TenkaCloud",
-    "loading": "Cargando…"
+    "loading": "Cargando…",
+    "no_session": "No hay sesión activa. Por favor, inicia sesión de nuevo."
   },
   "nav": {
     "problems": "Problemas",
     "leaderboard": "Clasificación",
-    "notifications": "Notificaciones"
+    "notifications": "Notificaciones",
+    "menu_header": "Menú",
+    "event_section": "Evento",
+    "quests_section": "Quests",
+    "tools_section": "Herramientas",
+    "home": "Inicio",
+    "scoreboard": "Tabla de puntuación",
+    "score_events": "Eventos de puntuación",
+    "sso_credentials": "Credenciales SSO",
+    "sign_out": "Cerrar sesión"
+  },
+  "switcher": {
+    "aria_label": "Selector de idioma"
   },
   "errors": {
     "generic": "Se produjo un error",
