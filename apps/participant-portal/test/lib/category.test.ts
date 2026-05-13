@@ -16,4 +16,18 @@ describe("categoryOf", () => {
     const scoring: ParticipantScoringInfo = { kind: "flag", points: 100 };
     expect(categoryOf(scoring)).toBe("challenge");
   });
+
+  it("kind=phased-polling は battle を返すべき (#688 regression — phased-polling は battle 軸)", () => {
+    const scoring: ParticipantScoringInfo = { kind: "phased-polling" };
+    expect(categoryOf(scoring)).toBe("battle");
+  });
+
+  it("kind=uptime-flat / uptime-multi はいずれも battle を返すべき", () => {
+    expect(categoryOf({ kind: "uptime-flat" })).toBe("battle");
+    expect(categoryOf({ kind: "uptime-multi" })).toBe("battle");
+  });
+
+  it("kind=attack-detection は battle を返すべき", () => {
+    expect(categoryOf({ kind: "attack-detection" })).toBe("battle");
+  });
 });

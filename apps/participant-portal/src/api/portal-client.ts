@@ -14,8 +14,22 @@ export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
   "DELETED",
 ]);
 
+/**
+ * ADR-012 で定義された 5 種の builtin scoring kind。
+ * Phase 1 (旧 view) は flag / uptime のみだったが、 Phase 3 で phased-polling /
+ * uptime-flat / uptime-multi / attack-detection が追加された。
+ * UI 表示 (= categoryOf) は ADR-005 で Battle / Challenge の 2 軸に collapse する。
+ */
+export type ScoringKind =
+  | "flag"
+  | "uptime"
+  | "uptime-flat"
+  | "uptime-multi"
+  | "phased-polling"
+  | "attack-detection";
+
 export interface ParticipantScoringInfo {
-  readonly kind: "flag" | "uptime";
+  readonly kind: ScoringKind;
   readonly points?: number;
   readonly pointsPerSuccess?: number;
   readonly hints?: readonly string[];
