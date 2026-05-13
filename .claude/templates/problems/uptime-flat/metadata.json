@@ -1,0 +1,31 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "__PROBLEM_ID__",
+  "name": "__PROBLEM_NAME__",
+  "category": "Battle",
+  "status": "draft",
+  "difficulty": 3,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "1 endpoint を稼働させ続けて defense する Battle 問題の skeleton (uptime-flat 採点)。",
+  "description": "deploy 後に 1 endpoint が払い出される。 1 分毎に platform が probe し、 200 OK ならポイント加算。 fail 時はゼロ加算 (penalty なし)。\\n\\n典型用途: 「最低限稼働する単一サービス」 を 1〜2 時間維持する Battle。 攻撃側 / 防御側のロール分けはしない最も簡単な uptime 採点。",
+  "tags": ["__TAG__"],
+  "exposedPorts": [{ "port": 80, "name": "service (HTTP)" }],
+  "learningGoals": ["__LEARNING_GOAL_1__"],
+  "cfnTemplate": "template.yaml",
+  "endpoints": [
+    {
+      "slot": "main",
+      "default": { "from": "cfn-output", "key": "ServiceUrl" },
+      "overridable": false,
+      "label": "Service endpoint",
+      "description": "競技者が稼働させ続ける service。 deploy 直後は ok、 攻撃 / 自己破壊で fail する想定。"
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-flat",
+    "intervalMinutes": 1,
+    "probe": { "path": "/", "expectStatus": [200] },
+    "pointsPerSuccess": 100,
+    "failurePenalty": 0
+  }
+}

@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem — __PROBLEM_ID__ (attack-detection Battle).
+  競技者向け service + 攻撃検知 counter (= scoring engine が CFn Output から読む) の skeleton。
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+
+Resources:
+  # TODO: 競技者が monitor する service / WAF / SOC の AWS リソースを実装。
+  PlaceholderService:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${NamePrefix}-placeholder"
+
+  # 攻撃検知 counter の格納場所。 競技者の service / WAF / Lambda がここに値を書き、
+  # CFn Output で露出する。 platform は 1 分毎にこの Output 値を読んで diff を取る。
+  #
+  # 注: AWS::SSM::Parameter は value 更新後に CFn Outputs に反映される時間が不定。
+  # 確実に runtime 値を取りたい場合は CFn Custom Resource (= Lambda が SSM 読んで返す) を
+  # 噛ませる構成にする。
+  AttackCounterParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/attack-count"
+      Type: String
+      Value: "0"
+      Description: "Attack detection counter (= 競技者 service が increment、 scoring が diff で加点)。"
+
+Outputs:
+  ServiceUrl:
+    Description: "metadata.endpoints.main.default.key で参照される URL。"
+    Value: "https://example.com/__REPLACE__"
+  AttackCount:
+    Description: "scoring.statsOutputKey が指す counter 値 (= 数値文字列)。"
+    Value: !GetAtt AttackCounterParameter.Value
+  NamePrefix:
+    Value: !Ref NamePrefix

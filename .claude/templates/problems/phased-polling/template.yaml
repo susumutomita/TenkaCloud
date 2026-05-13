@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem — __PROBLEM_ID__ (phased-polling Battle).
+  時間経過で rule が変わる Battle 型 skeleton。 disruption 発火 Scheduler 含む。
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+  DegradedAfterMinutes:
+    Type: Number
+    Default: 60
+    MinValue: 1
+    MaxValue: 720
+    Description: "[ADR-012 Phase 4 Disruption] disruptions[0] 発火タイミング。 metadata.phases[0].afterMinutes と一致させる。"
+
+Resources:
+  # TODO: 競技者向け service を実装 (EC2 + docker compose / Lambda / ECS / App Runner 等)。
+  # 例として SNS Topic placeholder のみ:
+  PlaceholderService:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${NamePrefix}-placeholder"
+
+  # ----- Disruption pattern (ADR-012 Phase 4) -----
+  # phases[0]=degraded fire 時に SSM RunCommand で対象 service に手を入れる Lambda。
+  # idempotent に書くこと (= 2 回 fire しても挙動同じ)。
+  DisruptionFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-disruption-fn-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  DegradedDisruptionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-degraded-disruption"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt DisruptionFunctionRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          def handler(event, context):
+              # TODO: 実装。 SSM RunCommand / S3 swap / IAM 剥奪 等。
+              print("disruption fired", event)
+              return {"ok": True}
+
+  SchedulerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-scheduler-invoke-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeDisruptionFunction
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt DegradedDisruptionFunction.Arn
+
+  DegradedDisruptionSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${NamePrefix}-degraded-disruption"
+      FlexibleTimeWindow: { Mode: "OFF" }
+      ScheduleExpression: !Sub "rate(${DegradedAfterMinutes} minutes)"
+      Target:
+        Arn: !GetAtt DegradedDisruptionFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+
+Outputs:
+  BaseUrl:
+    Description: "main slot の default URL。"
+    Value: "https://example.com/__REPLACE__"
+  NamePrefix:
+    Value: !Ref NamePrefix

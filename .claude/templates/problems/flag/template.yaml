@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem — __PROBLEM_ID__ (flag-kind Challenge).
+  競技者が AWS Console / CLI で正解値を発見して portal に提出する Challenge 型の skeleton。
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    Description: "tc-{problemSlug}-{teamSlug} 形式の共通リソース prefix。"
+
+Resources:
+  # 例: SSM Parameter に正解 flag を仕込む。 競技者は ssm:GetParameter で取り出す等。
+  FlagParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/flag"
+      Type: String
+      Value: "TC{__REPLACE_WITH_REAL_FLAG__}"
+      Description: "本問題の正解 flag (competitor が発見すべき値)。"
+
+Outputs:
+  FlagValue:
+    Description: "scoring engine が submitted flag と一致比較する正解値 (= metadata.scoring.flagOutputKey で参照)。"
+    Value: !GetAtt FlagParameter.Value
+  NamePrefix:
+    Description: "Deploy 時に渡された prefix (echo)。"
+    Value: !Ref NamePrefix

@@ -1,0 +1,43 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "__PROBLEM_ID__",
+  "name": "__PROBLEM_NAME__",
+  "category": "Battle",
+  "status": "draft",
+  "difficulty": 3,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "N slot を全部生存させ続ける uptime-multi 採点の Battle skeleton。",
+  "description": "deploy 後に複数 endpoint が払い出される。 1 分毎に platform が全 slot を probe し、 **全部 OK** なら pointsAllOk 加算、 1 つでも fail なら failurePenalty。\\n\\n典型用途: 「複数 service の同時稼働」 が必要な Battle (= microservice 監視 / 3-tier app 等)。 1 つでも倒すと点が伸びないため、 攻撃側に「どこを倒すか」 の戦略が出る。",
+  "tags": ["__TAG__"],
+  "exposedPorts": [
+    { "port": 80, "name": "frontend (HTTP)" },
+    { "port": 8080, "name": "api (HTTP)" }
+  ],
+  "learningGoals": ["__LEARNING_GOAL_1__"],
+  "cfnTemplate": "template.yaml",
+  "endpoints": [
+    {
+      "slot": "frontend",
+      "default": { "from": "cfn-output", "key": "FrontendUrl" },
+      "overridable": true,
+      "label": "Frontend",
+      "description": "ユーザー向け UI service。 WAF / CDN を被せて override 登録可。"
+    },
+    {
+      "slot": "api",
+      "default": { "from": "cfn-output", "key": "ApiUrl" },
+      "overridable": true,
+      "label": "API",
+      "description": "JSON API。 SQLi / injection 攻撃の標的になる想定。"
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-multi",
+    "probedSlots": [
+      { "slot": "frontend", "path": "/", "expectStatus": [200] },
+      { "slot": "api", "path": "/healthz", "expectStatus": [200] }
+    ],
+    "pointsAllOk": 100,
+    "failurePenalty": 0
+  }
+}

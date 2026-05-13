@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem — __PROBLEM_ID__ (uptime-multi Battle).
+  N slot 全 OK でのみ加点される Battle 型 skeleton。
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    Description: "tc-{problemSlug}-{teamSlug} 形式の共通リソース prefix。"
+  AllowedCidr:
+    Type: String
+    Default: "0.0.0.0/0"
+    AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+
+Resources:
+  # TODO: 各 endpoint slot に対応する AWS リソースを定義。
+  # security-battle-royale の template.yaml を雛形に EC2 + Docker compose で複数 service を立てる構成が典型。
+  PlaceholderService:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${NamePrefix}-placeholder"
+
+Outputs:
+  FrontendUrl:
+    Description: "frontend slot の default URL (metadata.endpoints.frontend.default.key と一致)。"
+    Value: "https://example.com/frontend"
+  ApiUrl:
+    Description: "api slot の default URL。"
+    Value: "https://example.com/api"
+  NamePrefix:
+    Value: !Ref NamePrefix

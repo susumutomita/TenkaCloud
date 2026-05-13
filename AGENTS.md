@@ -156,10 +156,41 @@ problems/<category>/<id>/          # metadata.json + template.yaml が正本
 - **DeployRequested イベント** は `ProblemDeployBackendStack` の Worker Lambda が拾い、tenant の ExternalId で競技者アカウントに AssumeRole → CFn CreateStack する。**ExternalId は必ず要求** (省略不可)。
 - **Frontend の URL** は `runtime-config.json` (CloudFront 配下) 経由で注入される。`apps/*/src/config.ts` に `loadConfig()` がある。新しい URL を追加するときは hosting stack の env と config.ts の interface を両方更新する。
 
+## Problem Authoring (ADR-012)
+
+新しい問題を追加するときの正本は次の 3 点です。
+
+- **正本 schema**: [`problems/SCHEMA.json`](./problems/SCHEMA.json) — `metadata.json` の JSON Schema
+- **30 分 onboarding guide**: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — step-by-step + 5 kind の決定木 + 実例 4 問
+- **Claude Code skill**: `.claude/skills/create-problem/SKILL.md` — `/create-problem` で起動、要件ヒアリング → 雛形生成 → metadata 編集まで誘導
+
+問題は **3-asset model** (ADR-012):
+
+```
+problems/<category>/<id>/
+├── metadata.json    # catalog 表示 + scoring engine + portal plugin 配線の正本
+├── template.yaml    # CFn ペライチ (deploy 本体、 競技者 account に直接 deploy)
+└── portal/          # 任意 (= dashboard.slots で宣言した tsx)
+```
+
+採点は 5 種の builtin kind (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) を 1 問題 1 つ宣言する。 platform 側 generic scoring Lambda (= ADR-012 Phase 3) が dispatch する。 問題固有の scoring code を platform に書かない。
+
+雛形生成 CLI を備えています。
+
+```bash
+bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>
+bun run scripts/tenkacloud-problem.ts validate <id>
+bun run scripts/tenkacloud-problem.ts list-kinds
+```
+
+雛形 templates: `.claude/templates/problems/<kind>/` に 5 kind 分 (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`)。
+
 ## 参照
 
 - @CLAUDE.md — プロダクト全体・アーキテクチャ・コマンド一覧
 - [`docs/architecture/harness.md`](./docs/architecture/harness.md) — invariant + PR Discipline の正本
+- [`docs/architecture/adr-012-problem-plugin-architecture.html`](./docs/architecture/adr-012-problem-plugin-architecture.html) — 問題 = plugin、 platform = host の設計
+- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 問題作成 30 分 onboarding
 - [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — 競技者アカウント側のセットアップ
 - [`problems/README.md`](./problems/README.md) — 問題追加の手順とスキーマ
 - `apps/<app>/README.md` — 各 SPA のローカル開発手順
