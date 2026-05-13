@@ -1,311 +1,967 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TenkaCloud — AWS マルチテナント SaaS 競技基盤</title>
-<meta name="description" content="TenkaCloud は AWS マルチテナント SaaS の競技 (Battle / Challenge) ホスティング基盤。SBT (@cdklabs/sbt-aws) 上で問題テンプレートを競技者 AWS アカウントへ自動 deploy する。OSS / Apache 2.0。">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TenkaCloud — クラウド競技を、もっとシンプルに。</title>
+<meta name="description" content="TenkaCloud は本物の AWS で構築・防御・コスト最適化を競う、オープンソースのクラウド競技基盤。Battle / Challenge を 1 イベントに混ぜて使える、Apache 2.0 の SaaS。" />
+<meta property="og:title" content="TenkaCloud — クラウド競技を、もっとシンプルに。" />
+<meta property="og:description" content="本物の AWS で競う、オープンソースのクラウド競技基盤。Battle / Challenge を 1 イベントに混ぜて使える。Apache 2.0。" />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <style>
-  :root {
-    --c-text: #1f2328;
-    --c-muted: #59636e;
-    --c-border: #d1d9e0;
-    --c-bg: #ffffff;
-    --c-bg-soft: #f6f8fa;
-    --c-link: #0969da;
-    --c-accent: #0550ae;
-    --c-warn: #9a6700;
-    --c-warn-bg: #fff8c5;
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Segoe UI", sans-serif;
-    color: var(--c-text);
-    background: var(--c-bg);
-    line-height: 1.65;
-  }
-  a { color: var(--c-link); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code {
-    background: var(--c-bg-soft);
-    padding: 0.1em 0.4em;
-    border-radius: 3px;
-    font-size: 0.92em;
-    font-family: SFMono-Regular, Consolas, monospace;
-  }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 0 1.5rem; }
-  header.site {
-    border-bottom: 1px solid var(--c-border);
-    padding: 1rem 0;
-    background: var(--c-bg);
-  }
-  header.site .wrap {
-    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    flex-wrap: wrap;
-  }
-  header.site .brand {
-    font-weight: 700; font-size: 1.1rem; color: var(--c-text);
-  }
-  header.site nav { display: flex; gap: 1.2rem; font-size: 0.95rem; }
+:root {
+  --ink:        #1d1d1f;
+  --ink-2:      #424245;
+  --ink-3:      #6e6e73;
+  --ink-4:      #86868b;
+  --line:       #d2d2d7;
+  --line-soft:  #e8e8ed;
+  --paper:      #ffffff;
+  --paper-2:    #fbfbfd;
+  --paper-3:    #f5f5f7;
 
-  .hero {
-    padding: 3.5rem 0 2.5rem;
-    background: linear-gradient(180deg, var(--c-bg-soft) 0%, var(--c-bg) 100%);
-    border-bottom: 1px solid var(--c-border);
-  }
-  .hero h1 {
-    font-size: 2.2rem; line-height: 1.25; margin: 0 0 1rem;
-    letter-spacing: -0.01em;
-  }
-  .hero .tagline {
-    font-size: 1.2rem; color: var(--c-muted); margin: 0 0 1.5rem;
-  }
-  .hero .cta {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    background: var(--c-link); color: #fff;
-    padding: 0.7rem 1.4rem; border-radius: 6px;
-    font-weight: 600; font-size: 0.98rem;
-  }
-  .hero .cta:hover { background: var(--c-accent); text-decoration: none; }
-  .hero .cta-secondary {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    border: 1px solid var(--c-border); color: var(--c-text);
-    padding: 0.7rem 1.4rem; border-radius: 6px;
-    font-weight: 600; font-size: 0.98rem;
-    margin-left: 0.6rem;
-  }
-  .hero .cta-secondary:hover { background: var(--c-bg-soft); text-decoration: none; }
+  --font-sans: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  .alpha-banner {
-    background: var(--c-warn-bg); color: var(--c-warn);
-    padding: 0.8rem 1rem; border-radius: 4px;
-    font-size: 0.92rem; margin: 1.5rem 0 0;
-    border-left: 4px solid var(--c-warn);
-  }
+  --w: 980px;
+}
 
-  section { padding: 2.5rem 0; }
-  section h2 {
-    font-size: 1.4rem; margin: 0 0 1rem;
-    border-bottom: 1px solid var(--c-border); padding-bottom: 0.4rem;
-  }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-weight: 400;
+  line-height: 1.5;
+}
 
-  .features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 1.2rem; margin-top: 1rem;
-  }
-  .feature {
-    border: 1px solid var(--c-border);
-    border-radius: 6px;
-    padding: 1.2rem 1.3rem;
-    background: var(--c-bg);
-  }
-  .feature h3 {
-    font-size: 1.02rem; margin: 0 0 0.5rem;
-  }
-  .feature p {
-    font-size: 0.93rem; color: var(--c-muted); margin: 0;
-  }
+.wrap { max-width: var(--w); margin: 0 auto; padding: 0 22px; }
 
-  .stack-table {
-    width: 100%; border-collapse: collapse;
-    font-size: 0.93rem; margin-top: 0.5rem;
-  }
-  .stack-table th, .stack-table td {
-    border: 1px solid var(--c-border);
-    padding: 0.5rem 0.8rem; text-align: left; vertical-align: top;
-  }
-  .stack-table th { background: var(--c-bg-soft); font-weight: 600; }
+/* ============== NAV ============== */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  height: 48px;
+}
+.nav .wrap {
+  height: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  max-width: 1024px;
+}
+.nav .brand {
+  font-weight: 500; font-size: 19px; letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.nav-links { display: flex; gap: 28px; font-size: 12px; }
+.nav-links a { color: var(--ink-2); text-decoration: none; cursor: pointer; }
+.nav-links a:hover { color: var(--ink); }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 12px; }
+.nav-right .lang { color: var(--ink-3); cursor: pointer; background: none; border: none; padding: 0; font: inherit; }
+.nav-right .lang.on { color: var(--ink); font-weight: 500; }
+.nav-right .sep { color: var(--line); }
 
-  pre.cli {
-    background: #0d1117; color: #e6edf3;
-    padding: 1rem 1.2rem; border-radius: 6px;
-    overflow-x: auto; font-size: 0.88rem; line-height: 1.6;
-    font-family: SFMono-Regular, Consolas, monospace;
-  }
-  pre.cli .comment { color: #8b949e; }
-  pre.cli .cmd { color: #79c0ff; }
+/* ============== TYPE ============== */
+h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.025em; margin: 0; color: var(--ink); }
+p { margin: 0; }
 
-  footer.site {
-    border-top: 1px solid var(--c-border);
-    padding: 2rem 0;
-    color: var(--c-muted); font-size: 0.9rem;
-    margin-top: 2rem;
-  }
-  footer.site .wrap {
-    display: flex; gap: 1.5rem; flex-wrap: wrap;
-    justify-content: space-between;
-  }
-  footer.site a { color: var(--c-muted); }
+.eyebrow {
+  font-size: 14px; font-weight: 500;
+  color: var(--ink-3); margin-bottom: 6px;
+}
+
+/* ============== HERO ============== */
+.hero { text-align: center; padding: 96px 22px 24px; }
+.hero h1 {
+  font-size: clamp(48px, 7vw, 80px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  max-width: 880px;
+  margin: 0 auto 18px;
+  text-wrap: balance;
+}
+.hero h1 em { font-style: normal; font-weight: 600; color: var(--ink-3); }
+.hero .sub {
+  font-size: clamp(20px, 2.2vw, 26px);
+  line-height: 1.32;
+  color: var(--ink-2);
+  max-width: 720px;
+  margin: 0 auto;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.hero .cta-row {
+  display: flex; gap: 22px; justify-content: center;
+  margin-top: 28px; font-size: 17px;
+}
+.hero .cta-row a {
+  color: #0066cc; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.hero .cta-row a:hover { text-decoration: underline; }
+
+.hero-visual { margin: 56px auto 0; max-width: 1024px; padding: 0 22px; }
+
+/* device-like glass card showing the product */
+.product-card {
+  position: relative;
+  background: var(--paper-3);
+  border-radius: 28px;
+  padding: 56px 48px;
+  overflow: hidden;
+}
+.product-card .inner {
+  position: relative;
+  background: var(--paper);
+  border-radius: 18px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 20px 60px -20px rgba(0,0,0,0.18);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+}
+.product-card .toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--paper-2);
+}
+.product-card .toolbar .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+.product-card .toolbar .url {
+  margin-left: auto; margin-right: auto;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
+}
+.product-card .body { display: grid; grid-template-columns: 220px 1fr; min-height: 360px; }
+.product-card .sidebar {
+  border-right: 1px solid var(--line-soft);
+  padding: 20px 16px; background: var(--paper-2);
+}
+.product-card .sidebar .group {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-4); margin: 14px 8px 6px;
+}
+.product-card .sidebar a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 6px;
+  font-size: 13px; color: var(--ink-2); text-decoration: none;
+}
+.product-card .sidebar a.on { background: var(--paper-3); color: var(--ink); font-weight: 500; }
+.product-card .sidebar a .b { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.product-card .sidebar a.battle .b { background: #ff453a; }
+.product-card .sidebar a.challenge .b { background: #30b766; }
+
+.product-card .main { padding: 24px 28px; }
+.product-card .main h3 { font-size: 20px; margin-bottom: 4px; }
+.product-card .main .breadcrumb { font-size: 12px; color: var(--ink-3); margin-bottom: 18px; }
+.product-card .main .row {
+  display: grid; grid-template-columns: 1fr 80px 80px 80px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+.product-card .main .row:last-child { border-bottom: 1px solid var(--line-soft); }
+.product-card .main .row .name { font-weight: 500; color: var(--ink); }
+.product-card .main .row .id { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); margin-top: 2px; display: block; }
+.product-card .main .row .tag {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px;
+  display: inline-block; font-weight: 500;
+}
+.product-card .main .row .tag.battle { background: rgba(255,69,58,0.1); color: #b8261d; }
+.product-card .main .row .tag.challenge { background: rgba(48,183,102,0.1); color: #1d7a44; }
+.product-card .main .row .stars { display: inline-flex; gap: 2px; }
+.product-card .main .row .stars i { width: 6px; height: 6px; border-radius: 1px; background: var(--line); display: inline-block; }
+.product-card .main .row .stars i.on { background: var(--ink); }
+.product-card .main .row .pts { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+
+/* ============== SECTIONS ============== */
+section { padding: 120px 22px; }
+section.alt { background: var(--paper-3); }
+section .wrap { max-width: var(--w); }
+section h2 {
+  font-size: clamp(34px, 4.4vw, 56px);
+  font-weight: 600; letter-spacing: -0.03em;
+  line-height: 1.08; max-width: 760px; margin: 0 0 16px;
+  text-wrap: balance;
+}
+section .lead {
+  font-size: clamp(18px, 1.6vw, 21px);
+  color: var(--ink-2); max-width: 640px;
+  line-height: 1.45; margin: 0 0 56px;
+}
+
+/* ============== TWO-UP FEATURE ============== */
+.twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.tile {
+  background: var(--paper-3); border-radius: 22px; padding: 44px;
+  min-height: 460px; display: flex; flex-direction: column;
+}
+.tile .kicker { font-size: 13px; color: var(--ink-3); font-weight: 500; margin-bottom: 10px; }
+.tile h3 {
+  font-size: 32px; font-weight: 600; letter-spacing: -0.025em;
+  line-height: 1.1; margin-bottom: 12px; text-wrap: balance;
+}
+.tile p { font-size: 16px; line-height: 1.5; color: var(--ink-2); max-width: 340px; }
+.tile .demo { margin-top: auto; }
+
+.demo-scoreboard {
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px; overflow: hidden;
+}
+.demo-scoreboard .head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 11px; color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+.demo-scoreboard .head .live { display: inline-flex; align-items: center; gap: 6px; color: #b8261d; }
+.demo-scoreboard .head .live .d {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #ff453a; animation: ping 1.6s infinite;
+}
+@keyframes ping { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.demo-scoreboard .row {
+  display: grid; grid-template-columns: 24px 1fr 80px;
+  align-items: center; padding: 12px 16px;
+  border-top: 1px solid var(--line-soft); font-size: 13px;
+}
+.demo-scoreboard .row:first-child { border-top: none; }
+.demo-scoreboard .row .rank { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.demo-scoreboard .row.lead .rank { color: var(--ink); font-weight: 700; }
+.demo-scoreboard .row .name { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+.demo-scoreboard .row.lead .name { color: var(--ink); font-weight: 500; }
+.demo-scoreboard .row .pts { text-align: right; font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+
+.demo-flag {
+  background: var(--paper); border: 1px solid var(--line-soft);
+  border-radius: 14px; padding: 20px;
+}
+.demo-flag .label {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 8px;
+}
+.demo-flag .input {
+  height: 38px; border: 1px solid var(--line); border-radius: 8px;
+  padding: 0 12px; display: flex; align-items: center;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink);
+  margin-bottom: 12px; background: var(--paper);
+}
+.demo-flag .input .cursor {
+  width: 1px; height: 14px; background: var(--ink); margin-left: 2px;
+  animation: cursor 1s steps(2) infinite;
+}
+@keyframes cursor { 50% { opacity: 0; } }
+.demo-flag .submit {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 14px;
+  background: var(--ink); color: var(--paper);
+  border-radius: 999px; font-size: 12px; font-weight: 500; border: none;
+}
+.demo-flag .points { margin-top: 14px; font-size: 12px; color: var(--ink-3); font-family: var(--font-mono); }
+.demo-flag .points b { color: var(--ink); font-weight: 600; }
+
+/* ============== AUDIENCE 3-up ============== */
+.aud {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1px; background: var(--line-soft);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.aud .col {
+  background: var(--paper);
+  padding: 48px 36px;
+  display: flex; flex-direction: column;
+  min-height: 320px;
+}
+.aud .col .role {
+  font-size: 12px; color: var(--ink-3); font-weight: 500;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 22px;
+}
+.aud .col h3 {
+  font-size: 26px; line-height: 1.15; font-weight: 600;
+  letter-spacing: -0.02em; margin-bottom: 10px; text-wrap: balance;
+}
+.aud .col p { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin: 0; flex: 1; }
+.aud .col .more { margin-top: 24px; font-size: 13px; color: #0066cc; text-decoration: none; }
+.aud .col .more:hover { text-decoration: underline; }
+
+/* ============== STEPS ============== */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px; }
+.step .n {
+  font-size: 12px; font-weight: 500; color: var(--ink-3);
+  margin-bottom: 14px; font-family: var(--font-mono);
+}
+.step h4 {
+  font-size: 22px; font-weight: 600;
+  letter-spacing: -0.02em; margin-bottom: 10px;
+}
+.step p { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+.step .code {
+  margin-top: 16px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+/* ============== TRUST ============== */
+.trust { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.trust .copy h2 { font-size: clamp(30px, 3.8vw, 44px); margin-bottom: 16px; }
+.trust ul { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
+.trust ul li {
+  display: grid; grid-template-columns: 18px 1fr; gap: 14px;
+  font-size: 15px; line-height: 1.5; color: var(--ink-2);
+}
+.trust ul li::before {
+  content: "";
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ink); margin-top: 8px;
+}
+.trust ul li b { color: var(--ink); font-weight: 600; }
+
+.flow { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 18px; padding: 28px; }
+.flow .node {
+  background: var(--paper-2); border: 1px solid var(--line-soft);
+  border-radius: 10px; padding: 14px 16px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.flow .node .tag { font-size: 10px; color: var(--ink-3); }
+.flow .arr {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
+}
+.flow .arr .line { flex: 1; height: 1px; background: var(--line); position: relative; }
+.flow .arr .line::after {
+  content: ""; position: absolute; right: 0; top: -3px;
+  width: 0; height: 0;
+  border-left: 6px solid var(--line);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+}
+.flow .sub { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; }
+.flow .sub .leaf {
+  background: var(--paper-2); border: 1px solid var(--line-soft);
+  border-radius: 8px; padding: 10px 12px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-2);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.flow .sub .leaf .ok { color: #1d7a44; font-size: 10px; }
+
+/* ============== STATS ============== */
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.stat { padding: 56px 24px 56px 0; border-right: 1px solid var(--line-soft); }
+.stat:last-child { border-right: none; }
+.stat .n {
+  font-size: clamp(40px, 4.4vw, 64px);
+  font-weight: 600; letter-spacing: -0.04em;
+  line-height: 1; color: var(--ink); margin-bottom: 8px;
+}
+.stat .n .u { font-size: 0.55em; color: var(--ink-3); margin-left: 2px; font-weight: 500; }
+.stat .l { font-size: 13px; color: var(--ink-3); max-width: 200px; line-height: 1.45; }
+
+/* ============== ENTERPRISE CTA ============== */
+.ent-cta {
+  background: var(--ink); color: var(--paper);
+  border-radius: 28px; padding: 80px 56px; text-align: center;
+}
+.ent-cta .eyebrow { color: rgba(255,255,255,0.55); margin-bottom: 12px; }
+.ent-cta h2 {
+  color: var(--paper);
+  font-size: clamp(34px, 4.6vw, 56px);
+  font-weight: 600; letter-spacing: -0.03em;
+  margin: 0 auto 16px; max-width: 680px; text-wrap: balance;
+}
+.ent-cta p {
+  color: rgba(255,255,255,0.7);
+  font-size: 18px; max-width: 540px;
+  margin: 0 auto 36px; line-height: 1.5;
+}
+.ent-cta .btns { display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.ent-cta .btn-primary {
+  height: 46px; padding: 0 26px;
+  background: var(--paper); color: var(--ink);
+  border-radius: 999px;
+  font-size: 15px; font-weight: 500; border: none; cursor: pointer;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.ent-cta .btn-ghost {
+  height: 46px; padding: 0 26px;
+  background: transparent; color: var(--paper);
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.3);
+  font-size: 15px; font-weight: 500;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* ============== FOOTER ============== */
+footer { padding: 56px 22px 32px; background: var(--paper-3); color: var(--ink-3); }
+footer .wrap {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 40px; max-width: 1024px;
+}
+footer h5 { font-size: 12px; font-weight: 600; color: var(--ink); margin: 0 0 12px; }
+footer a { display: block; color: var(--ink-3); text-decoration: none; font-size: 12px; padding: 4px 0; }
+footer a:hover { color: var(--ink); text-decoration: underline; }
+footer .brand { font-size: 19px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+footer .tag { font-size: 12px; color: var(--ink-3); line-height: 1.5; max-width: 280px; }
+footer .legal {
+  grid-column: 1 / -1;
+  margin-top: 24px; padding-top: 24px;
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-4);
+}
+
+/* ============== RESPONSIVE ============== */
+@media (max-width: 860px) {
+  .twoup, .steps, .aud, .trust, .stats { grid-template-columns: 1fr; }
+  .stats { gap: 1px; background: var(--line-soft); border: none; }
+  .stat { border-right: none; background: var(--paper); padding: 32px 22px; }
+  .product-card { padding: 24px; }
+  .product-card .body { grid-template-columns: 1fr; }
+  .product-card .sidebar { display: none; }
+  .product-card .main .row { grid-template-columns: 1fr auto; }
+  .product-card .main .row > :nth-child(3),
+  .product-card .main .row > :nth-child(4) { display: none; }
+  .ent-cta { padding: 56px 28px; border-radius: 18px; }
+  footer .wrap { grid-template-columns: 1fr 1fr; }
+  section { padding: 80px 22px; }
+}
 </style>
 </head>
 <body>
 
-<header class="site">
+<nav class="nav">
   <div class="wrap">
     <div class="brand">TenkaCloud</div>
-    <nav>
-      <a href="#what">What</a>
-      <a href="#features">機能</a>
-      <a href="#stack">技術スタック</a>
-      <a href="#start">Getting Started</a>
-      <a href="https://github.com/susumutomita/TenkaCloud">GitHub</a>
-    </nav>
+    <div class="nav-links">
+      <a href="#modes" data-i18n="nav.product">プロダクト</a>
+      <a href="#onboard" data-i18n="nav.problems">問題</a>
+      <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="nav.docs">ドキュメント</a>
+      <a href="#contact" data-i18n="nav.contact">お問い合わせ</a>
+      <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
+    </div>
+    <div class="nav-right">
+      <button class="lang on" data-lang="ja" type="button">JA</button>
+      <span class="sep">·</span>
+      <button class="lang" data-lang="en" type="button">EN</button>
+    </div>
   </div>
-</header>
+</nav>
 
 <section class="hero">
+  <h1>
+    <span data-i18n="hero.h1a">クラウドの実力は、</span><em data-i18n="hero.h1b">実戦でしか測れない。</em>
+  </h1>
+  <p class="sub" data-i18n="hero.sub">AWS の実環境で、構築・防御・コスト最適化を競う。誰でも使える、オープンソースのアリーナ。</p>
+  <div class="cta-row">
+    <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">
+      <span data-i18n="hero.cta1">GitHub を見る</span> ›
+    </a>
+    <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">
+      <span data-i18n="hero.cta2">デモを見る</span> ›
+    </a>
+  </div>
+
+  <div class="hero-visual">
+    <div class="product-card">
+      <div class="inner">
+        <div class="toolbar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="url">portal.tenkacloud.dev / problems</span>
+        </div>
+        <div class="body">
+          <div class="sidebar">
+            <div class="group">Workspace</div>
+            <a class="on"><span class="b battle"></span><span data-i18n="product.sidebar.0">問題</span></a>
+            <a><span class="b"></span><span data-i18n="product.sidebar.1">リーダーボード</span></a>
+            <a><span class="b"></span><span data-i18n="product.sidebar.2">イベント</span></a>
+            <a><span class="b"></span><span data-i18n="product.sidebar.3">ドキュメント</span></a>
+            <div class="group">Categories</div>
+            <a class="battle"><span class="b battle"></span>Battle</a>
+            <a class="challenge"><span class="b challenge"></span>Challenge</a>
+          </div>
+          <div class="main">
+            <div class="breadcrumb" data-i18n="product.breadcrumb">Workspace · open-arena · Season 01</div>
+            <h3 data-i18n="product.title">問題カタログ</h3>
+            <div style="margin-top:14px;" id="product-rows"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="modes">
   <div class="wrap">
-    <h1>AWS マルチテナント SaaS 競技基盤</h1>
-    <p class="tagline">
-      Battle (uptime 防御戦) と Challenge (CTF 形式の単発問題) の競技を、
-      競技者の AWS アカウントへ自動 deploy する OSS。
-    </p>
+    <div class="eyebrow" data-i18n="modes.eyebrow">2 つのモード</div>
+    <h2 data-i18n="modes.h2">対戦か、演習か。両方か。</h2>
+    <p class="lead" data-i18n="modes.lead">リアルタイムの Battle と、じっくり解く Challenge。1 つのイベントに混ぜて使える。</p>
+    <div class="twoup">
+      <div class="tile">
+        <div class="kicker" data-i18n="modes.battle.kicker">Battle</div>
+        <h3 data-i18n="modes.battle.h">Battle.</h3>
+        <p data-i18n="modes.battle.p">稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。</p>
+        <div class="demo">
+          <div class="demo-scoreboard">
+            <div class="head">
+              <span>SECURITY BATTLE ROYALE</span>
+              <span class="live"><span class="d"></span><span data-i18n="modes.battle.live">ROUND 03 · LIVE</span></span>
+            </div>
+            <div id="scoreboard-rows"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tile">
+        <div class="kicker" data-i18n="modes.challenge.kicker">Challenge</div>
+        <h3 data-i18n="modes.challenge.h">Challenge.</h3>
+        <p data-i18n="modes.challenge.p">問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。</p>
+        <div class="demo">
+          <div class="demo-flag">
+            <div class="label">Flag</div>
+            <div class="input"><span data-i18n="modes.challenge.input">Hello from tc-iam-…</span><span class="cursor"></span></div>
+            <button class="submit" type="button">Submit ›</button>
+            <div class="points">+<b>800 pts</b> · iam-escape-room</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="aud.eyebrow">誰のための</div>
+    <h2 data-i18n="aud.h2">出る人にも、開く人にも。</h2>
+    <p class="lead" data-i18n="aud.lead">個人のエンジニアから、勉強会の主催者、教育の現場まで。AWS コンソールを開かずに、競技は始まる。</p>
+  </div>
+  <div class="aud">
+    <div class="col">
+      <div class="role" data-i18n="aud.a.role">エンジニア</div>
+      <h3 data-i18n="aud.a.h">実戦で、腕を上げる。</h3>
+      <p data-i18n="aud.a.p">本物の AWS で問題を解き、ランクを上げる。成果は履歴に残せる、技術の足跡になる。</p>
+      <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.a.more">参加者ポータル</span> ›</a>
+    </div>
+    <div class="col">
+      <div class="role" data-i18n="aud.b.role">イベント主催</div>
+      <h3 data-i18n="aud.b.h">GameDay を、1 画面で。</h3>
+      <p data-i18n="aud.b.p">競技者ごとの環境を自動で配ってまわす。準備に費やしていた一週間が、半日で終わる。</p>
+      <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">運営ガイド</span> ›</a>
+    </div>
+    <div class="col">
+      <div class="role" data-i18n="aud.c.role">学校・コミュニティ</div>
+      <h3 data-i18n="aud.c.h">AWS を、教材にする。</h3>
+      <p data-i18n="aud.c.p">授業や勉強会で、本物の AWS を題材にできる。問題はオープン。新しい問題の提案も歓迎します。</p>
+      <a class="more" href="https://github.com/susumutomita/TenkaCloud/blob/main/problems/README.md" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.c.more">問題を作る</span> ›</a>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="onboard">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="onboard.eyebrow">オンボーディング</div>
+    <h2 data-i18n="onboard.h2">AWS との接続は、3 ステップ。</h2>
+    <p class="lead" data-i18n="onboard.lead">「自分のアカウントに何をされるか」をなくす設計。最小権限の AssumeRole 一本だけで、すべてが動く。</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">01</div>
+        <h4 data-i18n="onboard.s1.h">テンプレートを、1 度だけ。</h4>
+        <p data-i18n="onboard.s1.p">CloudFormation を自分のアカウントに 1 回デプロイ。それで IAM Role が用意される。</p>
+        <div class="code"><div>$ aws cloudformation create-stack \</div><div>&nbsp;&nbsp;&nbsp;&nbsp;--stack-name tenka-bootstrap \</div><div>&nbsp;&nbsp;&nbsp;&nbsp;--template-url https://…</div></div>
+      </div>
+      <div class="step">
+        <div class="n">02</div>
+        <h4 data-i18n="onboard.s2.h">ExternalId で、固く守る。</h4>
+        <p data-i18n="onboard.s2.p">TenkaCloud は固有の ExternalId 付きでしか、その Role を引き受けられない。Role ARN だけでは入れない。</p>
+        <div class="code"><div>Principal: tenkacloud-control-plane</div><div>Condition:</div><div>&nbsp;&nbsp;sts:ExternalId: TC-EXT-•••</div></div>
+      </div>
+      <div class="step">
+        <div class="n">03</div>
+        <h4 data-i18n="onboard.s3.h">ポータルから、競技へ。</h4>
+        <p data-i18n="onboard.s3.p">ログインすれば、問題環境が自動で立ち上がる。エンドポイントと点数は、その瞬間から見える。</p>
+        <div class="code"><div>$ open https://portal.tenkacloud.dev</div><div>→ <span data-i18n="onboard.s3.line2">問題が割り当てられました</span></div><div>→ Frontend URL: https://t1…</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="trust">
+      <div class="copy">
+        <div class="eyebrow" data-i18n="trust.eyebrow">セキュリティ</div>
+        <h2 data-i18n="trust.h2">あなたの AWS は、ずっとあなたのもの。</h2>
+        <ul id="trust-bullets"></ul>
+      </div>
+      <div class="flow">
+        <div class="node">
+          <span>TenkaCloud · Control Plane</span>
+          <span class="tag">SaaS</span>
+        </div>
+        <div class="arr">
+          <span>AssumeRole + ExternalId</span>
+          <span class="line"></span>
+        </div>
+        <div class="sub">
+          <div class="leaf"><span>acct-a</span><span class="ok">● deployed</span></div>
+          <div class="leaf"><span>acct-b</span><span class="ok">● deployed</span></div>
+          <div class="leaf"><span>acct-c</span><span class="ok">● deployed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="stats" id="stats-grid"></div>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap">
+    <div class="ent-cta">
+      <div class="eyebrow" data-i18n="ent.eyebrow">もし、こんな使い方をしたいなら</div>
+      <h2 data-i18n="ent.h2">クローズドな会場で、走らせたい人へ。</h2>
+      <p data-i18n="ent.p">社内勉強会、学校の授業、クローズドなインシデントレスポンス演習 — 公開アリーナで難しい使い方を考えているなら、相談してください。OSS なので料金はありません。</p>
+      <div class="btns">
+        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta1">お問い合わせ</span> ›</a>
+        <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> ›</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
     <div>
-      <a class="cta" href="https://github.com/susumutomita/TenkaCloud">GitHub repo →</a>
-      <a class="cta-secondary" href="#start">Getting Started</a>
-    </div>
-    <div class="alpha-banner">
-      ⚠️ <b>Alpha</b> — 初回の dogfood セッションを完了したばかりで production-ready ではありません。
-      実運用前に <a href="https://github.com/susumutomita/TenkaCloud/issues">Issue tracker</a> で
-      open issue を確認してください。
-    </div>
-  </div>
-</section>
-
-<section id="what">
-  <div class="wrap">
-    <h2>これは何か</h2>
-    <p>
-      TenkaCloud は <b>AWS の権威付き競技</b> (CTF / Hands-on / Battle / Challenge 形式)
-      を <b>マルチテナント SaaS としてホスト</b> する基盤です。
-    </p>
-    <p>
-      運営 (operator) は <b>SaaS 画面操作だけで</b> 「競技イベントの作成」「全 team 環境の
-      bulk deploy」「採点」「teardown」 を完結させ、AWS Console や CLI を一切触りません。
-      競技者 (participant) は <b>チーム単位のログインキー</b> でポータルへログインし、
-      自 team の AWS account に立ち上がった問題環境にアクセスします。
-    </p>
-    <p>
-      問題は <code>problems/&lt;category&gt;/&lt;id&gt;/</code> に
-      <code>metadata.json</code> + <code>template.yaml</code> (CFn) を置くだけで追加でき、
-      問題作成者は <b>scoring engine の細部を意識せずに問題に集中</b> できます。
-    </p>
-  </div>
-</section>
-
-<section id="features">
-  <div class="wrap">
-    <h2>主な機能</h2>
-    <div class="features">
-      <div class="feature">
-        <h3>2 カテゴリの競技</h3>
-        <p>
-          <b>Battle</b> (uptime 採点、HealthCheck 1 分間隔) と <b>Challenge</b>
-          (flag 提出形式の単発問題)。1 event に両方混在可能。
-        </p>
-      </div>
-      <div class="feature">
-        <h3>マルチテナント (SBT 0.3.9 ベース)</h3>
-        <p>
-          SaaS Builder Toolkit の Control Plane / Application Plane 構造に乗せ、
-          basic / standard / premium / platinum tier を分離 deploy。
-        </p>
-      </div>
-      <div class="feature">
-        <h3>競技者 AWS アカウントへ問題を deploy</h3>
-        <p>
-          AssumeRole + ExternalId で cross-account に CFn CreateStack。
-          Operator は AWS Console を開かず SaaS 画面だけで運営完結。
-        </p>
-      </div>
-      <div class="feature">
-        <h3>Free Tier 内コスト設計</h3>
-        <p>
-          DynamoDB は PROVISIONED 1 RCU / 1 WCU を Aspect で強制。Lambda + EventBridge
-          + Step Functions で実装、idle コストを最小化。
-        </p>
-      </div>
-      <div class="feature">
-        <h3>競技者ポータル</h3>
-        <p>
-          Cloudscape Design System で組んだ portal。problem catalog / scoreboard /
-          notifications / SSO で AWS Console federation login も提供。
-        </p>
-      </div>
-      <div class="feature">
-        <h3>OSS / Apache 2.0</h3>
-        <p>
-          Issue / PR welcome。詳細な architecture invariant と PR discipline は
-          repo 内 <code>docs/architecture/harness.md</code>。
-        </p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="stack">
-  <div class="wrap">
-    <h2>技術スタック</h2>
-    <table class="stack-table">
-      <tr><th style="width:30%">レイヤー</th><th>採用技術</th></tr>
-      <tr><td>フロントエンド</td><td>Vite 7, React 19, Cloudscape Design System</td></tr>
-      <tr><td>バックエンド</td><td>AWS Lambda + Hono, API Gateway HTTP API, DynamoDB</td></tr>
-      <tr><td>IaC</td><td>AWS CDK 2 + <code>@cdklabs/sbt-aws</code> 0.3.9, cdk-nag</td></tr>
-      <tr><td>認証</td><td>AWS Cognito (Hosted UI + OAuth Code + PKCE)</td></tr>
-      <tr><td>イベント</td><td>EventBridge (cross-plane で tenant 作成 / deploy 完了 etc を伝達)</td></tr>
-      <tr><td>テスト</td><td>Vitest (unit / CDK assertion)</td></tr>
-      <tr><td>パッケージ管理</td><td>Bun 1.3.11 (workspaces)</td></tr>
-    </table>
-  </div>
-</section>
-
-<section id="start">
-  <div class="wrap">
-    <h2>Getting Started</h2>
-    <p>
-      ローカルで repo を clone して、AWS account に <code>make deploy</code> で 3-phase
-      で立ち上がります (= ControlPlane / Bootstrap / TenantTemplate / Pipeline →
-      AdminConsole hosting → Cognito callback URL 更新)。
-    </p>
-    <pre class="cli"><span class="comment"># clone</span>
-<span class="cmd">git clone</span> --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
-<span class="cmd">cd</span> TenkaCloud
-
-<span class="comment"># dependency + 初期 deploy (= 全 stack を 1 発で)</span>
-<span class="cmd">make</span> install
-<span class="cmd">make</span> deploy ENV=development
-
-<span class="comment"># 立ち上がったら出力された URL に access して SystemAdmin で login</span>
-<span class="comment"># テナント作成 → application-admin-console → Event 作成 → bulk deploy → 競技開始</span></pre>
-    <p style="margin-top:1.5rem; font-size:0.92rem; color: var(--c-muted);">
-      詳細な setup / 問題追加 / contribute の流れは
-      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
-      および
-      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CLAUDE.md">CLAUDE.md</a> (= AI agent 向けですが人間も読める)
-      を参照。
-    </p>
-  </div>
-</section>
-
-<footer class="site">
-  <div class="wrap">
-    <div>
-      © 2026 TenkaCloud / Susumu Tomita
-      &nbsp;·&nbsp;
-      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/LICENSE">Apache 2.0</a>
+      <div class="brand">TenkaCloud</div>
+      <div class="tag" data-i18n="footer.tag">AWS の実環境で競う、オープンソースのクラウド競技基盤。Apache 2.0。</div>
     </div>
     <div>
-      <a href="https://github.com/susumutomita/TenkaCloud">GitHub</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/susumutomita/TenkaCloud/issues">Issues</a>
-      &nbsp;·&nbsp;
-      <a href="https://github.com/susumutomita/TenkaCloud/discussions">Discussions</a>
+      <h5>Product</h5>
+      <a href="#modes" data-i18n="footer.p0">概要</a>
+      <a href="https://github.com/susumutomita/TenkaCloud/tree/main/problems" target="_blank" rel="noopener noreferrer" data-i18n="footer.p1">問題カタログ</a>
+      <a data-i18n="footer.p2">参加者ポータル</a>
+      <a data-i18n="footer.p3">運営コンソール</a>
+    </div>
+    <div>
+      <h5>Resources</h5>
+      <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="footer.r0">ドキュメント</a>
+      <a href="https://github.com/susumutomita/TenkaCloud/tree/main/docs/architecture" target="_blank" rel="noopener noreferrer" data-i18n="footer.r1">アーキテクチャ</a>
+      <a href="https://github.com/susumutomita/TenkaCloud/releases" target="_blank" rel="noopener noreferrer" data-i18n="footer.r2">Changelog</a>
+    </div>
+    <div>
+      <h5>Community</h5>
+      <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer">Discussions</a>
+      <a href="https://github.com/susumutomita/TenkaCloud/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+      <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>
+    </div>
+    <div class="legal">
+      <span data-i18n="footer.legal">© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0</span>
+      <span>v0.2.0 · ja · en</span>
     </div>
   </div>
 </footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var I18N = {
+    ja: {
+      "nav.product": "プロダクト",
+      "nav.problems": "問題",
+      "nav.docs": "ドキュメント",
+      "nav.contact": "お問い合わせ",
+      "nav.github": "GitHub",
+
+      "hero.h1a": "クラウドの実力は、",
+      "hero.h1b": "実戦でしか測れない。",
+      "hero.sub": "AWS の実環境で、構築・防御・コスト最適化を競う。誰でも使える、オープンソースのアリーナ。",
+      "hero.cta1": "GitHub を見る",
+      "hero.cta2": "デモを見る",
+
+      "product.title": "問題カタログ",
+      "product.breadcrumb": "Workspace · open-arena · Season 01",
+      "product.sidebar.0": "問題",
+      "product.sidebar.1": "リーダーボード",
+      "product.sidebar.2": "イベント",
+      "product.sidebar.3": "ドキュメント",
+
+      "modes.eyebrow": "2 つのモード",
+      "modes.h2": "対戦か、演習か。両方か。",
+      "modes.lead": "リアルタイムの Battle と、じっくり解く Challenge。1 つのイベントに混ぜて使える。",
+      "modes.battle.kicker": "Battle",
+      "modes.battle.h": "Battle.",
+      "modes.battle.p": "稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。",
+      "modes.battle.live": "ROUND 03 · LIVE",
+      "modes.challenge.kicker": "Challenge",
+      "modes.challenge.h": "Challenge.",
+      "modes.challenge.p": "問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。",
+      "modes.challenge.input": "Hello from tc-iam-…",
+
+      "aud.eyebrow": "誰のための",
+      "aud.h2": "出る人にも、開く人にも。",
+      "aud.lead": "個人のエンジニアから、勉強会の主催者、教育の現場まで。AWS コンソールを開かずに、競技は始まる。",
+      "aud.a.role": "エンジニア",
+      "aud.a.h": "実戦で、腕を上げる。",
+      "aud.a.p": "本物の AWS で問題を解き、ランクを上げる。成果は履歴に残せる、技術の足跡になる。",
+      "aud.a.more": "参加者ポータル",
+      "aud.b.role": "イベント主催",
+      "aud.b.h": "GameDay を、1 画面で。",
+      "aud.b.p": "競技者ごとの環境を自動で配ってまわす。準備に費やしていた一週間が、半日で終わる。",
+      "aud.b.more": "運営ガイド",
+      "aud.c.role": "学校・コミュニティ",
+      "aud.c.h": "AWS を、教材にする。",
+      "aud.c.p": "授業や勉強会で、本物の AWS を題材にできる。問題はオープン。新しい問題の提案も歓迎します。",
+      "aud.c.more": "問題を作る",
+
+      "onboard.eyebrow": "オンボーディング",
+      "onboard.h2": "AWS との接続は、3 ステップ。",
+      "onboard.lead": "「自分のアカウントに何をされるか」をなくす設計。最小権限の AssumeRole 一本だけで、すべてが動く。",
+      "onboard.s1.h": "テンプレートを、1 度だけ。",
+      "onboard.s1.p": "CloudFormation を自分のアカウントに 1 回デプロイ。それで IAM Role が用意される。",
+      "onboard.s2.h": "ExternalId で、固く守る。",
+      "onboard.s2.p": "TenkaCloud は固有の ExternalId 付きでしか、その Role を引き受けられない。Role ARN だけでは入れない。",
+      "onboard.s3.h": "ポータルから、競技へ。",
+      "onboard.s3.p": "ログインすれば、問題環境が自動で立ち上がる。エンドポイントと点数は、その瞬間から見える。",
+      "onboard.s3.line2": "問題が割り当てられました",
+
+      "trust.eyebrow": "セキュリティ",
+      "trust.h2": "あなたの AWS は、ずっとあなたのもの。",
+      "trust.bullets": [
+        ["クロスアカウント AssumeRole + ExternalId。", "競技者アカウントへの操作は、すべて固有 ExternalId 付き。Role ARN を知っているだけでは、何もできない。"],
+        ["撤収は、いつでも自分の手で。", "ポータルから 1 クリックでスタックごと削除。リソースの取り残しも、想定外の請求もない。"],
+        ["コードは全部、GitHub にある。", "Lambda、Step Functions、IaC。何が動いているか、自分の目で読める。Apache License 2.0。"],
+        ["Free Tier の中で、走り続ける。", "DynamoDB は 1 RCU / 1 WCU 固定。アイドル中の課金は、ゼロ。"]
+      ],
+
+      "stats": [
+        { n: "100", u: "+",   l: "公開済みの問題。3 カテゴリ・5 難易度。" },
+        { n: "3",   u: "min", l: "競技者アカウントへの平均デプロイ時間。" },
+        { n: "0",   u: "$/h", l: "アイドル時の運用コスト。" },
+        { n: "100", u: "%",   l: "OSS / Apache 2.0。すべて読める。" }
+      ],
+
+      "ent.eyebrow": "もし、こんな使い方をしたいなら",
+      "ent.h2": "クローズドな会場で、走らせたい人へ。",
+      "ent.p": "社内勉強会、学校の授業、クローズドなインシデントレスポンス演習 — 公開アリーナで難しい使い方を考えているなら、相談してください。OSS なので料金はありません。",
+      "ent.cta1": "お問い合わせ",
+      "ent.cta2": "GitHub を見る",
+
+      "footer.tag": "AWS の実環境で競う、オープンソースのクラウド競技基盤。Apache 2.0。",
+      "footer.p0": "概要", "footer.p1": "問題カタログ", "footer.p2": "参加者ポータル", "footer.p3": "運営コンソール",
+      "footer.r0": "ドキュメント", "footer.r1": "アーキテクチャ", "footer.r2": "Changelog",
+      "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0"
+    },
+    en: {
+      "nav.product": "Product",
+      "nav.problems": "Problems",
+      "nav.docs": "Docs",
+      "nav.contact": "Contact",
+      "nav.github": "GitHub",
+
+      "hero.h1a": "Cloud skill ",
+      "hero.h1b": "is measured in the wild.",
+      "hero.sub": "Compete on real AWS — build it, defend it, optimize it. An open-source arena, free for anyone to use.",
+      "hero.cta1": "View on GitHub",
+      "hero.cta2": "Watch the demo",
+
+      "product.title": "Problem catalog",
+      "product.breadcrumb": "Workspace · open-arena · Season 01",
+      "product.sidebar.0": "Problems",
+      "product.sidebar.1": "Leaderboard",
+      "product.sidebar.2": "Events",
+      "product.sidebar.3": "Docs",
+
+      "modes.eyebrow": "Two modes",
+      "modes.h2": "Live battles. Solo challenges. Or both.",
+      "modes.lead": "Real-time Battles and patient Challenges, in a single event if you want.",
+      "modes.battle.kicker": "Battle",
+      "modes.battle.h": "Battle.",
+      "modes.battle.p": "Uptime, in real time. A health check probes every team every minute — the last one standing wins.",
+      "modes.battle.live": "ROUND 03 · LIVE",
+      "modes.challenge.kicker": "Challenge",
+      "modes.challenge.h": "Challenge.",
+      "modes.challenge.p": "Solve the problem, submit the flag, earn the points. Learn one AWS service at a time, in depth.",
+      "modes.challenge.input": "Hello from tc-iam-…",
+
+      "aud.eyebrow": "Who it's for",
+      "aud.h2": "For the people who play. And the people who host.",
+      "aud.lead": "Solo engineers, meetup organizers, classrooms. Run an event, or join one — without ever opening the AWS Console.",
+      "aud.a.role": "Engineers",
+      "aud.a.h": "Sharpen on the real thing.",
+      "aud.a.p": "Solve problems on real AWS, climb the rank, earn badges your résumé can prove.",
+      "aud.a.more": "Participant portal",
+      "aud.b.role": "Organizers",
+      "aud.b.h": "Run a GameDay from one screen.",
+      "aud.b.p": "Every team's environment, provisioned automatically. The week of prep collapses to an afternoon.",
+      "aud.b.more": "Operator guide",
+      "aud.c.role": "Schools & community",
+      "aud.c.h": "Teach with real AWS.",
+      "aud.c.p": "Use real AWS as a textbook. Every problem is open — and new ones are welcome from anyone.",
+      "aud.c.more": "Author a problem",
+
+      "onboard.eyebrow": "Onboarding",
+      "onboard.h2": "Connect AWS in three steps.",
+      "onboard.lead": "We designed away the \"what's it going to do in my account?\" question. One least-privilege AssumeRole — nothing more, nothing less.",
+      "onboard.s1.h": "Deploy the bootstrap, once.",
+      "onboard.s1.p": "One CloudFormation template, deployed once into your account. An IAM Role is provisioned for us.",
+      "onboard.s2.h": "Locked with ExternalId.",
+      "onboard.s2.p": "TenkaCloud can only AssumeRole with a unique ExternalId. A leaked Role ARN gets you nowhere.",
+      "onboard.s3.h": "Compete from the portal.",
+      "onboard.s3.p": "Log in. Your problem stack deploys itself. Endpoints and scores are live the moment you land.",
+      "onboard.s3.line2": "Problem assigned",
+
+      "trust.eyebrow": "Security",
+      "trust.h2": "Your AWS account, still yours.",
+      "trust.bullets": [
+        ["Cross-account AssumeRole + ExternalId.", "Every call into a player account carries a unique ExternalId. Knowing the Role ARN gets an attacker nothing."],
+        ["Tear it down whenever, yourself.", "One click in the portal removes the stack. No orphans, no surprise charges."],
+        ["The code is on GitHub.", "Lambdas, Step Functions, the IaC — read what runs, line by line. Apache License 2.0."],
+        ["Runs inside Free Tier.", "DynamoDB pinned at 1 RCU / 1 WCU. Idle cost is zero."]
+      ],
+
+      "stats": [
+        { n: "100", u: "+",   l: "Public problems. 3 categories, 5 difficulty tiers." },
+        { n: "3",   u: "min", l: "Average deploy time into a player account." },
+        { n: "0",   u: "$/h", l: "Operating cost while idle." },
+        { n: "100", u: "%",   l: "Open source. Apache 2.0. End to end." }
+      ],
+
+      "ent.eyebrow": "If you need it private",
+      "ent.h2": "Running it in a closed setting?",
+      "ent.p": "Internal study groups, classroom courses, closed-door incident-response drills — anything the public arena can't easily host. Reach out. It's OSS; there's no fee.",
+      "ent.cta1": "Get in touch",
+      "ent.cta2": "View on GitHub",
+
+      "footer.tag": "An open-source cloud-competition platform that runs on real AWS. Apache 2.0.",
+      "footer.p0": "Overview", "footer.p1": "Problems", "footer.p2": "Participant portal", "footer.p3": "Operator console",
+      "footer.r0": "Docs", "footer.r1": "Architecture", "footer.r2": "Changelog",
+      "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0"
+    }
+  };
+
+  var PRODUCT_ROWS = [
+    { cat: "Battle",    id: "security-battle-royale", name: { ja: "Security Battle Royale", en: "Security Battle Royale" }, diff: 3, pts: "1,200 pts" },
+    { cat: "Challenge", id: "iam-escape-room",        name: { ja: "IAM Escape Room",        en: "IAM Escape Room"        }, diff: 4, pts: "  800 pts" },
+    { cat: "Challenge", id: "cost-optimizer",         name: { ja: "Cost Optimizer",         en: "Cost Optimizer"         }, diff: 2, pts: "  400 pts" },
+    { cat: "Battle",    id: "lambda-cold-war",        name: { ja: "Lambda Cold War",        en: "Lambda Cold War"        }, diff: 4, pts: "1,000 pts" }
+  ];
+
+  function renderProductRows(lang) {
+    var html = PRODUCT_ROWS.map(function (r) {
+      var stars = [1,2,3,4,5].map(function (i) {
+        return '<i class="' + (i <= r.diff ? 'on' : '') + '"></i>';
+      }).join('');
+      var tagClass = r.cat === "Battle" ? "battle" : "challenge";
+      return '<div class="row">'
+        + '<div><div class="name">' + r.name[lang] + '</div><span class="id">' + r.id + '</span></div>'
+        + '<span class="tag ' + tagClass + '">' + r.cat + '</span>'
+        + '<span class="stars">' + stars + '</span>'
+        + '<span class="pts">' + r.pts + '</span>'
+        + '</div>';
+    }).join('');
+    document.getElementById("product-rows").innerHTML = html;
+  }
+
+  function renderTrustBullets(lang) {
+    var bullets = I18N[lang]["trust.bullets"];
+    var html = bullets.map(function (entry) {
+      return '<li><span><b>' + entry[0] + '</b> ' + entry[1] + '</span></li>';
+    }).join('');
+    document.getElementById("trust-bullets").innerHTML = html;
+  }
+
+  function renderStats(lang) {
+    var stats = I18N[lang]["stats"];
+    var html = stats.map(function (s) {
+      return '<div class="stat">'
+        + '<div class="n">' + s.n + '<span class="u">' + s.u + '</span></div>'
+        + '<div class="l">' + s.l + '</div>'
+        + '</div>';
+    }).join('');
+    document.getElementById("stats-grid").innerHTML = html;
+  }
+
+  var SCORE_BASE = [
+    { name: "team-shogun",    pts: 8420 },
+    { name: "team-honnoji",   pts: 7990 },
+    { name: "team-sekigahara", pts: 7710 },
+    { name: "team-osaka",     pts: 6420 }
+  ];
+
+  function renderScoreboard(tick) {
+    var html = SCORE_BASE.map(function (r, i) {
+      var pts = r.pts + (tick * (4 - i) * 7);
+      var leadCls = i === 0 ? " lead" : "";
+      return '<div class="row' + leadCls + '">'
+        + '<span class="rank">' + (i + 1) + '</span>'
+        + '<span class="name">' + r.name + '</span>'
+        + '<span class="pts">' + pts.toLocaleString() + '</span>'
+        + '</div>';
+    }).join('');
+    document.getElementById("scoreboard-rows").innerHTML = html;
+  }
+
+  function applyLang(lang) {
+    document.documentElement.lang = lang;
+    var dict = I18N[lang];
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n");
+      if (dict[key] != null) el.textContent = dict[key];
+    });
+    document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
+      btn.classList.toggle("on", btn.getAttribute("data-lang") === lang);
+    });
+    renderProductRows(lang);
+    renderTrustBullets(lang);
+    renderStats(lang);
+  }
+
+  document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyLang(btn.getAttribute("data-lang"));
+    });
+  });
+
+  applyLang("ja");
+
+  var tick = 0;
+  renderScoreboard(tick);
+  setInterval(function () { tick += 1; renderScoreboard(tick); }, 1500);
+})();
+</script>
 
 </body>
 </html>
