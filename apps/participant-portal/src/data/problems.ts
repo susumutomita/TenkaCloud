@@ -38,6 +38,23 @@ export interface ProblemDisruptionEntry {
 export type ProblemDashboardSlots = Readonly<Record<string, string>>;
 
 /**
+ * ADR-012 Phase 2: endpoint slot 宣言 (= portal が plugin に渡す default URL の組立に使う)。
+ * `default.from` は現状 `cfn-output` のみ。 `appendPath` で 1 CFn output を複数 slot で path
+ * 違いに使い回せる (= microservice-migration の BaseUrl + /users /orders /catalog 等)。
+ */
+export interface ProblemEndpointEntry {
+  readonly slot: string;
+  readonly default: {
+    readonly from: "cfn-output";
+    readonly key: string;
+    readonly appendPath?: string;
+  };
+  readonly overridable: boolean;
+  readonly label?: string;
+  readonly description?: string;
+}
+
+/**
  * Portal で表示する問題メタ情報。`cfnTemplate` / `cfnParameters` 等の deploy 内部情報は
  * 含めない (= 答えのヒントを意図せず露出させないため)。
  */
@@ -52,6 +69,8 @@ export interface ProblemCatalogEntry {
   readonly description: string;
   readonly learningGoals: readonly string[];
   readonly tags: readonly string[];
+  /** ADR-012 Phase 2: endpoint slot 宣言 (= portal plugin の default URL 組立に使う)。 */
+  readonly endpoints: readonly ProblemEndpointEntry[];
   /** ADR-012 Phase 4: 段階制の予告 (= afterMinutes で portal が countdown / status pill 表示)。 */
   readonly phases: readonly ProblemPhaseEntry[];
   /** ADR-012 Phase 4: 「妨害」予告 (= template.yaml-bundled self-triggered Scheduler)。 */
@@ -75,6 +94,13 @@ interface ProblemMetadata {
   exposedPorts?: { port: number; name: string }[];
   cfnTemplate?: string;
   cfnParameters?: Record<string, string>;
+  endpoints?: {
+    slot: string;
+    default: { from: "cfn-output"; key: string; appendPath?: string };
+    overridable?: boolean;
+    label?: string;
+    description?: string;
+  }[];
   phases?: {
     name: string;
     afterMinutes: number;
@@ -100,10 +126,23 @@ const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
   { eager: true },
 );
 
+/**
+ * `exactOptionalPropertyTypes` 下で `{ ...(x ? {x} : {}) }` の連鎖を避けるための一括 helper。
+ * undefined / 空文字 の値を持つ key を落として、 残った key だけの shape を返す。
+ */
+function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
+}
+
 function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
-  // dashboard.slots は metadata から透過的に passthrough。 1 file 1 slot 1 component 規約 (= 値は
-  // "portal/<file>.tsx" 形式の相対 path) で plugin loader が glob 照合する。
   const dashboardSlots = metadata.dashboard?.slots;
+  // 競技者向けには operator 内部 field (= effect / parameters / operatorEditable /
+  // eventDetailType 等の採点 / trigger internals) を全部隠す。 1 箇所に narrowing を集約
+  // して props-builder 等での re-implement を防ぐ。
   return {
     id: metadata.id,
     name: metadata.name,
@@ -115,24 +154,36 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
     description: metadata.description,
     learningGoals: metadata.learningGoals,
     tags: metadata.tags,
-    // 競技者向けには effect の中身 (= switchPlatformToDegraded / scorePathOverride 等の
-    // 採点 internals) は隠して、 name / afterMinutes / description だけ露出する。
+    endpoints:
+      metadata.endpoints?.map((ep) => ({
+        slot: ep.slot,
+        default: omitUndefined({
+          from: ep.default.from,
+          key: ep.default.key,
+          appendPath: ep.default.appendPath,
+        }) as ProblemEndpointEntry["default"],
+        overridable: ep.overridable === true,
+        ...omitUndefined({ label: ep.label, description: ep.description }),
+      })) ?? [],
     phases:
-      metadata.phases?.map((p) => ({
-        name: p.name,
-        afterMinutes: p.afterMinutes,
-        ...(p.description ? { description: p.description } : {}),
-      })) ?? [],
-    // 同じく eventDetailType / parameters / operatorEditable 等の operator 向け internals は隠す。
+      metadata.phases?.map(
+        (p) =>
+          omitUndefined({
+            name: p.name,
+            afterMinutes: p.afterMinutes,
+            description: p.description,
+          }) as ProblemPhaseEntry,
+      ) ?? [],
     disruptions:
-      metadata.disruptions?.map((d) => ({
-        id: d.id,
-        name: d.name,
-        ...(typeof d.defaultAfterMinutes === "number"
-          ? { defaultAfterMinutes: d.defaultAfterMinutes }
-          : {}),
-        ...(d.description ? { description: d.description } : {}),
-      })) ?? [],
+      metadata.disruptions?.map(
+        (d) =>
+          omitUndefined({
+            id: d.id,
+            name: d.name,
+            defaultAfterMinutes: d.defaultAfterMinutes,
+            description: d.description,
+          }) as ProblemDisruptionEntry,
+      ) ?? [],
     ...(dashboardSlots && Object.keys(dashboardSlots).length > 0
       ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
       : {}),
@@ -143,7 +194,12 @@ const PROBLEM_CATALOG: readonly ProblemCatalogEntry[] = Object.values(metadataMo
   .map((mod) => metadataToEntry(mod.default))
   .sort((a, b) => a.id.localeCompare(b.id));
 
+// O(1) lookup map (= per-render hot path で findProblemMetadata を複数回呼ぶ場合の linear scan 抑止)。
+const PROBLEM_CATALOG_BY_ID: ReadonlyMap<string, ProblemCatalogEntry> = new Map(
+  PROBLEM_CATALOG.map((p) => [p.id, p]),
+);
+
 /** `problemId` (= metadata.json の `id` field) で問題を引く。無ければ undefined。 */
 export function findProblemMetadata(problemId: string): ProblemCatalogEntry | undefined {
-  return PROBLEM_CATALOG.find((p) => p.id === problemId);
+  return PROBLEM_CATALOG_BY_ID.get(problemId);
 }

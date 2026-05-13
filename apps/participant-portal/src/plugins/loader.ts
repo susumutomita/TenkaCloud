@@ -30,24 +30,35 @@ const pluginModules = import.meta.glob<{ default: PortalSlotComponent }>(
 );
 
 /**
- * metadata.json の `dashboard.slots[slotName] = "portal/<file>.tsx"` を、 vite glob の
- * key (= `<projectRoot>/problems/<category>/<id>/portal/<file>.tsx` の portal 相対) に
- * 変換するヘルパー。
+ * glob entry の lookup を O(1) 化する事前 index。 key は問題 dir 名 + slot path
+ * (例: "microservice-migration-battle/portal/StatusPanel.tsx")。 glob で得た絶対 path から
+ * 末尾 2 segment (= "<problemId>/portal/<file>.tsx") を抽出して key とする。
  *
- * 戻り値: matched なら glob entry の loader、 無ければ undefined。
+ * 設計判断: problemId は 1 対 1 で 問題 dir 名に対応する前提 (= 慣習: dir 名 == metadata.id)。
  */
+const PLUGIN_ENTRY_BY_NEEDLE: ReadonlyMap<string, () => Promise<{ default: PortalSlotComponent }>> =
+  (() => {
+    const map = new Map<string, () => Promise<{ default: PortalSlotComponent }>>();
+    for (const [key, loader] of Object.entries(pluginModules)) {
+      // key = "../../../../problems/<category>/<problemId>/portal/<file>.tsx"
+      const segments = key.split("/");
+      if (segments.length < 3) continue;
+      const fileName = segments[segments.length - 1];
+      const portalSegment = segments[segments.length - 2];
+      const problemId = segments[segments.length - 3];
+      if (!fileName || !problemId || portalSegment !== "portal") continue;
+      map.set(`${problemId}/portal/${fileName}`, loader);
+    }
+    return map;
+  })();
+
 function resolvePluginEntry(
   problemId: string,
   slotPath: string,
 ): (() => Promise<{ default: PortalSlotComponent }>) | undefined {
-  // metadata の slotPath は問題 dir からの相対 (例: "portal/StatusPanel.tsx")。
-  // glob key は portal SPA src/plugins/loader.ts からの相対 (例: "../../../../problems/...")。
-  // problemId は 1 対 1 で 問題 dir 名に対応する前提 (= 慣習: dir 名 == metadata.id)。
-  const needle = `/${problemId}/${slotPath}`;
-  for (const [key, loader] of Object.entries(pluginModules)) {
-    if (key.endsWith(needle)) return loader;
-  }
-  return undefined;
+  // slotPath は問題 dir からの相対 (例: "portal/StatusPanel.tsx")。 PLUGIN_ENTRY_BY_NEEDLE の
+  // key 形式と合わせて 1 回 lookup。
+  return PLUGIN_ENTRY_BY_NEEDLE.get(`${problemId}/${slotPath}`);
 }
 
 /**

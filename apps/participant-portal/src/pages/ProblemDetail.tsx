@@ -94,11 +94,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           problemId={problem.problemId}
           jobId={problem.jobId}
           score={problem.score}
-          team={{
-            teamName: view.team.teamName,
-            ...(view.team.teamId ? { teamId: view.team.teamId } : {}),
-            ...(view.team.eventId ? { eventId: view.team.eventId } : {}),
-          }}
+          team={view.team}
           stackOutputs={problem.stackOutputs}
         />
       )}

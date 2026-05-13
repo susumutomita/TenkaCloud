@@ -1,12 +1,13 @@
 /**
  * ADR-012 Phase 5: PortalSlotProps を組み立てる純関数群。
  *
- * portal の data layer (= metadata.json glob + ParticipantProblemView) と plugin SDK の
- * shape (= PortalEndpoint / PortalPhaseEntry / PortalDisruptionEntry) の間の marshalling。
+ * `data/problems.ts` の build-time catalog (= operator 内部 field を narrow 済) を消費し、
+ * deployment.stackOutputs / team view と合流して SDK の shape に marshal する。
  *
  * 設計判断:
  *   - 副作用なし (= test 容易)
  *   - metadata 不在 / endpoint slot 宣言なしは空配列 (= plugin 側で `.map` で安全に処理可)
+ *   - URL 結合失敗は context (problemId / slot / key) 付きで throw (= silent skip しない)
  *   - effectiveUrl は portal 側 endpoint registry (Phase 3.A) が override を返すまでは
  *     defaultUrl と同一値。 plugin から見ると "default が常に effective" になる初期 state。
  */
@@ -15,53 +16,14 @@ import type {
   PortalDisruptionEntry,
   PortalEndpoint,
   PortalPhaseEntry,
+  PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
-
-interface MetadataEndpoint {
-  slot: string;
-  default: { from: "cfn-output"; key: string; appendPath?: string };
-  overridable?: boolean;
-  label?: string;
-  description?: string;
-}
-
-interface MetadataPhase {
-  name: string;
-  afterMinutes: number;
-  description?: string;
-}
-
-interface MetadataDisruption {
-  id: string;
-  name: string;
-  defaultAfterMinutes?: number;
-  description?: string;
-}
-
-/**
- * 問題の生 metadata.json を glob で持つ (= props-builder は scoring / cfnTemplate 等の
- * private field に触らず、 plugin が見ていい shape だけを取り出す)。
- */
-const metadataModules = import.meta.glob<{
-  default: {
-    id: string;
-    endpoints?: MetadataEndpoint[];
-    phases?: MetadataPhase[];
-    disruptions?: MetadataDisruption[];
-  };
-}>("../../../../problems/*/*/metadata.json", { eager: true });
-
-function findRawMetadata(problemId: string) {
-  for (const mod of Object.values(metadataModules)) {
-    if (mod.default.id === problemId) return mod.default;
-  }
-  return undefined;
-}
+import { findProblemMetadata } from "../data/problems";
 
 /**
  * `base` + 任意 `appendPath` を結合して absolute URL を返す。 不正な URL は throw
  * (= silent undefined fallback は metadata / CFn output の malformed を隠す。 caller の
- * `buildPortalEndpointsFromOutputs` で context (problemId / slot / key) を付けて rethrow する)。
+ * `buildPortalEndpointsFromOutputs` で context 付き Error に rethrow する)。
  */
 function joinUrl(base: string, appendPath?: string): string {
   if (!appendPath) return base;
@@ -72,17 +34,14 @@ function joinUrl(base: string, appendPath?: string): string {
 /**
  * `metadata.endpoints[]` + deployment.stackOutputs から PortalEndpoint[] を組み立てる。
  * overrideUrl は本 fn では未対応 (= portal の endpoint registry API を後で wire-up する)。
- *
- * URL 結合 (= joinUrl) が失敗したら context (problemId / slot / key) を含めて throw する。
- * silent skip にすると competitor が malformed URL を踏んだ時に「default が出ない理由」 が
- * 観測不能になる。 caller (PortalPluginSlots) の ErrorBoundary が catch して fallback を render。
+ * URL 結合失敗時は context 付きで throw (= caller の ErrorBoundary に降ろす)。
  */
 export function buildPortalEndpointsFromOutputs(
   problemId: string,
   stackOutputs: Record<string, string>,
 ): readonly PortalEndpoint[] {
-  const metadata = findRawMetadata(problemId);
-  if (!metadata?.endpoints) return [];
+  const metadata = findProblemMetadata(problemId);
+  if (!metadata || metadata.endpoints.length === 0) return [];
   return metadata.endpoints.map((ep) => {
     const base = stackOutputs[ep.default.key];
     let defaultUrl: string | undefined;
@@ -98,7 +57,7 @@ export function buildPortalEndpointsFromOutputs(
     }
     return {
       slot: ep.slot,
-      overridable: ep.overridable === true,
+      overridable: ep.overridable,
       ...(ep.label ? { label: ep.label } : {}),
       ...(ep.description ? { description: ep.description } : {}),
       ...(defaultUrl ? { defaultUrl, effectiveUrl: defaultUrl } : {}),
@@ -106,32 +65,27 @@ export function buildPortalEndpointsFromOutputs(
   });
 }
 
-/**
- * `metadata.phases[]` を予告用の slim shape に narrow (= effect 内部は plugin に渡さない)。
- */
 export function buildPortalPhases(problemId: string): readonly PortalPhaseEntry[] {
-  const metadata = findRawMetadata(problemId);
-  if (!metadata?.phases) return [];
-  return metadata.phases.map((p) => ({
-    name: p.name,
-    afterMinutes: p.afterMinutes,
-    ...(p.description ? { description: p.description } : {}),
-  }));
+  return findProblemMetadata(problemId)?.phases ?? [];
+}
+
+export function buildPortalDisruptions(problemId: string): readonly PortalDisruptionEntry[] {
+  return findProblemMetadata(problemId)?.disruptions ?? [];
 }
 
 /**
- * `metadata.disruptions[]` を予告用の slim shape に narrow (= eventDetailType / parameters
- * 等の operator 内部 field は plugin に渡さない)。
+ * portal の `view.team` shape を SDK の team shape に narrow。 undefined field を落として
+ * `exactOptionalPropertyTypes` に適合させる。 PortalPluginSlots / ProblemDetail の重複を
+ * 1 箇所に集約。
  */
-export function buildPortalDisruptions(problemId: string): readonly PortalDisruptionEntry[] {
-  const metadata = findRawMetadata(problemId);
-  if (!metadata?.disruptions) return [];
-  return metadata.disruptions.map((d) => ({
-    id: d.id,
-    name: d.name,
-    ...(typeof d.defaultAfterMinutes === "number"
-      ? { defaultAfterMinutes: d.defaultAfterMinutes }
-      : {}),
-    ...(d.description ? { description: d.description } : {}),
-  }));
+export function buildPortalTeam(team: {
+  readonly teamName: string;
+  readonly teamId?: string;
+  readonly eventId?: string;
+}): PortalSlotProps["team"] {
+  return {
+    teamName: team.teamName,
+    ...(team.teamId ? { teamId: team.teamId } : {}),
+    ...(team.eventId ? { eventId: team.eventId } : {}),
+  };
 }

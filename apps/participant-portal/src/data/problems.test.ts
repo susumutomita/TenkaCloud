@@ -67,4 +67,21 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(m?.phases).toEqual([]);
     expect(m?.disruptions).toEqual([]);
   });
+
+  // ADR-012 Phase 5: endpoints[] を portal plugin が build-time catalog から直接読めることを pin。
+  it("microservice-migration-battle で endpoints[] が露出されるべき (ADR-012 Phase 5)", () => {
+    const m = findProblemMetadata("microservice-migration-battle");
+    expect(m?.endpoints).toHaveLength(3);
+    expect(m?.endpoints.map((e) => e.slot)).toEqual(
+      expect.arrayContaining(["users", "orders", "catalog"]),
+    );
+    const users = m?.endpoints.find((e) => e.slot === "users");
+    expect(users?.default.key).toBe("BaseUrl");
+    expect(users?.default.appendPath).toBe("/users");
+    expect(users?.overridable).toBe(true);
+  });
+
+  it("endpoints[] が無い問題は空配列を返すべき", () => {
+    expect(findProblemMetadata("hello-world")?.endpoints).toEqual([]);
+  });
 });
