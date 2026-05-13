@@ -6,6 +6,7 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
@@ -13,7 +14,12 @@ import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
 import { PhaseCountdown, type PhaseCountdownEntry } from "../components/PhaseCountdown";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
-import { findProblemMetadata, type ProblemCatalogEntry } from "../data/problems";
+import {
+  findProblemMetadata,
+  type ProblemCatalogEntry,
+  resolveLocalizedNarrative,
+} from "../data/problems";
+import { useI18n } from "../i18n";
 import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
@@ -37,23 +43,30 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error, refresh } = useTeamView();
-
-  if (!jobId) return <Navigate to="/problems" replace />;
-
+  // Issue #583 Phase 5.B: locale に応じて metadata.i18n[locale] override を被せる。
+  // hooks-rule のため early return より前で hook を呼ぶ (= jobId 不在でも順序が変わらない)。
+  const { locale } = useI18n();
   const problem = view?.problems.find((p) => p.jobId === jobId);
   // #550: problem.problemId から build-time catalog で metadata を引いて narrative を表示。
   // backend を経由せず Portal が直接 metadata.json を bundle に持つ (admin-console と同 source、
   // ADR-003 で DDB API 化したらここを差し替える)。catalog 不在 (= 旧 problem 等) は undefined。
   const metadata = problem ? findProblemMetadata(problem.problemId) : undefined;
+  // ja / metadata.i18n 不在 / 該当 field 不在は元の ja narrative にフォールバック (helper 側で処理)。
+  const narrative = useMemo(
+    () => (metadata ? resolveLocalizedNarrative(metadata, locale) : undefined),
+    [metadata, locale],
+  );
+
+  if (!jobId) return <Navigate to="/problems" replace />;
 
   return (
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={metadata?.shortDescription}
+        description={narrative?.shortDescription}
         actions={<Button onClick={() => navigate("/problems")}>問題一覧へ戻る</Button>}
       >
-        {metadata?.name ?? problem?.problemId ?? jobId}
+        {narrative?.name ?? problem?.problemId ?? jobId}
       </Header>
 
       {error && (
@@ -74,7 +87,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。 */}
-      {problem && metadata && <ProblemInfoSection metadata={metadata} />}
+      {problem && metadata && narrative && (
+        <ProblemInfoSection metadata={metadata} narrative={narrative} />
+      )}
       {/* ADR-012 Phase 4 / Issue #607: phases / disruptions を予告 panel + countdown timeline で表示。
        *   両方とも空なら skip。 deployedAt が API から取れたら live countdown、 取れなければ
        *   static な「+N 分」 表示に degrade。 */}
@@ -130,7 +145,16 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
  * 対応 (= #550 issue 本文の段階的実装、schema 拡張は `problems/SCHEMA.json` + 既存 3 問の
  * metadata.json 全更新が要りスコープ大)。
  */
-function ProblemInfoSection({ metadata }: { metadata: ProblemCatalogEntry }) {
+function ProblemInfoSection({
+  metadata,
+  narrative,
+}: {
+  metadata: ProblemCatalogEntry;
+  narrative: {
+    readonly description: string;
+    readonly learningGoals: readonly string[];
+  };
+}) {
   return (
     <Container header={<Header variant="h2">問題情報</Header>}>
       <SpaceBetween size="m">
@@ -166,15 +190,15 @@ function ProblemInfoSection({ metadata }: { metadata: ProblemCatalogEntry }) {
         <div>
           <Box variant="awsui-key-label">問題説明</Box>
           <Box variant="p">
-            <span style={{ whiteSpace: "pre-wrap" }}>{metadata.description}</span>
+            <span style={{ whiteSpace: "pre-wrap" }}>{narrative.description}</span>
           </Box>
         </div>
 
-        {metadata.learningGoals.length > 0 && (
+        {narrative.learningGoals.length > 0 && (
           <div>
             <Box variant="awsui-key-label">学習目的</Box>
             <ul>
-              {metadata.learningGoals.map((g) => (
+              {narrative.learningGoals.map((g) => (
                 <li key={g}>{g}</li>
               ))}
             </ul>
