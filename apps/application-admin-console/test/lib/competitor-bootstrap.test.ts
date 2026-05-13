@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
+  buildUpdatePayload,
+  buildUpdateStackUrl,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
 } from "../../src/lib/competitor-bootstrap";
 
@@ -71,5 +73,48 @@ describe("COMPETITOR_BOOTSTRAP_TEMPLATE_URL", () => {
     expect(COMPETITOR_BOOTSTRAP_TEMPLATE_URL).toMatch(
       /^https:\/\/raw\.githubusercontent\.com\/.+\/competitor-bootstrap\.yaml$/,
     );
+  });
+});
+
+describe("buildUpdateStackUrl (#706)", () => {
+  it("Update Stack 経路 (#/stacks/update/template) を指すべき", () => {
+    const url = buildUpdateStackUrl();
+    expect(url).toContain("#/stacks/update/template");
+    expect(url).toContain("https://ap-northeast-1.console.aws.amazon.com/cloudformation/home");
+  });
+
+  it("templateURL + stackName を pre-fill し、 秘密値 Parameter は含まないべき (= existing 値再利用)", () => {
+    const decoded = decodeURIComponent(buildUpdateStackUrl());
+    expect(decoded).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
+    expect(decoded).toContain("stackName=tenkacloud-competitor-bootstrap");
+    // 秘密値 (ExternalId) を URL に含めない、 既存 stack の Parameter を Use existing で再利用する
+    expect(decoded).not.toContain("param_ExternalId");
+    expect(decoded).not.toContain("param_TenkaCloudAccountId");
+    expect(decoded).not.toContain("param_RoleName");
+  });
+
+  it("region を上書きできるべき", () => {
+    const url = buildUpdateStackUrl({ region: "us-east-1" });
+    expect(url).toContain("https://us-east-1.console.aws.amazon.com/");
+    expect(url).toContain("region=us-east-1");
+  });
+});
+
+describe("buildUpdatePayload (#706)", () => {
+  it("Update Stack URL と「update のお願い」 文言を含むべき", () => {
+    const payload = buildUpdatePayload();
+    expect(payload).toContain(buildUpdateStackUrl());
+    expect(payload).toContain("update");
+    expect(payload).toContain("既存");
+  });
+
+  it("Quick-create URL (= 新規 create 経路) は含まれないべき (= update 専用)", () => {
+    expect(buildUpdatePayload()).not.toContain("quickcreate");
+  });
+
+  it("秘密値 (ExternalId / TenkaCloudAccountId) は含まないべき (= 公開 URL のみ)", () => {
+    const payload = buildUpdatePayload();
+    expect(payload).not.toContain("ExternalId:");
+    expect(payload).not.toContain("123456789012");
   });
 });
