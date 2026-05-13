@@ -14,7 +14,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
-const TEMPLATES_DIR = "infrastructure/templates";
+/**
+ * Issue #691: 問題側 yaml (= problems/<category>/<id>/template.yaml) も同じ
+ * IAM Description regex に当たるため scan 対象に含める。 既存の
+ * infrastructure/templates/ と並列に walk する。
+ */
+const TEMPLATES_DIRS = ["infrastructure/templates", "problems"];
 
 function isAllowedCharCode(cp: number): boolean {
   return (
@@ -26,13 +31,20 @@ function isAllowedCharCode(cp: number): boolean {
   );
 }
 
+function isCfnTemplate(filename: string): boolean {
+  // CFn template は `*.yaml` のみ (= ASCII restriction が IAM Description 経由で効く)。
+  // docker-compose.yml 等の `.yml` infra-adjacent ファイルは CFn 経由で deploy されないので
+  // 対象外。 問題側は `template.yaml` 命名規約 (= ADR-012 / problems/SCHEMA.json) で固定。
+  return extname(filename) === ".yaml";
+}
+
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       out.push(...walk(full));
-    } else if (extname(entry) === ".yaml" || extname(entry) === ".yml") {
+    } else if (isCfnTemplate(entry)) {
       out.push(full);
     }
   }
@@ -40,7 +52,8 @@ function walk(dir: string): string[] {
 }
 
 const errors: string[] = [];
-for (const file of walk(TEMPLATES_DIR)) {
+const allFiles = TEMPLATES_DIRS.flatMap(walk);
+for (const file of allFiles) {
   const lines = readFileSync(file, "utf8").split("\n");
   lines.forEach((line, idx) => {
     for (const ch of line) {
@@ -67,4 +80,6 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`OK: ${TEMPLATES_DIR}/ 配下の yaml すべて ASCII + Latin-1 範囲 (IAM Description 安全)`);
+console.log(
+  `OK: ${TEMPLATES_DIRS.join(" + ")} 配下 ${allFiles.length} yaml すべて ASCII + Latin-1 範囲 (IAM Description 安全)`,
+);
