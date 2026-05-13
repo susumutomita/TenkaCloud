@@ -13,7 +13,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        env-check synth diff bootstrap \
+        env-check synth check-synth diff bootstrap \
         deploy deploy-control-plane deploy-bootstrap destroy \
         deploy-battles destroy-battles
 
@@ -40,8 +40,14 @@ build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
 audit-deps:    ; bun run audit:dependencies
-check:         install lint test validate-problems check-problems-index check-docs check-http-status audit-deps
-before-commit: lint test validate-problems check-problems-index check-docs check-http-status audit-deps
+check:         install lint test validate-problems check-problems-index check-docs check-http-status audit-deps check-synth
+before-commit: lint test validate-problems check-problems-index check-docs check-http-status audit-deps check-synth
+
+# `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
+# 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
+check-synth:
+	@$(MAKE) synth >/dev/null 2>&1 || { echo "ERROR: cdk synth failed (= make deploy も失敗します)。 make synth で詳細を確認してください。"; exit 1; }
+	@echo "OK  cdk synth (= deploy 経路の module resolution が通る)"
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
