@@ -540,6 +540,10 @@
           "description": {
             "type": "string",
             "description": "portal や運営 console で表示する phase 説明文 (任意)。"
+          },
+          "publicHint": {
+            "type": "boolean",
+            "description": "[Issue #689 / ADR-013 OQ#7] true のとき participant-portal の StatusPanel に phase 詳細 (name + description) を予告表示する。 default (= undefined / false) では competitive UX を守るため hide。 operator 側 admin-console は publicHint に関わらず全 phase 表示する想定。"
           }
         }
       }
@@ -583,6 +587,10 @@
           "description": {
             "type": "string",
             "description": "disruption の動作 / 戦術的影響を participant 向けに説明する文章。 portal の予告 panel で countdown と一緒に表示される (= player への hint)。"
+          },
+          "publicHint": {
+            "type": "boolean",
+            "description": "[Issue #689 / ADR-013 OQ#7] true のとき participant-portal の StatusPanel に disruption 詳細 (name + description + defaultAfterMinutes) を予告表示する。 default (= undefined / false) では competitive UX を守るため hide。 operator 側 admin-console は publicHint に関わらず全 disruption を表示する想定。"
           },
           "triggers": {
             "type": "array",

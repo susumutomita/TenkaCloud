@@ -65,12 +65,21 @@ export function buildPortalEndpointsFromOutputs(
   });
 }
 
+/**
+ * Issue #689 (= ADR-013 OQ#7): 競技者にとって発見すべき phase / disruption 詳細を
+ * 事前にネタバレ表示しないため、 各 entry が `publicHint=true` を持つ場合のみ portal に
+ * 流す。 default は **hide** (= fail-closed)、 operator side (= admin-console) は別経路で
+ * 全 phase 表示できる前提。 metadata 作者が「これは事前に見せて OK」 と明示した entry だけが
+ * portal の StatusPanel に届く。
+ */
 export function buildPortalPhases(problemId: string): readonly PortalPhaseEntry[] {
-  return findProblemMetadata(problemId)?.phases ?? [];
+  const phases = findProblemMetadata(problemId)?.phases ?? [];
+  return phases.filter((p) => p.publicHint === true);
 }
 
 export function buildPortalDisruptions(problemId: string): readonly PortalDisruptionEntry[] {
-  return findProblemMetadata(problemId)?.disruptions ?? [];
+  const disruptions = findProblemMetadata(problemId)?.disruptions ?? [];
+  return disruptions.filter((d) => d.publicHint === true);
 }
 
 /**

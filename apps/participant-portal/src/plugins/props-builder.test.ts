@@ -49,10 +49,16 @@ describe("buildPortalEndpointsFromOutputs", () => {
 });
 
 describe("buildPortalPhases", () => {
-  it("phases[] が宣言済の問題は narrow 後 array を返すべき (effect は plugin に渡さない)", () => {
+  it("publicHint=true な phases のみ返すべき (#689 — ネタバレ防止)", () => {
+    // microservice-migration-battle は phases[] に degraded / legacy を持つが、 default
+    // (= publicHint 未指定) では portal に出さない。 metadata 作者が明示的に publicHint=true
+    // を立てた entry のみ portal に届く。
     const phases = buildPortalPhases("microservice-migration-battle");
-    expect(phases.length).toBeGreaterThanOrEqual(2);
-    // operator 内部 field (effect) が plugin に渡らない (= 答えの hint や noise を防ぐ)
+    expect(phases.every((p) => p.publicHint === true)).toBe(true);
+  });
+
+  it("operator 内部 field (= effect / switchPlatformToDegraded) を plugin に流さない", () => {
+    const phases = buildPortalPhases("microservice-migration-battle");
     const json = JSON.stringify(phases);
     expect(json).not.toContain("switchPlatformToDegraded");
     expect(json).not.toContain("scorePathOverride");
@@ -64,9 +70,12 @@ describe("buildPortalPhases", () => {
 });
 
 describe("buildPortalDisruptions", () => {
-  it("disruptions[] が無い問題は空配列を返すべき (= Phase 4 disruptions[] 未追加の場合)", () => {
-    // disruptions[] は Phase 4 で microservice-migration-battle にのみ追加。
-    // 他問題は disruptions[] 無しのため空配列。
+  it("publicHint=true な disruptions のみ返すべき (#689 — ネタバレ防止)", () => {
+    const out = buildPortalDisruptions("microservice-migration-battle");
+    expect(out.every((d) => d.publicHint === true)).toBe(true);
+  });
+
+  it("disruptions[] が無い問題は空配列を返すべき", () => {
     expect(buildPortalDisruptions("hello-world")).toEqual([]);
     expect(buildPortalDisruptions("hello-world-battle")).toEqual([]);
     expect(buildPortalDisruptions("security-battle-royale")).toEqual([]);
