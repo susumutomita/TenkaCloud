@@ -31,8 +31,9 @@ validate-problems: ; bun run validate:problems
 build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
-check:         install lint test validate-problems check-docs check-http-status
-before-commit: lint test validate-problems check-docs check-http-status
+audit-deps:    ; bun run audit:dependencies
+check:         install lint test validate-problems check-docs check-http-status audit-deps
+before-commit: lint test validate-problems check-docs check-http-status audit-deps
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format

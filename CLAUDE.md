@@ -179,6 +179,17 @@ if (res.status === 401) throw new PortalAuthError();                       // �
 - `infrastructure/templates/competitor-bootstrap.yaml` の IAM Role は最小権限 (CFn CreateStack + 問題テンプレートが触る AWS サービス分のみ)
 - 依存パッケージは Renovate / dependabot で更新、CI は Safe Chain で malicious package を検出
 
+### Supply Chain Security (mini Shai-Hulud 第二波対策、参考 [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd))
+
+`prepare` / `postinstall` 等の transitive dep lifecycle script を悪用した credential exfil 系攻撃に対する 4 層防御です。
+
+1. **Bun `trustedDependencies`**: Bun は default で transitive lifecycle script を block (= secure-by-default)。`package.json` の `trustedDependencies` 配列が明示 allowlist (現状空)。
+2. **`.npmrc`**: `ignore-scripts=true` + `min-release-age=168h` (= 7 日 quarantine、 npm 11+)。 contributor が npm / yarn / pnpm を使っても自動防御。
+3. **CI 監査** `make audit-deps` (`scripts/audit-dependencies.ts`): `node_modules` を scan し lifecycle script を持つ package を `scripts/audit-baseline.json` と diff、 新規追加 / 既存 dep の hook 追加で fail。
+4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain による悪意 package 検出。
+
+`trustedDependencies` への package 追加は単独 PR で行い、 該当 script の中身を目視確認 + PR body で要約してください (= 不審な curl / wget / OS persistence / 環境変数 exfil があれば baseline に入れず報告)。
+
 ## 技術スタック
 
 | レイヤー         | 技術                                                                  |
