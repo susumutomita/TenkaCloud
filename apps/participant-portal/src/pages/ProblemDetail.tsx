@@ -9,6 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { PhaseCountdown, type PhaseCountdownEntry } from "../components/PhaseCountdown";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import { findProblemMetadata, type ProblemCatalogEntry } from "../data/problems";
@@ -73,9 +74,11 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。 */}
       {problem && metadata && <ProblemInfoSection metadata={metadata} />}
-      {/* ADR-012 Phase 4: phases / disruptions を予告 panel として表示。 両方とも空なら skip。 */}
+      {/* ADR-012 Phase 4 / Issue #607: phases / disruptions を予告 panel + countdown timeline で表示。
+       *   両方とも空なら skip。 deployedAt が API から取れたら live countdown、 取れなければ
+       *   static な「+N 分」 表示に degrade。 */}
       {problem && metadata && (metadata.phases.length > 0 || metadata.disruptions.length > 0) && (
-        <TimelinePredictSection metadata={metadata} />
+        <TimelinePredictSection metadata={metadata} deployedAt={problem.createdAt} />
       )}
 
       {problem && (
@@ -177,55 +180,55 @@ function InfoCell({ label, children }: { label: string; children: React.ReactNod
 }
 
 /**
- * ADR-012 Phase 4 portal predict: phases[] と disruptions[] を「いつ何が起きるか」 panel に
- * 並べて表示する。 deploy 時刻 (= 自チーム deploy の startedAt) は portal API に未露出 (Phase 4
- * scope 外) なので、 "deploy 後 N 分" の relative 表示に留める。 deploy 時刻が露出されたら
- * countdown / 経過判定を後付けする (= 同じ data shape を使う前提)。
+ * ADR-012 Phase 4 + Issue #607: phases[] と disruptions[] を「いつ何が起きるか」 + live countdown
+ * で表示。 deployedAt (= problem.createdAt) があれば 1 秒間隔の残時間表示、 無ければ
+ * static「+N 分」 表示に degrade。 残時間 < 3 分は warn 強調 (= 事前告知)。
  */
-function TimelinePredictSection({ metadata }: { metadata: ProblemCatalogEntry }) {
+function TimelinePredictSection({
+  metadata,
+  deployedAt,
+}: {
+  metadata: ProblemCatalogEntry;
+  deployedAt?: string;
+}) {
   const phases = metadata.phases;
   const disruptions = metadata.disruptions;
+  const phaseEntries: PhaseCountdownEntry[] = phases.map((p) => ({
+    id: `phase-${p.name}`,
+    name: p.name,
+    afterMinutes: p.afterMinutes,
+    ...(p.description ? { description: p.description } : {}),
+    variant: "phase",
+  }));
+  const disruptionEntries: PhaseCountdownEntry[] = disruptions.map((d) => ({
+    id: `disruption-${d.id}`,
+    name: d.name,
+    afterMinutes: d.defaultAfterMinutes ?? 0,
+    ...(d.description ? { description: d.description } : {}),
+    variant: "disruption",
+  }));
   return (
     <Container
       header={
         <Header
           variant="h2"
-          description="このあと自動で発火するフェーズ / 妨害イベント。 各イベントの発火タイミングは metadata.json の宣言値で、 operator が deploy 時に上書きしている場合は実際の発火時刻と差が出ます。"
+          description="このあと自動で発火するフェーズ / 妨害イベント。 残 3 分以内のイベントは warn 強調で予告します。 各イベントの発火タイミングは metadata.json の宣言値で、 operator が deploy 時に上書きしている場合は実際の発火時刻と差が出ます。"
         >
           タイムライン (予告)
         </Header>
       }
     >
       <SpaceBetween size="m">
-        {phases.length > 0 && (
+        {phaseEntries.length > 0 && (
           <div>
             <Box variant="awsui-key-label">フェーズ</Box>
-            <ul>
-              {phases.map((p) => (
-                <li key={p.name}>
-                  <Badge color="blue">+{p.afterMinutes} 分</Badge> <strong>{p.name}</strong>
-                  {p.description && <Box variant="p">{p.description}</Box>}
-                </li>
-              ))}
-            </ul>
+            <PhaseCountdown entries={phaseEntries} {...(deployedAt ? { deployedAt } : {})} />
           </div>
         )}
-        {disruptions.length > 0 && (
+        {disruptionEntries.length > 0 && (
           <div>
             <Box variant="awsui-key-label">妨害イベント</Box>
-            <ul>
-              {disruptions.map((d) => (
-                <li key={d.id}>
-                  {typeof d.defaultAfterMinutes === "number" && (
-                    <>
-                      <Badge color="red">+{d.defaultAfterMinutes} 分</Badge>{" "}
-                    </>
-                  )}
-                  <strong>{d.name}</strong>
-                  {d.description && <Box variant="p">{d.description}</Box>}
-                </li>
-              ))}
-            </ul>
+            <PhaseCountdown entries={disruptionEntries} {...(deployedAt ? { deployedAt } : {})} />
           </div>
         )}
       </SpaceBetween>

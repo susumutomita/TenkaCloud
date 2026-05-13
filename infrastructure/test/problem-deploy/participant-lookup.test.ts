@@ -91,6 +91,14 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.team.teamNameSetByCompetitor).toBe(true);
   });
 
+  // Issue #607: createdAt を portal API に露出 (= phase countdown timeline で使う)。
+  it("Issue #607: problem.createdAt を ParticipantProblemView に echo するべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.createdAt).toBe("2026-05-04T15:00:00.000Z");
+  });
+
   it("Phase 2a 経由の eventId / teamId 列が team に伝播するべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
