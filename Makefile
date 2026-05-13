@@ -22,7 +22,13 @@ help:
 	      /^[a-z][a-zA-Z0-9_-]*:/ && !/^help:/ {sub(/:.*/, ""); printf "  %s\n", $$0}' Makefile
 
 # ===== Setup / Build =====
-install:       ; bun install
+install:
+	# --ignore-scripts: defuse mini-shai-hulud 2nd wave (Flatt Tech, 2026-05-12).
+	# bun does not honour npm_config_ignore_scripts or .npmrc's ignore-scripts,
+	# so the flag is required on every invocation. Husky's `prepare` is skipped
+	# along with everything else, so we re-bootstrap it explicitly afterwards.
+	bun install --ignore-scripts
+	bun x husky
 install_ci:    ; bun install --frozen-lockfile --ignore-scripts
 build:         ; bun run build
 typecheck:     ; bun run typecheck
