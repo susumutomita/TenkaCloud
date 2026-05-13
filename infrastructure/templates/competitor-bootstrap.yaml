@@ -148,6 +148,30 @@ Resources:
                   - logs:DescribeLogGroups
                   - logs:DescribeLogStreams
                 Resource: "*"
+
+              # Lambda resources created by problem CFn templates (= microservice-migration-battle
+              # disruption Lambdas etc.). Scope is narrowed to the tc-* function name prefix.
+              # Issue #692: CFn deploy requires lambda:GetFunction for stack drift / read-back,
+              # which was missing and caused ROLLBACK_COMPLETE with AccessDenied.
+              - Sid: LambdaForProblemFunctions
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - lambda:ListTags
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:GetPolicy
+                  - lambda:PutFunctionConcurrency
+                  - lambda:DeleteFunctionConcurrency
+                  - lambda:GetFunctionConfiguration
+                Resource:
+                  - !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:tc-*"
       Tags:
         - Key: TenkaCloud:Purpose
           Value: competitor-deploy
