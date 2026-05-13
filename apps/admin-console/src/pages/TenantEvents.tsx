@@ -33,6 +33,24 @@ import type { AppConfig } from "../config";
 const POLL_INTERVAL_MS = 30_000;
 const PAGE_SIZE = 50;
 
+/**
+ * Issue #656: tenant API が provisioning 中 (= CodePipeline 進行中で API Gateway 未存在)
+ * のとき fetch が `TypeError: Failed to fetch` を起こす or backend が 502/503/504 を返す。
+ * このいずれかなら "プロビジョニング中" UI を出し、 raw error を隠す。
+ */
+function isLikelyProvisioning(err: unknown): boolean {
+  if (err instanceof AdminInsightApiError) {
+    return (
+      err.status === StatusCodes.BAD_GATEWAY ||
+      err.status === StatusCodes.SERVICE_UNAVAILABLE ||
+      err.status === StatusCodes.GATEWAY_TIMEOUT
+    );
+  }
+  if (err instanceof TypeError) return true;
+  if (err instanceof Error && /failed to fetch/i.test(err.message)) return true;
+  return false;
+}
+
 const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",
   DEPLOYING: "blue",
@@ -50,6 +68,7 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [notConfigured, setNotConfigured] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
 
   const idToken = auth.tokens?.idToken;
 
@@ -58,16 +77,19 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
     try {
       const res = await fetchTenantEvents(config, idToken, tenantId, { limit: PAGE_SIZE });
       if (res === null) {
-        // adminInsightApiUrl 未配線 (= phase 2 deploy 前 / dev)
         setNotConfigured(true);
         return;
       }
       setItems(res.items);
       setError(null);
       setForbidden(false);
+      setProvisioning(false);
     } catch (err) {
       if (err instanceof AdminInsightApiError && err.status === StatusCodes.FORBIDDEN) {
         setForbidden(true);
+      } else if (isLikelyProvisioning(err)) {
+        setProvisioning(true);
+        setError(null);
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -108,6 +130,31 @@ export function TenantEventsPage({ config }: { config: AppConfig }) {
       <Alert type="error" header="権限がありません">
         この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。
       </Alert>
+    );
+  }
+
+  if (provisioning) {
+    return (
+      <SpaceBetween size="l">
+        <Header
+          variant="h1"
+          description={`Tenant ID: ${tenantId}`}
+          actions={
+            <Button variant="normal" onClick={() => navigate("/tenants")}>
+              テナント一覧に戻る
+            </Button>
+          }
+        >
+          テナント Event 一覧
+        </Header>
+        <Alert type="info" header="テナントを準備中です">
+          この tenant の API はまだ deploy 中のため Event 一覧を取得できません。 provisioning は通常
+          5〜10 分で完了します。 30 秒ごとに自動で再試行します。
+        </Alert>
+        <Box textAlign="center" padding="l">
+          <Spinner /> 接続待機中…
+        </Box>
+      </SpaceBetween>
     );
   }
 
