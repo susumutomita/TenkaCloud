@@ -1,0 +1,94 @@
+/**
+ * @tenkacloud/portal-plugin-sdk
+ *
+ * ADR-012 Phase 5: TenkaCloud participant-portal の plugin contract。
+ * 問題 (= problems/<id>/portal/) が export する React component の props を型で
+ * 固める。portal はこれらの型に従って plugin slot を render する。
+ *
+ * peer-dep policy: react のみ。Cloudscape は portal 側が runtime に provide する想定
+ * (= Phase 7 で importmap 配線、 現状は build-time integration で同一 bundle に乗る)。
+ *
+ * MVP は **build-time integration** で動作する (= participant-portal が Vite の
+ * `import.meta.glob` で problems/<id>/portal/ の .tsx を chunk 分割込みで取り込む)。
+ * 真の runtime URL-based loading (= 別 S3 / 別 deploy) は Phase 7 separate ADR で扱う。
+ */
+
+import type { ComponentType } from "react";
+
+/**
+ * Plugin slot に渡される共通 props。portal が問題の deployment / scoring / phase の
+ * 状態を一括で plugin に渡す。
+ *
+ * fields:
+ * - `team`: 自チームの基本情報。teamId / teamName / eventId。
+ * - `problemId`: 問題 ID (= metadata.json の `id`)。同一 plugin が複数 problem 間で
+ *    共有された場合の分岐 key (実用上は 1 problem 1 portal/ dir 想定)。
+ * - `jobId`: deployment ULID。1 team が同 problem を複数 deploy した時の dedupe key。
+ * - `score`: 現在の累積 score。
+ * - `endpoints`: 自チームの (slot, defaultUrl, overrideUrl, effectiveUrl)。
+ * - `phases`: metadata.phases[] (= operator 内部 field なし、 predict 用)。
+ * - `disruptions`: metadata.disruptions[] (= 同上)。
+ * - `nowIso`: portal が plugin に「現在時刻」を渡す (= test 容易性 + clock skew 緩和)。
+ */
+export interface PortalSlotProps {
+  readonly team: {
+    readonly teamId?: string;
+    readonly teamName: string;
+    readonly eventId?: string;
+  };
+  readonly problemId: string;
+  readonly jobId: string;
+  readonly score: number;
+  readonly endpoints: readonly PortalEndpoint[];
+  readonly phases: readonly PortalPhaseEntry[];
+  readonly disruptions: readonly PortalDisruptionEntry[];
+  readonly nowIso: string;
+}
+
+/**
+ * 1 endpoint slot の状態。 default URL は metadata.endpoints[i].default.key + appendPath
+ * から portal が deploy 後の CFn output を読んで計算する。 effective = override ?? default。
+ */
+export interface PortalEndpoint {
+  readonly slot: string;
+  readonly overridable: boolean;
+  readonly label?: string;
+  readonly description?: string;
+  readonly defaultUrl?: string;
+  readonly overrideUrl?: string;
+  readonly effectiveUrl?: string;
+}
+
+export interface PortalPhaseEntry {
+  readonly name: string;
+  readonly afterMinutes: number;
+  readonly description?: string;
+}
+
+export interface PortalDisruptionEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly defaultAfterMinutes?: number;
+  readonly description?: string;
+}
+
+/**
+ * 1 slot に配置する component の型 alias。 problem 側 portal/<SlotName>.tsx は
+ * `export default function StatusPanel(props: PortalSlotProps) {...}` の形で書く。
+ *
+ * 名前は metadata.json の `dashboard.slots[slotName]` で portal 側 slot 名に紐付ける。
+ * 1 ファイル 1 slot 1 component (= portal lookup の正本は metadata の slot 名 → file path)。
+ *
+ * portal が予約する slot 名は {@link PORTAL_SLOT_NAMES} の literal 列挙を参照。
+ */
+export type PortalSlotComponent = ComponentType<PortalSlotProps>;
+
+/**
+ * 予約 slot 名の literal 列挙。 portal 側 / plugin 側で typo を防ぐため共有する。
+ * 各 slot の意味:
+ *   - StatusPanel       : 自チームの現在状態 (= endpoint 健全性 + phase countdown)
+ *   - RegistrationPanel : endpoint override 登録 form (= 切り出した service URL を登録)
+ *   - HelpDrawer        : 問題固有のヒント / 操作手順を出す drawer
+ */
+export const PORTAL_SLOT_NAMES = ["StatusPanel", "RegistrationPanel", "HelpDrawer"] as const;
+export type PortalSlotName = (typeof PORTAL_SLOT_NAMES)[number];

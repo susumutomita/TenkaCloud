@@ -79,6 +79,28 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
 - DynamoDB の on-demand (`PAY_PER_REQUEST`) 化 — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED 強制
 - SSE / WebSocket の新規導入 — Lambda 運用と整合する **polling** で書く
 - シークレットのコミット (`infrastructure/environments/<env>/.env`、AWS credentials)
+- `package.json` の `trustedDependencies` への追加を独断で行わない — supply chain attack の入口になる
+
+## Supply Chain Security (mini Shai-Hulud 第二波 2026-05 対策)
+
+参考: [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd)
+
+防御層は次の 4 段で構成する。
+
+1. **Bun の `trustedDependencies` モデル**: Bun は transitive dep の lifecycle script を default で実行しない。 root `package.json` の `trustedDependencies` 配列が allowlist (現状空)
+2. **`.npmrc`**: 万一 contributor が npm / yarn / pnpm を使っても自動 fallback で防御するため `ignore-scripts=true` + `min-release-age=168h` (= 7 日 quarantine) を入れる
+3. **CI 監査** (`make audit-deps`): `scripts/audit-dependencies.ts` が `node_modules` 配下を scan し、 lifecycle script (= preinstall / install / postinstall / preprepare / prepare / postprepare) を持つ package を `scripts/audit-baseline.json` と diff。 新規追加 / 既存 dep の hook 追加で CI を fail させる
+4. **CI の `--ignore-scripts` install + Safe Chain**: `make install_ci` は `bun install --frozen-lockfile --ignore-scripts`、 さらに Aikido Safe Chain で悪意 package を検出する
+
+### baseline を更新するとき
+
+dependency を新規追加 / 更新したとき lifecycle script を持つ新 package が baseline に増えることがある。 次の手順で更新する。
+
+1. 該当 package の `package.json` 内 lifecycle script を実際に読み、 不審な動作 (= curl / wget / OS 識別 / 環境変数 exfil / ファイル書き込み / プロセス spawn) がないことを目視確認
+2. `bun run scripts/audit-dependencies.ts --update` で `scripts/audit-baseline.json` を更新
+3. PR body に「baseline 更新の理由 + 確認した script の要約」を書く
+
+特に不審な script (= remote download / OS-level persistence / curl piped to sh) を見たら baseline に入れず PR を停止して報告すること。
 
 ## TDD
 

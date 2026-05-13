@@ -12,6 +12,7 @@ import { useTeamView } from "../auth/TeamViewProvider";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import { findProblemMetadata, type ProblemCatalogEntry } from "../data/problems";
+import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
   1: "入門",
@@ -72,6 +73,10 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。 */}
       {problem && metadata && <ProblemInfoSection metadata={metadata} />}
+      {/* ADR-012 Phase 4: phases / disruptions を予告 panel として表示。 両方とも空なら skip。 */}
+      {problem && metadata && (metadata.phases.length > 0 || metadata.disruptions.length > 0) && (
+        <TimelinePredictSection metadata={metadata} />
+      )}
 
       {problem && (
         <ProblemPanel
@@ -79,6 +84,18 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
           onScored={refresh}
+        />
+      )}
+
+      {/* ADR-012 Phase 5: problem 側 portal plugin (= metadata.dashboard.slots で宣言) を
+       *   render する。 該当 slot が無い問題は section 全体が render されない。 */}
+      {problem && metadata?.dashboardSlots && view?.team && (
+        <PortalPluginSlots
+          problemId={problem.problemId}
+          jobId={problem.jobId}
+          score={problem.score}
+          team={view.team}
+          stackOutputs={problem.stackOutputs}
         />
       )}
     </SpaceBetween>
@@ -156,5 +173,62 @@ function InfoCell({ label, children }: { label: string; children: React.ReactNod
       <Box variant="awsui-key-label">{label}</Box>
       <div>{children}</div>
     </div>
+  );
+}
+
+/**
+ * ADR-012 Phase 4 portal predict: phases[] と disruptions[] を「いつ何が起きるか」 panel に
+ * 並べて表示する。 deploy 時刻 (= 自チーム deploy の startedAt) は portal API に未露出 (Phase 4
+ * scope 外) なので、 "deploy 後 N 分" の relative 表示に留める。 deploy 時刻が露出されたら
+ * countdown / 経過判定を後付けする (= 同じ data shape を使う前提)。
+ */
+function TimelinePredictSection({ metadata }: { metadata: ProblemCatalogEntry }) {
+  const phases = metadata.phases;
+  const disruptions = metadata.disruptions;
+  return (
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description="このあと自動で発火するフェーズ / 妨害イベント。 各イベントの発火タイミングは metadata.json の宣言値で、 operator が deploy 時に上書きしている場合は実際の発火時刻と差が出ます。"
+        >
+          タイムライン (予告)
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        {phases.length > 0 && (
+          <div>
+            <Box variant="awsui-key-label">フェーズ</Box>
+            <ul>
+              {phases.map((p) => (
+                <li key={p.name}>
+                  <Badge color="blue">+{p.afterMinutes} 分</Badge> <strong>{p.name}</strong>
+                  {p.description && <Box variant="p">{p.description}</Box>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {disruptions.length > 0 && (
+          <div>
+            <Box variant="awsui-key-label">妨害イベント</Box>
+            <ul>
+              {disruptions.map((d) => (
+                <li key={d.id}>
+                  {typeof d.defaultAfterMinutes === "number" && (
+                    <>
+                      <Badge color="red">+{d.defaultAfterMinutes} 分</Badge>{" "}
+                    </>
+                  )}
+                  <strong>{d.name}</strong>
+                  {d.description && <Box variant="p">{d.description}</Box>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </SpaceBetween>
+    </Container>
   );
 }

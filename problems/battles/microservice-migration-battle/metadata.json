@@ -76,6 +76,17 @@
       "description": "Legacy code path フェーズ。 各サービスに仕込まれた遅延 code path を取り除く必要が出る。"
     }
   ],
+  "disruptions": [
+    {
+      "id": "ec2-latency-injection",
+      "name": "EC2 ネットワーク遅延注入",
+      "eventDetailType": "DegradedDisruptionFired",
+      "defaultAfterMinutes": 60,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "delayMs": 200, "device": "eth0" },
+      "description": "deploy 後 60 分 (default) の self-triggered Scheduler が EC2 の eth0 に `tc qdisc add ... netem delay 200ms` を注入する。 phases[0]=degraded と同時刻で発火し、 score engine 側の degradedPoints 切替と組み合わさって accumulated latency による減点が始まる。 operator は deploy 時に afterMinutes を上書き可能 (CFn parameter `DegradedAfterMinutes`)。"
+    }
+  ],
   "dashboard": {
     "slots": {
       "RegistrationPanel": "portal/RegistrationPanel.tsx",
