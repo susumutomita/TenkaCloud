@@ -1,0 +1,21 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "__PROBLEM_ID__",
+  "name": "__PROBLEM_NAME__",
+  "category": "Challenge",
+  "status": "draft",
+  "difficulty": 2,
+  "estimatedDuration": "30〜45 分",
+  "shortDescription": "1 行サマリ (~200 字) — どんな問題か。",
+  "description": "問題の長文説明。\\n\\n参加者が deploy 後に何をするか / どんな AWS リソースが立つか / 正解 flag はどこから取り出すかを書く。\\n\\nflag 型の典型: CFn template に SSM Parameter / Secrets Manager / 静的 Output で正解値を仕込み、 OutputKey を `scoring.flagOutputKey` で指す。 競技者は AWS Console / CLI で値を見つけ、 portal の flag form に提出する。",
+  "tags": ["__TAG__"],
+  "exposedPorts": [{ "port": 0, "name": "(no public endpoint)" }],
+  "learningGoals": ["__LEARNING_GOAL_1__", "__LEARNING_GOAL_2__"],
+  "cfnTemplate": "template.yaml",
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "FlagValue",
+    "points": 100,
+    "hints": ["__HINT_1__ (任意、 portal の hint 欄に表示)"]
+  }
+}

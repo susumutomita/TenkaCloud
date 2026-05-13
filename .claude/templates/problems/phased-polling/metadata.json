@@ -1,0 +1,55 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "__PROBLEM_ID__",
+  "name": "__PROBLEM_NAME__",
+  "category": "Battle",
+  "status": "draft",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "時間経過で rule が変わる phased-polling 採点の Battle skeleton。",
+  "description": "競技時間中に複数 phase が自動進行する Battle 型。 phases[].afterMinutes で発火 offset を持ち、 phase ごとに `effect` で scoring engine の挙動を切り替える (= platform 加点分類 / scorePath override 等)。\\n\\n典型用途: マイクロサービス分割レース、 段階的負荷試験、 時系列的に変わる game rule。 phased-polling は probe 1 回ごとに platform 自己申告 (`/meta`) を読み platform 分類 (ec2/lambda/ecs/apprunner) で加点する。",
+  "tags": ["__TAG__"],
+  "exposedPorts": [{ "port": 80, "name": "service" }],
+  "learningGoals": ["__LEARNING_GOAL_1__"],
+  "cfnTemplate": "template.yaml",
+  "endpoints": [
+    {
+      "slot": "main",
+      "default": { "from": "cfn-output", "key": "BaseUrl" },
+      "overridable": true,
+      "label": "Main service",
+      "description": "Lambda / ECS / App Runner に切り出したら override 登録可。"
+    }
+  ],
+  "scoring": {
+    "kind": "phased-polling",
+    "intervalMinutes": 1,
+    "probe": { "metaPath": "/meta", "scorePath": "/score" },
+    "platformRules": {
+      "ec2": { "points": 100, "degradedPoints": 10 },
+      "lambda": { "points": 1000 },
+      "ecs": { "points": 1000 },
+      "apprunner": { "points": 1000 }
+    },
+    "failurePenalty": -100
+  },
+  "phases": [
+    {
+      "name": "degraded",
+      "afterMinutes": 60,
+      "effect": { "switchPlatformToDegraded": ["ec2"] },
+      "description": "60 分後に ec2 platform points が degradedPoints (= 10) に切り替わる。"
+    }
+  ],
+  "disruptions": [
+    {
+      "id": "ec2-latency",
+      "name": "EC2 ネットワーク遅延注入",
+      "eventDetailType": "DegradedDisruptionFired",
+      "defaultAfterMinutes": 60,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "delayMs": 200 },
+      "description": "phases[0]=degraded と同時に EC2 latency 注入。 template.yaml の Disruption Lambda が SSM RunCommand で tc qdisc を発行。"
+    }
+  ]
+}
