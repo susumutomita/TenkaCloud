@@ -32,10 +32,16 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
-const SCORING_KIND_LABEL = {
+const SCORING_KIND_LABEL: Record<string, string> = {
   flag: "Challenge (flag 提出)",
   uptime: "Battle (uptime 加点)",
-} as const;
+  "uptime-flat": "Battle (uptime 加点)",
+  "uptime-multi": "Battle (uptime 加点)",
+  "phased-polling": "Battle (時間経過で加点ルール変動)",
+  "attack-detection": "Battle (攻撃 detection)",
+};
+
+const FALLBACK_KIND_LABEL = "(未設定)";
 
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
@@ -57,10 +63,14 @@ export function ProblemPanel({
   sessionToken: string;
   onScored: () => Promise<void>;
 }) {
-  const kindLabel = problem.scoring ? SCORING_KIND_LABEL[problem.scoring.kind] : "(未設定)";
+  const kindLabel = problem.scoring
+    ? (SCORING_KIND_LABEL[problem.scoring.kind] ?? FALLBACK_KIND_LABEL)
+    : FALLBACK_KIND_LABEL;
   const now = Date.now();
   const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
-  const isUptime = problem.scoring?.kind === "uptime";
+  // #688: phased-polling / uptime-flat / uptime-multi / attack-detection も Battle 軸
+  // (= uptime と同じ \"古い lastScoredAt = stale\" UX を適用)。 flag だけ非 Battle。
+  const isUptime = problem.scoring ? problem.scoring.kind !== "flag" : false;
   const isStale =
     isUptime &&
     Number.isFinite(lastScoredMs) &&
