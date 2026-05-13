@@ -9,7 +9,7 @@ export JSII_DEPRECATED := quiet
 .DEFAULT_GOAL := help
 
 .PHONY: help install install_ci build typecheck test check before-commit beforecommit \
-        build-docs check-docs \
+        build-docs check-docs audit-deps \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \

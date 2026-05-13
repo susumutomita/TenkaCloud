@@ -118,8 +118,20 @@ function inspectPackage(pkgDir: string, expectedName: string): Finding | undefin
 }
 
 function readRootPackage(): PackageJson {
+  // CI 中 / 開発中の操作ミスで root package.json が消えた / 壊れた時に、 stack trace ではなく
+  // 何の file がどう壊れているかを示すメッセージで止める (= caller の listWorkspacePackages /
+  // runAudit に readable な failure を伝える)。
   const p = join(REPO_ROOT, "package.json");
-  return JSON.parse(readFileSync(p, "utf8"));
+  if (!existsSync(p)) {
+    throw new Error(`Root package.json not found at ${p}`);
+  }
+  try {
+    return JSON.parse(readFileSync(p, "utf8"));
+  } catch (e) {
+    throw new Error(
+      `Failed to parse root package.json at ${p}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 function listWorkspacePackages(): readonly string[] {
