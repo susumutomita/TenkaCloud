@@ -48,6 +48,17 @@ Parameters:
     Type: String
     Default: main
     Description: チェックアウトする branch / tag / commit。
+  DegradedAfterMinutes:
+    Type: Number
+    Default: 60
+    MinValue: 1
+    MaxValue: 720
+    Description: >
+      [ADR-012 Phase 4 Disruption] deploy 後 N 分経過時点で EC2 上に `tc qdisc` の
+      network latency (200ms) を注入する self-triggered Scheduler の発火タイミング。
+      metadata.json の `phases[0].afterMinutes` と整合させる前提 (= 同じタイミングで
+      score engine が ec2 platform points を degradedPoints へ切替)。
+      operator が deploy 時に上書き可能。
 
 Resources:
   # ----- VPC + Networking -----
@@ -193,6 +204,107 @@ Resources:
           ENVEOF
 
           docker compose up -d --build
+
+  # ----- Disruption pattern (ADR-012 Phase 4) -----
+  # phases[0] (degraded) と整合する self-triggered Scheduler。 deploy 後
+  # DegradedAfterMinutes 経過時点で SSM RunCommand を発行し、 EC2 の eth0 に
+  # `tc qdisc` で 200ms の network latency を注入する。 同じタイミングで platform
+  # 側の score engine が ec2 points を degradedPoints (= 10) に切り替える (= 別 path
+  # で metadata.phases から駆動)。 portal は metadata.disruptions[] から countdown を
+  # 表示する (= predict)。
+  #
+  # 設計選択: `rate(N minutes)` を Scheduler に渡すと、 deploy 後 N 分後の最初の発火 +
+  # 以降 N 分毎にも発火する。 tc qdisc add は EEXIST で fail するので 2 回目以降は
+  # no-op (= idempotent)。 正確に 1 回だけ発火させたい場合は CustomResource で deploy
+  # 時刻 + offset の `at()` 式を組み立てる必要があるが、 Phase 1 reference impl では
+  # 簡潔さを優先して rate() + idempotent Lambda で実装する。
+  DisruptionFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-disruption-fn-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SendCommandToOwnInstance
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript"
+
+  DegradedDisruptionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-degraded-disruption"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt DisruptionFunctionRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          INSTANCE_ID: !Ref Ec2
+      Code:
+        ZipFile: |
+          import os
+          import boto3
+
+          # phases[0]=degraded fire 時点で EC2 に network latency を注入する。
+          # `tc qdisc add` は 2 回目以降 EEXIST で fail するので `|| true` で握り潰す。
+          # Scheduler が rate(N min) で N 分毎に再発火するが、 1 回目以降は no-op。
+          def handler(event, context):
+              ssm = boto3.client("ssm")
+              ssm.send_command(
+                  InstanceIds=[os.environ["INSTANCE_ID"]],
+                  DocumentName="AWS-RunShellScript",
+                  Comment="TenkaCloud microservice-migration: phases[0] degraded fire",
+                  Parameters={
+                      "commands": [
+                          "tc qdisc add dev eth0 root netem delay 200ms || true",
+                      ],
+                  },
+              )
+              return {"ok": True}
+
+  SchedulerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-scheduler-invoke-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeDisruptionFunction
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt DegradedDisruptionFunction.Arn
+
+  DegradedDisruptionSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${NamePrefix}-degraded-disruption"
+      Description: >
+        TenkaCloud microservice-migration-battle phases[0]=degraded の disruption schedule。
+        deploy 後 DegradedAfterMinutes 経過時点で EC2 上に network latency を注入する。
+      FlexibleTimeWindow: { Mode: "OFF" }
+      ScheduleExpression: !Sub "rate(${DegradedAfterMinutes} minutes)"
+      Target:
+        Arn: !GetAtt DegradedDisruptionFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
 
 Outputs:
   BaseUrl:

@@ -40,4 +40,31 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(json).not.toContain("cfnTemplate");
     expect(json).not.toContain("cfnParameters");
   });
+
+  // ADR-012 Phase 4: phases / disruptions を portal が予告 panel に出すための data shape pin。
+  it("microservice-migration-battle で phases / disruptions が露出されるべき (ADR-012 Phase 4)", () => {
+    const m = findProblemMetadata("microservice-migration-battle");
+    expect(m).toBeDefined();
+    expect(m?.phases.length).toBeGreaterThanOrEqual(2);
+    expect(m?.phases.map((p) => p.name)).toEqual(expect.arrayContaining(["degraded", "legacy"]));
+    expect(m?.disruptions.length).toBeGreaterThanOrEqual(1);
+    expect(m?.disruptions[0]?.id).toBe("ec2-latency-injection");
+    expect(m?.disruptions[0]?.defaultAfterMinutes).toBe(60);
+  });
+
+  it("phases / disruptions に operator 内部 field (effect / parameters / eventDetailType) を露出しないべき", () => {
+    const m = findProblemMetadata("microservice-migration-battle");
+    const json = JSON.stringify(m);
+    // 採点 internals / Phase 2 用 trigger 情報は競技者には不要 (= 答えの hint や noise 防止)
+    expect(json).not.toContain("eventDetailType");
+    expect(json).not.toContain("operatorEditable");
+    expect(json).not.toContain("switchPlatformToDegraded");
+    expect(json).not.toContain("scorePathOverride");
+  });
+
+  it("phases / disruptions が無い問題は空配列を返すべき", () => {
+    const m = findProblemMetadata("hello-world");
+    expect(m?.phases).toEqual([]);
+    expect(m?.disruptions).toEqual([]);
+  });
 });
