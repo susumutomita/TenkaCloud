@@ -153,10 +153,11 @@ describe("getConsoleSigninUrl", () => {
     const policyRaw = cmd.input.Policy;
     expect(typeof policyRaw).toBe("string");
     const policy = JSON.parse(policyRaw as string) as {
-      Statement: Array<{ Effect: string; Action: string[] }>;
+      Statement: Array<{ Effect: string; Action: string | string[]; Resource: string | string[] }>;
     };
-    const denyActions = policy.Statement.filter((s) => s.Effect === "Deny").flatMap(
-      (s) => s.Action,
+    const flattenAction = (a: string | string[]) => (Array.isArray(a) ? a : [a]);
+    const denyActions = policy.Statement.filter((s) => s.Effect === "Deny").flatMap((s) =>
+      flattenAction(s.Action),
     );
     // 他チームの teamLoginKey が DDB Deployments に入っているので必須
     expect(denyActions).toContain("dynamodb:*");
@@ -165,11 +166,56 @@ describe("getConsoleSigninUrl", () => {
     expect(denyActions).toContain("iam:*");
     // 連鎖 AssumeRole も封じる (= 別 Role に乗り換えられない)
     expect(denyActions).toContain("sts:AssumeRole");
+    // #704: operator の deploy ジョブと tenant UserPool を遮蔽
+    expect(denyActions).toContain("codepipeline:*");
+    expect(denyActions).toContain("codebuild:*");
+    expect(denyActions).toContain("cognito-idp:*");
     // CFn の閲覧は Allow されている
-    const allowActions = policy.Statement.filter((s) => s.Effect === "Allow").flatMap(
-      (s) => s.Action,
+    const allowActions = policy.Statement.filter((s) => s.Effect === "Allow").flatMap((s) =>
+      flattenAction(s.Action),
     );
     expect(allowActions).toContain("cloudformation:DescribeStacks");
+  });
+
+  it("#704: session policy の Allow Resource は deployment の namePrefix scope に絞られているべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIAFAKE",
+        SecretAccessKey: "SECRETFAKE",
+        SessionToken: "TOKENFAKE",
+        Expiration: new Date(),
+      },
+    });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ SigninToken: "TOKEN" }), { status: 200 }),
+    );
+
+    await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+
+    const cmd = stsSend.mock.calls[0]?.[0] as AssumeRoleCommand;
+    const policy = JSON.parse(cmd.input.Policy as string) as {
+      Statement: Array<{ Effect: string; Action: string | string[]; Resource: string | string[] }>;
+    };
+    const flatten = (r: string | string[]) => (Array.isArray(r) ? r : [r]);
+    const allowResources = policy.Statement.filter((s) => s.Effect === "Allow").flatMap((s) =>
+      flatten(s.Resource),
+    );
+    // CFn / logs / lambda / s3 は namePrefix で絞られている (= 他チームの tc-* は AccessDenied)
+    expect(
+      allowResources.some(
+        (r) => r === "arn:aws:cloudformation:*:*:stack/tc-security-battle-royale-alpha/*",
+      ),
+    ).toBe(true);
+    expect(
+      allowResources.some(
+        (r) => r === "arn:aws:lambda:*:*:function:tc-security-battle-royale-alpha*",
+      ),
+    ).toBe(true);
+    expect(allowResources.some((r) => r === "arn:aws:s3:::tc-security-battle-royale-alpha*")).toBe(
+      true,
+    );
   });
 
   it("getSigninToken が 5xx を返したら federation_endpoint_failed (#705)", async () => {
