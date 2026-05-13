@@ -98,7 +98,7 @@ describe("deploymentsChanged", () => {
 describe("constants", () => {
   it("page size と polling 間隔の妥当性", () => {
     expect(DEPLOYMENT_LIST_PAGE_SIZE).toBe(50);
-    expect(DEPLOYMENT_LIST_POLL_INTERVAL_MS).toBe(10_000);
+    expect(DEPLOYMENT_LIST_POLL_INTERVAL_MS).toBe(30_000);
   });
 
   it("EMPTY_DEPLOYMENT_ITEMS は frozen で同 reference を再利用 (Table prop 安定化)", () => {

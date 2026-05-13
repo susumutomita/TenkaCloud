@@ -34,7 +34,9 @@ const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
 /** Archive 操作が許可される Event status (backend の archive.ts と一致)。 */
 const ARCHIVABLE_STATUSES: ReadonlySet<EventStatus> = new Set(["DRAFT", "ENDED", "TEARDOWN"]);
 
-const POLL_INTERVAL_MS = 10_000;
+// Lambda invocation コスト抑制のため 30 秒 (= 過去 10 秒 polling は 6 req/min/user で
+// EventApi 発火が過多)。 list 系は 30 秒粒度で十分。
+const POLL_INTERVAL_MS = 30_000;
 const PAGE_SIZE = 50;
 
 interface ColumnContext {

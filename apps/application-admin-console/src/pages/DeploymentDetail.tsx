@@ -42,7 +42,9 @@ import {
   type PhaseStatus,
 } from "../lib/deploy-phases";
 
-const POLL_INTERVAL_MS = 5_000;
+// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒 polling は 12 req/min/user で過多)。
+// deploy phase の進行は CloudFormation 側で数十秒〜数分単位なので、 30 秒粒度で十分。
+const POLL_INTERVAL_MS = 30_000;
 
 /** Phase status を Cloudscape StatusIndicator にマップ。Netlify と意味的に揃える。 */
 const PHASE_STATUS_INDICATOR: Record<PhaseStatus, StatusIndicatorProps.Type> = {

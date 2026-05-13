@@ -1,7 +1,10 @@
 import type { DeploymentSummary } from "../api/deploy-client";
 
-/** Polling list pages の polling 間隔。`Deployments.tsx` / `ProblemDetail.tsx` 両方で共有。 */
-export const DEPLOYMENT_LIST_POLL_INTERVAL_MS = 10_000;
+/**
+ * Polling list pages の polling 間隔。`Deployments.tsx` / `ProblemDetail.tsx` 両方で共有。
+ * Lambda invocation コスト抑制のため 30 秒 (= 過去 10 秒 = 6 req/min/user で過多)。
+ */
+export const DEPLOYMENT_LIST_POLL_INTERVAL_MS = 30_000;
 
 /**
  * Polling 結果の安定 reference 用 frozen const。`items ?? EMPTY_DEPLOYMENT_ITEMS` で
