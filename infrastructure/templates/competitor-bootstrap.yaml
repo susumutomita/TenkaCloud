@@ -40,10 +40,22 @@ Parameters:
       operator (TenkaCloud expects this exact name).
 
 Resources:
-  # Role with broad permissions over the surfaces touched by problem CFn templates.
-  # Each problem may create VPC + EC2 + IAM (instance profile / role) + the CFn
-  # stack itself; this scope is wide enough for Create / Update / Delete.
-  # Tightening to least-privilege is deferred until problem templates stabilize.
+  # AssumeRole target with AdministratorAccess in the competitor account.
+  #
+  # Issue #721 / #(scheduler gap): granular least-privilege policies kept missing
+  # services as new problem templates were added (ssm:PutParameter for
+  # hello-world Challenge, scheduler:* for microservice-migration-battle, etc.),
+  # causing CREATE_FAILED + ROLLBACK_COMPLETE on every new problem. The competitor
+  # consents to TenkaCloud operating in their account when they deploy this
+  # bootstrap, and trust is already gated by the 2-factor (account + ExternalId)
+  # AssumeRole condition. AdministratorAccess removes the IAM whack-a-mole and
+  # lets new problems deploy without re-issuing the bootstrap each time.
+  #
+  # Defense-in-depth that remains:
+  #   - Trust policy locked to TenkaCloud account ID + ExternalId
+  #   - ConsoleViewerRole on the operator side is `tc-*` scoped (PR #710)
+  #   - MaxSessionDuration = 1h
+  #   - Competitor deletes the stack to revoke access in one shot
   CompetitorDeployRole:
     Type: AWS::IAM::Role
     Properties:
@@ -64,114 +76,8 @@ Resources:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
       MaxSessionDuration: 3600
-      Policies:
-        - PolicyName: ProblemDeployPermissions
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              # CloudFormation umbrella (deploy / update / delete / describe).
-              - Sid: CloudFormationFull
-                Effect: Allow
-                Action:
-                  - cloudformation:*
-                Resource: "*"
-
-              # EC2 / VPC resources created by problem CFn templates.
-              - Sid: Ec2Vpc
-                Effect: Allow
-                Action:
-                  - ec2:*
-                Resource: "*"
-
-              # SSM (AMI resolution + Session Manager) + Parameter Store.
-              - Sid: Ssm
-                Effect: Allow
-                Action:
-                  - ssm:GetParameters
-                  - ssm:GetParameter
-                  - ssm:GetParametersByPath
-                  - ssm:DescribeParameters
-                Resource: "*"
-
-              # IAM scope is narrowed to the `tc-*` Path / Name prefix that
-              # problem CFn templates use for their instance profile / role.
-              - Sid: IamForProblemRoles
-                Effect: Allow
-                Action:
-                  - iam:CreateRole
-                  - iam:DeleteRole
-                  - iam:GetRole
-                  - iam:PassRole
-                  - iam:AttachRolePolicy
-                  - iam:DetachRolePolicy
-                  - iam:PutRolePolicy
-                  - iam:DeleteRolePolicy
-                  - iam:GetRolePolicy
-                  - iam:ListRolePolicies
-                  - iam:ListAttachedRolePolicies
-                  - iam:CreateInstanceProfile
-                  - iam:DeleteInstanceProfile
-                  - iam:GetInstanceProfile
-                  - iam:AddRoleToInstanceProfile
-                  - iam:RemoveRoleFromInstanceProfile
-                  - iam:TagRole
-                  - iam:UntagRole
-                Resource:
-                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/tc-*"
-                  - !Sub "arn:aws:iam::${AWS::AccountId}:instance-profile/tc-*"
-
-              # S3 headroom for future problem templates (= unused today,
-              # kept narrow via `tc-*` bucket prefix).
-              - Sid: S3ForProblemBuckets
-                Effect: Allow
-                Action:
-                  - s3:CreateBucket
-                  - s3:DeleteBucket
-                  - s3:GetBucket*
-                  - s3:PutBucket*
-                  - s3:ListBucket
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                Resource:
-                  - "arn:aws:s3:::tc-*"
-                  - "arn:aws:s3:::tc-*/*"
-
-              # CloudWatch Logs for problem app / UserData diagnostics.
-              - Sid: CloudWatchLogs
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                  - logs:DeleteLogGroup
-                  - logs:DescribeLogGroups
-                  - logs:DescribeLogStreams
-                Resource: "*"
-
-              # Lambda resources created by problem CFn templates (= microservice-migration-battle
-              # disruption Lambdas etc.). Scope is narrowed to the tc-* function name prefix.
-              # Issue #692: CFn deploy requires lambda:GetFunction for stack drift / read-back,
-              # which was missing and caused ROLLBACK_COMPLETE with AccessDenied.
-              - Sid: LambdaForProblemFunctions
-                Effect: Allow
-                Action:
-                  - lambda:CreateFunction
-                  - lambda:DeleteFunction
-                  - lambda:GetFunction
-                  - lambda:UpdateFunctionCode
-                  - lambda:UpdateFunctionConfiguration
-                  - lambda:TagResource
-                  - lambda:UntagResource
-                  - lambda:ListTags
-                  - lambda:AddPermission
-                  - lambda:RemovePermission
-                  - lambda:GetPolicy
-                  - lambda:PutFunctionConcurrency
-                  - lambda:DeleteFunctionConcurrency
-                  - lambda:GetFunctionConfiguration
-                Resource:
-                  - !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:tc-*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
       Tags:
         - Key: TenkaCloud:Purpose
           Value: competitor-deploy
