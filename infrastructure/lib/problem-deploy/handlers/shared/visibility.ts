@@ -1,14 +1,17 @@
 /**
- * ADR-008 Phase 3 (Issue #642): `BATTLE_PROBLEMS_VISIBILITY` env を decode する。
+ * ADR-008 Phase 3 (Issue #642): private 問題 visibility env のパーサと判定。
  *
- * 形は `{problemId: "private"}` のみ (= private 問題だけを enumerate、 public は default)。
- * CDK synth 時に `discoverProblemsVisibility` で生成され、 Lambda env として渡る。
- * Lambda cold start で 1 回だけ評価される想定。
- *
- * 未設定 / parse 失敗時は空 map を返す (= 全 problem を public 扱い = local-path 経路で動作)。
- * これは "infra 配線が landed 前は dormant" の動作を担保するための fail-safe。
+ * BATTLE_PROBLEMS_VISIBILITY env (= `{problemId: "private"}` JSON) を decode し、
+ * CHALLENGE_PAYLOAD_BUCKET env と組み合わせて S3 presigned URL を発行すべきか判定する。
+ * いずれかが空なら従来の local-path 経路で動作 (= dormant default)。
  */
-export function parseProblemsVisibility(raw: string | undefined): Record<string, "private"> {
+
+export const PROBLEM_VISIBILITY_PRIVATE = "private" as const;
+export type PrivateVisibility = typeof PROBLEM_VISIBILITY_PRIVATE;
+
+export function parseProblemsVisibility(
+  raw: string | undefined,
+): Record<string, PrivateVisibility> {
   if (!raw) return {};
   let parsed: unknown;
   try {
@@ -21,22 +24,23 @@ export function parseProblemsVisibility(raw: string | undefined): Record<string,
     return {};
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  const visibility: Record<string, "private"> = {};
+  const visibility: Record<string, PrivateVisibility> = {};
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    if (v === "private") visibility[k] = "private";
+    if (v === PROBLEM_VISIBILITY_PRIVATE) visibility[k] = PROBLEM_VISIBILITY_PRIVATE;
   }
   return visibility;
 }
 
 /**
- * `metadata.visibility === "private"` かつ S3 bucket env が bind されているときだけ
- * presigned URL を発行すべきか判定。 両方揃わなければ false (= 既存 local-path 経路)。
+ * private 問題 + bucket 両方揃ったとき bucket 名を返す。 dormant なら undefined。
+ * 呼び出し側で truthy check 1 つで分岐できる + 型が narrow される。
  */
-export function shouldGeneratePresignedUrl(args: {
+export function resolveChallengePayloadBucket(args: {
   readonly problemId: string;
-  readonly visibility: Readonly<Record<string, "private">>;
+  readonly visibility: Readonly<Record<string, PrivateVisibility>> | undefined;
   readonly bucketName: string | undefined;
-}): boolean {
-  if (!args.bucketName) return false;
-  return args.visibility[args.problemId] === "private";
+}): string | undefined {
+  if (!args.bucketName) return undefined;
+  if (args.visibility?.[args.problemId] !== PROBLEM_VISIBILITY_PRIVATE) return undefined;
+  return args.bucketName;
 }

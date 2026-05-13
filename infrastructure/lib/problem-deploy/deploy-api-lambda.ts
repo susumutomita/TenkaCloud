@@ -6,6 +6,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface DeployApiLambdaProps {
@@ -145,18 +146,8 @@ export class DeployApiLambda extends Construct {
       }),
     );
 
-    // ADR-008 Phase 3 (Issue #642): private 問題で S3 GetObject (= presigned URL の signing
-    // 元になる object key 解決) と HeadObject (= 任意の存在確認) を許可する。
-    // bucket 未指定なら本 statement を追加しない (= dormant、 最小権限維持)。
-    if (props.challengePayloadBucketName) {
-      const bucketArn = `arn:${stack.partition}:s3:::${props.challengePayloadBucketName}`;
-      this.fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["s3:GetObject"],
-          resources: [`${bucketArn}/*`],
-        }),
-      );
-    }
+    // ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 GetObject 権限。
+    // bucket 未指定なら no-op (= dormant、 最小権限維持)。
+    grantChallengePayloadRead(this, this.fn, props.challengePayloadBucketName);
   }
 }

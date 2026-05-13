@@ -1,8 +1,7 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
-import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
@@ -30,14 +29,6 @@ export interface EventApiLambdaProps {
    * Phase 2 (ADR-003) で DDB catalog に置換される予定。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
-  /**
-   * ADR-008 Phase 3 (Issue #642): private 問題 id のセット。 dormant default 空。
-   */
-  readonly problemsVisibility: Readonly<Record<string, "private">>;
-  /**
-   * ADR-008 Phase 3 (Issue #642): private 問題 payload S3 bucket 名。 未指定で dormant。
-   */
-  readonly challengePayloadBucketName?: string;
   /**
    * tenantId として handler に渡す `DEFAULT_TENANT_ID` env (DeployApi と同じ fallback)。
    * Cognito JWT 結線後は JWT claim から取る。
@@ -88,9 +79,6 @@ export class EventApiLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         DEFAULT_TENANT_ID: props.defaultTenantId ?? "unknown-tenant",
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
-        // ADR-008 Phase 3 (Issue #642): visibility + bucket、 default dormant
-        BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
-        CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -111,19 +99,5 @@ export class EventApiLambda extends Construct {
     // RW を付与しない (= 最小権限)。
     props.competitorAccountsTable.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
-
-    // ADR-008 Phase 3 (Issue #642): bulk deploy 経路でも private 問題の presigned URL を
-    // 発行するため、 bucket が指定されているなら GetObject 権限を付与する。
-    if (props.challengePayloadBucketName) {
-      const stack = Stack.of(this);
-      const bucketArn = `arn:${stack.partition}:s3:::${props.challengePayloadBucketName}`;
-      this.fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["s3:GetObject"],
-          resources: [`${bucketArn}/*`],
-        }),
-      );
-    }
   }
 }

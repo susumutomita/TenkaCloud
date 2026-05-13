@@ -11,7 +11,11 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   publishProblemEvent,
 } from "../shared/events.js";
-import { parseProblemsVisibility, shouldGeneratePresignedUrl } from "../shared/visibility.js";
+import {
+  type PrivateVisibility,
+  parseProblemsVisibility,
+  resolveChallengePayloadBucket,
+} from "../shared/visibility.js";
 import { buildStackPrefix, slugify } from "./naming.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { generateTeamLoginKey } from "./team-key.js";
@@ -41,20 +45,11 @@ export interface DeployContext {
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
-   * ADR-008 Phase 3 (Issue #642): private 問題 id のセット (= `{id: "private"}`)。
-   * `BATTLE_PROBLEMS_VISIBILITY` env から parse 済の map。 未指定 / 空なら全 public 扱い。
+   * ADR-008 Phase 3: visibility / bucket / s3 client。 いずれか欠けるなら presigned URL を
+   * 発行せず local-path 経路で動作する (= dormant default)。
    */
-  readonly problemsVisibility?: Readonly<Record<string, "private">>;
-  /**
-   * ADR-008 Phase 3 (Issue #642): private 問題 payload を格納する S3 bucket 名
-   * (= `tc-challenges-${env}`)。 env (`CHALLENGE_PAYLOAD_BUCKET`) で binding。
-   * 未設定なら presigned URL を発行せず、 既存 local-path 経路で動作する (= dormant default)。
-   */
+  readonly problemsVisibility?: Readonly<Record<string, PrivateVisibility>>;
   readonly challengePayloadBucket?: string;
-  /**
-   * S3 client。 cold start 1 回構築されて warm invoke で再利用される想定。 テストで DI 可能。
-   * presigned URL 発行が不要 (= 全 public 問題) の deploy では参照されないため optional。
-   */
   readonly s3?: S3Client;
 }
 
@@ -150,18 +145,15 @@ export async function startDeployment(
     }),
   );
 
-  // ADR-008 Phase 3 (Issue #642): private 問題で bucket env が bind されているなら
-  // S3 から 15min TTL presigned URL を発行して event detail に詰める。 CodeBuild の
-  // deploy-battles.sh (PR-638) が CHALLENGE_PAYLOAD_URL を受け取って zip を fetch する。
-  // 失敗時は throw して deploy を止める (= 握り潰さない、 静かな regression を防ぐ)。
+  // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
+  // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
+  const privateBucket = resolveChallengePayloadBucket({
+    problemId: request.problemId,
+    visibility: ctx.problemsVisibility,
+    bucketName: ctx.challengePayloadBucket,
+  });
   let challengePayloadUrl: string | undefined;
-  if (
-    shouldGeneratePresignedUrl({
-      problemId: request.problemId,
-      visibility: ctx.problemsVisibility ?? {},
-      bucketName: ctx.challengePayloadBucket,
-    })
-  ) {
+  if (privateBucket) {
     if (!ctx.s3) {
       throw new Error(
         "deploy-handler: private problem requires S3 client but ctx.s3 is undefined. " +
@@ -170,7 +162,7 @@ export async function startDeployment(
     }
     challengePayloadUrl = await generateChallengePayloadUrl({
       s3: ctx.s3,
-      bucketName: ctx.challengePayloadBucket as string,
+      bucketName: privateBucket,
       problemId: request.problemId,
     });
   }
@@ -220,17 +212,14 @@ export interface DeploySharedResources {
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
-  readonly problemsVisibility: Readonly<Record<string, "private">>;
+  readonly problemsVisibility: Readonly<Record<string, PrivateVisibility>>;
   readonly challengePayloadBucket: string | undefined;
   readonly s3: S3Client;
 }
 
 export function buildSharedResources(): DeploySharedResources {
-  // ADR-008 Phase 3 (Issue #642): bucket env が空文字列 / 未設定なら presigned URL を発行しない。
-  // ChallengePayloadStack 未 deploy 時に Lambda が起動できるようにするための fail-open 設計。
-  const bucketEnv = process.env.CHALLENGE_PAYLOAD_BUCKET;
-  const challengePayloadBucket =
-    typeof bucketEnv === "string" && bucketEnv.length > 0 ? bucketEnv : undefined;
+  // ChallengePayloadStack 未 deploy なら env は空文字列で届く。 dormant 扱いに正規化。
+  const challengePayloadBucket = process.env.CHALLENGE_PAYLOAD_BUCKET || undefined;
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),

@@ -197,11 +197,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       competitorAccountsTable: competitorAccounts.table,
       eventBus,
       problemsCatalog: props.problemsCatalog,
-      // ADR-008 Phase 3 (Issue #642): bulk deploy 経路でも同じ env を渡す。
-      problemsVisibility: props.problemsVisibility ?? {},
-      ...(props.challengePayloadBucketName
-        ? { challengePayloadBucketName: props.challengePayloadBucketName }
-        : {}),
       defaultTenantId: props.defaultTenantId,
       environmentName: props.environmentName,
     });

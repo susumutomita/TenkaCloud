@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   parseProblemsVisibility,
-  shouldGeneratePresignedUrl,
+  resolveChallengePayloadBucket,
 } from "../../lib/problem-deploy/handlers/shared/visibility";
 
 /**
@@ -37,34 +37,44 @@ describe("parseProblemsVisibility (Issue #642)", () => {
   });
 });
 
-describe("shouldGeneratePresignedUrl (Issue #642)", () => {
-  it("bucketName 未設定なら false (= dormant)", () => {
+describe("resolveChallengePayloadBucket (Issue #642)", () => {
+  it("bucketName 未設定なら undefined (= dormant)", () => {
     expect(
-      shouldGeneratePresignedUrl({
+      resolveChallengePayloadBucket({
         problemId: "secret-problem",
         visibility: { "secret-problem": "private" },
         bucketName: undefined,
       }),
-    ).toBe(false);
+    ).toBeUndefined();
   });
 
-  it("bucketName あっても visibility に該当 id が無ければ false", () => {
+  it("bucketName あっても visibility に該当 id が無ければ undefined", () => {
     expect(
-      shouldGeneratePresignedUrl({
+      resolveChallengePayloadBucket({
         problemId: "public-problem",
         visibility: { "secret-problem": "private" },
         bucketName: "tc-challenges-test",
       }),
-    ).toBe(false);
+    ).toBeUndefined();
   });
 
-  it("bucketName + visibility 両方揃ったら true", () => {
+  it("visibility が undefined でも安全に undefined を返すべき", () => {
     expect(
-      shouldGeneratePresignedUrl({
+      resolveChallengePayloadBucket({
+        problemId: "any-problem",
+        visibility: undefined,
+        bucketName: "tc-challenges-test",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("bucketName + visibility 両方揃ったら bucket 名を返すべき", () => {
+    expect(
+      resolveChallengePayloadBucket({
         problemId: "secret-problem",
         visibility: { "secret-problem": "private" },
         bucketName: "tc-challenges-test",
       }),
-    ).toBe(true);
+    ).toBe("tc-challenges-test");
   });
 });
