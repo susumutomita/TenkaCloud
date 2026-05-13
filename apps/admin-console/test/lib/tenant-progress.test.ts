@@ -50,6 +50,38 @@ describe("computeTenantProgress", () => {
     expect(out.elapsedMs).toBe(0);
     expect(out.label).toBe("0 秒経過");
   });
+
+  it("経過時間が正確に 30 分 (= 境界値) の場合は severity=warning に切り替わるべき", () => {
+    const out = computeTenantProgress({
+      createdAt: "2026-05-13T19:30:00.000Z",
+      nowMs: BASE,
+    });
+    expect(out.severity).toBe("warning");
+  });
+
+  it("経過時間が 30 分 - 1 ms (= 境界値直前) は severity=ok を維持するべき", () => {
+    const out = computeTenantProgress({
+      createdAt: "2026-05-13T19:30:00.001Z",
+      nowMs: BASE,
+    });
+    expect(out.severity).toBe("ok");
+  });
+
+  it("経過時間が正確に 60 分 (= 境界値) の場合は severity=danger に切り替わるべき", () => {
+    const out = computeTenantProgress({
+      createdAt: "2026-05-13T19:00:00.000Z",
+      nowMs: BASE,
+    });
+    expect(out.severity).toBe("danger");
+  });
+
+  it("経過時間が 60 分 - 1 ms (= 境界値直前) は severity=warning を維持するべき", () => {
+    const out = computeTenantProgress({
+      createdAt: "2026-05-13T19:00:00.001Z",
+      nowMs: BASE,
+    });
+    expect(out.severity).toBe("warning");
+  });
 });
 
 describe("isInProgress", () => {
