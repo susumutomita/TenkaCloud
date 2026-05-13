@@ -51,6 +51,14 @@ export const DeployCreateRequestedDetailSchema = z.object({
    * AssumeRole の `--external-id` に渡す。`competitorRoleArn` と同時にのみ詰める。
    */
   externalIdParameterName: z.string().optional(),
+  /**
+   * ADR-008 Phase 3 (Issue #642): private 問題用の短命 (15 分 TTL) S3 presigned URL。
+   * deploy-handler が `metadata.visibility === "private"` で `CHALLENGE_PAYLOAD_BUCKET`
+   * env 変数が bind されているときのみ発行する。 CodeBuild の `deploy-battles.sh`
+   * がこの URL を fetch して zip 展開する (= PR-638 で実装済)。 public 問題 / 未配線
+   * 環境では undefined のままで、 既存の local-path 経路で動作する。
+   */
+  challengePayloadUrl: z.string().url().optional(),
 });
 export type DeployCreateRequestedDetail = z.infer<typeof DeployCreateRequestedDetailSchema>;
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   discoverProblemsCatalog,
   discoverProblemsScoring,
+  discoverProblemsVisibility,
 } from "../lib/utils/discover-problems-catalog";
 
 /**
@@ -173,5 +174,19 @@ describe("discoverProblemsScoring", () => {
     expect(discoverProblemsScoring(workspace)).toEqual({
       good: { kind: "flag", flagOutputKey: "X", points: 1 },
     });
+  });
+});
+
+// ADR-008 Phase 3 (Issue #642): visibility 抜き出し
+describe("discoverProblemsVisibility (Issue #642)", () => {
+  it("visibility=private の問題だけを map にすべき (public は省略)", () => {
+    writeProblem("challenges", "public-one", { id: "public-one", visibility: "public" });
+    writeProblem("battles", "private-one", { id: "private-one", visibility: "private" });
+    writeProblem("battles", "no-visibility", { id: "no-visibility" });
+    expect(discoverProblemsVisibility(workspace)).toEqual({ "private-one": "private" });
+  });
+
+  it("空 workspace は空 map (= 全 public 扱い)", () => {
+    expect(discoverProblemsVisibility(workspace)).toEqual({});
   });
 });

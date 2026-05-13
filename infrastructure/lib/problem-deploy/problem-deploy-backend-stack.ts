@@ -70,6 +70,17 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly problemsPhases?: Readonly<Record<string, unknown>>;
   /**
+   * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
+   * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
+   */
+  readonly problemsVisibility?: Readonly<Record<string, "private">>;
+  /**
+   * ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 bucket 名 (= `tc-challenges-${env}`)。
+   * 未指定なら deploy-handler / event-api Lambda は CHALLENGE_PAYLOAD_BUCKET 空で起動し、
+   * presigned URL を発行しない (= dormant)。 ChallengePayloadStack 配備後にここを bind する。
+   */
+  readonly challengePayloadBucketName?: string;
+  /**
    * 競技者向け Participant Portal を S3 + CloudFront で配信する。指定された
    * `runtimeConfig` が runtime-config.json として配置される。Portal backend が
    * 無い段階では `runtimeConfig: "default-dev-mock"` を渡せば mode="dev-mock"
@@ -167,6 +178,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       eventBus,
       defaultTenantId: props.defaultTenantId,
       problemsCatalog: props.problemsCatalog,
+      // ADR-008 Phase 3 (Issue #642): visibility + bucket、 unset で dormant default。
+      problemsVisibility: props.problemsVisibility ?? {},
+      ...(props.challengePayloadBucketName
+        ? { challengePayloadBucketName: props.challengePayloadBucketName }
+        : {}),
       environmentName: props.environmentName,
     });
     this.deployApiLambda = deployApi.fn;
@@ -181,6 +197,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       competitorAccountsTable: competitorAccounts.table,
       eventBus,
       problemsCatalog: props.problemsCatalog,
+      // ADR-008 Phase 3 (Issue #642): bulk deploy 経路でも同じ env を渡す。
+      problemsVisibility: props.problemsVisibility ?? {},
+      ...(props.challengePayloadBucketName
+        ? { challengePayloadBucketName: props.challengePayloadBucketName }
+        : {}),
       defaultTenantId: props.defaultTenantId,
       environmentName: props.environmentName,
     });

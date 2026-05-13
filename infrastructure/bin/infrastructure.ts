@@ -23,6 +23,7 @@ import {
   discoverProblemsEndpoints,
   discoverProblemsPhases,
   discoverProblemsScoring,
+  discoverProblemsVisibility,
 } from "../lib/utils/discover-problems-catalog";
 
 // TenkaCloud の env 読み込み。`infrastructure/environments/<env>/.env` がある場合だけ load。
@@ -220,6 +221,12 @@ const problemsScoring = discoverProblemsScoring(problemsRoot);
 const problemsEndpoints = discoverProblemsEndpoints(problemsRoot);
 // ADR-012 Phase 3.B: `phases[]` を持つ問題のみ集まる (= phased-polling kind 用)。
 const problemsPhases = discoverProblemsPhases(problemsRoot);
+// ADR-008 Phase 3 (Issue #642): `visibility=private` の問題 id を抜く。 public 問題は省略 (= dormant)。
+const problemsVisibility = discoverProblemsVisibility(problemsRoot);
+// ADR-008 Phase 2 (Issue #642): private 問題 payload を格納する S3 bucket 名。
+// `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` env で operator が ChallengePayloadStack 名を渡す。
+// 未設定なら deploy-handler は env 空で起動し、 既存 local-path 経路で動作 (= dormant)。
+const challengePayloadBucketName = process.env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;
 
 // #538: Bulk Deploy 並列度 (CodeBuild concurrent build cap)。
 // `CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT` env で operator が tune する。未設定なら
@@ -246,6 +253,9 @@ const problemDeployBackendStack = new ProblemDeployBackendStack(app, "tenkacloud
   problemsScoring,
   problemsEndpoints,
   problemsPhases,
+  // ADR-008 Phase 3 (Issue #642): visibility + bucket
+  problemsVisibility,
+  ...(challengePayloadBucketName ? { challengePayloadBucketName } : {}),
   participantPortal,
   deployConcurrentBuildLimit,
   // Issue #459 / ADR-002: SSM SecureString path `/{environmentName}/tenants/{tenantId}/external-id`

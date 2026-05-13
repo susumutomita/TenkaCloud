@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>TenkaCloudChallenges private repo bootstrap — TenkaCloud</title>
+    <style>
+      body {
+        font:
+          16px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          "Hiragino Sans",
+          sans-serif;
+        max-width: 900px;
+        margin: 2em auto;
+        padding: 0 1em;
+        color: #1d2025;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #0972d3;
+      }
+      h2 {
+        border-bottom: 1px solid #d5dbdb;
+        padding-bottom: 0.3em;
+        margin-top: 2em;
+      }
+      code {
+        background: #f4f4f4;
+        padding: 0.1em 0.4em;
+        border-radius: 3px;
+        font-family: "SFMono-Regular", Consolas, monospace;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 1em;
+        border-radius: 6px;
+        overflow-x: auto;
+      }
+      pre code {
+        background: transparent;
+        padding: 0;
+      }
+      table {
+        border-collapse: collapse;
+        margin: 1em 0;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid #d5dbdb;
+        padding: 0.5em 0.8em;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f4f4f4;
+      }
+      .note {
+        background: #fcf2da;
+        border-left: 4px solid #f0a000;
+        padding: 0.8em 1em;
+        margin: 1em 0;
+        border-radius: 4px;
+      }
+      .step {
+        background: #eef7fc;
+        border-left: 4px solid #0972d3;
+        padding: 0.8em 1em;
+        margin: 1em 0;
+        border-radius: 4px;
+      }
+      .checklist li {
+        margin: 0.3em 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TenkaCloudChallenges private repo bootstrap</h1>
+    <p>
+      Issue
+      <a href="https://github.com/susumutomita/TenkaCloud/issues/643">#643</a>
+      / ADR-008 Phase 4。 本 directory は user が
+      <code>TenkaCloudChallenges</code> private repo を新規作成する際の bootstrap
+      テンプレ集です。 Claude 側で投入できる artifact (= workflow YAML / IAM
+      CFn テンプレ) を pre-position し、 user は GitHub 上で repo を作成して
+      ここのファイルをコピーするだけで Phase 4 を稼働させられます。
+    </p>
+
+    <div class="note">
+      <strong>役割分担</strong>:
+      <ul>
+        <li>
+          <strong>Claude 担当 (= ここに済)</strong>: workflow YAML / IAM trust
+          CFn / README
+        </li>
+        <li>
+          <strong>user 担当</strong>: GitHub repo 作成、 OIDC IAM Stack の
+          deploy、 GitHub Actions secret bind、 1 問目の private 移行
+        </li>
+      </ul>
+    </div>
+
+    <h2>1. 概要</h2>
+    <p>
+      ADR-008 は問題ペイロード (= microservice-migration-battle の services
+      コード等の「答え」) を public な本体 repo から private repo に分離する
+      アーキテクチャ。 本 bootstrap で揃えるのは <strong>private repo 側</strong>
+      の構造です:
+    </p>
+    <pre><code>TenkaCloudChallenges/   (= 新規作成、 private)
+├── problems/
+│   └── &lt;category&gt;/&lt;id&gt;/
+│       ├── metadata.json
+│       └── template.yaml
+├── .github/workflows/
+│   ├── publish.yml          # ここから copy
+│   └── catalog-pr.yml       # ここから copy
+└── README.md
+</code></pre>
+
+    <h2>2. user 担当の手順</h2>
+    <ol class="checklist">
+      <li>
+        <strong>private repo 作成</strong>: GitHub UI で
+        <code>TenkaCloudChallenges</code> を visibility=private で新規作成
+        (owner: <code>susumutomita</code> or org)
+      </li>
+      <li>
+        <strong>本 directory の YAML をコピー</strong>:
+        <ul>
+          <li>
+            <code>publish.yml</code> → <code>.github/workflows/publish.yml</code>
+          </li>
+          <li>
+            <code>catalog-pr.yml</code> →
+            <code>.github/workflows/catalog-pr.yml</code>
+          </li>
+        </ul>
+      </li>
+      <li>
+        <strong>OIDC IAM Stack を deploy</strong>: 本 directory の
+        <code>oidc-iam-trust.template.yaml</code> を運営 AWS account に
+        <code>aws cloudformation deploy</code> で投入。 出力された Role ARN を
+        repo Actions secret <code>AWS_CHALLENGE_PUBLISH_ROLE_ARN</code> に bind
+      </li>
+      <li>
+        <strong>初期 README.md を作成</strong>: 本 directory の
+        <code>private-repo-README.template.md</code> を参考にコピーして
+        <code>TenkaCloudChallenges/README.md</code> に展開
+      </li>
+      <li>
+        <strong>1 問目を private 移行 (= 任意)</strong>: 本体 repo の
+        <code>problems/battles/microservice-migration-battle/services/</code> を
+        private repo に move、 本体側 metadata.json の visibility を
+        <code>private</code> に変更
+      </li>
+    </ol>
+
+    <div class="step">
+      <strong>S3 bucket / Step Functions 側の infra は別 issue</strong>: ChallengePayloadStack
+      (= <code>tc-challenges-${env}</code> bucket + Step Functions env override)
+      は <a href="https://github.com/susumutomita/TenkaCloud/issues/642">#642</a>
+      で別 tracking。 本 bootstrap は repo 構造のみを扱う。
+    </div>
+
+    <h2>3. ファイル一覧</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ファイル</th>
+          <th>目的</th>
+          <th>コピー先</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>publish.yml</code></td>
+          <td>
+            問題 dir 変更 → zip 化 → S3 upload (= version=git short SHA で pin)
+          </td>
+          <td>
+            <code>TenkaCloudChallenges/.github/workflows/publish.yml</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>catalog-pr.yml</code></td>
+          <td>
+            問題 metadata 変更 → 本体 repo の <code>problems/index.json</code> に diff
+            PR
+          </td>
+          <td>
+            <code>TenkaCloudChallenges/.github/workflows/catalog-pr.yml</code>
+          </td>
+        </tr>
+        <tr>
+          <td><code>oidc-iam-trust.template.yaml</code></td>
+          <td>
+            GitHub OIDC provider + Role (= S3 upload + PR 作成権限)
+          </td>
+          <td>
+            運営 AWS account の CloudFormation (= 別 stack)
+          </td>
+        </tr>
+        <tr>
+          <td><code>private-repo-README.template.md</code></td>
+          <td>private repo 側の README 雛形 (= contributor 向け説明)</td>
+          <td><code>TenkaCloudChallenges/README.md</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. 注意</h2>
+    <ul>
+      <li>
+        publish.yml は <code>min-release-age=168h</code>
+        と整合 (= mini Shai-Hulud 第二波対策、 AGENTS.md / .npmrc 参照)
+      </li>
+      <li>
+        OIDC trust の <code>sub</code> 条件は repo 名 + branch を絞る
+        (= <code>repo:susumutomita/TenkaCloudChallenges:ref:refs/heads/main</code>
+        相当) で fork 経由の濫用を防ぐ
+      </li>
+      <li>
+        catalog-pr.yml の bot token は GitHub App ベースが望ましい (= PAT
+        rotation の手間を省く)。 初期は PAT で動かして後で App 化
+      </li>
+    </ul>
+
+    <h2>5. 関連</h2>
+    <ul>
+      <li>
+        Issue
+        <a href="https://github.com/susumutomita/TenkaCloud/issues/643">#643</a>
+        — 本 bootstrap の発行元
+      </li>
+      <li>
+        Issue
+        <a href="https://github.com/susumutomita/TenkaCloud/issues/642">#642</a>
+        — Worker Lambda S3 presigned URL 経路 (= 本 repo 構造が稼働後に活性化)
+      </li>
+      <li>
+        <a href="../adr-013-disruption-phase2-condition-triggered.html"
+          >ADR-013</a
+        >
+        — 隣接の Phase 2 アーキテクチャ
+      </li>
+    </ul>
+  </body>
+</html>

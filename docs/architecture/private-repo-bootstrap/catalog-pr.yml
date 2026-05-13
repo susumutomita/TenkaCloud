@@ -1,0 +1,124 @@
+# ADR-008 Phase 4: private repo の metadata diff を本体 repo に PR で同期するワークフロー。
+#
+# このファイルは TenkaCloudChallenges private repo の .github/workflows/catalog-pr.yml に
+# そのままコピーして使う想定。 secret `TENKACLOUD_CATALOG_BOT_TOKEN` を事前に bind:
+#   - PAT (= 初期): scope=repo, expires=90d
+#   - GitHub App (= 推奨): rotation 不要、 fine-grained 権限
+#
+# トリガー:
+#   - main branch への push で metadata.json が変わったとき (= visibility 変更 / 新規問題追加)
+#
+# 動作:
+#   1. checkout private repo (= self)
+#   2. 本体 repo (TenkaCloud) を checkout
+#   3. problems/index.json を再生成 (= 本体 repo の build:problems-index と同等)
+#   4. diff がなければ skip
+#   5. 本体 repo に branch を切って PR (= bot 用 commit author)
+
+name: catalog-pr
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "problems/**/metadata.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalog-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TENKACLOUD_REPO: susumutomita/TenkaCloud
+      INDEX_PATH: problems/index.json
+    steps:
+      - name: Checkout self (TenkaCloudChallenges)
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: private-repo
+          fetch-depth: 1
+
+      - name: Checkout TenkaCloud (本体 repo)
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: ${{ env.TENKACLOUD_REPO }}
+          token: ${{ secrets.TENKACLOUD_CATALOG_BOT_TOKEN }}
+          path: tenkacloud
+          fetch-depth: 1
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (= TenkaCloud 本体 CI と pin 揃え)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Sync private metadata into TenkaCloud working tree
+        run: |
+          set -euo pipefail
+          # private repo の problems/<category>/<id>/metadata.json を本体 repo の同一 path に上書き。
+          # 本体 repo 側に同名問題があれば metadata を更新、 無ければ新規追加 (= 新 problem dir 作成)。
+          rsync -a --include='*/' --include='metadata.json' --exclude='*' \
+            private-repo/problems/ tenkacloud/problems/
+
+      - name: Rebuild problems/index.json
+        working-directory: tenkacloud
+        env:
+          npm_config_ignore_scripts: "true"
+        run: |
+          # 本体 repo の build-problem-index.ts は biome formatter を使うので install が必要
+          make install_ci
+          bun run build:problems-index
+
+      - name: Detect drift
+        id: drift
+        working-directory: tenkacloud
+        run: |
+          if git diff --quiet -- "$INDEX_PATH" "problems/"; then
+            echo "no metadata drift; skipping PR"
+            echo "has_drift=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "metadata drift detected; will open PR"
+            echo "has_drift=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open / update PR in TenkaCloud
+        if: steps.drift.outputs.has_drift == 'true'
+        working-directory: tenkacloud
+        env:
+          GH_TOKEN: ${{ secrets.TENKACLOUD_CATALOG_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="bot/catalog-sync-$(date -u +%Y%m%d)"
+          git config user.name "tenkacloud-catalog-bot"
+          git config user.email "tenkacloud-catalog-bot@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add problems/
+          git commit -m "chore(catalog): sync metadata from TenkaCloudChallenges@${GITHUB_SHA::12}"
+          git push --force --set-upstream origin "$BRANCH"
+          # PR が既に開いていれば update、 無ければ作成
+          if ! gh pr view "$BRANCH" --json number 2>/dev/null; then
+            gh pr create \
+              --title "chore(catalog): sync from TenkaCloudChallenges@${GITHUB_SHA::12}" \
+              --body "Auto-generated PR from TenkaCloudChallenges/.github/workflows/catalog-pr.yml.
+
+## Source
+
+- TenkaCloudChallenges commit: \`${GITHUB_SHA}\`
+- Trigger: \`${GITHUB_EVENT_NAME}\`
+
+## Regression 分析
+
+- 同期対象は \`problems/**/metadata.json\` + \`problems/index.json\` のみ
+- public-only catalog の整合性を維持 (= private payload 自体は本体 repo に含めない)
+
+## 物理影響
+
+- NO-OP: 本体 repo の deploy 経路に変更なし (= metadata の visibility 表示が更新されるだけ)" \
+              --base main \
+              --head "$BRANCH"
+          fi

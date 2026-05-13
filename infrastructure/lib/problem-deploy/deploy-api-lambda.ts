@@ -29,6 +29,17 @@ export interface DeployApiLambdaProps {
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
+   * ADR-008 Phase 3 (Issue #642): private 問題 id のセット (= `{problemId: "private"}`)。
+   * `discoverProblemsVisibility` の戻り値そのまま。 空 map なら全 public 扱いで dormant。
+   */
+  readonly problemsVisibility: Readonly<Record<string, "private">>;
+  /**
+   * ADR-008 Phase 3 (Issue #642): private 問題 payload を格納する S3 bucket 名。
+   * 未指定 / 空文字列なら presigned URL を発行しない (= local-path 経路で動作)。
+   * ChallengePayloadStack (Phase 2 infra) が deploy 後にここを指定して活性化する。
+   */
+  readonly challengePayloadBucketName?: string;
+  /**
    * SSM SecureString path 構築用の env 名 (Phase 2.2、`/<environmentName>/tenants/...`)。
    */
   readonly environmentName: string;
@@ -65,6 +76,9 @@ export class DeployApiLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         DEFAULT_TENANT_ID: props.defaultTenantId ?? "unknown-tenant",
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
+        // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
+        BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
+        CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -130,5 +144,19 @@ export class DeployApiLambda extends Construct {
         resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
       }),
     );
+
+    // ADR-008 Phase 3 (Issue #642): private 問題で S3 GetObject (= presigned URL の signing
+    // 元になる object key 解決) と HeadObject (= 任意の存在確認) を許可する。
+    // bucket 未指定なら本 statement を追加しない (= dormant、 最小権限維持)。
+    if (props.challengePayloadBucketName) {
+      const bucketArn = `arn:${stack.partition}:s3:::${props.challengePayloadBucketName}`;
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["s3:GetObject"],
+          resources: [`${bucketArn}/*`],
+        }),
+      );
+    }
   }
 }
