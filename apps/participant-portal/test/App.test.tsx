@@ -15,6 +15,9 @@ const config: AppConfig = {
 
 function renderApp(initialPath: string) {
   // i18n Phase 1.A: main.tsx で I18nProvider が App を包むので test でも wrap する。
+  // Phase 2: jsdom の navigator.language = "en-US" だと auto-detect で en に
+  // なってしまい test で参照する日本語 string と乖離するため、 ja を明示 pin する。
+  localStorage.setItem("tenkacloud.portal.locale", "ja");
   return render(
     <I18nProvider>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -65,9 +68,9 @@ describe("App", () => {
       expect(button).not.toBeDisabled();
       await user.click(button);
 
-      // Home page の greeting が出る
+      // Home page の greeting (ja: 「ようこそ、{teamName} さん」) が出る
       expect(
-        await screen.findByRole("heading", { level: 1, name: /Welcome,/ }),
+        await screen.findByRole("heading", { level: 1, name: /ようこそ/ }),
       ).toBeInTheDocument();
     });
   });
@@ -80,14 +83,14 @@ describe("App", () => {
       const input = screen.getByPlaceholderText("チームに配布されたキー");
       await user.type(input, "TEAM-A-KEY");
       await user.click(await screen.findByRole("button", { name: "サインイン" }));
-      await screen.findByRole("heading", { level: 1, name: /Welcome,/ });
+      await screen.findByRole("heading", { level: 1, name: /ようこそ/ });
       unmount();
 
       // session が localStorage に残ったまま /login に直接アクセスしても
       // login form は出ず、Home (Welcome) にすぐ遷移するべき
       renderApp("/login");
       expect(
-        await screen.findByRole("heading", { level: 1, name: /Welcome,/ }),
+        await screen.findByRole("heading", { level: 1, name: /ようこそ/ }),
       ).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "サインイン" })).not.toBeInTheDocument();
     });

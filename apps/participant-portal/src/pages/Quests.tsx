@@ -23,6 +23,7 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
@@ -34,31 +35,13 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
-/**
- * 競技者語彙の status label (#549)。
- *
- * deployment status (`COMPLETE` / `IN_PROGRESS` / ...) は operator 視点の語彙で、
- * 競技者目線では「自分が解いた = COMPLETE」と誤解されていた。インフラ状態を抽象化して
- * 「プレイ可能か」の軸に変換する。本来は scoring kind ごとに「正解/未提出」「防御中/攻撃検知」
- * を出すべきだが (issue 内 案 A)、それは participant API の拡張が要るので別 issue
- * (#163 / #164) で対応する。本 PR では **「環境の起動状態」** を競技者語彙に統一する第一弾。
- */
-const STATUS_PARTICIPANT_LABEL: Record<DeploymentStatus, string> = {
-  PENDING: "起動準備中",
-  IN_PROGRESS: "起動中…",
-  COMPLETE: "起動中",
-  FAILED: "起動失敗",
-  DELETING: "停止中",
-  DELETED: "停止済",
-};
-
 type CategoryFilter = "all" | "battle" | "challenge";
 
-function categoryBadge(scoring: ParticipantScoringInfo | undefined) {
+function categoryBadge(scoring: ParticipantScoringInfo | undefined, uncategorizedLabel: string) {
   const cat = categoryOf(scoring);
   if (cat === "battle") return <Badge color="red">Battle</Badge>;
   if (cat === "challenge") return <Badge color="blue">Challenge</Badge>;
-  return <Badge color="grey">未分類</Badge>;
+  return <Badge color="grey">{uncategorizedLabel}</Badge>;
 }
 
 /**
@@ -73,6 +56,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
   const auth = useAuth();
+  const t = useT();
   const isBackend = config.mode === "backend";
   const [filter, setFilter] = useState<CategoryFilter>("all");
   // #551: 問題ごとの「AWS Console を開く」 button 進行中フラグ。1 card につき 1 click だけ
@@ -84,7 +68,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
     if (consoleInFlight[jobId]) return;
     const sessionToken = auth.session?.sessionToken ?? null;
     if (!sessionToken) {
-      setConsoleError("セッションが切れています。再ログインしてください。");
+      setConsoleError(t("quests.session_expired"));
       return;
     }
     setConsoleInFlight((prev) => ({ ...prev, [jobId]: true }));
@@ -119,23 +103,23 @@ export function QuestsPage({ config }: { config: AppConfig }) {
     return all.filter((p) => categoryOf(p.scoring) === filter);
   }, [view, filter]);
 
+  const emptyMessage =
+    filter === "all"
+      ? t("quests.empty_all")
+      : filter === "battle"
+        ? t("quests.empty_battle")
+        : t("quests.empty_challenge");
+  const emptyHint = filter === "all" ? t("quests.empty_hint_all") : t("quests.empty_hint_filtered");
+
   return (
     <SpaceBetween size="l">
-      <Header
-        variant="h1"
-        description="自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。"
-      >
-        問題一覧 (Quests)
+      <Header variant="h1" description={t("quests.header_description")}>
+        {t("quests.header")}
       </Header>
 
-      {!isBackend && (
-        <Alert type="info">
-          dev-mock モードで動作中です。実 backend と接続するには runtime-config の <code>mode</code>{" "}
-          を <code>backend</code> に設定してください。
-        </Alert>
-      )}
+      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {error && (
-        <Alert type="error" header="状態の取得に失敗しました">
+        <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
         </Alert>
       )}
@@ -144,7 +128,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
           type="error"
           dismissible
           onDismiss={() => setConsoleError(null)}
-          header="AWS Console の発行に失敗しました"
+          header={t("quests.console_failed_header")}
         >
           {consoleError}
         </Alert>
@@ -154,17 +138,17 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         selectedId={filter}
         onChange={({ detail }) => setFilter(detail.selectedId as CategoryFilter)}
         options={[
-          { id: "all", text: `すべて (${counts.all})` },
-          { id: "battle", text: `Battle (${counts.battle})` },
-          { id: "challenge", text: `Challenge (${counts.challenge})` },
+          { id: "all", text: `${t("quests.filter_all")} (${counts.all})` },
+          { id: "battle", text: `${t("quests.filter_battle")} (${counts.battle})` },
+          { id: "challenge", text: `${t("quests.filter_challenge")} (${counts.challenge})` },
         ]}
-        label="カテゴリで絞り込み"
+        label={t("quests.filter_label")}
       />
 
       <Cards<ParticipantProblemView>
         items={filteredItems}
         loading={isBackend && !view && !error}
-        loadingText="問題を取得中…"
+        loadingText={t("quests.loading_text")}
         cardDefinition={{
           // jobId (ULID) を URL key にする。problemId (slug) は metadata 上 unique 前提だが、
           // 将来 problemId を意図せず重複登録された場合の link 衝突を回避する防御。
@@ -180,22 +164,22 @@ export function QuestsPage({ config }: { config: AppConfig }) {
               >
                 <code>{problem.problemId}</code>
               </Link>
-              {categoryBadge(problem.scoring)}
+              {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
             </SpaceBetween>
           ),
           sections: [
             {
               id: "status",
-              header: "環境ステータス",
+              header: t("quests.status_env_header"),
               content: (problem) => (
                 <StatusIndicator type={STATUS_TYPE[problem.status]}>
-                  {STATUS_PARTICIPANT_LABEL[problem.status]}
+                  {t(`quests.status_label.${problem.status}`)}
                 </StatusIndicator>
               ),
             },
             {
               id: "score",
-              header: "現在の Score",
+              header: t("quests.score_header"),
               content: (problem) => (
                 <Box variant="strong" color="text-status-success">
                   {problem.score} pt
@@ -204,18 +188,18 @@ export function QuestsPage({ config }: { config: AppConfig }) {
             },
             {
               id: "region",
-              header: "Region",
+              header: t("quests.region_header"),
               content: (problem) => problem.region,
             },
             {
               id: "outputs",
-              header: "アクセス先 URL",
+              header: t("quests.outputs_header"),
               content: (problem) => {
                 const entries = Object.entries(problem.stackOutputs);
                 if (entries.length === 0) {
                   return (
                     <Box variant="small" color="text-status-inactive">
-                      まだ deploy 完了していません
+                      {t("quests.outputs_pending")}
                     </Box>
                   );
                 }
@@ -239,7 +223,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
                       loading={consoleInFlight[problem.jobId] === true}
                       onClick={() => void openAwsConsole(problem.jobId)}
                     >
-                      AWS Console を開く
+                      {t("quests.open_console")}
                     </Button>
                   </SpaceBetween>
                 );
@@ -251,15 +235,9 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         empty={
           <Container>
             <Box textAlign="center" padding="l">
-              <Box variant="strong">
-                {filter === "all"
-                  ? "問題がありません"
-                  : `${filter === "battle" ? "Battle" : "Challenge"} カテゴリに該当する問題がありません`}
-              </Box>
+              <Box variant="strong">{emptyMessage}</Box>
               <Box variant="small" color="text-status-inactive" padding={{ top: "s" }}>
-                {filter === "all"
-                  ? "このチームには deploy 済みの問題がありません。operator にお問い合わせください。"
-                  : "他カテゴリは「すべて」タブで確認できます。"}
+                {emptyHint}
               </Box>
             </Box>
           </Container>

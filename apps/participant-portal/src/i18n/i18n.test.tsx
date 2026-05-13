@@ -50,6 +50,23 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current("nonexistent.key")).toBe("nonexistent.key");
   });
 
+  it("t() は params を {name} placeholder で補間すべき (Phase 2 page-level)", () => {
+    const { result } = renderHook(() => useI18n(), { wrapper });
+    act(() => result.current.setLocale("ja"));
+    expect(result.current.t("home.welcome", { teamName: "Team Alpha" })).toBe(
+      "ようこそ、Team Alpha さん",
+    );
+    act(() => result.current.setLocale("en"));
+    expect(result.current.t("home.welcome", { teamName: "Team Alpha" })).toBe(
+      "Welcome, Team Alpha",
+    );
+  });
+
+  it("params 未指定の placeholder は raw のまま残る (= missing key debug 用)", () => {
+    expect(_testInternals.interpolate("Hello, {name}!", {})).toBe("Hello, {name}!");
+    expect(_testInternals.interpolate("a={a} b={b}", { a: 1 })).toBe("a=1 b={b}");
+  });
+
   it("SUPPORTED_LOCALES = 4 言語 [ja, en, es, zh]", () => {
     const supported: readonly LocaleCode[] = ["ja", "en", "es", "zh"];
     for (const code of supported) {
