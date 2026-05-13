@@ -58,19 +58,24 @@ function findRawMetadata(problemId: string) {
   return undefined;
 }
 
-function joinUrl(base: string, appendPath?: string): string | undefined {
+/**
+ * `base` + 任意 `appendPath` を結合して absolute URL を返す。 不正な URL は throw
+ * (= silent undefined fallback は metadata / CFn output の malformed を隠す。 caller の
+ * `buildPortalEndpointsFromOutputs` で context (problemId / slot / key) を付けて rethrow する)。
+ */
+function joinUrl(base: string, appendPath?: string): string {
   if (!appendPath) return base;
-  try {
-    const baseWithSlash = base.endsWith("/") ? base : `${base}/`;
-    return new URL(appendPath, baseWithSlash).toString();
-  } catch {
-    return undefined;
-  }
+  const baseWithSlash = base.endsWith("/") ? base : `${base}/`;
+  return new URL(appendPath, baseWithSlash).toString();
 }
 
 /**
  * `metadata.endpoints[]` + deployment.stackOutputs から PortalEndpoint[] を組み立てる。
  * overrideUrl は本 fn では未対応 (= portal の endpoint registry API を後で wire-up する)。
+ *
+ * URL 結合 (= joinUrl) が失敗したら context (problemId / slot / key) を含めて throw する。
+ * silent skip にすると competitor が malformed URL を踏んだ時に「default が出ない理由」 が
+ * 観測不能になる。 caller (PortalPluginSlots) の ErrorBoundary が catch して fallback を render。
  */
 export function buildPortalEndpointsFromOutputs(
   problemId: string,
@@ -80,7 +85,17 @@ export function buildPortalEndpointsFromOutputs(
   if (!metadata?.endpoints) return [];
   return metadata.endpoints.map((ep) => {
     const base = stackOutputs[ep.default.key];
-    const defaultUrl = base ? joinUrl(base, ep.default.appendPath) : undefined;
+    let defaultUrl: string | undefined;
+    if (base) {
+      try {
+        defaultUrl = joinUrl(base, ep.default.appendPath);
+      } catch (e) {
+        throw new Error(
+          `Failed to build endpoint URL for problemId=${problemId} slot=${ep.slot} key=${ep.default.key}: ${e instanceof Error ? e.message : String(e)}`,
+          { cause: e },
+        );
+      }
+    }
     return {
       slot: ep.slot,
       overridable: ep.overridable === true,

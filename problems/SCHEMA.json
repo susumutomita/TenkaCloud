@@ -553,8 +553,8 @@
           "type": "object",
           "additionalProperties": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9._/-]+\\.tsx$",
-            "description": "問題 dir からの相対 path で portal component (.tsx) を指す。"
+            "pattern": "^portal/[A-Za-z0-9._-]+\\.tsx$",
+            "description": "問題 dir からの相対 path で portal component (.tsx) を指す。 plugin loader (= apps/participant-portal/src/plugins/loader.ts) の glob が `problems/<category>/<id>/portal/*.tsx` のみ discover するため、 `portal/<file>.tsx` 形式に限定する。"
           },
           "description": "slot 名 → component path の map。 slot 名は portal が予約した名前 (StatusPanel / RegistrationPanel / LeaderboardPanel 等、 Phase 5 で固める) を使う。"
         }

@@ -35,6 +35,17 @@ describe("buildPortalEndpointsFromOutputs", () => {
   it("存在しない problemId は空配列を返すべき", () => {
     expect(buildPortalEndpointsFromOutputs("does-not-exist", {})).toEqual([]);
   });
+
+  it("malformed base URL (CFn output が空文字 / 不正) は context 付きで throw すべき (= silent skip しない)", () => {
+    // base に malformed URL を投入し joinUrl で `new URL("/users", "not-a-url/")` が
+    // throw する case。 silent undefined fallback は metadata / output 異常を隠してしまうので、
+    // context (= problemId / slot / key) 付き Error を rethrow することで debuggable にする。
+    expect(() =>
+      buildPortalEndpointsFromOutputs("microservice-migration-battle", {
+        BaseUrl: "not-a-valid-url",
+      }),
+    ).toThrow(/microservice-migration-battle/);
+  });
 });
 
 describe("buildPortalPhases", () => {

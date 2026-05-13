@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { _listDiscoveredPluginKeys, loadPluginSlot } from "./loader";
+import { afterEach, describe, expect, it } from "vitest";
+import { _clearSlotComponentCache, _listDiscoveredPluginKeys, loadPluginSlot } from "./loader";
+
+afterEach(() => {
+  _clearSlotComponentCache();
+});
 
 /**
  * ADR-012 Phase 5: plugin loader が Vite glob で問題 dir 配下の portal tsx を
@@ -41,5 +45,14 @@ describe("plugin loader (ADR-012 Phase 5)", () => {
 
   it("存在しない problemId は undefined を返すべき", () => {
     expect(loadPluginSlot("does-not-exist", "StatusPanel")).toBeUndefined();
+  });
+
+  it("同一 (problemId, slotName) を 2 回呼ぶと同 LazyExoticComponent instance を返すべき (= memoize)", () => {
+    const a = loadPluginSlot("microservice-migration-battle", "StatusPanel");
+    const b = loadPluginSlot("microservice-migration-battle", "StatusPanel");
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    // memoize されていなければ React.lazy(loader) で別 instance になる (= Suspense identity 不安定)
+    expect(a).toBe(b);
   });
 });
