@@ -4,6 +4,7 @@
   "name": "__PROBLEM_NAME__",
   "category": "Battle",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 4,
   "estimatedDuration": "60〜90 分",
   "shortDescription": "攻撃検知 counter 差分で加点する attack-detection Battle skeleton。",

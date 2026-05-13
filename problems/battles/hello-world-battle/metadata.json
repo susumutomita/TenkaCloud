@@ -4,6 +4,7 @@
   "name": "Hello World Battle (Sample)",
   "category": "Battle",
   "status": "ready",
+  "visibility": "public",
   "difficulty": 1,
   "estimatedDuration": "30 分",
   "shortDescription": "Battle uptime scoring の最小 sample。EC2 上で nginx (frontend) + Python (API) を起動し、両方が 200 を返す間スコアが 1 分ごとに +100 加算。",

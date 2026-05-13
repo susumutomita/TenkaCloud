@@ -4,6 +4,7 @@
   "name": "__PROBLEM_NAME__",
   "category": "Challenge",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 2,
   "estimatedDuration": "30〜45 分",
   "shortDescription": "1 行サマリ (~200 字) — どんな問題か。",

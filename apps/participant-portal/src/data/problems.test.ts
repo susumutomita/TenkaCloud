@@ -84,4 +84,17 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
   it("endpoints[] が無い問題は空配列を返すべき", () => {
     expect(findProblemMetadata("hello-world")?.endpoints).toEqual([]);
   });
+
+  // ADR-008 / Issue #574 Phase 1: visibility field を catalog に露出する。
+  it("既存 4 問題はすべて visibility='public' で露出されるべき", () => {
+    for (const id of [
+      "hello-world",
+      "hello-world-battle",
+      "security-battle-royale",
+      "microservice-migration-battle",
+    ]) {
+      const m = findProblemMetadata(id);
+      expect(m?.visibility).toBe("public");
+    }
+  });
 });

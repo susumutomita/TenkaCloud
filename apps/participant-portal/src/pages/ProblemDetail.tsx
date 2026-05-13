@@ -122,9 +122,13 @@ function ProblemInfoSection({ metadata }: { metadata: ProblemCatalogEntry }) {
       <SpaceBetween size="m">
         <ColumnLayout columns={4} variant="text-grid">
           <InfoCell label="カテゴリ">
-            <Badge color={metadata.category === "Battle" ? "red" : "blue"}>
-              {metadata.category}
-            </Badge>
+            <SpaceBetween direction="horizontal" size="xxs">
+              <Badge color={metadata.category === "Battle" ? "red" : "blue"}>
+                {metadata.category}
+              </Badge>
+              {/* ADR-008 Phase 1: private 問題には「答え非公開」 badge。 public は省略 (= ノイズ削減)。 */}
+              {metadata.visibility === "private" && <Badge color="severity-high">答え非公開</Badge>}
+            </SpaceBetween>
           </InfoCell>
           <InfoCell label="難易度">{DIFFICULTY_LABEL[metadata.difficulty]}</InfoCell>
           <InfoCell label="想定プレイ時間">{metadata.estimatedDuration}</InfoCell>

@@ -12,6 +12,10 @@
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
+/** ADR-008 / Issue #574: 問題実装の公開境界。 public = 本体 repo に payload を持つ教材問題、
+ *  private = TenkaCloudChallenges 別 repo に payload を持ち S3 presigned URL で配信される
+ *  本格競技問題。 metadata に省略時は public 扱い (= 既存 metadata との互換)。 */
+export type ProblemVisibility = "public" | "private";
 
 /**
  * ADR-012 Phase 4 portal predict: 問題 metadata で宣言された phase / disruption の予告 entry。
@@ -63,6 +67,8 @@ export interface ProblemCatalogEntry {
   readonly name: string;
   readonly category: ProblemCategory;
   readonly status: ProblemStatus;
+  /** ADR-008 Phase 1 / Issue #574: 公開境界。 metadata 省略時は "public" を default に。 */
+  readonly visibility: ProblemVisibility;
   readonly difficulty: 1 | 2 | 3 | 4 | 5;
   readonly estimatedDuration: string;
   readonly shortDescription: string;
@@ -85,6 +91,7 @@ interface ProblemMetadata {
   name: string;
   category: ProblemCategory;
   status: ProblemStatus;
+  visibility?: ProblemVisibility;
   difficulty: 1 | 2 | 3 | 4 | 5;
   estimatedDuration: string;
   shortDescription: string;
@@ -148,6 +155,8 @@ function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
     name: metadata.name,
     category: metadata.category,
     status: metadata.status,
+    // metadata 省略時は public 扱い (= 既存問題互換 + ADR-008 D4 の "省略時 public" 規約)。
+    visibility: metadata.visibility ?? "public",
     difficulty: metadata.difficulty,
     estimatedDuration: metadata.estimatedDuration,
     shortDescription: metadata.shortDescription,
