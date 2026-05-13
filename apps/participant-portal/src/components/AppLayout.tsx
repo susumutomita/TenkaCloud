@@ -13,6 +13,18 @@ import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
+
+/**
+ * Issue #583 Phase 1.A: locale switcher の display 名 map。 各 locale.json 内
+ * `locale.name` を import せず literal で持つ (= bundle size 抑制 / 起動時依存削減)。
+ */
+const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
+  ja: "日本語",
+  en: "English",
+  es: "Español",
+  zh: "中文",
+};
 
 /**
  * Participant Portal の shell。AWS GameDay の参考画面に倣って TopNavigation +
@@ -74,8 +86,27 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   const navigate = useNavigate();
   const teamView = useTeamView();
 
+  const { locale, setLocale } = useI18n();
+
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
-    if (!auth.session) return [];
+    // Issue #583 Phase 1.A: locale switcher utility は session 有無に依存しない (= ログイン
+    // 前 / login page でも切替可能)。
+    const localeUtility: TopNavigationProps.Utility = {
+      type: "menu-dropdown",
+      iconName: "globe",
+      ariaLabel: "言語切替 / Language",
+      text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
+      items: SUPPORTED_LOCALES.map((code) => ({
+        id: code,
+        text: LOCALE_DICTIONARIES_NAME[code] ?? code,
+      })),
+      onItemClick: ({ detail }) => {
+        if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
+          setLocale(detail.id as LocaleCode);
+        }
+      },
+    };
+    if (!auth.session) return [localeUtility];
     // Score: backend mode のときだけ実値、未取得なら "…"、dev-mock なら "—"。
     const totalScore = teamView.view
       ? teamView.view.problems.reduce((sum, p) => sum + p.score, 0)
@@ -95,6 +126,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
             ? `${myEntry.rank}/${totalEntries}`
             : "…";
     return [
+      localeUtility,
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
       // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
       // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
@@ -128,6 +160,8 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     teamView.leaderboard,
     teamView.leaderboardNoEvent,
     config.mode,
+    locale,
+    setLocale,
   ]);
 
   const sideNavItems = useMemo(
