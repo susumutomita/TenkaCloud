@@ -93,4 +93,25 @@ describe("TenantEventsPage (#598 Phase 1.B)", () => {
     renderPage();
     expect(await screen.findByText(/権限がありません/)).toBeInTheDocument();
   });
+
+  it('TypeError(`Failed to fetch`) は "テナントを準備中" UI に置き換わるべき (#656)', async () => {
+    mocks.fetchTenantEvents.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    renderPage();
+    expect(await screen.findByText(/テナントを準備中/)).toBeInTheDocument();
+    expect(screen.queryByText(/読み込みに失敗しました/)).toBeNull();
+  });
+
+  it('502 / 503 / 504 も "テナントを準備中" 扱いになるべき (#656)', async () => {
+    const { AdminInsightApiError } = await import("../../src/api/admin-drill-down");
+    mocks.fetchTenantEvents.mockRejectedValueOnce(new AdminInsightApiError(503, "unavailable"));
+    renderPage();
+    expect(await screen.findByText(/テナントを準備中/)).toBeInTheDocument();
+  });
+
+  it("500 (= AdminInsight 内部エラー) は従来通り raw error alert になるべき (regression)", async () => {
+    const { AdminInsightApiError } = await import("../../src/api/admin-drill-down");
+    mocks.fetchTenantEvents.mockRejectedValueOnce(new AdminInsightApiError(500, "boom"));
+    renderPage();
+    expect(await screen.findByText(/読み込みに失敗しました/)).toBeInTheDocument();
+  });
 });

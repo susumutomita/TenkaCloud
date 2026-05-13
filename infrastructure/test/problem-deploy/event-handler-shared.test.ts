@@ -1,4 +1,4 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import { queryDeploymentsByEvent } from "../../lib/problem-deploy/handlers/event-handler/shared";
 
