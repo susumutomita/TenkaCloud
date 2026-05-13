@@ -91,19 +91,19 @@ app.get("/healthz", (c) => c.json({ ok: true }));
 app.post("/problems/:problemId/deploy", async (c) => {
   const problemId = c.req.param("problemId");
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
-    return c.json({ error: "invalid problemId" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
   }
 
   let body: unknown;
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "request body must be JSON" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
   }
 
   const parsed = DeployRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ error: "validation failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
   }
 
   const ctx = buildContext(shared, resolveTenantId(c));
@@ -138,10 +138,10 @@ app.post("/problems/:problemId/deploy", async (c) => {
 app.get("/problems/:problemId/deployments", async (c) => {
   const problemId = c.req.param("problemId");
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
-    return c.json({ error: "invalid problemId" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
   }
   const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
+  if (!parsedLimit) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
   try {
     const response = await listDeployments(shared, {
       tenantId: resolveTenantId(c),
@@ -159,7 +159,7 @@ app.get("/problems/:problemId/deployments", async (c) => {
 
 app.get("/deployments", async (c) => {
   const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid limit" }, HTTP_BAD_REQUEST);
+  if (!parsedLimit) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
   try {
     const response = await listDeployments(shared, {
       tenantId: resolveTenantId(c),
@@ -177,7 +177,7 @@ app.get("/deployments", async (c) => {
 app.get("/deployments/:jobId", async (c) => {
   const jobId = c.req.param("jobId");
   if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid jobId" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_job_id" }, HTTP_BAD_REQUEST);
   }
   try {
     const item = await getDeployment(shared, resolveTenantId(c), jobId);
@@ -197,7 +197,7 @@ app.get("/deployments/:jobId", async (c) => {
 app.get("/deployments/:jobId/stack-progress", async (c) => {
   const jobId = c.req.param("jobId");
   if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid jobId" }, StatusCodes.BAD_REQUEST);
+    return c.json({ error: "invalid_job_id" }, StatusCodes.BAD_REQUEST);
   }
   try {
     const outcome = await getStackProgress(
@@ -241,7 +241,7 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
 app.delete("/deployments/:jobId", async (c) => {
   const jobId = c.req.param("jobId");
   if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid jobId" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_job_id" }, HTTP_BAD_REQUEST);
   }
   try {
     const outcome = await requestTeardown(shared, resolveTenantId(c), jobId, Date.now());
