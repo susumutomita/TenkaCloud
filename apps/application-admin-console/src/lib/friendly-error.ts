@@ -65,6 +65,27 @@ const KNOWN_ERRORS: Readonly<Record<string, FriendlyError>> = {
     title: "対象が見つかりません",
     hint: "他の operator が削除した可能性があります。 一覧を再読み込みしてください",
   },
+  // Issue #705: SSO Credentials の 4 分岐
+  role_arn_missing: {
+    title: "ConsoleViewerRole が設定されていません",
+    hint: "Lambda 環境変数 CONSOLE_VIEWER_ROLE_ARN が未設定です (= 通常は CDK deploy で自動注入)",
+    possibleCauses: [
+      "ProblemDeployBackendStack の participantPortal flag が false で deploy された",
+      "Lambda env が手動で削除された (= CFn drift)",
+    ],
+  },
+  federation_endpoint_failed: {
+    title: "AWS Federation endpoint がエラーを返しました",
+    hint: "signin.aws.amazon.com の getSigninToken が non-200 status を返しました",
+    possibleCauses: [
+      "AWS 側 federation service の一時的な障害",
+      "Session JSON のサイズ超過 (= 通常起こらない)",
+    ],
+  },
+  federation_token_malformed: {
+    title: "AWS Federation token の response 形式が不正です",
+    hint: "AWS 側 spec 変更の可能性 (= AWS support 確認推奨)",
+  },
 };
 
 /**

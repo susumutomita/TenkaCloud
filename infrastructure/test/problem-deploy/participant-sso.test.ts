@@ -62,11 +62,11 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "invalid_jobid" });
   });
 
-  it("CONSOLE_VIEWER_ROLE_ARN env が無ければ misconfigured を返すべき", async () => {
+  it("CONSOLE_VIEWER_ROLE_ARN env が無ければ role_arn_missing を返すべき (#705)", async () => {
     process.env.CONSOLE_VIEWER_ROLE_ARN = "";
     const { shared } = buildShared();
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "misconfigured" });
+    expect(result).toEqual({ kind: "role_arn_missing" });
   });
 
   it("teamLoginKey に該当 deployment が無ければ unauthorized を返すべき", async () => {
@@ -172,7 +172,7 @@ describe("getConsoleSigninUrl", () => {
     expect(allowActions).toContain("cloudformation:DescribeStacks");
   });
 
-  it("getSigninToken が 5xx を返したら misconfigured", async () => {
+  it("getSigninToken が 5xx を返したら federation_endpoint_failed (#705)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     stsSend.mockResolvedValueOnce({
@@ -186,6 +186,46 @@ describe("getConsoleSigninUrl", () => {
     fetchSpy.mockResolvedValueOnce(new Response("server error", { status: 500 }));
 
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "misconfigured" });
+    expect(result).toEqual({ kind: "federation_endpoint_failed", status: 500 });
+  });
+
+  it("STS AssumeRole が throw したら assume_role_failed + reason を返すべき (#705)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    stsSend.mockRejectedValueOnce(new Error("AccessDenied: role not assumable"));
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result.kind).toBe("assume_role_failed");
+    if (result.kind === "assume_role_failed") {
+      expect(result.reason).toMatch(/AccessDenied/);
+    }
+  });
+
+  it("STS Credentials が empty なら assume_role_failed を返すべき (#705)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    stsSend.mockResolvedValueOnce({ Credentials: undefined });
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result.kind).toBe("assume_role_failed");
+  });
+
+  it("federation token JSON が malformed なら federation_token_malformed (#705)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIAFAKE",
+        SecretAccessKey: "SECRETFAKE",
+        SessionToken: "TOKENFAKE",
+        Expiration: new Date(),
+      },
+    });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ NotSigninToken: 123 }), { status: 200 }),
+    );
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "federation_token_malformed" });
   });
 });
