@@ -12,6 +12,7 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import { PolicyDocument } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
+import { TenantStatusReconciler } from "../tenant-status-reconciler/tenant-status-reconciler";
 import { TenantApiKey } from "./tenant-api-key";
 
 interface BootstrapTemplateStackProps extends StackProps {
@@ -172,6 +173,13 @@ export class BootstrapTemplateStack extends Stack {
       apiKeyValue: props.apiKeyPlatinumTierParameter,
       ssmParameterApiKeyIdName: props.apiKeySSMParameterNames.platinum.keyId,
       ssmParameterApiValueName: props.apiKeySSMParameterNames.platinum.value,
+    });
+
+    // Issue #659: 2 分周期で TenantMappingTable を scan し、 provision-tenant.sh の
+    // 結果 (tenantConfig 充足 / 経過時間) で "In progress" stuck な行を "Complete" /
+    // "Failed" に自動遷移させる。
+    new TenantStatusReconciler(this, "TenantStatusReconciler", {
+      tenantMappingTable: this.tenantMappingTable,
     });
   }
 }
