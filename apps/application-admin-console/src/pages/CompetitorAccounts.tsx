@@ -28,6 +28,8 @@ import type { AppConfig } from "../config";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
+  buildUpdatePayload,
+  buildUpdateStackUrl,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
 } from "../lib/competitor-bootstrap";
 import { type FriendlyError, toFriendlyError } from "../lib/friendly-error";
@@ -58,6 +60,8 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const [showSecret, setShowSecret] = useState<
     CreateCompetitorAccountResponse | RotateExternalIdResponse | null
   >(null);
+  // #706: 既存 bootstrap stack の update 案内 modal (= row の「Update bootstrap」 button から開く)。
+  const [updateTarget, setUpdateTarget] = useState<CompetitorAccountSummary | null>(null);
 
   const reload = useCallback(async () => {
     if (!apiClient) return;
@@ -181,6 +185,14 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
             >
               Rotate ExternalId
             </Button>
+            <Button
+              variant="normal"
+              iconName="upload"
+              onClick={() => setUpdateTarget(item)}
+              data-testid={`update-bootstrap-${item.awsAccountId}`}
+            >
+              Update bootstrap
+            </Button>
             <Button variant="link" onClick={() => setDeleteTarget(item)}>
               削除
             </Button>
@@ -263,6 +275,8 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
           鍵漏洩リスク削減)。
         </p>
       </Modal>
+
+      <BootstrapUpdateModal target={updateTarget} onDismiss={() => setUpdateTarget(null)} />
 
       <Modal
         visible={rotateTarget !== null}
@@ -552,6 +566,82 @@ function SecretRevealModal({ details, onDismiss }: SecretRevealModalProps) {
             </ol>
           </div>
         </ColumnLayout>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+interface BootstrapUpdateModalProps {
+  target: CompetitorAccountSummary | null;
+  onDismiss: () => void;
+}
+
+/**
+ * #706: 既存 bootstrap stack の update 案内 modal。
+ *
+ * PR-694 (Lambda IAM 追加) のように deploy chain 側で IAM が増えると、 競技者の
+ * `tenkacloud-competitor-bootstrap` stack を最新 template で update してもらわないと
+ * 「lambda:GetFunction AccessDenied」 等で deploy が失敗する。
+ *
+ * 本 modal は秘密値 (ExternalId) を含まないので、 既存 row から呼べる (= row には
+ * externalId が無い)。 競技者の CFn console で Parameter は default で existing value 再利用される。
+ */
+function BootstrapUpdateModal({ target, onDismiss }: BootstrapUpdateModalProps) {
+  const [copied, setCopied] = useState(false);
+  if (!target) return null;
+  const updateUrl = buildUpdateStackUrl({ region: target.region });
+  const payload = buildUpdatePayload({ region: target.region });
+  const onCopy = async () => {
+    await navigator.clipboard.writeText(payload);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <Modal
+      visible
+      onDismiss={onDismiss}
+      header="bootstrap stack の update を依頼"
+      footer={
+        <Box float="right">
+          <Button variant="primary" onClick={onDismiss}>
+            閉じる
+          </Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <Alert type="info" header="新しい IAM 反映には bootstrap stack の update が必要です">
+          deploy chain 側で IAM (例: Lambda 操作権限) が追加された場合、 competitor 側で
+          <code>tenkacloud-competitor-bootstrap</code> stack を最新 template に update して
+          もらう必要があります。 ExternalId 等の秘密値は競技者の既存 stack で再利用されるため、
+          operator から再送する必要はありません。
+        </Alert>
+        <Box>
+          <Button
+            variant="primary"
+            iconName={copied ? "status-positive" : "copy"}
+            onClick={() => void onCopy()}
+            data-testid="copy-update-payload"
+          >
+            {copied ? "コピーしました" : "update 依頼テキストをコピー (Slack / メール用)"}
+          </Button>
+        </Box>
+        <div>
+          <Box variant="awsui-key-label">Update Stack URL (= 競技者がワンクリックで開く)</Box>
+          <CopyableField value={updateUrl} ariaLabel="Copy Update Stack URL" />
+        </div>
+        <div>
+          <Box variant="awsui-key-label">最新 template (= レビュー用 raw URL)</Box>
+          <CopyableField
+            value={COMPETITOR_BOOTSTRAP_TEMPLATE_URL}
+            ariaLabel="Copy bootstrap template URL"
+          />
+        </div>
+        <Box variant="small" color="text-status-inactive">
+          競技者は SSO ログイン後、 Replace current template 画面に直行します。 Parameter 値は 「Use
+          existing value」 (= default) のままで OK。 confirm 画面で IAM diff (例: lambda:GetFunction
+          追加) を確認して Update。
+        </Box>
       </SpaceBetween>
     </Modal>
   );
