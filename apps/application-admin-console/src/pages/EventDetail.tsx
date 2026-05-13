@@ -18,6 +18,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { ApiError, useApiClient } from "../api/client";
 import {
+  archiveEvent,
   type BulkDeployBody,
   type BulkResult,
   bulkDeployEvent,
@@ -141,6 +142,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [endsAtInFlight, setEndsAtInFlight] = useState(false);
   const [endInFlight, setEndInFlight] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  // #708: TEARDOWN が ROLLBACK_COMPLETE な stack で stuck したときの operator rescue。
+  const [confirmForceArchive, setConfirmForceArchive] = useState(false);
+  const [forceArchiveInFlight, setForceArchiveInFlight] = useState(false);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   const [notifyJustSent, setNotifyJustSent] = useState(false);
   // #558: scoring lock/unlock の in-flight 状態。"lock" / "unlock" / null を持つ。
@@ -332,6 +336,26 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     }
   };
 
+  /**
+   * #708: TEARDOWN で stuck している Event を operator 判断で ARCHIVED に倒す rescue。
+   * backend の archive endpoint は TEARDOWN を allow しているので追加 API 不要。
+   * 競技者 account 側に残る CFn stack (= ROLLBACK_COMPLETE 等) は別途競技者が手動削除する。
+   */
+  const handleForceArchive = async () => {
+    if (!apiClient || forceArchiveInFlight) return;
+    setForceArchiveInFlight(true);
+    setConfirmForceArchive(false);
+    setError(null);
+    try {
+      await archiveEvent(apiClient, eventId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setForceArchiveInFlight(false);
+    }
+  };
+
   const handleEndEvent = async () => {
     if (!apiClient || endInFlight) return;
     setEndInFlight(true);
@@ -483,6 +507,31 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             <Alert type={wizard.alertType} header="次のアクション">
               {wizard.cta}
             </Alert>
+            {detail?.status === "TEARDOWN" && (
+              // #708: 子 deployment の DeleteStack が ROLLBACK_COMPLETE な stack で stuck
+              // すると TEARDOWN のまま ARCHIVED に遷移しない問題への operator rescue。
+              <Alert
+                type="info"
+                header="削除が進まない場合 (operator rescue)"
+                action={
+                  <Button
+                    loading={forceArchiveInFlight}
+                    onClick={() => setConfirmForceArchive(true)}
+                    data-testid="force-archive-button"
+                  >
+                    Force ARCHIVED に倒す
+                  </Button>
+                }
+              >
+                競技者 account 側で stack が <code>ROLLBACK_COMPLETE</code> 等の状態のまま
+                残っていると DeleteStack が no-op 扱いで進行せず、 Event が TEARDOWN のまま固まる
+                ことがあります。 5 分以上動かない場合は競技者に
+                <strong>CFn console で該当 stack の手動 Delete</strong> を依頼するか、 operator
+                判断で本 Event を <strong>Force ARCHIVED</strong> に倒してください (= 該当
+                deployment 行は DELETED に遷移済 / FAILED として扱われ、 Event view から 外れます)。
+                物理 stack は別途競技者の手動削除が必要なので注意。
+              </Alert>
+            )}
           </SpaceBetween>
         </Container>
       )}
@@ -829,6 +878,38 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           <Box variant="small" color="text-status-warning">
             ENDED 状態から READY に戻すことはできません。再開するには Event を作り直して下さい。
           </Box>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={confirmForceArchive}
+        header="Event を Force ARCHIVED に倒しますか?"
+        onDismiss={() => setConfirmForceArchive(false)}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setConfirmForceArchive(false)}>キャンセル</Button>
+              <Button
+                variant="primary"
+                loading={forceArchiveInFlight}
+                onClick={handleForceArchive}
+                data-testid="force-archive-confirm"
+              >
+                Force ARCHIVED 実行
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>
+            Event を <code>ARCHIVED</code> に遷移し、 一覧の default view から外します。
+          </Box>
+          <Alert type="warning" header="物理 stack は別途競技者の手動削除が必要">
+            本 button は <strong>DDB の Event row を ARCHIVED に倒すだけ</strong> です。 競技者
+            account に残った <code>ROLLBACK_COMPLETE</code> 等の CFn stack は競技者が CFn console
+            で手動 Delete する必要があります。 競技者へ事前に依頼してから実行してください。
+          </Alert>
         </SpaceBetween>
       </Modal>
 
