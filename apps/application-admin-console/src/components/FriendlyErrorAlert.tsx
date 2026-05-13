@@ -15,6 +15,7 @@ export function FriendlyErrorAlert({ error }: { readonly error: FriendlyError })
           <Box variant="strong">考えられる原因:</Box>
           <ul style={{ marginTop: 4, marginBottom: 0, paddingLeft: 22 }}>
             {error.possibleCauses.map((cause) => (
+              // KNOWN_ERRORS は static const で cause text は問題ごとに unique なため key=text で安全
               <li key={cause}>{cause}</li>
             ))}
           </ul>

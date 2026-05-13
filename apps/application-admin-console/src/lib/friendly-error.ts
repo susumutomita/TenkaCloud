@@ -14,8 +14,6 @@ export interface FriendlyError {
   readonly title: string;
   readonly hint?: string;
   readonly possibleCauses?: readonly string[];
-  /** 元の raw body (= 開発者用、 details として表示) */
-  readonly raw?: string;
 }
 
 interface BackendErrorEnvelope {
@@ -115,10 +113,13 @@ export function toFriendlyError(err: unknown): FriendlyError {
       if (code && KNOWN_ERRORS[code]) {
         return KNOWN_ERRORS[code];
       }
-      const codeOrMsg = code ?? (typeof envelope.message === "string" ? envelope.message : null);
+      // title に code (or message) を併記、 hint には message が code と異なる時のみ詰める
+      // (= title と hint で同じ文字列を表示しないため)。
+      const msg = typeof envelope.message === "string" ? envelope.message : undefined;
+      const codeOrMsg = code ?? msg;
       return {
         title: codeOrMsg ? `エラー (${err.status}) — ${codeOrMsg}` : `エラー (${err.status})`,
-        hint: typeof envelope.message === "string" ? envelope.message : undefined,
+        hint: code && msg ? msg : undefined,
       };
     }
     return {
