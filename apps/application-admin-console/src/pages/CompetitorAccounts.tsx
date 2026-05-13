@@ -22,7 +22,13 @@ import {
   rotateExternalId,
   verifyCompetitorAccount,
 } from "../api/competitor-accounts-client";
+import { CopyableField } from "../components/CopyableField";
 import type { AppConfig } from "../config";
+import {
+  buildLaunchStackUrl,
+  buildShareablePayload,
+  COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
+} from "../lib/competitor-bootstrap";
 import { computeRotationAge, ROTATION_AGE_WARNING_DAYS } from "../lib/rotation-age";
 
 const ACCOUNT_ID_RE = /^\d{12}$/;
@@ -455,7 +461,23 @@ interface SecretRevealModalProps {
 }
 
 function SecretRevealModal({ details, onDismiss }: SecretRevealModalProps) {
+  const [allCopied, setAllCopied] = useState(false);
   if (!details) return null;
+  const launchStackUrl = buildLaunchStackUrl({
+    tenkaCloudAccountId: details.tenkaCloudAccountId,
+    externalId: details.externalId,
+    competitorRoleName: details.competitorRoleName,
+  });
+  const payload = buildShareablePayload({
+    tenkaCloudAccountId: details.tenkaCloudAccountId,
+    externalId: details.externalId,
+    competitorRoleName: details.competitorRoleName,
+  });
+  const onCopyAll = async () => {
+    await navigator.clipboard.writeText(payload);
+    setAllCopied(true);
+    setTimeout(() => setAllCopied(false), 2000);
+  };
   return (
     <Modal
       visible
@@ -472,30 +494,69 @@ function SecretRevealModal({ details, onDismiss }: SecretRevealModalProps) {
       <SpaceBetween size="m">
         <Alert type="warning" header="この画面でのみ ExternalId を確認できます">
           ExternalId は SecureString として保存されており、閉じると再表示できません。
-          競技者に渡すコピーは **今** 取ってください。
+          競技者に渡すコピーは <strong>今</strong> 取ってください。
         </Alert>
+        <Box>
+          <Button
+            variant="primary"
+            iconName={allCopied ? "status-positive" : "copy"}
+            onClick={() => void onCopyAll()}
+          >
+            {allCopied ? "コピーしました" : "すべて (3 値 + 手順 + Launch Stack URL) をコピー"}
+          </Button>
+        </Box>
         <ColumnLayout columns={1} variant="text-grid">
           <div>
-            <Box variant="awsui-key-label">TenkaCloud Account ID</Box>
-            <code>{details.tenkaCloudAccountId}</code>
+            <Box variant="awsui-key-label">
+              TenkaCloud Account ID (= CFn Parameter <code>TenkaCloudAccountId</code>)
+            </Box>
+            <CopyableField
+              value={details.tenkaCloudAccountId}
+              ariaLabel="Copy TenkaCloudAccountId"
+            />
           </div>
           <div>
-            <Box variant="awsui-key-label">ExternalId</Box>
-            <code style={{ wordBreak: "break-all" }}>{details.externalId}</code>
+            <Box variant="awsui-key-label">
+              ExternalId (= CFn Parameter <code>ExternalId</code>)
+            </Box>
+            <CopyableField value={details.externalId} ariaLabel="Copy ExternalId" />
           </div>
           <div>
-            <Box variant="awsui-key-label">Competitor Role 名</Box>
-            <code>{details.competitorRoleName}</code>
+            <Box variant="awsui-key-label">
+              Competitor Role 名 (= CFn Parameter <code>RoleName</code>)
+            </Box>
+            <CopyableField value={details.competitorRoleName} ariaLabel="Copy RoleName" />
           </div>
           <div>
-            <Box variant="awsui-key-label">次のステップ</Box>
+            <Box variant="awsui-key-label">次のステップ — 競技者向け</Box>
             <ol>
               <li>
-                競技者が <code>infrastructure/templates/competitor-bootstrap.yaml</code> を 自分の
-                AWS account で 1 回 deploy する (上の値を Parameter として渡す)
+                上の「すべてコピー」 button で 3 値 + 手順を取得し Slack / メール等で競技者に送る
               </li>
               <li>
-                deploy 完了後、この画面の「Verify」 button で STS AssumeRole sanity check を行う
+                競技者は AWS CFn console で <strong>1 click deploy</strong>:
+                <br />
+                <Button href={launchStackUrl} target="_blank" iconName="external" iconAlign="right">
+                  Launch Stack (Quick-create deeplink)
+                </Button>
+                <br />
+                <Box variant="small" color="text-status-inactive">
+                  上の link は CFn create-stack 画面に直行し、 Parameter 3 値は pre-fill 済。
+                  競技者は SSO ログイン後 1 click で stack 作成可能。
+                </Box>
+              </li>
+              <li>
+                CFn template (= 競技者がレビューしたい場合):{" "}
+                <a
+                  href={COMPETITOR_BOOTSTRAP_TEMPLATE_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  competitor-bootstrap.yaml (raw)
+                </a>
+              </li>
+              <li>
+                deploy 完了後、 この画面の「Verify」 button で STS AssumeRole sanity check を行う
               </li>
               <li>verified=true になれば deploy 経路で利用可能になる</li>
             </ol>
