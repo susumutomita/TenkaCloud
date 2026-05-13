@@ -75,7 +75,8 @@ export class DeployApiLambda extends Construct {
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
-        DEFAULT_TENANT_ID: props.defaultTenantId ?? "unknown-tenant",
+        // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
+        ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
         // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
         BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),

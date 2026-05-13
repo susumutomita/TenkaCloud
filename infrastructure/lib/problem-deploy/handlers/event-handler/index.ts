@@ -3,7 +3,11 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
-import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
+import {
+  MissingTenantClaimError,
+  resolveCognitoSub,
+  resolveTenantId,
+} from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
   HTTP_ACCEPTED,
@@ -78,6 +82,13 @@ app.use(
 // stack trace 等が browser に漏れない、PR-570 review 指摘)。operator は CloudWatch Logs
 // の `[events] uncaught handler error` 行で詳細を引く。
 app.onError((err, c) => {
+  if (err instanceof MissingTenantClaimError) {
+    console.warn("[events] missing tenantId claim", { path: c.req.path });
+    return c.json(
+      { error: "missing_tenant_claim", message: err.message },
+      StatusCodes.UNAUTHORIZED,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[events] uncaught handler error", { path: c.req.path, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);

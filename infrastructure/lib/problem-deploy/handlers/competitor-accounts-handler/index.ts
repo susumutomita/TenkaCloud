@@ -3,7 +3,11 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
-import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
+import {
+  MissingTenantClaimError,
+  resolveCognitoSub,
+  resolveTenantId,
+} from "../deploy-handler/auth.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
   CompetitorAccountNotFoundError,
@@ -53,6 +57,13 @@ app.use(
 
 // 想定外 throw を 500 JSON で返す (= CORS headers 付きで browser が body を読める、PR-559 同様)。
 app.onError((err, c) => {
+  if (err instanceof MissingTenantClaimError) {
+    console.warn("[competitor-accounts] missing tenantId claim", { path: c.req.path });
+    return c.json(
+      { error: "missing_tenant_claim", message: err.message },
+      StatusCodes.UNAUTHORIZED,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[competitor-accounts] uncaught handler error", {
     path: c.req.path,

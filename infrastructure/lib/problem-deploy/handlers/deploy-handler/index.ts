@@ -12,7 +12,7 @@ import {
   HTTP_NOT_FOUND,
   HTTP_OK,
 } from "../shared/http-status.js";
-import { resolveTenantId } from "./auth.js";
+import { MissingTenantClaimError, resolveTenantId } from "./auth.js";
 import { requestTeardown } from "./delete.js";
 import {
   buildContext,
@@ -81,6 +81,16 @@ app.use(
 // stack trace 等が browser に漏れない、PR-570 review 指摘)。operator は CloudWatch Logs
 // の `[deploy] uncaught handler error` 行で詳細を引く。
 app.onError((err, c) => {
+  // Issue #686: JWT に custom:tenantId が無い場合は 401 で fail-closed (= silent
+  // "unknown-tenant" 書き込みを防ぐ)。 caller (frontend) は FriendlyErrorAlert で
+  // 「再ログインしてください」 を表示する。
+  if (err instanceof MissingTenantClaimError) {
+    console.warn("[deploy] missing tenantId claim", { path: c.req.path });
+    return c.json(
+      { error: "missing_tenant_claim", message: err.message },
+      StatusCodes.UNAUTHORIZED,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[deploy] uncaught handler error", { path: c.req.path, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
