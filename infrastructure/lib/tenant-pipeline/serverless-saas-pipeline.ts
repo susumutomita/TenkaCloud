@@ -177,9 +177,11 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
     });
 
-    const stepfunctionLogGroup = new logs.LogGroup(this, "stepFunctionLG", {
-      logGroupName: "/aws/vendedlogs/states/StepFunctionLogging",
-    });
+    // logGroupName は省略して CFn auto-generate に任せる。
+    // 旧コードは `/aws/vendedlogs/states/StepFunctionLogging` を hardcode していて、
+    // 同 account 内に複数 deploy / 旧 stack 残骸との衝突 (= AlreadyExists) を起こしていた。
+    // CFn auto-name は `<stack>-stepFunctionLG-<hash>` で stack スコープに閉じる。
+    const stepfunctionLogGroup = new logs.LogGroup(this, "stepFunctionLG");
 
     const approvalQueue = new sqs.Queue(this, "ApprovalQueue", {
       enforceSSL: true,
