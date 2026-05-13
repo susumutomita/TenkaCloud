@@ -110,9 +110,19 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       setStackProgress(progress);
       setStackProgressError(null);
     } catch (err) {
-      // CFn 失敗は基本情報を巻き込まない (= 別 state に閉じる)。
-      // 409 (= stack 未割当 / deploy 極初期) は別 message に分けて「準備中」表示する。
-      const notYetCreated = err instanceof ApiError && err.status === StatusCodes.CONFLICT;
+      // #687: 「stack 未割当」(= deploy 初期で CFn 未着手) は次のいずれかで判定:
+      //   - 409 (= backend が `stack_not_yet_created` で返す正規 path)
+      //   - 5xx (= upstream Lambda が cold / API GW route 未配線 等の transient 状態)
+      //   - TypeError (= DNS / CORS preflight 失敗 = "Failed to fetch")
+      // いずれも "準備中" graceful UI に集約し、 raw error は出さない (#656 と同 pattern)。
+      const notYetCreated =
+        (err instanceof ApiError &&
+          (err.status === StatusCodes.CONFLICT ||
+            err.status === StatusCodes.BAD_GATEWAY ||
+            err.status === StatusCodes.SERVICE_UNAVAILABLE ||
+            err.status === StatusCodes.GATEWAY_TIMEOUT)) ||
+        err instanceof TypeError ||
+        (err instanceof Error && /failed to fetch/i.test(err.message));
       const message = err instanceof Error ? err.message : String(err);
       setStackProgressError({ message, notYetCreated });
     } finally {
