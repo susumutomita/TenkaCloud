@@ -71,10 +71,14 @@ if (!process.env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME) {
 const defaultStageName = "prod";
 const defaultLambdaReserveConcurrency = "1";
 const defaultLambdaCanaryDeploymentPreference = "True";
-const defaultApiKeyPlatinumTierParameter = "88b43c36-802e-11eb-af35-38f9d35b2c15-test2";
-const defaultApiKeyPremiumTierParameter = "6db2bdc2-6d96-11eb-a56f-38f9d33cfd0f-test2";
-const defaultApiKeyStandardTierParameter = "b1c735d8-6d96-11eb-a28b-38f9d33cfd0f-test2";
-const defaultApiKeyBasicTierParameter = "daae9784-6d96-11eb-a28b-38f9d33cfd0f-test2";
+// API Key VALUE は AWS account 内で globally unique である必要があり、 hardcoded UUID
+// (SBT ref-arch の `88b43c36-...`) を使うと 2 回目の deploy で `AlreadyExists` する。
+// `<appName>-<env>` (namePrefix 同様) と tier を埋めた deterministic な値にして、
+// 同 appName + environment + tier の組み合わせなら何度 deploy しても同じ値 (= CFn が
+// drift 検出せず replace しない)、 別 env / 別 app では衝突しない値にする。
+// 旧 ProtoShip / 旧 stack 由来の orphan API Key が残ってる場合は cleanup.sh が削除する。
+const buildDefaultApiKey = (envName: string, appName: string, tier: string): string =>
+  `${appName}-${envName}-${tier}-tier-key-default-do-not-share`.toLowerCase();
 // optional input parameters
 const stageName = process.env.CDK_PARAM_STAGE_NAME || defaultStageName;
 const lambdaReserveConcurrency = Number(
@@ -83,14 +87,6 @@ const lambdaReserveConcurrency = Number(
 const lambdaCanaryDeploymentPreference =
   process.env.CDK_PARAM_LAMBDA_CANARY_DEPLOYMENT_PREFERENCE ||
   defaultLambdaCanaryDeploymentPreference;
-const apiKeyPlatinumTierParameter =
-  process.env.CDK_PARAM_API_KEY_PLATINUM_TIER_PARAMETER || defaultApiKeyPlatinumTierParameter;
-const apiKeyPremiumTierParameter =
-  process.env.CDK_PARAM_API_KEY_PREMIUM_TIER_PARAMETER || defaultApiKeyPremiumTierParameter;
-const apiKeyStandardTierParameter =
-  process.env.CDK_PARAM_API_KEY_STANDARD_TIER_PARAMETER || defaultApiKeyStandardTierParameter;
-const apiKeyBasicTierParameter =
-  process.env.CDK_PARAM_API_KEY_BASIC_TIER_PARAMETER || defaultApiKeyBasicTierParameter;
 
 // DynamoDB の billing mode + read/write capacity は `environments/<env>/config.json`
 // の `dynamoDbConfig` セクションで宣言し、`.env` の `${VAR:-default}` で override する
@@ -171,6 +167,40 @@ const apiKeySSMParameterNames = {
     value: `${namePrefix}-apiKeyPlatinumTierValue`,
   },
 };
+
+// API Key VALUE も namePrefix 同様に app+env 単位で unique 化する。 旧 SBT ref-arch の
+// hardcoded UUID (`88b43c36-...`) を default にしていたため、 同 account に複数回 deploy
+// すると `AlreadyExists` 衝突を起こしていた (= #523 の SSM Parameter 名 fix と対の問題)。
+//
+// production / staging は default を許さず env var 必須にする (= 値が source に漏れない、
+// dev でしか動かない値で production に出荷する事故を防ぐ)。 dev / development だけ
+// deterministic default で開発体験を犠牲にしない。
+const appNameLower = (config?.appName ?? "tenkacloud").toLowerCase();
+const isProductionLike = environment === "production" || environment === "staging";
+const resolveApiKey = (envVar: string, tier: string): string => {
+  const fromEnv = process.env[envVar];
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  if (isProductionLike) {
+    throw new Error(
+      `${envVar} が ${environment} 環境で未設定です。 SSM SecureString 等で安全な値を生成して ` +
+        `infrastructure/environments/${environment}/.env に設定してください (= deterministic default は dev 限定)。`,
+    );
+  }
+  return buildDefaultApiKey(environment, appNameLower, tier);
+};
+const apiKeyPlatinumTierParameter = resolveApiKey(
+  "CDK_PARAM_API_KEY_PLATINUM_TIER_PARAMETER",
+  "platinum",
+);
+const apiKeyPremiumTierParameter = resolveApiKey(
+  "CDK_PARAM_API_KEY_PREMIUM_TIER_PARAMETER",
+  "premium",
+);
+const apiKeyStandardTierParameter = resolveApiKey(
+  "CDK_PARAM_API_KEY_STANDARD_TIER_PARAMETER",
+  "standard",
+);
+const apiKeyBasicTierParameter = resolveApiKey("CDK_PARAM_API_KEY_BASIC_TIER_PARAMETER", "basic");
 
 // 全 stack の env を統一する: TenantTemplateStack だけ env-aware にすると、
 // env-agnostic な BootstrapTemplateStack の TenantMappingTable を cross-env 参照する

@@ -135,4 +135,23 @@ else
   log "  (already gone)"
 fi
 
+# SBT ref-arch の API Key (`server-Basic-*` / `server-Stand-*` / `server-Premi-*` /
+# `server-Plati-*`、 旧 stack 名 prefix が CFn 上のリソース名に焼かれている) と
+# tenkacloud- prefix の現行 API Key を残骸チェック。 CFn 管理下なら destroy で消えるが、
+# 過去の partial-rollback で stack だけ削除済 + API Key 残存というケースを救う。
+# 同名 API key が複数 region にまたがる可能性は低いので current region のみ scan。
+log "scanning for orphan API Keys (server-Basic / Stand / Premi / Plati or tenkacloud-* tier keys)..."
+ORPHAN_KEY_IDS=$(aws apigateway get-api-keys --query \
+  "items[?starts_with(name, 'server-Basic-') || starts_with(name, 'server-Stand-') || starts_with(name, 'server-Premi-') || starts_with(name, 'server-Plati-') || contains(name, '-basic-tier-key-') || contains(name, '-standard-tier-key-') || contains(name, '-premium-tier-key-') || contains(name, '-platinum-tier-key-')].id" \
+  --output text 2>/dev/null || true)
+if [ -n "${ORPHAN_KEY_IDS}" ]; then
+  for key_id in ${ORPHAN_KEY_IDS}; do
+    log "  deleting orphan api key ${key_id}"
+    aws apigateway delete-api-key --api-key "${key_id}" 2>/dev/null \
+      || log "    skip (already gone or in-use)"
+  done
+else
+  log "  no orphan api keys found"
+fi
+
 log "cleanup complete."
