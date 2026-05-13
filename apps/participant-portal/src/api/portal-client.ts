@@ -52,6 +52,10 @@ export interface ParticipantProblemView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  /** Issue #607: deploy 開始時刻 (DDB.createdAt の echo)。 portal の phase countdown が
+   *  metadata.phases / disruptions の afterMinutes との差で残時間を計算する。 deploy 中の
+   *  PENDING / IN_PROGRESS でも present。 */
+  readonly createdAt?: string;
   /** ADR-005 Phase 3.1: Battle (uptime) のみ aggregate health を露出。 */
   readonly applicationStatus?: ApplicationStatus;
 }
