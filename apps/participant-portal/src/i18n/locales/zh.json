@@ -4,12 +4,25 @@
   },
   "app": {
     "title": "TenkaCloud 参赛者门户",
-    "loading": "正在加载…"
+    "loading": "正在加载…",
+    "no_session": "没有活跃的会话。请重新登录。"
   },
   "nav": {
     "problems": "题目",
     "leaderboard": "排行榜",
-    "notifications": "通知"
+    "notifications": "通知",
+    "menu_header": "菜单",
+    "event_section": "赛事",
+    "quests_section": "Quests",
+    "tools_section": "工具",
+    "home": "主页",
+    "scoreboard": "积分榜",
+    "score_events": "得分事件",
+    "sso_credentials": "SSO 凭证",
+    "sign_out": "退出登录"
+  },
+  "switcher": {
+    "aria_label": "语言切换"
   },
   "errors": {
     "generic": "发生错误",
