@@ -13,6 +13,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
+        check-http-status check-template-ascii \
         env-check synth check-synth diff bootstrap \
         deploy deploy-control-plane deploy-bootstrap destroy \
         deploy-battles destroy-battles
@@ -39,9 +40,11 @@ check-problems-index: ; bun run check:problems-index
 build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
+# IAM Description が CJK で CREATE_FAILED するのを merge 前に検出 (#664)
+check-template-ascii: ; bun run scripts/check-template-ascii.ts
 audit-deps:    ; bun run audit:dependencies
-check:         install lint test validate-problems check-problems-index check-docs check-http-status audit-deps check-synth
-before-commit: lint test validate-problems check-problems-index check-docs check-http-status audit-deps check-synth
+check:         install lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii audit-deps check-synth
+before-commit: lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
