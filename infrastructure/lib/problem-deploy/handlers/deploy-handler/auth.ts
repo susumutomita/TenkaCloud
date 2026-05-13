@@ -13,12 +13,19 @@ export function extractTenantIdFromClaims(claims: JwtClaims | undefined): string
 }
 
 /**
- * Issue #686: JWT に `custom:tenantId` が無い + `DEFAULT_TENANT_ID` env も unset の場合に
- * silent fallback `"unknown-tenant"` を返していたため、 全 row が同 partition に書かれ
- * UI に `Tenant: unknown-tenant` が出ていた。 fail-closed に変更し、 caller (handler) が
- * 401 Unauthorized で弾けるよう Error を throw する。
+ * Issue #686 (revisit): 旧 fail-closed (= JWT claim 欠落で `MissingTenantClaimError` throw)
+ * は Cognito UserPoolClient の readAttributes 設定漏れで `custom:tenantId` が id_token に
+ * 載らない既存 tenant に対し GET /events が全部 500 になる regression を引き起こした
+ * (PR-697 deploy 後の事故報告)。
  *
- * `DEFAULT_TENANT_ID` env は dev / local 経路向けの explicit override として残す。
+ * 暫定 rollback: silent fallback `"unknown-tenant"` に戻す。 別途、
+ *  (a) tenant-template/identity-provider.ts の UserPoolClient `readAttributes` に
+ *      `custom:tenantId` を明示追加 (= JWT に確実に乗せる)
+ *  (b) frontend が `tenantId === "unknown-tenant"` を 「(自動検出中)」 で表示する band-aid
+ * の 2 経路で正解に近づける (= 別 PR)。
+ *
+ * `MissingTenantClaimError` class は handler 側 onError 配線が既に残っているため、
+ * type 互換のために残置 (= 将来 fail-closed 復帰時に再利用可能)。
  */
 export class MissingTenantClaimError extends Error {
   constructor() {
@@ -29,14 +36,14 @@ export class MissingTenantClaimError extends Error {
   }
 }
 
+const FALLBACK_TENANT_ID = "unknown-tenant";
+
 export function resolveTenantId(c: Context): string {
   const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
   const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
   const fromJwt = extractTenantIdFromClaims(claims);
   if (fromJwt) return fromJwt;
-  const fromEnv = process.env.DEFAULT_TENANT_ID;
-  if (fromEnv && fromEnv.length > 0 && fromEnv !== "unknown-tenant") return fromEnv;
-  throw new MissingTenantClaimError();
+  return process.env.DEFAULT_TENANT_ID ?? FALLBACK_TENANT_ID;
 }
 
 /**

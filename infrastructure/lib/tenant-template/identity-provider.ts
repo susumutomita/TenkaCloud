@@ -222,6 +222,17 @@ export class IdentityProvider extends Construct {
       email: true,
     });
 
+    // Issue #686 (root cause): id_token に `custom:tenantId` が乗らず deploy 経路で
+    // tenant 識別ができなかった。 Cognito の readAttributes が unset だと default で全
+    // 標準 attribute が読めるが、 **custom: は明示的に追加しないと id_token claim に
+    // 出ない**。 readAttributes に `custom:tenantId` 等を明示する。
+    const readAttributes = new aws_cognito.ClientAttributes()
+      .withStandardAttributes({
+        email: true,
+        emailVerified: true,
+      })
+      .withCustomAttributes("tenantId", "userRole", "apiKey", "tenantTier");
+
     this.tenantUserPoolClient = new aws_cognito.UserPoolClient(this, "tenantUserPoolClient", {
       userPool: this.tenantUserPool,
       generateSecret: false,
@@ -232,6 +243,7 @@ export class IdentityProvider extends Construct {
         custom: false,
       },
       writeAttributes: writeAttributes,
+      readAttributes: readAttributes,
       oAuth: {
         scopes: [
           aws_cognito.OAuthScope.EMAIL,
