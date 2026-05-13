@@ -1,9 +1,15 @@
 import { CognitoAuth, ControlPlane } from "@cdklabs/sbt-aws";
 import * as cdk from "aws-cdk-lib";
-import type { CfnUserPoolClient, IUserPool, UserPoolClient } from "aws-cdk-lib/aws-cognito";
+import type {
+  CfnUserPool,
+  CfnUserPoolClient,
+  IUserPool,
+  UserPoolClient,
+} from "aws-cdk-lib/aws-cognito";
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
+import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message";
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;
@@ -84,6 +90,20 @@ export class ControlPlaneStack extends cdk.Stack {
       ...LOCALHOST_LOGOUT_URLS,
       ...extraLogoutUrls,
     ]);
+
+    // Issue #653: SBT default の SystemAdmin 招待メール本文は `http://localhost` を
+    // 埋めてしまうため、 admin-console origin に書き換える。 Phase 1 deploy 時は
+    // CDK_PARAM_ADMIN_CONSOLE_ORIGIN 未確定なので fallback 文面、 Phase 3 再 deploy で
+    // CloudFront URL に解決される。
+    const cfnUserPool = cognitoAuth.userPool.node.defaultChild as CfnUserPool;
+    cfnUserPool.addPropertyOverride(
+      "AdminCreateUserConfig.InviteMessageTemplate.EmailSubject",
+      INVITE_EMAIL_SUBJECT,
+    );
+    cfnUserPool.addPropertyOverride(
+      "AdminCreateUserConfig.InviteMessageTemplate.EmailMessage",
+      buildInviteEmailBody(adminConsoleOrigin),
+    );
 
     const eventBus = EventBus.fromEventBusArn(this, "eventBus", controlPlane.eventManager.busArn);
 

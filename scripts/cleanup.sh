@@ -140,6 +140,17 @@ fi
 # tenkacloud- prefix の現行 API Key を残骸チェック。 CFn 管理下なら destroy で消えるが、
 # 過去の partial-rollback で stack だけ削除済 + API Key 残存というケースを救う。
 # 同名 API key が複数 region にまたがる可能性は低いので current region のみ scan。
+# 旧コードが LogGroup を hardcoded 名で作っていた残骸を削除 (= #653 / StepFunctionLogging 経路)。
+# 現在は CFn auto-name に切替済だが、 過去 deploy の残骸が出てくると AlreadyExists で 2 回目 deploy が落ちる。
+log "scanning for orphan LogGroups (legacy hardcoded names)..."
+for orphan_lg in "/aws/vendedlogs/states/StepFunctionLogging"; do
+  if aws logs describe-log-groups --log-group-name-prefix "${orphan_lg}" --query 'logGroups[?logGroupName==`'"${orphan_lg}"'`].logGroupName' --output text 2>/dev/null | grep -q .; then
+    log "  deleting orphan log group ${orphan_lg}"
+    aws logs delete-log-group --log-group-name "${orphan_lg}" 2>/dev/null \
+      || log "    skip (already gone or in-use)"
+  fi
+done
+
 log "scanning for orphan API Keys (server-Basic / Stand / Premi / Plati or tenkacloud-* tier keys)..."
 ORPHAN_KEY_IDS=$(aws apigateway get-api-keys --query \
   "items[?starts_with(name, 'server-Basic-') || starts_with(name, 'server-Stand-') || starts_with(name, 'server-Premi-') || starts_with(name, 'server-Plati-') || contains(name, '-basic-tier-key-') || contains(name, '-standard-tier-key-') || contains(name, '-premium-tier-key-') || contains(name, '-platinum-tier-key-')].id" \
