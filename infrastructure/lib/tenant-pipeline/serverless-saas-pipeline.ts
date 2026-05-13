@@ -112,7 +112,14 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
             commands: ["npm install -g aws-cdk"],
           },
           build: {
-            commands: [fs.readFileSync("../scripts/update-tenant.sh", "utf8")],
+            // #690: CodeBuild の default shell は dash (POSIX sh) で `set -o pipefail` を
+            // サポートしない。 script に shebang `#!/bin/bash` を書いても commands embed では
+            // 単なるコメント扱いで効かない。 `bash -ex <<'EOSCRIPT'` heredoc で明示的に bash に
+            // 流し込み、 PR-560 の pipefail 安全策を維持する (= -ex = errexit + xtrace、
+            // 元 shebang `#!/bin/bash -xe` と同等)。
+            commands: [
+              `bash -ex <<'TENANT_UPDATE_SCRIPT_EOF'\n${fs.readFileSync("../scripts/update-tenant.sh", "utf8")}\nTENANT_UPDATE_SCRIPT_EOF`,
+            ],
           },
         },
       }),
