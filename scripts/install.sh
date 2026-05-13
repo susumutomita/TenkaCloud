@@ -4,7 +4,8 @@ set -eo pipefail
 #
 # Phase 1: Backend stacks (ControlPlane + Bootstrap + TenantTemplate-pooled + Pipeline)
 # Phase 2: AdminConsoleHostingStack (React admin-console を CloudFront+S3 配信)
-# Phase 3: ControlPlaneStack 再 deploy (CloudFront URL を callback/CORS に追加)
+# Phase 3: ControlPlaneStack + admin-console-insight 再 deploy
+#         (CloudFront URL を callback / CORS に追加、 #716)
 #
 # Usage:
 #   bash scripts/install.sh "admin@example.com"
@@ -215,16 +216,21 @@ export CDK_PARAM_ADMIN_INSIGHT_API_URL="${ADMIN_INSIGHT_API_URL}"
 bunx cdk deploy tenkacloud-admin-console-hosting --require-approval never
 
 # ============================================================================
-# Phase 3: ControlPlaneStack 再 deploy — CloudFront URL を callback/CORS に足す
+# Phase 3: ControlPlaneStack + admin-console-insight 再 deploy
+#   - control-plane の Cognito callback / OAuth allow-list に CloudFront URL を追加
+#   - admin-console-insight の HTTP API CORS allow-list にも同 URL を追加 (#716)
+#     旧実装は control-plane のみ再 deploy しており、 admin-console-insight の CORS は
+#     Phase 1 時点の localhost-only のままで Provisioning Jobs page が "Failed to fetch"
+#     を吐いていた。
 # ============================================================================
 echo ""
 echo "=============================================="
-echo "Phase 3: Update tenkacloud-control-plane with admin-console CloudFront URL"
+echo "Phase 3: Update tenkacloud-control-plane + admin-console-insight with admin-console CloudFront URL"
 echo "=============================================="
 ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
 export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"
 echo "  CloudFront URL: ${ADMIN_CONSOLE_URL}"
-bunx cdk deploy tenkacloud-control-plane --require-approval never
+bunx cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight --require-approval never
 
 # ============================================================================
 # 完了
