@@ -127,6 +127,25 @@ function parsePhaseEntry(value: unknown): ProblemPhaseEntry | undefined {
   };
 }
 
+/**
+ * `discoverProblemsCatalog` の sibling (ADR-008 Phase 3 / Issue #642)。
+ * `metadata.visibility === "private"` の問題 id のみを抜いて map で返す。
+ * public 問題は省略 (= env var を最小化、 default 動作を維持)。
+ *
+ * Lambda env (`BATTLE_PROBLEMS_VISIBILITY`) として deploy-handler に渡し、
+ * `CHALLENGE_PAYLOAD_BUCKET` env と組み合わせて S3 presigned URL を発行する判定に使う。
+ * 両 env が空のときは従来の local-path 経路で動作 (= dormant default)。
+ */
+export function discoverProblemsVisibility(problemsRoot: string): Record<string, "private"> {
+  const result: Record<string, "private"> = {};
+  for (const meta of iterateProblemsMetadata(problemsRoot)) {
+    if (meta.visibility === "private") {
+      result[meta.id] = "private";
+    }
+  }
+  return result;
+}
+
 interface ProblemMetadataEntry {
   id: string;
   category: string;
@@ -134,6 +153,7 @@ interface ProblemMetadataEntry {
   scoring: unknown;
   endpoints: unknown;
   phases: unknown;
+  visibility: unknown;
 }
 
 function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetadataEntry> {
@@ -157,6 +177,7 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
           scoring?: unknown;
           endpoints?: unknown;
           phases?: unknown;
+          visibility?: unknown;
         };
         if (typeof meta.id !== "string" || meta.id.length === 0) {
           console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
@@ -169,6 +190,7 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
           scoring: meta.scoring,
           endpoints: meta.endpoints,
           phases: meta.phases,
+          visibility: meta.visibility,
         };
       } catch (err) {
         console.warn(

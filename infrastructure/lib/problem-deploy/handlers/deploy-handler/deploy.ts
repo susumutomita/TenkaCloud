@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { S3Client } from "@aws-sdk/client-s3";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
@@ -10,7 +11,13 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   publishProblemEvent,
 } from "../shared/events.js";
+import {
+  type PrivateVisibility,
+  parseProblemsVisibility,
+  resolveChallengePayloadBucket,
+} from "../shared/visibility.js";
 import { buildStackPrefix, slugify } from "./naming.js";
+import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { generateTeamLoginKey } from "./team-key.js";
 import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
 
@@ -37,6 +44,13 @@ export interface DeployContext {
    * Phase 2 (ADR-003) で DDB ベースの問題カタログに置換する。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /**
+   * ADR-008 Phase 3: visibility / bucket / s3 client。 いずれか欠けるなら presigned URL を
+   * 発行せず local-path 経路で動作する (= dormant default)。
+   */
+  readonly problemsVisibility?: Readonly<Record<string, PrivateVisibility>>;
+  readonly challengePayloadBucket?: string;
+  readonly s3?: S3Client;
 }
 
 export type DeployInvocation = DeployRequest & {
@@ -131,6 +145,28 @@ export async function startDeployment(
     }),
   );
 
+  // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
+  // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
+  const privateBucket = resolveChallengePayloadBucket({
+    problemId: request.problemId,
+    visibility: ctx.problemsVisibility,
+    bucketName: ctx.challengePayloadBucket,
+  });
+  let challengePayloadUrl: string | undefined;
+  if (privateBucket) {
+    if (!ctx.s3) {
+      throw new Error(
+        "deploy-handler: private problem requires S3 client but ctx.s3 is undefined. " +
+          "Check CDK wiring for CHALLENGE_PAYLOAD_BUCKET + S3Client.",
+      );
+    }
+    challengePayloadUrl = await generateChallengePayloadUrl({
+      s3: ctx.s3,
+      bucketName: privateBucket,
+      problemId: request.problemId,
+    });
+  }
+
   const detail: DeployCreateRequestedDetail = {
     jobId: item.jobId,
     tenantId: item.tenantId,
@@ -145,6 +181,7 @@ export async function startDeployment(
     // fetch して AssumeRole する。
     competitorRoleArn: verified.competitorRoleArn,
     externalIdParameterName: verified.externalIdParameterName,
+    ...(challengePayloadUrl ? { challengePayloadUrl } : {}),
   };
   await publishProblemEvent({
     client: ctx.events,
@@ -175,9 +212,14 @@ export interface DeploySharedResources {
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  readonly problemsVisibility: Readonly<Record<string, PrivateVisibility>>;
+  readonly challengePayloadBucket: string | undefined;
+  readonly s3: S3Client;
 }
 
 export function buildSharedResources(): DeploySharedResources {
+  // ChallengePayloadStack 未 deploy なら env は空文字列で届く。 dormant 扱いに正規化。
+  const challengePayloadBucket = process.env.CHALLENGE_PAYLOAD_BUCKET || undefined;
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
@@ -186,6 +228,9 @@ export function buildSharedResources(): DeploySharedResources {
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
+    problemsVisibility: parseProblemsVisibility(process.env.BATTLE_PROBLEMS_VISIBILITY),
+    challengePayloadBucket,
+    s3: new S3Client({}),
   };
 }
 

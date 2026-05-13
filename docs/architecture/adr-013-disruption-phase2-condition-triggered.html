@@ -126,17 +126,59 @@
 </section>
 
 <section>
-<h2>Open Questions</h2>
+<h2>Open Questions — Recommendations</h2>
 
-<ol>
-<li><strong>idempotency 保証</strong>: cross-account event が重複到達するケース (= EventBridge at-least-once 配信) に対し、 競技者 Lambda 側でどう冪等にするか。 SSM Parameter で「最後の発火 idempotency token」 を読むか、 event ID + S3 GetObject で重複検出するか。</li>
-<li><strong>operator UI の権限境界</strong>: tenant admin が他 tenant の disruption を弄れないよう RBAC を細かく切る必要があるか (= multi-tenant 環境での切替)。</li>
-<li><strong>observation latency</strong>: scoring Lambda が 1 分 polling なので最短発火は 1 分後。 sub-second 反応が必要なら scoring を SQS-based event-driven に変える必要あり (= 別 ADR)。</li>
-<li><strong>metadata version</strong>: <code>triggers[]</code> 追加は SCHEMA 拡張なので問題 metadata の version 互換性が要る。 Phase 1-only 問題 (= triggers 未宣言) は self-fire のみ動く。 新規問題は条件付きで triggers を追加可能。</li>
-<li><strong>同一 disruption × 複数 triggers の semantics</strong>: 「after-deploy 60 分」 と 「team-score-above 5000」 が両方 OR で発火するのか AND か。 OR で「最初に true になった方」 が trigger される仕様にする (= 直感的) を提案。</li>
-<li><strong>無効化 trigger</strong>: 一度発火した disruption を「rollback」 する逆 trigger (= 例: latency 撤去) は本 Phase 2 で扱うか、 Phase 3 で扱うか。</li>
-<li><strong>事前告知 UI</strong>: condition-triggered は portal の countdown timeline (= Phase 4 で実装) と整合しない。 「team-score-above 5000」 のような条件は competitor から見えづらい。 portal で 「次の disruption は score 4500 で発火 (今 4200)」 のような可視化を出すか、 隠すか。</li>
-</ol>
+<p>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/644">#644</a> の判断対象として 7 件。 Claude 側の提案を pin し、 user の確認を経て Status を Draft → Proposed に移す前提です。</p>
+
+<table>
+<thead><tr><th>#</th><th>Question</th><th>Recommendation</th><th>Rationale</th></tr></thead>
+<tbody>
+<tr>
+  <td>1</td>
+  <td><strong>idempotency 保証</strong>: cross-account event が重複到達するケース (= EventBridge at-least-once 配信) に対し、 競技者 Lambda 側でどう冪等にするか。</td>
+  <td>競技者 Lambda 側で event ID (= EventBridge の <code>id</code> field) を 24h TTL DDB (新規 <code>DisruptionFireLog</code> table、 PK=jobId+SK=eventId) で重複判定。 既出なら no-op。</td>
+  <td>SSM Parameter は write quota が低く (= 1 TPS/account)、 competitor account に新規 IAM 権限を 1 つ追加するだけで実装可能な DDB 方式が clean。 24h TTL は競技セッション (90〜120 分) を上回る window で safety margin あり。</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><strong>operator UI の権限境界</strong>: tenant admin が他 tenant の disruption を弄れないよう RBAC を細かく切る必要があるか (= multi-tenant 環境での切替)。</td>
+  <td>tenant admin は自 tenant の event/team scope の disruption だけ操作可能 (= 既存の Cognito <code>custom:tenantId</code> claim で fence)。 system admin (admin-console) のみ全 tenant の override が可能。</td>
+  <td>SBT pooled stack の既存 RBAC モデル (<code>custom:tenantId</code> filter) を踏襲。 新規 IAM policy / Cognito group は不要 (= 最小変更)。</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><strong>observation latency</strong>: scoring Lambda が 1 分 polling なので最短発火は 1 分後。 sub-second 反応が必要なら scoring を SQS-based event-driven に変える必要あり。</td>
+  <td>Phase 2 では 1 分 latency を許容 (= 既存 scoring 経路を維持)。 sub-second 反応が必要な disruption は別 ADR (= Phase 3) で扱う。</td>
+  <td>Battle 競技の体感として 1 分 latency は許容範囲 (= 攻防の駆け引きとして遅延を含めた設計)。 SQS event-driven に切替えると existing scoring Lambda の冪等性 + retry が複雑化するため、 必要性が顕在化するまで延期。</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><strong>metadata version</strong>: <code>triggers[]</code> 追加は SCHEMA 拡張なので問題 metadata の version 互換性が要る。</td>
+  <td>SCHEMA 上 <code>triggers</code> は optional (= Phase 1 で着地済、 PR-637)。 既存 Phase 1-only 問題は無変更で動く。 新規問題は宣言可能。 SCHEMA バージョン bump (semver の minor) で community contributor に向けて変更を告知する。</td>
+  <td>Backward compat を保つことで existing problems の publish が壊れない (= ADR-008 catalog-pr.yml が破綻しない)。 minor bump で changelog に明示すれば community も気づける。</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><strong>同一 disruption × 複数 triggers の semantics</strong>: 「after-deploy 60 分」 と 「team-score-above 5000」 が両方 OR で発火するのか AND か。</td>
+  <td><strong>OR</strong> セマンティクス (= 最初に true になった trigger が発火)、 fire 後は他 trigger を suppress (= idempotency と整合)。</td>
+  <td>直感的 (= 「どれかの条件が達したら発火」)。 AND は表現力が低い (= 「全条件満たすまで遅延」 は実用上稀)。 fire suppress は #1 の idempotency と同 mechanism で実現できるので追加複雑性ゼロ。</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><strong>無効化 trigger</strong>: 一度発火した disruption を「rollback」 する逆 trigger (= 例: latency 撤去) は本 Phase 2 で扱うか、 Phase 3 で扱うか。</td>
+  <td>Phase 2 では <strong>rollback trigger を扱わない</strong>。 Phase 1 既存の self-fire rollback (= disruption template 内で <code>rollbackAfterMinutes</code> 宣言済) でカバー。</td>
+  <td>condition-triggered rollback は条件 DSL の倍化を招く (= fire condition + rollback condition の 2 軸)。 既存 self-fire rollback で大半の Battle UX は満たせるため、 ニーズが見えるまで delay。</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><strong>事前告知 UI</strong>: 「team-score-above 5000」 のような条件は competitor から見えづらい。 portal で 「次の disruption は score 4500 で発火 (今 4200)」 のような可視化を出すか、 隠すか。</td>
+  <td>metadata で <code>triggers[].publicHint?: string</code> を optional 宣言。 publicHint がある trigger は portal の disruption timeline に表示、 無い trigger は隠す (= operator 判断で運営の "サプライズ" 余地を残す)。</td>
+  <td>透明性と "ゲーム性" のトレードオフを問題作成者が決められるよう逃げ道を残す。 hello-world-battle 等の sample は publicHint を埋めることで competitor 体験を改善できる。</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>Status</strong>: 上記 7 件の recommendation を user が accept した時点で本 ADR を Draft → Proposed に移行し、 Rollout Phase 3 (scoring Lambda 実装) に着手可。</p>
 </section>
 
 <section>

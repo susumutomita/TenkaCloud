@@ -8,6 +8,16 @@ import {
   UnverifiedCompetitorAccountError,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 
+// ADR-008 Phase 3 (Issue #642): presigned URL 発行は AWS SDK の signing が必要なので
+// 実 SDK を呼ばずに deterministic な URL を返すよう module を mock する。
+// generateChallengePayloadUrl の input 検証はこの mock で十分。
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => ({
+  generateChallengePayloadUrl: vi.fn(
+    async (args: { bucketName: string; problemId: string; expiresInSeconds?: number }) =>
+      `https://${args.bucketName}.s3.ap-northeast-1.amazonaws.com/${args.problemId}/latest.zip?X-Amz-Signature=fake-${args.expiresInSeconds ?? 900}`,
+  ),
+}));
+
 /**
  * Phase 2.2 (Issue #459): startDeployment が事前に CompetitorAccounts table を Get
  * (verified=true gate) するようになった。test では default で「verified=true」を返し、
@@ -178,5 +188,63 @@ describe("startDeployment", () => {
       "arn:aws:iam::123456789012:role/TenkaCloud-CompetitorDeploy-Role",
     );
     expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
+  });
+
+  // ADR-008 Phase 3 (Issue #642): visibility / bucket env が dormant なら presigned URL を発行しない (= default)
+  describe("Issue #642: private 問題の presigned URL 発行", () => {
+    it("visibility 空のとき detail.challengePayloadUrl は undefined (= default 互換)", async () => {
+      const { ctx, eventsSend } = buildContext();
+      await startDeployment(ctx, sampleRequest());
+      const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+      const entry = cmd.input.Entries?.[0];
+      const detail = JSON.parse(entry?.Detail ?? "{}");
+      expect(detail.challengePayloadUrl).toBeUndefined();
+    });
+
+    it("bucket 未設定のとき private 問題でも presigned URL を発行しない (= dormant)", async () => {
+      const { ctx, eventsSend } = buildContext({
+        problemsVisibility: { "security-battle-royale": "private" },
+        // challengePayloadBucket は undefined のまま
+      });
+      await startDeployment(ctx, sampleRequest());
+      const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+      const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
+      expect(detail.challengePayloadUrl).toBeUndefined();
+    });
+
+    it("private 問題 + bucket 設定 + S3 client があれば presigned URL を detail に詰めるべき", async () => {
+      const { ctx, eventsSend } = buildContext({
+        problemsVisibility: { "security-battle-royale": "private" },
+        challengePayloadBucket: "tc-challenges-test",
+        s3: {} as DeployContext["s3"],
+      });
+      await startDeployment(ctx, sampleRequest());
+      const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+      const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
+      expect(typeof detail.challengePayloadUrl).toBe("string");
+      expect(detail.challengePayloadUrl).toContain("tc-challenges-test");
+      expect(detail.challengePayloadUrl).toContain("security-battle-royale/latest.zip");
+    });
+
+    it("public 問題は private map に無いので bucket 設定があっても presigned URL を発行しない", async () => {
+      const { ctx, eventsSend } = buildContext({
+        problemsVisibility: { "some-other-private-problem": "private" },
+        challengePayloadBucket: "tc-challenges-test",
+        s3: {} as DeployContext["s3"],
+      });
+      await startDeployment(ctx, sampleRequest({ problemId: "security-battle-royale" }));
+      const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+      const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
+      expect(detail.challengePayloadUrl).toBeUndefined();
+    });
+
+    it("private 問題 + bucket あり + s3 client 未注入なら error を throw すべき", async () => {
+      const { ctx } = buildContext({
+        problemsVisibility: { "security-battle-royale": "private" },
+        challengePayloadBucket: "tc-challenges-test",
+        s3: undefined,
+      });
+      await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/S3 client/);
+    });
   });
 });

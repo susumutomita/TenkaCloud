@@ -6,6 +6,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface DeployApiLambdaProps {
@@ -28,6 +29,17 @@ export interface DeployApiLambdaProps {
    * 入力 (`detail.problemDir`) に詰める。Phase 2 (ADR-003) で DDB ベースの catalog に置換。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /**
+   * ADR-008 Phase 3 (Issue #642): private 問題 id のセット (= `{problemId: "private"}`)。
+   * `discoverProblemsVisibility` の戻り値そのまま。 空 map なら全 public 扱いで dormant。
+   */
+  readonly problemsVisibility: Readonly<Record<string, "private">>;
+  /**
+   * ADR-008 Phase 3 (Issue #642): private 問題 payload を格納する S3 bucket 名。
+   * 未指定 / 空文字列なら presigned URL を発行しない (= local-path 経路で動作)。
+   * ChallengePayloadStack (Phase 2 infra) が deploy 後にここを指定して活性化する。
+   */
+  readonly challengePayloadBucketName?: string;
   /**
    * SSM SecureString path 構築用の env 名 (Phase 2.2、`/<environmentName>/tenants/...`)。
    */
@@ -65,6 +77,9 @@ export class DeployApiLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         DEFAULT_TENANT_ID: props.defaultTenantId ?? "unknown-tenant",
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
+        // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
+        BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
+        CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -130,5 +145,9 @@ export class DeployApiLambda extends Construct {
         resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
       }),
     );
+
+    // ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 GetObject 権限。
+    // bucket 未指定なら no-op (= dormant、 最小権限維持)。
+    grantChallengePayloadRead(this, this.fn, props.challengePayloadBucketName);
   }
 }
