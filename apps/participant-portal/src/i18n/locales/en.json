@@ -1,0 +1,22 @@
+{
+  "locale": {
+    "name": "English"
+  },
+  "app": {
+    "title": "TenkaCloud Participant Portal",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "problems": "Problems",
+    "leaderboard": "Leaderboard",
+    "notifications": "Notifications"
+  },
+  "errors": {
+    "generic": "An error occurred",
+    "auth_expired": "Team login key is invalid or the deployment has been deleted.",
+    "invalid_url": "Invalid URL format (must be an absolute URL starting with http:// or https://).",
+    "slot_not_overridable": "This slot is not overridable.",
+    "unknown_slot": "This slot is not declared in metadata.",
+    "no_endpoints": "This problem has no endpoints declared."
+  }
+}
