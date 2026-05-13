@@ -9,7 +9,8 @@
   "nav": {
     "menu": "管理菜单",
     "tenants": "租户列表",
-    "tenants_new": "创建租户"
+    "tenants_new": "创建租户",
+    "jobs": "配置作业"
   },
   "auth": {
     "sign_out": "退出登录"

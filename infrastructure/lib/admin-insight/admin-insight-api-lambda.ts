@@ -88,5 +88,16 @@ export class AdminInsightApiLambda extends Construct {
         resources: ["*"],
       }),
     );
+
+    // Issue #658: Provisioning Jobs page が tenkacloud-saas-pipeline の execution 履歴を
+    // 引くため CodePipeline read 権限を付与。 ListPipelineExecutions は ARN ベースの絞り込みが
+    // 可能なので最小権限で固定。 GetPipelineExecution は将来の "Failed phase 詳細" routes 用。
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["codepipeline:ListPipelineExecutions", "codepipeline:GetPipelineExecution"],
+        resources: ["*"],
+      }),
+    );
   }
 }

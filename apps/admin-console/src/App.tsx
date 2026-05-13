@@ -6,6 +6,7 @@ import type { AppConfig } from "./config";
 import { AdminDeploymentDetailPage } from "./pages/AdminDeploymentDetail";
 import { AdminEventDetailPage } from "./pages/AdminEventDetail";
 import { CallbackPage } from "./pages/Callback";
+import { JobsPage } from "./pages/Jobs";
 import { LoginPage } from "./pages/Login";
 import { TenantCreatePage } from "./pages/TenantCreate";
 import { TenantEventsPage } from "./pages/TenantEvents";
@@ -71,6 +72,16 @@ export function App({ config }: { config: AppConfig }) {
             <RequireAuth>
               <ShellLayout>
                 <AdminDeploymentDetailPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/jobs"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <JobsPage config={config} />
               </ShellLayout>
             </RequireAuth>
           }

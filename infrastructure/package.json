@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@aws-cdk/aws-lambda-python-alpha": "^2.140.0-alpha.0",
+    "@aws-sdk/client-codepipeline": "^3.1045.0",
     "@cdklabs/sbt-aws": "0.3.9",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",

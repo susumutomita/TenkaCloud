@@ -11,6 +11,7 @@ import {
   getStackProgressForTenant,
 } from "./deployments.js";
 import { getEventDetailForTenant, listEventsForTenant } from "./events.js";
+import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
 import { buildSharedResources } from "./shared.js";
 import { summarizeTenants } from "./summary.js";
 
@@ -287,6 +288,31 @@ app.get("/admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress", as
       jobId,
       message,
     });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// ====== Issue #658: Provisioning Jobs (CodePipeline executions) ======
+
+app.get("/admin/insight/pipeline-executions", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/pipeline-executions");
+  if (forbidden) return forbidden;
+
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) {
+    return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
+  }
+
+  try {
+    const region = process.env.AWS_REGION ?? "ap-northeast-1";
+    const response = await listPipelineExecutions(
+      { client: defaultPipelineClient, region },
+      { limit: parsedLimit.limit },
+    );
+    return c.json(response, StatusCodes.OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] listPipelineExecutions failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
