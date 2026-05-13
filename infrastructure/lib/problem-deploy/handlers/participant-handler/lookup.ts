@@ -67,6 +67,10 @@ export type ParticipantProblemView = Pick<
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  /** ADR-012 Phase 4 / Issue #607: deploy 開始時刻 (= DDB.createdAt の echo)。 portal の phase
+   *  countdown timeline (= metadata.phases[].afterMinutes の経過判定) に使う。 deploy 中の
+   *  PENDING / IN_PROGRESS でも present (= job 生成時刻)。 */
+  readonly createdAt?: string;
   /**
    * Battle (uptime kind) の集約 health。per-endpoint の URL / 名前は **絶対に出さない**
    * (ADR-005 D1)。Challenge 形式 (flag kind) では undefined。
@@ -126,6 +130,9 @@ export function toProblemView(
     lastScoredAt: typeof item.lastScoredAt === "string" ? item.lastScoredAt : undefined,
     lastResult: item.lastResult,
     scoring: scoring ? toScoringInfo(scoring, item) : undefined,
+    // Issue #607: deploy 開始時刻 (DDB.createdAt) を echo。 portal の phase countdown が
+    // metadata.phases[].afterMinutes との差で「+N 分まであと M 分」を計算する。
+    createdAt: typeof item.createdAt === "string" ? item.createdAt : undefined,
     // 全 uptime 系 (= legacy uptime + uptime-flat + uptime-multi + phased-polling) で
     // endpointsHealth aggregate を出す (ADR-005 D1: per-endpoint URL は隠す)。
     // attack-detection / flag では undefined (= probe しない kind)。

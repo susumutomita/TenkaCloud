@@ -1,0 +1,53 @@
+{
+  "version": "1",
+  "problems": [
+    {
+      "id": "hello-world",
+      "name": "Hello World (Sample)",
+      "category": "Challenge",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "1 分",
+      "shortDescription": "Challenge / flag 提出形式の最小 sample。SSM Parameter Store に書かれた値を当てて入力すると 100 点獲得。",
+      "tags": ["sample", "challenge", "flag", "ssm"],
+      "scoringKind": "flag"
+    },
+    {
+      "id": "hello-world-battle",
+      "name": "Hello World Battle (Sample)",
+      "category": "Battle",
+      "status": "ready",
+      "visibility": "public",
+      "difficulty": 1,
+      "estimatedDuration": "30 分",
+      "shortDescription": "Battle uptime scoring の最小 sample。EC2 上で nginx (frontend) + Python (API) を起動し、両方が 200 を返す間スコアが 1 分ごとに +100 加算。",
+      "tags": ["sample", "battle", "uptime", "ec2", "nginx"],
+      "scoringKind": "uptime"
+    },
+    {
+      "id": "microservice-migration-battle",
+      "name": "Microservice Migration Battle",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "EC2 1 台に同居する 3 サービス (users / orders / catalog) を Lambda + API Gateway / ECS Fargate / App Runner の 3 種ホスティングに分割するレース。",
+      "tags": ["microservices", "migration", "lambda", "ecs", "apprunner", "ec2", "docker"],
+      "scoringKind": "phased-polling"
+    },
+    {
+      "id": "security-battle-royale",
+      "name": "Security Battle Royale",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 3,
+      "estimatedDuration": "60〜90 分",
+      "shortDescription": "意図的に脆弱性を仕込んだ Web アプリを攻撃 / 防御し、競技アカウント上で生き残るチームを決める。",
+      "tags": ["security", "web", "sql-injection", "rce", "ssrf"],
+      "scoringKind": "uptime-multi"
+    }
+  ]
+}

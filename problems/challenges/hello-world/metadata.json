@@ -4,6 +4,7 @@
   "name": "Hello World (Sample)",
   "category": "Challenge",
   "status": "ready",
+  "visibility": "public",
   "difficulty": 1,
   "estimatedDuration": "1 分",
   "shortDescription": "Challenge / flag 提出形式の最小 sample。SSM Parameter Store に書かれた値を当てて入力すると 100 点獲得。",

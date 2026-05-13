@@ -52,6 +52,10 @@ export interface ParticipantProblemView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  /** Issue #607: deploy 開始時刻 (DDB.createdAt の echo)。 portal の phase countdown が
+   *  metadata.phases / disruptions の afterMinutes との差で残時間を計算する。 deploy 中の
+   *  PENDING / IN_PROGRESS でも present。 */
+  readonly createdAt?: string;
   /** ADR-005 Phase 3.1: Battle (uptime) のみ aggregate health を露出。 */
   readonly applicationStatus?: ApplicationStatus;
 }
@@ -107,12 +111,14 @@ function buildPortalUrl(apiBaseUrl: string, path: string): URL {
 }
 
 interface PortalFetchOptions {
-  readonly method?: "GET" | "POST" | "PATCH";
+  readonly method?: "GET" | "POST" | "PATCH" | "DELETE";
   readonly query?: Readonly<Record<string, string>>;
   readonly body?: unknown;
   readonly signal?: AbortSignal;
   /** 400 を `PortalValidationError(error)` に変換する (応答 body の `error` フィールドを採用)。 */
   readonly throwOn400?: boolean;
+  /** 409 (conflict、 例: slot_not_overridable) を validation error として扱う。 */
+  readonly throwOn409?: boolean;
   /** 404 を `undefined` として返す (= "存在しない" を許容するエンドポイント)。 */
   readonly returnUndefinedOn404?: boolean;
 }
@@ -146,6 +152,10 @@ async function portalFetch<T>(
   if (res.status === StatusCodes.BAD_REQUEST && options.throwOn400) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new PortalValidationError(body.error ?? "invalid_request");
+  }
+  if (res.status === StatusCodes.CONFLICT && options.throwOn409) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new PortalValidationError(body.error ?? "conflict");
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -370,4 +380,75 @@ export async function submitFlag(
     throwOn400: true,
     signal,
   })) as SubmitFlagOutcome;
+}
+
+/**
+ * ADR-012 Phase 3.A: Endpoint registry API client。 1 problem の slot 一覧 (= default URL +
+ * override URL + effective URL の集約 view) を返す。 競技者 portal で「自チームの endpoint」 panel
+ * を render するために使う。
+ */
+export interface ParticipantEndpointView {
+  readonly slot: string;
+  readonly overridable: boolean;
+  readonly label?: string;
+  readonly description?: string;
+  readonly defaultUrl?: string;
+  readonly overrideUrl?: string;
+  readonly effectiveUrl?: string;
+}
+
+export interface ParticipantEndpointsResponse {
+  readonly teamId: string;
+  readonly endpoints: readonly ParticipantEndpointView[];
+}
+
+export async function listProblemEndpoints(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  problemId: string,
+  signal?: AbortSignal,
+): Promise<ParticipantEndpointsResponse> {
+  return (await portalFetch<ParticipantEndpointsResponse>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(problemId)}/endpoints`,
+    teamLoginKey,
+    { signal, throwOn400: true },
+  )) as ParticipantEndpointsResponse;
+}
+
+/**
+ * 競技者が override URL を登録 / 更新する (`POST .../endpoints/<slot> { url }`)。 400 (invalid_url
+ * など) と 409 (slot_not_overridable) は PortalValidationError に変換し、 caller (= form) が
+ * inline error として表示する。
+ */
+export async function putProblemEndpointOverride(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  problemId: string,
+  slot: string,
+  url: string,
+  signal?: AbortSignal,
+): Promise<ParticipantEndpointsResponse> {
+  return (await portalFetch<ParticipantEndpointsResponse>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(problemId)}/endpoints/${encodeURIComponent(slot)}`,
+    teamLoginKey,
+    { method: "POST", body: { url }, throwOn400: true, throwOn409: true, signal },
+  )) as ParticipantEndpointsResponse;
+}
+
+/** override を解除して default URL に戻す。 */
+export async function deleteProblemEndpointOverride(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  problemId: string,
+  slot: string,
+  signal?: AbortSignal,
+): Promise<ParticipantEndpointsResponse> {
+  return (await portalFetch<ParticipantEndpointsResponse>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(problemId)}/endpoints/${encodeURIComponent(slot)}`,
+    teamLoginKey,
+    { method: "DELETE", throwOn400: true, signal },
+  )) as ParticipantEndpointsResponse;
 }

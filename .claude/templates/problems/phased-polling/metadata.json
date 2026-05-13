@@ -4,6 +4,7 @@
   "name": "__PROBLEM_NAME__",
   "category": "Battle",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 4,
   "estimatedDuration": "90〜120 分",
   "shortDescription": "時間経過で rule が変わる phased-polling 採点の Battle skeleton。",

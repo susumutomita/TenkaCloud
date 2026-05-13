@@ -45,6 +45,11 @@
       "enum": ["ready", "draft", "deprecated"],
       "description": "公開ステータス。ready = 参加者向けデプロイ可能 / draft = 開発中 / deprecated = 廃止予定。"
     },
+    "visibility": {
+      "type": "string",
+      "enum": ["public", "private"],
+      "description": "[ADR-008] 問題実装の公開境界。 public = 本体 repo 内に template.yaml / api / frontend を持つ教材用 (= 答えが open でも成立する問題、 hello-world 系)。 private = TenkaCloudChallenges 別 private repo に payload を置き S3 + 15min presigned URL で配信する本格競技用 (= 答えが open だと成立しない microservice-migration-battle 系)。 省略時 public (= 既存 metadata との互換)。 Phase 1 では UI 表示のみ、 Phase 3 で Worker Lambda の S3 fetch 分岐を入れる。"
+    },
     "difficulty": {
       "type": "integer",
       "minimum": 1,
@@ -541,6 +546,57 @@
           "description": {
             "type": "string",
             "description": "disruption の動作 / 戦術的影響を participant 向けに説明する文章。 portal の予告 panel で countdown と一緒に表示される (= player への hint)。"
+          },
+          "triggers": {
+            "type": "array",
+            "description": "[ADR-013 Phase 1 / Issue #615] disruption の発火条件宣言。 省略時は ADR-012 Phase 1 の self-fire (= `defaultAfterMinutes` で template.yaml-bundled Scheduler から起動) のみ。 triggers[] が宣言されると ADR-013 Phase 2 で導入される condition-triggered 発火が有効化される (= scoring Lambda 側 eval、 cross-account EventBridge bus 経由)。 複数 trigger は OR で結合 (= 最初に true になった条件で発火)。 同一 disruption の重複発火は idempotency key で抑制。",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "afterMinutes"],
+                  "properties": {
+                    "kind": {
+                      "const": "after-deploy",
+                      "description": "deploy 時刻 + offset で発火 (= ADR-012 Phase 1 の self-fire 等価)。 fail-safe として常に含めることを推奨。"
+                    },
+                    "afterMinutes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "deploy からの経過分数。"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "threshold"],
+                  "properties": {
+                    "kind": {
+                      "const": "team-score-above",
+                      "description": "team の累計 score が threshold を上回ったら発火 (= 強チームへの handicap、 ゲームバランス調整用)。"
+                    },
+                    "threshold": { "type": "integer", "minimum": 0 }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "phaseName"],
+                  "properties": {
+                    "kind": {
+                      "const": "phase-entered",
+                      "description": "phases[].name == phaseName のフェーズに突入したら発火 (= phased-polling 系で phase 遷移と同期した disruption)。"
+                    },
+                    "phaseName": {
+                      "type": "string",
+                      "description": "metadata.phases[].name の値を指す。"
+                    }
+                  }
+                }
+              ]
+            }
           }
         }
       }

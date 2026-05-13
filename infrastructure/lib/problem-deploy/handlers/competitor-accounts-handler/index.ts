@@ -68,7 +68,7 @@ app.post("/admin/competitor-accounts", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "request body must be JSON" }, StatusCodes.BAD_REQUEST);
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
   }
   const parsed = CreateCompetitorAccountRequestSchema.safeParse(body);
   if (!parsed.success) {

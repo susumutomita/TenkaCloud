@@ -91,8 +91,51 @@ build_parameter_overrides() {
   printf '%s\n' "${overrides[@]}"
 }
 
+#
+# ADR-008 Phase 3 / Issue #634: private 問題の payload を S3 から取得する。
+#
+# 環境変数 `CHALLENGE_PAYLOAD_URL` が set されているとき、 problem_dir を local path として
+# 信頼せず、 presigned URL から zip を取得し /tmp に展開してそちらを problem_dir に差し替える。
+# Phase 2 (CDK ChallengePayloadStack) が deploy された後、 deploy-handler Lambda が
+# Step Functions に env override で URL を渡す。 URL は 15min TTL の presigned。
+#
+# Phase 2 未 deploy 時は CHALLENGE_PAYLOAD_URL は常に空文字 → 既存 local-path 経路で動く
+# (= 既存 public 問題への影響なし)。
+resolve_problem_dir() {
+  local input_dir="$1"
+  if [[ -z "${CHALLENGE_PAYLOAD_URL:-}" ]]; then
+    # public 問題: 引数の dir をそのまま使う (= 既存挙動)
+    echo "${input_dir}"
+    return 0
+  fi
+
+  # private 問題: presigned URL から zip を download → 展開
+  if ! command -v unzip >/dev/null 2>&1; then
+    echo "error: unzip が必要です (CHALLENGE_PAYLOAD_URL からの展開で使う)" >&2
+    return 1
+  fi
+  local payload_dir
+  payload_dir="$(mktemp -d -t challenge-payload-XXXXXX)"
+  echo "Downloading private challenge payload to ${payload_dir}..." >&2
+  if ! curl -sSfL --max-time 60 -o "${payload_dir}/payload.zip" "${CHALLENGE_PAYLOAD_URL}"; then
+    echo "error: presigned URL からの payload download に失敗しました (= URL 期限切れ or network)" >&2
+    return 1
+  fi
+  unzip -q "${payload_dir}/payload.zip" -d "${payload_dir}"
+  # zip 内には 1 dir = problem dir の構造を想定 (= problems/<category>/<id>/ をそのまま zip)
+  local extracted_dir
+  extracted_dir="$(find "${payload_dir}" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+  if [[ -z "${extracted_dir}" || ! -f "${extracted_dir}/template.yaml" ]]; then
+    echo "error: zip 内に template.yaml を含む dir が見つかりません (= zip 構造不正)" >&2
+    return 1
+  fi
+  echo "${extracted_dir}"
+}
+
 deploy_one() {
   local problem_dir="$1"
+  # ADR-008 Phase 3: private 問題の場合 zip を展開して dir を差し替える。 public は no-op。
+  problem_dir="$(resolve_problem_dir "${problem_dir}")"
   local template="${problem_dir}/template.yaml"
   if [[ ! -f "${template}" ]]; then
     echo "error: ${template} が見つかりません" >&2

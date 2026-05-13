@@ -1,0 +1,20 @@
+{
+  "locale": {
+    "name": "Español"
+  },
+  "app": {
+    "title": "Consola de Administración TenkaCloud",
+    "loading": "Cargando…"
+  },
+  "nav": {
+    "menu": "Menú de administración",
+    "tenants": "Tenants",
+    "tenants_new": "Crear tenant"
+  },
+  "auth": {
+    "sign_out": "Cerrar sesión"
+  },
+  "errors": {
+    "generic": "Se produjo un error"
+  }
+}
