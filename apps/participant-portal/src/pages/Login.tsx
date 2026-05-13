@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
 /**
  * 競技者ログイン画面。チーム単位で発行されたログインキーを入力すると、
@@ -24,6 +25,7 @@ import type { AppConfig } from "../config";
 export function LoginPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const navigate = useNavigate();
+  const t = useT();
   const [teamLoginKey, setTeamLoginKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +43,7 @@ export function LoginPage({ config }: { config: AppConfig }) {
       await auth.login(teamLoginKey);
       navigate("/");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "サインインに失敗しました。もう一度お試しください。";
+      const message = err instanceof Error ? err.message : t("login.failed_generic");
       setError(message);
     } finally {
       setSubmitting(false);
@@ -56,35 +57,32 @@ export function LoginPage({ config }: { config: AppConfig }) {
       <Container
         header={
           <Header variant="h1" description={config.eventTitle}>
-            TenkaCloud Participant Portal
+            {t("login.header")}
           </Header>
         }
       >
         <Form
           actions={
             <Button variant="primary" disabled={!canSubmit} loading={submitting} onClick={onSubmit}>
-              サインイン
+              {t("login.submit")}
             </Button>
           }
         >
           <SpaceBetween size="l">
             {error && (
-              <Alert type="error" header="サインインに失敗しました">
+              <Alert type="error" header={t("login.failed_header")}>
                 {error}
               </Alert>
             )}
-            <Alert type="info" header="チームログインキーで認証します">
-              運営から共有されたチーム単位のログインキーを入力してください。個人ごとのアカウントは作成されません。
+            <Alert type="info" header={t("login.info_header")}>
+              {t("login.info_body")}
             </Alert>
-            <FormField
-              label="チームログインキー"
-              description="問題 deploy 時に運営が発行する短命キー"
-            >
+            <FormField label={t("login.field_label")} description={t("login.field_description")}>
               <Input
                 value={teamLoginKey}
                 type="password"
                 onChange={({ detail }) => setTeamLoginKey(detail.value)}
-                placeholder="チームに配布されたキー"
+                placeholder={t("login.field_placeholder")}
                 disabled={submitting}
               />
             </FormField>

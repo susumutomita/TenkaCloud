@@ -5,7 +5,9 @@
   "app": {
     "title": "TenkaCloud Participant Portal",
     "loading": "Loading…",
-    "no_session": "No active session. Please sign in again."
+    "no_session": "No active session. Please sign in again.",
+    "dev_mock_alert": "Running in dev-mock mode. To connect to a real backend, set runtime-config mode to backend.",
+    "fetch_status_failed": "Failed to fetch status"
   },
   "nav": {
     "problems": "Problems",
@@ -31,5 +33,69 @@
     "slot_not_overridable": "This slot is not overridable.",
     "unknown_slot": "This slot is not declared in metadata.",
     "no_endpoints": "This problem has no endpoints declared."
+  },
+  "home": {
+    "welcome": "Welcome, {teamName}",
+    "welcome_description": "Welcome to {eventTitle}",
+    "team_score_header": "Team total score",
+    "score_total": "Total",
+    "score_problem_count": "Problems",
+    "score_completed_count": "Completed",
+    "no_problems_header": "No problems",
+    "no_problems_body": "This team has no deployed problems. Please contact the operator."
+  },
+  "login": {
+    "header": "TenkaCloud Participant Portal",
+    "submit": "Sign in",
+    "failed_header": "Sign-in failed",
+    "failed_generic": "Sign-in failed. Please try again.",
+    "info_header": "Authenticating with team login key",
+    "info_body": "Enter the team-level login key shared by your operator. Per-individual accounts are not created.",
+    "field_label": "Team login key",
+    "field_description": "Short-lived key issued by the operator at problem deploy time",
+    "field_placeholder": "Key distributed to your team"
+  },
+  "quests": {
+    "header": "Problems (Quests)",
+    "header_description": "Catalog of problems deployed to your team. Each card links directly to its access URL.",
+    "console_failed_header": "Failed to issue AWS Console URL",
+    "session_expired": "Session expired. Please sign in again.",
+    "filter_all": "All",
+    "filter_battle": "Battle",
+    "filter_challenge": "Challenge",
+    "filter_label": "Filter by category",
+    "loading_text": "Loading problems…",
+    "category_uncategorized": "Uncategorized",
+    "status_env_header": "Environment status",
+    "score_header": "Current score",
+    "region_header": "Region",
+    "outputs_header": "Access URL",
+    "outputs_pending": "Deploy not yet complete",
+    "open_console": "Open AWS Console",
+    "empty_all": "No problems",
+    "empty_battle": "No problems in the Battle category",
+    "empty_challenge": "No problems in the Challenge category",
+    "empty_hint_all": "This team has no deployed problems. Please contact the operator.",
+    "empty_hint_filtered": "Check other categories under the \"All\" tab.",
+    "status_label": {
+      "PENDING": "Preparing",
+      "IN_PROGRESS": "Starting…",
+      "COMPLETE": "Running",
+      "FAILED": "Failed to start",
+      "DELETING": "Stopping",
+      "DELETED": "Stopped"
+    }
+  },
+  "notifications": {
+    "header": "Notifications",
+    "header_description": "Operator notifications (newest first, max 100, polled every 60 s)",
+    "fetch_failed": "Failed to fetch notifications",
+    "no_event_header": "Notifications are not delivered",
+    "no_event_body": "This team belongs to a legacy deployment not linked to an event, so operator notifications are not delivered.",
+    "loading": "Loading notifications…",
+    "empty_header": "No notifications yet",
+    "empty_hint": "Notifications sent by the operator from the application admin console will appear here.",
+    "severity_info": "Info",
+    "severity_warning": "Warning"
   }
 }

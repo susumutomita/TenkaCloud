@@ -9,11 +9,13 @@ import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
   const isBackend = config.mode === "backend";
+  const t = useT();
   // Polling は ShellLayout の TeamViewProvider で一括管理される (TopNav も同じデータを共有)。
   const { view, error, refresh } = useTeamView();
 
@@ -21,22 +23,20 @@ export function HomePage({ config }: { config: AppConfig }) {
 
   return (
     <SpaceBetween size="l">
-      <Header variant="h1" description={`${config.eventTitle} へようこそ`}>
-        Welcome, {teamName}
+      <Header
+        variant="h1"
+        description={t("home.welcome_description", { eventTitle: config.eventTitle })}
+      >
+        {t("home.welcome", { teamName })}
       </Header>
 
-      {!isBackend && (
-        <Alert type="info">
-          dev-mock モードで動作中です。実 backend と接続するには runtime-config の <code>mode</code>{" "}
-          を <code>backend</code> に設定してください。
-        </Alert>
-      )}
+      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {error && (
-        <Alert type="error" header="状態の取得に失敗しました">
+        <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
         </Alert>
       )}
-      {isBackend && !view && !error && <Box>状態を取得中…</Box>}
+      {isBackend && !view && !error && <Box>{t("app.loading")}</Box>}
 
       {view && <TeamScorePanel view={view} />}
 
@@ -51,8 +51,8 @@ export function HomePage({ config }: { config: AppConfig }) {
       ))}
 
       {view && view.problems.length === 0 && (
-        <Container header={<Header variant="h2">問題がありません</Header>}>
-          <Box>このチームには deploy 済みの問題がありません。operator にお問い合わせください。</Box>
+        <Container header={<Header variant="h2">{t("home.no_problems_header")}</Header>}>
+          <Box>{t("home.no_problems_body")}</Box>
         </Container>
       )}
     </SpaceBetween>
@@ -60,23 +60,24 @@ export function HomePage({ config }: { config: AppConfig }) {
 }
 
 function TeamScorePanel({ view }: { view: ParticipantTeamView }) {
+  const t = useT();
   const totalScore = view.problems.reduce((sum, p) => sum + p.score, 0);
   return (
-    <Container header={<Header variant="h2">チーム累計スコア</Header>}>
+    <Container header={<Header variant="h2">{t("home.team_score_header")}</Header>}>
       <KeyValuePairs
         columns={3}
         items={[
           {
-            label: "合計",
+            label: t("home.score_total"),
             value: (
               <Box variant="awsui-value-large" color="text-status-success">
                 {totalScore} pt
               </Box>
             ),
           },
-          { label: "問題数", value: String(view.problems.length) },
+          { label: t("home.score_problem_count"), value: String(view.problems.length) },
           {
-            label: "完了済",
+            label: t("home.score_completed_count"),
             value: String(view.problems.filter((p) => p.status === "COMPLETE").length),
           },
         ]}

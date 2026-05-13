@@ -5,7 +5,9 @@
   "app": {
     "title": "Portal de Participantes TenkaCloud",
     "loading": "Cargando…",
-    "no_session": "No hay sesión activa. Por favor, inicia sesión de nuevo."
+    "no_session": "No hay sesión activa. Por favor, inicia sesión de nuevo.",
+    "dev_mock_alert": "Ejecutándose en modo dev-mock. Para conectar con un backend real, establece mode=backend en runtime-config.",
+    "fetch_status_failed": "No se pudo obtener el estado"
   },
   "nav": {
     "problems": "Problemas",
@@ -31,5 +33,69 @@
     "slot_not_overridable": "Este slot no se puede sobrescribir.",
     "unknown_slot": "Este slot no está declarado en metadata.",
     "no_endpoints": "Este problema no tiene endpoints declarados."
+  },
+  "home": {
+    "welcome": "Bienvenido, {teamName}",
+    "welcome_description": "Bienvenido a {eventTitle}",
+    "team_score_header": "Puntuación total del equipo",
+    "score_total": "Total",
+    "score_problem_count": "Problemas",
+    "score_completed_count": "Completados",
+    "no_problems_header": "Sin problemas",
+    "no_problems_body": "Este equipo no tiene problemas desplegados. Por favor, contacta al operador."
+  },
+  "login": {
+    "header": "Portal de Participantes TenkaCloud",
+    "submit": "Iniciar sesión",
+    "failed_header": "Error al iniciar sesión",
+    "failed_generic": "No se pudo iniciar sesión. Inténtalo de nuevo.",
+    "info_header": "Autenticación con clave de equipo",
+    "info_body": "Introduce la clave de inicio de sesión a nivel de equipo proporcionada por el operador. No se crean cuentas individuales.",
+    "field_label": "Clave de inicio de sesión del equipo",
+    "field_description": "Clave de corta duración emitida por el operador al desplegar el problema",
+    "field_placeholder": "Clave distribuida a tu equipo"
+  },
+  "quests": {
+    "header": "Problemas (Quests)",
+    "header_description": "Catálogo de problemas desplegados para tu equipo. Cada tarjeta enlaza directamente a su URL de acceso.",
+    "console_failed_header": "No se pudo generar la URL de AWS Console",
+    "session_expired": "Sesión expirada. Por favor, inicia sesión de nuevo.",
+    "filter_all": "Todos",
+    "filter_battle": "Battle",
+    "filter_challenge": "Challenge",
+    "filter_label": "Filtrar por categoría",
+    "loading_text": "Cargando problemas…",
+    "category_uncategorized": "Sin categoría",
+    "status_env_header": "Estado del entorno",
+    "score_header": "Puntuación actual",
+    "region_header": "Región",
+    "outputs_header": "URL de acceso",
+    "outputs_pending": "Despliegue aún no completado",
+    "open_console": "Abrir AWS Console",
+    "empty_all": "Sin problemas",
+    "empty_battle": "Sin problemas en la categoría Battle",
+    "empty_challenge": "Sin problemas en la categoría Challenge",
+    "empty_hint_all": "Este equipo no tiene problemas desplegados. Por favor, contacta al operador.",
+    "empty_hint_filtered": "Consulta otras categorías en la pestaña \"Todos\".",
+    "status_label": {
+      "PENDING": "Preparando",
+      "IN_PROGRESS": "Iniciando…",
+      "COMPLETE": "En ejecución",
+      "FAILED": "Falló el inicio",
+      "DELETING": "Deteniendo",
+      "DELETED": "Detenido"
+    }
+  },
+  "notifications": {
+    "header": "Notificaciones",
+    "header_description": "Notificaciones del operador (más recientes primero, máximo 100, sondeo cada 60 s)",
+    "fetch_failed": "No se pudieron obtener las notificaciones",
+    "no_event_header": "Las notificaciones no se entregan",
+    "no_event_body": "Este equipo pertenece a un despliegue antiguo no vinculado a un evento, por lo que no recibe notificaciones del operador.",
+    "loading": "Cargando notificaciones…",
+    "empty_header": "Aún no hay notificaciones",
+    "empty_hint": "Aquí aparecerán las notificaciones enviadas por el operador desde la application admin console.",
+    "severity_info": "Info",
+    "severity_warning": "Advertencia"
   }
 }

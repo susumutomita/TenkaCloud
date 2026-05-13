@@ -9,15 +9,12 @@ import { useEffect } from "react";
 import type { NotificationView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 
 const SEVERITY_COLOR: Record<NotificationView["severity"], "blue" | "red"> = {
   info: "blue",
   warning: "red",
-};
-const SEVERITY_LABEL: Record<NotificationView["severity"], string> = {
-  info: "Info",
-  warning: "Warning",
 };
 
 /**
@@ -33,6 +30,7 @@ const SEVERITY_LABEL: Record<NotificationView["severity"], string> = {
 export function NotificationsPage({ config }: { config: AppConfig }) {
   const { notifications, notificationsError, notificationsNoEvent, markNotificationsSeen } =
     useTeamView();
+  const t = useT();
   const isBackend = config.mode === "backend";
   const items = notifications?.items;
 
@@ -44,40 +42,38 @@ export function NotificationsPage({ config }: { config: AppConfig }) {
     }
   }, [items, markNotificationsSeen]);
 
+  const severityLabel = (s: NotificationView["severity"]) =>
+    s === "info" ? t("notifications.severity_info") : t("notifications.severity_warning");
+
   return (
     <SpaceBetween size="l">
-      <Header variant="h1" description="運営からの通知 (新しい順、最大 100 件、polling 60 秒)">
-        Notifications
+      <Header variant="h1" description={t("notifications.header_description")}>
+        {t("notifications.header")}
       </Header>
 
-      {!isBackend && (
-        <Alert type="info">
-          dev-mock モードで動作中です。実 backend と接続するには runtime-config の<code>mode</code>{" "}
-          を <code>backend</code> に設定してください。
-        </Alert>
-      )}
+      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {notificationsError && (
-        <Alert type="error" header="通知の取得に失敗しました">
+        <Alert type="error" header={t("notifications.fetch_failed")}>
           {notificationsError}
         </Alert>
       )}
       {notificationsNoEvent && (
-        <Alert type="info" header="通知は配信されません">
-          このチームは event に紐づいていない旧 deployment のため、運営からの通知配信対象外です。
+        <Alert type="info" header={t("notifications.no_event_header")}>
+          {t("notifications.no_event_body")}
         </Alert>
       )}
       {isBackend && !notifications && !notificationsError && !notificationsNoEvent && (
         <Box textAlign="center" padding="l">
-          <Spinner /> 通知を取得中…
+          <Spinner /> {t("notifications.loading")}
         </Box>
       )}
 
       {items && items.length === 0 && (
         <Container>
           <Box textAlign="center" padding="l">
-            <Box variant="strong">まだ通知はありません</Box>
+            <Box variant="strong">{t("notifications.empty_header")}</Box>
             <Box variant="small" color="text-status-inactive" padding={{ top: "s" }}>
-              運営者が application admin console から発信した通知をここに表示します。
+              {t("notifications.empty_hint")}
             </Box>
           </Box>
         </Container>
@@ -92,7 +88,7 @@ export function NotificationsPage({ config }: { config: AppConfig }) {
                 <Header
                   variant="h3"
                   actions={
-                    <Badge color={SEVERITY_COLOR[n.severity]}>{SEVERITY_LABEL[n.severity]}</Badge>
+                    <Badge color={SEVERITY_COLOR[n.severity]}>{severityLabel(n.severity)}</Badge>
                   }
                 >
                   {n.title}
