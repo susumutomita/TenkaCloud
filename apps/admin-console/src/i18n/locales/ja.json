@@ -1,0 +1,20 @@
+{
+  "locale": {
+    "name": "日本語"
+  },
+  "app": {
+    "title": "TenkaCloud 管理コンソール",
+    "loading": "読み込み中…"
+  },
+  "nav": {
+    "menu": "管理メニュー",
+    "tenants": "テナント一覧",
+    "tenants_new": "テナント作成"
+  },
+  "auth": {
+    "sign_out": "サインアウト"
+  },
+  "errors": {
+    "generic": "エラーが発生しました"
+  }
+}

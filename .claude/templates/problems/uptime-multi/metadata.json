@@ -4,6 +4,7 @@
   "name": "__PROBLEM_NAME__",
   "category": "Battle",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "60〜90 分",
   "shortDescription": "N slot を全部生存させ続ける uptime-multi 採点の Battle skeleton。",

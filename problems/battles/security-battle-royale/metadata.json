@@ -4,6 +4,7 @@
   "name": "Security Battle Royale",
   "category": "Battle",
   "status": "draft",
+  "visibility": "public",
   "difficulty": 3,
   "estimatedDuration": "60〜90 分",
   "shortDescription": "意図的に脆弱性を仕込んだ Web アプリを攻撃 / 防御し、競技アカウント上で生き残るチームを決める。",
