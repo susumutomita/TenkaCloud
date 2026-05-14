@@ -2,9 +2,10 @@ import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
 
 export interface AdminInsightApiLambdaProps {
   /**
@@ -46,7 +47,7 @@ export class AdminInsightApiLambda extends Construct {
     super(scope, id);
 
     this.fn = new NodejsFunction(this, "Function", {
-      runtime: Runtime.NODEJS_22_X,
+      runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(__dirname, "handlers/admin-insight-handler/index.ts"),
       handler: "handler",
@@ -62,7 +63,7 @@ export class AdminInsightApiLambda extends Construct {
       },
       bundling: {
         minify: true,
-        target: "node22",
+        target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: true,
         externalModules: [],
       },

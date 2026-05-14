@@ -16,9 +16,34 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import type { Construct } from "constructs";
 
-const DEPLOYMENT_STATE_MACHINE_NAME = "tenkacloud-saas-deployment-machine";
+const DEPLOYMENT_STATE_MACHINE_NAME_SUFFIX = "saas-deployment-machine";
+const TENANT_UPDATE_SCRIPT_PATH = path.join(__dirname, "../../../scripts/update-tenant.sh");
+const TENANT_PIPELINE_LAMBDA_RUNTIME = lambda.Runtime.PYTHON_3_14;
+const TENANT_PIPELINE_CODEBUILD_IMAGE_ID = "aws/codebuild/standard:8.0";
+const TENANT_PIPELINE_CODEBUILD_NODE_VERSION = 24;
+
+const sanitizeNamePart = (value: string, fallback: string): string => {
+  const sanitized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return sanitized || fallback;
+};
+
+const buildDeploymentStateMachineName = (appName: string, environmentName: string): string => {
+  const namespace = [
+    sanitizeNamePart(appName, "tenkacloud"),
+    sanitizeNamePart(environmentName, "development"),
+  ].join("-");
+  const maxNamespaceLength = 80 - DEPLOYMENT_STATE_MACHINE_NAME_SUFFIX.length - 1;
+  const safeNamespace = namespace.slice(0, maxNamespaceLength).replace(/-$/g, "");
+  return `${safeNamespace}-${DEPLOYMENT_STATE_MACHINE_NAME_SUFFIX}`;
+};
 
 export interface ServerlessSaaSPipelineInterface extends cdk.StackProps {
+  appName: string;
+  environmentName: string;
   tenantMappingTable: Table;
   s3SourceBucket: string;
   sourceZip: string;
@@ -30,6 +55,10 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: ServerlessSaaSPipelineInterface) {
     super(scope, id, props);
+    const deploymentStateMachineName = buildDeploymentStateMachineName(
+      props.appName,
+      props.environmentName,
+    );
 
     // Artifacts bucket.
     const artifactsBucket = new s3.Bucket(this, "ArtifactsBucket", {
@@ -48,7 +77,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     const handlersPath = path.join(__dirname, "handlers");
     const lambdaFunctionPrep = new lambda.Function(this, "prep-deploy", {
       handler: "lambda-prepare-deploy.lambda_handler",
-      runtime: lambda.Runtime.PYTHON_3_9,
+      runtime: TENANT_PIPELINE_LAMBDA_RUNTIME,
       code: new lambda.AssetCode(handlersPath),
       memorySize: 512,
       timeout: cdk.Duration.seconds(10),
@@ -102,7 +131,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
         path: props.sourceZip,
       }),
       environment: {
-        buildImage: codebuild.LinuxBuildImage.STANDARD_5_0,
+        buildImage: codebuild.LinuxBuildImage.fromCodeBuildImageId(
+          TENANT_PIPELINE_CODEBUILD_IMAGE_ID,
+        ),
         privileged: true, // Required for Docker
         environmentVariables: {
           STACK_NAME: { value: "default-stack-name" },
@@ -112,6 +143,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
         version: "0.2",
         phases: {
           install: {
+            "runtime-versions": {
+              nodejs: TENANT_PIPELINE_CODEBUILD_NODE_VERSION,
+            },
             commands: ["npm install -g aws-cdk"],
           },
           build: {
@@ -121,7 +155,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
             // 流し込み、 PR-560 の pipefail 安全策を維持する (= -ex = errexit + xtrace、
             // 元 shebang `#!/bin/bash -xe` と同等)。
             commands: [
-              `bash -ex <<'TENANT_UPDATE_SCRIPT_EOF'\n${fs.readFileSync("../scripts/update-tenant.sh", "utf8")}\nTENANT_UPDATE_SCRIPT_EOF`,
+              `bash -ex <<'TENANT_UPDATE_SCRIPT_EOF'\n${fs.readFileSync(TENANT_UPDATE_SCRIPT_PATH, "utf8")}\nTENANT_UPDATE_SCRIPT_EOF`,
             ],
           },
         },
@@ -182,7 +216,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     // Create Lambda iterator to cycle through waved deployments.
     const lambdaFunctionIterator = new lambda.Function(this, "WaveIterator", {
       handler: "iterator.lambda_handler",
-      runtime: lambda.Runtime.PYTHON_3_9,
+      runtime: TENANT_PIPELINE_LAMBDA_RUNTIME,
       code: lambda.Code.fromAsset(handlersPath, { exclude: ["*.json"] }),
       memorySize: 512,
       timeout: cdk.Duration.seconds(10),
@@ -266,7 +300,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
         TENANT_MAPPING_TABLE: props.tenantMappingTable.tableName,
         CODE_BUILD_PROJECT_NAME: codeBuildProject.projectName,
       },
-      stateMachineName: DEPLOYMENT_STATE_MACHINE_NAME,
+      stateMachineName: deploymentStateMachineName,
       stateMachineType: "STANDARD",
       tracingConfiguration: {
         enabled: true,
@@ -284,7 +318,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     const stateMachine = stepfunctions.StateMachine.fromStateMachineName(
       this,
       "DeploymentStateMachine",
-      DEPLOYMENT_STATE_MACHINE_NAME,
+      deploymentStateMachineName,
     );
 
     const stepFunctionAction = new codepipeline_actions.StepFunctionInvokeAction({
