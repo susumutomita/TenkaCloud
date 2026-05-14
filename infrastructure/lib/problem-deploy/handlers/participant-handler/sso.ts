@@ -133,7 +133,10 @@ export async function getConsoleSigninUrl(
     sessionToken: creds.SessionToken,
   });
 
-  const tokenUrl = `${FEDERATION_ENDPOINT}?Action=getSigninToken&SessionDuration=${FEDERATION_SESSION_DURATION_SEC}&Session=${encodeURIComponent(sessionJson)}`;
+  // #747: AssumeRole 由来の temporary credentials で federation する場合、 SessionDuration
+  // パラメータは **省略必須** (AWS 仕様)。 渡すと endpoint が 400 で reject する。
+  // session 寿命は AssumeRole 時の DurationSeconds (= 3600s) を継承する。
+  const tokenUrl = `${FEDERATION_ENDPOINT}?Action=getSigninToken&Session=${encodeURIComponent(sessionJson)}`;
   const tokenRes = await fetch(tokenUrl, { method: "GET" });
   if (!tokenRes.ok) {
     console.error("[sso] federation endpoint non-200", {

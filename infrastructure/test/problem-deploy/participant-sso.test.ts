@@ -148,6 +148,12 @@ describe("getConsoleSigninUrl", () => {
     expect(result.loginUrl).toContain("cloudformation");
     // 競技者の namePrefix で stacks フィルタを掛ける
     expect(result.loginUrl).toContain(encodeURIComponent("tc-security-battle-royale-alpha"));
+
+    // #747: getSigninToken request URL に SessionDuration param が含まれてはいけない
+    // (AssumeRole 由来 credentials では federation endpoint が 400 を返すため)。
+    const fetchedUrl = fetchSpy.mock.calls[0]?.[0]?.toString() ?? "";
+    expect(fetchedUrl).toContain("Action=getSigninToken");
+    expect(fetchedUrl).not.toContain("SessionDuration");
   });
 
   it("AssumeRole に inline session policy を渡し、DDB / Secrets Manager / KMS / IAM を Deny で殺すべき", async () => {
