@@ -45,13 +45,13 @@ function synthInsightStack(adminConsoleOrigin?: string): Template {
 
 describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   describe("Lambda", () => {
-    it("AdminInsight Lambda を Node.js 20 / arm64 で 1 個 立てるべき", () => {
+    it("AdminInsight Lambda を Node.js 22 / arm64 で 1 個 立てるべき", () => {
       const tpl = synthInsightStack();
       tpl.resourceCountIs("AWS::Lambda::Function", 1);
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
-          Runtime: "nodejs20.x",
+          Runtime: "nodejs22.x",
           Architectures: ["arm64"],
         }),
       );

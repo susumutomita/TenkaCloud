@@ -2,9 +2,10 @@ import * as path from "node:path";
 import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface CompetitorAccountsApiLambdaProps {
@@ -42,7 +43,7 @@ export class CompetitorAccountsApiLambda extends Construct {
     const stack = Stack.of(this);
 
     this.fn = new NodejsFunction(this, "Function", {
-      runtime: Runtime.NODEJS_20_X,
+      runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(__dirname, "handlers/competitor-accounts-handler/index.ts"),
       handler: "handler",
@@ -57,7 +58,7 @@ export class CompetitorAccountsApiLambda extends Construct {
       },
       bundling: {
         minify: true,
-        target: "node20",
+        target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: true,
         externalModules: [],
       },

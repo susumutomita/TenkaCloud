@@ -370,6 +370,8 @@ cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
 
 const serverlessSaaSPipeline = new ServerlessSaaSPipeline(app, "tenkacloud-saas-pipeline", {
   ...stackEnv,
+  appName: appNameLower,
+  environmentName: environment,
   tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
   s3SourceBucket,
   sourceZip,
