@@ -167,7 +167,7 @@ deploy_one() {
   #   - stack が無ければ Create
   #   - stack があれば Update (差分が無ければ "No changes" で 0 終了)
   #   - --no-fail-on-empty-changeset で「差分無し」を成功扱いにする (rerun 時の運用上の都合)
-  aws cloudformation deploy \
+  if ! aws cloudformation deploy \
     --region "${AWS_REGION}" \
     --stack-name "${name_prefix}" \
     --template-file "${template}" \
@@ -175,10 +175,13 @@ deploy_one() {
     --no-fail-on-empty-changeset \
     --parameter-overrides "${parameter_overrides[@]}" \
     --tags \
-        "TenkaCloud:NamePrefix=${name_prefix}" \
-        "TenkaCloud:Problem=${problem_slug}" \
-        "TenkaCloud:TeamSlug=${TEAM_SLUG}" \
-        "TenkaCloud:DeployedBy=deploy-battles.sh"
+      "TenkaCloud:NamePrefix=${name_prefix}" \
+      "TenkaCloud:Problem=${problem_slug}" \
+      "TenkaCloud:TeamSlug=${TEAM_SLUG}" \
+      "TenkaCloud:DeployedBy=deploy-battles.sh"; then
+    echo "error: CloudFormation deploy failed for ${name_prefix}" >&2
+    return 1
+  fi
 
   # outputs を表示 (FrontendUrl 等が見える)
   echo ""

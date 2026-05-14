@@ -9,6 +9,7 @@ import {
   IntegrationPattern,
   JsonPath,
   LogLevel,
+  Pass,
   StateMachine,
 } from "aws-cdk-lib/aws-stepfunctions";
 import {
@@ -129,6 +130,27 @@ export class DeployCreateStateMachine extends Construct {
       "MarkFailedWithoutBuildId",
       false,
     );
+    const useStackStatusReasonAsFailureCause = new Pass(
+      this,
+      "UseStackStatusReasonAsFailureCause",
+      {
+        parameters: {
+          "Cause.$": "$.cfn.Stacks[0].StackStatusReason",
+        },
+        resultPath: "$.error",
+      },
+    );
+    useStackStatusReasonAsFailureCause.next(markFailed);
+    const routeDescribedStackStatus = new Choice(this, "RouteDescribedStackStatus")
+      .when(
+        Condition.or(
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "ROLLBACK_COMPLETE"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "CREATE_FAILED"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "UPDATE_ROLLBACK_COMPLETE"),
+        ),
+        useStackStatusReasonAsFailureCause,
+      )
+      .otherwise(markSucceeded);
     const routeFailedDeployment = new Choice(this, "RouteFailedDeployment")
       .when(Condition.isPresent("$.codebuild.Build.Id"), markFailed)
       .otherwise(markFailedWithoutBuildId);
@@ -145,7 +167,7 @@ export class DeployCreateStateMachine extends Construct {
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
       definitionBody: DefinitionBody.fromChainable(
-        markInProgress.next(startCodeBuild).next(describeStacks).next(markSucceeded),
+        markInProgress.next(startCodeBuild).next(describeStacks).next(routeDescribedStackStatus),
       ),
       timeout: Duration.minutes(60),
       logs: { destination: logGroup, level: LogLevel.ALL },
