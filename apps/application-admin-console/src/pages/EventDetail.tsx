@@ -119,6 +119,39 @@ const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   ARCHIVED: "grey",
 };
 
+interface EndsAtValidation {
+  readonly canSubmit: boolean;
+  readonly errorText?: string;
+  readonly value?: Date;
+}
+
+function validateEndsAtInput(
+  date: string,
+  time: string,
+  startsAt: string | undefined,
+  nowMs: number,
+): EndsAtValidation {
+  if (!date || !time) return { canSubmit: false };
+  const value = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(value.getTime())) {
+    return { canSubmit: false, errorText: "終了日時の形式が不正です" };
+  }
+  if (value.getTime() < nowMs - 60_000) {
+    return {
+      canSubmit: false,
+      errorText:
+        "過去の日時は指定できません。今すぐ終了するには「Event を終了」 button を使ってください。",
+    };
+  }
+  if (startsAt) {
+    const startsAtMs = new Date(startsAt).getTime();
+    if (Number.isFinite(startsAtMs) && value.getTime() <= startsAtMs) {
+      return { canSubmit: false, errorText: "終了時刻は開始時刻より後の時刻を指定してください。" };
+    }
+  }
+  return { canSubmit: true, value };
+}
+
 export function EventDetailPage({ config }: { config: AppConfig }) {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
@@ -258,34 +291,15 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   // こちらは status は触らず HealthCheck の gate で時刻 gate するだけ (operator の負担減)。
   const handleScheduleEnd = async () => {
     if (!apiClient || endsAtInFlight) return;
-    if (!endsAtDate || !endsAtTime) {
-      setError("終了の日付と時刻の両方を指定してください");
+    const validation = validateEndsAtInput(endsAtDate, endsAtTime, detail?.startsAt, Date.now());
+    if (!validation.canSubmit || !validation.value) {
+      setError(validation.errorText ?? "終了の日付と時刻の両方を指定してください");
       return;
-    }
-    const local = new Date(`${endsAtDate}T${endsAtTime}:00`);
-    if (Number.isNaN(local.getTime())) {
-      setError("終了日時の形式が不正です");
-      return;
-    }
-    // #536 frontend 防御線: 過去 endsAt を弾く (= SLACK 60s で backend と揃える)
-    if (local.getTime() < Date.now() - 60_000) {
-      setError(
-        "過去の日時は指定できません。今すぐ終了するには「Event を終了」 button を使ってください。",
-      );
-      return;
-    }
-    // #536 frontend 防御線: endsAt が startsAt 以前なら弾く (= 競技時間 0 / 負を防ぐ)
-    if (detail?.startsAt) {
-      const startsAtMs = new Date(detail.startsAt).getTime();
-      if (Number.isFinite(startsAtMs) && local.getTime() <= startsAtMs) {
-        setError("終了時刻は開始時刻より後の時刻を指定してください。");
-        return;
-      }
     }
     setEndsAtInFlight(true);
     setError(null);
     try {
-      await setEventSchedule(apiClient, eventId, { endsAt: local.toISOString() });
+      await setEventSchedule(apiClient, eventId, { endsAt: validation.value.toISOString() });
       setEndsAtModalOpen(false);
       setEndsAtDate("");
       setEndsAtTime("");
@@ -413,6 +427,13 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
         0,
       )
     : 0;
+  const endsAtValidation = validateEndsAtInput(
+    endsAtDate,
+    endsAtTime,
+    detail?.startsAt,
+    Date.now(),
+  );
+  const endsAtInvalid = endsAtValidation.errorText !== undefined;
 
   return (
     <SpaceBetween size="l">
@@ -1019,7 +1040,12 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button onClick={() => setEndsAtModalOpen(false)}>キャンセル</Button>
-              <Button variant="primary" loading={endsAtInFlight} onClick={handleScheduleEnd}>
+              <Button
+                variant="primary"
+                loading={endsAtInFlight}
+                disabled={!endsAtValidation.canSubmit || endsAtInFlight}
+                onClick={handleScheduleEnd}
+              >
                 設定
               </Button>
             </SpaceBetween>
@@ -1034,23 +1060,24 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           </Box>
           {detail?.startsAt && (
             <Box variant="small" color="text-status-inactive">
-              開始時刻: <code>{detail.startsAt}</code> —
-              終了時刻はこれより後の時刻を指定してください。
+              開始時刻: <code>{detail.startsAt}</code>
             </Box>
           )}
-          <FormField label="日付 (YYYY-MM-DD)">
+          <FormField label="日付 (YYYY-MM-DD)" errorText={endsAtValidation.errorText}>
             <DatePicker
               value={endsAtDate}
               onChange={(e) => setEndsAtDate(e.detail.value)}
               placeholder="YYYY/MM/DD"
+              invalid={endsAtInvalid}
             />
           </FormField>
-          <FormField label="時刻 (HH:mm)">
+          <FormField label="時刻 (HH:mm)" errorText={endsAtValidation.errorText}>
             <TimeInput
               value={endsAtTime}
               format="hh:mm"
               placeholder="hh:mm"
               onChange={(e) => setEndsAtTime(e.detail.value)}
+              invalid={endsAtInvalid}
             />
           </FormField>
         </SpaceBetween>

@@ -1,4 +1,4 @@
-import { type QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, type QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setEventSchedule } from "../../lib/problem-deploy/handlers/event-handler/schedule";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
@@ -26,11 +26,19 @@ function buildShared(): {
   return { shared, ddbSend };
 }
 
+function mockCurrentEvent(
+  ddbSend: ReturnType<typeof vi.fn>,
+  item: { tenantId?: string; startsAt?: string; endsAt?: string } = { tenantId: "tenant-acme" },
+) {
+  ddbSend.mockResolvedValueOnce({ Item: item });
+}
+
 describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("正常系: Event 行 + 紐づく全 deployment 行の eventStartsAt を更新するべき", async () => {
     const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
       Attributes: { eventId: "EV1", tenantId: "tenant-acme", startsAt: STARTS_AT },
     });
@@ -54,7 +62,10 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
       updatedDeployments: 3,
     });
 
-    const eventUpd = ddbSend.mock.calls[0]?.[0] as UpdateCommand;
+    const eventGet = ddbSend.mock.calls[0]?.[0] as GetCommand;
+    expect(eventGet).toBeInstanceOf(GetCommand);
+
+    const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(eventUpd).toBeInstanceOf(UpdateCommand);
     expect(eventUpd.input.ConditionExpression).toBe("tenantId = :tenantId");
     expect(eventUpd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
@@ -62,14 +73,14 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
     // endsAt 未指定なので update 対象に含まれない
     expect(eventUpd.input.ExpressionAttributeValues?.[":endsAt"]).toBeUndefined();
 
-    const queryCmd = ddbSend.mock.calls[1]?.[0] as QueryCommand;
+    const queryCmd = ddbSend.mock.calls[2]?.[0] as QueryCommand;
     expect(queryCmd.input.IndexName).toBe("GSI1");
     expect(queryCmd.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
     expect(queryCmd.input.FilterExpression).toBe("eventId = :ev");
 
     const updCmds = ddbSend.mock.calls
       .map((c) => c[0])
-      .filter((c, i): c is UpdateCommand => i > 0 && c instanceof UpdateCommand);
+      .filter((c, i): c is UpdateCommand => i > 1 && c instanceof UpdateCommand);
     expect(updCmds).toHaveLength(3);
     for (const cmd of updCmds) {
       expect(cmd.input.ExpressionAttributeValues?.[":s"]).toBe(STARTS_AT);
@@ -79,9 +90,7 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
 
   it("Event 行不在 / tenant 不一致は ConditionalCheckFailedException → not_found", async () => {
     const { shared, ddbSend } = buildShared();
-    const err = new Error("conditional failed");
-    err.name = "ConditionalCheckFailedException";
-    ddbSend.mockRejectedValueOnce(err);
+    ddbSend.mockResolvedValueOnce({});
 
     const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
       startsAt: STARTS_AT,
@@ -93,6 +102,7 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
 
   it("対象 deployment が 0 件でも ok を返し updatedDeployments=0", async () => {
     const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
       Attributes: { eventId: "EV1", tenantId: "tenant-acme", startsAt: STARTS_AT },
     });
@@ -119,6 +129,7 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
 
   it("startsAt が now - 30s (SLACK 内) なら通すべき (#537 clock skew)", async () => {
     const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
       Attributes: { eventId: "EV1", tenantId: "tenant-acme", startsAt: NOW_ISO },
     });
@@ -133,6 +144,7 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
 
   it("Event 更新 + 全 deployment update の updatedAt は同じ now 値を使うべき", async () => {
     const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
       Attributes: { eventId: "EV1", tenantId: "tenant-acme", startsAt: STARTS_AT },
     });
@@ -140,8 +152,8 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
     ddbSend.mockResolvedValue({});
 
     await setEventSchedule(shared, "tenant-acme", "EV1", { startsAt: STARTS_AT, nowMs: NOW_MS });
-    const eventUpd = ddbSend.mock.calls[0]?.[0] as UpdateCommand;
-    const deployUpd = ddbSend.mock.calls[2]?.[0] as UpdateCommand;
+    const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    const deployUpd = ddbSend.mock.calls[3]?.[0] as UpdateCommand;
     expect(eventUpd.input.ExpressionAttributeValues?.[":now"]).toBe(NOW_ISO);
     expect(deployUpd.input.ExpressionAttributeValues?.[":now"]).toBe(NOW_ISO);
   });
@@ -152,6 +164,7 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
 
   it("endsAt のみ指定 → Event の endsAt + deployments の eventEndsAt を更新、startsAt は触らない", async () => {
     const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend, { tenantId: "tenant-acme", startsAt: STARTS_AT });
     ddbSend.mockResolvedValueOnce({
       Attributes: { eventId: "EV1", tenantId: "tenant-acme", endsAt: ENDS_AT },
     });
@@ -168,17 +181,18 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
       expect(out.endsAt).toBe(ENDS_AT);
     }
 
-    const eventUpd = ddbSend.mock.calls[0]?.[0] as UpdateCommand;
+    const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(eventUpd.input.ExpressionAttributeValues?.[":endsAt"]).toBe(ENDS_AT);
     expect(eventUpd.input.ExpressionAttributeValues?.[":startsAt"]).toBeUndefined();
 
-    const deployUpd = ddbSend.mock.calls[2]?.[0] as UpdateCommand;
+    const deployUpd = ddbSend.mock.calls[3]?.[0] as UpdateCommand;
     expect(deployUpd.input.ExpressionAttributeValues?.[":e"]).toBe(ENDS_AT);
     expect(deployUpd.input.ExpressionAttributeValues?.[":s"]).toBeUndefined();
   });
 
   it("startsAt + endsAt 両方指定 → 1 回の UpdateCommand で両方更新するべき", async () => {
     const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
       Attributes: {
         eventId: "EV1",
@@ -197,7 +211,7 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
     });
     expect(out.kind).toBe("ok");
 
-    const eventUpd = ddbSend.mock.calls[0]?.[0] as UpdateCommand;
+    const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(eventUpd.input.UpdateExpression).toContain("startsAt = :startsAt");
     expect(eventUpd.input.UpdateExpression).toContain("endsAt = :endsAt");
     expect(eventUpd.input.ExpressionAttributeValues?.[":startsAt"]).toBe(STARTS_AT);
@@ -230,6 +244,25 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
       endsAt: earlierEnd,
     });
     expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("endsAt のみ指定でも既存 startsAt 以前なら ends_before_starts で reject すべき (#741)", async () => {
+    const { shared, ddbSend } = buildShared();
+    const laterStart = "2026-05-08T13:00:00.000Z";
+    mockCurrentEvent(ddbSend, { tenantId: "tenant-acme", startsAt: laterStart });
+
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      endsAt: ENDS_AT,
+      nowMs: NOW_MS,
+    });
+
+    expect(out).toEqual({
+      kind: "ends_before_starts",
+      startsAt: laterStart,
+      endsAt: ENDS_AT,
+    });
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+    expect(ddbSend.mock.calls[0]?.[0]).toBeInstanceOf(GetCommand);
   });
 
   it("endsAt === startsAt も ends_before_starts (= 競技時間 0 分は無効)", async () => {
