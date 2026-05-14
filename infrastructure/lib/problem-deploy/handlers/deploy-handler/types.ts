@@ -60,6 +60,8 @@ export interface DeploymentItem {
    * the first hop before assuming the per-problem ParticipantViewerRole.
    */
   competitorRoleArn?: string;
+  /** SSM SecureString path that stores the tenant ExternalId for cross-account operations. */
+  externalIdParameterName?: string;
   region: string;
   /**
    * 内部 slug。operator が deploy form で入力し、`namePrefix` (CFn StackName) の

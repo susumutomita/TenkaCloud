@@ -3,10 +3,14 @@ import type { Project } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import {
+  Choice,
+  Condition,
   DefinitionBody,
   IntegrationPattern,
   JsonPath,
   LogLevel,
+  Pass,
+  Result,
   StateMachine,
 } from "aws-cdk-lib/aws-stepfunctions";
 import {
@@ -45,8 +49,9 @@ export interface DeployDeleteStateMachineProps {
  *     "awsAccountId": "123456789012"
  *   }
  *
- * MVP-1 は same-account のみ。Phase 2 で cross-account になったら CodeBuild Role に
- * `sts:AssumeRole` を足し、delete-battles.sh で AssumeRole する形に拡張する。
+ * verified deployment は `competitorRoleArn` / `externalIdParameterName` を CodeBuild に
+ * 渡し、delete-battles.sh が ExternalId 付き AssumeRole 後に target account の stack を消す。
+ * 旧 event detail は same-account fallback に倒す。
  */
 export class DeployDeleteStateMachine extends Construct {
   public readonly stateMachine: StateMachine;
@@ -58,32 +63,74 @@ export class DeployDeleteStateMachine extends Construct {
       retention: RetentionDays.ONE_WEEK,
     });
 
-    const startCodeBuild = new CodeBuildStartBuild(this, "StartDeleteCodeBuild", {
+    const startCodeBuildSameAccount = new CodeBuildStartBuild(this, "StartDeleteCodeBuild", {
       project: props.codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
       environmentVariablesOverride: {
         OPERATION: { value: "delete" },
         DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
         DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
-        // Phase 2.2 (Issue #459): cross-account delete でも AssumeRole metadata を渡す。
-        // detail に値が無いケース (旧 deployment 行) は `States.Format` で空文字に倒れる。
-        COMPETITOR_ROLE_ARN: {
-          value: JsonPath.format("{}", JsonPath.stringAt("$.detail.competitorRoleArn")),
-        },
-        EXTERNAL_ID_SSM_PARAMETER: {
-          value: JsonPath.format("{}", JsonPath.stringAt("$.detail.externalIdParameterName")),
-        },
       },
       resultPath: "$.codebuild",
     });
 
+    const startCodeBuildCrossAccount = new CodeBuildStartBuild(
+      this,
+      "StartDeleteCodeBuildCrossAccount",
+      {
+        project: props.codeBuildProject,
+        integrationPattern: IntegrationPattern.RUN_JOB,
+        environmentVariablesOverride: {
+          OPERATION: { value: "delete" },
+          DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
+          DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+          COMPETITOR_ROLE_ARN: {
+            value: JsonPath.stringAt("$.detail.competitorRoleArn"),
+          },
+          EXTERNAL_ID_SSM_PARAMETER: {
+            value: JsonPath.stringAt("$.detail.externalIdParameterName"),
+          },
+        },
+        resultPath: "$.codebuild",
+      },
+    );
+
+    const invalidAssumeRoleMetadata = new Pass(this, "InvalidAssumeRoleMetadata", {
+      result: Result.fromObject({
+        Cause:
+          "competitorRoleArn and externalIdParameterName must be provided together for cross-account delete",
+      }),
+      resultPath: "$.error",
+    });
+
+    const routeDeleteInput = new Choice(this, "RouteDeleteInput")
+      .when(
+        Condition.and(
+          Condition.isPresent("$.detail.competitorRoleArn"),
+          Condition.isPresent("$.detail.externalIdParameterName"),
+        ),
+        startCodeBuildCrossAccount,
+      )
+      .when(
+        Condition.and(
+          Condition.not(Condition.isPresent("$.detail.competitorRoleArn")),
+          Condition.not(Condition.isPresent("$.detail.externalIdParameterName")),
+        ),
+        startCodeBuildSameAccount,
+      )
+      .otherwise(invalidAssumeRoleMetadata);
+
     const markDeleted = this.buildMarkDeleted(props.deploymentsTable);
     const markFailed = this.buildMarkFailed(props.deploymentsTable);
 
-    startCodeBuild.addCatch(markFailed, { resultPath: "$.error" });
+    startCodeBuildSameAccount.addCatch(markFailed, { resultPath: "$.error" });
+    startCodeBuildCrossAccount.addCatch(markFailed, { resultPath: "$.error" });
+    startCodeBuildSameAccount.next(markDeleted);
+    startCodeBuildCrossAccount.next(markDeleted);
+    invalidAssumeRoleMetadata.next(markFailed);
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
-      definitionBody: DefinitionBody.fromChainable(startCodeBuild.next(markDeleted)),
+      definitionBody: DefinitionBody.fromChainable(routeDeleteInput),
       timeout: Duration.minutes(60),
       logs: { destination: logGroup, level: LogLevel.ALL },
       tracingEnabled: true,

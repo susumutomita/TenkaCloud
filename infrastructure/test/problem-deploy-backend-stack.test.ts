@@ -200,6 +200,38 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(createStateMachine).toContain("MarkFailed");
     });
 
+    it("Create State Machine は DescribeStacks を Lambda 経由で実行すべき (#762)", () => {
+      const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
+      const createStateMachine = Object.values(stateMachines)
+        .map((stateMachine) => JSON.stringify(stateMachine))
+        .find((definition) => definition.includes("StartDeployCodeBuild"));
+
+      expect(createStateMachine).toBeDefined();
+      expect(createStateMachine).toContain("RouteCreateInput");
+      expect(createStateMachine).toContain("StartDeployCodeBuildCrossAccount");
+      expect(createStateMachine).toContain("DescribeStack");
+      expect(createStateMachine).toContain("DescribeStackFunction");
+      expect(createStateMachine).not.toContain(
+        "arn:aws:states:::aws-sdk:cloudformation:describeStacks",
+      );
+      expect(createStateMachine).not.toContain("States.Format('{}', $.detail.competitorRoleArn)");
+    });
+
+    it("Delete State Machine は AssumeRole metadata の有無を Choice で分岐し、欠落 path 参照で runtime 死しないべき (#758)", () => {
+      const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
+      const deleteStateMachine = Object.values(stateMachines)
+        .map((stateMachine) => JSON.stringify(stateMachine))
+        .find((definition) => definition.includes("StartDeleteCodeBuild"));
+
+      expect(deleteStateMachine).toBeDefined();
+      expect(deleteStateMachine).toContain("RouteDeleteInput");
+      expect(deleteStateMachine).toContain("StartDeleteCodeBuildCrossAccount");
+      expect(deleteStateMachine).toContain("InvalidAssumeRoleMetadata");
+      expect(deleteStateMachine).toContain("$.detail.competitorRoleArn");
+      expect(deleteStateMachine).toContain("$.detail.externalIdParameterName");
+      expect(deleteStateMachine).toContain("MarkFailed");
+    });
+
     it("EventBridge Rule を Create / Delete / GenericScoring / ExternalIdAudit schedule で 4 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
       //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
