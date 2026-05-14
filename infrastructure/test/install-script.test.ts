@@ -23,7 +23,7 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
 
   it("Phase 3 で CDK_PARAM_ADMIN_CONSOLE_ORIGIN を再 export してから再 deploy すべき", () => {
     const exportIdx = source.indexOf(
-      'export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"',
+      `export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="\${ADMIN_CONSOLE_URL}"`,
     );
     const deployIdx = source.indexOf(
       "bunx cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight",
