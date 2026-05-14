@@ -297,6 +297,20 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     }
   };
 
+  const handleEndNowSchedule = async () => {
+    if (!apiClient || endsAtInFlight) return;
+    setEndsAtInFlight(true);
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { endsAt: new Date(Date.now()).toISOString() });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEndsAtInFlight(false);
+    }
+  };
+
   // #558: 採点を lock (= 表彰フェーズ、加点経路全停止)。
   //   - server side: READY / ENDED の event のみ受理 (= 409 not_lockable for other)
   //   - idempotent: 既に locked のときも 200 + idempotent=true
@@ -615,7 +629,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           header={
             <Header
               variant="h2"
-              description="開始時刻を指定すると HealthCheck が probe / 採点を開始、終了時刻を指定すると自動で gate を閉めます (= operator が「Event を終了」を押し忘れても採点が垂れ流しにならない、#536)。"
+              description="開始時刻を指定すると HealthCheck が probe / 採点を開始、終了時刻を指定すると status は変えずに採点 gate を閉じます。"
             >
               競技スケジュール
             </Header>
@@ -661,12 +675,21 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     未設定 (= 手動「Event を終了」まで採点継続)
                   </Box>
                 )}
-                <Button
-                  onClick={() => setEndsAtModalOpen(true)}
-                  disabled={!apiClient || endsAtInFlight}
-                >
-                  日時を指定して終了
-                </Button>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    onClick={() => setEndsAtModalOpen(true)}
+                    disabled={!apiClient || endsAtInFlight}
+                  >
+                    日時を指定して終了
+                  </Button>
+                  <Button
+                    loading={endsAtInFlight}
+                    disabled={!apiClient}
+                    onClick={handleEndNowSchedule}
+                  >
+                    即座に終了
+                  </Button>
+                </SpaceBetween>
               </SpaceBetween>
             </Field>
           </ColumnLayout>
