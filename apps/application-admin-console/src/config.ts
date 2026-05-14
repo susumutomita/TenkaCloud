@@ -20,6 +20,13 @@ export interface AppConfig {
    * runtime-config に未注入なら undefined (CDK 側 wire-up が完了するまで fallback 表示)。
    */
   readonly participantPortalUrl?: string;
+  /**
+   * #718: 競技者向け CFn bootstrap template (competitor-bootstrap.yaml) の public S3 URL。
+   * CFn `TemplateURL` は S3 URL のみ受け付けるので Launch Stack / Update Stack deeplink に
+   * 渡す URL は S3 でなければならない。未注入 (= Phase 3 redeploy 前) は GitHub raw URL に
+   * fallback する (= dev / 初回 deploy 用、 deeplink としては不正だが手 download 可能)。
+   */
+  readonly competitorBootstrapTemplateUrl?: string;
 }
 
 interface RuntimeConfig {
@@ -29,6 +36,7 @@ interface RuntimeConfig {
   readonly tenantName: string;
   readonly apiUrl: string;
   readonly participantPortalUrl?: string;
+  readonly competitorBootstrapTemplateUrl?: string;
 }
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
@@ -52,6 +60,10 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       apiUrl: data.apiUrl,
       participantPortalUrl:
         typeof data.participantPortalUrl === "string" ? data.participantPortalUrl : undefined,
+      competitorBootstrapTemplateUrl:
+        typeof data.competitorBootstrapTemplateUrl === "string"
+          ? data.competitorBootstrapTemplateUrl
+          : undefined,
     };
   } catch {
     return null;
@@ -77,6 +89,7 @@ export async function loadConfig(
       tenantName: runtime.tenantName,
       apiBaseUrl: runtime.apiUrl,
       participantPortalUrl: runtime.participantPortalUrl,
+      competitorBootstrapTemplateUrl: runtime.competitorBootstrapTemplateUrl,
       redirectUri,
       scope,
     };

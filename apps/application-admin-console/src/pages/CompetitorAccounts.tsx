@@ -248,7 +248,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         }}
       />
 
-      <SecretRevealModal details={showSecret} onDismiss={() => setShowSecret(null)} />
+      <SecretRevealModal
+        details={showSecret}
+        onDismiss={() => setShowSecret(null)}
+        templateUrl={config.competitorBootstrapTemplateUrl}
+      />
 
       <Modal
         visible={deleteTarget !== null}
@@ -276,7 +280,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         </p>
       </Modal>
 
-      <BootstrapUpdateModal target={updateTarget} onDismiss={() => setUpdateTarget(null)} />
+      <BootstrapUpdateModal
+        target={updateTarget}
+        onDismiss={() => setUpdateTarget(null)}
+        templateUrl={config.competitorBootstrapTemplateUrl}
+      />
 
       <Modal
         visible={rotateTarget !== null}
@@ -462,20 +470,24 @@ function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountMo
 interface SecretRevealModalProps {
   details: CreateCompetitorAccountResponse | RotateExternalIdResponse | null;
   onDismiss: () => void;
+  /** #718: runtime-config 由来の public S3 URL (= CFn TemplateURL に渡す)。未注入なら GitHub raw fallback。 */
+  templateUrl?: string;
 }
 
-function SecretRevealModal({ details, onDismiss }: SecretRevealModalProps) {
+function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModalProps) {
   const [allCopied, setAllCopied] = useState(false);
   if (!details) return null;
   const launchStackUrl = buildLaunchStackUrl({
     tenkaCloudAccountId: details.tenkaCloudAccountId,
     externalId: details.externalId,
     competitorRoleName: details.competitorRoleName,
+    templateUrl,
   });
   const payload = buildShareablePayload({
     tenkaCloudAccountId: details.tenkaCloudAccountId,
     externalId: details.externalId,
     competitorRoleName: details.competitorRoleName,
+    templateUrl,
   });
   const onCopyAll = async () => {
     await navigator.clipboard.writeText(payload);
@@ -574,6 +586,8 @@ function SecretRevealModal({ details, onDismiss }: SecretRevealModalProps) {
 interface BootstrapUpdateModalProps {
   target: CompetitorAccountSummary | null;
   onDismiss: () => void;
+  /** #718: runtime-config 由来の public S3 URL (= CFn TemplateURL に渡す)。未注入なら GitHub raw fallback。 */
+  templateUrl?: string;
 }
 
 /**
@@ -586,11 +600,11 @@ interface BootstrapUpdateModalProps {
  * 本 modal は秘密値 (ExternalId) を含まないので、 既存 row から呼べる (= row には
  * externalId が無い)。 競技者の CFn console で Parameter は default で existing value 再利用される。
  */
-function BootstrapUpdateModal({ target, onDismiss }: BootstrapUpdateModalProps) {
+function BootstrapUpdateModal({ target, onDismiss, templateUrl }: BootstrapUpdateModalProps) {
   const [copied, setCopied] = useState(false);
   if (!target) return null;
-  const updateUrl = buildUpdateStackUrl({ region: target.region });
-  const payload = buildUpdatePayload({ region: target.region });
+  const updateUrl = buildUpdateStackUrl({ region: target.region, templateUrl });
+  const payload = buildUpdatePayload({ region: target.region, templateUrl });
   const onCopy = async () => {
     await navigator.clipboard.writeText(payload);
     setCopied(true);

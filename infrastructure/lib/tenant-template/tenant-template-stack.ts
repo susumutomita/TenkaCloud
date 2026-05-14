@@ -58,6 +58,14 @@ interface TenantTemplateStackProps extends StackProps {
    * できるようにするため)。Participant Portal が無効化された tenant では undefined。
    */
   participantPortalUrl?: string;
+  /**
+   * #718: 競技者向け CFn bootstrap template (competitor-bootstrap.yaml) の public S3 URL。
+   * `AdminConsoleHostingStack` の `competitorBootstrapTemplateUrl` をクロススタック参照で受け、
+   * application-admin-console の runtime-config に注入する。
+   * Phase 1 deploy 時 (AdminConsoleHostingStack 未存在) は undefined、 Phase 3 で
+   * install.sh が tenant-template-pooled を再 deploy するときに埋まる。
+   */
+  competitorBootstrapTemplateUrl?: string;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -129,6 +137,7 @@ export class TenantTemplateStack extends Stack {
       tenantName: props.tenantName,
       apiUrl: apiGateway.restApi.url,
       participantPortalUrl: props.participantPortalUrl,
+      competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
     });
 
     new AwsCustomResource(this, "CreateTenantMapping", {

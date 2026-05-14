@@ -4,9 +4,11 @@
  *   - yaml を copy / download できる button を提供 (= 手動 deploy 経路)
  *   - AWS CFn console の Quick-create URL を発行 (= 1 click deploy 経路)
  *
- * Launch Stack URL は public repo の raw.githubusercontent.com URL を templateURL に渡し、
- * Parameter 3 つを query string で pre-fill する。 競技者は AWS SSO ログイン 1 回で deploy
- * 確認画面に直行できる。
+ * #718: CFn `TemplateURL` は **S3 / SSM の URL のみ** 受け付ける (= raw.githubusercontent.com は
+ * "TemplateURL must be a supported URL" で reject される)。 admin-console-hosting stack が
+ * deploy 時に public S3 bucket へ同 yaml を upload し、 runtime-config 経由で URL を露出する。
+ * 旧 fallback (= GitHub raw) は dev / 未 deploy 環境用にのみ残し、 deploy 後は config 経由で
+ * S3 URL に切り替わる。
  */
 
 const TEMPLATE_REPO = "susumutomita/TenkaCloud";
@@ -15,13 +17,35 @@ const TEMPLATE_PATH = "infrastructure/templates/competitor-bootstrap.yaml";
 const DEFAULT_REGION = "ap-northeast-1";
 const DEFAULT_STACK_NAME = "tenkacloud-competitor-bootstrap";
 
-export const COMPETITOR_BOOTSTRAP_TEMPLATE_URL = `https://raw.githubusercontent.com/${TEMPLATE_REPO}/${TEMPLATE_BRANCH}/${TEMPLATE_PATH}`;
+/**
+ * dev 環境 / runtime-config 未配線時の fallback URL。 CFn console から fetch すると
+ * "TemplateURL must be a supported URL" で reject されるので、 production では config 経由で
+ * S3 URL を必ず注入すること。 raw URL 自体は yaml の手 download / レビュー用には引き続き有効。
+ */
+export const COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK = `https://raw.githubusercontent.com/${TEMPLATE_REPO}/${TEMPLATE_BRANCH}/${TEMPLATE_PATH}`;
+
+/**
+ * @deprecated #718: const は dev fallback。 production では runtime-config の
+ * `competitorBootstrapTemplateUrl` を参照し、 builder 関数に渡すこと。
+ */
+export const COMPETITOR_BOOTSTRAP_TEMPLATE_URL = COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK;
+
+function resolveTemplateUrl(templateUrl: string | undefined): string {
+  return templateUrl && templateUrl.length > 0
+    ? templateUrl
+    : COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK;
+}
 
 export interface LaunchStackUrlInput {
   readonly tenkaCloudAccountId: string;
   readonly externalId: string;
   readonly competitorRoleName: string;
   readonly region?: string;
+  /**
+   * #718: CFn TemplateURL 用の S3 URL (= AdminConsoleHostingStack output)。
+   * undefined / 空文字なら GitHub raw fallback (= dev 用) を使う。
+   */
+  readonly templateUrl?: string;
 }
 
 /**
@@ -31,7 +55,7 @@ export interface LaunchStackUrlInput {
 export function buildLaunchStackUrl(input: LaunchStackUrlInput): string {
   const region = input.region ?? DEFAULT_REGION;
   const params = new URLSearchParams({
-    templateURL: COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
+    templateURL: resolveTemplateUrl(input.templateUrl),
     stackName: DEFAULT_STACK_NAME,
     param_TenkaCloudAccountId: input.tenkaCloudAccountId,
     param_ExternalId: input.externalId,
@@ -53,13 +77,15 @@ export function buildLaunchStackUrl(input: LaunchStackUrlInput): string {
  */
 export interface UpdateStackUrlInput {
   readonly region?: string;
+  /** #718: CFn TemplateURL 用の S3 URL。 undefined / 空文字なら GitHub raw fallback。 */
+  readonly templateUrl?: string;
 }
 
 export function buildUpdateStackUrl(input: UpdateStackUrlInput = {}): string {
   const region = input.region ?? DEFAULT_REGION;
   const params = new URLSearchParams({
     stackName: DEFAULT_STACK_NAME,
-    templateURL: COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
+    templateURL: resolveTemplateUrl(input.templateUrl),
   });
   return `https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/update/template?${params.toString()}`;
 }
@@ -77,7 +103,7 @@ export function buildShareablePayload(input: LaunchStackUrlInput): string {
     `RoleName:            ${input.competitorRoleName}`,
     "",
     "deploy 手順:",
-    `1. CFn テンプレ: ${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}`,
+    `1. CFn テンプレ: ${resolveTemplateUrl(input.templateUrl)}`,
     "2. 競技者 AWS account にログインし、 上記 3 値を Parameter として CFn create-stack",
     "3. Quick-create リンク (= 確認画面に pre-fill 済で直接遷移):",
     `   ${buildLaunchStackUrl(input)}`,
