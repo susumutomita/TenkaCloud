@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-015: ADR convention を harness invariant に格上げする</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-015: ADR convention を harness invariant に格上げする</h1>
+  <p><em>HTML 正本 + self-contained 規約を repo 同梱の機械検査に閉じ、 別 contributor / 別エージェントセッションでも自然と守れる状態にする</em></p>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-05-15</div>
+    <div><b>Tracking:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/763">#763</a></div>
+    <div><b>Related:</b>
+      <a href="./adr-007-outside-in.html">ADR-007</a>、
+      <a href="./adr-010-api-first-cli-mcp.html">ADR-010</a>、
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a>、
+      <a href="./harness.html">harness.md</a>
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>TenkaCloud は <code>docs/architecture/</code> 配下に手書き HTML の ADR (= Architecture Decision Record) を蓄積している。 ADR-001 から ADR-014 までに、 problem deploy CRUD、 cross-account federation、 problem plugin architecture、 EventBridge 駆動 reconciliation など、 SaaS 基盤の主要な設計判断が記録されている。</p>
+
+<p>この ADR 群には 2 つの暗黙の運用ルールがあった。</p>
+
+<ol>
+<li><strong>ADR は HTML で書く</strong> — Markdown ではなく手書き HTML を正本にし、 row span / color / SVG / collapsible / decision card grid などの表現力を使って判断と影響範囲を読みやすくする。 docs 全体の SSG (<code>scripts/build-docs.ts</code>) は ADR を上書き対象から除外して、 ADR HTML は build artifact ではなく source として扱う。</li>
+<li><strong>ADR は self-contained に書く</strong> — chat session の文脈 (<code>今回</code> / <code>本タスク</code> / <code>このターン</code> / <code>先ほど</code>)、 段階反映 metadata (<code>順次反映</code> / <code>Phase X.Y で書く</code> / <code>あとで追記</code>)、 AI agent との役割分担メモ (<code>Claude 担当</code> / <code>user 担当</code>) を本文に残さない。 OSS readers が ADR 単体で背景・判断・影響を理解できることを基準にする。</li>
+</ol>
+
+<p>この 2 ルールは、 これまで repo owner の personal memory (<code>~/.claude/projects/.../memory/feedback_design_docs_html.md</code> および <code>feedback_adr_self_contained_oss.md</code>) にのみ存在していた。 結果として次の問題が起きていた。</p>
+
+<table>
+<thead><tr><th>症状</th><th>例</th></tr></thead>
+<tbody>
+<tr><td>memory を持たない contributor / セッションが MD で ADR を書きうる</td><td>別環境の AI agent が <code>docs/architecture/adr-015-foo.md</code> を提案して PR を出す。 SSG が touch しないため build は通り、 reviewer が指摘するまで HTML 正本ルールに気づかない。</td></tr>
+<tr><td>chat 痕跡が ADR に持ち込まれて累積する</td><td><code>adr-002</code> / <code>006</code> / <code>009</code> / <code>013</code> に <code>Claude 担当</code> / <code>user 担当</code> の役割分担メモが残存。 OSS readers にとって意味不明な metadata が決定文書に混入する。</td></tr>
+<tr><td>規約を CLAUDE.md / AGENTS.md にも書いていなかった</td><td>codebase 内に正本がなく、 memory 同期できないツールチェーン (Codex CLI / Cursor 等) が違反を再生産する。</td></tr>
+</tbody>
+</table>
+
+<h3>制約</h3>
+
+<table>
+<thead><tr><th>制約</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>Cost 0 原則 (Free Tier 内運用)</td><td>追加の SaaS linter / cloud build service を要求しない。 ローカル + GitHub Actions 内で完結させる。</td></tr>
+<tr><td>既存 PR Discipline (<code>INVARIANT_PR_*</code>)</td><td>harness 実行は staged ファイル限定で fast に保ち、 <code>make before-commit</code> ゲート前に走らせて開発体験を壊さない。</td></tr>
+<tr><td>既存 ADR を 1 PR で全部書き直さない</td><td>14 本ある既存 ADR の本文を一括で修正するのは scope 過大。 既知違反は baseline で suppress し、 新規 regression のみを落とす。</td></tr>
+<tr><td>ADR HTML の表現力を維持する</td><td>SVG / decision card grid / collapsible <code>&lt;details&gt;</code> を活かす想定なので、 純テキスト変換 (Markdown 経由 SSG) には戻さない。</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<p><strong>Accepted:</strong> ADR convention (HTML 正本 / self-contained) を harness invariant に格上げし、 repo 同梱の機械検査と CLAUDE.md / AGENTS.md による明文化の 2 段構えで強制する。</p>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">D1</div>
+    <div class="title"><code>adr-must-be-html</code> rule</div>
+    <div class="body"><code>docs/architecture/adr-*.md</code> が staged または tracked にあると error を出す。 ADR は HTML 手書き正本だけを許容する。</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D2</div>
+    <div class="title"><code>adr-self-contained</code> rule</div>
+    <div class="body"><code>docs/architecture/adr-*.html</code> 本文中の chat 痕跡 / 段階反映 metadata / 役割分担メモを行単位で error にする。 <code>&lt;pre&gt;</code> / <code>&lt;code&gt;</code> 引用ブロック内は除外する。</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D3</div>
+    <div class="title">既存違反は baseline 化</div>
+    <div class="body"><code>.claude/harness/baselines/adr-self-contained.json</code> に既知違反 (ruleId / filePath / line / match) を列挙する。 baseline に載っている finding は harness が suppress し、 新規 regression のみが落ちる。</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D4</div>
+    <div class="title">CLAUDE.md / AGENTS.md にも明文化</div>
+    <div class="body">memory 非保持の contributor / エージェントセッションにも規約が届くよう、 codebase 内に正本を置く。 機械検査と人間 review の両側で強制する。</div>
+  </div>
+</div>
+
+<h3>D1: <code>adr-must-be-html</code></h3>
+
+<p>新規 ADR を MD で起こすこと自体を禁止する。 検査は単純な path match で、 <code>docs/architecture/adr-[a-z0-9-]+\.md</code> に該当する staged / tracked ファイルがあれば error を返す。 例外は <code>docs/architecture/harness.md</code> のみで、 これは invariant の source-of-truth であり ADR ではないため対象外とする。</p>
+
+<p>検査が走るタイミングは次のいずれか。</p>
+
+<ul>
+<li><code>make harness</code> (= <code>--staged --fail-on=error</code>) — pre-commit hook と PR ゲートから呼ばれる。</li>
+<li><code>make harness-test</code> — rule そのものの unit test (vitest) を走らせる。</li>
+<li>full scan モード (<code>--staged</code> 省略) — CI で全 tracked ファイルを scan する保険として残す。</li>
+</ul>
+
+<h3>D2: <code>adr-self-contained</code></h3>
+
+<p>ADR HTML 本文を行単位で走査し、 chat session 文脈や段階反映 metadata に該当する正規表現にマッチする行を error として報告する。 検出パターン群は次のとおり。</p>
+
+<table>
+<thead><tr><th>カテゴリ</th><th>マッチ語の例</th><th>禁止理由</th></tr></thead>
+<tbody>
+<tr><td>時間的指示語</td><td><code>今回</code> / <code>本タスク</code> / <code>このターン</code> / <code>先ほど</code> / <code>さきほど</code></td><td>ADR は時間軸を持たない決定文書。 「いつ書かれたか」に依存する表現は読者を混乱させる。</td></tr>
+<tr><td>chat session 参照</td><td><code>このチャット</code> / <code>このスレッド</code></td><td>ADR は会話 log ではない。 必要な context は本文に取り込む。</td></tr>
+<tr><td>段階反映 metadata</td><td><code>順次反映</code> / <code>順次更新</code> / <code>あとで書く</code> / <code>TODO: あとで追記</code> / <code>Phase X.Y で書く</code></td><td>未確定状態の ADR を merge する signal になり、 後続 PR が忘れられる。 段階分割は別 ADR / 別 issue に切り出す。</td></tr>
+<tr><td>一人称 / 役割分担</td><td><code>Claude が書いた</code> / <code>Claude 担当</code> / <code>user 担当</code> / <code>私が決めた</code></td><td>OSS readers にとって意味不明な metadata。 ADR は <code>TenkaCloud は X を採用する</code> のような impersonal な決定文体で書く。</td></tr>
+</tbody>
+</table>
+
+<p>引用コード (<code>&lt;pre&gt;</code> / <code>&lt;code&gt;</code> ブロック内) は line-level mask で除外する。 fixture / code example として上記語を引く場面はあるため、 ブロック内の出現は finding にしない。</p>
+
+<h3>D3: baseline 機構</h3>
+
+<p>既存の 14 本の ADR を 1 PR で書き直すのは scope 過大なため、 既知違反は <code>.claude/harness/baselines/adr-self-contained.json</code> に entry として列挙する。 baseline schema は次のとおり。</p>
+
+<pre>{
+  "entries": [
+    {
+      "ruleId": "adr-self-contained",
+      "filePath": "docs/architecture/adr-006-notifications.html",
+      "line": 601,
+      "match": "user 担当"
+    },
+    ...
+  ]
+}</pre>
+
+<p>harness runner は rule check 結果から <code>ruleId</code> / <code>filePath</code> / <code>line</code> / <code>match</code> が一致する finding を suppress する。 新規 ADR / 既存 ADR の修正で新たに違反を入れた場合は baseline に載っていないため finding が落ちる。 baseline entry の削除方向 (= 既存違反を本文修正で消す PR) は許容するが、 追加方向 (= 新規違反を baseline に逃がす PR) は code review で禁じる。</p>
+
+<h3>D4: docs 上の明文化</h3>
+
+<p>codebase 内の 2 つの正本ファイルに ADR 規約を書く。</p>
+
+<ul>
+<li><a href="./harness.html">harness.md</a> の Enforcement Rules 表に <code>adr-must-be-html</code> / <code>adr-self-contained</code> の 2 rule を追加する。 これにより rule ID と意図が <code>secrets-manager-forbidden</code> / <code>handler-must-not-call-fetch</code> と同じ粒度で参照可能になる。</li>
+<li><a href="../../CLAUDE.md">CLAUDE.md</a> および <a href="../../AGENTS.md">AGENTS.md</a> に <strong>ADR 規約</strong> セクションを追加する。 memory にしか書いていなかった HTML / self-contained 規約を、 contributor / エージェント向けの開発フロー文書に格上げする。</li>
+</ul>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Positive</h3>
+
+<ul>
+<li><strong>harness が初めて成立する</strong>: 本 ADR 採択以前、 <code>make harness</code> は <code>.claude/harness/bin/architecture.ts</code> が repo に存在せず <code>Module not found</code> で常に落ちていた。 ADR-015 で <code>.claude/harness/</code> 配下に CLI scaffold + rule registry + baseline filter + vitest 設定を一式持ち込み、 <code>make harness</code> / <code>make harness-test</code> が動作する状態になる。 既存の <code>secrets-manager-forbidden</code> / <code>handler-must-not-call-fetch</code> も同じ scaffold に後から追加可能になる。</li>
+<li><strong>memory 非保持の contributor / エージェントに規約が届く</strong>: Codex CLI、 Cursor、 別環境の Claude Code、 human contributor のいずれが ADR を書いても、 <code>make before-commit</code> 経由で同じ規約が適用される。 規約が memory にしか無い状態の脆さが解消される。</li>
+<li><strong>既存違反の見える化</strong>: baseline JSON が「どこに残存違反が居るか」のインデックスになり、 ADR 本文を修正する PR で 1 entry ずつ削れる。 違反一覧を grep で抜くより accurate に追える。</li>
+<li><strong>Enforcement Rule 追加の foothold</strong>: 今後 architecture invariant や PR Discipline の 機械検査を増やすとき、 ADR-015 が確立した rule 登録 / baseline / 単体テストの pattern に乗せられる。</li>
+</ul>
+
+<h3>Negative / Trade-off</h3>
+
+<ul>
+<li><strong>正規表現ベースの検出は false positive / false negative がある</strong>: 「順次 deploy する」 (= normal 用法) は通すよう regex を狭めているが、 將來に新しい禁止表現が出てきたら pattern 追加 PR を要する。 false positive が起きた場合は文章を書き換えるか、 引用なら <code>&lt;code&gt;</code> 内に置く運用で逃げる。</li>
+<li><strong>baseline は永続的な技術負債になりうる</strong>: baseline に置いた違反を「既知なのでいい」と放置すると、 本来削るべき残骸が ADR に残り続ける。 baseline は新規 PR の足枷を外す回避策であって、 段階的に空にしていく前提で運用する。</li>
+<li><strong>harness 本体が 1 つの workspace になる</strong>: <code>.claude/harness/</code> は独自 <code>package.json</code> / <code>tsconfig.json</code> / <code>node_modules</code> を持つ。 monorepo の workspaces 一覧には載らないため、 ルート <code>make install</code> とは別に <code>cd .claude/harness && bun install</code> が必要 (= <code>make harness</code> / <code>make harness-test</code> 内で吸収される)。</li>
+<li><strong>ADR-015 自身も self-contained rule の対象になる</strong>: 本 ADR 内に検出パターン語 (<code>今回</code> / <code>Claude 担当</code> 等) を <strong>説明として</strong> 含める必要があるため、 該当部分は <code>&lt;code&gt;</code> でラップして mask 範囲に逃がしている。 同様の self-referential ADR を将来書くときは同じパターンを踏襲する。</li>
+</ul>
+
+<h3>Risk</h3>
+
+<table>
+<thead><tr><th>Risk</th><th>影響</th><th>緩和策</th></tr></thead>
+<tbody>
+<tr><td>harness が空白 / 改行 / unicode variant で誤検出する</td><td>新規 PR が unrelated に落ちる</td><td>regex を厳格に保ち、 vitest fixture で代表例を pin。 issue が出たら pattern + test を 1 PR で更新する。</td></tr>
+<tr><td>baseline JSON のメンテが止まる</td><td>残存違反が永久に残る</td><td>tech-debt スキャンの観察対象として baseline entry 数を追跡する。 ADR を修正する PR で entry 削除をセットにする習慣を CLAUDE.md に書く。</td></tr>
+<tr><td>新規 ADR を MD で書きたい誘惑</td><td><code>adr-must-be-html</code> rule への bypass PR が出る</td><td>harness を <code>make before-commit</code> ゲートに据え置き、 bypass 不能にする。 CI でも同じ check を走らせる。</td></tr>
+<tr><td>harness 自体の bug が ADR PR をブロックする</td><td>contributor の生産性低下</td><td>vitest を unit test として常時 green に保つ。 harness の動作変更は <code>--fail-on=warning</code> 等の段階導入経路を残す。</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Alternatives considered</h2>
+
+<table>
+<thead>
+<tr><th>選択肢</th><th>判定</th><th>理由</th></tr>
+</thead>
+<tbody>
+<tr class="hide"><td>A. docs だけに書いて harness を作らない</td><td><span class="badge reject">却下</span></td><td>memory の延長と変わらず、 規約を読まない contributor / エージェントには届かない。 reviewer が毎回指摘するコストが残る。</td></tr>
+<tr class="hide"><td>B. external linter (textlint / vale / markdownlint plugin)</td><td><span class="badge reject">却下</span></td><td>HTML 内の chat 痕跡を高精度で検査できる既製 ruleset は無い。 plugin 化のコストが harness 自前実装と同等で、 baseline 機構を別 tool に外出しすると統制が分散する。</td></tr>
+<tr class="hide"><td>C. pre-commit hook だけで CI には載せない</td><td><span class="badge reject">却下</span></td><td>local で hook を無効化されると bypass 可能。 GitHub Actions 側でも <code>make harness</code> を再実行することで二重ゲートにする方針と整合しない。</td></tr>
+<tr class="show"><td>D. <code>.claude/harness/</code> 配下に CLI + rule registry + baseline + vitest を持ち込む</td><td><span class="badge accept">採用</span></td><td>既存 <code>secrets-manager-forbidden</code> / <code>handler-must-not-call-fetch</code> の rule 登録先と同じ場所に拡張する自然な経路。 harness 本体を初めて成立させ、 後続の Enforcement Rule 追加にも再利用できる。</td></tr>
+<tr class="hide"><td>E. 全 ADR の本文を 1 PR で書き直して baseline 不要にする</td><td><span class="badge reject">却下</span></td><td>14 本ある ADR 本文の修正は scope 過大。 reviewer に diff の文脈解読を要求しすぎる。 baseline で suppress しつつ別 PR で削減する方が安全。</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Implementation outline</h2>
+
+<p>harness scaffold と rule 群は次の構造で <code>.claude/harness/</code> 配下に閉じる。</p>
+
+<pre>.claude/harness/
+├── package.json              # 独自 workspace (bun install 対象)
+├── tsconfig.json
+├── vitest.config.ts
+├── bin/
+│   ├── architecture.ts       # CLI entrypoint (= make harness が呼ぶ)
+│   └── tech-debt.ts          # 将来の tech-debt scanner placeholder
+├── src/
+│   ├── cli.ts                # 引数 parser + run + formatFindings
+│   ├── baseline.ts           # baseline JSON loader + finding suppress
+│   ├── types.ts              # Finding / Rule / Severity 型
+│   ├── rules/
+│   │   ├── index.ts          # rule registry
+│   │   ├── adr-must-be-html.ts
+│   │   ├── adr-self-contained.ts
+│   │   ├── adr-must-be-html.test.ts
+│   │   └── adr-self-contained.test.ts
+│   └── utils/
+│       └── staged-files.ts   # git diff --cached / ls-files wrapper
+└── baselines/
+    └── adr-self-contained.json</pre>
+
+<p>Makefile target との対応は次のとおり。</p>
+
+<table>
+<thead><tr><th>Make target</th><th>実コマンド</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>make harness</code></td><td><code>bun run .claude/harness/bin/architecture.ts --staged --fail-on=error</code></td><td>pre-commit / PR ゲート。 staged ファイルのみ scan する fast path。</td></tr>
+<tr><td><code>make harness-test</code></td><td><code>cd .claude/harness &amp;&amp; bunx vitest run</code></td><td>rule そのものの unit test。 rule を増減するときに必ず通す。</td></tr>
+<tr><td>full scan</td><td><code>bun run .claude/harness/bin/architecture.ts --fail-on=error</code></td><td>CI 側で全 tracked ファイルを scan する保険。 staged モードで漏れた違反を catch。</td></tr>
+</tbody>
+</table>
+
+<h3>新規 Enforcement Rule 追加手順</h3>
+
+<ol>
+<li><code>.claude/harness/src/rules/&lt;rule-id&gt;.ts</code> に rule 本体を書き、 同階層の <code>&lt;rule-id&gt;.test.ts</code> で fixture を pin する。</li>
+<li><code>.claude/harness/src/rules/index.ts</code> の <code>architectureRules</code> 配列に rule を登録する。</li>
+<li><code>docs/architecture/harness.md</code> の Enforcement Rules 表に 1 段落で rule ID / 検査対象 / 違反理由を書き、 <code>make build-docs</code> で <code>harness.html</code> を再生成する。</li>
+<li><code>CLAUDE.md</code> / <code>AGENTS.md</code> に違反パターンが反映される場合は規約セクションも更新する。</li>
+<li>既存違反がある場合は baseline JSON に列挙する。 entry 削減を別 PR の作業項目として issue で trackable にする。</li>
+</ol>
+</section>
+
+<section>
+<h2>Rollout</h2>
+
+<ul>
+<li>PR <a href="https://github.com/susumutomita/TenkaCloud/pull/770">#770</a> で harness scaffold と 2 rule、 baseline、 docs 反映を同時 merge する (= ADR-015 と同 PR / 同 rollout unit)。</li>
+<li>merge 直後から <code>make harness</code> が <code>Module not found</code> ではなくなる。 contributor / エージェントの開発フロー文書 (CLAUDE.md / AGENTS.md) を読んだ時点で規約が伝わる。</li>
+<li>既存 ADR の baseline entry 削減は別 PR で 1 entry ずつ進める。 baseline が空になった時点で <code>adr-self-contained</code> rule は新規 ADR / 既存 ADR の修正の両方で完全に効くようになる。</li>
+<li>次の Enforcement Rule (= ADR-014 で予告した EventBridge 移行に伴う <code>polling-budget-forbidden</code> 等) を追加する際は、 ADR-015 で確立した手順に従う。</li>
+</ul>
+</section>
+
+</body>
+</html>
