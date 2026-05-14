@@ -127,6 +127,7 @@ export async function createEvent(
 /**
  * #555: `POST /events/:id/deploy` の opt-in body。全フィールド optional:
  *   - `retryFailedOnly: true` — FAILED 状態の deployment 行だけ再実行 (= 失敗分 retry)
+ *   - `forceRedeploy: true` — COMPLETE/FAILED/DELETED の既存 deployment を置換して再実行
  *   - `teamIds` — 指定 team のみ deploy (= 後追い team / 該当 team の env 再構築)
  *   - `problemIds` — 指定 problem のみ deploy (= 後追い問題 / 修正済問題の全 team 再 deploy)
  *
@@ -134,6 +135,7 @@ export async function createEvent(
  */
 export interface BulkDeployBody {
   retryFailedOnly?: true;
+  forceRedeploy?: true;
   teamIds?: readonly string[];
   problemIds?: readonly string[];
 }
