@@ -13,6 +13,7 @@ import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window";
 import { ControlPlaneStack } from "../lib/control-plane-stack";
 import { getEnv } from "../lib/helper-functions";
+import { ObservabilityStack } from "../lib/observability/cloudwatch-dashboard-stack";
 import type { ParticipantPortalRuntimeConfig } from "../lib/problem-deploy/participant-portal-hosting";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../lib/tenant-pipeline/serverless-saas-pipeline";
@@ -209,6 +210,9 @@ const apiKeyBasicTierParameter = resolveApiKey("CDK_PARAM_API_KEY_BASIC_TIER_PAR
 const stackEnv =
   awsAccountId && awsRegion ? { env: { account: awsAccountId, region: awsRegion } } : {};
 
+const apiIdFromExecuteApiUrl = (apiUrl: string): string =>
+  cdk.Fn.select(0, cdk.Fn.split(".", cdk.Fn.select(2, cdk.Fn.split("/", apiUrl))));
+
 const controlPlaneStack = new ControlPlaneStack(app, "tenkacloud-control-plane", {
   ...stackEnv,
   systemAdminEmail,
@@ -371,6 +375,70 @@ const serverlessSaaSPipeline = new ServerlessSaaSPipeline(app, "tenkacloud-saas-
   sourceZip,
 });
 cdk.Aspects.of(serverlessSaaSPipeline).add(new DestroyPolicySetter());
+
+const observabilityStack = new ObservabilityStack(app, "tenkacloud-observability", {
+  ...stackEnv,
+  environment,
+  stateMachines: {
+    deployCreateArn: problemDeployBackendStack.deployCreateStateMachineArn,
+    deployDeleteArn: problemDeployBackendStack.deployDeleteStateMachineArn,
+  },
+  codeBuildProjectNames: {
+    problemDeploy: problemDeployBackendStack.deployCodeBuildProjectName,
+    provisioning: serverlessSaaSPipeline.provisioningCodeBuildProjectName,
+  },
+  dynamoDbTableNames: {
+    deployments: problemDeployBackendStack.deploymentsTable.tableName,
+    events: problemDeployBackendStack.eventsTable.tableName,
+    teams: problemDeployBackendStack.teamsTable.tableName,
+    competitorAccounts: problemDeployBackendStack.competitorAccountsTable.tableName,
+    problemEndpoints: problemDeployBackendStack.problemEndpointsTable.tableName,
+    tenantMappingTable: bootstrapTemplateStack.tenantMappingTable.tableName,
+  },
+  lambdaFunctionNames: {
+    deployApi: problemDeployBackendStack.deployApiLambda.functionName,
+    eventApi: problemDeployBackendStack.eventApiLambda.functionName,
+    participantPortal: problemDeployBackendStack.participantPortalLambda?.functionName,
+    adminInsight: adminConsoleInsightStack.lambdaFunctionName,
+    competitorAccounts: problemDeployBackendStack.competitorAccountsApiLambda.functionName,
+    externalIdAudit: problemDeployBackendStack.externalIdAuditLambda.functionName,
+    genericScoring: problemDeployBackendStack.genericScoringLambda.functionName,
+  },
+  apiGateways: {
+    controlPlane: {
+      kind: "http",
+      label: "control-plane",
+      apiId: apiIdFromExecuteApiUrl(controlPlaneStack.regApiGatewayUrl),
+      stage: "$default",
+    },
+    tenant: {
+      kind: "rest",
+      label: "tenant",
+      apiName: tenantTemplateStack.tenantApiName,
+      stage: tenantTemplateStack.tenantApiStageName,
+    },
+    // ADR-001 以降 problem-deploy routes は tenant REST API に統合されているため、
+    // API Gateway metric は同じ API/stage を problem-deploy label でも表示する。
+    problemDeploy: {
+      kind: "rest",
+      label: "problem-deploy",
+      apiName: tenantTemplateStack.tenantApiName,
+      stage: tenantTemplateStack.tenantApiStageName,
+    },
+    adminInsight: {
+      kind: "http",
+      label: "admin-insight",
+      apiId: adminConsoleInsightStack.apiId,
+      stage: "$default",
+    },
+  },
+});
+observabilityStack.addDependency(controlPlaneStack);
+observabilityStack.addDependency(problemDeployBackendStack);
+observabilityStack.addDependency(adminConsoleInsightStack);
+observabilityStack.addDependency(bootstrapTemplateStack);
+observabilityStack.addDependency(tenantTemplateStack);
+observabilityStack.addDependency(serverlessSaaSPipeline);
 
 // AdminConsoleHostingStack: React admin-console を CloudFront+S3 で配信 + runtime-config.json 配置。
 // 3-phase deploy の phase 2 で deploy される (install.sh が backend outputs を env として渡す)。

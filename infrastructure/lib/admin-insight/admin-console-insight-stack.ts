@@ -62,6 +62,10 @@ export class AdminConsoleInsightStack extends cdk.Stack {
    * admin-console の runtime-config.json に注入される。
    */
   public readonly apiUrl: string;
+  /** Admin Insight HTTP API ID for CloudWatch metrics. */
+  public readonly apiId: string;
+  /** Admin Insight Lambda function name for CloudWatch metrics. */
+  public readonly lambdaFunctionName: string;
 
   constructor(scope: Construct, id: string, props: AdminConsoleInsightStackProps) {
     super(scope, id, props);
@@ -71,6 +75,7 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       eventsTable: props.eventsTable,
       teamsTable: props.teamsTable,
     });
+    this.lambdaFunctionName = lambda.fn.functionName;
 
     // JWT Authorizer: ControlPlane UserPool の token を検証する。
     // (= cognito:groups claim の SystemAdmin チェックは handler 側で実施する 2 段防御)
@@ -151,6 +156,7 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     });
 
     this.apiUrl = httpApi.apiEndpoint;
+    this.apiId = httpApi.apiId;
 
     new CfnOutput(this, "AdminInsightApiUrl", {
       value: httpApi.apiEndpoint,
