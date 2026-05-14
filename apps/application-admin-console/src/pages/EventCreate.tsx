@@ -34,6 +34,7 @@ const TEAMS_MIN = 1;
 const TEAMS_MAX = 99;
 const TEAM_COUNT_INPUT_MAX_LEN = 3; // TEAMS_MAX が 99 = 2 桁、+1 余裕で 3 桁まで入力受理
 const INITIAL_TEAM_COUNT = 3;
+const NO_VERIFIED_ACCOUNTS_HELPER = "No verified accounts available. Add one first.";
 
 const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
   value: r.code,
@@ -118,6 +119,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     () => filterVerifiedAccounts(competitorAccounts),
     [competitorAccounts],
   );
+  const noVerifiedAccounts = competitorAccounts !== null && verifiedAccounts.length === 0;
+  const showNoVerifiedAccountsHint = noVerifiedAccounts && !accountsLoadError;
   const accountOptions: SelectProps.Option[] = useMemo(
     () =>
       verifiedAccounts.map((a) => ({
@@ -318,7 +321,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
               dropdown に選択肢が出るまで数秒お待ちください。
             </Alert>
           )}
-          {competitorAccounts !== null && verifiedAccounts.length === 0 && !accountsLoadError && (
+          {showNoVerifiedAccountsHint && (
             <Alert
               type="warning"
               header="verified=true な Competitor Account がありません"
@@ -331,7 +334,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                   >
                     再読込
                   </Button>
-                  <Link href="#/competitor-accounts" external={false}>
+                  <Link
+                    href="/competitor-accounts"
+                    external={false}
+                    onFollow={(e) => {
+                      e.preventDefault();
+                      navigate("/competitor-accounts");
+                    }}
+                  >
                     Competitor Accounts へ移動
                   </Link>
                 </SpaceBetween>
@@ -382,23 +392,32 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                       const selected =
                         accountOptions.find((o) => o.value === t.awsAccountId) ?? null;
                       return (
-                        <Select
-                          selectedOption={selected}
-                          options={accountOptions}
-                          placeholder={
-                            accountOptions.length === 0
-                              ? "verified account 未登録"
-                              : "verified account を選択"
-                          }
-                          disabled={accountOptions.length === 0}
-                          empty="verified=true な競技者 account がありません"
-                          onChange={({ detail }) =>
-                            updateTeamRow(t.idx, {
-                              awsAccountId: detail.selectedOption?.value ?? "",
-                            })
-                          }
-                          invalid={t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)}
-                        />
+                        <SpaceBetween size="xxs">
+                          <Select
+                            selectedOption={selected}
+                            options={accountOptions}
+                            placeholder={
+                              noVerifiedAccounts
+                                ? NO_VERIFIED_ACCOUNTS_HELPER
+                                : "verified account を選択"
+                            }
+                            disabled={accountOptions.length === 0}
+                            empty="verified=true な競技者 account がありません"
+                            onChange={({ detail }) =>
+                              updateTeamRow(t.idx, {
+                                awsAccountId: detail.selectedOption?.value ?? "",
+                              })
+                            }
+                            invalid={
+                              t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)
+                            }
+                          />
+                          {noVerifiedAccounts && (
+                            <Box variant="small" color="text-status-inactive">
+                              {NO_VERIFIED_ACCOUNTS_HELPER}
+                            </Box>
+                          )}
+                        </SpaceBetween>
                       );
                     },
                   },
