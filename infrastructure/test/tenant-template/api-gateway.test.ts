@@ -9,9 +9,9 @@ import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime";
 
 /**
  * tenant API Gateway の resource / method shape を pin する。サイドバー「デプロイ履歴」が引く
- * `GET /deployments` (no path param) を含む全 5 route が、Lambda 内 Hono router と整合
- * していることを担保する (= PR #467 で Lambda には追加したが Gateway resource を入れ忘れて
- * 403 + CORS error になった regression を防ぐ)。
+ * `GET /deployments` (no path param) や `GET /deployments/{jobId}/stack-progress` を含む
+ * deploy route が、Lambda 内 Hono router と整合していることを担保する (= PR #467 で Lambda
+ * には追加したが Gateway resource を入れ忘れて 403 + CORS error になった regression を防ぐ)。
  */
 
 function buildHarness() {
@@ -101,6 +101,23 @@ describe("tenant ApiGateway", () => {
     tpl.hasResourceProperties("AWS::ApiGateway::Method", {
       HttpMethod: "DELETE",
       ResourceId: { Ref: jobIdResource },
+    });
+  });
+
+  it("/deployments/{jobId}/stack-progress に GET / OPTIONS method が紐づいているべき", () => {
+    const stackProgressResource = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { PathPart: "stack-progress" },
+      }),
+    )[0]?.[0];
+    expect(stackProgressResource).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "GET",
+      ResourceId: { Ref: stackProgressResource },
+    });
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "OPTIONS",
+      ResourceId: { Ref: stackProgressResource },
     });
   });
 
