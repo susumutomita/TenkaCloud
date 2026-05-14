@@ -13,6 +13,7 @@ import { DeployCreateStateMachine } from "./deploy-create-state-machine";
 import { DeployDeleteStateMachine } from "./deploy-delete-state-machine";
 import { DeployDeleteEventRule, DeployEventRule } from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
+import { DescribeStackLambda } from "./describe-stack-lambda";
 import { EventApiLambda } from "./event-api-lambda";
 import { EventsTable } from "./events-table";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
@@ -240,8 +241,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
     this.deployCodeBuildProjectName = codeBuild.project.projectName;
 
+    const describeStack = new DescribeStackLambda(this, "DescribeStack", {
+      environmentName: props.environmentName,
+    });
+
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {
       codeBuildProject: codeBuild.project,
+      describeStackFunction: describeStack.fn,
       deploymentsTable: deployments.table,
     });
     this.deployCreateStateMachineArn = stateMachine.stateMachine.stateMachineArn;

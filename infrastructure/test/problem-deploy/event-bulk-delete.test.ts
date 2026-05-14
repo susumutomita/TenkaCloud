@@ -17,7 +17,9 @@ function buildShared(): {
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
     eventBusName: "test-bus",
+    env: "development",
     ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
     events: { send: eventsSend } as unknown as EventSharedResources["events"],
     problemsCatalog: {},
@@ -39,6 +41,8 @@ const dep = (over: Record<string, unknown> = {}) => ({
   tenantId: "tenant-acme",
   problemId: "p",
   awsAccountId: "999999999999",
+  competitorRoleArn: "arn:aws:iam::999999999999:role/TenkaCloud-CompetitorDeploy-Role",
+  externalIdParameterName: "/development/tenants/tenant-acme/external-id",
   region: "ap-northeast-1",
   namePrefix: "tc-p-team-1",
   status: "COMPLETE",
@@ -138,6 +142,34 @@ describe("bulkTeardownEvent", () => {
       expect(out.result.enqueued).toBe(1);
       expect(out.result.skipped).toBe(2);
     }
+  });
+
+  it("DeployDeleteRequested detail に AssumeRole metadata を含めるべき (#758)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        dep({
+          jobId: "01A",
+          competitorRoleArn: "arn:aws:iam::999999999999:role/TenkaCloud-CompetitorDeploy-Role",
+          externalIdParameterName: "/development/tenants/tenant-acme/external-id",
+        }),
+      ],
+    });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    const putCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(String(putCmd.input.Entries?.[0]?.Detail)) as {
+      competitorRoleArn?: string;
+      externalIdParameterName?: string;
+    };
+    expect(detail.competitorRoleArn).toBe(
+      "arn:aws:iam::999999999999:role/TenkaCloud-CompetitorDeploy-Role",
+    );
+    expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
 
   it("event は存在するが deployment 0 件 (まだ deploy してない) なら enqueued=0 を返すべき", async () => {

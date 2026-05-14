@@ -1,6 +1,7 @@
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
+import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
@@ -104,6 +105,28 @@ export async function bulkTeardownEvent(
         region,
         awsAccountId,
       };
+      const rowHasAssumeRoleMetadata =
+        typeof item.competitorRoleArn === "string" &&
+        item.competitorRoleArn.length > 0 &&
+        typeof item.externalIdParameterName === "string" &&
+        item.externalIdParameterName.length > 0;
+      const verified = rowHasAssumeRoleMetadata
+        ? undefined
+        : await resolveVerifiedCompetitorAccount(
+            {
+              ddb: shared.ddb,
+              competitorAccountsTableName: shared.competitorAccountsTableName,
+              env: shared.env,
+            },
+            tenantId,
+            awsAccountId,
+          );
+      detail.competitorRoleArn = rowHasAssumeRoleMetadata
+        ? item.competitorRoleArn
+        : verified?.competitorRoleArn;
+      detail.externalIdParameterName = rowHasAssumeRoleMetadata
+        ? item.externalIdParameterName
+        : verified?.externalIdParameterName;
       return {
         entry: {
           EventBusName: shared.eventBusName,
