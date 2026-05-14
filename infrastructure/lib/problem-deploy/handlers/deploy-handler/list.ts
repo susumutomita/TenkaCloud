@@ -21,6 +21,7 @@ export interface DeploymentSummary {
   readonly namePrefix: string;
   readonly status: DeploymentStatus;
   readonly stackId?: string;
+  readonly buildId?: string;
   readonly stackOutputs?: string;
   readonly failureReason?: string;
   readonly createdAt: string;
@@ -66,6 +67,7 @@ export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
     namePrefix: String(item.namePrefix ?? ""),
     status: (item.status ?? "PENDING") as DeploymentStatus,
     stackId: item.stackId,
+    buildId: item.buildId,
     stackOutputs: item.stackOutputs,
     failureReason: item.failureReason,
     createdAt: String(item.createdAt ?? ""),

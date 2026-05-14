@@ -165,6 +165,22 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(synthJson).toContain("IN_PROGRESS");
     });
 
+    it("Create State Machine は完了/失敗時に CodeBuild buildId を Deployments row へ保存すべき", () => {
+      const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
+      const createStateMachine = Object.values(stateMachines)
+        .map((stateMachine) => JSON.stringify(stateMachine))
+        .find((definition) => definition.includes("StartDeployCodeBuild"));
+
+      expect(createStateMachine).toBeDefined();
+      expect(createStateMachine).toContain("MarkSucceeded");
+      expect(createStateMachine).toContain("MarkFailed");
+      expect(createStateMachine).toContain(
+        "stackId = :stackId, stackOutputs = :stackOutputs, buildId = :buildId",
+      );
+      expect(createStateMachine).toContain("#failureReason = :failureReason, buildId = :buildId");
+      expect(createStateMachine).toContain("$.codebuild.Build.Id");
+    });
+
     it("EventBridge Rule を Create / Delete / GenericScoring / ExternalIdAudit schedule で 4 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
       //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
