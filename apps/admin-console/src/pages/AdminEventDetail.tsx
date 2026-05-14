@@ -23,6 +23,7 @@ import {
 } from "../api/admin-drill-down";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { interpolate, useT } from "../i18n";
 
 /**
  * Phase 1.B drill-down — Event 詳細 (read-only mirror、ADR-011 / #598)。
@@ -67,11 +68,14 @@ function renderTeamLoginKeyBlackout() {
   );
 }
 
-function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[] | undefined) {
+function renderProblemDeployStatus(
+  deployments: readonly EventDeploymentSummary[] | undefined,
+  t: (key: string) => string,
+) {
   if (!deployments || deployments.length === 0) {
     return (
       <Box variant="small" color="text-status-inactive">
-        未デプロイ
+        {t("admin_event_detail.deploy_not_started")}
       </Box>
     );
   }
@@ -86,8 +90,18 @@ function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[
       <Box variant="strong">
         {complete} / {total}
       </Box>
-      {failed > 0 && <Badge color="red">FAILED {failed}</Badge>}
-      {inFlight > 0 && <Badge color="blue">進行中 {inFlight}</Badge>}
+      {failed > 0 && (
+        <Badge color="red">
+          {interpolate(t("admin_event_detail.deploy_failed_count"), { count: String(failed) })}
+        </Badge>
+      )}
+      {inFlight > 0 && (
+        <Badge color="blue">
+          {interpolate(t("admin_event_detail.deploy_in_progress_count"), {
+            count: String(inFlight),
+          })}
+        </Badge>
+      )}
     </SpaceBetween>
   );
 }
@@ -96,6 +110,7 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
   const { tenantId, eventId } = useParams<{ tenantId: string; eventId: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const t = useT();
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -144,13 +159,13 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
   }, [fetchOnce]);
 
   if (!tenantId || !eventId || !EVENT_ID_RE.test(eventId)) {
-    return <Alert type="error">不正なパラメータです。</Alert>;
+    return <Alert type="error">{t("admin_event_detail.invalid_params")}</Alert>;
   }
 
   if (forbidden) {
     return (
-      <Alert type="error" header="権限がありません">
-        この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。
+      <Alert type="error" header={t("admin_event_detail.forbidden_header")}>
+        {t("admin_event_detail.forbidden_body")}
       </Alert>
     );
   }
@@ -165,14 +180,14 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
               variant="normal"
               onClick={() => navigate(`/tenants/${encodeURIComponent(tenantId)}/events`)}
             >
-              Event 一覧に戻る
+              {t("admin_event_detail.back_to_events")}
             </Button>
           }
         >
-          Event が見つかりません
+          {t("admin_event_detail.not_found_header")}
         </Header>
         <Alert type="warning">
-          Tenant {tenantId} に event {eventId} は存在しません。
+          {interpolate(t("admin_event_detail.not_found_body"), { tenantId, eventId })}
         </Alert>
       </SpaceBetween>
     );
@@ -181,14 +196,14 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
   if (!detail && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> 状態を取得中…
+        <Spinner /> {t("admin_event_detail.loading")}
       </Box>
     );
   }
 
   if (error && !detail) {
     return (
-      <Alert type="error" header="Event 詳細の取得に失敗しました">
+      <Alert type="error" header={t("admin_event_detail.fetch_error_header")}>
         {error}
       </Alert>
     );
@@ -202,7 +217,8 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={
           <>
-            Tenant: <code>{tenantId}</code> / Event ID: <code>{detail.eventId}</code>
+            {t("admin_event_detail.tenant_label")}: <code>{tenantId}</code> /{" "}
+            {t("admin_event_detail.event_id_label")}: <code>{detail.eventId}</code>
           </>
         }
         actions={
@@ -210,7 +226,7 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
             variant="normal"
             onClick={() => navigate(`/tenants/${encodeURIComponent(tenantId)}/events`)}
           >
-            Event 一覧に戻る
+            {t("admin_event_detail.back_to_events")}
           </Button>
         }
       >
@@ -220,7 +236,7 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
       {error && (
         <Alert
           type="warning"
-          header="再読み込みに失敗しました"
+          header={t("admin_event_detail.reload_error_header")}
           dismissible
           onDismiss={() => setError(null)}
         >
@@ -228,27 +244,36 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
-      <Container header={<Header variant="h2">サマリー</Header>}>
+      <Container header={<Header variant="h2">{t("admin_event_detail.summary_header")}</Header>}>
         <KeyValuePairs
           columns={3}
           items={[
             {
-              label: "ステータス",
+              label: t("admin_event_detail.summary_label_status"),
               value: <Badge color={STATUS_COLOR[detail.status]}>{detail.status}</Badge>,
             },
-            { label: "チーム数", value: detail.teamCount },
-            { label: "問題数", value: detail.problemCount },
-            { label: "作成", value: detail.createdAt },
-            { label: "更新", value: detail.updatedAt },
-            { label: "開始時刻", value: detail.startsAt ?? "(未設定)" },
-            { label: "終了時刻", value: detail.endsAt ?? "(未設定)" },
+            { label: t("admin_event_detail.summary_label_team_count"), value: detail.teamCount },
             {
-              label: "採点 lock",
+              label: t("admin_event_detail.summary_label_problem_count"),
+              value: detail.problemCount,
+            },
+            { label: t("admin_event_detail.summary_label_created"), value: detail.createdAt },
+            { label: t("admin_event_detail.summary_label_updated"), value: detail.updatedAt },
+            {
+              label: t("admin_event_detail.summary_label_starts_at"),
+              value: detail.startsAt ?? t("admin_event_detail.unset"),
+            },
+            {
+              label: t("admin_event_detail.summary_label_ends_at"),
+              value: detail.endsAt ?? t("admin_event_detail.unset"),
+            },
+            {
+              label: t("admin_event_detail.summary_label_scoring_lock"),
               value: detail.scoringLocked ? (
-                <Badge color="red">LOCKED</Badge>
+                <Badge color="red">{t("admin_event_detail.scoring_locked")}</Badge>
               ) : (
                 <Box variant="small" color="text-status-inactive">
-                  unlocked
+                  {t("admin_event_detail.scoring_unlocked")}
                 </Box>
               ),
             },
@@ -256,26 +281,42 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
         />
       </Container>
 
-      <Container header={<Header variant="h2">問題セット ({detail.problems.length})</Header>}>
+      <Container
+        header={
+          <Header variant="h2">
+            {interpolate(t("admin_event_detail.problems_header"), {
+              count: String(detail.problems.length),
+            })}
+          </Header>
+        }
+      >
         <Table
           variant="embedded"
           items={[...detail.problems]}
           empty={
             <Box textAlign="center" color="inherit" padding="l">
-              問題セットは登録されていません。
+              {t("admin_event_detail.problems_empty")}
             </Box>
           }
           columnDefinitions={[
-            { id: "problemId", header: "Problem ID", cell: (p) => <code>{p.problemId}</code> },
-            { id: "region", header: "Default Region", cell: (p) => p.defaultRegion },
+            {
+              id: "problemId",
+              header: t("admin_event_detail.col_problem_id"),
+              cell: (p) => <code>{p.problemId}</code>,
+            },
+            {
+              id: "region",
+              header: t("admin_event_detail.col_default_region"),
+              cell: (p) => p.defaultRegion,
+            },
             {
               id: "deployStatus",
-              header: "Deploy 状況",
-              cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId]),
+              header: t("admin_event_detail.col_deploy_status"),
+              cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
             },
             {
               id: "jobs",
-              header: "Deploy Job",
+              header: t("admin_event_detail.col_deploy_job"),
               cell: (p) => {
                 const list = detail.deploymentsByProblem[p.problemId];
                 if (!list || list.length === 0) {
@@ -318,38 +359,58 @@ export function AdminEventDetailPage({ config }: { config: AppConfig }) {
         />
       </Container>
 
-      <Container header={<Header variant="h2">チーム ({detail.teams.length})</Header>}>
+      <Container
+        header={
+          <Header variant="h2">
+            {interpolate(t("admin_event_detail.teams_header"), {
+              count: String(detail.teams.length),
+            })}
+          </Header>
+        }
+      >
         <Table<TeamSummary>
           variant="embedded"
           items={[...detail.teams]}
           empty={
             <Box textAlign="center" color="inherit" padding="l">
-              チームは登録されていません。
+              {t("admin_event_detail.teams_empty")}
             </Box>
           }
           columnDefinitions={[
-            { id: "teamId", header: "Team ID", cell: (t) => <code>{t.teamId}</code> },
-            { id: "internalSlug", header: "Slug", cell: (t) => <code>{t.internalSlug}</code> },
+            {
+              id: "teamId",
+              header: t("admin_event_detail.col_team_id"),
+              cell: (t) => <code>{t.teamId}</code>,
+            },
+            {
+              id: "internalSlug",
+              header: t("admin_event_detail.col_slug"),
+              cell: (t) => <code>{t.internalSlug}</code>,
+            },
             {
               id: "displayName",
-              header: "表示名 (競技者選択)",
-              cell: (t) => t.displayName ?? "(未設定)",
+              header: t("admin_event_detail.col_display_name"),
+              cell: (team) => team.displayName ?? t("admin_event_detail.unset"),
             },
             {
               id: "awsAccountId",
-              header: "AWS Account",
-              cell: (t) => (t.awsAccountId ? <code>{t.awsAccountId}</code> : "(未設定)"),
+              header: t("admin_event_detail.col_aws_account"),
+              cell: (team) =>
+                team.awsAccountId ? (
+                  <code>{team.awsAccountId}</code>
+                ) : (
+                  t("admin_event_detail.unset")
+                ),
             },
             {
               id: "teamLoginKey",
-              header: "ログインキー",
+              header: t("admin_event_detail.col_login_key"),
               cell: () => renderTeamLoginKeyBlackout(),
             },
           ]}
         />
         <Box variant="small" color="text-status-info" padding={{ top: "s" }}>
-          ※ ログインキーは SystemAdmin 経路では露出しません (ADR-011 D2)。Tenant Admin の Event
-          詳細ページで参照してください。
+          {t("admin_event_detail.login_key_note")}
         </Box>
       </Container>
     </SpaceBetween>
