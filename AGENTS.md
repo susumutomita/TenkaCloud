@@ -78,6 +78,7 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
 - 設定ファイル (`biome.json`, `vitest.config.*`, `tsconfig.json`) の直接編集
 - DynamoDB の on-demand (`PAY_PER_REQUEST`) 化 — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED 強制
 - SSE / WebSocket の新規導入 — Lambda 運用と整合する **polling** で書く
+  - 状態反映の polling 削減は [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html) に従い EventBridge 駆動で補完する。frontend polling 方針は維持する
 - シークレットのコミット (`infrastructure/environments/<env>/.env`、AWS credentials)
 - `package.json` の `trustedDependencies` への追加を独断で行わない — supply chain attack の入口になる
 

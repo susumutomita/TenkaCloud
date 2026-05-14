@@ -230,7 +230,14 @@ echo "=============================================="
 ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
 export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"
 echo "  CloudFront URL: ${ADMIN_CONSOLE_URL}"
-bunx cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight --require-approval never
+# #718: AdminConsoleHostingStack の CompetitorBootstrapTemplateUrl output を取得し、
+# tenant-template-pooled に env 経由で再 inject する。 これにより application-admin-console の
+# runtime-config.json に S3 URL が埋まり、 Launch Stack / Update Stack の CFn TemplateURL が
+# S3 URL になる (= 旧 GitHub raw は CFn が reject していた)。
+COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'CompetitorBootstrapTemplateUrl')].OutputValue" --output text)
+export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL="${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
+echo "  Competitor bootstrap template URL: ${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
+bunx cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight tenkacloud-tenant-template-pooled --require-approval never
 
 # ============================================================================
 # 完了

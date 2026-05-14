@@ -333,6 +333,11 @@ const bootstrapTemplateStack = new BootstrapTemplateStack(app, "tenkacloud-boots
 });
 cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
 
+// #718: AdminConsoleHostingStack が Phase 2 で deploy する public S3 bucket の URL を、
+// Phase 3 で install.sh が tenant-template-pooled に env 経由で再 inject する。
+// Phase 1 deploy 時点では env 未設定なので undefined。 frontend は GitHub raw URL に fallback。
+const competitorBootstrapTemplateUrlEnv = process.env.CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL;
+
 const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-template-${tenantId}`, {
   ...stackEnv,
   tenantId,
@@ -349,6 +354,7 @@ const tenantTemplateStack = new TenantTemplateStack(app, `tenkacloud-tenant-temp
   eventApiLambda: problemDeployBackendStack.eventApiLambda,
   competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
   participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
+  competitorBootstrapTemplateUrl: competitorBootstrapTemplateUrlEnv,
 });
 
 tenantTemplateStack.addDependency(problemDeployBackendStack);
