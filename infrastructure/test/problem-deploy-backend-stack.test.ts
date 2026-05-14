@@ -174,6 +174,8 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(createStateMachine).toBeDefined();
       expect(createStateMachine).toContain("MarkSucceeded");
       expect(createStateMachine).toContain("MarkFailed");
+      expect(createStateMachine).toContain("PROBLEM_EXTERNAL_ID");
+      expect(createStateMachine).toContain("$.detail.jobId");
       expect(createStateMachine).toContain(
         "stackId = :stackId, stackOutputs = :stackOutputs, buildId = :buildId",
       );
@@ -428,7 +430,7 @@ function synthParticipantPortalLambdaOnly(): Template {
     endpointsTable: endpoints,
     problemsScoring: {},
     problemsEndpoints: {},
-    consoleViewerRoleArn: "arn:aws:iam::123456789012:role/console-viewer",
+    environmentName: "development",
   });
   return Template.fromStack(stack);
 }
@@ -487,6 +489,41 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
             PROBLEM_ENDPOINTS: Match.anyValue(),
           }),
         }),
+      }),
+    );
+  });
+
+  it("AWS Console SSO 用に DEPLOY_ENVIRONMENT を持つべき", () => {
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const fn = Object.values(functions)[0] as {
+      Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+    };
+    const vars = fn.Properties?.Environment?.Variables ?? {};
+    expect(vars.DEPLOY_ENVIRONMENT).toBe("development");
+  });
+
+  it("AWS Console SSO 用に SSM ExternalId read と CompetitorDeployRole AssumeRole 権限を持つべき", () => {
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "ConsoleSso",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({
+                  Action: "ssm:GetParameter",
+                  Effect: "Allow",
+                }),
+                Match.objectLike({
+                  Action: "sts:AssumeRole",
+                  Effect: "Allow",
+                  Resource: "arn:aws:iam::*:role/TenkaCloud-*",
+                }),
+              ]),
+            }),
+          }),
+        ]),
       }),
     );
   });

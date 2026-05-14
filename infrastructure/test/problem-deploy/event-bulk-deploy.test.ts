@@ -597,6 +597,9 @@ describe("bulkDeployEvent", () => {
     const items = transactCmd?.input.TransactItems ?? [];
     for (const it of items) {
       expect(it.Put?.Item?.awsAccountId).toBe("111111111111");
+      expect(it.Put?.Item?.competitorRoleArn).toBe(
+        "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
+      );
     }
   });
 

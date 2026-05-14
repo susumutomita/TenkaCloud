@@ -1,4 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
@@ -26,6 +27,10 @@ export interface ParticipantSharedResources {
    */
   readonly endpointsTableName: string;
   readonly ddb: DynamoDBDocumentClient;
+  /** SSM SecureString client for tenant ExternalId lookup used by AWS Console SSO. */
+  readonly ssm?: Pick<SSMClient, "send">;
+  /** Deploy environment segment used in `/{env}/tenants/{tenantId}/external-id`. */
+  readonly env?: string;
   /** `{ [problemId]: ProblemScoringMetadata }`。submit-flag が採点に使う。 */
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
   /**
@@ -43,6 +48,8 @@ export function buildParticipantSharedResources(): ParticipantSharedResources {
     // route 側で空チェックして 503 を返す経路にする。
     endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
+    ssm: new SSMClient({}),
+    env: getEnv("DEPLOY_ENVIRONMENT"),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
   };

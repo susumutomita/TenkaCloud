@@ -55,6 +55,11 @@ export interface DeploymentItem {
   problemId: string;
   tenantId: string;
   awsAccountId: string;
+  /**
+   * Cross-account deploy RoleArn resolved from CompetitorAccounts. Participant SSO uses it as
+   * the first hop before assuming the per-problem ParticipantViewerRole.
+   */
+  competitorRoleArn?: string;
   region: string;
   /**
    * 内部 slug。operator が deploy form で入力し、`namePrefix` (CFn StackName) の

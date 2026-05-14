@@ -134,6 +134,14 @@ export class DeployCodeBuildProject extends Construct {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "",
         },
+        TENKACLOUD_ACCOUNT_ID: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: Stack.of(this).account,
+        },
+        PROBLEM_EXTERNAL_ID: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "",
+        },
       },
       buildSpec: BuildSpec.fromObject({
         version: "0.2",

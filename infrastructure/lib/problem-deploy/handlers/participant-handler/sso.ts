@@ -1,10 +1,12 @@
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
+import { getExternalId } from "../shared/external-id-store.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
- * Issue #705: 旧 `kind: "misconfigured"` が 4 分岐 (= env 未設定 / STS 失敗 /
+ * Issue #705: 旧 `kind: "misconfigured"` が複数分岐 (= STS 失敗 /
  * federation endpoint 失敗 / token JSON malformed) を全部潰していたため、 operator が
  * CloudWatch logs を引かないと原因切り分けできなかった。 細分化して structured log と
  * frontend friendly-error mapping を可能にする。
@@ -14,7 +16,6 @@ export type SsoOutcome =
   | { kind: "unauthorized" }
   | { kind: "not_ready" }
   | { kind: "invalid_jobid" }
-  | { kind: "role_arn_missing" }
   | { kind: "assume_role_failed"; reason: string }
   | { kind: "federation_endpoint_failed"; status: number }
   | { kind: "federation_token_malformed" };
@@ -23,57 +24,44 @@ const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const FEDERATION_SESSION_DURATION_SEC = 3600;
 const TENKACLOUD_ISSUER = "https://tenkacloud.example/portal";
 
-function buildSessionPolicy(_namePrefix: string): string {
-  // #737: 旧実装は per-namePrefix ARN scope を Allow 7 statements に詰めていたが、 STS の
-  // packed session policy size limit (= 2048 bytes) を 118% 超過して AssumeRole 自体が
-  // failing していた (CloudWatch logs で確定)。 session policy は **Deny only** に simplify
-  // し、 Allow は Role の inline TcReadOnly policy (= tc-* 接頭辞 scoped) に委譲する。
-  //
-  // Trade-off: competitor は同 account の他 team の tc-* stack を一覧可能になるが、 sensitive
-  // data (operator の teamLoginKey 入り DDB / Secrets / KMS / IAM) は引き続き Deny で守られる。
-  // 詳細: #737 / PR-710 の reverse mitigation。 namePrefix 引数は今後の per-tag scoping
-  // (= 別 Phase で session tag 経由) のために interface を残すが、 本実装では使わない。
-  return JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Deny",
-        Action: [
-          "codepipeline:*",
-          "codebuild:*",
-          "cognito-idp:*",
-          "cognito-identity:*",
-          "dynamodb:*",
-          "secretsmanager:*",
-          "ssm:Get*",
-          "ssm:Describe*",
-          "kms:Decrypt",
-          "kms:GenerateDataKey",
-          "iam:*",
-          "sts:AssumeRole",
-        ],
-        Resource: "*",
-      },
-    ],
-  });
-}
-
 const sts = new STSClient({});
+
+type StsCredentialShape = {
+  AccessKeyId?: string;
+  SecretAccessKey?: string;
+  SessionToken?: string;
+};
+
+function toSdkCredentials(creds: StsCredentialShape | undefined):
+  | {
+      accessKeyId: string;
+      secretAccessKey: string;
+      sessionToken: string;
+    }
+  | undefined {
+  if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) return undefined;
+  return {
+    accessKeyId: creds.AccessKeyId,
+    secretAccessKey: creds.SecretAccessKey,
+    sessionToken: creds.SessionToken,
+  };
+}
 
 /**
  * AWS Console ワンクリック login URL を発行する。
  *
  * 流れ:
  *   1. teamLoginKey で team の deployment を引き、jobId 一致行を抽出
- *   2. STS AssumeRole で `ConsoleViewerRole` (ReadOnlyAccess) の temp credentials 取得
- *   3. `signin.aws.amazon.com/federation?Action=getSigninToken` で SigninToken 交換
- *   4. `Action=login` URL を組み立てて返す (= 競技者が click すると AWS Console 開く)
+ *   2. deployment.stackOutputs から per-problem ParticipantViewerRoleArn を読む
+ *   3. tenant ExternalId で CompetitorDeployRole を AssumeRole
+ *   4. jobId ExternalId で ParticipantViewerRole を AssumeRole
+ *   5. `signin.aws.amazon.com/federation?Action=getSigninToken` で SigninToken 交換
+ *   6. `Action=login` URL を組み立てて返す (= 競技者が click すると AWS Console 開く)
  *
  * 競技者は自前 AWS アカウント不要。1-hour TTL で自動 expire。
  *
  * 行不在 / DELETING / DELETED → unauthorized。PENDING / IN_PROGRESS や stack 未起動
- * (namePrefix 無し) → not_ready。
- * `CONSOLE_VIEWER_ROLE_ARN` env 未設定 → misconfigured (= CDK 未 deploy)。
+ * (namePrefix 無し)、ParticipantViewerRoleArn 未出力 → not_ready。
  */
 export async function getConsoleSigninUrl(
   shared: ParticipantSharedResources,
@@ -81,8 +69,6 @@ export async function getConsoleSigninUrl(
   jobId: string,
 ): Promise<SsoOutcome> {
   if (!ULID_RE.test(jobId)) return { kind: "invalid_jobid" };
-  const roleArn = process.env.CONSOLE_VIEWER_ROLE_ARN;
-  if (!roleArn) return { kind: "role_arn_missing" };
 
   const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
@@ -96,30 +82,69 @@ export async function getConsoleSigninUrl(
   if (typeof deployment.namePrefix !== "string") return { kind: "not_ready" };
   const region = typeof deployment.region === "string" ? deployment.region : undefined;
   if (!region) return { kind: "not_ready" };
+  const tenantId = typeof deployment.tenantId === "string" ? deployment.tenantId : undefined;
+  if (!tenantId) return { kind: "not_ready" };
+  const competitorRoleArn =
+    typeof deployment.competitorRoleArn === "string" ? deployment.competitorRoleArn : undefined;
+  if (!competitorRoleArn) return { kind: "not_ready" };
+  const participantRoleArn = parseStackOutputs(deployment.stackOutputs).ParticipantViewerRoleArn;
+  if (!participantRoleArn) return { kind: "not_ready" };
+  if (!shared.ssm || !shared.env) {
+    console.error("[sso] ExternalId store is not configured", { jobId, tenantId });
+    return { kind: "assume_role_failed", reason: "ExternalId store is not configured" };
+  }
 
-  // STS AssumeRole + inline session policy で operator 機密への access を Deny する。
-  // ReadOnly の Allow は ConsoleViewerRole の inline TcReadOnly policy に委譲する。
-  // ExternalId は同 account 内なので省略 (cross-account は別 Role でカバー)。
+  const tenantExternalId = await getExternalId({ ssm: shared.ssm, env: shared.env }, tenantId);
+  if (!tenantExternalId) {
+    console.error("[sso] tenant ExternalId missing", { jobId, tenantId });
+    return { kind: "assume_role_failed", reason: "Tenant ExternalId missing" };
+  }
+
   let session: {
     Credentials?: { AccessKeyId?: string; SecretAccessKey?: string; SessionToken?: string };
   };
   try {
-    session = await sts.send(
+    const competitorSession = await sts.send(
       new AssumeRoleCommand({
-        RoleArn: roleArn,
-        RoleSessionName: `participant-${jobId}`,
+        RoleArn: competitorRoleArn,
+        RoleSessionName: `participant-sso-${jobId}`,
+        ExternalId: tenantExternalId,
         DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
-        Policy: buildSessionPolicy(deployment.namePrefix),
+      }),
+    );
+    const competitorCredentials = toSdkCredentials(competitorSession.Credentials);
+    if (!competitorCredentials) {
+      console.error("[sso] CompetitorDeployRole AssumeRole returned empty Credentials", {
+        competitorRoleArn,
+        jobId,
+      });
+      return { kind: "assume_role_failed", reason: "Credentials field empty" };
+    }
+    const innerSts = new STSClient({ credentials: competitorCredentials });
+    session = await innerSts.send(
+      new AssumeRoleCommand({
+        RoleArn: participantRoleArn,
+        RoleSessionName: `participant-viewer-${jobId}`,
+        ExternalId: jobId,
+        DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
       }),
     );
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    console.error("[sso] AssumeRole failed", { roleArn, jobId, reason });
+    console.error("[sso] AssumeRole failed", {
+      competitorRoleArn,
+      participantRoleArn,
+      jobId,
+      reason,
+    });
     return { kind: "assume_role_failed", reason };
   }
   const creds = session.Credentials;
   if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
-    console.error("[sso] AssumeRole returned empty Credentials", { roleArn, jobId });
+    console.error("[sso] ParticipantViewerRole AssumeRole returned empty Credentials", {
+      participantRoleArn,
+      jobId,
+    });
     return { kind: "assume_role_failed", reason: "Credentials field empty" };
   }
 

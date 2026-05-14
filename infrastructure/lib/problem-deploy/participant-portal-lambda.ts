@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -17,6 +17,7 @@ import {
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
+import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface ParticipantPortalLambdaProps {
   readonly deploymentsTable: ITable;
@@ -43,18 +44,18 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly problemsEndpoints: Readonly<Record<string, unknown>>;
   /**
-   * `ConsoleViewerRole` の ARN。AWS Console federation login URL 発行のため
-   * Lambda が `sts:AssumeRole` する。caller side で IAM grant も付与する。
+   * SSM SecureString path segment for tenant ExternalId lookup
+   * (`/{environmentName}/tenants/{tenantId}/external-id`).
    */
-  readonly consoleViewerRoleArn: string;
+  readonly environmentName: string;
 }
 
 /**
  * Participant Portal backend Lambda。Function URL (AuthType=NONE) で公開し、
  * `Authorization: Bearer <teamLoginKey>` を Lambda 内で検証する。
  *
- * IAM は最小限: Deployments テーブルと GSI2 への Query 権限のみ。Worker / API
- * Lambda が持つ CFn AssumeRole / EventBridge / DDB 書き込み権限は付与しない。
+ * IAM は最小限: participant state tables, tenant ExternalId SSM read, and the first
+ * AssumeRole hop into the competitor deploy role. CFn/EventBridge write paths stay out.
  */
 export class ParticipantPortalLambda extends Construct {
   public readonly fn: NodejsFunction;
@@ -62,6 +63,12 @@ export class ParticipantPortalLambda extends Construct {
 
   constructor(scope: Construct, id: string, props: ParticipantPortalLambdaProps) {
     super(scope, id);
+    const stack = Stack.of(this);
+    const ssmArn = buildExternalIdParameterArnPattern(
+      stack.region,
+      stack.account,
+      props.environmentName,
+    );
 
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
@@ -118,6 +125,25 @@ export class ParticipantPortalLambda extends Construct {
             }),
           ],
         }),
+        ConsoleSso: new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              actions: ["ssm:GetParameter"],
+              resources: [ssmArn],
+            }),
+            new PolicyStatement({
+              actions: ["kms:Decrypt"],
+              resources: ["*"],
+              conditions: {
+                StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn },
+              },
+            }),
+            new PolicyStatement({
+              actions: ["sts:AssumeRole"],
+              resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
+            }),
+          ],
+        }),
       },
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
@@ -141,7 +167,7 @@ export class ParticipantPortalLambda extends Construct {
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
         BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
         PROBLEM_ENDPOINTS: JSON.stringify(props.problemsEndpoints),
-        CONSOLE_VIEWER_ROLE_ARN: props.consoleViewerRoleArn,
+        DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

@@ -98,6 +98,9 @@ describe("startDeployment", () => {
     expect(item?.GSI1PK).toBe("TENANT#tenant-acme");
     expect(typeof item?.GSI1SK).toBe("string");
     expect(item?.namePrefix).toBe("tc-security-battle-royale-alpha-team");
+    expect(item?.competitorRoleArn).toBe(
+      "arn:aws:iam::123456789012:role/TenkaCloud-CompetitorDeploy-Role",
+    );
   });
 
   it("GSI2PK = TEAMKEY#<teamLoginKey> を sparse index 用に書き込むべき", async () => {
