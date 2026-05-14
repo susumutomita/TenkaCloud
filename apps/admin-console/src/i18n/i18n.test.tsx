@@ -60,6 +60,24 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     }
   });
 
+  it("admin drill-down namespace の key set が 4 言語で一致すべき", () => {
+    const namespaces = ["admin_event_detail", "admin_deployment_detail"];
+    const collectLeafKeys = (node: unknown, prefix = ""): string[] => {
+      if (typeof node !== "object" || node === null) return [prefix];
+      return Object.entries(node).flatMap(([key, value]) =>
+        collectLeafKeys(value, prefix ? `${prefix}.${key}` : key),
+      );
+    };
+
+    for (const namespace of namespaces) {
+      const baseline = collectLeafKeys(_testInternals.LOCALE_DICTIONARIES.en[namespace]).sort();
+      for (const code of ["ja", "es", "zh"] as const) {
+        const actual = collectLeafKeys(_testInternals.LOCALE_DICTIONARIES[code][namespace]).sort();
+        expect(actual).toEqual(baseline);
+      }
+    }
+  });
+
   it("locale 変更時に <html lang> が追従すべき", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("zh"));

@@ -27,6 +27,7 @@ import {
 } from "../api/admin-drill-down";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { interpolate, useT } from "../i18n";
 
 /**
  * Phase 1.B drill-down — Deploy job 詳細 (read-only mirror、ADR-011 / #598)。
@@ -48,6 +49,7 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
   const { tenantId, jobId } = useParams<{ tenantId: string; jobId: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const t = useT();
   const [item, setItem] = useState<DeploymentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -123,13 +125,13 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
   }, [fetchDetail, fetchProgress]);
 
   if (!tenantId || !jobId || !JOB_ID_RE.test(jobId)) {
-    return <Alert type="error">不正なパラメータです。</Alert>;
+    return <Alert type="error">{t("admin_deployment_detail.invalid_params")}</Alert>;
   }
 
   if (forbidden) {
     return (
-      <Alert type="error" header="権限がありません">
-        この機能は SystemAdmin group のメンバーのみ閲覧できます。ログインし直してください。
+      <Alert type="error" header={t("admin_deployment_detail.forbidden_header")}>
+        {t("admin_deployment_detail.forbidden_body")}
       </Alert>
     );
   }
@@ -144,14 +146,14 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
               variant="normal"
               onClick={() => navigate(`/tenants/${encodeURIComponent(tenantId)}/events`)}
             >
-              Event 一覧に戻る
+              {t("admin_deployment_detail.back_to_events")}
             </Button>
           }
         >
-          Deploy Job が見つかりません
+          {t("admin_deployment_detail.not_found_header")}
         </Header>
         <Alert type="warning">
-          Tenant {tenantId} に Job {jobId} は存在しません。
+          {interpolate(t("admin_deployment_detail.not_found_body"), { tenantId, jobId })}
         </Alert>
       </SpaceBetween>
     );
@@ -160,14 +162,14 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
   if (!item && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> 状態を取得中…
+        <Spinner /> {t("admin_deployment_detail.loading")}
       </Box>
     );
   }
 
   if (error && !item) {
     return (
-      <Alert type="error" header="Deploy Job 詳細の取得に失敗しました">
+      <Alert type="error" header={t("admin_deployment_detail.fetch_error_header")}>
         {error}
       </Alert>
     );
@@ -183,7 +185,8 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={
           <>
-            Tenant: <code>{tenantId}</code> / Job ID: <code>{item.jobId}</code>
+            {t("admin_deployment_detail.tenant_label")}: <code>{tenantId}</code> /{" "}
+            {t("admin_deployment_detail.job_id_label")}: <code>{item.jobId}</code>
           </>
         }
         actions={
@@ -192,7 +195,7 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
               variant="normal"
               onClick={() => navigate(`/tenants/${encodeURIComponent(tenantId)}/events`)}
             >
-              Event 一覧に戻る
+              {t("admin_deployment_detail.back_to_events")}
             </Button>
             {item.eventId && (
               <Button
@@ -206,19 +209,21 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
                   }
                 }}
               >
-                親 Event に戻る
+                {t("admin_deployment_detail.back_to_parent_event")}
               </Button>
             )}
           </SpaceBetween>
         }
       >
-        Deploy「{item.displayTeamName ?? item.teamName}」
+        {interpolate(t("admin_deployment_detail.title"), {
+          teamName: item.displayTeamName ?? item.teamName,
+        })}
       </Header>
 
       {error && (
         <Alert
           type="warning"
-          header="再読み込みに失敗しました"
+          header={t("admin_deployment_detail.reload_error_header")}
           dismissible
           onDismiss={() => setError(null)}
         >
@@ -226,53 +231,82 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
-      <Container header={<Header variant="h2">ステータス</Header>}>
+      <Container
+        header={<Header variant="h2">{t("admin_deployment_detail.status_header")}</Header>}
+      >
         <SpaceBetween size="m">
           <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
             {item.status}
           </StatusIndicator>
           {item.status === "FAILED" && item.failureReason && (
-            <Alert type="error" header="失敗理由">
+            <Alert type="error" header={t("admin_deployment_detail.failure_reason_header")}>
               {item.failureReason}
             </Alert>
           )}
           {!TERMINAL_STATUSES.has(item.status) && (
             <Box variant="small" color="text-status-info">
-              {POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。
+              {interpolate(t("admin_deployment_detail.auto_refresh"), {
+                seconds: String(POLL_INTERVAL_MS / 1000),
+              })}
             </Box>
           )}
         </SpaceBetween>
       </Container>
 
-      <Container header={<Header variant="h2">基本情報</Header>}>
+      <Container
+        header={<Header variant="h2">{t("admin_deployment_detail.basic_info_header")}</Header>}
+      >
         <ColumnLayout columns={2} variant="text-grid">
           <KeyValuePairs
             items={[
-              { label: "Problem ID", value: <code>{item.problemId}</code> },
-              { label: "表示名 (競技者選択)", value: item.displayTeamName ?? "(未設定)" },
-              { label: "内部 slug (operator 入力)", value: <code>{item.teamName}</code> },
-              { label: "AWS Account", value: <code>{item.awsAccountId}</code> },
-              { label: "Region", value: item.region },
+              {
+                label: t("admin_deployment_detail.label_problem_id"),
+                value: <code>{item.problemId}</code>,
+              },
+              {
+                label: t("admin_deployment_detail.label_display_name"),
+                value: item.displayTeamName ?? t("admin_deployment_detail.unset"),
+              },
+              {
+                label: t("admin_deployment_detail.label_internal_slug"),
+                value: <code>{item.teamName}</code>,
+              },
+              {
+                label: t("admin_deployment_detail.label_aws_account"),
+                value: <code>{item.awsAccountId}</code>,
+              },
+              { label: t("admin_deployment_detail.label_region"), value: item.region },
             ]}
           />
           <KeyValuePairs
             items={[
-              { label: "Stack 名 prefix", value: <code>{item.namePrefix}</code> },
               {
-                label: "Stack ID",
-                value: item.stackId ? <code>{item.stackId}</code> : "(未割当)",
+                label: t("admin_deployment_detail.label_stack_name_prefix"),
+                value: <code>{item.namePrefix}</code>,
               },
-              { label: "作成", value: item.createdAt },
-              { label: "更新", value: item.updatedAt },
               {
-                label: "Event ID",
-                value: item.eventId ? <code>{item.eventId}</code> : "(該当なし)",
+                label: t("admin_deployment_detail.label_stack_id"),
+                value: item.stackId ? (
+                  <code>{item.stackId}</code>
+                ) : (
+                  t("admin_deployment_detail.unassigned")
+                ),
+              },
+              { label: t("admin_deployment_detail.label_created"), value: item.createdAt },
+              { label: t("admin_deployment_detail.label_updated"), value: item.updatedAt },
+              {
+                label: t("admin_deployment_detail.label_event_id"),
+                value: item.eventId ? (
+                  <code>{item.eventId}</code>
+                ) : (
+                  t("admin_deployment_detail.not_applicable")
+                ),
               },
             ]}
           />
         </ColumnLayout>
         <Box variant="small" color="text-status-info" padding={{ top: "s" }}>
-          ※ ログインキー (`teamLoginKey`) は SystemAdmin 経路では露出しません (ADR-011 D2)。
+          {t("admin_deployment_detail.login_key_note")}
         </Box>
       </Container>
 
@@ -283,7 +317,13 @@ export function AdminDeploymentDetailPage({ config }: { config: AppConfig }) {
       />
 
       {Object.keys(outputs).length > 0 && (
-        <Container header={<Header variant="h2">CloudFormation Outputs</Header>}>
+        <Container
+          header={
+            <Header variant="h2">
+              {t("admin_deployment_detail.cloudformation_outputs_header")}
+            </Header>
+          }
+        >
           <KeyValuePairs
             items={Object.entries(outputs).map(([label, value]) => ({
               label,
@@ -306,12 +346,15 @@ function StackProgressSection(props: {
   readonly pending: boolean;
 }) {
   const { progress, error, pending } = props;
+  const t = useT();
 
   if (!progress && !error && pending) {
     return (
-      <Container header={<Header variant="h2">Stack 進行状況</Header>}>
+      <Container
+        header={<Header variant="h2">{t("admin_deployment_detail.stack_progress_header")}</Header>}
+      >
         <Box textAlign="center" padding="m">
-          <Spinner /> CFn から取得中…
+          <Spinner /> {t("admin_deployment_detail.stack_progress_loading")}
         </Box>
       </Container>
     );
@@ -319,14 +362,13 @@ function StackProgressSection(props: {
 
   if (error && !progress) {
     return (
-      <Container header={<Header variant="h2">Stack 進行状況</Header>}>
+      <Container
+        header={<Header variant="h2">{t("admin_deployment_detail.stack_progress_header")}</Header>}
+      >
         {error.notYetCreated ? (
-          <Box color="text-status-info">
-            CFn Stack はまだ作成されていません。deploy worker が起動し次第、ここに StackEvents /
-            Resources が表示されます。
-          </Box>
+          <Box color="text-status-info">{t("admin_deployment_detail.stack_not_yet_created")}</Box>
         ) : (
-          <Alert type="warning" header="CFn の進行状況を取得できませんでした">
+          <Alert type="warning" header={t("admin_deployment_detail.stack_progress_error_header")}>
             {error.message}
           </Alert>
         )}
@@ -345,25 +387,34 @@ function StackProgressSection(props: {
           variant="h2"
           description={
             progress.stackStatus
-              ? `現在の CFn Stack 状態: ${progress.stackStatus}`
-              : "CFn StackEvents / Resources を CFn API から直接取得しています。"
+              ? interpolate(t("admin_deployment_detail.stack_status_description"), {
+                  status: progress.stackStatus,
+                })
+              : t("admin_deployment_detail.stack_direct_fetch_description")
           }
           actions={
             <Link href={progress.consoleUrl} external>
-              CFn console を開く
+              {t("admin_deployment_detail.open_cfn_console")}
             </Link>
           }
         >
-          Stack 進行状況
+          {t("admin_deployment_detail.stack_progress_header")}
         </Header>
       }
     >
       <SpaceBetween size="m">
         {firstFailure && (
-          <Alert type="error" header={`失敗: ${firstFailure.logicalResourceId}`}>
+          <Alert
+            type="error"
+            header={interpolate(t("admin_deployment_detail.stack_failure_header"), {
+              logicalResourceId: firstFailure.logicalResourceId,
+            })}
+          >
             <Box>
-              <code>{firstFailure.resourceType}</code> が <code>{firstFailure.resourceStatus}</code>{" "}
-              になりました。
+              {interpolate(t("admin_deployment_detail.stack_failure_body"), {
+                resourceType: firstFailure.resourceType,
+                resourceStatus: firstFailure.resourceStatus,
+              })}
             </Box>
             {firstFailure.resourceStatusReason && (
               <Box variant="small">{firstFailure.resourceStatusReason}</Box>
@@ -373,35 +424,41 @@ function StackProgressSection(props: {
 
         <Table<StackProgressEvent>
           variant="embedded"
-          header={<Header variant="h3">StackEvents (最新 {progress.events.length} 件)</Header>}
+          header={
+            <Header variant="h3">
+              {interpolate(t("admin_deployment_detail.stack_events_header"), {
+                count: String(progress.events.length),
+              })}
+            </Header>
+          }
           items={[...progress.events]}
           empty={
             <Box textAlign="center" color="inherit" padding="l">
-              StackEvents はまだありません。
+              {t("admin_deployment_detail.stack_events_empty")}
             </Box>
           }
           columnDefinitions={[
             {
               id: "timestamp",
-              header: "時刻",
+              header: t("admin_deployment_detail.col_timestamp"),
               cell: (e) => e.timestamp,
               width: 200,
             },
             {
               id: "logicalResourceId",
-              header: "LogicalId",
+              header: t("admin_deployment_detail.col_logical_id"),
               cell: (e) => <code>{e.logicalResourceId}</code>,
               width: 220,
             },
             {
               id: "resourceType",
-              header: "Type",
+              header: t("admin_deployment_detail.col_type"),
               cell: (e) => <code>{e.resourceType}</code>,
               width: 220,
             },
             {
               id: "status",
-              header: "Status",
+              header: t("admin_deployment_detail.col_status"),
               cell: (e) => (
                 <StatusIndicator type={cfnStatusToIndicator(e.resourceStatus)}>
                   {e.resourceStatus}
@@ -411,7 +468,7 @@ function StackProgressSection(props: {
             },
             {
               id: "reason",
-              header: "Reason",
+              header: t("admin_deployment_detail.col_reason"),
               cell: (e) => e.resourceStatusReason ?? "",
             },
           ]}
@@ -419,29 +476,35 @@ function StackProgressSection(props: {
 
         <Table<StackProgressResource>
           variant="embedded"
-          header={<Header variant="h3">Resources ({progress.resources.length} 件)</Header>}
+          header={
+            <Header variant="h3">
+              {interpolate(t("admin_deployment_detail.resources_header"), {
+                count: String(progress.resources.length),
+              })}
+            </Header>
+          }
           items={[...progress.resources]}
           empty={
             <Box textAlign="center" color="inherit" padding="l">
-              Resources はまだ作成されていません。
+              {t("admin_deployment_detail.resources_empty")}
             </Box>
           }
           columnDefinitions={[
             {
               id: "logicalResourceId",
-              header: "LogicalId",
+              header: t("admin_deployment_detail.col_logical_id"),
               cell: (r) => <code>{r.logicalResourceId}</code>,
               width: 220,
             },
             {
               id: "resourceType",
-              header: "Type",
+              header: t("admin_deployment_detail.col_type"),
               cell: (r) => <code>{r.resourceType}</code>,
               width: 220,
             },
             {
               id: "status",
-              header: "Status",
+              header: t("admin_deployment_detail.col_status"),
               cell: (r) => (
                 <StatusIndicator type={cfnStatusToIndicator(r.resourceStatus)}>
                   {r.resourceStatus}
@@ -451,7 +514,7 @@ function StackProgressSection(props: {
             },
             {
               id: "physicalResourceId",
-              header: "PhysicalId",
+              header: t("admin_deployment_detail.col_physical_id"),
               cell: (r) => (r.physicalResourceId ? <code>{r.physicalResourceId}</code> : ""),
             },
           ]}

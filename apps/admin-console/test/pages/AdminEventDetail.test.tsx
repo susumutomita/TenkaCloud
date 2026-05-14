@@ -38,22 +38,29 @@ const EVENT_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
 const TENANT_ID = "t-acme";
 
 const { AdminEventDetailPage } = await import("../../src/pages/AdminEventDetail");
+const { I18nProvider } = await import("../../src/i18n");
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[`/tenants/${TENANT_ID}/events/${EVENT_ID}`]}>
-      <Routes>
-        <Route
-          path="/tenants/:tenantId/events/:eventId"
-          element={<AdminEventDetailPage config={config} />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={[`/tenants/${TENANT_ID}/events/${EVENT_ID}`]}>
+        <Routes>
+          <Route
+            path="/tenants/:tenantId/events/:eventId"
+            element={<AdminEventDetailPage config={config} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Force JA locale for deterministic assertions on i18n strings.
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("tenkacloud.admin.locale", "ja");
+  }
   mocks.useAuth.mockReturnValue({
     tokens: { idToken: "id-token", accessToken: "a", expiresAt: 0 },
     ready: true,
