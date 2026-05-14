@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-014: EventBridge 駆動 state reconciliation</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .note { background: #fff8c5; border-left: 4px solid var(--c-warn); padding: .6rem 1rem; border-radius: 3px; margin: .8rem 0; }
+</style>
+</head>
+<body>
+
+<h1>ADR-014: EventBridge 駆動 state reconciliation</h1>
+
+<div class="meta">
+  <span><b>Status:</b> <span class="badge accept">Accepted (Phased rollout)</span></span>
+  <span><b>Date:</b> 2026-05-14</span>
+  <span><b>Decider:</b> susumutomita</span>
+  <span><b>Driver:</b> #724 / 競技 platform の Lambda invocation cost + state 反映 latency</span>
+</div>
+
+<h2>Context</h2>
+
+<p>
+TenkaCloud の deploy / scoring / event status 反映は現在、 複数の polling 経路で構成されている:
+</p>
+
+<table>
+  <thead>
+    <tr><th>経路</th><th>主体</th><th>間隔</th><th>役割</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>EventDetail / participant portal の fetch</td><td>frontend (browser)</td><td>30s</td><td>deployment status / score の表示更新</td></tr>
+    <tr><td><code>reconcileEventStatuses</code></td><td>generic-scoring Lambda</td><td>1 min</td><td>DEPLOYING → READY / TEARDOWN → ARCHIVED の自動遷移</td></tr>
+    <tr><td>StackProgress fetch</td><td>admin-console</td><td>30s</td><td>CFn events / resources 表示</td></tr>
+    <tr><td>Score engine</td><td>generic-scoring Lambda</td><td>1 min</td><td>Battle uptime probe / phased-polling 採点</td></tr>
+  </tbody>
+</table>
+
+<p>問題点:</p>
+<ul>
+  <li><b>Lambda invocation cost</b>: 1-min polling × 全 tenant 並列で Lambda 呼び出しが時間あたり線形に増える。 Free Tier の 100 万 invocation/月 を超えると課金 (≒ 0.20 USD per million)、 5 tenant + 4 timer source = 約 60 万/月の constant invocation</li>
+  <li><b>状態反映 latency</b>: CFn rollback など operator-visible event が 30s〜2 min 遅延して UI に反映される</li>
+  <li><b>Stuck state の root cause</b>: <a href="https://github.com/susumutomita/TenkaCloud/issues/708">#708 (TEARDOWN stuck)</a> / <a href="https://github.com/susumutomita/TenkaCloud/issues/723">#723 (IN_PROGRESS stuck after ROLLBACK_COMPLETE)</a> はいずれも reconcileEventStatuses が CFn 真の state を polling 前提で書き戻すため、 polling 中の race と silent skip で stuck になりやすい</li>
+</ul>
+
+<p>ユーザー指摘: <i>「ポーリングじゃなくてイベント駆動とかにできないのでしょうか? 負荷も高くなるし」</i></p>
+
+<h3>制約 (前提として固定)</h3>
+
+<ul>
+  <li><b>SSE / WebSocket の新規導入禁止</b> (memory <code>feedback_polling_over_sse</code>): API Gateway WebSocket は Lambda 運用と非整合、 frontend は polling 維持</li>
+  <li><b>DynamoDB on-demand 禁止</b>: 全 table PROVISIONED 1/1 を <code>DynamoDbLowCapacity</code> Aspect で強制</li>
+  <li><b>Cost 0 原則</b>: Free Tier 内で完結</li>
+  <li><b>cross-account event bus 経路あり</b>: 競技者 account の CFn / CodeBuild event を operator account に流す必要がある</li>
+</ul>
+
+<h2>Decision</h2>
+
+<p>Phased migration を採用。 backend (= reconciler / probe) は event-driven に移行、 frontend は polling 維持。</p>
+
+<h3>Phase A — CFn Stack Status Change を EventBridge で受信 (高優先)</h3>
+
+<p>
+競技者 account 側で <code>aws.cloudformation</code> source の <code>"CloudFormation Stack Status Change"</code> event を購読する EventBridge rule を <code>competitor-bootstrap.yaml</code> に追加。 rule target は operator account の event bus (= cross-account event delivery)。 operator side で event を受ける Worker Lambda が DDB <code>Deployments</code> row の status を直接 update する。
+</p>
+
+<table>
+  <thead><tr><th>Source</th><th>競技者 account の EventBridge rule</th><th>Target</th><th>Operator side Worker</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>aws.cloudformation</code></td>
+      <td>
+        <pre>{
+  "source": ["aws.cloudformation"],
+  "detail-type": ["CloudFormation Stack Status Change"],
+  "detail": {
+    "stack-name": [{"prefix": "tc-"}]
+  }
+}</pre>
+      </td>
+      <td>operator account の event bus ARN<br/>(= <code>CDK_PARAM_OPERATOR_EVENT_BUS_ARN</code> param)</td>
+      <td>
+        <code>CfnStackStatusReconciler</code> Lambda:
+        <ul>
+          <li>event.detail から stack-name / status-details を抽出</li>
+          <li>namePrefix で Deployments row を Query (GSI 経由)</li>
+          <li>StackStatus が COMPLETE → row.status = COMPLETE</li>
+          <li>失敗系 → row.status = FAILED + failureReason</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<p>これで <code>reconcileEventStatuses</code> の 1-min polling は <b>不要</b> になる (= Event status 遷移は EventBridge driven、 Deployments row.status は CFn event で直接更新される)。 #708 / #723 の stuck root cause も同時に解消。</p>
+
+<h3>Phase B — CodeBuild State Change で buildId を即時記録</h3>
+
+<p>
+<a href="https://github.com/susumutomita/TenkaCloud/issues/720">#720</a> で MarkSucceeded / MarkFailed に buildId を入れる short-term fix を入れたが、 deploy 進行中 (= IN_PROGRESS) は依然 buildId が DDB に無い。 EventBridge <code>"CodeBuild Build State Change"</code> event を購読 (operator account 内なので cross-account 不要) で buildId を即時 record。
+</p>
+
+<pre>{
+  "source": ["aws.codebuild"],
+  "detail-type": ["CodeBuild Build State Change"],
+  "detail": {
+    "project-name": ["tenkacloud-saas-provisioning"],
+    "build-status": ["IN_PROGRESS", "SUCCEEDED", "FAILED"]
+  }
+}</pre>
+
+<h3>Phase C — Frontend polling は維持 (= SSE 禁止制約遵守)</h3>
+
+<p>
+SSE / WebSocket は新規導入禁止 (= memory <code>feedback_polling_over_sse</code>)。 frontend 側の 30s polling は維持するが、 Lambda 側の応答に <code>If-Modified-Since</code> headers 相当 (= DDB <code>updatedAt</code> の比較) を入れて no-op responses を 200 + 空 payload で返し、 invocation 自体を 0 にはできないが転送量を削減する。
+</p>
+
+<h3>Out-of-scope</h3>
+
+<ul>
+  <li>SSE / WebSocket / AppSync subscription (= 禁止)</li>
+  <li>外部 endpoint への scoring probe (= 競技者 endpoint への HTTP probe は polling 維持、 仕様)</li>
+  <li>EventBridge Pipes (= 過剰、 Lambda + Rule で十分)</li>
+</ul>
+
+<h2>Consequences</h2>
+
+<h3>Pros</h3>
+
+<ul>
+  <li>Lambda invocation コスト削減: <code>reconcileEventStatuses</code> の 1-min polling 廃止で月あたり ~43,200 invocation/tenant 削減 (= 60 × 24 × 30)</li>
+  <li>状態反映 latency 改善: CFn rollback 〜 UI 反映が 30s〜2min → ~5s (EventBridge delivery + Lambda invocation)</li>
+  <li>#708 / #723 の stuck root cause が構造的に解消 (= reconcile が race / silent skip しない)</li>
+  <li>operator が「stuck かどうか」を判断する必要が無くなる (= 全ての state 遷移が event-driven trace 可能)</li>
+</ul>
+
+<h3>Cons</h3>
+
+<ul>
+  <li>cross-account event bus の設定が増える: 競技者 bootstrap.yaml に EventBridge rule + Target ARN + IAM policy を追加</li>
+  <li>operator account 側に新 Worker Lambda + Rule + DLQ (Phase 2 で +1 Lambda function、 同 Free Tier 内)</li>
+  <li>EventBridge event は at-least-once delivery (= 重複処理あり)。 Worker Lambda は idempotent に書く (= DDB <code>UpdateItem ConditionExpression</code> で版重ね防止)</li>
+  <li>競技者の <code>tenkacloud-competitor-bootstrap</code> stack を update する必要がある (= <a href="https://github.com/susumutomita/TenkaCloud/issues/706">#706 / PR-712</a> の Update bootstrap UX で対応済み)</li>
+</ul>
+
+<h3>Migration impact</h3>
+
+<table>
+  <thead><tr><th>File / construct</th><th>変更</th></tr></thead>
+  <tbody>
+    <tr><td><code>infrastructure/templates/competitor-bootstrap.yaml</code></td><td>EventBridge rule + Target ARN + sts:PutEvents IAM 追加</td></tr>
+    <tr><td><code>infrastructure/lib/problem-deploy/cfn-stack-status-reconciler.ts</code> (new)</td><td>EventBridge rule + Worker Lambda</td></tr>
+    <tr><td><code>infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler.ts</code></td><td><code>reconcileEventStatuses</code> 関数を Phase A 完了後に削除予定 (= rollout 完了まで残す)</td></tr>
+    <tr><td><code>scripts/install.sh</code></td><td>Phase 1 で operator event bus ARN を <code>CDK_PARAM_OPERATOR_EVENT_BUS_ARN</code> として export</td></tr>
+  </tbody>
+</table>
+
+<h2>Open questions</h2>
+
+<ol>
+  <li><b>cross-account event bus の方向</b>: 競技者 → operator (= 本 ADR の選択) か、 operator → 競技者 か。 競技者 side で Rule を持つ方が CFn event の source に近く delivery latency が短い (= 採用)</li>
+  <li><b>event filter pattern の粒度</b>: <code>tc-</code> 接頭辞 filter は十分か、 同 account に他 stack があるとき false positive を防げるか。 Phase A 実装時に検証</li>
+  <li><b>delivery failure 時の retry</b>: EventBridge は 24h retry + DLQ。 operator side で DLQ を Lambda で監視するか、 SNS alert を出すか</li>
+  <li><b>Frontend polling 削減</b>: <code>If-Modified-Since</code> 相当の no-op 応答を導入するか、 polling 間隔を 30s → 60s に伸ばすか (= Phase C で判定)</li>
+</ol>
+
+<h2>References</h2>
+
+<ul>
+  <li><a href="adr-006-notifications.html">ADR-006 — Notifications (polling architecture の前提)</a></li>
+  <li><a href="adr-012-problem-plugin-architecture.html">ADR-012 — Problem plugin architecture</a></li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/708">#708 — TEARDOWN stuck</a></li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/720">#720 — Deploy log buildId 永続化</a></li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/723">#723 — ROLLBACK_COMPLETE 後の IN_PROGRESS stuck</a></li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/724">#724 — 本 ADR の driver</a></li>
+</ul>
+
+</body>
+</html>
