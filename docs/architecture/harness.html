@@ -117,6 +117,12 @@ PR body に <code>## 物理影響</code> セクションを置く。そこで <c
 <li><p><code>handler-must-not-call-fetch</code>
 <code>lib/handlers/</code> 配下のファイルで <code>fetch(</code> の直接呼び出しを検出すると error。handler (Controller 層) は入力検証と Service 呼び出しとレスポンス整形のみを担い、外部 API 通信は Repository 層に閉じ込める。Controller に fetch を入れると Service / Repository の境界が崩れ、ユニットテストが HTTP モック前提になる。</p>
 </li>
+<li><p><code>adr-must-be-html</code>
+<code>docs/architecture/adr-*.md</code> を staged に含めると error。ADR は HTML で書き、row span / color / SVG / collapsible などの表現力を使える形で正本化する。<code>docs/architecture/harness.md</code> は invariant の source-of-truth なので対象外。</p>
+</li>
+<li><p><code>adr-self-contained</code>
+<code>docs/architecture/adr-*.html</code> に chat 文脈、段階的反映 metadata、AI agent との役割分担メモが含まれると error。ADR は OSS readers が単独で読める正本として書く。既存違反は <code>.claude/harness/baselines/adr-self-contained.json</code> に baseline 化し、新規 regression だけを捕まえる。</p>
+</li>
 </ul>
 <h2>Enforcement</h2>
 <ul>

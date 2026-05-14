@@ -70,6 +70,12 @@ Invariants に加えて、実装レベルの原則を機械検査するルール
 - `handler-must-not-call-fetch`
   `lib/handlers/` 配下のファイルで `fetch(` の直接呼び出しを検出すると error。handler (Controller 層) は入力検証と Service 呼び出しとレスポンス整形のみを担い、外部 API 通信は Repository 層に閉じ込める。Controller に fetch を入れると Service / Repository の境界が崩れ、ユニットテストが HTTP モック前提になる。
 
+- `adr-must-be-html`
+  `docs/architecture/adr-*.md` を staged に含めると error。ADR は HTML で書き、row span / color / SVG / collapsible などの表現力を使える形で正本化する。`docs/architecture/harness.md` は invariant の source-of-truth なので対象外。
+
+- `adr-self-contained`
+  `docs/architecture/adr-*.html` に chat 文脈、段階的反映 metadata、AI agent との役割分担メモが含まれると error。ADR は OSS readers が単独で読める正本として書く。既存違反は `.claude/harness/baselines/adr-self-contained.json` に baseline 化し、新規 regression だけを捕まえる。
+
 ## Enforcement
 
 - `make harness` (= `bun run .claude/harness/bin/architecture.ts --staged --fail-on=error`)

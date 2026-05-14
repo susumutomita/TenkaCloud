@@ -62,6 +62,12 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
   - **PR 同士の参照** = `PR-565` のように番号 prefix
   - 旧ルール (= `(#N)` の括弧で auto-close 抑止) は誤解だった。`Closes` などの keyword が無ければ `#N` 単独で auto-close されない (= backlink のみ作る)。
 
+## ADR 規約
+
+- ADR は `docs/architecture/adr-*.html` で書く。Markdown の新規 ADR は作らない。row span / color / SVG / collapsible など、HTML の表現力を使って設計判断を正本化する。
+- ADR は self-contained に書く。chat 文脈、順次反映 metadata、`Claude が提案` / `user 担当` のような会話内の役割分担、未確定 TODO を残さない。OSS readers が ADR 単体で背景・判断・影響を理解できることを基準にする。
+- 機械検査は `make harness` の `adr-must-be-html` / `adr-self-contained` rule が担う。既存違反は `.claude/harness/baselines/adr-self-contained.json` で baseline 化し、新規 regression だけを落とす。
+
 ## コーディング規約
 
 - **HTTP status code は `StatusCodes.*` (`http-status-codes` library) を使う**。`c.json(body, 200)` / `res.status === 401` のような数値リテラル直書きは禁止。意図 (200 vs 202、400 vs 409 等) を name で明示し、grep / lint で意味検索を可能にする。
