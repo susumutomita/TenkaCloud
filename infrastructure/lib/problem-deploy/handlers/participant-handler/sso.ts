@@ -126,7 +126,8 @@ const sts = new STSClient({});
  *
  * 競技者は自前 AWS アカウント不要。1-hour TTL で自動 expire。
  *
- * 行不在 / DELETING / DELETED → unauthorized。stack 未起動 (namePrefix 無し) → not_ready。
+ * 行不在 / DELETING / DELETED → unauthorized。PENDING / IN_PROGRESS や stack 未起動
+ * (namePrefix 無し) → not_ready。
  * `CONSOLE_VIEWER_ROLE_ARN` env 未設定 → misconfigured (= CDK 未 deploy)。
  */
 export async function getConsoleSigninUrl(
@@ -146,6 +147,7 @@ export async function getConsoleSigninUrl(
 
   const status = (deployment.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return { kind: "unauthorized" };
+  if (status === "IN_PROGRESS" || status === "PENDING") return { kind: "not_ready" };
   if (typeof deployment.namePrefix !== "string") return { kind: "not_ready" };
   const region = typeof deployment.region === "string" ? deployment.region : undefined;
   if (!region) return { kind: "not_ready" };
