@@ -73,7 +73,12 @@ export class GenericScoringLambda extends Construct {
       entry: path.resolve(__dirname, "handlers/generic-scoring-handler/index.ts"),
       handler: "handler",
       timeout: Duration.minutes(2),
-      memorySize: 256,
+      // #746: 旧 256MB だと cold start で OOM + init timeout が頻発し採点 Lambda が
+      // 起動すらしなかった (CloudWatch logs で Init Duration 10001ms timeout +
+      // Runtime.OutOfMemory を確認)。 同 ParticipantPortalLambda が #672 で 512MB に
+      // 上げた経緯と同じく、 bundle が AWS SDK / Hono / zod 込みで巨大なので 1024MB に
+      // 余裕を持たせる (= cold start 後の steady state は実測 256MB 未満で済むはず)。
+      memorySize: 1024,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
