@@ -87,6 +87,9 @@ export class ApiGateway extends Construct {
     const deployment = deployments.addResource("{jobId}");
     deployment.addMethod("GET", deployIntegration, deployMethodOptions);
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);
+    deployment
+      .addResource("stack-progress")
+      .addMethod("GET", deployIntegration, deployMethodOptions);
 
     // ADR-004 Phase 1+2a/2b: /events — 1 競技イベント = 1 行で teams + problems を持つ
     // /events                          POST  = create   / GET = list
