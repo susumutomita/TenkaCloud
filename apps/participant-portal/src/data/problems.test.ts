@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { findProblemMetadata, resolveLocalizedNarrative } from "./problems";
+import {
+  findProblemMetadata,
+  type ProblemCatalogEntry,
+  resolveLocalizedNarrative,
+} from "./problems";
 
 /**
  * #550: Portal の build-time catalog が `problems/<category>/<id>/metadata.json` を
@@ -9,6 +13,14 @@ import { findProblemMetadata, resolveLocalizedNarrative } from "./problems";
  * 既存 3 問 (hello-world / hello-world-battle / security-battle-royale) を pin する。
  * 新 problem 追加で test を更新する運用 (= CLAUDE.md の TDD タイトル「〜すべき」に沿う)。
  */
+
+function requireProblemMetadata(problemId: string): ProblemCatalogEntry {
+  const metadata = findProblemMetadata(problemId);
+  expect(metadata).toBeDefined();
+  if (!metadata) throw new Error(`problem metadata not found: ${problemId}`);
+  return metadata;
+}
+
 describe("findProblemMetadata (Portal build-time catalog #550)", () => {
   it("hello-world (Challenge sample) が引けて narrative field を含むべき", () => {
     const m = findProblemMetadata("hello-world");
@@ -101,23 +113,23 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
   // Issue #583 Phase 5: i18n override の locale fallback chain。
   describe("resolveLocalizedNarrative (Phase 5)", () => {
     it("locale='ja' なら top-level の値をそのまま返すべき", () => {
-      const m = findProblemMetadata("hello-world");
-      const r = resolveLocalizedNarrative(m!, "ja");
+      const m = requireProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m, "ja");
       expect(r.name).toBe("Hello World (Sample)");
       expect(r.description).toContain("Challenge / flag 提出形式");
     });
 
     it("locale='en' の override が宣言されていれば英語を返すべき (hello-world)", () => {
-      const m = findProblemMetadata("hello-world");
-      const r = resolveLocalizedNarrative(m!, "en");
+      const m = requireProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m, "en");
       expect(r.shortDescription).toMatch(/Minimal Challenge/);
       expect(r.description).toMatch(/Deploying creates a single SSM Parameter/);
       expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
     });
 
     it("locale='zh' の override が宣言されていれば中文を返すべき (hello-world)", () => {
-      const m = findProblemMetadata("hello-world");
-      const r = resolveLocalizedNarrative(m!, "zh");
+      const m = requireProblemMetadata("hello-world");
+      const r = resolveLocalizedNarrative(m, "zh");
       expect(r.name).toContain("示例");
     });
 
@@ -137,14 +149,14 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     });
 
     it("security-battle-royale の locale='en' で英語翻訳を返すべき", () => {
-      const m = findProblemMetadata("security-battle-royale");
-      const r = resolveLocalizedNarrative(m!, "en");
+      const m = requireProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m, "en");
       expect(r.shortDescription).toMatch(/Attack\/defend/);
     });
 
     it("locale='es' で security-battle-royale もスペイン語翻訳を返すべき", () => {
-      const m = findProblemMetadata("security-battle-royale");
-      const r = resolveLocalizedNarrative(m!, "es");
+      const m = requireProblemMetadata("security-battle-royale");
+      const r = resolveLocalizedNarrative(m, "es");
       expect(r.shortDescription).toMatch(/Ataca\/defiende/);
     });
   });
