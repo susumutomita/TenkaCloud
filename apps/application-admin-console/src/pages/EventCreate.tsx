@@ -41,6 +41,23 @@ const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
   label: r.label,
 }));
 
+export function buildVerifiedAccountOption(a: CompetitorAccountSummary): SelectProps.Option {
+  const descriptionParts = [a.alias, a.region, a.competitorRoleName].filter(
+    (p): p is string => typeof p === "string" && p.length > 0,
+  );
+  return {
+    value: a.awsAccountId,
+    label: a.awsAccountId,
+    labelTag: a.alias,
+    description: descriptionParts.join(" / "),
+    filteringTags: descriptionParts,
+  };
+}
+
+export function formatVerifiedAccountSummary(a: CompetitorAccountSummary): string {
+  return a.alias ? `${a.awsAccountId} (${a.alias})` : a.awsAccountId;
+}
+
 interface ProblemRow {
   problemId: string;
   problemName: string;
@@ -122,11 +139,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const noVerifiedAccounts = competitorAccounts !== null && verifiedAccounts.length === 0;
   const showNoVerifiedAccountsHint = noVerifiedAccounts && !accountsLoadError;
   const accountOptions: SelectProps.Option[] = useMemo(
-    () =>
-      verifiedAccounts.map((a) => ({
-        value: a.awsAccountId,
-        label: a.alias ? `${a.alias} (${a.awsAccountId})` : a.awsAccountId,
-      })),
+    () => verifiedAccounts.map((a) => buildVerifiedAccountOption(a)),
+    [verifiedAccounts],
+  );
+  const accountById = useMemo(
+    () => new Map(verifiedAccounts.map((a) => [a.awsAccountId, a])),
     [verifiedAccounts],
   );
 
@@ -391,6 +408,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                     cell: (t) => {
                       const selected =
                         accountOptions.find((o) => o.value === t.awsAccountId) ?? null;
+                      const selectedAccount = accountById.get(t.awsAccountId);
                       return (
                         <SpaceBetween size="xxs">
                           <Select
@@ -412,6 +430,13 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                               t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)
                             }
                           />
+                          {selectedAccount && (
+                            <Box variant="small" color="text-status-inactive">
+                              <span title={formatVerifiedAccountSummary(selectedAccount)}>
+                                {formatVerifiedAccountSummary(selectedAccount)}
+                              </span>
+                            </Box>
+                          )}
                           {noVerifiedAccounts && (
                             <Box variant="small" color="text-status-inactive">
                               {NO_VERIFIED_ACCOUNTS_HELPER}
