@@ -3,6 +3,8 @@ import type { Project } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import {
+  Choice,
+  Condition,
   DefinitionBody,
   IntegrationPattern,
   JsonPath,
@@ -121,15 +123,25 @@ export class DeployCreateStateMachine extends Construct {
     });
 
     const markSucceeded = this.buildMarkSucceeded(props.deploymentsTable);
-    const markFailed = this.buildMarkFailed(props.deploymentsTable);
+    const markFailed = this.buildMarkFailed(props.deploymentsTable, "MarkFailed", true);
+    const markFailedWithoutBuildId = this.buildMarkFailed(
+      props.deploymentsTable,
+      "MarkFailedWithoutBuildId",
+      false,
+    );
+    const routeFailedDeployment = new Choice(this, "RouteFailedDeployment")
+      .when(Condition.isPresent("$.codebuild.Build.Id"), markFailed)
+      .otherwise(markFailedWithoutBuildId);
 
     // MarkInProgress / CodeBuild / DescribeStacks のいずれの失敗も MarkFailed (= status=FAILED)
     // に倒す。MarkInProgress は DDB throttle くらいでしか落ちないが落とし穴を残さないため
     // catch を付ける。DescribeStacks も稀な throttle / 競技者 account 側 Role の問題で
     // 落ちうる。その場合 stackOutputs 不在のまま FAILED にして operator が再試行する。
-    markInProgress.addCatch(markFailed, { resultPath: "$.error" });
-    startCodeBuild.addCatch(markFailed, { resultPath: "$.error" });
-    describeStacks.addCatch(markFailed, { resultPath: "$.error" });
+    // buildId は StartDeployCodeBuild が正常 output を返した後だけ存在するため、pre-CodeBuild
+    // 失敗では従来通り buildId 無しで FAILED を書く。
+    markInProgress.addCatch(routeFailedDeployment, { resultPath: "$.error" });
+    startCodeBuild.addCatch(routeFailedDeployment, { resultPath: "$.error" });
+    describeStacks.addCatch(routeFailedDeployment, { resultPath: "$.error" });
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
       definitionBody: DefinitionBody.fromChainable(
@@ -149,7 +161,7 @@ export class DeployCreateStateMachine extends Construct {
       table,
       key: deploymentKey(),
       updateExpression:
-        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs",
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs, buildId = :buildId",
       expressionAttributeNames: { "#status": "status" },
       expressionAttributeValues: {
         ":status": DynamoAttributeValue.fromString("COMPLETE"),
@@ -160,16 +172,18 @@ export class DeployCreateStateMachine extends Construct {
         ":stackOutputs": DynamoAttributeValue.fromString(
           JsonPath.jsonToString(JsonPath.objectAt("$.cfn.Stacks[0].Outputs")),
         ),
+        ":buildId": DynamoAttributeValue.fromString(JsonPath.stringAt("$.codebuild.Build.Id")),
       },
     });
   }
 
-  private buildMarkFailed(table: ITable): DynamoUpdateItem {
-    return new DynamoUpdateItem(this, "MarkFailed", {
+  private buildMarkFailed(table: ITable, id: string, persistBuildId: boolean): DynamoUpdateItem {
+    return new DynamoUpdateItem(this, id, {
       table,
       key: deploymentKey(),
       updateExpression:
-        "SET #status = :status, updatedAt = :updatedAt, #failureReason = :failureReason",
+        "SET #status = :status, updatedAt = :updatedAt, #failureReason = :failureReason" +
+        (persistBuildId ? ", buildId = :buildId" : ""),
       expressionAttributeNames: {
         "#status": "status",
         "#failureReason": "failureReason",
@@ -180,6 +194,13 @@ export class DeployCreateStateMachine extends Construct {
         // `$.error.Cause` は CodeBuild RUN_JOB の `States.TaskFailed` Cause (= build
         // 失敗 detail の JSON 文字列)。100 文字を超えるので JSON のまま格納する。
         ":failureReason": DynamoAttributeValue.fromString(JsonPath.stringAt("$.error.Cause")),
+        ...(persistBuildId
+          ? {
+              ":buildId": DynamoAttributeValue.fromString(
+                JsonPath.stringAt("$.codebuild.Build.Id"),
+              ),
+            }
+          : {}),
       },
     });
   }

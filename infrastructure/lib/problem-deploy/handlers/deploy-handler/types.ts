@@ -74,6 +74,8 @@ export interface DeploymentItem {
 
   /** worker (CFn 起動側) が埋める */
   stackId?: string;
+  /** Step Functions の CodeBuildStartBuild output (= `Build.Id`) から永続化する build ID。 */
+  buildId?: string;
   /** StatusUpdater が CFn Outputs を JSON 文字列で書き戻す */
   stackOutputs?: string;
   failureReason?: string;

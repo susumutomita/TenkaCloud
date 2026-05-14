@@ -11,7 +11,7 @@ import { Construct } from "constructs";
  *
  * 主な属性:
  *   jobId / problemId / tenantId / awsAccountId / region / teamName /
- *   namePrefix / teamLoginKey / status / stackId / stackOutputs /
+ *   namePrefix / teamLoginKey / status / buildId / stackId / stackOutputs /
  *   failureReason / createdAt / updatedAt / expiresAt
  *
  * GSI1 (テナント別の deployment 一覧):
