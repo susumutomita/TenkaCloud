@@ -1,10 +1,11 @@
 import { App, Stack } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { UserPool } from "aws-cdk-lib/aws-cognito";
-import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Code, Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
 import { describe, expect, it } from "vitest";
 import { ApiGateway } from "../../lib/tenant-template/api-gateway";
 import type { CustomApiKey } from "../../lib/tenant-template/interfaces/custom-api-key";
+import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime";
 
 /**
  * tenant API Gateway の resource / method shape を pin する。サイドバー「デプロイ履歴」が引く
@@ -18,17 +19,17 @@ function buildHarness() {
   const stack = new Stack(app, "TestStack");
   const userPool = new UserPool(stack, "UP");
   const fn = new LambdaFunction(stack, "DeployApi", {
-    runtime: Runtime.NODEJS_20_X,
+    runtime: LAMBDA_NODEJS_RUNTIME,
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
   const eventFn = new LambdaFunction(stack, "EventApi", {
-    runtime: Runtime.NODEJS_20_X,
+    runtime: LAMBDA_NODEJS_RUNTIME,
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
   const competitorAccountsFn = new LambdaFunction(stack, "CompetitorAccountsApi", {
-    runtime: Runtime.NODEJS_20_X,
+    runtime: LAMBDA_NODEJS_RUNTIME,
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
