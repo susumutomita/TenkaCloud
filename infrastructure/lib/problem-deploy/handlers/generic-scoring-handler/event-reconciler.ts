@@ -49,6 +49,41 @@ export interface ReconcileEventStatusesContext {
   readonly deploymentsTableName: string;
 }
 
+async function queryDeploymentStatusesForEvent(
+  ctx: ReconcileEventStatusesContext,
+  event: { tenantId: string; eventId: string },
+): Promise<string[]> {
+  const statuses: string[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+
+  do {
+    const depsOut = await ctx.ddb.send(
+      new QueryCommand({
+        TableName: ctx.deploymentsTableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        FilterExpression: "eventId = :ev",
+        ProjectionExpression: "#status",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":pk": `TENANT#${event.tenantId}`,
+          ":ev": event.eventId,
+        },
+        ExclusiveStartKey: exclusiveStartKey,
+      }),
+    );
+
+    statuses.push(
+      ...(depsOut.Items ?? [])
+        .map((d) => String((d as { status?: string }).status ?? ""))
+        .filter((s) => s.length > 0),
+    );
+    exclusiveStartKey = depsOut.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+
+  return statuses;
+}
+
 /**
  * Events table を scan して `DEPLOYING` / `TEARDOWN` 状態の Event について、
  * 子 deployment 集約 status を見て `READY` / `ARCHIVED` に遷移させる (#557 #539)。
@@ -89,24 +124,11 @@ export async function reconcileEventStatuses(
     await Promise.all(
       items.map(async (event) => {
         if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
-        // 子 deployments を GSI1 (TENANT#) で query → 同 event のものに in-memory filter。
-        const depsOut = await ctx.ddb.send(
-          new QueryCommand({
-            TableName: ctx.deploymentsTableName,
-            IndexName: "GSI1",
-            KeyConditionExpression: "GSI1PK = :pk",
-            FilterExpression: "eventId = :ev",
-            ProjectionExpression: "#status",
-            ExpressionAttributeNames: { "#status": "status" },
-            ExpressionAttributeValues: {
-              ":pk": `TENANT#${event.tenantId}`,
-              ":ev": event.eventId,
-            },
-          }),
-        );
-        const depStatuses = (depsOut.Items ?? [])
-          .map((d) => String((d as { status?: string }).status ?? ""))
-          .filter((s) => s.length > 0);
+        // 子 deployments を GSI1 (TENANT#) で query → eventId filter 後の全 page を集約。
+        const depStatuses = await queryDeploymentStatusesForEvent(ctx, {
+          tenantId: event.tenantId,
+          eventId: event.eventId,
+        });
         const next = resolveEventStatusTransition(event.status, depStatuses);
         if (!next) return;
 

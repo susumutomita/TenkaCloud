@@ -187,6 +187,77 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(scan2.input.ExclusiveStartKey).toEqual({ PK: "cursor" });
   });
 
+  it("Deployment Query が pagination するべき (= Filter 後の空 page を越えて READY 判定する)", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EV-PAGED",
+          tenantId: "tenant-acme",
+          eventId: "EV-PAGED",
+          status: "DEPLOYING",
+        },
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [],
+      LastEvaluatedKey: { GSI1PK: "TENANT#tenant-acme", GSI1SK: "cursor" },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ status: "COMPLETE" }, { status: "COMPLETE" }],
+    });
+    ddbSend.mockResolvedValueOnce({});
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+
+    expect(ddbSend).toHaveBeenCalledTimes(4);
+    const query1 = ddbSend.mock.calls[1]?.[0] as {
+      input: { ExclusiveStartKey?: Record<string, unknown> };
+    };
+    const query2 = ddbSend.mock.calls[2]?.[0] as {
+      input: { ExclusiveStartKey?: Record<string, unknown> };
+    };
+    const updateCmd = ddbSend.mock.calls[3]?.[0] as {
+      input: { ExpressionAttributeValues: Record<string, string> };
+    };
+    expect(query1.input.ExclusiveStartKey).toBeUndefined();
+    expect(query2.input.ExclusiveStartKey).toEqual({
+      GSI1PK: "TENANT#tenant-acme",
+      GSI1SK: "cursor",
+    });
+    expect(updateCmd.input.ExpressionAttributeValues[":next"]).toBe("READY");
+  });
+
+  it("Deployment Query の後続 page に非 terminal があれば READY にしないべき", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EV-PENDING",
+          tenantId: "tenant-acme",
+          eventId: "EV-PENDING",
+          status: "DEPLOYING",
+        },
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ status: "COMPLETE" }],
+      LastEvaluatedKey: { GSI1PK: "TENANT#tenant-acme", GSI1SK: "cursor" },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ status: "PENDING" }],
+    });
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+
+    expect(ddbSend).toHaveBeenCalledTimes(3);
+    const query2 = ddbSend.mock.calls[2]?.[0] as {
+      input: { ExclusiveStartKey?: Record<string, unknown> };
+    };
+    expect(query2.input.ExclusiveStartKey).toEqual({
+      GSI1PK: "TENANT#tenant-acme",
+      GSI1SK: "cursor",
+    });
+  });
+
   it("Event filter は DEPLOYING または TEARDOWN のみであるべき (= READY / ENDED は触らない)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
     await reconcileEventStatuses(ctx, NOW_ISO);
