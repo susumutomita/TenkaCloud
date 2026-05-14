@@ -36,4 +36,4 @@ install_node_from_nvmrc
 
 cd cdk
 npm install
-npx cdk deploy "$STACK_NAME" --exclusively --require-approval never
+bunx cdk deploy "$STACK_NAME" --exclusively --require-approval never

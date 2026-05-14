@@ -1,14 +1,34 @@
 #!/bin/bash -e
+# pipefail: runtime bootstrap の curl 失敗を silent に続行させない。
+set -o pipefail
 
 # Install dependencies
 sudo yum update -y
-sudo yum install -y nodejs
-sudo yum install -y npm
-sudo npm install -g aws-cdk
 sudo yum install -y jq
 sudo yum install -y python3-pip
 sudo python3 -m pip install --upgrade setuptools
 sudo python3 -m pip install git-remote-codecommit
+
+export REGION=$AWS_REGION
+echo "REGION: ${REGION}"
+
+export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "ACCOUNT_ID: ${ACCOUNT_ID}"
+
+export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
+export CDK_SOURCE_NAME="source.zip"
+
+VERSIONS=$(aws s3api list-object-versions --bucket "$CDK_PARAM_S3_BUCKET_NAME" --prefix "$CDK_SOURCE_NAME" --query 'Versions[?IsLatest==`true`].{VersionId:VersionId}' --output text 2>&1)
+CDK_PARAM_COMMIT_ID=$(echo "$VERSIONS" | awk 'NR==1{print $1}')
+echo "CDK_PARAM_COMMIT_ID: ${CDK_PARAM_COMMIT_ID}"
+
+aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAME" --version-id "$CDK_PARAM_COMMIT_ID" "$CDK_SOURCE_NAME" 2>&1
+unzip -o "$CDK_SOURCE_NAME"
+
+# shellcheck source=lib/install-node.sh
+source ./scripts/lib/install-node.sh
+install_node_from_nvmrc
 
 # Enable nocasematch option
 shopt -s nocasematch
@@ -104,7 +124,7 @@ if [[ $TIER == "PLATINUM" ]]; then
   export CDK_PARAM_DEPROVISIONING_DETAIL_TYPE="NA"
 
   echo "undeploying tenant template $STACK_NAME"
-  npx cdk destroy $STACK_NAME --force
+  bunx cdk destroy "$STACK_NAME" --force
 
 else
   # Read tenant details from the cloudformation stack output parameters
