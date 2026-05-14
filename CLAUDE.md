@@ -92,8 +92,16 @@ DynamoDB シングルテーブル設計はしない。stack ごとに専用テ�
 
 - `secrets-manager-forbidden` — `@aws-sdk/client-secrets-manager` 禁止 (SSM Parameter Store SecureString を使う、コスト 0 原則)
 - `handler-must-not-call-fetch` — `lib/handlers/` で `fetch(` 直接呼び出し禁止 (Service / Repository に閉じ込める)
+- `adr-must-be-html` — ADR は `docs/architecture/adr-*.html` で書く。Markdown ADR は禁止
+- `adr-self-contained` — ADR に chat 文脈 / 順次反映 metadata / AI agent との役割分担メモを残さない
 
 ## 開発フロー
+
+### ADR 規約
+
+ADR は `docs/architecture/adr-*.html` を正本とし、Markdown では書かない。row span / color / SVG / collapsible など、設計判断を読みやすくする HTML の表現力を使う。
+
+ADR は OSS readers 向けに self-contained に書く。chat 文脈、順次反映 metadata、`Claude が提案` / `user 担当` のような会話内の役割分担、未確定 TODO は残さない。背景、判断、影響、代替案、移行方針を、その ADR 単体で読める形にする。
 
 ### ゲート (PR 作成前)
 
