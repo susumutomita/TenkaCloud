@@ -1,4 +1,4 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
 import type { EventItem } from "./types.js";
@@ -57,7 +57,7 @@ const SCHEDULE_SLACK_MS = 60_000;
  * caller (handler/index.ts) は zod validate 済を前提。validation:
  *   - past_starts_at: startsAt < now - SLACK
  *   - past_ends_at:   endsAt   < now - SLACK
- *   - ends_before_starts: 両方指定時、endsAt <= startsAt
+ *   - ends_before_starts: effective endsAt <= effective startsAt
  *
  * tenant 跨ぎ参照防止: Event 行の tenantId が引数 `tenantId` と一致しない場合は `not_found`。
  */
@@ -96,6 +96,30 @@ export async function setEventSchedule(
     const endsAtMs = new Date(endsAt).getTime();
     if (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && endsAtMs <= startsAtMs) {
       return { kind: "ends_before_starts", startsAt, endsAt };
+    }
+  }
+
+  const currentOut = await shared.ddb.send(
+    new GetCommand({
+      TableName: shared.eventsTableName,
+      Key: { PK: `EVENT#${eventId}`, SK: "META" },
+      ProjectionExpression: "tenantId, startsAt, endsAt",
+    }),
+  );
+  const currentEvent = currentOut.Item as Pick<EventItem, "tenantId" | "startsAt" | "endsAt">;
+  if (!currentEvent || currentEvent.tenantId !== tenantId) return { kind: "not_found" };
+
+  const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
+  const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
+  if (effectiveStartsAt !== undefined && effectiveEndsAt !== undefined) {
+    const startsAtMs = new Date(effectiveStartsAt).getTime();
+    const endsAtMs = new Date(effectiveEndsAt).getTime();
+    if (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && endsAtMs <= startsAtMs) {
+      return {
+        kind: "ends_before_starts",
+        startsAt: effectiveStartsAt,
+        endsAt: effectiveEndsAt,
+      };
     }
   }
 
