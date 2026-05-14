@@ -188,14 +188,9 @@ describe("getConsoleSigninUrl", () => {
     expect(denyActions).toContain("codepipeline:*");
     expect(denyActions).toContain("codebuild:*");
     expect(denyActions).toContain("cognito-idp:*");
-    // CFn の閲覧は Allow されている
-    const allowActions = policy.Statement.filter((s) => s.Effect === "Allow").flatMap((s) =>
-      flattenAction(s.Action),
-    );
-    expect(allowActions).toContain("cloudformation:DescribeStacks");
   });
 
-  it("#704: session policy の Allow Resource は deployment の namePrefix scope に絞られているべき", async () => {
+  it("#737: session policy は Deny statements のみで packed size に余裕があるべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     stsSend.mockResolvedValueOnce({
@@ -216,24 +211,10 @@ describe("getConsoleSigninUrl", () => {
     const policy = JSON.parse(cmd.input.Policy as string) as {
       Statement: Array<{ Effect: string; Action: string | string[]; Resource: string | string[] }>;
     };
-    const flatten = (r: string | string[]) => (Array.isArray(r) ? r : [r]);
-    const allowResources = policy.Statement.filter((s) => s.Effect === "Allow").flatMap((s) =>
-      flatten(s.Resource),
-    );
-    // CFn / logs / lambda / s3 は namePrefix で絞られている (= 他チームの tc-* は AccessDenied)
-    expect(
-      allowResources.some(
-        (r) => r === "arn:aws:cloudformation:*:*:stack/tc-security-battle-royale-alpha/*",
-      ),
-    ).toBe(true);
-    expect(
-      allowResources.some(
-        (r) => r === "arn:aws:lambda:*:*:function:tc-security-battle-royale-alpha*",
-      ),
-    ).toBe(true);
-    expect(allowResources.some((r) => r === "arn:aws:s3:::tc-security-battle-royale-alpha*")).toBe(
-      true,
-    );
+    expect(policy.Statement).toHaveLength(1);
+    expect(policy.Statement[0]?.Effect).toBe("Deny");
+    expect(JSON.stringify(policy).length).toBeLessThan(2048);
+    expect(policy.Statement.some((s) => s.Effect === "Allow")).toBe(false);
   });
 
   it("getSigninToken が 5xx を返したら federation_endpoint_failed (#705)", async () => {

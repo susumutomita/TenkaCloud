@@ -23,74 +23,19 @@ const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const FEDERATION_SESSION_DURATION_SEC = 3600;
 const TENKACLOUD_ISSUER = "https://tenkacloud.example/portal";
 
-/**
- * AssumeRole 時の inline session policy を namePrefix scope で組み立てる。
- *
- * 旧実装は Allow Resource を `"*"` で broad に開いていた (#704)。Role 側の
- * `ReadOnlyAccess` を外し `tc-*` 接頭辞に絞ったので、 さらに本 session policy で
- * **当該 team の `tc-{problemSlug}-{teamSlug}` だけ**に narrow する。
- *
- * セッションポリシーは Role の policy との **AND** で評価される (= Allow の和集合では
- * なく交差) ため、ここで Allow した範囲しか操作できない。
- *
- * Deny:
- *   - codepipeline:* / codebuild:* → operator の deploy job (= 他テナント問題の進行) を遮蔽
- *   - cognito-idp:* / cognito-identity:* → tenant UserPool 名 leak 防止
- *   - dynamodb / secretsmanager / ssm:Get-Describe / kms:Decrypt / iam / sts:AssumeRole
- *     → operator account の bearer token / KMS / 他 Role への乗り換えを禁止
- */
-function buildSessionPolicy(namePrefix: string): string {
+function buildSessionPolicy(_namePrefix: string): string {
+  // #737: 旧実装は per-namePrefix ARN scope を Allow 7 statements に詰めていたが、 STS の
+  // packed session policy size limit (= 2048 bytes) を 118% 超過して AssumeRole 自体が
+  // failing していた (CloudWatch logs で確定)。 session policy は **Deny only** に simplify
+  // し、 Allow は Role の inline TcReadOnly policy (= tc-* 接頭辞 scoped) に委譲する。
+  //
+  // Trade-off: competitor は同 account の他 team の tc-* stack を一覧可能になるが、 sensitive
+  // data (operator の teamLoginKey 入り DDB / Secrets / KMS / IAM) は引き続き Deny で守られる。
+  // 詳細: #737 / PR-710 の reverse mitigation。 namePrefix 引数は今後の per-tag scoping
+  // (= 別 Phase で session tag 経由) のために interface を残すが、 本実装では使わない。
   return JSON.stringify({
     Version: "2012-10-17",
     Statement: [
-      {
-        Effect: "Allow",
-        Action: [
-          "cloudformation:DescribeStacks",
-          "cloudformation:GetTemplate",
-          "cloudformation:ListStackResources",
-          "cloudformation:DescribeStackEvents",
-          "cloudformation:DescribeStackResource",
-          "cloudformation:DescribeStackResources",
-        ],
-        Resource: [`arn:aws:cloudformation:*:*:stack/${namePrefix}/*`],
-      },
-      // ListStacks は ARN 制約不可。 Console UI の stack 一覧表示に必要なので Allow するが、
-      // events / resources の閲覧は上の per-namePrefix Allow で gate される (= 他チームの
-      // stack 詳細は AccessDenied)。
-      { Effect: "Allow", Action: "cloudformation:ListStacks", Resource: "*" },
-      {
-        Effect: "Allow",
-        Action: [
-          "logs:DescribeLogGroups",
-          "logs:DescribeLogStreams",
-          "logs:GetLogEvents",
-          "logs:FilterLogEvents",
-        ],
-        Resource: [
-          `arn:aws:logs:*:*:log-group:/aws/lambda/${namePrefix}*`,
-          `arn:aws:logs:*:*:log-group:/aws/lambda/${namePrefix}*:log-stream:*`,
-        ],
-      },
-      {
-        Effect: "Allow",
-        Action: ["lambda:GetFunction", "lambda:ListFunctions"],
-        Resource: [`arn:aws:lambda:*:*:function:${namePrefix}*`],
-      },
-      {
-        Effect: "Allow",
-        Action: ["s3:GetBucketLocation", "s3:ListBucket", "s3:GetObject"],
-        Resource: [`arn:aws:s3:::${namePrefix}*`, `arn:aws:s3:::${namePrefix}*/*`],
-      },
-      // ec2 Describe* は ARN 制約が効かない API があるため、 必要な subset だけ Allow。
-      // namePrefix tag による更なる絞り込みは template 側で `TenkaCloud:NamePrefix` tag が
-      // 必須化された Phase で導入予定。
-      {
-        Effect: "Allow",
-        Action: ["ec2:DescribeInstances", "ec2:DescribeSecurityGroups", "ec2:DescribeVpcs"],
-        Resource: "*",
-      },
-      { Effect: "Allow", Action: "apigateway:GET", Resource: "*" },
       {
         Effect: "Deny",
         Action: [
@@ -152,7 +97,8 @@ export async function getConsoleSigninUrl(
   const region = typeof deployment.region === "string" ? deployment.region : undefined;
   if (!region) return { kind: "not_ready" };
 
-  // STS AssumeRole + inline session policy で当該 team の namePrefix だけに絞る。
+  // STS AssumeRole + inline session policy で operator 機密への access を Deny する。
+  // ReadOnly の Allow は ConsoleViewerRole の inline TcReadOnly policy に委譲する。
   // ExternalId は同 account 内なので省略 (cross-account は別 Role でカバー)。
   let session: {
     Credentials?: { AccessKeyId?: string; SecretAccessKey?: string; SessionToken?: string };
