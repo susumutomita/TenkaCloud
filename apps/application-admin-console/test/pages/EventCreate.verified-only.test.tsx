@@ -46,7 +46,9 @@ const config: AppConfig = {
   apiBaseUrl: "https://api.example.com/prod",
 };
 
-const { EventCreatePage } = await import("../../src/pages/EventCreate");
+const { EventCreatePage, buildVerifiedAccountOption, formatVerifiedAccountSummary } = await import(
+  "../../src/pages/EventCreate"
+);
 
 function renderPage() {
   return render(
@@ -66,6 +68,25 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventCreatePage (Phase 2.2 verified-only)", () => {
+  it("account option は 12 桁 ID を主ラベルにして alias を補足表示するべき", () => {
+    const account = {
+      awsAccountId: "111111111111",
+      region: "ap-northeast-1",
+      competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+      alias: "production-shared-account",
+      verified: true,
+      verifiedAt: "2026-05-10T00:00:00.000Z",
+      createdAt: "2026-05-09T00:00:00.000Z",
+      updatedAt: "2026-05-10T00:00:00.000Z",
+    };
+    const option = buildVerifiedAccountOption(account);
+
+    expect(option.label).toBe("111111111111");
+    expect(option.labelTag).toBe("production-shared-account");
+    expect(option.description).toContain("production-shared-account");
+    expect(formatVerifiedAccountSummary(account)).toBe("111111111111 (production-shared-account)");
+  });
+
   it("0 件のとき Competitor Accounts への導線 (Alert) を表示するべき", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({ items: [] });
     renderPage();
