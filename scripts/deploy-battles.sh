@@ -55,6 +55,15 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 TEAM_SLUG="${TEAM_SLUG:-demo-team}"
+TENKACLOUD_ACCOUNT_ID="${TENKACLOUD_ACCOUNT_ID:-}"
+if [[ -z "${TENKACLOUD_ACCOUNT_ID}" ]]; then
+  TENKACLOUD_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+fi
+if [[ ! "${TENKACLOUD_ACCOUNT_ID}" =~ ^[0-9]{12}$ ]]; then
+  echo "error: TENKACLOUD_ACCOUNT_ID must be a 12-digit AWS account ID" >&2
+  exit 1
+fi
+export TENKACLOUD_ACCOUNT_ID
 
 # Phase 2.2 (Issue #459): COMPETITOR_ROLE_ARN が set されているなら、aws CLI 呼び出し前に
 # AssumeRole + ExternalId で tmp credentials に切り替える。空なら same-account 経路で動く。
@@ -69,7 +78,20 @@ build_parameter_overrides() {
   local problem_dir="$1"
   local name_prefix="$2"
   local metadata="${problem_dir}/metadata.json"
-  local -a overrides=("NamePrefix=${name_prefix}")
+  local problem_external_id="${PROBLEM_EXTERNAL_ID:-}"
+  if [[ -z "${problem_external_id}" ]]; then
+    problem_external_id="$(set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+  fi
+  if [[ ${#problem_external_id} -lt 16 ]]; then
+    echo "error: PROBLEM_EXTERNAL_ID must be at least 16 characters" >&2
+    return 1
+  fi
+
+  local -a overrides=(
+    "NamePrefix=${name_prefix}"
+    "TenkaCloudAccountId=${TENKACLOUD_ACCOUNT_ID}"
+    "ExternalId=${problem_external_id}"
+  )
 
   if [[ ! -f "${metadata}" ]]; then
     printf '%s\n' "${overrides[@]}"
@@ -160,7 +182,7 @@ deploy_one() {
   echo "  StackName : ${name_prefix}"
   echo "  Region    : ${AWS_REGION}"
   echo "  TeamSlug  : ${TEAM_SLUG}"
-  echo "  Parameters: ${#parameter_overrides[@]} item(s) (NamePrefix + cfnParameters)"
+  echo "  Parameters: ${#parameter_overrides[@]} item(s) (NamePrefix + TenkaCloudAccountId + ExternalId + cfnParameters)"
   echo "=========================================="
 
   # `aws cloudformation deploy` は CreateStack / UpdateStack を冪等に扱う:

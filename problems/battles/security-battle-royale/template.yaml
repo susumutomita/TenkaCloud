@@ -54,6 +54,15 @@ Parameters:
     Type: String
     Default: trunk/protoship-migration
     Description: branch / tag / commit to check out.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
 
 Resources:
   # ----- VPC + Networking -----
@@ -138,6 +147,74 @@ Resources:
 
   # ----- IAM (SSM Session Manager only) -----
   # api.py is designed to hit IMDS (= intentional exposure). So the role only carries Session Manager.
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${NamePrefix}-participant-viewer"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DescribeOwnEc2
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeTags
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeInternetGateways
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${Sg}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicSubnet}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${Vpc}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/${Rt}"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/${Igw}"
+              - Sid: StartSessionToOwnInstance
+                Effect: Allow
+                Action:
+                  - ssm:StartSession
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
+                  - !Sub "arn:aws:ssm:${AWS::Region}::document/SSM-SessionManagerRunShell"
+              - Sid: TerminateOwnSession
+                Effect: Allow
+                Action:
+                  - ssm:TerminateSession
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${NamePrefix}*"
+              - Sid: DescribeOwnStack
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
+              - Sid: FilterOwnLambdaLogs
+                Effect: Allow
+                Action:
+                  - logs:FilterLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${NamePrefix}*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${NamePrefix}*:*"
+              - Sid: InspectOwnLambdaFunctions
+                Effect: Allow
+                Action:
+                  - lambda:GetFunction
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamePrefix}*"
+
   InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -226,3 +303,6 @@ Outputs:
   NamePrefix:
     Description: Common resource prefix used by this stack.
     Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

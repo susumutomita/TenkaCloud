@@ -30,8 +30,7 @@ const ERROR_STATUS = {
   not_found: HTTP_NOT_FOUND,
   scoring_locked: HTTP_CONFLICT,
   misconfigured: HTTP_INTERNAL_ERROR,
-  // Issue #705: SSO の "misconfigured" を 4 分岐に split (= 原因切り分け可能に)。
-  role_arn_missing: HTTP_INTERNAL_ERROR,
+  // Issue #705: SSO の "misconfigured" を細分化 (= 原因切り分け可能に)。
   assume_role_failed: HTTP_INTERNAL_ERROR,
   federation_endpoint_failed: HTTP_INTERNAL_ERROR,
   federation_token_malformed: HTTP_INTERNAL_ERROR,

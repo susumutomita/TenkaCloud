@@ -126,6 +126,7 @@ export async function startDeployment(
     problemId: request.problemId,
     tenantId: ctx.tenantId,
     awsAccountId: request.awsAccountId,
+    competitorRoleArn: verified.competitorRoleArn,
     region: request.region,
     teamName: request.teamName,
     namePrefix,

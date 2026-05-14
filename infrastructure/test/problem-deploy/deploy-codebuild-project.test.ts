@@ -103,7 +103,7 @@ describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)"
     );
   });
 
-  it("CodeBuild env variables に COMPETITOR_ROLE_ARN / EXTERNAL_ID_SSM_PARAMETER を宣言するべき", () => {
+  it("CodeBuild env variables に AssumeRole と per-deployment ExternalId 用の env を宣言するべき", () => {
     const tpl = synth();
     tpl.hasResourceProperties(
       "AWS::CodeBuild::Project",
@@ -112,6 +112,8 @@ describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)"
           EnvironmentVariables: Match.arrayWith([
             Match.objectLike({ Name: "COMPETITOR_ROLE_ARN" }),
             Match.objectLike({ Name: "EXTERNAL_ID_SSM_PARAMETER" }),
+            Match.objectLike({ Name: "TENKACLOUD_ACCOUNT_ID" }),
+            Match.objectLike({ Name: "PROBLEM_EXTERNAL_ID" }),
           ]),
         }),
       }),

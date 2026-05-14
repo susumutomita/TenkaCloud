@@ -242,6 +242,7 @@ export async function bulkDeployEvent(
         problemId: problem.problemId,
         tenantId,
         awsAccountId,
+        competitorRoleArn: verified.competitorRoleArn,
         region: problem.defaultRegion,
         teamName: team.internalSlug,
         namePrefix,

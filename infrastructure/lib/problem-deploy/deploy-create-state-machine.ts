@@ -101,6 +101,7 @@ export class DeployCreateStateMachine extends Construct {
           value: JsonPath.format("{}", JsonPath.stringAt("$.detail.externalIdParameterName")),
         },
         DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
+        PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
       },
       resultPath: "$.codebuild",
     });
