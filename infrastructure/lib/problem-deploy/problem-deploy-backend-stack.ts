@@ -131,6 +131,12 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * tenant API の `/admin/competitor-accounts*` route から invoke される。
    */
   public readonly competitorAccountsApiLambda: IFunction;
+  /** Optional Participant Portal backend Lambda. Undefined when portal hosting is disabled. */
+  public readonly participantPortalLambda?: IFunction;
+  /** Generic scoring dispatcher Lambda. */
+  public readonly genericScoringLambda: IFunction;
+  /** ExternalId rotation age audit Lambda. */
+  public readonly externalIdAuditLambda: IFunction;
   /**
    * Participant Portal の CloudFront URL。Participant Portal が無効化された tenant
    * では undefined。`TenantTemplateStack` が application-admin-console の runtime-config に
@@ -149,6 +155,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * 参照のみ (read 権限は付与しない)。
    */
   public readonly teamsTable: Table;
+  /** CompetitorAccounts table name is surfaced to ObservabilityStack metrics. */
+  public readonly competitorAccountsTable: Table;
+  /** ProblemEndpoints table name is surfaced to ObservabilityStack metrics. */
+  public readonly problemEndpointsTable: Table;
+  /** DeployCreate Step Functions State Machine ARN for CloudWatch metrics. */
+  public readonly deployCreateStateMachineArn: string;
+  /** DeployDelete Step Functions State Machine ARN for CloudWatch metrics. */
+  public readonly deployDeleteStateMachineArn: string;
+  /** Problem deploy CodeBuild project name for CloudWatch metrics. */
+  public readonly deployCodeBuildProjectName: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -168,6 +184,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
     // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
     const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
+    this.competitorAccountsTable = competitorAccounts.table;
+    this.problemEndpointsTable = endpoints.table;
     const eventBus = EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn);
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
@@ -221,11 +239,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       concurrentBuildLimit: props.deployConcurrentBuildLimit,
       environmentName: props.environmentName,
     });
+    this.deployCodeBuildProjectName = codeBuild.project.projectName;
 
     const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {
       codeBuildProject: codeBuild.project,
       deploymentsTable: deployments.table,
     });
+    this.deployCreateStateMachineArn = stateMachine.stateMachine.stateMachineArn;
 
     // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。
     new DeployEventRule(this, "DeployCreateRule", {
@@ -240,6 +260,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       codeBuildProject: codeBuild.project,
       deploymentsTable: deployments.table,
     });
+    this.deployDeleteStateMachineArn = deleteStateMachine.stateMachine.stateMachineArn;
     new DeployDeleteEventRule(this, "DeployDeleteRule", {
       eventBus,
       stateMachine: deleteStateMachine.stateMachine,
@@ -252,7 +273,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     //
     // uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
     // `if (problemsScoring.length > 0)` ガードは撤去のまま継続)。
-    new GenericScoringLambda(this, "GenericScoring", {
+    const genericScoring = new GenericScoringLambda(this, "GenericScoring", {
       deploymentsTable: deployments.table,
       eventsTable: events.table,
       endpointsTable: endpoints.table,
@@ -260,16 +281,18 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsEndpoints: props.problemsEndpoints,
       problemsPhases: props.problemsPhases ?? {},
     });
+    this.genericScoringLambda = genericScoring.fn;
 
     // Phase 3.2 / Issue #603: ExternalId rotation age 監査 Lambda。1 日 1 回起動して
     // CompetitorAccounts table を Scan し、各 (tenantId, awsAccountId) の rotation age を
     // CloudWatch メトリクス `TenkaCloud/CompetitorAccounts/RotationAge` に publish する。
     // SSM Parameter Store は 100 version で auto-drop するため明示的な cleanup Lambda は
     // 入れない (= 説明は `external-id-audit-lambda.ts` の docblock を参照)。
-    new ExternalIdAuditLambda(this, "ExternalIdAudit", {
+    const externalIdAudit = new ExternalIdAuditLambda(this, "ExternalIdAudit", {
       competitorAccountsTable: competitorAccounts.table,
       environmentName: props.environmentName,
     });
+    this.externalIdAuditLambda = externalIdAudit.fn;
 
     if (props.participantPortal) {
       const consoleViewerRole = new ConsoleViewerRole(this, "ConsoleViewerRole");
@@ -281,6 +304,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         problemsEndpoints: props.problemsEndpoints,
         consoleViewerRoleArn: consoleViewerRole.role.roleArn,
       });
+      this.participantPortalLambda = portalLambda.fn;
       // Lambda role に AssumeRole 権限を付与 (= federation flow の前提)。
       consoleViewerRole.role.grantAssumeRole(portalLambda.fn.grantPrincipal);
       new CfnOutput(this, "ParticipantPortalApiUrl", {

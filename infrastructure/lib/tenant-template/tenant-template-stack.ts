@@ -69,6 +69,13 @@ interface TenantTemplateStackProps extends StackProps {
 }
 
 export class TenantTemplateStack extends Stack {
+  /** Tenant REST API ID for execute-api references. */
+  public readonly tenantApiId: string;
+  /** Tenant REST API name for REST API CloudWatch metrics. */
+  public readonly tenantApiName: string;
+  /** Tenant REST API deployment stage name for CloudWatch metrics. */
+  public readonly tenantApiStageName: string;
+
   constructor(scope: Construct, id: string, props: TenantTemplateStackProps) {
     super(scope, id, props);
     const waveNumber = props.waveNumber || "1";
@@ -126,6 +133,9 @@ export class TenantTemplateStack extends Stack {
         value: this.ssmLookup(props.ApiKeySSMParameterNames.platinum.value),
       },
     });
+    this.tenantApiId = apiGateway.restApi.restApiId;
+    this.tenantApiName = apiGateway.restApi.restApiName;
+    this.tenantApiStageName = apiGateway.restApi.deploymentStage.stageName;
 
     // apiGateway 確定後に runtime-config.json を配置する (apiUrl を詰めるため)。
     // ADR-001 / Issue #458: Deploy 系 endpoint は本 tenant API に統合されたので

@@ -25,6 +25,9 @@ export interface ServerlessSaaSPipelineInterface extends cdk.StackProps {
 }
 
 export class ServerlessSaaSPipeline extends cdk.Stack {
+  /** Tenant provisioning CodeBuild project name for CloudWatch metrics. */
+  public readonly provisioningCodeBuildProjectName: string;
+
   constructor(scope: Construct, id: string, props: ServerlessSaaSPipelineInterface) {
     super(scope, id, props);
 
@@ -124,6 +127,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
         },
       }),
     });
+    this.provisioningCodeBuildProjectName = codeBuildProject.projectName;
 
     // Add Permissions.
     codeBuildProject.addToRolePolicy(
