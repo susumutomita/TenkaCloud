@@ -110,28 +110,26 @@ export async function submitFlag(
     const totalScore = Number((updated.Attributes as { score?: unknown })?.score ?? scoring.points);
 
     // 加点成功時のみ score event 行を append。失敗 (= already_scored の race) では
-    // 既存の event 行が記録済みなので二重に書かない。Put 失敗は best-effort で log。
+    // 既存の event 行が記録済みなので二重に書かない。
+    // #745: 旧実装は Put 失敗を console.warn で握り潰していたが、 score events 履歴が空のまま
+    // header の score だけ加点される矛盾を生んだ (= IAM 不足で silent skip)。 AGENTS.md
+    // 「モック / スタブで握り潰す fallback 禁止」 違反だったので、 失敗は throw して
+    // route-helpers の internal_error 経路で 500 を返す。
     if (item.jobId) {
-      try {
-        await writeScoreEvent(
-          shared.ddb,
-          shared.tableName,
-          {
-            jobId: item.jobId,
-            problemId: item.problemId,
-            teamId: item.teamId,
-            eventId: item.eventId,
-            expiresAt: item.expiresAt ?? 0,
-          },
-          "flag",
-          scoring.points,
-          now,
-        );
-      } catch (err) {
-        console.warn(`[submit-flag] score-event write failed jobId=${item.jobId}`, {
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
+      await writeScoreEvent(
+        shared.ddb,
+        shared.tableName,
+        {
+          jobId: item.jobId,
+          problemId: item.problemId,
+          teamId: item.teamId,
+          eventId: item.eventId,
+          expiresAt: item.expiresAt ?? 0,
+        },
+        "flag",
+        scoring.points,
+        now,
+      );
     }
 
     return { kind: "ok", scoreDelta: scoring.points, totalScore };

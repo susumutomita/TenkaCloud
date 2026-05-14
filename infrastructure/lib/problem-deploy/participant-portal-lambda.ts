@@ -83,6 +83,14 @@ export class ParticipantPortalLambda extends Construct {
               actions: ["dynamodb:UpdateItem"],
               resources: [props.deploymentsTable.tableArn],
             }),
+            // #745: writeScoreEvent (= submit-flag handler が flag 正解時に PK=`DEPLOYMENT#${jobId}`
+            // / SK=`EVENT#${ts}#${ulid}` で score event 行を append) が PutItem を発行する。
+            // この grant が無いと AccessDenied で silent skip され、 UI で 「加点済だが履歴 0 件」
+            // の矛盾が発生していた (= CloudWatch logs で確認済)。
+            new PolicyStatement({
+              actions: ["dynamodb:PutItem"],
+              resources: [props.deploymentsTable.tableArn],
+            }),
           ],
         }),
         // ADR-006 Notifications: Events table の partition Query 権限のみ。
