@@ -126,10 +126,10 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
-  // #555: 「失敗分を再実行」も同じ POST /deploy 経路。in-flight 状態を 3 値に拡張。
-  const [bulkInFlight, setBulkInFlight] = useState<"deploy" | "teardown" | "retry-failed" | null>(
-    null,
-  );
+  // #555/#756: deploy 系操作は同じ POST /deploy 経路。in-flight 状態だけ分けて表示する。
+  const [bulkInFlight, setBulkInFlight] = useState<
+    "deploy" | "teardown" | "retry-failed" | "redeploy" | null
+  >(null);
   const [confirmTeardown, setConfirmTeardown] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
@@ -173,7 +173,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
 
   const handleBulkDeploy = async (body: BulkDeployBody = {}) => {
     if (!apiClient || bulkInFlight) return;
-    setBulkInFlight(body.retryFailedOnly ? "retry-failed" : "deploy");
+    setBulkInFlight(
+      body.retryFailedOnly ? "retry-failed" : body.forceRedeploy ? "redeploy" : "deploy",
+    );
     setError(null);
     try {
       const res = await bulkDeployEvent(apiClient, eventId, body);
@@ -405,6 +407,12 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
         0,
       )
     : 0;
+  const completeCount = detail
+    ? Object.values(detail.deploymentsByProblem).reduce(
+        (acc, list) => acc + list.filter((d) => d.status === "COMPLETE").length,
+        0,
+      )
+    : 0;
 
   return (
     <SpaceBetween size="l">
@@ -437,6 +445,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 loading={bulkInFlight === "retry-failed"}
                 disabled={
                   !detail ||
+                  detail.status === "ENDED" ||
                   detail.status === "TEARDOWN" ||
                   detail.status === "ARCHIVED" ||
                   bulkInFlight !== null
@@ -445,6 +454,22 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 onClick={() => handleBulkDeploy({ retryFailedOnly: true })}
               >
                 失敗分を再実行 ({failedCount} 件)
+              </Button>
+            )}
+            {completeCount > 0 && (
+              <Button
+                loading={bulkInFlight === "redeploy"}
+                disabled={
+                  !detail ||
+                  detail.status === "ENDED" ||
+                  detail.status === "TEARDOWN" ||
+                  detail.status === "ARCHIVED" ||
+                  bulkInFlight !== null
+                }
+                iconName="refresh"
+                onClick={() => handleBulkDeploy({ forceRedeploy: true })}
+              >
+                再デプロイ ({completeCount} 件)
               </Button>
             )}
             <Button

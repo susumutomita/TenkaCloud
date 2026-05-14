@@ -487,6 +487,39 @@ describe("bulkDeployEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
+  // #756: forceRedeploy = true → COMPLETE 済み stack を新 template で update し直す
+  it("forceRedeploy = true は COMPLETE 行を DELETE + 新規 PENDING を CREATE するべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // 2 teams = 4 通り
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { teamId: "T1", problemId: "hello-world", jobId: "OLD-COMPLETE", status: "COMPLETE" },
+        { teamId: "T2", problemId: "hello-world-battle", jobId: "OLD-PENDING", status: "PENDING" },
+      ],
+    });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, {
+      forceRedeploy: true,
+    });
+
+    // COMPLETE は置換、未作成 2 件は通常 deploy、PENDING 1 件は skip。
+    expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 3, skipped: 1 } });
+
+    const transactCmd = ddbSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is TransactWriteCommand => c instanceof TransactWriteCommand);
+    const items = transactCmd?.input.TransactItems ?? [];
+    expect(items.filter((it) => it.Put)).toHaveLength(3);
+    const deletes = items.filter((it) => it.Delete);
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]?.Delete?.Key?.PK).toBe("DEPLOYMENT#OLD-COMPLETE");
+    expect(deletes[0]?.Delete?.ConditionExpression).toContain("tenantId");
+    expect(deletes[0]?.Delete?.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
+  });
+
   // #555: teamIds で range を絞る (= 後追い team / 該当 team の env だけ deploy)
   it("teamIds 指定 で指定 team のみ deploy するべき", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();

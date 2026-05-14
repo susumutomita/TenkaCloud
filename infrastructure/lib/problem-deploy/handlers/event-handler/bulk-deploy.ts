@@ -67,6 +67,9 @@ const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
  *   - `{ retryFailedOnly: true }` → FAILED 状態の旧行を DELETE → 同 (teamId, problemId) で
  *     新 jobId の PENDING を CREATE。旧 jobId は失われる (= 履歴より状態のクリーンさを優先、
  *     failureReason の monitoring は publish 直後の CloudWatch Logs に残る)。
+ *   - `{ forceRedeploy: true }` → COMPLETE / FAILED / DELETED の旧行を DELETE → 同
+ *     (teamId, problemId) で新 jobId の PENDING を CREATE。PENDING / IN_PROGRESS / DELETING
+ *     は二重実行防止のため skip。
  *   - `{ teamIds }` / `{ problemIds }` → 範囲を絞る (後追い team / 問題用)
  *   - 組み合わせ可能 (= `{ retryFailedOnly: true, teamIds: [t1] }` で「team t1 の失敗のみ retry」)
  */
@@ -129,6 +132,8 @@ export async function bulkDeployEvent(
   );
   // (teamId, problemId) → 旧 FAILED 行の jobId (retryFailedOnly のとき DELETE 対象)。
   const failedByKey = new Map<string, { jobId: string }>();
+  // (teamId, problemId) → 再 deploy で置換可能な terminal 行の jobId。
+  const forceRedeployByKey = new Map<string, { jobId: string }>();
   // (teamId, problemId) → status を問わず存在する組 (skipped 計算用)。
   const existingKey = new Set<string>();
   for (const d of existingDeployments) {
@@ -140,8 +145,15 @@ export async function bulkDeployEvent(
     if (d.status === "FAILED" && !failedByKey.has(k)) {
       failedByKey.set(k, { jobId: String(d.jobId ?? "") });
     }
+    if (
+      (d.status === "COMPLETE" || d.status === "FAILED" || d.status === "DELETED") &&
+      !forceRedeployByKey.has(k)
+    ) {
+      forceRedeployByKey.set(k, { jobId: String(d.jobId ?? "") });
+    }
   }
   const retryFailedOnly = request?.retryFailedOnly === true;
+  const forceRedeploy = request?.forceRedeploy === true;
   // retryFailedOnly でかつ FAILED 行が 0 件 → 何もしない (= enqueued: 0、skipped: 0)。
   if (retryFailedOnly && failedByKey.size === 0) {
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
@@ -191,7 +203,7 @@ export async function bulkDeployEvent(
   interface PlanEntry {
     readonly item: DeploymentItem;
     readonly entry: PutEventsRequestEntry;
-    /** retryFailedOnly = true のとき、対応する旧 FAILED 行の jobId (= これを DELETE)。 */
+    /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
     readonly replacesJobId?: string;
   }
   const plan: PlanEntry[] = [];
@@ -201,13 +213,22 @@ export async function bulkDeployEvent(
     const teamAwsAccountId = team.awsAccountId;
     for (const problem of problems) {
       const k = `${team.teamId} ${problem.problemId}`;
+      const replacement = retryFailedOnly
+        ? failedByKey.get(k)
+        : forceRedeploy
+          ? forceRedeployByKey.get(k)
+          : undefined;
       if (retryFailedOnly) {
         // FAILED で無い組み合わせは対象外 (= silent skip、skipped にも計上しない)。
-        if (!failedByKey.has(k)) continue;
+        if (!replacement) continue;
       } else if (existingKey.has(k)) {
-        // 既存 (status を問わず) と衝突 → idempotent skip (全展開 / 部分指定 共通)。
-        skipped++;
-        continue;
+        if (forceRedeploy && replacement) {
+          // terminal 行は下で DELETE + 新 PENDING CREATE。in-flight 行は通常通り skip。
+        } else {
+          // 既存 (status を問わず) と衝突 → idempotent skip (全展開 / 部分指定 共通)。
+          skipped++;
+          continue;
+        }
       }
       const problemDir = shared.problemsCatalog[problem.problemId];
       if (!problemDir) {
@@ -280,7 +301,7 @@ export async function bulkDeployEvent(
       plan.push({
         item,
         entry,
-        replacesJobId: retryFailedOnly ? failedByKey.get(k)?.jobId : undefined,
+        replacesJobId: replacement?.jobId,
       });
     }
   }
@@ -292,10 +313,10 @@ export async function bulkDeployEvent(
     };
   }
 
-  // DDB TransactWrite は 1 call 25 items まで (Put + Delete を合算)。retryFailedOnly では
-  // 1 plan entry につき Put + Delete の 2 op が要るので chunk 上限を半減させる。
+  // DDB TransactWrite は 1 call 25 items まで (Put + Delete を合算)。retry / force redeploy
+  // では 1 plan entry につき Put + Delete の 2 op が要るので chunk 上限を半減させる。
   // ConditionExpression で同 jobId 二重生成を防ぐ (ULID 衝突は実質起こらないが defense)。
-  const opsPerEntry = retryFailedOnly ? 2 : 1;
+  const opsPerEntry = retryFailedOnly || forceRedeploy ? 2 : 1;
   const planPerChunk = Math.floor(TRANSACT_WRITE_BATCH / opsPerEntry);
   const transactChunks: Promise<unknown>[] = [];
   for (let i = 0; i < plan.length; i += planPerChunk) {

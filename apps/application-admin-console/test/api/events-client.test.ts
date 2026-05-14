@@ -126,6 +126,12 @@ describe("bulkDeployEvent", () => {
     await bulkDeployEvent(client, "EV1", { teamIds: ["t1"], problemIds: ["hello-world"] });
     expect(calls[0]?.body).toEqual({ teamIds: ["t1"], problemIds: ["hello-world"] });
   });
+
+  it("forceRedeploy: true を body にそのまま乗せて POST するべき", async () => {
+    const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
+    await bulkDeployEvent(client, "EV1", { forceRedeploy: true });
+    expect(calls[0]?.body).toEqual({ forceRedeploy: true });
+  });
 });
 
 describe("bulkTeardownEvent", () => {

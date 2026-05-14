@@ -268,9 +268,12 @@ export type EventDetail = z.infer<typeof EventDetailSchema>;
  *   - `retryFailedOnly: true` → status=FAILED の deployment 行のみ抽出。旧 DDB 行を
  *     DELETE → 同 (teamId, problemId) で新 jobId で PENDING を CREATE する (= 旧 jobId は
  *     消える)。Issue #555 / 要件 FR-3 の「失敗分を再実行」 button の backend。
+ *   - `forceRedeploy: true` → 既存 terminal deployment (COMPLETE / FAILED / DELETED) を
+ *     DELETE → 同 (teamId, problemId) で新 jobId の PENDING を CREATE する。pre-#744 の
+ *     stackOutputs を持つ COMPLETE stack を最新 template で update し直す運用復旧用。
  *   - `teamIds` / `problemIds` → 指定された team / problem だけに範囲を絞る (= 後追い参加
- *     team / 後追い投入問題のみを deploy)。`retryFailedOnly: true` と組み合わせ可能
- *     (= 「team t1 の失敗だけ retry」)。
+ *     team / 後追い投入問題のみを deploy)。`retryFailedOnly: true` / `forceRedeploy: true` と
+ *     組み合わせ可能。
  *
  * idempotent semantics: 既存 deployment と (eventId, teamId, problemId) が衝突する組は
  * 全展開モードでも skipped に計上する (= 後追い deploy が二重生成しないため)。
@@ -280,8 +283,13 @@ export type EventDetail = z.infer<typeof EventDetailSchema>;
 export const BulkDeployRequestSchema = z
   .object({
     retryFailedOnly: z.literal(true).optional(),
+    forceRedeploy: z.literal(true).optional(),
     teamIds: z.array(z.string().min(1)).min(1).max(100).optional(),
     problemIds: z.array(z.string().min(1)).min(1).max(50).optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => !(v.retryFailedOnly && v.forceRedeploy), {
+    message: "retryFailedOnly and forceRedeploy are mutually exclusive",
+    path: ["forceRedeploy"],
+  });
 export type BulkDeployRequest = z.infer<typeof BulkDeployRequestSchema>;

@@ -143,3 +143,50 @@ describe("EventDetailPage #555 失敗分を再実行 button", () => {
     expect(buttonEl?.disabled).toBe(true);
   });
 });
+
+describe("EventDetailPage #756 再デプロイ button", () => {
+  it("COMPLETE な deployment が 0 件のときは button を表示しないべき", async () => {
+    mocks.getEvent.mockResolvedValueOnce({
+      ...baseDetail,
+      deploymentsByProblem: {
+        "hello-world": [
+          { jobId: "J1", teamId: "t1", status: "PENDING" },
+          { jobId: "J2", teamId: "t2", status: "FAILED" },
+        ],
+      },
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));
+    expect(screen.queryByText(/再デプロイ/)).not.toBeInTheDocument();
+  });
+
+  it("COMPLETE な deployment があると 件数つきで button を表示するべき", async () => {
+    mocks.getEvent.mockResolvedValueOnce({
+      ...baseDetail,
+      deploymentsByProblem: {
+        "hello-world": [
+          { jobId: "J1", teamId: "t1", status: "COMPLETE" },
+          { jobId: "J2", teamId: "t2", status: "COMPLETE" },
+        ],
+      },
+    });
+    renderPage();
+    expect(await screen.findByText(/再デプロイ \(2 件\)/)).toBeInTheDocument();
+  });
+
+  it("button を押すと bulkDeployEvent を forceRedeploy=true で呼ぶべき", async () => {
+    mocks.getEvent.mockResolvedValue({
+      ...baseDetail,
+      deploymentsByProblem: {
+        "hello-world": [{ jobId: "J1", teamId: "t1", status: "COMPLETE" }],
+      },
+    });
+    renderPage();
+    const button = await screen.findByText(/再デプロイ \(1 件\)/);
+    await userEvent.click(button);
+    await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
+    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
+      forceRedeploy: true,
+    });
+  });
+});
