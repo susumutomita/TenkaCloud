@@ -181,6 +181,23 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(createStateMachine).toContain("$.codebuild.Build.Id");
     });
 
+    it("Create State Machine は ROLLBACK_COMPLETE を terminal failure として MarkFailed に倒すべき", () => {
+      const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
+      const createStateMachine = Object.values(stateMachines)
+        .map((stateMachine) => JSON.stringify(stateMachine))
+        .find((definition) => definition.includes("StartDeployCodeBuild"));
+
+      expect(createStateMachine).toBeDefined();
+      expect(createStateMachine).toContain("RouteDescribedStackStatus");
+      expect(createStateMachine).toContain("UseStackStatusReasonAsFailureCause");
+      expect(createStateMachine).toContain("$.cfn.Stacks[0].StackStatus");
+      expect(createStateMachine).toContain("ROLLBACK_COMPLETE");
+      expect(createStateMachine).toContain("CREATE_FAILED");
+      expect(createStateMachine).toContain("UPDATE_ROLLBACK_COMPLETE");
+      expect(createStateMachine).toContain("$.cfn.Stacks[0].StackStatusReason");
+      expect(createStateMachine).toContain("MarkFailed");
+    });
+
     it("EventBridge Rule を Create / Delete / GenericScoring / ExternalIdAudit schedule で 4 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
       //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
