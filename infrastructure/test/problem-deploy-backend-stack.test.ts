@@ -60,11 +60,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("Deploy API Lambda (tenant API から invoke される)", () => {
-    it("Node.js 20 / arm64 で BATTLE_PROBLEMS_CATALOG env を持つべき", () => {
+    it("Node.js 22 / arm64 で BATTLE_PROBLEMS_CATALOG env を持つべき", () => {
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
-          Runtime: "nodejs20.x",
+          Runtime: "nodejs22.x",
           Architectures: ["arm64"],
           Environment: Match.objectLike({
             Variables: Match.objectLike({
@@ -244,7 +244,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
-          Runtime: "nodejs20.x",
+          Runtime: "nodejs22.x",
           Architectures: ["arm64"],
           Environment: Match.objectLike({
             Variables: Match.objectLike({
@@ -286,7 +286,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
-          Runtime: "nodejs20.x",
+          Runtime: "nodejs22.x",
           Architectures: ["arm64"],
           Environment: Match.objectLike({
             Variables: Match.objectLike({
@@ -341,7 +341,7 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
         Match.objectLike({
-          Runtime: "nodejs20.x",
+          Runtime: "nodejs22.x",
           Environment: Match.objectLike({
             Variables: Match.objectLike({
               COMPETITOR_ACCOUNTS_TABLE_NAME: Match.anyValue(),

@@ -42,7 +42,7 @@ export class CompetitorAccountsApiLambda extends Construct {
     const stack = Stack.of(this);
 
     this.fn = new NodejsFunction(this, "Function", {
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       architecture: Architecture.ARM_64,
       entry: path.resolve(__dirname, "handlers/competitor-accounts-handler/index.ts"),
       handler: "handler",
@@ -57,7 +57,7 @@ export class CompetitorAccountsApiLambda extends Construct {
       },
       bundling: {
         minify: true,
-        target: "node20",
+        target: "node22",
         sourceMap: true,
         externalModules: [],
       },

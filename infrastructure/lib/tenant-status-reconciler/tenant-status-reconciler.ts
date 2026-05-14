@@ -37,7 +37,7 @@ export class TenantStatusReconciler extends Construct {
     super(scope, id);
 
     this.fn = new NodejsFunction(this, "Function", {
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       architecture: Architecture.ARM_64,
       entry: path.resolve(__dirname, "handlers/handler.ts"),
       handler: "handler",
@@ -49,7 +49,7 @@ export class TenantStatusReconciler extends Construct {
       },
       bundling: {
         minify: true,
-        target: "node20",
+        target: "node22",
         sourceMap: true,
         externalModules: [],
       },

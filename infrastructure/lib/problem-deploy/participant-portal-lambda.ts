@@ -125,7 +125,7 @@ export class ParticipantPortalLambda extends Construct {
     });
 
     this.fn = new NodejsFunction(this, "Function", {
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       architecture: Architecture.ARM_64,
       entry: path.resolve(__dirname, "handlers/participant-handler/index.ts"),
       handler: "handler",
@@ -146,7 +146,7 @@ export class ParticipantPortalLambda extends Construct {
       },
       bundling: {
         minify: true,
-        target: "node20",
+        target: "node22",
         sourceMap: true,
         externalModules: [],
       },
