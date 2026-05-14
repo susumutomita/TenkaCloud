@@ -90,6 +90,24 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "unauthorized" });
   });
 
+  it("IN_PROGRESS な deployment は AssumeRole せず not_ready を返すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "IN_PROGRESS" })] });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    expect(stsSend).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("PENDING な deployment は AssumeRole せず not_ready を返すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "PENDING" })] });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    expect(stsSend).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("namePrefix 未設定 (stack 未起動) は not_ready", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
