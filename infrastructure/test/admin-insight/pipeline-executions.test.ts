@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildExecutionConsoleUrl,
+  type ListPipelineExecutionsDeps,
   listPipelineExecutions,
   summarizeExecution,
 } from "../../lib/admin-insight/handlers/admin-insight-handler/pipeline-executions";
+
+function buildDeps(send: ReturnType<typeof vi.fn>, region: string): ListPipelineExecutionsDeps {
+  return {
+    client: {
+      send: send as unknown as ListPipelineExecutionsDeps["client"]["send"],
+    },
+    region,
+  };
+}
 
 describe("buildExecutionConsoleUrl", () => {
   it("CodePipeline console の timeline deep link を組み立てるべき", () => {
@@ -64,10 +74,7 @@ describe("listPipelineExecutions", () => {
         },
       ],
     });
-    const out = await listPipelineExecutions(
-      { client: { send } as any, region: "ap-northeast-1" },
-      { limit: 10 },
-    );
+    const out = await listPipelineExecutions(buildDeps(send, "ap-northeast-1"), { limit: 10 });
     expect(send).toHaveBeenCalledTimes(1);
     const cmd = (send.mock.calls[0] as unknown[])[0] as {
       input: { pipelineName: string; maxResults?: number };
@@ -80,7 +87,7 @@ describe("listPipelineExecutions", () => {
 
   it("limit 未指定なら default=50 で呼ぶべき", async () => {
     const send = vi.fn().mockResolvedValue({ pipelineExecutionSummaries: [] });
-    await listPipelineExecutions({ client: { send } as any, region: "us-east-1" });
+    await listPipelineExecutions(buildDeps(send, "us-east-1"));
     const cmd = (send.mock.calls[0] as unknown[])[0] as {
       input: { maxResults?: number };
     };
@@ -89,7 +96,7 @@ describe("listPipelineExecutions", () => {
 
   it("limit を 100 で頭打ち (= MAX_LIMIT)", async () => {
     const send = vi.fn().mockResolvedValue({ pipelineExecutionSummaries: [] });
-    await listPipelineExecutions({ client: { send } as any, region: "us-east-1" }, { limit: 999 });
+    await listPipelineExecutions(buildDeps(send, "us-east-1"), { limit: 999 });
     const cmd = (send.mock.calls[0] as unknown[])[0] as {
       input: { maxResults?: number };
     };
@@ -98,7 +105,7 @@ describe("listPipelineExecutions", () => {
 
   it("limit < 1 でも最低 1 で呼ぶべき (= defensive)", async () => {
     const send = vi.fn().mockResolvedValue({ pipelineExecutionSummaries: [] });
-    await listPipelineExecutions({ client: { send } as any, region: "us-east-1" }, { limit: 0 });
+    await listPipelineExecutions(buildDeps(send, "us-east-1"), { limit: 0 });
     const cmd = (send.mock.calls[0] as unknown[])[0] as {
       input: { maxResults?: number };
     };
@@ -113,10 +120,7 @@ describe("listPipelineExecutions", () => {
         { pipelineExecutionId: "e2", status: "Running" },
       ],
     });
-    const out = await listPipelineExecutions({
-      client: { send } as any,
-      region: "ap-northeast-1",
-    });
+    const out = await listPipelineExecutions(buildDeps(send, "ap-northeast-1"));
     expect(out.items).toHaveLength(2);
     expect(out.items.map((i) => i.executionId)).toEqual(["e1", "e2"]);
   });

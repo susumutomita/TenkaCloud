@@ -1,7 +1,9 @@
 #!/bin/bash
-# CodeBuild の provision-tenant.sh / update-tenant.sh で source する Node セットアップ helper。
+# CodeBuild の provision-tenant.sh / update-tenant.sh / deprovision-tenant.sh で source する runtime
+# セットアップ helper。
 #
-# `.nvmrc` を読んで NodeSource (deb / rpm) repo から install する。
+# `.nvmrc` を読んで NodeSource (deb / rpm) repo から Node を install し、root package.json の
+# `packageManager` から Bun version を読んで `bunx` を使える状態にする。
 #
 # Why NodeSource: image 非依存で動く (AL2 / AL2023 / Ubuntu standard:5.0 / 7.0)。CodeBuild image
 # に nvm が無いケースで silent fail した旧 nvm 経路 (#560) の置換。
@@ -12,6 +14,34 @@
 # Why OS detect: CodeBuild の LinuxBuildImage.STANDARD_5_0 は Ubuntu (deb) で
 # `rpm.nodesource.com` が `This script is intended for RPM-based systems` で fail する。
 # `apt-get` / `yum` (or `dnf`) のどちらが居るかで NodeSource URL とパッケージマネージャを切替える。
+
+install_bun_from_package_manager() {
+  local bun_version
+  local installed_bun_version
+
+  bun_version="$(node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); const match = String(pkg.packageManager || '').match(/^bun@(.+)$/); if (match) process.stdout.write(match[1]);")"
+  if [ -z "$bun_version" ]; then
+    echo "package.json must pin packageManager as bun@<version> for CodeBuild runtime setup." >&2
+    return 1
+  fi
+
+  export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+
+  installed_bun_version=""
+  if command -v bun >/dev/null 2>&1; then
+    installed_bun_version="$(bun --version)"
+  fi
+
+  if [ "$installed_bun_version" != "$bun_version" ]; then
+    curl -fsSL https://bun.sh/install | bash -s "bun-v${bun_version}"
+    export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+    hash -r 2>/dev/null || true
+  fi
+
+  bun --version
+}
 
 install_node_from_nvmrc() {
   local node_major
@@ -41,4 +71,5 @@ install_node_from_nvmrc() {
   fi
   node --version
   npm --version
+  install_bun_from_package_manager
 }

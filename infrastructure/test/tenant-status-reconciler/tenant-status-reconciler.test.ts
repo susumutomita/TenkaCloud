@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 import { TenantStatusReconciler } from "../../lib/tenant-status-reconciler/tenant-status-reconciler";
 
 function synth() {
