@@ -77,8 +77,16 @@ function TeamScorePanel({ view }: { view: ParticipantTeamView }) {
           },
           { label: t("home.score_problem_count"), value: String(view.problems.length) },
           {
+            // Issue #821 / #822: 旧 \"deploy COMPLETE\" カウントから 「正解した問題数」 に
+            // 変更する。 flag 問題は flagSubmitted=true、 非 flag (Battle) は score>0 を
+            // 「解いた」 と扱う (= スコアを稼げてれば貢献あり)。
             label: t("home.score_completed_count"),
-            value: String(view.problems.filter((p) => p.status === "COMPLETE").length),
+            value: String(
+              view.problems.filter((p) => {
+                if (p.scoring?.kind === "flag") return p.scoring.flagSubmitted === true;
+                return p.score > 0;
+              }).length,
+            ),
           },
         ]}
       />
