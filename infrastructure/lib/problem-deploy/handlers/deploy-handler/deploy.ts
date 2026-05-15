@@ -12,6 +12,7 @@ import {
   publishProblemEvent,
 } from "../shared/events.js";
 import { logDeployTrace } from "../shared/trace-log.js";
+import { emitShadowAudit } from "../shared/trust-bridge-shadow.js";
 import {
   type PrivateVisibility,
   parseProblemsVisibility,
@@ -186,6 +187,27 @@ export async function startDeployment(
     externalIdParameterName: verified.externalIdParameterName,
     ...(challengePayloadUrl ? { challengePayloadUrl } : {}),
   };
+  // Issue #795 ADR-017 Phase 3 (shadow integration): 既存 deploy flow を変更せず、
+  // CloudActionIntent を構築 + audit log を CloudWatch に emit する。 失敗系も
+  // fail-open (= 既存の publishProblemEvent / DDB Put には影響を与えない)。
+  emitShadowAudit({
+    jobId,
+    tenantId: item.tenantId,
+    teamSlug,
+    problemId: item.problemId,
+    namePrefix: item.namePrefix,
+    region: item.region,
+    awsAccountId: item.awsAccountId,
+    ...(verified.competitorRoleArn ? { competitorRoleArn: verified.competitorRoleArn } : {}),
+    nowMs,
+    ttlSeconds: 900,
+    action: "deploy",
+    requestedScopes: [
+      "cloudformation:CreateStack",
+      "cloudformation:DescribeStacks",
+      "cloudformation:DescribeStackEvents",
+    ],
+  });
   try {
     await publishProblemEvent({
       client: ctx.events,
