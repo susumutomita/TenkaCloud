@@ -68,8 +68,21 @@ describe("problem template ParticipantViewerRole (#744)", () => {
       expect(role).toContain(`AWS: !Sub "arn:aws:iam::\${TenkaCloudAccountId}:root"`);
       expect(role).toContain("sts:ExternalId: !Ref ExternalId");
       expect(role).toContain("PolicyName: ProblemSpecific");
-      expect(role).not.toContain('Resource: "*"');
-      expect(role).not.toContain("Resource: '*'");
+      // Issue #820: \`Resource: \"*\"\` is permitted ONLY when paired with a
+      // List* / Describe-all Sid (AWS list-only APIs cannot be resource-scoped).
+      // Any \`Resource: \"*\"\` outside such a Sid indicates overprovisioning.
+      // Split by \`- Sid:\` markers to scope the search to each statement.
+      const statements = role.split(/^\s+- Sid: /m).slice(1);
+      for (const stmt of statements) {
+        const sid = stmt.split(/\s/, 1)[0] ?? "";
+        const hasWildcard = stmt.includes('Resource: "*"') || stmt.includes("Resource: '*'");
+        if (hasWildcard) {
+          expect(
+            /^(List|Describe)/.test(sid),
+            `Sid \"${sid}\" uses Resource:\"*\" — only allowed for List*/Describe-all read APIs`,
+          ).toBe(true);
+        }
+      }
       expect(template).toContain("ParticipantViewerRoleArn:");
       expect(template).toContain("Value: !GetAtt ParticipantViewerRole.Arn");
 
