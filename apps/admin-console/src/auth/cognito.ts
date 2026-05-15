@@ -104,3 +104,50 @@ export function clearTokens(): void {
   sessionStorage.removeItem(VERIFIER_KEY);
   sessionStorage.removeItem(STATE_KEY);
 }
+
+/**
+ * Issue #833: Cognito Hosted UI session (= cookie) を revoke してから redirect する。
+ *
+ * 旧 logout は `clearTokens()` (= sessionStorage) のみで、 Cognito 側の session cookie
+ * は browser に残ったまま。 次に `beginLogin` で /oauth2/authorize に redirect すると、
+ * Cognito が既存 cookie で silent re-login させ、 Hosted UI を経由せずに画面に戻って
+ * しまっていた。
+ *
+ * 修正:
+ *   1. refresh token があれば `/oauth2/revoke` で server-side revoke
+ *   2. sessionStorage を clearTokens
+ *   3. `/logout?client_id=...&logout_uri=...` に redirect し Cognito cookie を破棄
+ *
+ * `logout_uri` は UserPoolClient の sign-out URLs に登録されている origin に
+ * redirect する (= 多くの環境で `<redirectUri origin>/login` を登録済)。
+ */
+export async function beginLogout(config: AppConfig): Promise<void> {
+  // (1) refresh token の server-side revoke (= best-effort、 失敗しても続行)
+  const stored = loadStoredTokens();
+  if (stored?.refreshToken) {
+    try {
+      await fetch(`${config.cognitoDomain}/oauth2/revoke`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          token: stored.refreshToken,
+          client_id: config.cognitoClientId,
+        }),
+      });
+    } catch {
+      // revoke endpoint 失敗は production session 残留にしかつながらない (= 致命的でない)
+      // ので silently 続ける。 logout redirect で Cognito cookie は消える。
+    }
+  }
+  // (2) local 側 token を確実に破棄
+  clearTokens();
+  // (3) Hosted UI cookie を破棄するため `/logout` に redirect。 logout_uri は
+  //     UserPoolClient の `Allowed sign-out URLs` に含まれている origin に揃える。
+  const logoutUrl = new URL(`${config.cognitoDomain}/logout`);
+  logoutUrl.searchParams.set("client_id", config.cognitoClientId);
+  // redirectUri の origin + "/login" を logout 後の戻り先にする (= 既存 PKCE callback
+  // と同 origin、 UserPoolClient の sign-out URL 設定と整合)。
+  const callbackOrigin = new URL(config.redirectUri).origin;
+  logoutUrl.searchParams.set("logout_uri", `${callbackOrigin}/login`);
+  window.location.assign(logoutUrl.toString());
+}

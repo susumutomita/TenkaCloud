@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import type { AppConfig } from "../config";
-import { beginLogin, clearTokens, loadStoredTokens, type TokenSet } from "./cognito";
+import { beginLogin, beginLogout, loadStoredTokens, type TokenSet } from "./cognito";
 
 interface AuthState {
   tokens: TokenSet | null;
@@ -29,8 +29,11 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
         void beginLogin(config);
       },
       logout: () => {
-        clearTokens();
+        // Issue #833: Cognito Hosted UI cookie + refresh token を server-side revoke
+        // してから /logout に redirect する (= 旧コードは local sessionStorage のみ clear
+        // で Cognito 側 cookie が残り silent re-login していた)。
         setTokensState(null);
+        void beginLogout(config);
       },
       setTokens: (t) => setTokensState(t),
     }),
