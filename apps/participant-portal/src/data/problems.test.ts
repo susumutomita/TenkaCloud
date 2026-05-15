@@ -116,7 +116,9 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       const m = requireProblemMetadata("hello-world");
       const r = resolveLocalizedNarrative(m, "ja");
       expect(r.name).toBe("Hello World (Sample)");
-      expect(r.description).toContain("Challenge / flag 提出形式");
+      // Issue #816: narrative re-write で description が変わったので tone-of-voice の
+      // 代表的な substring (= 加藤さん) で検証する。
+      expect(r.description).toContain("加藤さん");
     });
 
     it("locale='en' の override が宣言されていれば英語を返すべき (hello-world)", () => {

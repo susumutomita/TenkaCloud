@@ -9,7 +9,7 @@
       "visibility": "public",
       "difficulty": 1,
       "estimatedDuration": "1 分",
-      "shortDescription": "Challenge / flag 提出形式の最小 sample。SSM Parameter Store に書かれた値を当てて入力すると 100 点獲得。",
+      "shortDescription": "新人 SRE のあなた、 まずは加藤さんが残した SSM Parameter の挨拶を読んで Portal に貼り付けて。 100 点。",
       "tags": ["sample", "challenge", "flag", "ssm"],
       "scoringKind": "flag"
     },
