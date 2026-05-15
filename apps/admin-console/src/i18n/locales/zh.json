@@ -87,7 +87,13 @@
     "col_start_time": "开始时间",
     "col_elapsed": "耗时",
     "col_last_update": "最后更新",
-    "open_console_aria": "在 AWS 控制台打开 execution {executionId}"
+    "open_console_aria": "在 AWS 控制台打开 execution {executionId}",
+    "tab_provisioning": "Provisioning",
+    "tab_deprovisioning": "Deprovisioning",
+    "deprovisioning_phase1_header": "计划在 Phase 2 集成到本控制台",
+    "deprovisioning_phase1_body": "租户删除 (deprovisioning) 通过 SBT BashJobRunner 的 Step Functions State Machine 执行。 当前 admin-insight Lambda 仅识别 CodePipeline,暂时请前往 AWS 控制台 > Step Functions,以 'deprovisioning' 关键字筛选 State Machine 来查看执行历史。",
+    "deprovisioning_open_console": "在 AWS 控制台打开 Step Functions",
+    "deprovisioning_open_console_aria": "在新标签页中打开 AWS Step Functions 控制台 (State Machine 列表)"
   },
   "tenant_events": {
     "missing_tenant_id": "未指定 tenantId。",

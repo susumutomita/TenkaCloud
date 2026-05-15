@@ -87,7 +87,13 @@
     "col_start_time": "開始時刻",
     "col_elapsed": "経過時間",
     "col_last_update": "最終更新",
-    "open_console_aria": "Execution {executionId} を AWS Console で開く"
+    "open_console_aria": "Execution {executionId} を AWS Console で開く",
+    "tab_provisioning": "Provisioning",
+    "tab_deprovisioning": "Deprovisioning",
+    "deprovisioning_phase1_header": "Phase 2 で本コンソールに統合予定です",
+    "deprovisioning_phase1_body": "テナント削除 (deprovisioning) は SBT BashJobRunner の Step Functions State Machine 経由で動作します。 現状 admin-insight Lambda は CodePipeline 専用で SFN を扱わないため、 当面は AWS Console > Step Functions で 'deprovisioning' を含むステートマシンの execution 履歴を確認してください。",
+    "deprovisioning_open_console": "AWS Console で Step Functions を開く",
+    "deprovisioning_open_console_aria": "AWS Step Functions コンソール (ステートマシン一覧) を新しいタブで開く"
   },
   "tenant_events": {
     "missing_tenant_id": "tenantId が指定されていません。",
