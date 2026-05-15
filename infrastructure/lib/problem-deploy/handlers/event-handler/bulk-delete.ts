@@ -100,6 +100,7 @@ export async function bulkTeardownEvent(
 
       const detail: DeployDeleteRequestedDetail = {
         jobId,
+        correlationId: jobId,
         tenantId,
         stackName,
         region,

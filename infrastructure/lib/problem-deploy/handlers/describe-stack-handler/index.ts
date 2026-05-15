@@ -2,10 +2,12 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Credentials } from "@aws-sdk/client-sts";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import { logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
 
 export interface DescribeStackStateMachineInput {
   readonly detail?: {
     readonly jobId?: string;
+    readonly correlationId?: string;
     readonly tenantId?: string;
     readonly namePrefix?: string;
     readonly region?: string;
@@ -89,6 +91,12 @@ async function assumeCompetitorRole(
       jobId: params.jobId,
       externalIdVersion: previousVersion,
     });
+    warnDeployTrace("deploy.describe-stack.assume-role.grace-fallback", {
+      jobId: params.jobId,
+      correlationId: params.jobId,
+      region: params.region,
+      externalIdVersion: previousVersion,
+    });
     return credentials;
   }
 }
@@ -116,8 +124,17 @@ export async function describeStackForDeployment(
 ) {
   const detail = input.detail ?? {};
   const jobId = requireString(detail.jobId, "detail.jobId");
+  const correlationId = detail.correlationId || jobId;
   const stackName = requireString(detail.namePrefix, "detail.namePrefix");
   const region = requireString(detail.region, "detail.region");
+  logDeployTrace("deploy.describe-stack.start", {
+    jobId,
+    correlationId,
+    tenantId: detail.tenantId,
+    stackName,
+    region,
+    hasCompetitorRole: Boolean(detail.competitorRoleArn),
+  });
   const credentials = await assumeCompetitorRole(deps, {
     region,
     jobId,
@@ -125,7 +142,17 @@ export async function describeStackForDeployment(
     externalIdParameterName: detail.externalIdParameterName,
   });
   const cfn = deps.cfnClient({ region, credentials });
-  return cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+  const out = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+  logDeployTrace("deploy.describe-stack.succeeded", {
+    jobId,
+    correlationId,
+    tenantId: detail.tenantId,
+    stackName,
+    region,
+    stackStatus: out.Stacks?.[0]?.StackStatus,
+    stackId: out.Stacks?.[0]?.StackId,
+  });
+  return out;
 }
 
 const ssm = new SSMClient({});

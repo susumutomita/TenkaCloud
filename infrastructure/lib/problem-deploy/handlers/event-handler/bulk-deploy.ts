@@ -280,6 +280,7 @@ export async function bulkDeployEvent(
       };
       const detail: DeployCreateRequestedDetail = {
         jobId,
+        correlationId: jobId,
         tenantId,
         problemId: problem.problemId,
         problemDir,

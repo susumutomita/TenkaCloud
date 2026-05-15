@@ -1,6 +1,7 @@
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { z } from "zod";
+import { logDeployTrace } from "./trace-log.js";
 
 /**
  * Deploy backend で流れる EventBridge イベントの定義。
@@ -31,6 +32,7 @@ export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" a
  */
 export const DeployCreateRequestedDetailSchema = z.object({
   jobId: z.string().min(1),
+  correlationId: z.string().min(1).optional(),
   tenantId: z.string().min(1),
   problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   problemDir: z.string().regex(/^problems\/[a-z0-9-]+\/[a-z0-9-]+$/),
@@ -73,6 +75,7 @@ export type DeployCreateRequestedDetail = z.infer<typeof DeployCreateRequestedDe
  */
 export const DeployDeleteRequestedDetailSchema = z.object({
   jobId: z.string().min(1),
+  correlationId: z.string().min(1).optional(),
   tenantId: z.string().min(1),
   stackName: z.string().min(1),
   region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),
@@ -107,6 +110,11 @@ export async function publishProblemEvent(args: {
   jobId: string;
   detail: Record<string, unknown>;
 }): Promise<void> {
+  const correlationId =
+    typeof args.detail.correlationId === "string" && args.detail.correlationId.length > 0
+      ? args.detail.correlationId
+      : args.jobId;
+  const resource = `tenkacloud:deployment:${args.jobId}`;
   const out = await args.client.send(
     new PutEventsCommand({
       Entries: [
@@ -115,12 +123,21 @@ export async function publishProblemEvent(args: {
           Source: EVENT_SOURCE,
           DetailType: args.detailType,
           Detail: JSON.stringify(args.detail),
-          Resources: [`tenkacloud:deployment:${args.jobId}`],
+          Resources: [resource],
         },
       ],
     }),
   );
-  if ((out.FailedEntryCount ?? 0) === 0) return;
+  if ((out.FailedEntryCount ?? 0) === 0) {
+    logDeployTrace("deploy.eventbridge.publish.succeeded", {
+      jobId: args.jobId,
+      correlationId,
+      detailType: args.detailType,
+      eventBusName: args.busName,
+      resource,
+    });
+    return;
+  }
   const failed = out.Entries?.[0];
   throw new ProblemEventPublishError(
     args.detailType,

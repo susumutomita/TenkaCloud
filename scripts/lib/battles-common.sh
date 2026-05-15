@@ -27,6 +27,34 @@ resolve_aws_region() {
   echo "${region}"
 }
 
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "${value}"
+}
+
+trace_log() {
+  local event="$1"
+  shift || true
+  local correlation_id="${TENKACLOUD_CORRELATION_ID:-${PROBLEM_EXTERNAL_ID:-}}"
+  local job_id="${PROBLEM_EXTERNAL_ID:-${TENKACLOUD_CORRELATION_ID:-}}"
+  local json
+  json="{\"event\":\"$(json_escape "${event}")\",\"level\":\"info\",\"component\":\"deploy-codebuild\",\"correlationId\":\"$(json_escape "${correlation_id}")\",\"jobId\":\"$(json_escape "${job_id}")\""
+  while [[ $# -ge 2 ]]; do
+    local key="$1"
+    local value="$2"
+    shift 2
+    if [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      json="${json},\"${key}\":\"$(json_escape "${value}")\""
+    fi
+  done
+  printf '%s}\n' "${json}"
+}
+
 # Phase 2.2 (Issue #459) cross-account AssumeRole helper。
 #
 # `COMPETITOR_ROLE_ARN` env が空でなければ:

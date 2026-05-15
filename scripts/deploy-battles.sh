@@ -70,6 +70,7 @@ export TENKACLOUD_ACCOUNT_ID
 assume_competitor_role_if_configured
 
 AWS_REGION="$(resolve_aws_region)"
+trace_log "deploy.codebuild.start" operation "create" region "${AWS_REGION}" teamSlug "${TEAM_SLUG}" problemCount "$#"
 
 # metadata.json の cfnParameters を `Key=Value` 形式の配列に展開する。`__RANDOM_PASSWORD__`
 # トークンは 32 桁ランダム英数字に置換 (DbPassword 等の secret 用途)。`NamePrefix` は
@@ -184,6 +185,7 @@ deploy_one() {
   echo "  TeamSlug  : ${TEAM_SLUG}"
   echo "  Parameters: ${#parameter_overrides[@]} item(s) (NamePrefix + TenkaCloudAccountId + ExternalId + cfnParameters)"
   echo "=========================================="
+  trace_log "deploy.cfn.deploy.start" stackName "${name_prefix}" region "${AWS_REGION}" teamSlug "${TEAM_SLUG}" problemDir "${problem_dir}"
 
   # `aws cloudformation deploy` は CreateStack / UpdateStack を冪等に扱う:
   #   - stack が無ければ Create
@@ -201,9 +203,11 @@ deploy_one() {
       "TenkaCloud:Problem=${problem_slug}" \
       "TenkaCloud:TeamSlug=${TEAM_SLUG}" \
       "TenkaCloud:DeployedBy=deploy-battles.sh"; then
+    trace_log "deploy.cfn.deploy.failed" stackName "${name_prefix}" region "${AWS_REGION}" teamSlug "${TEAM_SLUG}" problemDir "${problem_dir}"
     echo "error: CloudFormation deploy failed for ${name_prefix}" >&2
     return 1
   fi
+  trace_log "deploy.cfn.deploy.succeeded" stackName "${name_prefix}" region "${AWS_REGION}" teamSlug "${TEAM_SLUG}" problemDir "${problem_dir}"
 
   # outputs を表示 (FrontendUrl 等が見える)
   echo ""
@@ -227,9 +231,11 @@ done
 echo ""
 echo "=========================================="
 if [[ ${#failures[@]} -eq 0 ]]; then
+  trace_log "deploy.codebuild.succeeded" operation "create" region "${AWS_REGION}" problemCount "$#"
   echo "All $# deploy(s) succeeded."
   exit 0
 else
+  trace_log "deploy.codebuild.failed" operation "create" region "${AWS_REGION}" failureCount "${#failures[@]}" problemCount "$#"
   echo "Failed deploys (${#failures[@]} of $#):"
   for f in "${failures[@]}"; do
     echo "  - ${f}"

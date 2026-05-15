@@ -30,12 +30,14 @@ REGION="${2:-$(resolve_aws_region)}"
 # DEPLOY_REGION も export し直す (delete でも target region を AssumeRole 後に固定する)。
 export DEPLOY_REGION="${REGION}"
 assume_competitor_role_if_configured
+trace_log "deploy.codebuild.start" operation "delete" region "${REGION}" stackName "${STACK_NAME}"
 
 echo "=========================================="
 echo "Deleting stack"
 echo "  StackName : ${STACK_NAME}"
 echo "  Region    : ${REGION}"
 echo "=========================================="
+trace_log "deploy.cfn.delete.start" stackName "${STACK_NAME}" region "${REGION}"
 
 # DeleteStack 自体が冪等 (削除済み stack に対して呼んでも ValidationError を返すだけで
 # 既存リソースに影響なし)。pre-check の describe-stacks は TOCTOU race を生む (= check と
@@ -47,9 +49,11 @@ delete_err="$(
     --stack-name "${STACK_NAME}" 2>&1
 )" || {
   if grep -qiE "ValidationError|does not exist" <<<"${delete_err}"; then
+    trace_log "deploy.cfn.delete.already_deleted" stackName "${STACK_NAME}" region "${REGION}"
     echo "Stack ${STACK_NAME} は既に存在しない (already deleted) → no-op で終了"
     exit 0
   fi
+  trace_log "deploy.cfn.delete.failed" stackName "${STACK_NAME}" region "${REGION}"
   echo "error: delete-stack failed (auth/throttle/network 等を疑う): ${delete_err}" >&2
   exit 1
 }
@@ -63,12 +67,16 @@ wait_err="$(
     --stack-name "${STACK_NAME}" 2>&1
 )" || {
   if grep -qiE "ValidationError|does not exist" <<<"${wait_err}"; then
+    trace_log "deploy.cfn.delete.already_deleted" stackName "${STACK_NAME}" region "${REGION}"
     echo "Stack ${STACK_NAME} は既に削除済 (wait の前に消えた) → no-op で終了"
     exit 0
   fi
+  trace_log "deploy.cfn.delete.failed" stackName "${STACK_NAME}" region "${REGION}"
   echo "error: wait stack-delete-complete failed: ${wait_err}" >&2
   exit 1
 }
 
 echo ""
+trace_log "deploy.cfn.delete.succeeded" stackName "${STACK_NAME}" region "${REGION}"
+trace_log "deploy.codebuild.succeeded" operation "delete" region "${REGION}" stackName "${STACK_NAME}"
 echo "Stack ${STACK_NAME} deleted (region=${REGION})."

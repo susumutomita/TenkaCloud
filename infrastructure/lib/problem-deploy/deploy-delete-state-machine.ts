@@ -70,6 +70,8 @@ export class DeployDeleteStateMachine extends Construct {
         OPERATION: { value: "delete" },
         DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
         DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+        PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+        TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
       },
       resultPath: "$.codebuild",
     });
@@ -84,6 +86,8 @@ export class DeployDeleteStateMachine extends Construct {
           OPERATION: { value: "delete" },
           DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
           DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+          PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+          TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           COMPETITOR_ROLE_ARN: {
             value: JsonPath.stringAt("$.detail.competitorRoleArn"),
           },

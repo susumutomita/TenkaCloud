@@ -64,6 +64,7 @@ export interface DeployCodeBuildProjectProps {
  *   - `TEAM_SLUG`: 例 `demo-team` (create 時のみ)
  *   - `DELETE_STACK_NAME`: CFn StackName / StackId (delete 時のみ)
  *   - `DELETE_REGION`: delete 対象 region (delete 時のみ)
+ *   - `TENKACLOUD_CORRELATION_ID`: operator trace 用。現状は deploy jobId と同値。
  *
  * 同一 AWS account 内 deploy のみ (MVP-1 制約)。Phase 2 で cross-account になったら
  * IAM Role に `sts:AssumeRole` 等を足す。
@@ -139,6 +140,10 @@ export class DeployCodeBuildProject extends Construct {
           value: Stack.of(this).account,
         },
         PROBLEM_EXTERNAL_ID: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "",
+        },
+        TENKACLOUD_CORRELATION_ID: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "",
         },

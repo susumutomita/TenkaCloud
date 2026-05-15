@@ -11,6 +11,7 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   publishProblemEvent,
 } from "../shared/events.js";
+import { logDeployTrace } from "../shared/trace-log.js";
 import {
   type PrivateVisibility,
   parseProblemsVisibility,
@@ -170,6 +171,7 @@ export async function startDeployment(
 
   const detail: DeployCreateRequestedDetail = {
     jobId: item.jobId,
+    correlationId: item.jobId,
     tenantId: item.tenantId,
     problemId: item.problemId,
     problemDir,
@@ -214,6 +216,16 @@ export async function startDeployment(
     }
     throw err;
   }
+  logDeployTrace("deploy.create.enqueued", {
+    jobId,
+    correlationId: jobId,
+    tenantId: item.tenantId,
+    problemId: item.problemId,
+    teamSlug,
+    region: item.region,
+    awsAccountId: item.awsAccountId,
+    namePrefix: item.namePrefix,
+  });
 
   return {
     jobId,
