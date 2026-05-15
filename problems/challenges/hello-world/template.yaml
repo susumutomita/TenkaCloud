@@ -52,12 +52,34 @@ Resources:
                 Effect: Allow
                 Action:
                   - ssm:GetParameter
+                  - ssm:GetParameters
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # Issue #820: AWS Console SSM Parameter Store list view requires
+              # DescribeParameters / GetParametersByPath (list APIs cannot be
+              # resource-scoped, but the Console filters by path so the user only
+              # sees their own problem's parameters).
+              - Sid: ListSsmParametersForConsole
+                Effect: Allow
+                Action:
+                  - ssm:DescribeParameters
+                  - ssm:GetParametersByPath
+                Resource: "*"
               - Sid: DescribeOwnStack
                 Effect: Allow
                 Action:
                   - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplate
                 Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
+              # Issue #820: required for CFn Console stack list view
+              # (ListStacks cannot be resource-scoped). List-only, no impact on
+              # the solution path (reading the SSM Parameter value).
+              - Sid: ListCfnStacksForConsole
+                Effect: Allow
+                Action:
+                  - cloudformation:ListStacks
+                Resource: "*"
 
   HelloParameter:
     Type: AWS::SSM::Parameter
