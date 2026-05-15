@@ -20,9 +20,7 @@ infrastructure/cloudformation/**
 references/
 references/**
 
-# 多言語 README は Japanese textlint rule (= ja-technical-writing / ja-spacing /
+# 英語 README は Japanese textlint rule (= ja-technical-writing / ja-spacing /
 # spellcheck-tech-word の日本語側 dictionary) の対象外。 README.ja.md だけは
 # 日本語版なので除外しない。
 README.md
-README.es.md
-README.zh.md

@@ -12,7 +12,7 @@ Battle (リアルタイム対戦) と Challenge (個別演習) の問題を、 �
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
 
-🌐 [English](./README.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [中文](./README.zh.md)
+🌐 [English](./README.md) · [日本語](./README.ja.md)
 
 </div>
 
@@ -102,7 +102,9 @@ make deploy   # 3-phase install.sh: backend → admin console → callback CORS
 | 📊 **5 種類の scoring kind** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` を 1 問題ごとに宣言 |
 | 🌐 **i18n** | 日本語をデフォルト、 EN / ES / ZH の locale override を問題 metadata に書ける |
 | 🛡 **セキュリティ** | AssumeRole に必須 ExternalId、 secrets は SSM SecureString、 全 API に Cognito JWT、 per-team rate limiting |
-| 📡 **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action インテント プロトコルでクラウド横断の権限委譲 (AWS + GCP + Azure adapter、 [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) を参照) |
+<!-- textlint-disable spellcheck-tech-word -->
+| 📡 **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol でクラウド横断の権限委譲 (AWS + GCP + Azure adapter、 [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) を参照) |
+<!-- textlint-enable spellcheck-tech-word -->
 | 🔭 **Observability** | CloudWatch Dashboard で deploy chain / DDB / Lambda / API GW を 1 画面、 `correlationId` 入り structured trace log |
 
 ## 問題の構成
@@ -147,7 +149,9 @@ ADR は表現力 (decision table / threat-model grid / 色分け badge) のた�
 - [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html) — EventBridge-driven state reconciliation
 - [ADR-015](./docs/architecture/adr-015-adr-convention-as-harness.html) — ADR convention を harness で機械強制
 - [ADR-016](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — TenkaCloud Lite mode + AppPlaneCore 抽出
-- [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) — Cloud Action インテント / Trust Bridge (クラウド横断権限委譲)
+<!-- textlint-disable spellcheck-tech-word -->
+- [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) — Cloud Action Intent / Trust Bridge (クラウド横断権限委譲)
+<!-- textlint-enable spellcheck-tech-word -->
 - [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html) — wire format reference (RFC 7515 JWS、 13 セクション)
 
 ## ロードマップ

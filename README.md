@@ -12,7 +12,7 @@ Battle (real-time) and Challenge (self-paced) problems deployed straight to each
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
 
-🌐 [English](./README.md) · [日本語](./README.ja.md) · [Español](./README.es.md) · [中文](./README.zh.md)
+🌐 [English](./README.md) · [日本語](./README.ja.md)
 
 </div>
 
