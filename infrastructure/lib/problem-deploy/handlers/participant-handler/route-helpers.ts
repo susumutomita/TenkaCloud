@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { StatusCodes } from "http-status-codes";
 import {
   HTTP_BAD_REQUEST,
   HTTP_CONFLICT,
@@ -6,6 +7,12 @@ import {
   HTTP_NOT_FOUND,
   HTTP_UNAUTHORIZED,
 } from "../shared/http-status.js";
+import {
+  participantRateLimiter,
+  RATE_LIMITS,
+  type RateLimitConfig,
+} from "../shared/rate-limiter.js";
+import { logDeployTrace } from "../shared/trace-log.js";
 import { extractBearerToken } from "./auth.js";
 
 /**
@@ -50,16 +57,38 @@ export function respondError(c: Context, kind: ErrorKind) {
 }
 
 /**
- * Bearer token 必須 route の共通テンプレ。token 抽出 + try/catch + 500 ログ。
+ * Bearer token 必須 route の共通テンプレ。 token 抽出 + per-team rate limit + try/catch + 500 ログ。
  * handler 側は token を受け取って outcome / Response を返すだけ。
+ *
+ * Issue #767: rateLimit を指定すると、 `(teamLoginKey, routeName)` 単位で token bucket を
+ * 引いて DoS / 暴走耐性を上げる。 デフォルトは READ_MID (= 60 burst / 1 RPS sustained)。
+ * 書き込み系 (submit-flag / endpoint override / patch /me) は WRITE_LOW を渡して厳しく絞る。
+ * 拒否時は 429 + Retry-After header を返し、 frontend は normal polling 文脈なら再試行する。
  */
 export async function withBearerAuth(
   c: Context,
   routeName: string,
   handler: (token: string) => Promise<Response>,
+  rateLimit: RateLimitConfig = RATE_LIMITS.READ_MID,
 ): Promise<Response> {
   const token = extractBearerToken(c.req.header("authorization"));
   if (!token) return respondError(c, "unauthorized");
+
+  const outcome = participantRateLimiter.take(`${token}|${routeName}`, rateLimit);
+  if (!outcome.allowed) {
+    logDeployTrace("portal.rate_limit.rejected", {
+      routeName,
+      retryAfterSec: outcome.retryAfterSec,
+      capacity: rateLimit.capacity,
+      refillPerSec: rateLimit.refillPerSec,
+    });
+    c.header("Retry-After", String(outcome.retryAfterSec));
+    return c.json(
+      { error: "rate_limited", retryAfterSec: outcome.retryAfterSec },
+      StatusCodes.TOO_MANY_REQUESTS,
+    );
+  }
+
   try {
     return await handler(token);
   } catch (err) {
