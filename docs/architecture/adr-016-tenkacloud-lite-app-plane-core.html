@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-016: AppPlaneCore 抽出 + TenkaCloud Lite mode</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-016: AppPlaneCore 抽出 + TenkaCloud Lite mode</h1>
+  <p><em>Control Plane 不要の Lite 経路を作るために、 Tenant Template から App Plane コア構成を独立 construct に切り出す</em></p>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-05-15</div>
+    <div><b>Tracking:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/778">#778</a></div>
+    <div><b>Related:</b>
+      <a href="./adr-007-outside-in.html">ADR-007</a>、
+      <a href="./adr-010-api-first-cli-mcp.html">ADR-010</a>、
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a>、
+      <a href="./adr-015-adr-convention-as-harness.html">ADR-015</a>
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>TenkaCloud は AWS マルチテナント SaaS として設計されており、 Control Plane (= SBT) + Tenant Pipeline + per-tenant Application Plane が前提になっている。 この構成は enterprise tenant にとって価値があるが、 OSS / Product Hunt / Hacker News / 個人開発者向けの最初の体験としては重すぎる。</p>
+
+<p>TenkaCloud を「触ってみる」 段階の理想は次のような one-command UX。</p>
+
+<pre>$ tenkacloud lite up --problem problems/battles/hello-world-battle
+✓ Deployed AppPlaneCore (tenantId=local)
+✓ Application Admin Console: https://d123.cloudfront.net
+✓ Participant Portal:        https://e456.cloudfront.net
+✓ Team login key:            7f3a-...
+✓ Problem deployed:          hello-world-battle (Battle, scoring active)
+</pre>
+
+<p>現状の <code>scripts/install.sh</code> は 3-phase deploy で次の stacks を立てる。</p>
+
+<table>
+<thead><tr><th>Stack</th><th>役割</th><th>Lite 必要性</th></tr></thead>
+<tbody>
+<tr><td><code>ControlPlaneStack</code></td><td>SBT 同梱の System Admin + tenant CRUD + EventBridge bus</td><td>不要 (= Lite は tenant 1 つ固定)</td></tr>
+<tr><td><code>BootstrapTemplateStack</code></td><td>SBT BashJobRunner + TenantMappingTable + SSM API key</td><td>不要 (= tenant 動的作成 / multi-tier API key 経路を使わない)</td></tr>
+<tr><td><code>ProblemDeployBackendStack</code></td><td>Deployments DDB + DeployApi / EventApi / CompetitorAccounts Lambda + Step Functions + CodeBuild + Participant Portal</td><td><strong>必須</strong> (= 問題 deploy + scoring + 競技者 UI の本体)</td></tr>
+<tr><td><code>TenantTemplateStack</code></td><td>tenant API Gateway + Cognito UserPool + ApplicationAdminConsoleHosting + tier API key 参照 + TenantMappingTable 登録</td><td><strong>部分必須</strong> (= API Gateway + Cognito + Hosting は要、 tier API key + TenantMappingTable は不要)</td></tr>
+<tr><td><code>ServerlessSaaSPipeline</code></td><td>CodePipeline 経由の per-tenant provisioning</td><td>不要</td></tr>
+<tr><td><code>AdminConsoleInsightStack</code></td><td>System Admin tenant 横断観察 API</td><td>不要 (= 1 tenant のみで観察対象が無い)</td></tr>
+<tr><td><code>AdminConsoleHostingStack</code></td><td>admin-console SPA を CloudFront 配信</td><td>不要 (= Lite は application-admin-console + participant-portal だけで完結)</td></tr>
+<tr><td><code>ObservabilityStack</code></td><td>CloudWatch Dashboard</td><td>任意</td></tr>
+</tbody>
+</table>
+
+<h3>制約</h3>
+
+<table>
+<thead><tr><th>制約</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>Cost 0 原則 (Free Tier 圏内)</td><td>Lite は最小 stack で deploy、 1/1 PROVISIONED DDB / Free Tier Lambda quota を維持する</td></tr>
+<tr><td>Full mode の破壊禁止</td><td>既存の SaaS deploy 経路 (= 3-phase install.sh + per-tenant pipeline) は壊さない。 ADR-007 の outside-in 規律に従う</td></tr>
+<tr><td>runtime-config 互換性</td><td><code>apps/application-admin-console/src/config.ts</code> の <code>/runtime-config.json</code> shape (= <code>cognitoDomain</code> / <code>userClientId</code> / <code>tenantId</code> / <code>tenantName</code> / <code>apiUrl</code> / <code>participantPortalUrl?</code> / <code>competitorBootstrapTemplateUrl?</code>) は Lite / Full 共通で保つ</td></tr>
+<tr><td>Cognito Hosted UI 維持</td><td>Lite mode でも認証バイパスを書かない (= <code>INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER</code>)。 local dev でも Cognito を立てる</td></tr>
+<tr><td>1 command で UP / DOWN</td><td>Lite UX は <code>tenkacloud lite up</code> / <code>down</code> の 2 コマンドで完結する。 .env を手で書かせない</td></tr>
+</tbody>
+</table>
+
+<h3>現在の TenantTemplateStack の構成解析</h3>
+
+<p>既存の <code>infrastructure/lib/tenant-template/tenant-template-stack.ts</code> は次を担っている。</p>
+
+<ol>
+<li><code>ApplicationAdminConsoleHosting</code> (= SPA + runtime-config 配信) を作る</li>
+<li>tenant Cognito <code>IdentityProvider</code> (= UserPool + UserPoolClient + Hosted UI domain) を作る</li>
+<li>tenant <code>ApiGateway</code> (= REST API + DeployApi / EventApi / CompetitorAccountsApi 統合) を作る</li>
+<li><code>deployRuntimeConfig</code> で runtime-config.json を S3 配置する</li>
+<li><code>TenantMappingTable</code> に DDB Put (= SaaS pipeline の per-tenant deploy chain 上流)</li>
+<li>tier API key SSM Parameter を <code>ssmLookup</code> で参照する</li>
+<li>SBT provisioning / pipeline flow に組み込まれる</li>
+</ol>
+
+<p>このうち 1〜4 は Lite mode でもそのまま必要、 5〜7 は Full SaaS だけが必要。</p>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<p><strong>Accepted:</strong> <code>TenantTemplateStack</code> から App Plane コア構成を <code>AppPlaneCore</code> Construct として抽出し、 Full mode と Lite mode の両方が同じ Construct を再利用する形に倒す。 Lite mode は <code>TenkaCloudLiteStack</code> + CLI runner (<code>scripts/tenkacloud-lite.ts</code>) を追加。 既存 Full SaaS 経路は <code>AppPlaneCore</code> を内部利用する形で挙動を変えない。</p>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">D1</div>
+    <div class="title">AppPlaneCore 抽出</div>
+    <div class="body"><code>infrastructure/lib/app-plane-core/</code> に再利用可能 Construct を切る。 <code>ApplicationAdminConsoleHosting</code> + <code>IdentityProvider</code> + tenant <code>ApiGateway</code> + <code>deployRuntimeConfig</code> を内包。 tier API key / TenantMappingTable は持ち込まない</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D2</div>
+    <div class="title">TenantTemplateStack は AppPlaneCore を内部利用</div>
+    <div class="body">既存 stack を AppPlaneCore のラッパーに書き換える。 TenantMappingTable 登録 / tier API key 参照 / SBT pipeline 統合 / SaaS tag は wrapper 側に残し、 既存 outputs (= API URL / Cognito Domain / Console URL) を保持する</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D3</div>
+    <div class="title">TenkaCloudLiteStack 新設</div>
+    <div class="body"><code>AppPlaneCore</code> (tenantId=local) + <code>ProblemDeployBackendStack</code> の 2 stack 組合せで動く軽量 stack。 Control Plane / Bootstrap / Pipeline / AdminConsoleInsight に依存しない</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D4</div>
+    <div class="title">CLI runner 追加</div>
+    <div class="body"><code>scripts/tenkacloud-lite.ts</code> (Bun + AWS SDK) を提供。 <code>up</code> / <code>down</code> / <code>deploy &lt;problemId&gt;</code> / <code>portal-url</code> / <code>team-key</code> を sub-command で持つ。 Cognito Hosted UI URL + Participant Portal URL + team login key を console 出力</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D5</div>
+    <div class="title">ProblemDeployBackendStack は eventBusArn を optional 化</div>
+    <div class="body">既存は ControlPlane の bus ARN を必須引数で受けるが、 Lite mode では Control Plane が無い。 <code>eventBusArn?: string</code> にし、 undefined のとき local EventBus を stack 内で作る fallback を入れる</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D6</div>
+    <div class="title">runtime-config 互換性は契約として固定</div>
+    <div class="body"><code>apps/application-admin-console</code> / <code>apps/participant-portal</code> の <code>runtime-config.json</code> shape は Lite / Full で完全に同じ。 frontend は mode-aware なロジックを持たない (= ADR-007 outside-in)</div>
+  </div>
+</div>
+
+<h3>D1: AppPlaneCore Construct</h3>
+
+<p>新規ファイル <code>infrastructure/lib/app-plane-core/app-plane-core.ts</code>。</p>
+
+<pre>export interface AppPlaneCoreProps {
+  readonly tenantId: string;
+  readonly tenantName: string;
+  readonly environment: string;
+  readonly deployApiLambda: IFunction;
+  readonly eventApiLambda: IFunction;
+  readonly competitorAccountsApiLambda: IFunction;
+  readonly participantPortalUrl?: string;
+  readonly competitorBootstrapTemplateUrl?: string;
+  readonly isPooledDeploy?: boolean;
+  /** Full mode の tier API key 参照を Lite mode では省略する。 */
+  readonly apiKeyConfig?: ApiKeyConfig;
+}
+
+export class AppPlaneCore extends Construct {
+  public readonly tenantApi: ApiGateway;
+  public readonly identityProvider: IdentityProvider;
+  public readonly applicationAdminConsoleHosting: ApplicationAdminConsoleHosting;
+  public readonly applicationAdminConsoleUrl: string;
+  // ...
+}
+</pre>
+
+<p>API Key ロジックは <code>apiKeyConfig?</code> で Lite mode 経由を保つ。 undefined のとき API Gateway 側の Usage Plan / API Key 配線をスキップする。</p>
+
+<h3>D2: TenantTemplateStack の wrap 化</h3>
+
+<p>既存 <code>TenantTemplateStack</code> は次の責務に縮小される。</p>
+
+<ol>
+<li><code>new AppPlaneCore(this, "AppPlane", { tenantId, tenantName, ..., apiKeyConfig: { ... } })</code> で内部 instance を作る</li>
+<li><code>TenantMappingTable</code> に Put (= SaaS pipeline 上流の DDB 登録)</li>
+<li>SBT tag (<code>TenantId</code> / <code>IsPooledDeploy</code>) を付与</li>
+<li>従来 outputs (= API URL / Cognito domain / Console URL) を AppPlaneCore から re-export</li>
+</ol>
+
+<p>外部 caller (= <code>bin/infrastructure.ts</code> / <code>app-wiring/wire.ts</code>) の interface は維持する (= no breaking change)。</p>
+
+<h3>D3: TenkaCloudLiteStack</h3>
+
+<p>新規ファイル <code>infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts</code>。</p>
+
+<pre>export class TenkaCloudLiteStack extends Stack {
+  constructor(scope: Construct, id: string, props: TenkaCloudLiteStackProps) {
+    super(scope, id, props);
+
+    // ProblemDeployBackend を内部に直接立てる (Control Plane bus 無し)。
+    const problemDeploy = new ProblemDeployBackendStack(this, "ProblemDeploy", {
+      ...props,
+      eventBusArn: undefined, // D5: local bus に fallback
+      participantPortal: { runtimeConfig: "default-dev-mock" },
+    });
+
+    // AppPlaneCore を tenantId=local で立てる。
+    const appPlane = new AppPlaneCore(this, "AppPlane", {
+      tenantId: "local",
+      tenantName: "TenkaCloud Lite",
+      environment: props.environment,
+      deployApiLambda: problemDeploy.deployApiLambda,
+      eventApiLambda: problemDeploy.eventApiLambda,
+      competitorAccountsApiLambda: problemDeploy.competitorAccountsApiLambda,
+      participantPortalUrl: problemDeploy.participantPortalUrl,
+      // apiKeyConfig: undefined = Usage Plan / API Key 配線スキップ
+    });
+
+    new CfnOutput(this, "ApplicationAdminConsoleUrl", { value: appPlane.applicationAdminConsoleUrl });
+    new CfnOutput(this, "ParticipantPortalUrl", { value: problemDeploy.participantPortalUrl });
+  }
+}
+</pre>
+
+<p>install.sh とは別に <code>scripts/tenkacloud-lite.ts</code> CLI を経由して <code>cdk deploy TenkaCloudLiteStack</code> を起動する。</p>
+
+<h3>D4: CLI runner (scripts/tenkacloud-lite.ts)</h3>
+
+<p>Bun + <code>@aws-sdk/client-cloudformation</code> ベースの軽量 CLI。 sub-command と最小 UX。</p>
+
+<table>
+<thead><tr><th>Command</th><th>動作</th></tr></thead>
+<tbody>
+<tr><td><code>tenkacloud lite up</code></td><td><code>cdk deploy TenkaCloudLiteStack</code> 起動 + 完了後に Application Admin Console URL と Participant Portal URL を表示</td></tr>
+<tr><td><code>tenkacloud lite deploy &lt;problemId&gt;</code></td><td>Lite stack の <code>EventApiLambda</code> に直接 invoke して event 作成 + 問題 deploy。 完了後 team login key を出力</td></tr>
+<tr><td><code>tenkacloud lite portal-url</code></td><td>Participant Portal URL を表示 (= clipboard / mailto 用)</td></tr>
+<tr><td><code>tenkacloud lite team-key &lt;eventId&gt;</code></td><td>競技者 team の login key を CFn output / DDB から取得して出力</td></tr>
+<tr><td><code>tenkacloud lite down</code></td><td><code>cdk destroy TenkaCloudLiteStack</code> + 関連 S3 bucket 削除 (= cleanup.sh の lite 版)</td></tr>
+</tbody>
+</table>
+
+<p>CLI は AWS access key を出力しない (= 競技者 portal URL + team login key の組合せで access、 AWS console access が要るなら ADR-002 の federation 経路を別途使う)。</p>
+
+<h3>D5: eventBusArn の optional 化</h3>
+
+<p>現行 <code>ProblemDeployBackendStack</code> は次のように受けている。</p>
+
+<pre>readonly eventBusArn: string;</pre>
+
+<p>これを次に変更する。</p>
+
+<pre>readonly eventBusArn?: string;
+// 内部: undefined のとき new events.EventBus(this, "LocalBus") を作って自前 publish 経路を持つ
+</pre>
+
+<p>Full mode (= ControlPlane bus を受ける) では引数が埋まるので挙動不変。 Lite mode は undefined を渡して local bus に倒す。 cross-stack event 受信は元々 Full mode の <code>ServerlessSaaSPipeline</code> 側だけが行うため、 Lite では発生しない。</p>
+
+<h3>D6: runtime-config 互換性の契約</h3>
+
+<p><code>apps/application-admin-console/src/config.ts</code> の <code>loadConfig()</code> は次の shape を期待する。</p>
+
+<pre>{
+  cognitoDomain: string;
+  userClientId: string;
+  tenantId: string;
+  tenantName: string;
+  apiUrl: string;
+  participantPortalUrl?: string;
+  competitorBootstrapTemplateUrl?: string;
+}</pre>
+
+<p>Lite mode はこの shape を完全に維持し、 <code>tenantId = "local"</code> / <code>tenantName = "TenkaCloud Lite"</code> を埋める。 frontend は mode-aware な分岐を持たず、 同じ artifact (<code>apps/application-admin-console/dist/</code>) を再利用する (= <code>INVARIANT_APP_CODE_IS_UNMODIFIED</code>)。</p>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Positive</h3>
+
+<ul>
+<li><strong>外部 adoption の障壁を 1 桁下げる</strong>: 「TenkaCloud を試したい」 開発者は <code>tenkacloud lite up</code> 1 コマンドで AWS account に最小 stack を deploy できる。 SBT / SaaS Ref Arch / Cognito Hosted UI の知識を要求しない</li>
+<li><strong>Full mode を壊さない</strong>: AppPlaneCore を間に挟むだけで、 既存 <code>TenantTemplateStack</code> の outputs / runtime-config / SBT pipeline 統合は維持。 CFn 出力同等性を invariant 化する</li>
+<li><strong>Plugin architecture との相補</strong>: ADR-012 の問題プラグイン経路 (= <code>problems/&lt;id&gt;/template.yaml</code>) を Lite mode でも同じ動作で利用可能。 OSS contributors が問題を 1 つ書いて Lite で試す閉ループが成立</li>
+<li><strong>CLI-first 経路の foothold</strong>: ADR-010 の API-first / CLI / MCP 思想に乗る。 CLI runner が事実上 ControlPlane の代替 UI として機能する場面が Lite mode から見えてくる</li>
+</ul>
+
+<h3>Negative / Trade-off</h3>
+
+<ul>
+<li><strong>2 つの mode を並行 maintain</strong>: Full / Lite で 2 経路の synth / deploy / test を維持する。 invariant (= runtime-config shape / AppPlaneCore interface) を共通化することで分岐コストを最小化する</li>
+<li><strong>Lite mode の "toy path" 化リスク</strong>: 機能の差分が広がると Lite が長期 maintain されない懸念。 mitigation として AppPlaneCore / ProblemDeployBackend / problem template を Full と完全共有する規律を <code>docs/architecture/harness.md</code> に invariant として追加する</li>
+<li><strong>CLI 実装コスト</strong>: <code>scripts/tenkacloud-lite.ts</code> の sub-command を一通り書く必要がある (= up / down / deploy / portal-url / team-key)。 既存 <code>install.sh</code> / <code>cleanup.sh</code> 経路と共通化できる部分は再利用する</li>
+<li><strong>eventBusArn optional 化の影響範囲</strong>: <code>ProblemDeployBackendStack</code> 内で local EventBus を作る経路を追加するので、 既存 test の event publish 経路を双方で pin する必要あり</li>
+</ul>
+
+<h3>Risk</h3>
+
+<table>
+<thead><tr><th>Risk</th><th>影響</th><th>緩和策</th></tr></thead>
+<tbody>
+<tr><td>Full mode の synth が refactor で意図せず変わる</td><td>既存 deploy で CREATE/REPLACE が発生</td><td>synth snapshot test を追加し、 CFn template の resource list / logical ID / dependency を 1 件ずつ pin する。 ADR-015 harness に <code>cdk synth diff</code> rule の検討余地</td></tr>
+<tr><td>Lite mode が divergent toy path 化</td><td>長期 maintain 不能、 dead code 蓄積</td><td>AppPlaneCore / ProblemDeployBackend / problem template を Full と完全共有する規律を harness invariant 化 (= <code>INVARIANT_LITE_REUSES_APP_PLANE_CORE</code> の新規追加候補)</td></tr>
+<tr><td>CLI が AWS credential を露出する誤運用</td><td>OSS user の AWS account が漏洩</td><td>CLI は long-lived access key を絶対に出力しない。 必要なら ADR-002 の federation 経由で短命 SigninToken を発行する</td></tr>
+<tr><td>runtime-config shape の drift</td><td>frontend が Lite / Full で挙動分岐する誘惑</td><td>shape を 1 つの zod schema として <code>apps/application-admin-console/src/config-schema.ts</code> に固定し、 Lite / Full 両方の runtime-config builder が同 schema を passthrough することを test で pin する</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Alternatives considered</h2>
+
+<table>
+<thead>
+<tr><th>選択肢</th><th>判定</th><th>理由</th></tr>
+</thead>
+<tbody>
+<tr class="hide"><td>A. Lite mode のために TenkaCloud 全体を別 repo / 別 fork に切り出す</td><td><span class="badge reject">却下</span></td><td>fork は問題 plugin / scoring engine / participant portal の整合性を保つコストが線形に増える。 Full mode の進化に Lite mode が追従しなくなる</td></tr>
+<tr class="hide"><td>B. install.sh を簡略化して "minimal install" モードを生やす</td><td><span class="badge reject">却下</span></td><td>3-phase deploy + ControlPlane + Cognito Hosted UI 経路を維持したまま「軽量化」 を試みると条件分岐が複雑化し、 結局 Full mode を壊す。 stack の構造を変えるべき</td></tr>
+<tr class="hide"><td>C. Lite mode は CloudFormation template 直書きで CDK を回避</td><td><span class="badge reject">却下</span></td><td>CDK の Construct 再利用が効かなくなり、 Full mode の進化に追従できない。 そもそも問題 deploy 経路は CDK + Step Functions + Lambda の組合せで、 plain CFn では書けない</td></tr>
+<tr class="show"><td>D. AppPlaneCore を抽出 + TenkaCloudLiteStack + CLI runner</td><td><span class="badge accept">採用</span></td><td>既存の Tenant Template から共通部分を Construct として切り出すだけで、 Full mode を壊さず Lite mode を追加できる。 CDK Construct の再利用性を活かす</td></tr>
+<tr class="hide"><td>E. Lite mode は AWS account を要求せず LocalStack / dev container で動かす</td><td><span class="badge reject">却下</span></td><td>本物の S3 / CloudFront / Cognito / Lambda が必要 (= 競技者が実際に AWS resource を deploy する性質の product)。 LocalStack で Cognito Hosted UI を再現するのは構造的に困難</td></tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Implementation phases</h2>
+
+<p>本 ADR は単一 PR では完結しない。 次の phase に分割して進める。</p>
+
+<table>
+<thead><tr><th>Phase</th><th>内容</th><th>受入条件</th></tr></thead>
+<tbody>
+<tr><td>1. AppPlaneCore 抽出</td><td><code>infrastructure/lib/app-plane-core/</code> 新設。 <code>TenantTemplateStack</code> を wrapper 化</td><td>既存 <code>cdk synth</code> 出力が CFn 物理差分 0 件 (= synth snapshot test で pin)</td></tr>
+<tr><td>2. ProblemDeployBackend の eventBusArn optional 化</td><td><code>eventBusArn?: string</code> + local bus fallback。 既存 test を Full / undefined 双方で green</td><td>Full mode の event publish 経路は不変。 Lite mode の同 path が local bus 経由で動く unit test 追加</td></tr>
+<tr><td>3. TenkaCloudLiteStack</td><td>新規 stack。 <code>cdk synth TenkaCloudLiteStack</code> が通る</td><td>Lite stack の synth が成功し、 Application Admin Console URL + Participant Portal URL を CFn output に持つ</td></tr>
+<tr><td>4. CLI runner</td><td><code>scripts/tenkacloud-lite.ts</code> + <code>Makefile</code> target (<code>make lite-up</code> / <code>make lite-down</code>)</td><td>1 コマンドで <code>up</code> → <code>deploy</code> → <code>portal-url</code> → <code>down</code> が通る</td></tr>
+<tr><td>5. 動作確認 + docs</td><td>サンプル問題 (<code>problems/battles/hello-world-battle</code> 等) を Lite mode で deploy → scoring 動作 → destroy</td><td>OSS readers が README の Lite mode セクションだけで up / down できる</td></tr>
+</tbody>
+</table>
+
+<p>各 phase は独立 PR として merge 可能 (= <code>INVARIANT_PR_SHIPS_WORKING_INCREMENT</code> に従う)。 Phase 1 は AppPlaneCore 抽出という refactor のみで Lite mode 自体は未追加でも、 「TenantTemplateStack の内部構造改善」 として独立価値を持つ。</p>
+</section>
+
+<section>
+<h2>Open Questions</h2>
+
+<p>本 ADR では下記を Phase 1 着手時に再検討するものとして残す。</p>
+
+<ol>
+<li><strong>Lite mode は ProblemDeployBackendStack を直接 deploy するか、 ProblemDeployLiteBackendStack を別に切るか</strong>: 現状は直接 deploy 案。 Lite 専用の機能差分 (= ParticipantPortal を default-dev-mock で固定する等) が増えるなら別 stack の検討余地あり。 Phase 2 で実 deploy して runtime cost / feature 差分を実測してから判断</li>
+<li><strong>Lite mode の Cognito を dev-mode (= 自動 confirm) に倒すか</strong>: 招待メール経由は OSS user の onboarding 摩擦になる。 Lite では initial password を CLI に直接表示する fast-path を検討 (= ただし <code>INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER</code> に違反しない範囲で)</li>
+<li><strong>Application Admin Console を Lite mode CLI MVP に含めるか</strong>: 「CLI + Participant Portal だけで十分」 シナリオも考えられる。 まずは AppPlaneCore に含めておき、 CLI から URL を出すだけにする (= 必要なら competitor は URL を踏まなくてもいい運用)</li>
+<li><strong>team login key の発行主体</strong>: 既存 EventApiLambda が ULID 32-byte 生成。 CLI から直叩きするか、 CLI が Lambda invoke するか。 後者で統一する想定</li>
+<li><strong>状態保管</strong>: Lite でも DDB 経由を維持する (= Free Tier 圏内、 local state 経路は複雑度が割に合わない)</li>
+<li><strong>AdminConsoleInsight</strong>: Lite では不要 (= tenant 1 つのみで cross-tenant 観察対象が無い)</li>
+</ol>
+</section>
+
+<section>
+<h2>Rollout</h2>
+
+<ul>
+<li>Phase 1 (AppPlaneCore 抽出) を最初の PR として出す。 CFn 物理差分 0 件を invariant 化</li>
+<li>Phase 2-5 は順に独立 PR で merge する</li>
+<li>各 Phase が完了するごとに <a href="https://github.com/susumutomita/TenkaCloud/issues/778">Issue #778</a> の Acceptance Criteria を 1 つずつチェックしていく</li>
+<li>Full mode の deploy 経路は phase 全期間で壊さない。 各 PR で <code>make synth</code> を旧 main と比較する手順を PR body に明記する</li>
+<li>Phase 5 完了時点で <code>README.md</code> の冒頭に Lite mode セクションを追加 (= OSS user の最初の体験経路として明示する)</li>
+</ul>
+</section>
+
+</body>
+</html>
