@@ -8,10 +8,8 @@ import {
   PhysicalResourceId,
 } from "aws-cdk-lib/custom-resources";
 import type { Construct } from "constructs";
+import { buildAppPlaneCore } from "../app-plane-core";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
-import { ApiGateway } from "./api-gateway";
-import { ApplicationAdminConsoleHosting } from "./application-admin-console-hosting";
-import { IdentityProvider } from "./identity-provider";
 
 interface TenantTemplateStackProps extends StackProps {
   stageName: string;
@@ -80,75 +78,41 @@ export class TenantTemplateStack extends Stack {
     super(scope, id, props);
     const waveNumber = props.waveNumber || "1";
 
-    // 順序の意図: hosting → identity → hosting.deployRuntimeConfig の 3 段階。
-    // identity の UserPoolClient callback URL に hosting.distributionUrl を渡す必要が
-    // あり、hosting の runtime-config.json には identity の cognitoDomain / clientId
-    // が必要なため、循環参照を 2 段階構築 (コンストラクタ + method) で回避する。
+    // Issue #778 ADR-016 Phase 1: App Plane コア構成 (= hosting + identity + apiGateway +
+    // runtime-config 配置) は `buildAppPlaneCore` builder に切り出して Lite mode と共有する。
+    // CFn 物理差分 0 件 invariant のため、 sub-construct は同 stack scope に同 logical ID で
+    // 生成される (= Stack/ApplicationAdminConsoleHosting / Stack/IdentityProvider / Stack/ApiGateway)。
+    //
+    // 順序の意図: hosting → identity → apiGateway → hosting.deployRuntimeConfig の 4 段。
+    // identity の UserPoolClient callback URL に hosting.distributionUrl を渡す必要があり、
+    // hosting の runtime-config.json には identity の cognitoDomain / clientId / apiGateway の
+    // apiUrl が必要なため、 builder 内で 2 段階構築 (コンストラクタ + deployRuntimeConfig
+    // method) で循環参照を回避する。
     //
     // pooled / silo どちらの TenantTemplateStack インスタンスでも同じ構造を立てる。
     //   - pooled: install.sh phase 1 で 1 度だけ立つ共有 console
     //   - silo:   provision-tenant.sh が PLATINUM tier で per-tenant に立てる
-    // tenantId 注入は本 PR には含まない (#48 で追加)。
-    const applicationAdminConsoleHosting = new ApplicationAdminConsoleHosting(
-      this,
-      "ApplicationAdminConsoleHosting",
-      {
-        tenantId: props.tenantId,
-      },
-    );
-
-    const identityProvider = new IdentityProvider(this, "IdentityProvider", {
+    const appPlaneCore = buildAppPlaneCore(this, {
       tenantId: props.tenantId,
+      tenantName: props.tenantName,
       environment: props.environment,
-      applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
-    });
-
-    // Note: apiUrl は apiGateway が確定してから渡すので、先に apiGateway を作る。
-    // 旧コードでは hosting.deployRuntimeConfig が先だったが、apiUrl が必要になった
-    // ので順序を変更する。
-    // (実行順): hosting → identity → apiGateway → hosting.deployRuntimeConfig
-
-    const apiGateway = new ApiGateway(this, "ApiGateway", {
-      tenantId: props.tenantId,
       isPooledDeploy: props.isPooledDeploy,
-      idpDetails: identityProvider.identityDetails,
-      userPool: identityProvider.tenantUserPool,
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
-      apiKeyBasicTier: {
-        apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.basic.keyId),
-        value: this.ssmLookup(props.ApiKeySSMParameterNames.basic.value),
-      },
-      apiKeyStandardTier: {
-        apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.standard.keyId),
-        value: this.ssmLookup(props.ApiKeySSMParameterNames.standard.value),
-      },
-      apiKeyPremiumTier: {
-        apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.premium.keyId),
-        value: this.ssmLookup(props.ApiKeySSMParameterNames.premium.value),
-      },
-      apiKeyPlatinumTier: {
-        apiKeyId: this.ssmLookup(props.ApiKeySSMParameterNames.platinum.keyId),
-        value: this.ssmLookup(props.ApiKeySSMParameterNames.platinum.value),
+      participantPortalUrl: props.participantPortalUrl,
+      competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
+      apiKeyConfig: {
+        ssmParameterNames: props.ApiKeySSMParameterNames,
+        ssmLookup: (name) => this.ssmLookup(name),
       },
     });
+    const applicationAdminConsoleHosting = appPlaneCore.applicationAdminConsoleHosting;
+    const identityProvider = appPlaneCore.identityProvider;
+    const apiGateway = appPlaneCore.apiGateway;
     this.tenantApiId = apiGateway.restApi.restApiId;
     this.tenantApiName = apiGateway.restApi.restApiName;
     this.tenantApiStageName = apiGateway.restApi.deploymentStage.stageName;
-
-    // apiGateway 確定後に runtime-config.json を配置する (apiUrl を詰めるため)。
-    // ADR-001 / Issue #458: Deploy 系 endpoint は本 tenant API に統合されたので
-    // runtime-config.json は `apiUrl` 1 本のみ (旧 `deployApiUrl` 廃止)。
-    applicationAdminConsoleHosting.deployRuntimeConfig({
-      cognitoDomain: identityProvider.cognitoDomainUrl,
-      cognitoClientId: identityProvider.tenantUserPoolClient.userPoolClientId,
-      tenantId: props.tenantId,
-      tenantName: props.tenantName,
-      apiUrl: apiGateway.restApi.url,
-      participantPortalUrl: props.participantPortalUrl,
-      competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
-    });
 
     new AwsCustomResource(this, "CreateTenantMapping", {
       installLatestAwsSdk: true,
