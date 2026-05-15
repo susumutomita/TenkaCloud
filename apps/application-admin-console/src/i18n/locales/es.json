@@ -27,7 +27,10 @@
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — Consola de administración del tenant",
     "open_catalog": "Abrir catálogo de problemas",
-    "welcome": "Bienvenido, {displayName}"
+    "welcome": "Bienvenido, {displayName}",
+    "welcome_fallback_name": "Tenant",
+    "tenant_name_missing_header": "Falta el nombre del tenant en tu JWT",
+    "tenant_name_missing_body": "Cierre sesión y vuelva a iniciar sesión. Si el problema persiste, solicite al administrador del sistema que configure el atributo custom:tenantName en su usuario de Cognito."
   },
   "event_list": {
     "header": "Eventos",

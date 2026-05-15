@@ -27,7 +27,10 @@
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — 租户管理控制台",
     "open_catalog": "打开题目目录",
-    "welcome": "欢迎, {displayName}"
+    "welcome": "欢迎, {displayName}",
+    "welcome_fallback_name": "租户",
+    "tenant_name_missing_header": "JWT 中缺少租户名",
+    "tenant_name_missing_body": "请退出并重新登录。 如问题持续,请联系系统管理员,将您 Cognito 用户的 custom:tenantName 属性设置为正确的租户名。"
   },
   "event_list": {
     "header": "Event 列表",

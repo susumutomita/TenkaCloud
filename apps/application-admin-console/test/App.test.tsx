@@ -82,16 +82,20 @@ describe("App", () => {
       ).toBeInTheDocument();
     });
 
-    it("custom:tenantName が無いときは custom:tenantId に fallback するべき", async () => {
+    it("custom:tenantName が無いときは fallback プレースホルダ (= UUID-like tenantId を welcome に出さない、 Issue #830)", async () => {
       loginAs({
         email: "admin@example.com",
-        "custom:tenantId": "t-acme",
+        "custom:tenantId": "3f01a734-9652-4065-a391-fa1b4d45ae26",
         "custom:tenantTier": "BASIC",
       });
       renderApp("/");
+      // welcome 文に UUID が漏れず、 fallback (= "テナント") に倒れる
       expect(
-        await screen.findByRole("heading", { level: 1, name: /t-acme さん/ }),
+        await screen.findByRole("heading", { level: 1, name: /テナント さん/ }),
       ).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /3f01a734/ })).toBeNull();
+      // tenantName 欠落の Alert が表示される (= operator に再ログインを促す)
+      expect(screen.getByText(/テナント名が JWT に含まれていません/)).toBeInTheDocument();
     });
 
     it("config.tenantName の placeholder ('Shared Pooled Tenant') を画面に出してはいけない", async () => {

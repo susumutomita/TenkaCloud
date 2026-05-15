@@ -27,7 +27,10 @@
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — テナント管理コンソール",
     "open_catalog": "問題カタログを開く",
-    "welcome": "ようこそ、{displayName} さん"
+    "welcome": "ようこそ、{displayName} さん",
+    "welcome_fallback_name": "テナント",
+    "tenant_name_missing_header": "テナント名が JWT に含まれていません",
+    "tenant_name_missing_body": "一度サインアウトして再ログインしてください。 解消しない場合は System Admin に連絡し、 テナント名を Cognito user の custom:tenantName 属性に設定してもらってください。"
   },
   "event_list": {
     "header": "Event 一覧",

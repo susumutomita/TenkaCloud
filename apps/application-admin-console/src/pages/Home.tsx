@@ -1,3 +1,4 @@
+import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -11,6 +12,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
 import { listProblemSummaries } from "../data/problems";
 import { useT } from "../i18n";
+import { resolveTenantDisplayName } from "../lib/tenant-display";
 
 // #542: 初回 operator 向けの onboarding section を dismiss 可能にするための localStorage key。
 // 2 回目以降の visit では「次のアクション」 section を出さず、画面上半分を進行中 Event 一覧
@@ -56,7 +58,11 @@ export function HomePage() {
   const tenantId = claims?.["custom:tenantId"];
   const tenantTier = claims?.["custom:tenantTier"];
   // Issue #831: userEmail は TopNav 右上に移動済。 Home page で参照しない。
-  const displayName = tenantName ?? tenantId ?? "(unknown tenant)";
+  // Issue #830: welcome 文に UUID を出さない。 tenantName が無いときは fallback (= "テナント")
+  // を使い、 raw tenantId は 「テナント情報」 panel 側でのみ表示する。
+  const { displayName: resolvedName, fromFallback: tenantNameMissing } =
+    resolveTenantDisplayName(claims);
+  const displayName = resolvedName ?? t("home.welcome_fallback_name");
 
   const problems = listProblemSummaries();
   const totalCount = problems.length;
@@ -79,6 +85,12 @@ export function HomePage() {
       >
         {t("home.welcome", { displayName })}
       </Header>
+
+      {tenantNameMissing && (
+        <Alert type="warning" header={t("home.tenant_name_missing_header")}>
+          {t("home.tenant_name_missing_body")}
+        </Alert>
+      )}
 
       <Container header={<Header variant="h2">問題カタログ</Header>}>
         <ColumnLayout columns={4} variant="text-grid">
