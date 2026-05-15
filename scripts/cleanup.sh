@@ -151,6 +151,27 @@ for orphan_lg in "/aws/vendedlogs/states/StepFunctionLogging"; do
   fi
 done
 
+# SSM Parameter Store の per-tenant ExternalId (= `/{env}/tenants/{tenantId}/external-id`)
+# は competitor-accounts handler が runtime で `PutParameterCommand` で書き込む (= CFn 管理外)
+# ため `cdk destroy` で消えない (= make destroy 後にも SecureString が残骸として残る)。
+# orphan API key と同じ pattern で env scope (`/${ENV}/tenants/`) を走査し削除する。
+# 対象は SecureString だが describe-parameters は `Type=SecureString` 自体を返さない
+# ので filter は不要、 命名規約 (`ends_with(Name, '/external-id')`) で同定する。
+log "scanning for orphan SSM parameters (per-tenant ExternalId SecureStrings)..."
+ORPHAN_PARAMS=$(aws ssm describe-parameters \
+  --parameter-filters "Key=Name,Option=BeginsWith,Values=/${ENV}/tenants/" \
+  --query "Parameters[?ends_with(Name, '/external-id')].Name" \
+  --output text 2>/dev/null || true)
+if [ -n "${ORPHAN_PARAMS}" ]; then
+  for param_name in ${ORPHAN_PARAMS}; do
+    log "  deleting orphan SSM parameter ${param_name}"
+    aws ssm delete-parameter --name "${param_name}" 2>/dev/null \
+      || log "    skip (already gone or in-use)"
+  done
+else
+  log "  no orphan SSM parameters found"
+fi
+
 log "scanning for orphan API Keys (server-Basic / Stand / Premi / Plati or tenkacloud-* tier keys)..."
 ORPHAN_KEY_IDS=$(aws apigateway get-api-keys --query \
   "items[?starts_with(name, 'server-Basic-') || starts_with(name, 'server-Stand-') || starts_with(name, 'server-Premi-') || starts_with(name, 'server-Plati-') || contains(name, '-basic-tier-key-') || contains(name, '-standard-tier-key-') || contains(name, '-premium-tier-key-') || contains(name, '-platinum-tier-key-')].id" \
