@@ -305,3 +305,162 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "federation_token_malformed" });
   });
 });
+
+/**
+ * Issue #759: 各 not_ready 経路は structured log を 1 件 emit すべき。
+ * CloudWatch Logs Insights `filter event like /^portal\.sso\.not_ready\./` で
+ * どの gate で死んだか 1 引きで切り分け可能にする受入条件。
+ */
+describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () => {
+  const logSpy = vi.spyOn(console, "log");
+
+  beforeEach(() => {
+    stsSend.mockReset();
+    ssmSend.mockReset();
+    stsClientConfigs.length = 0;
+    logSpy.mockReset();
+    logSpy.mockImplementation(() => undefined);
+  });
+
+  afterEach(() => logSpy.mockReset());
+
+  function findEvent(name: string): Record<string, unknown> | undefined {
+    for (const call of logSpy.mock.calls) {
+      const raw = call[0];
+      if (typeof raw !== "string") continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (parsed && typeof parsed === "object" && (parsed as { event?: unknown }).event === name) {
+        return parsed as Record<string, unknown>;
+      }
+    }
+    return undefined;
+  }
+
+  it("IN_PROGRESS の deployment で portal.sso.not_ready.in_progress を info log すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "IN_PROGRESS" })] });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    const payload = findEvent("portal.sso.not_ready.in_progress");
+    expect(payload).toBeDefined();
+    expect(payload?.level).toBe("info");
+    expect(payload?.jobId).toBe(VALID_JOB_ID);
+    expect(payload?.problemId).toBe("security-battle-royale");
+    expect(payload?.status).toBe("IN_PROGRESS");
+  });
+
+  it("namePrefix 未設定で portal.sso.not_ready.namePrefix_missing を info log すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ namePrefix: undefined, status: "COMPLETE" })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    const payload = findEvent("portal.sso.not_ready.namePrefix_missing");
+    expect(payload).toBeDefined();
+    expect(payload?.jobId).toBe(VALID_JOB_ID);
+  });
+
+  it("region 未設定で portal.sso.not_ready.region_missing を info log すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ region: undefined })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    const payload = findEvent("portal.sso.not_ready.region_missing");
+    expect(payload).toBeDefined();
+    expect(payload?.jobId).toBe(VALID_JOB_ID);
+  });
+
+  it("tenantId 未設定で portal.sso.not_ready.tenantId_missing を info log すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ tenantId: undefined })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    const payload = findEvent("portal.sso.not_ready.tenantId_missing");
+    expect(payload).toBeDefined();
+    expect(payload?.jobId).toBe(VALID_JOB_ID);
+  });
+
+  it("competitorRoleArn 未設定で portal.sso.not_ready.competitorRoleArn_missing を info log すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ competitorRoleArn: undefined })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    const payload = findEvent("portal.sso.not_ready.competitorRoleArn_missing");
+    expect(payload).toBeDefined();
+    expect(payload?.jobId).toBe(VALID_JOB_ID);
+    expect(payload?.tenantId).toBe("tenant-acme");
+  });
+
+  it("ParticipantViewerRoleArn 不在で outputKeys を含む info log を emit すべき (世代不一致の即特定)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          stackOutputs: JSON.stringify({
+            BaseUrl: "http://example.com",
+            NamePrefix: "tc-foo-bar",
+          }),
+        }),
+      ],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+    const payload = findEvent("portal.sso.not_ready.participantViewerRole_missing");
+    expect(payload).toBeDefined();
+    expect(payload?.jobId).toBe(VALID_JOB_ID);
+    expect(payload?.outputKeys).toEqual(expect.arrayContaining(["BaseUrl", "NamePrefix"]));
+    expect(payload?.outputKeys).not.toContain("ParticipantViewerRoleArn");
+  });
+
+  it("成功経路では not_ready log は 1 件も emit しないべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIADEPLOY",
+        SecretAccessKey: "DEPLOYSECRET",
+        SessionToken: "DEPLOYTOKEN",
+        Expiration: new Date(),
+      },
+    });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIAFAKE",
+        SecretAccessKey: "SECRETFAKE",
+        SessionToken: "TOKENFAKE",
+        Expiration: new Date(),
+      },
+    });
+    const fetchSpy2 = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ SigninToken: "TOKEN" }), { status: 200 }),
+      );
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result.kind).toBe("ok");
+    const notReadyEvents = logSpy.mock.calls.filter((c) => {
+      const raw = c[0];
+      if (typeof raw !== "string") return false;
+      try {
+        const parsed = JSON.parse(raw) as { event?: string };
+        return typeof parsed.event === "string" && parsed.event.startsWith("portal.sso.not_ready.");
+      } catch {
+        return false;
+      }
+    });
+    expect(notReadyEvents).toHaveLength(0);
+    fetchSpy2.mockRestore();
+  });
+});

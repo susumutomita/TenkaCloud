@@ -45,6 +45,19 @@
 
 Shell 経路の `correlationId` / `jobId` field は `TENKACLOUD_CORRELATION_ID` (現状 `PROBLEM_EXTERNAL_ID` と同値) を State Machine から伝搬する。 fallback として両 env のどちらか空でない方を採用する。
 
+### Participant Portal SSO 境界 (= Issue #759)
+
+| event | 出所 | level | 主な field |
+|---|---|---|---|
+| `portal.sso.not_ready.in_progress` | `participant-handler/sso.ts` (= status IN_PROGRESS / PENDING) | info | `jobId`, `problemId`, `status` |
+| `portal.sso.not_ready.namePrefix_missing` | 同上 | info | `jobId`, `problemId`, `status` |
+| `portal.sso.not_ready.region_missing` | 同上 | info | `jobId`, `problemId`, `status` |
+| `portal.sso.not_ready.tenantId_missing` | 同上 | info | `jobId`, `problemId`, `status` |
+| `portal.sso.not_ready.competitorRoleArn_missing` | 同上 | info | `jobId`, `problemId`, `tenantId` |
+| `portal.sso.not_ready.participantViewerRole_missing` | 同上 | info | `jobId`, `problemId`, `tenantId`, `outputKeys` (= 世代不一致即特定用に CFn Outputs の他 key 一覧) |
+
+SSO の `not_ready` 6 経路は旧実装ではすべてサイレントで、 operator が DDB item を引いて目視確認するしかなかった。 #759 で各 gate に structured log を 1 件 emit するようにし、 Insights query E (下記) で 1 引きに切り分け可能にした。
+
 ## CloudWatch Logs Insights クエリ
 
 ### A. jobId 1 つで全 phase を時系列に並べる (= 障害 triage の起点)
@@ -95,6 +108,17 @@ fields @timestamp, jobId, region, externalIdVersion
 ```
 
 連発しているなら ExternalId rotation 直後の窓に並走している兆候。 増加トレンドは `ExternalIdAudit` Lambda の metric と相関させる。
+
+### E. SSO `not_ready` がどの gate で落ちたかを 1 引きで切り分け (= Issue #759)
+
+```
+fields @timestamp, jobId, problemId, event, status, tenantId, outputKeys
+| filter event like /^portal\.sso\.not_ready\./
+| sort @timestamp desc
+| limit 100
+```
+
+特定 jobId に絞るときは `filter jobId = "01KRX..."` を AND 結合する。 `portal.sso.not_ready.participantViewerRole_missing` の `outputKeys` field を見ると、 問題 template が古い世代 (= `ParticipantViewerRoleArn` Output 不在) かどうかが他 outputs の有無で即判定できる。
 
 ## 実装方針 (= 後続 PR で増やすときの拘束)
 

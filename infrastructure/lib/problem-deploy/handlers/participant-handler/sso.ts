@@ -3,6 +3,7 @@ import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.j
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
 import { getExternalId } from "../shared/external-id-store.js";
+import { logDeployTrace } from "../shared/trace-log.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -77,18 +78,55 @@ export async function getConsoleSigninUrl(
   if (!deployment) return { kind: "unauthorized" };
 
   const status = (deployment.status ?? "PENDING") as DeploymentStatus;
+  const problemId = typeof deployment.problemId === "string" ? deployment.problemId : undefined;
   if (DELETED_LIKE_STATUSES.has(status)) return { kind: "unauthorized" };
-  if (status === "IN_PROGRESS" || status === "PENDING") return { kind: "not_ready" };
-  if (typeof deployment.namePrefix !== "string") return { kind: "not_ready" };
+
+  // Issue #759: 各 not_ready 経路で structured log を 1 件 emit する。
+  // CloudWatch Logs Insights:
+  //   `filter event like /^portal\.sso\.not_ready\./ | sort @timestamp desc`
+  // で どの gate で死んだか 1 引きで切り分け可能にする。 旧実装は全 6 経路がサイレントで、
+  // operator が deployment item を引いて目視確認するしかなかった (= #756 調査で実体験)。
+  if (status === "IN_PROGRESS" || status === "PENDING") {
+    logDeployTrace("portal.sso.not_ready.in_progress", { jobId, problemId, status });
+    return { kind: "not_ready" };
+  }
+  if (typeof deployment.namePrefix !== "string") {
+    logDeployTrace("portal.sso.not_ready.namePrefix_missing", { jobId, problemId, status });
+    return { kind: "not_ready" };
+  }
   const region = typeof deployment.region === "string" ? deployment.region : undefined;
-  if (!region) return { kind: "not_ready" };
+  if (!region) {
+    logDeployTrace("portal.sso.not_ready.region_missing", { jobId, problemId, status });
+    return { kind: "not_ready" };
+  }
   const tenantId = typeof deployment.tenantId === "string" ? deployment.tenantId : undefined;
-  if (!tenantId) return { kind: "not_ready" };
+  if (!tenantId) {
+    logDeployTrace("portal.sso.not_ready.tenantId_missing", { jobId, problemId, status });
+    return { kind: "not_ready" };
+  }
   const competitorRoleArn =
     typeof deployment.competitorRoleArn === "string" ? deployment.competitorRoleArn : undefined;
-  if (!competitorRoleArn) return { kind: "not_ready" };
-  const participantRoleArn = parseStackOutputs(deployment.stackOutputs).ParticipantViewerRoleArn;
-  if (!participantRoleArn) return { kind: "not_ready" };
+  if (!competitorRoleArn) {
+    logDeployTrace("portal.sso.not_ready.competitorRoleArn_missing", {
+      jobId,
+      problemId,
+      tenantId,
+    });
+    return { kind: "not_ready" };
+  }
+  const parsedOutputs = parseStackOutputs(deployment.stackOutputs);
+  const participantRoleArn = parsedOutputs.ParticipantViewerRoleArn;
+  if (!participantRoleArn) {
+    // 世代不一致 (= problem template が ParticipantViewerRole を持つ世代より古い) の
+    // 切り分けを 1 引きで可能にするため、 stack outputs の他 key 一覧を log に残す。
+    logDeployTrace("portal.sso.not_ready.participantViewerRole_missing", {
+      jobId,
+      problemId,
+      tenantId,
+      outputKeys: Object.keys(parsedOutputs),
+    });
+    return { kind: "not_ready" };
+  }
   if (!shared.ssm || !shared.env) {
     console.error("[sso] ExternalId store is not configured", { jobId, tenantId });
     return { kind: "assume_role_failed", reason: "ExternalId store is not configured" };
