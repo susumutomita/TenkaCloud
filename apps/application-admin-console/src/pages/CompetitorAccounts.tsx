@@ -3,6 +3,7 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
@@ -483,6 +484,8 @@ function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModa
     competitorRoleName: details.competitorRoleName,
     templateUrl,
   });
+  const effectiveTemplateUrl =
+    templateUrl && templateUrl.length > 0 ? templateUrl : COMPETITOR_BOOTSTRAP_TEMPLATE_URL;
   const payload = buildShareablePayload({
     tenkaCloudAccountId: details.tenkaCloudAccountId,
     externalId: details.externalId,
@@ -512,72 +515,73 @@ function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModa
           ExternalId は SecureString として保存されており、閉じると再表示できません。
           競技者に渡すコピーは <strong>今</strong> 取ってください。
         </Alert>
-        <Box>
+        <SpaceBetween size="s">
+          <Header variant="h3">推奨: Launch Stack 1 click deploy</Header>
           <Button
             variant="primary"
+            href={launchStackUrl}
+            target="_blank"
+            iconName="external"
+            iconAlign="right"
+          >
+            Launch Stack (Quick-create deeplink)
+          </Button>
+          <Box variant="small" color="text-status-inactive">
+            CFn create-stack 画面に直行し、Parameter 3 値は pre-fill 済です。
+          </Box>
+        </SpaceBetween>
+        <SpaceBetween size="s">
+          <Header variant="h3">競技者に共有する情報</Header>
+          <Button
             iconName={allCopied ? "status-positive" : "copy"}
             onClick={() => void onCopyAll()}
           >
             {allCopied ? "コピーしました" : "すべて (3 値 + 手順 + Launch Stack URL) をコピー"}
           </Button>
-        </Box>
-        <ColumnLayout columns={1} variant="text-grid">
-          <div>
-            <Box variant="awsui-key-label">
-              TenkaCloud Account ID (= CFn Parameter <code>TenkaCloudAccountId</code>)
-            </Box>
-            <CopyableField
-              value={details.tenkaCloudAccountId}
-              ariaLabel="Copy TenkaCloudAccountId"
-            />
-          </div>
-          <div>
-            <Box variant="awsui-key-label">
-              ExternalId (= CFn Parameter <code>ExternalId</code>)
-            </Box>
-            <CopyableField value={details.externalId} ariaLabel="Copy ExternalId" />
-          </div>
-          <div>
-            <Box variant="awsui-key-label">
-              Competitor Role 名 (= CFn Parameter <code>RoleName</code>)
-            </Box>
-            <CopyableField value={details.competitorRoleName} ariaLabel="Copy RoleName" />
-          </div>
-          <div>
-            <Box variant="awsui-key-label">次のステップ — 競技者向け</Box>
-            <ol>
-              <li>
-                上の「すべてコピー」 button で 3 値 + 手順を取得し Slack / メール等で競技者に送る
-              </li>
-              <li>
-                競技者は AWS CFn console で <strong>1 click deploy</strong>:
-                <br />
-                <Button href={launchStackUrl} target="_blank" iconName="external" iconAlign="right">
-                  Launch Stack (Quick-create deeplink)
-                </Button>
-                <br />
-                <Box variant="small" color="text-status-inactive">
-                  上の link は CFn create-stack 画面に直行し、 Parameter 3 値は pre-fill 済。
-                  競技者は SSO ログイン後 1 click で stack 作成可能。
+        </SpaceBetween>
+        <div>
+          <Box variant="awsui-key-label">次のステップ — 競技者向け</Box>
+          <ol>
+            <li>Launch Stack を開いて bootstrap stack を作成する</li>
+            <li>deploy 完了後、 この画面の「Verify」 button で接続確認する</li>
+          </ol>
+        </div>
+        <ExpandableSection headerText="手動 deploy の詳細" variant="container">
+          <SpaceBetween size="m">
+            <ColumnLayout columns={1} variant="text-grid">
+              <div>
+                <Box variant="awsui-key-label">
+                  TenkaCloud Account ID (= CFn Parameter <code>TenkaCloudAccountId</code>)
                 </Box>
-              </li>
-              <li>
-                CFn template (= 競技者がレビューしたい場合):{" "}
-                <a
-                  href={COMPETITOR_BOOTSTRAP_TEMPLATE_URL}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
+                <CopyableField
+                  value={details.tenkaCloudAccountId}
+                  ariaLabel="Copy TenkaCloudAccountId"
+                />
+              </div>
+              <div>
+                <Box variant="awsui-key-label">
+                  ExternalId (= CFn Parameter <code>ExternalId</code>)
+                </Box>
+                <CopyableField value={details.externalId} ariaLabel="Copy ExternalId" />
+              </div>
+              <div>
+                <Box variant="awsui-key-label">
+                  Competitor Role 名 (= CFn Parameter <code>RoleName</code>)
+                </Box>
+                <CopyableField value={details.competitorRoleName} ariaLabel="Copy RoleName" />
+              </div>
+              <div>
+                <Box variant="awsui-key-label">CFn template</Box>
+                <a href={effectiveTemplateUrl} target="_blank" rel="noreferrer noopener">
                   competitor-bootstrap.yaml (raw)
                 </a>
-              </li>
-              <li>
-                deploy 完了後、 この画面の「Verify」 button で STS AssumeRole sanity check を行う
-              </li>
-              <li>verified=true になれば deploy 経路で利用可能になる</li>
-            </ol>
-          </div>
-        </ColumnLayout>
+              </div>
+            </ColumnLayout>
+            <Box variant="small" color="text-status-inactive">
+              上記 3 値を Parameter として CloudFormation create-stack でも deploy できます。
+            </Box>
+          </SpaceBetween>
+        </ExpandableSection>
       </SpaceBetween>
     </Modal>
   );
