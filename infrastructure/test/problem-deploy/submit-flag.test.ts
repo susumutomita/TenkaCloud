@@ -95,11 +95,76 @@ describe("submitFlag", () => {
     expect(out).toEqual({ kind: "no_outputs" });
   });
 
-  it("submitted flag が expected と一致しなければ wrong を返すべき (UpdateItem 呼ばない)", async () => {
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+  it("submitted flag が expected と一致しなければ wrong + scoreDelta=0 を返すべき (penalty 未設定なら UpdateItem 呼ばない)", async () => {
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 25, wrongAnswerCount: 3 })] });
     const out = await submitFlag(shared, flagScoring, "KEY", "hello-world", "wrong-answer");
-    expect(out).toEqual({ kind: "wrong" });
-    expect(ddbSend).toHaveBeenCalledTimes(1); // Query のみ、Update なし
+    // Issue #817: penalty=0 / 未設定の場合は scoreDelta=0、 既存 wrongCount を返す互換挙動。
+    expect(out).toEqual({ kind: "wrong", scoreDelta: 0, totalScore: 25, wrongCount: 3 });
+    expect(ddbSend).toHaveBeenCalledTimes(1); // Query のみ、Update なし (= Free Tier WCU 節約)
+  });
+
+  it("Issue #817: wrongAnswerPenalty > 0 で不正解なら score を減算 + wrongAnswerCount を ADD すべき", async () => {
+    const penaltyScoring: Record<string, ProblemScoringMetadata> = {
+      "hello-world": {
+        kind: "flag",
+        flagOutputKey: "ParameterValue",
+        points: 100,
+        wrongAnswerPenalty: 10,
+      },
+    };
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 30, wrongAnswerCount: 2 })] });
+    // UpdateItem 後の Attributes (= score=30-10=20、 wrongAnswerCount=2+1=3)
+    ddbSend.mockResolvedValueOnce({ Attributes: { score: 20, wrongAnswerCount: 3 } });
+    // writeScoreEvent (= PutItem) の mock
+    ddbSend.mockResolvedValueOnce({});
+
+    const out = await submitFlag(shared, penaltyScoring, "KEY", "hello-world", "wrong-answer");
+
+    expect(out).toEqual({ kind: "wrong", scoreDelta: -10, totalScore: 20, wrongCount: 3 });
+    expect(ddbSend).toHaveBeenCalledTimes(3); // Query + UpdateItem + score event Put
+    const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    expect(updateCmd.input.UpdateExpression).toContain("ADD wrongAnswerCount :one, score :neg");
+    expect(updateCmd.input.ExpressionAttributeValues?.[":neg"]).toBe(-10);
+    expect(updateCmd.input.ConditionExpression).toContain("attribute_not_exists(flagSubmitted)");
+  });
+
+  it("Issue #817: penalty で score が負数になっても totalScore は 0 で clamp して返すべき", async () => {
+    const penaltyScoring: Record<string, ProblemScoringMetadata> = {
+      "hello-world": {
+        kind: "flag",
+        flagOutputKey: "ParameterValue",
+        points: 100,
+        wrongAnswerPenalty: 50,
+      },
+    };
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 10, wrongAnswerCount: 0 })] });
+    ddbSend.mockResolvedValueOnce({ Attributes: { score: -40, wrongAnswerCount: 1 } });
+    ddbSend.mockResolvedValueOnce({});
+
+    const out = await submitFlag(shared, penaltyScoring, "KEY", "hello-world", "wrong-answer");
+
+    expect(out).toEqual({ kind: "wrong", scoreDelta: -50, totalScore: 0, wrongCount: 1 });
+  });
+
+  it("Issue #817: penalty 経路で flagSubmitted=true との race (= CCF) は already_scored に倒すべき", async () => {
+    const penaltyScoring: Record<string, ProblemScoringMetadata> = {
+      "hello-world": {
+        kind: "flag",
+        flagOutputKey: "ParameterValue",
+        points: 100,
+        wrongAnswerPenalty: 10,
+      },
+    };
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100 })] });
+    ddbSend.mockImplementationOnce(async () => {
+      const err: Error & { name?: string } = new Error("conditional check failed");
+      err.name = "ConditionalCheckFailedException";
+      throw err;
+    });
+
+    const out = await submitFlag(shared, penaltyScoring, "KEY", "hello-world", "wrong-answer");
+
+    expect(out).toEqual({ kind: "already_scored", totalScore: 100 });
   });
 
   it("正解なら ADD score :pts SET flagSubmitted=true で UpdateItem し ok を返すべき", async () => {

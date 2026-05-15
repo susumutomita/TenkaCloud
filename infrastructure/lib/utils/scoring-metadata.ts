@@ -39,6 +39,11 @@ export interface FlagScoringMetadata {
   readonly kind: "flag";
   readonly flagOutputKey: string;
   readonly points: number;
+  /**
+   * Issue #817: 不正解 1 回ごとに score から減算する値 (= brute-force 対策)。
+   * 未設定 / 0 は減点無し (= 既存問題と後方互換)。 team score は 0 未満にならず clamp。
+   */
+  readonly wrongAnswerPenalty?: number;
   readonly hints?: readonly ProgressiveHint[];
 }
 
@@ -160,13 +165,29 @@ export function parseScoringMetadata(value: unknown): ProblemScoringMetadata | u
 }
 
 function parseFlag(value: unknown): FlagScoringMetadata | undefined {
-  const f = value as { flagOutputKey?: unknown; points?: unknown; hints?: unknown };
+  const f = value as {
+    flagOutputKey?: unknown;
+    points?: unknown;
+    wrongAnswerPenalty?: unknown;
+    hints?: unknown;
+  };
   if (typeof f.flagOutputKey !== "string") return undefined;
   if (typeof f.points !== "number" || !Number.isFinite(f.points) || f.points <= 0) return undefined;
+  // Issue #817: wrongAnswerPenalty は optional。 不正な値 (= 負 / 非整数 / 非数値) は undefined に
+  // clamp して fallback (= "no penalty" として安全側に倒す、 metadata typo で減点暴走を防ぐ)。
+  const penaltyRaw = f.wrongAnswerPenalty;
+  const wrongAnswerPenalty =
+    typeof penaltyRaw === "number" &&
+    Number.isFinite(penaltyRaw) &&
+    penaltyRaw >= 0 &&
+    Number.isInteger(penaltyRaw)
+      ? penaltyRaw
+      : undefined;
   return {
     kind: "flag",
     flagOutputKey: f.flagOutputKey,
     points: f.points,
+    wrongAnswerPenalty,
     hints: parseHints(f.hints),
   };
 }

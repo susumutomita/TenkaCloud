@@ -106,7 +106,11 @@ export interface ParticipantTeamView {
 export type SubmitFlagOutcome =
   | { kind: "ok"; scoreDelta: number; totalScore: number }
   | { kind: "already_scored"; totalScore: number }
-  | { kind: "wrong" };
+  /**
+   * Issue #817: 不正解。 問題 metadata に `wrongAnswerPenalty` が設定されていれば
+   * `scoreDelta` は負数 (= 減点)。 設定されていなければ 0。 wrongCount は累計試行回数。
+   */
+  | { kind: "wrong"; scoreDelta: number; totalScore: number; wrongCount: number };
 
 export class PortalValidationError extends Error {
   constructor(public readonly errorCode: string) {
