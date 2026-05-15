@@ -35,13 +35,46 @@ export interface DeployPhase {
 
 const COMPLETE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["COMPLETE", "FAILED", "DELETED"]);
 
+/**
+ * Issue #818: stackStatus (= 現在の stack 状態) を権威 source として優先する。
+ * 旧 \`eventsToPhaseStatus\` は CFn event history の **過去** \`*_IN_PROGRESS\` event
+ * も拾うため、 stack が CREATE_COMPLETE になっても in-progress のままになる bug が
+ * あった。
+ */
+function stackStatusToPhaseStatus(stackStatus: string | undefined): PhaseStatus | undefined {
+  if (!stackStatus) return undefined;
+  if (stackStatus === "CREATE_COMPLETE") return "complete";
+  if (stackStatus === "UPDATE_COMPLETE") return "complete";
+  if (stackStatus === "IMPORT_COMPLETE") return "complete";
+  if (stackStatus.endsWith("_FAILED")) return "failed";
+  if (stackStatus === "ROLLBACK_COMPLETE") return "failed";
+  if (stackStatus === "UPDATE_ROLLBACK_COMPLETE") return "failed";
+  if (stackStatus === "IMPORT_ROLLBACK_COMPLETE") return "failed";
+  if (stackStatus.startsWith("DELETE_")) return "skipped";
+  if (stackStatus.endsWith("_IN_PROGRESS")) return "in-progress";
+  return undefined;
+}
+
+/**
+ * Issue #818: LogicalId ごとに最新 event だけを判定対象にする (= 過去の
+ * IN_PROGRESS が COMPLETE で superseded されている状態を正しく扱う)。 旧
+ * \`events.some(IN_PROGRESS)\` は history 全体を拾って永遠に in-progress を
+ * 返していた。
+ */
 function eventsToPhaseStatus(events: readonly StackProgressEvent[]): PhaseStatus {
   if (events.length === 0) return "pending";
-  const hasFailed = events.some((e) => e.resourceStatus.endsWith("_FAILED"));
+  const latestByLogicalId = new Map<string, StackProgressEvent>();
+  for (const e of events) {
+    const cur = latestByLogicalId.get(e.logicalResourceId);
+    if (!cur || cur.timestamp < e.timestamp) {
+      latestByLogicalId.set(e.logicalResourceId, e);
+    }
+  }
+  const latest = Array.from(latestByLogicalId.values());
+  const hasFailed = latest.some((e) => e.resourceStatus.endsWith("_FAILED"));
   if (hasFailed) return "failed";
-  const hasInProgress = events.some((e) => e.resourceStatus.endsWith("_IN_PROGRESS"));
+  const hasInProgress = latest.some((e) => e.resourceStatus.endsWith("_IN_PROGRESS"));
   if (hasInProgress) return "in-progress";
-  // すべて `_COMPLETE` で終わる前提 (= rollback 系は `_FAILED` で拾われている)。
   return "complete";
 }
 
@@ -93,7 +126,12 @@ export function derivePhases(
   // CFn 未割当 (= events 空 + status=PENDING/IN_PROGRESS) は Pending。
   // status=FAILED かつ events 空 → 上の Building で Failed を消化したので CFn 側は Pending のまま。
   let cfnStatus: PhaseStatus;
-  if (events.length === 0) {
+  // Issue #818: 優先順位 (1) stackStatus が権威 (2) event history (= LogicalId 別最新)
+  // (3) status + 観測有無の組み合わせ
+  const fromStackStatus = stackStatusToPhaseStatus(stackProgress?.stackStatus);
+  if (fromStackStatus !== undefined) {
+    cfnStatus = fromStackStatus;
+  } else if (events.length === 0) {
     if (status === "COMPLETE") cfnStatus = "complete";
     else if (status === "FAILED") cfnStatus = "pending";
     else if (status === "DELETING" || status === "DELETED") cfnStatus = "skipped";
