@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 # 旧 architecture-harness / ai-improvement-loop は ProtoShip 移行で撤去。
 # 移行完了後に新しい harness を再導入する (Phase 2 以降)。
-make before-commit
+mise exec -- make before-commit
