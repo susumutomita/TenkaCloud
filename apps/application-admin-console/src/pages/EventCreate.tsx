@@ -23,7 +23,10 @@ import { createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
-import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
+import {
+  filterVerifiedAccounts,
+  formatCompetitorAccountsLoadError,
+} from "../lib/competitor-accounts-filter";
 
 const NAME_MAX = 120;
 // MUST match infrastructure/lib/problem-deploy/handlers/event-handler/types.ts (zod schema)。
@@ -112,7 +115,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       const res = await listCompetitorAccounts(apiClient as ApiClient);
       setCompetitorAccounts(res.items);
     } catch (err) {
-      setAccountsLoadError(err instanceof Error ? err.message : String(err));
+      // Issue #815: 401 は friendly な「再ログインしてください」 に flip。 silent 空配列で
+      // operator が次の一手を見失う UX を防ぐ (= 旧 unknown-tenant fallback の置き換え)。
+      setAccountsLoadError(formatCompetitorAccountsLoadError(err));
     } finally {
       setAccountsLoading(false);
     }
