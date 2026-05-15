@@ -243,6 +243,69 @@ describe("bulkDeployEvent", () => {
     expect(putCmds[2]?.input.Entries).toHaveLength(10);
   });
 
+  it("PutEvents の partial failure は該当 deployment を FAILED にして retry 可能にすべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValueOnce({
+      FailedEntryCount: 1,
+      Entries: [{}, { ErrorCode: "InternalFailure", ErrorMessage: "event bus down" }],
+    });
+
+    await expect(bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS)).rejects.toThrow(
+      /EventBridge PutEvents failed/,
+    );
+
+    const transactCmd = ddbSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is TransactWriteCommand => c instanceof TransactWriteCommand);
+    const failedJobId = transactCmd?.input.TransactItems?.[1]?.Put?.Item?.jobId;
+    const failureUpdates = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter(
+        (c): c is UpdateCommand =>
+          c instanceof UpdateCommand &&
+          c.input.TableName === "TestDeployments" &&
+          c.input.ExpressionAttributeValues?.[":failed"] === "FAILED",
+      );
+    expect(failureUpdates).toHaveLength(1);
+    expect(failureUpdates[0]?.input.Key).toEqual({ PK: `DEPLOYMENT#${failedJobId}`, SK: "META" });
+    expect(failureUpdates[0]?.input.ConditionExpression).toContain("#s = :pending");
+    expect(failureUpdates[0]?.input.ExpressionAttributeValues?.[":reason"]).toContain(
+      "InternalFailure: event bus down",
+    );
+  });
+
+  it("PutEvents の timeout/reject は chunk 内 deployment を FAILED にして retry 可能にすべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockRejectedValueOnce(new Error("EventBridge timeout"));
+
+    await expect(bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS)).rejects.toThrow(
+      /EventBridge PutEvents failed/,
+    );
+
+    const failureUpdates = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter(
+        (c): c is UpdateCommand =>
+          c instanceof UpdateCommand &&
+          c.input.TableName === "TestDeployments" &&
+          c.input.ExpressionAttributeValues?.[":failed"] === "FAILED",
+      );
+    expect(failureUpdates).toHaveLength(2);
+    expect(
+      failureUpdates.every((u) =>
+        String(u.input.ExpressionAttributeValues?.[":reason"] ?? "").includes(
+          "EventBridge timeout",
+        ),
+      ),
+    ).toBe(true);
+  });
+
   it("各 deployment 行の ConditionExpression で同 jobId 二重生成を防ぐべき", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
@@ -422,6 +485,25 @@ describe("bulkDeployEvent", () => {
     const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     // 4 通りのうち 2 件衝突、残り 2 件のみ enqueue
     expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 2, skipped: 2 } });
+  });
+
+  it("duplicate event で全組み合わせが既存 PENDING なら write / publish しないべき", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) }); // 1 team = 2 通り
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { teamId: "T1", problemId: "hello-world", jobId: "P1", status: "PENDING" },
+        { teamId: "T1", problemId: "hello-world-battle", jobId: "P2", status: "PENDING" },
+      ],
+    });
+    ddbSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 0, skipped: 2 } });
+    expect(ddbSend.mock.calls.filter((c) => c[0] instanceof TransactWriteCommand)).toHaveLength(0);
+    expect(eventsSend).not.toHaveBeenCalled();
   });
 
   // #555: retryFailedOnly = true → FAILED 行のみ再生成、PENDING/COMPLETE はスルー

@@ -183,6 +183,21 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(createStateMachine).toContain("$.codebuild.Build.Id");
     });
 
+    it("Create State Machine は CodeBuild timeout / AccessDenied を Catch して FAILED に倒すべき", () => {
+      const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
+      const createStateMachine = Object.values(stateMachines)
+        .map((stateMachine) => JSON.stringify(stateMachine))
+        .find((definition) => definition.includes("StartDeployCodeBuild"));
+
+      expect(createStateMachine).toBeDefined();
+      expect(createStateMachine).toContain("StartDeployCodeBuild");
+      expect(createStateMachine).toContain("StartDeployCodeBuildCrossAccount");
+      expect(createStateMachine).toContain("States.ALL");
+      expect(createStateMachine).toContain("RouteFailedDeployment");
+      expect(createStateMachine).toContain("MarkFailed");
+      expect(createStateMachine).toContain("MarkFailedWithoutBuildId");
+    });
+
     it("Create State Machine は ROLLBACK_COMPLETE を terminal failure として MarkFailed に倒すべき", () => {
       const stateMachines = tpl.findResources("AWS::StepFunctions::StateMachine");
       const createStateMachine = Object.values(stateMachines)
