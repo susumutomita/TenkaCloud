@@ -5,6 +5,7 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   publishProblemEvent,
 } from "../shared/events.js";
+import { logDeployTrace } from "../shared/trace-log.js";
 import type { DeploySharedResources } from "./deploy.js";
 import type { DeploymentItem, DeploymentStatus } from "./types.js";
 
@@ -102,6 +103,7 @@ export async function requestTeardown(
 
   const detail: DeployDeleteRequestedDetail = {
     jobId,
+    correlationId: jobId,
     tenantId,
     stackName,
     region,
@@ -116,6 +118,14 @@ export async function requestTeardown(
       detailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
       jobId,
       detail,
+    });
+    logDeployTrace("deploy.delete.enqueued", {
+      jobId,
+      correlationId: jobId,
+      tenantId,
+      stackName,
+      region,
+      awsAccountId,
     });
   } catch (err) {
     // publish 失敗時の compensation: status を FAILED に倒し failureReason を残す。

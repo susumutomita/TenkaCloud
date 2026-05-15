@@ -96,6 +96,7 @@ export class DeployCreateStateMachine extends Construct {
         TEAM_SLUG: { value: JsonPath.stringAt("$.detail.teamSlug") },
         DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
         PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+        TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
       },
       resultPath: "$.codebuild",
     });
@@ -111,6 +112,7 @@ export class DeployCreateStateMachine extends Construct {
           TEAM_SLUG: { value: JsonPath.stringAt("$.detail.teamSlug") },
           DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
           PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+          TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           COMPETITOR_ROLE_ARN: {
             value: JsonPath.stringAt("$.detail.competitorRoleArn"),
           },
