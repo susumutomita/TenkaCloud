@@ -19,7 +19,7 @@ describe("parseScoringMetadata", () => {
       });
     });
 
-    it("hints が string array なら filter して保持するべき", () => {
+    it("[#742 Phase 1, v1 legacy] hints が string array なら ProgressiveHint[] に正規化 (penalty=0、 id は source 順位ベース)", () => {
       expect(
         parseScoringMetadata({
           kind: "flag",
@@ -31,8 +31,106 @@ describe("parseScoringMetadata", () => {
         kind: "flag",
         flagOutputKey: "X",
         points: 1,
-        hints: ["use AWS Console", "second hint"],
+        // id は source 配列の index ベース (= 不正要素を skip しても、 残った要素の id は drift しない)。
+        // これにより metadata 編集で middle 要素を入れ替えても、 既存 reveal 記録の id は保たれる。
+        hints: [
+          { id: "hint-1", content: "use AWS Console", penalty: 0 },
+          { id: "hint-3", content: "second hint", penalty: 0 },
+        ],
       });
+    });
+
+    it("[#742 Phase 1, v2] hints が ProgressiveHint object array なら id / content / penalty を保持", () => {
+      expect(
+        parseScoringMetadata({
+          kind: "flag",
+          flagOutputKey: "X",
+          points: 100,
+          hints: [
+            { id: "hint-1", content: "AWS Console で読む", penalty: 10 },
+            { id: "hint-2", content: "値は `Hello from tc-...`", penalty: 20 },
+          ],
+        }),
+      ).toEqual({
+        kind: "flag",
+        flagOutputKey: "X",
+        points: 100,
+        hints: [
+          { id: "hint-1", content: "AWS Console で読む", penalty: 10 },
+          { id: "hint-2", content: "値は `Hello from tc-...`", penalty: 20 },
+        ],
+      });
+    });
+
+    it("[#742 Phase 1, v2] penalty が不正値 (= negative / NaN / 文字列) なら 0 にクランプ", () => {
+      const result = parseScoringMetadata({
+        kind: "flag",
+        flagOutputKey: "X",
+        points: 100,
+        hints: [
+          { id: "h1", content: "a", penalty: -5 },
+          { id: "h2", content: "b", penalty: "10" },
+          { id: "h3", content: "c", penalty: Number.NaN },
+          { id: "h4", content: "d", penalty: 7.9 },
+        ],
+      });
+      expect(result?.kind).toBe("flag");
+      if (result?.kind !== "flag") return;
+      expect(result.hints).toEqual([
+        { id: "h1", content: "a", penalty: 0 },
+        { id: "h2", content: "b", penalty: 0 },
+        { id: "h3", content: "c", penalty: 0 },
+        { id: "h4", content: "d", penalty: 7 }, // 7.9 → floor → 7
+      ]);
+    });
+
+    it("[#742 Phase 1] v1 と v2 の混在も許容 (= migration 途中の metadata でも壊れない)", () => {
+      const result = parseScoringMetadata({
+        kind: "flag",
+        flagOutputKey: "X",
+        points: 100,
+        hints: ["legacy string hint", { id: "modern-hint", content: "new shape", penalty: 15 }],
+      });
+      expect(result?.kind).toBe("flag");
+      if (result?.kind !== "flag") return;
+      expect(result.hints).toEqual([
+        { id: "hint-1", content: "legacy string hint", penalty: 0 },
+        { id: "modern-hint", content: "new shape", penalty: 15 },
+      ]);
+    });
+
+    it("[#742 Phase 1] v2 object に id / content が欠けていれば skip (= partial 不正でも全体 reject しない)", () => {
+      const result = parseScoringMetadata({
+        kind: "flag",
+        flagOutputKey: "X",
+        points: 100,
+        hints: [
+          { id: "ok", content: "valid", penalty: 5 },
+          { content: "missing id" },
+          { id: "missing-content" },
+          { id: "", content: "empty id", penalty: 0 },
+          { id: "empty-content", content: "", penalty: 0 },
+        ],
+      });
+      expect(result?.kind).toBe("flag");
+      if (result?.kind !== "flag") return;
+      expect(result.hints).toEqual([{ id: "ok", content: "valid", penalty: 5 }]);
+    });
+
+    it("[#742 Phase 1] hints が空配列 / 不正な要素のみなら undefined を返す", () => {
+      const r1 = parseScoringMetadata({ kind: "flag", flagOutputKey: "X", points: 1, hints: [] });
+      expect(r1?.kind).toBe("flag");
+      if (r1?.kind !== "flag") return;
+      expect(r1.hints).toBeUndefined();
+
+      const r2 = parseScoringMetadata({
+        kind: "flag",
+        flagOutputKey: "X",
+        points: 1,
+        hints: [123, null, undefined],
+      });
+      if (r2?.kind !== "flag") return;
+      expect(r2.hints).toBeUndefined();
     });
 
     it("flagOutputKey が string でない / points が無い / 0 以下は undefined", () => {
