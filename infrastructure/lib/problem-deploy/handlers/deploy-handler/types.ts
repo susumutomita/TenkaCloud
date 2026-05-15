@@ -144,6 +144,35 @@ export interface DeploymentItem {
    * dispatcher が UpdateItem で書き戻し、 次 tick で read-through に復元する。
    */
   scoringState?: string;
+  /**
+   * Issue #742 Phase 2: 競技者が reveal した progressive hint の記録。 reveal は idempotent
+   * (= 同 hintId 重複は no-op、 penalty は 1 度だけ適用)。
+   *
+   * shape: `[{ hintId, revealedAt: ISO8601, penaltyApplied }]`
+   *
+   * DDB は schemaless なので table 側の structural 変更は不要 (= attribute を新規追加するだけ)。
+   * 旧 row は本 attribute を持たない → 「未 reveal」 と等価。 Phase 3 (= reveal API) で
+   * UpdateItem で append、 Phase 4 (= frontend UI) で UI に locked / unlocked 状態を反映。
+   *
+   * 本 Phase 2 では type addition + helper (= hintRevealRecord 構造) のみ。 read/write 経路は
+   * Phase 3 で追加する。
+   */
+  hintsRevealed?: readonly HintRevealRecord[];
+}
+
+/**
+ * Issue #742 Phase 2: progressive hint reveal 1 件の記録。 Deployments table の
+ * `hintsRevealed` attribute に append する。
+ *
+ *   - hintId: metadata.scoring.hints[].id を参照 (= ProgressiveHint.id と一致)
+ *   - revealedAt: ISO 8601 string (= 監査 log + UI 表示用)
+ *   - penaltyApplied: 実 deduction された penalty (= metadata 編集後にも記録が drift しないため
+ *     当時値を保存。 metadata.scoring.hints[].penalty 変更時にも score 再計算は走らない)
+ */
+export interface HintRevealRecord {
+  readonly hintId: string;
+  readonly revealedAt: string;
+  readonly penaltyApplied: number;
 }
 
 export const DeployResponseSchema = z.object({
