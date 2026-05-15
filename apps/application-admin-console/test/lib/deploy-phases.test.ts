@@ -142,6 +142,75 @@ describe("derivePhases", () => {
     const phases = derivePhases({ ...baseDeployment, status: "DELETED" }, progressAllComplete);
     expect(pick(phases, "complete").status).toBe("skipped");
   });
+
+  // #818 regression: past CREATE_IN_PROGRESS event が history に残っていても、
+  // stack 自体は CREATE_COMPLETE に到達しているなら cfn-deploy phase は complete。
+  it("stackStatus=CREATE_COMPLETE のとき過去 IN_PROGRESS event があっても complete にすべき (#818)", () => {
+    const stuck: StackProgress = {
+      ...emptyProgress,
+      stackStatus: "CREATE_COMPLETE",
+      events: [
+        {
+          timestamp: "2026-05-11T01:09:00.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_IN_PROGRESS",
+        },
+        {
+          timestamp: "2026-05-11T01:09:10.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_COMPLETE",
+        },
+      ],
+    };
+    const phases = derivePhases({ ...baseDeployment, status: "COMPLETE" }, stuck);
+    expect(pick(phases, "cfn-deploy").status).toBe("complete");
+  });
+
+  it("stackStatus 未指定でも LogicalId 別最新 event を見て complete を返すべき (#818)", () => {
+    // stackStatus 取得失敗の fallback path。 同 LogicalId に IN_PROGRESS と
+    // COMPLETE 両方あるとき、 最新 (= COMPLETE) を採用する。
+    const fallback: StackProgress = {
+      ...emptyProgress,
+      events: [
+        {
+          timestamp: "2026-05-11T01:09:00.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_IN_PROGRESS",
+        },
+        {
+          timestamp: "2026-05-11T01:09:10.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_COMPLETE",
+        },
+      ],
+    };
+    const phases = derivePhases({ ...baseDeployment, status: "COMPLETE" }, fallback);
+    expect(pick(phases, "cfn-deploy").status).toBe("complete");
+  });
+
+  it("stackStatus=ROLLBACK_COMPLETE は failed にすべき (#818)", () => {
+    const rolledBack: StackProgress = {
+      ...emptyProgress,
+      stackStatus: "ROLLBACK_COMPLETE",
+      events: [],
+    };
+    const phases = derivePhases({ ...baseDeployment, status: "FAILED" }, rolledBack);
+    expect(pick(phases, "cfn-deploy").status).toBe("failed");
+  });
+
+  it("stackStatus=CREATE_IN_PROGRESS は in-progress にすべき (#818)", () => {
+    const inProgress: StackProgress = {
+      ...emptyProgress,
+      stackStatus: "CREATE_IN_PROGRESS",
+      events: progressWithCreateInProgress.events,
+    };
+    const phases = derivePhases({ ...baseDeployment, status: "IN_PROGRESS" }, inProgress);
+    expect(pick(phases, "cfn-deploy").status).toBe("in-progress");
+  });
 });
 
 describe("deploySummaryTitle", () => {
