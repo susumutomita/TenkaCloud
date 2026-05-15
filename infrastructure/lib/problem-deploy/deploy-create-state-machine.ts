@@ -150,12 +150,20 @@ export class DeployCreateStateMachine extends Construct {
       .otherwise(invalidAssumeRoleMetadata);
 
     // CodeBuild 完了後に CFn から Outputs と StackId を取得。verified deployment は
-    // competitor account への AssumeRole が必要なので DescribeStackLambda に state 全体を渡す。
+    // competitor account への AssumeRole が必要なので DescribeStackLambda に detail (= 元
+    // EventBridge event の detail field) を渡す。
     // payloadResponseOnly=true により $.cfn は Lambda response (= DescribeStacks output)
     // そのものになり、既存 MarkSucceeded の JSONPath 契約を維持する。
+    //
+    // Issue #809: 旧コードは `payload: TaskInput.fromJsonPathAt("$")` を使っていたが、
+    // CDK が optimized Lambda integration + `payloadResponseOnly: true` で
+    // `Parameters: "$"` (= literal string) を生成し、 Lambda は literal `"$"` を event
+    // として受け取って `event.detail.jobId` が undefined で fail していた。
+    // `TaskInput.fromObject({...})` で明示的に object payload を組むと CDK は
+    // `Parameters: { "detail.$": "$.detail" }` を生成し、 JSONPath が解決される。
     const describeStacks = new LambdaInvoke(this, "DescribeStack", {
       lambdaFunction: props.describeStackFunction,
-      payload: TaskInput.fromJsonPathAt("$"),
+      payload: TaskInput.fromObject({ detail: JsonPath.objectAt("$.detail") }),
       payloadResponseOnly: true,
       resultPath: "$.cfn",
     });
