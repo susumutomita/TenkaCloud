@@ -600,6 +600,30 @@ function StackProgressBody(props: {
         </Alert>
       )}
 
+      {progress.stuck?.isStuck && (
+        <Alert type="warning" header="CFn Stack が stuck の可能性があります">
+          <SpaceBetween size="xs">
+            <Box>
+              最新の CFn event から {progress.stuck.elapsedMinutes} 分経過しています。
+              {progress.stuck.resourceLogicalId && (
+                <>
+                  {" "}
+                  対象: <code>{progress.stuck.resourceLogicalId}</code>
+                  {progress.stuck.resourceStatus ? (
+                    <>
+                      {" "}
+                      (<code>{progress.stuck.resourceStatus}</code>)
+                    </>
+                  ) : null}
+                </>
+              )}
+            </Box>
+            <Box>{progress.stuck.reason}</Box>
+            <Box variant="small">{progress.stuck.remediationHint}</Box>
+          </SpaceBetween>
+        </Alert>
+      )}
+
       <Table<StackProgressEvent>
         variant="embedded"
         header={<Header variant="h3">StackEvents (最新 {progress.events.length} 件)</Header>}

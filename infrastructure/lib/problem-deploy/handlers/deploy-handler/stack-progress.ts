@@ -8,6 +8,7 @@ import {
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { buildCfnStuckDiagnosis, type StackStuckDiagnosis } from "../shared/cfn-stuck.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import type { DeploySharedResources } from "./deploy.js";
 import type { DeploymentItem } from "./types.js";
@@ -43,6 +44,7 @@ export interface StackProgress {
    * UI で「全体としての現在の CFn 状態」を 1 行で出すために使う。
    */
   readonly stackStatus?: string;
+  readonly stuck?: StackStuckDiagnosis;
 }
 
 export type StackProgressOutcome =
@@ -117,6 +119,7 @@ export interface StackProgressDeps {
     readonly competitorRoleArn: string;
     readonly externalIdParameterName: string;
   }) => Promise<CloudFormationClient>;
+  readonly now?: () => Date;
 }
 
 /** module-scope の lazy cache。region ごとに 1 度だけ build する (warm invoke で再利用)。 */
@@ -273,6 +276,14 @@ export async function getStackProgress(
       events: events.map(toProgressEvent),
       resources: sortedResources.map(toProgressResource),
       stackStatus,
+      stuck: buildCfnStuckDiagnosis({
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        events,
+        stackName,
+        stackStatus,
+        now: deps.now?.() ?? new Date(),
+      }),
     },
   };
 }

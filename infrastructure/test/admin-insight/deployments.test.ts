@@ -101,9 +101,11 @@ describe("getStackProgressForTenant (ADR-011 / #598 Phase 1.B)", () => {
 
   function buildCfnFactory(stub: Partial<CloudFormationClient>): {
     cfnClient: (region: string) => CloudFormationClient;
+    now: () => Date;
   } {
     return {
       cfnClient: () => stub as unknown as CloudFormationClient,
+      now: () => new Date("2026-05-11T00:45:00.000Z"),
     };
   }
 
@@ -185,6 +187,55 @@ describe("getStackProgressForTenant (ADR-011 / #598 Phase 1.B)", () => {
     expect(outcome.progress.stackStatus).toBe("CREATE_COMPLETE");
     expect(outcome.progress.consoleUrl).toContain("ap-northeast-1");
     expect(cfnSend).toHaveBeenCalledTimes(2);
+  });
+
+  it("CFn Stack が stuck の場合は原因要約と復旧ヒントを返すべき", async () => {
+    const send = vi.fn().mockResolvedValue({
+      Item: {
+        ...baseItem,
+        status: "IN_PROGRESS",
+        createdAt: "2026-05-11T00:00:00.000Z",
+        updatedAt: "2026-05-11T00:00:00.000Z",
+      },
+    });
+    const cfnSend = vi.fn().mockImplementation(async (cmd) => {
+      if (cmd instanceof DescribeStackEventsCommand) {
+        return {
+          StackEvents: [
+            {
+              Timestamp: new Date("2026-05-11T00:00:00Z"),
+              LogicalResourceId: "team-alpha-p1",
+              ResourceType: "AWS::CloudFormation::Stack",
+              ResourceStatus: "CREATE_IN_PROGRESS",
+            },
+            {
+              Timestamp: new Date("2026-05-11T00:00:00Z"),
+              LogicalResourceId: "WebServer",
+              ResourceType: "AWS::EC2::Instance",
+              ResourceStatus: "CREATE_IN_PROGRESS",
+              ResourceStatusReason: "Resource handler returned message: service quota exceeded",
+            },
+          ],
+        };
+      }
+      if (cmd instanceof DescribeStackResourcesCommand) {
+        return { StackResources: [] };
+      }
+      throw new Error(`unexpected cmd: ${cmd.constructor.name}`);
+    });
+
+    const outcome = await getStackProgressForTenant(
+      buildShared(send),
+      buildCfnFactory({ send: cfnSend as unknown as CloudFormationClient["send"] }),
+      "t1",
+      "01HZ",
+    );
+
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") throw new Error("unreachable");
+    expect(outcome.progress.stuck?.elapsedMinutes).toBe(45);
+    expect(outcome.progress.stuck?.resourceLogicalId).toBe("WebServer");
+    expect(outcome.progress.stuck?.remediationHint).toContain("service quota");
   });
 
   it("CFn が 'does not exist' を投げたら kind=stack_not_found_in_cfn を返すべき", async () => {
