@@ -121,6 +121,18 @@ export interface StackProgress {
   readonly events: readonly StackProgressEvent[];
   readonly resources: readonly StackProgressResource[];
   readonly stackStatus?: string;
+  readonly stuck?: StackStuckDiagnosis;
+}
+
+export interface StackStuckDiagnosis {
+  readonly isStuck: true;
+  readonly elapsedMinutes: number;
+  readonly observedAt: string;
+  readonly reason: string;
+  readonly remediationHint: string;
+  readonly resourceLogicalId?: string;
+  readonly resourceType?: string;
+  readonly resourceStatus?: string;
 }
 
 export class AdminInsightApiError extends Error {

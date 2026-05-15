@@ -160,4 +160,46 @@ describe("AdminDeploymentDetailPage (#598 Phase 1.B)", () => {
       expect(screen.getByText(/CFn console を開く/)).toBeInTheDocument();
     });
   });
+
+  it("StackProgress に stuck 診断があると SystemAdmin 画面に原因と復旧ヒントを表示すべき", async () => {
+    mocks.fetchTenantDeploymentDetail.mockResolvedValueOnce({
+      jobId: JOB_ID,
+      problemId: "p1",
+      tenantId: TENANT_ID,
+      awsAccountId: "123456789012",
+      region: "ap-northeast-1",
+      teamName: "team-alpha",
+      namePrefix: "team-alpha-p1",
+      status: "IN_PROGRESS",
+      createdAt: "x",
+      updatedAt: "x",
+      expiresAt: 0,
+    });
+    mocks.fetchTenantStackProgress.mockResolvedValueOnce({
+      jobId: JOB_ID,
+      stackName: "team-alpha-p1",
+      region: "ap-northeast-1",
+      consoleUrl: "https://ap-northeast-1.console.aws.amazon.com/cloudformation/home",
+      stackStatus: "CREATE_IN_PROGRESS",
+      stuck: {
+        isStuck: true,
+        elapsedMinutes: 45,
+        observedAt: "2026-05-11T00:45:00.000Z",
+        reason: "Resource handler returned message: service quota exceeded",
+        remediationHint: "Request a service quota increase or delete unused resources, then retry.",
+        resourceLogicalId: "WebServer",
+        resourceType: "AWS::EC2::Instance",
+        resourceStatus: "CREATE_IN_PROGRESS",
+      },
+      events: [],
+      resources: [],
+    });
+    renderPage();
+
+    await screen.findByText(/CFn Stack が stuck の可能性があります/);
+    expect(screen.getByText(/45 分/)).toBeInTheDocument();
+    expect(screen.getByText(/service quota exceeded/)).toBeInTheDocument();
+    expect(screen.getByText(/service quota increase/)).toBeInTheDocument();
+    expect(screen.getByText(/WebServer/)).toBeInTheDocument();
+  });
 });

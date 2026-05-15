@@ -6,6 +6,10 @@ import {
   type StackResource,
 } from "@aws-sdk/client-cloudformation";
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  buildCfnStuckDiagnosis,
+  type StackStuckDiagnosis,
+} from "../../../problem-deploy/handlers/shared/cfn-stuck.js";
 import type { AdminInsightSharedResources } from "./shared.js";
 
 /**
@@ -72,6 +76,7 @@ export interface StackProgress {
   readonly events: readonly StackProgressEvent[];
   readonly resources: readonly StackProgressResource[];
   readonly stackStatus?: string;
+  readonly stuck?: StackStuckDiagnosis;
 }
 
 export type StackProgressOutcome =
@@ -170,6 +175,7 @@ export async function getDeploymentForTenant(
 
 export interface StackProgressDeps {
   readonly cfnClient: (region: string) => CloudFormationClient;
+  readonly now?: () => Date;
 }
 
 const clientCache = new Map<string, CloudFormationClient>();
@@ -247,6 +253,14 @@ export async function getStackProgressForTenant(
       events: events.map(toProgressEvent),
       resources: sortedResources.map(toProgressResource),
       stackStatus,
+      stuck: buildCfnStuckDiagnosis({
+        createdAt: typeof item.createdAt === "string" ? item.createdAt : undefined,
+        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : undefined,
+        events,
+        stackName,
+        stackStatus,
+        now: deps.now?.() ?? new Date(),
+      }),
     },
   };
 }

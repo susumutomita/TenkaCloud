@@ -191,6 +191,83 @@ describe("getStackProgress", () => {
     expect(out.progress.consoleUrl).toContain("#/stacks/stackinfo");
   });
 
+  it("IN_PROGRESS が閾値を超えて動かない場合は stuck 原因と復旧ヒントを返すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleRow({
+        status: "IN_PROGRESS",
+        updatedAt: "2026-05-11T10:00:00.000Z",
+      }),
+    });
+
+    const events = [
+      {
+        Timestamp: new Date("2026-05-11T10:00:00Z"),
+        LogicalResourceId: STACK_NAME,
+        ResourceType: "AWS::CloudFormation::Stack",
+        ResourceStatus: "CREATE_IN_PROGRESS",
+      },
+      {
+        Timestamp: new Date("2026-05-11T09:59:30Z"),
+        LogicalResourceId: "WebServer",
+        ResourceType: "AWS::EC2::Instance",
+        ResourceStatus: "CREATE_IN_PROGRESS",
+        ResourceStatusReason: "Resource handler returned message: service quota exceeded",
+      },
+    ];
+
+    const out = await getStackProgress(
+      shared,
+      {
+        cfnClient: () => buildCfn(events, []) as never,
+        now: () => new Date("2026-05-11T10:45:00Z"),
+      },
+      TENANT,
+      JOB_ID,
+    );
+
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.progress.stuck?.isStuck).toBe(true);
+    expect(out.progress.stuck?.elapsedMinutes).toBe(45);
+    expect(out.progress.stuck?.resourceLogicalId).toBe("WebServer");
+    expect(out.progress.stuck?.reason).toContain("service quota exceeded");
+    expect(out.progress.stuck?.remediationHint).toContain("service quota");
+  });
+
+  it("IN_PROGRESS でも直近 event が新しければ stuck と判定しないべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleRow({
+        status: "IN_PROGRESS",
+        updatedAt: "2026-05-11T10:00:00.000Z",
+      }),
+    });
+
+    const events = [
+      {
+        Timestamp: new Date("2026-05-11T10:40:00Z"),
+        LogicalResourceId: STACK_NAME,
+        ResourceType: "AWS::CloudFormation::Stack",
+        ResourceStatus: "CREATE_IN_PROGRESS",
+      },
+    ];
+
+    const out = await getStackProgress(
+      shared,
+      {
+        cfnClient: () => buildCfn(events, []) as never,
+        now: () => new Date("2026-05-11T10:45:00Z"),
+      },
+      TENANT,
+      JOB_ID,
+    );
+
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.progress.stuck).toBeUndefined();
+  });
+
   it("最新 20 件に events を切り詰めるべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });

@@ -184,6 +184,40 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(cfn.getByText("Pending")).toBeInTheDocument();
   });
 
+  it("stackProgress に stuck 診断があると原因要約と復旧ヒントを表示すべき", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
+    mocks.getStackProgress.mockResolvedValue({
+      ...emptyProgress,
+      stackStatus: "CREATE_IN_PROGRESS",
+      stuck: {
+        isStuck: true,
+        elapsedMinutes: 45,
+        observedAt: "2026-05-11T10:45:00.000Z",
+        reason: "Resource handler returned message: service quota exceeded",
+        remediationHint: "Request a service quota increase or delete unused resources, then retry.",
+        resourceLogicalId: "WebServer",
+        resourceType: "AWS::EC2::Instance",
+        resourceStatus: "CREATE_IN_PROGRESS",
+      },
+      events: [
+        {
+          timestamp: "2026-05-11T10:00:00.000Z",
+          logicalResourceId: "WebServer",
+          resourceType: "AWS::EC2::Instance",
+          resourceStatus: "CREATE_IN_PROGRESS",
+          resourceStatusReason: "Resource handler returned message: service quota exceeded",
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/CFn Stack が stuck の可能性があります/);
+
+    expect(screen.getByText(/45 分/)).toBeInTheDocument();
+    expect(screen.getAllByText(/service quota exceeded/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Request a service quota increase/)).toBeInTheDocument();
+    expect(screen.getAllByText(/WebServer/).length).toBeGreaterThan(0);
+  });
+
   it("Maximize log button を押すと modal が開いて terminal-style log が表示されるべき", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue({

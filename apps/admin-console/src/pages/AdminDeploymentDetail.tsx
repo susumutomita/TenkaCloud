@@ -422,6 +422,28 @@ function StackProgressSection(props: {
           </Alert>
         )}
 
+        {progress.stuck?.isStuck && (
+          <Alert type="warning" header={t("admin_deployment_detail.stack_stuck_header")}>
+            <SpaceBetween size="xs">
+              <Box>
+                {interpolate(t("admin_deployment_detail.stack_stuck_elapsed"), {
+                  minutes: String(progress.stuck.elapsedMinutes),
+                })}
+              </Box>
+              {progress.stuck.resourceLogicalId && (
+                <Box>
+                  {interpolate(t("admin_deployment_detail.stack_stuck_target"), {
+                    logicalResourceId: progress.stuck.resourceLogicalId,
+                    resourceStatus: progress.stuck.resourceStatus ?? "-",
+                  })}
+                </Box>
+              )}
+              <Box>{progress.stuck.reason}</Box>
+              <Box variant="small">{progress.stuck.remediationHint}</Box>
+            </SpaceBetween>
+          </Alert>
+        )}
+
         <Table<StackProgressEvent>
           variant="embedded"
           header={
