@@ -1,3 +1,5 @@
+import { decodeLargeEnvValue } from "./env-encoding.js";
+
 /**
  * 問題の `metadata.json:endpoints[]` section の type-safe な parser (ADR-012 Phase 3.A)。
  *
@@ -70,10 +72,11 @@ export function parseEndpointSlot(value: unknown): ProblemEndpointSlot | undefin
 export function parseEndpointsEnv(
   raw: string | undefined,
 ): Record<string, readonly ProblemEndpointSlot[]> {
-  if (!raw) return {};
+  const decoded = decodeLargeEnvValue(raw);
+  if (!decoded) return {};
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(decoded);
   } catch {
     return {};
   }

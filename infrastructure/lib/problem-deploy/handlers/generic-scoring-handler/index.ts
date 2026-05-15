@@ -5,6 +5,7 @@ import {
   ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { decodeLargeEnvValue } from "../../../utils/env-encoding.js";
 import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { writeScoreEvent } from "../shared/score-event.js";
@@ -347,10 +348,11 @@ async function fetchScoringLockedMap(
  * 不正 entry は drop、 値が無ければ空 map。
  */
 export function parsePhasesEnv(raw: string | undefined): Record<string, readonly PhaseEntry[]> {
-  if (!raw) return {};
+  const decoded = decodeLargeEnvValue(raw);
+  if (!decoded) return {};
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(decoded);
   } catch {
     return {};
   }

@@ -16,6 +16,7 @@ import {
 } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { encodeLargeEnvValue } from "../utils/env-encoding";
 import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
@@ -165,8 +166,9 @@ export class ParticipantPortalLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
-        BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
-        PROBLEM_ENDPOINTS: JSON.stringify(props.problemsEndpoints),
+        // Issue #810: gzip+base64 で 4 KB env-var 上限を回避。 GenericScoring と同じ。
+        BATTLE_PROBLEMS_SCORING: encodeLargeEnvValue(JSON.stringify(props.problemsScoring)),
+        PROBLEM_ENDPOINTS: encodeLargeEnvValue(JSON.stringify(props.problemsEndpoints)),
         DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
       },
