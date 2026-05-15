@@ -31,6 +31,12 @@ function buildLiteApp(): cdk.App {
     env: { account: "123456789012", region: "ap-northeast-1" },
   } as const;
 
+  // 注: 既存 test 規約 (= problem-deploy-backend-stack.test.ts の `synthParticipantPortalLambdaOnly`)
+  // と同じ理由で `participantPortal` を test では渡さない (= CI で `apps/participant-portal/dist`
+  // asset が無いと CDK BucketDeployment が CannotFindAsset で fail する)。 bin entry 本体は
+  // `participantPortal: { runtimeConfig: "default-dev-mock" }` を渡すが、 wiring (= stack 数 /
+  // EventBus / AppPlaneCore / 禁止 stack 排除 / deps) の verification には participant portal
+  // は不要。 実 deploy 時 (= `make lite-up`) は frontend build 後に走るので dist は存在する。
   const problemDeployBackend = new ProblemDeployBackendStack(
     app,
     "tenkacloud-lite-problem-deploy",
@@ -43,7 +49,6 @@ function buildLiteApp(): cdk.App {
       problemsEndpoints: {},
       problemsPhases: {},
       problemsVisibility: {},
-      participantPortal: { runtimeConfig: "default-dev-mock" },
       environmentName: "development",
     },
   );
