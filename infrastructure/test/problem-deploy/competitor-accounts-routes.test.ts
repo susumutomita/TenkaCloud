@@ -300,7 +300,7 @@ describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id", () 
       expect(parsed.event).toBe("competitor-accounts.rotate");
       expect(parsed.awsAccountId).toBe("222222222222");
       expect(parsed.rotatedAt).toBe("2026-05-12T00:00:00.000Z");
-      // tenantId / rotatedBy は test 環境では JWT 解決 fallback (= "unknown-tenant" / "unknown") を取る。
+      // tenantId は test の `DEFAULT_TENANT_ID` env (= "tenant-test")、 rotatedBy は JWT 不在で "unknown" fallback。
       expect(typeof parsed.tenantId).toBe("string");
       expect(typeof parsed.rotatedBy).toBe("string");
     } finally {

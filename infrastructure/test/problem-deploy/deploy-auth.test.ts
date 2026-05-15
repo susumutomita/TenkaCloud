@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   extractTenantIdFromClaims,
+  MissingTenantClaimError,
   resolveTenantId,
 } from "../../lib/problem-deploy/handlers/deploy-handler/auth";
 
@@ -63,10 +64,10 @@ describe("resolveTenantId", () => {
     expect(resolveTenantId(c)).toBe("tenant-from-env");
   });
 
-  it("env も無ければ unknown-tenant に倒すべき (= silent fallback、 PR-697 rollback)", () => {
+  it("env も無ければ MissingTenantClaimError を throw すべき (= Issue #843 fail-closed)", () => {
     delete process.env.DEFAULT_TENANT_ID;
     const c = buildCtx();
-    expect(resolveTenantId(c)).toBe("unknown-tenant");
+    expect(() => resolveTenantId(c)).toThrow(MissingTenantClaimError);
   });
 
   it("requestContext が存在しない (Function URL ops 経路) なら env にフォールバック", () => {

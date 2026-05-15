@@ -11,6 +11,11 @@ Battle (real-time) and Challenge (self-paced) problems deployed straight to each
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
+![GitHub last commit (by committer)](https://img.shields.io/github/last-commit/susumutomita/TenkaCloud)
+![GitHub top language](https://img.shields.io/github/languages/top/susumutomita/TenkaCloud)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/susumutomita/TenkaCloud)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/susumutomita/TenkaCloud)
+![GitHub repo size](https://img.shields.io/github/repo-size/susumutomita/TenkaCloud)
 
 🌐 [English](./README.md) · [日本語](./README.ja.md)
 
