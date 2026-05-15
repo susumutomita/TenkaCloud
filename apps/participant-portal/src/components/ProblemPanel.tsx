@@ -15,8 +15,10 @@ import StatusIndicator, {
 import { useState } from "react";
 import {
   type DeploymentStatus,
+  type ParticipantHintView,
   type ParticipantProblemView,
   PortalValidationError,
+  revealHint,
   type SubmitFlagOutcome,
   submitFlag,
   TERMINAL_STATUSES,
@@ -167,7 +169,7 @@ function FlagSubmissionPanel({
   problemId: string;
   flagSubmitted: boolean;
   points: number;
-  hints: readonly string[];
+  hints: readonly ParticipantHintView[];
   onScored: () => Promise<void>;
 }) {
   const [flag, setFlag] = useState("");
@@ -209,13 +211,13 @@ function FlagSubmissionPanel({
   return (
     <SpaceBetween size="s">
       {hints.length > 0 && (
-        <Alert type="info" header="ヒント">
-          <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
-            {hints.map((h) => (
-              <li key={h}>{h}</li>
-            ))}
-          </ul>
-        </Alert>
+        <HintsPanel
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          problemId={problemId}
+          hints={hints}
+          onRevealed={onScored}
+        />
       )}
       <form onSubmit={handleSubmit}>
         <Form
@@ -256,5 +258,91 @@ function FlagSubmissionPanel({
         </Alert>
       )}
     </SpaceBetween>
+  );
+}
+
+/**
+ * Issue #742 Phase 4: progressive hint UI。
+ *
+ * - revealed=false (locked): 「ヒント N (-X pt)」 + 「reveal」 button
+ * - revealed=true (unlocked): hint content + revealedAt 表示
+ *
+ * reveal クリック時に POST /portal/me/problems/:problemId/hints/:hintId/reveal を叩き、
+ * 成功時に親 (= onScored) を呼んで score / hint 状態を refetch する (= optimistic に状態
+ * 更新せず、 server truth を読み直す)。 失敗時は inline error を表示。
+ */
+function HintsPanel({
+  apiBaseUrl,
+  sessionToken,
+  problemId,
+  hints,
+  onRevealed,
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  problemId: string;
+  hints: readonly ParticipantHintView[];
+  onRevealed: () => Promise<void>;
+}) {
+  const [revealing, setRevealing] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
+
+  const handleReveal = async (hintId: string) => {
+    if (revealing) return;
+    setRevealing(hintId);
+    setRevealError(null);
+    try {
+      await revealHint(apiBaseUrl, sessionToken, problemId, hintId);
+      await onRevealed();
+    } catch (err) {
+      if (err instanceof PortalValidationError) {
+        setRevealError(`バリデーションエラー: ${err.errorCode}`);
+      } else {
+        setRevealError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setRevealing(null);
+    }
+  };
+
+  return (
+    <Alert
+      type="info"
+      header={`ヒント (${hints.filter((h) => h.revealed).length} / ${hints.length} 公開済)`}
+    >
+      <SpaceBetween size="xs">
+        {hints.map((h, i) => (
+          <Box key={h.id}>
+            {h.revealed ? (
+              <Box>
+                <strong>ヒント {i + 1}:</strong> {h.content}
+                {h.revealedAt && (
+                  <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
+                    公開済 ({describeAgo(h.revealedAt, Date.now())})
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              <Box>
+                <strong>ヒント {i + 1}</strong> (公開すると -{h.penalty} pt){" "}
+                <Button
+                  variant="inline-link"
+                  loading={revealing === h.id}
+                  disabled={revealing !== null && revealing !== h.id}
+                  onClick={() => handleReveal(h.id)}
+                >
+                  公開する
+                </Button>
+              </Box>
+            )}
+          </Box>
+        ))}
+        {revealError && (
+          <Box color="text-status-error" variant="small">
+            {revealError}
+          </Box>
+        )}
+      </SpaceBetween>
+    </Alert>
   );
 }
