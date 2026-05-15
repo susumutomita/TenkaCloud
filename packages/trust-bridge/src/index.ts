@@ -1,0 +1,48 @@
+/**
+ * @TenkaCloud/trust-bridge — Issue #795 / ADR-017 Phase 1 public surface。
+ *
+ * 「クレデンシャルを越境させず、 署名された CloudActionIntent を越境させ、
+ *  検証側で短命 provider-native authority に交換する」 protocol の基盤層。
+ *
+ * Phase 1 出荷範囲:
+ *   - CloudActionIntent schema (zod)
+ *   - canonical JSON serialization
+ *   - JWS HS256 sign / verify
+ *   - TTL / notBefore 検証
+ *   - nonce hook 抽象
+ *   - audit record helper
+ *
+ * Phase 2 以降:
+ *   - AwsAssumeRoleExchange (= 既存 ExternalId flow を本 abstraction に migrate)
+ *   - Deploy API への internal integration
+ *   - GCP / Azure adapter prototype
+ *   - protocol 文書 (= docs/architecture/cloud-action-intent.html)
+ */
+
+export type { AuditInput, CloudActionAuditRecord } from "./audit.js";
+export { buildAuditRecord } from "./audit.js";
+export type {
+  JwsHeader,
+  SignOptions,
+  VerifyFailureReason,
+  VerifyOptions,
+  VerifyOutcome,
+} from "./jws.js";
+export { signIntent, verifySignature } from "./jws.js";
+export type { CloudActionIntent, VerifiedCloudActionIntent } from "./schema.js";
+export {
+  brandVerified,
+  CloudActionIntentSchema,
+  canonicalize,
+  INTENT_VERSION,
+  parseCloudActionIntent,
+} from "./schema.js";
+export type {
+  IntentVerifyError,
+  IntentVerifyFailureReason,
+  IntentVerifyOk,
+  IntentVerifyOptions,
+  IntentVerifyOutcome,
+  NonceStore,
+} from "./verify.js";
+export { verifyIntent } from "./verify.js";
