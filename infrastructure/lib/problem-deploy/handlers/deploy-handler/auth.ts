@@ -13,19 +13,22 @@ export function extractTenantIdFromClaims(claims: JwtClaims | undefined): string
 }
 
 /**
- * Issue #686 (revisit): 旧 fail-closed (= JWT claim 欠落で `MissingTenantClaimError` throw)
- * は Cognito UserPoolClient の readAttributes 設定漏れで `custom:tenantId` が id_token に
- * 載らない既存 tenant に対し GET /events が全部 500 になる regression を引き起こした
- * (PR-697 deploy 後の事故報告)。
+ * Issue #843: JWT に `custom:tenantId` が無く `DEFAULT_TENANT_ID` env も無い request は
+ * 401 で **fail-closed**。 旧 silent fallback (`"unknown-tenant"` 文字列) は SSM /
+ * DDB / EventBridge に bogus 行を量産する原因だったため削除した。
  *
- * 暫定 rollback: silent fallback `"unknown-tenant"` に戻す。 別途、
- *  (a) tenant-template/identity-provider.ts の UserPoolClient `readAttributes` に
- *      `custom:tenantId` を明示追加 (= JWT に確実に乗せる)
- *  (b) frontend が `tenantId === "unknown-tenant"` を 「(自動検出中)」 で表示する band-aid
- * の 2 経路で正解に近づける (= 別 PR)。
+ * 旧 fail-closed を一旦 rollback した理由 (Cognito UserPoolClient `readAttributes` に
+ * `custom:tenantId` が無く id_token に claim が載らなかった既存 tenant の regression、
+ * PR-697 rollback) は Issue #686 で解消済み:
+ *  - `tenant-template/identity-provider.ts` の `readAttributes` が `custom:tenantId`
+ *    `userRole` / `apiKey` / `tenantTier` / `tenantName` を明示 (= JWT に確実に乗る)
+ *  - `provision-tenant.sh` が `admin-create-user` 時に `custom:tenantId` を必ず set
+ *  - 3 handler (deploy / event / competitor-accounts) の `onError` で
+ *    `MissingTenantClaimError` → 401 `missing_tenant_claim` を返す配線が完備
  *
- * `MissingTenantClaimError` class は handler 側 onError 配線が既に残っているため、
- * type 互換のために残置 (= 将来 fail-closed 復帰時に再利用可能)。
+ * `DEFAULT_TENANT_ID` env は test 環境 (= `app.request()` で JWT を bypass する unit
+ * test) と TenkaCloud Lite の dev override 用にのみ残す。 prod では env を渡さない
+ * ので、 JWT claim 欠落は **必ず** 401 になる。
  */
 export class MissingTenantClaimError extends Error {
   constructor() {
@@ -36,14 +39,14 @@ export class MissingTenantClaimError extends Error {
   }
 }
 
-const FALLBACK_TENANT_ID = "unknown-tenant";
-
 export function resolveTenantId(c: Context): string {
   const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
   const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
   const fromJwt = extractTenantIdFromClaims(claims);
   if (fromJwt) return fromJwt;
-  return process.env.DEFAULT_TENANT_ID ?? FALLBACK_TENANT_ID;
+  const fromEnv = process.env.DEFAULT_TENANT_ID;
+  if (fromEnv) return fromEnv;
+  throw new MissingTenantClaimError();
 }
 
 /**
