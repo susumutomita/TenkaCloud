@@ -6,6 +6,7 @@ import TopNavigation, {
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
+import { decodeIdToken } from "../auth/claims";
 import type { AppConfig } from "../config";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 
@@ -37,6 +38,32 @@ export function ShellLayout({
   const navigate = useNavigate();
   const { locale, setLocale, t } = useI18n();
 
+  // Issue #831: sign-in user (= email) を TopNav 右上に menu-dropdown で出す。
+  // 旧 Home page の \"サインインユーザー\" KeyValue は削除し、 ここに移動する。
+  const claims = auth.tokens ? decodeIdToken(auth.tokens.idToken) : null;
+  const userEmail = claims?.email;
+  const userMenuUtility: TopNavigationProps.Utility | undefined = userEmail
+    ? {
+        type: "menu-dropdown",
+        iconName: "user-profile",
+        text: userEmail,
+        ariaLabel: `${userEmail} のメニュー`,
+        items: [
+          {
+            id: "signout",
+            text: t("auth.sign_out"),
+            iconName: "external",
+          },
+        ],
+        onItemClick: ({ detail }) => {
+          if (detail.id === "signout") {
+            auth.logout();
+            navigate("/login");
+          }
+        },
+      }
+    : undefined;
+
   const localeUtility: TopNavigationProps.Utility = {
     type: "menu-dropdown",
     iconName: "globe",
@@ -55,18 +82,22 @@ export function ShellLayout({
       <TopNavigation
         identity={{ href: "/", title: t("app.title") }}
         utilities={
+          // Issue #831: 右上 utility は (locale, user-menu) の順。 旧 \"サインアウト\" は
+          // user-menu の中に格納し、 user email を表に出す。 未 sign-in 時は locale のみ。
           auth.tokens
-            ? [
-                localeUtility,
-                {
-                  type: "button",
-                  text: t("auth.sign_out"),
-                  onClick: () => {
-                    auth.logout();
-                    navigate("/login");
+            ? userMenuUtility
+              ? [localeUtility, userMenuUtility]
+              : [
+                  localeUtility,
+                  {
+                    type: "button",
+                    text: t("auth.sign_out"),
+                    onClick: () => {
+                      auth.logout();
+                      navigate("/login");
+                    },
                   },
-                },
-              ]
+                ]
             : [localeUtility]
         }
       />

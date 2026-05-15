@@ -55,7 +55,7 @@ export function HomePage() {
   const tenantName = claims?.["custom:tenantName"];
   const tenantId = claims?.["custom:tenantId"];
   const tenantTier = claims?.["custom:tenantTier"];
-  const userEmail = claims?.email;
+  // Issue #831: userEmail は TopNav 右上に移動済。 Home page で参照しない。
   const displayName = tenantName ?? tenantId ?? "(unknown tenant)";
 
   const problems = listProblemSummaries();
@@ -133,7 +133,7 @@ export function HomePage() {
             label="プラン"
             valueNode={tenantTier ? <Badge>{tenantTier}</Badge> : <span>(unknown)</span>}
           />
-          <KeyValue label="サインインユーザー" value={userEmail ?? "(unknown)"} />
+          {/* Issue #831: \"サインインユーザー\" は TopNav 右上の user-menu に移動した */}
         </ColumnLayout>
       </Container>
     </SpaceBetween>
