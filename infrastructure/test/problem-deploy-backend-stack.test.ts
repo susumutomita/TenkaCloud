@@ -600,3 +600,44 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
     );
   });
 });
+
+describe("ProblemDeployBackendStack (#778 ADR-016 Phase 2: eventBusArn optional 化)", () => {
+  function synthLite(): Template {
+    const app = new cdk.App();
+    const stack = new ProblemDeployBackendStack(app, "LiteStack", {
+      sourceBucketName: "test-source-bucket-lite",
+      sourceObjectKey: "source.zip",
+      problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+      problemsScoring: {},
+      problemsEndpoints: {},
+      environmentName: "development",
+      // eventBusArn を省略 (= Lite mode)
+    });
+    return Template.fromStack(stack);
+  }
+
+  it("eventBusArn を省略すると local EventBus を 1 つ新規に作るべき (= Lite mode の自己完結)", () => {
+    const liteTemplate = synthLite();
+    liteTemplate.resourceCountIs("AWS::Events::EventBus", 1);
+    liteTemplate.hasResourceProperties(
+      "AWS::Events::EventBus",
+      Match.objectLike({
+        Name: Match.stringLikeRegexp("^tenkacloud-problem-deploy-local-"),
+      }),
+    );
+  });
+
+  it("eventBusArn を渡した既存 (= Full mode) では local EventBus を作らないべき", () => {
+    const fullTemplate = synthDefault();
+    fullTemplate.resourceCountIs("AWS::Events::EventBus", 0);
+  });
+
+  it("eventBusArn 省略でも DeployApi / EventApi / CompetitorAccountsApi / GenericScoring Lambda は同じ構成で生えるべき (= 機能 dormant にならない)", () => {
+    const liteTemplate = synthLite();
+    const lambdaCount = Object.keys(liteTemplate.findResources("AWS::Lambda::Function")).length;
+    expect(lambdaCount).toBeGreaterThan(0);
+    // EventBridge Rule (= Step Functions trigger) も local bus にぶら下がる。
+    const ruleCount = Object.keys(liteTemplate.findResources("AWS::Events::Rule")).length;
+    expect(ruleCount).toBeGreaterThan(0);
+  });
+});

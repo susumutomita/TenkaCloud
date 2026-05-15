@@ -28,8 +28,16 @@ import { ProblemEndpointsTable } from "./problem-endpoints-table";
 import { TeamsTable } from "./teams-table";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
-  /** SBT ControlPlane の EventBus ARN。Deploy 系イベントを流す。 */
-  readonly eventBusArn: string;
+  /**
+   * SBT ControlPlane の EventBus ARN。Deploy 系イベントを流す。
+   *
+   * Issue #778 ADR-016 Phase 2: Full mode (= ControlPlaneStack 経由) では SBT 同梱の
+   * EventBus を共有するため必須。 Lite mode (= TenkaCloudLiteStack、 Phase 3) では
+   * ControlPlane が存在しないので undefined を渡し、 本 stack 内で local EventBus を作って
+   * fallback する。 cross-stack event 受信は Full mode の ServerlessSaaSPipeline 側だけが
+   * 行うため、 Lite では local bus で自己完結する。
+   */
+  readonly eventBusArn?: string;
   /**
    * tenant API から deploy Lambda を invoke する経路で、JWT が解決できなかった場合の
    * `DEFAULT_TENANT_ID` env フォールバック値。
@@ -186,7 +194,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
     this.competitorAccountsTable = competitorAccounts.table;
     this.problemEndpointsTable = endpoints.table;
-    const eventBus = EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn);
+    // Issue #778 ADR-016 Phase 2: eventBusArn が渡されていれば既存の SBT bus を import、
+    // 渡されていなければ Lite mode と判定して local EventBus を新規に作る。 後者では Step
+    // Functions Rule も local bus にぶら下がるため、 cross-stack 依存が増えない。
+    const eventBus = props.eventBusArn
+      ? EventBus.fromEventBusArn(this, "ImportedEventBus", props.eventBusArn)
+      : new EventBus(this, "LocalEventBus", {
+          eventBusName: `tenkacloud-problem-deploy-local-${cdk.Stack.of(this).stackName}`,
+        });
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
