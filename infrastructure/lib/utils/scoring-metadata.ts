@@ -1,3 +1,5 @@
+import { decodeLargeEnvValue } from "./env-encoding.js";
+
 /**
  * 問題の `metadata.json:scoring` section の type-safe な parser (ADR-012 Phase 3.B 拡張)。
  *
@@ -382,12 +384,17 @@ function parseAttackDetection(value: unknown): AttackDetectionScoringMetadata | 
 /**
  * Lambda env (`BATTLE_PROBLEMS_SCORING`) を decode し、`{ [problemId]: ProblemScoringMetadata }`
  * に narrow する。不正な entry (parse 失敗 / non-object / shape mismatch) は drop。
+ *
+ * Issue #810: 4 KB env-var 上限を回避するため、 CDK 側は gzip+base64 で env に積む
+ * (= encodeLargeEnvValue)。 ここで decode → JSON parse する。 旧形式 (= plain JSON)
+ * も backward compat で読める (= H4s prefix 判定)。
  */
 export function parseScoringEnv(raw: string | undefined): Record<string, ProblemScoringMetadata> {
-  if (!raw) return {};
+  const decoded = decodeLargeEnvValue(raw);
+  if (!decoded) return {};
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(decoded);
   } catch {
     return {};
   }

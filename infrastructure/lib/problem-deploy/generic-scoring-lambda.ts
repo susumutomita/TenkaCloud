@@ -6,6 +6,7 @@ import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { encodeLargeEnvValue } from "../utils/env-encoding";
 import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
 
 export interface GenericScoringLambdaProps {
@@ -84,9 +85,12 @@ export class GenericScoringLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
-        BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
-        PROBLEM_ENDPOINTS: JSON.stringify(props.problemsEndpoints),
-        BATTLE_PROBLEMS_PHASES: JSON.stringify(props.problemsPhases),
+        // Issue #810: AWS Lambda env vars 4 KB 上限を回避するため gzip+base64 で
+        // 圧縮する。 旧形式 (= plain JSON) も decodeLargeEnvValue が backward compat
+        // で読めるので、 既存 test fixture / local dev は破壊しない。
+        BATTLE_PROBLEMS_SCORING: encodeLargeEnvValue(JSON.stringify(props.problemsScoring)),
+        PROBLEM_ENDPOINTS: encodeLargeEnvValue(JSON.stringify(props.problemsEndpoints)),
+        BATTLE_PROBLEMS_PHASES: encodeLargeEnvValue(JSON.stringify(props.problemsPhases)),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
