@@ -8,6 +8,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
+import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
@@ -286,6 +287,10 @@ function HintsPanel({
 }) {
   const [revealing, setRevealing] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
+  // Issue #819: 誤クリック防止のため confirmation Modal を出す。 `pendingReveal` は
+  // 「Modal を開いている対象 hint」 (= 確定するまで API call しない)。
+  const [pendingReveal, setPendingReveal] = useState<ParticipantHintView | null>(null);
+  const [pendingIndex, setPendingIndex] = useState<number>(0);
 
   const handleReveal = async (hintId: string) => {
     if (revealing) return;
@@ -302,47 +307,109 @@ function HintsPanel({
       }
     } finally {
       setRevealing(null);
+      setPendingReveal(null);
     }
   };
 
   return (
-    <Alert
-      type="info"
-      header={`ヒント (${hints.filter((h) => h.revealed).length} / ${hints.length} 公開済)`}
-    >
-      <SpaceBetween size="xs">
-        {hints.map((h, i) => (
-          <Box key={h.id}>
-            {h.revealed ? (
-              <Box>
-                <strong>ヒント {i + 1}:</strong> {h.content}
-                {h.revealedAt && (
-                  <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
-                    公開済 ({describeAgo(h.revealedAt, Date.now())})
-                  </Box>
-                )}
-              </Box>
-            ) : (
-              <Box>
-                <strong>ヒント {i + 1}</strong> (公開すると -{h.penalty} pt){" "}
-                <Button
-                  variant="inline-link"
-                  loading={revealing === h.id}
-                  disabled={revealing !== null && revealing !== h.id}
-                  onClick={() => handleReveal(h.id)}
-                >
-                  公開する
-                </Button>
-              </Box>
-            )}
+    <>
+      <Alert
+        type="info"
+        header={`ヒント (${hints.filter((h) => h.revealed).length} / ${hints.length} 公開済)`}
+      >
+        <SpaceBetween size="xs">
+          {hints.map((h, i) => (
+            <Box key={h.id}>
+              {h.revealed ? (
+                <Box>
+                  <strong>ヒント {i + 1}:</strong> {h.content}
+                  {h.revealedAt && (
+                    <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
+                      公開済 ({describeAgo(h.revealedAt, Date.now())})
+                    </Box>
+                  )}
+                </Box>
+              ) : (
+                <Box>
+                  <strong>ヒント {i + 1}</strong>{" "}
+                  <span style={{ color: h.penalty > 0 ? "#b54708" : "#475467" }}>
+                    (公開すると -{h.penalty} pt)
+                  </span>{" "}
+                  {/* Issue #819: variant="normal" + iconName で明示的に button 化
+                     (= 旧 "inline-link" だと地味で click 可能か視認しづらかった)。
+                     onClick は Modal を開いて confirm を待つ (= 誤クリック防御)。 */}
+                  <Button
+                    variant="normal"
+                    iconName="lock-private"
+                    loading={revealing === h.id}
+                    disabled={revealing !== null && revealing !== h.id}
+                    onClick={() => {
+                      setPendingReveal(h);
+                      setPendingIndex(i);
+                    }}
+                  >
+                    ヒントを公開する
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          ))}
+          {revealError && (
+            <Box color="text-status-error" variant="small">
+              {revealError}
+            </Box>
+          )}
+        </SpaceBetween>
+      </Alert>
+
+      {/* Issue #819: 誤クリック防御の confirmation Modal。 penalty=0 でも出す
+         (= 「ヒントを見る」 という行為自体に明示的同意が要る、 UX 上の合意形成)。 */}
+      <Modal
+        visible={pendingReveal !== null}
+        onDismiss={() => setPendingReveal(null)}
+        header={`ヒント ${pendingIndex + 1} を公開しますか?`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => setPendingReveal(null)}
+                disabled={revealing !== null}
+              >
+                キャンセル
+              </Button>
+              <Button
+                variant="primary"
+                loading={revealing !== null}
+                onClick={() => {
+                  if (pendingReveal) void handleReveal(pendingReveal.id);
+                }}
+              >
+                公開する
+              </Button>
+            </SpaceBetween>
           </Box>
-        ))}
-        {revealError && (
-          <Box color="text-status-error" variant="small">
-            {revealError}
-          </Box>
+        }
+      >
+        {pendingReveal && (
+          <SpaceBetween size="xs">
+            <Box>
+              {pendingReveal.penalty > 0 ? (
+                <>
+                  公開すると{" "}
+                  <strong style={{ color: "#b54708" }}>-{pendingReveal.penalty} pt</strong>{" "}
+                  減点されます。 一度公開すると元に戻せません。
+                </>
+              ) : (
+                <>このヒントには減点はありません。 公開するとヒントが表示されます。</>
+              )}
+            </Box>
+            <Box variant="small" color="text-status-inactive">
+              ヒント本文は公開後に表示されます。
+            </Box>
+          </SpaceBetween>
         )}
-      </SpaceBetween>
-    </Alert>
+      </Modal>
+    </>
   );
 }
