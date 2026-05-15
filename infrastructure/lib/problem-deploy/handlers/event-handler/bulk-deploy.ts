@@ -48,6 +48,13 @@ const PUT_EVENTS_BATCH = 10;
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
+interface PlanEntry {
+  readonly item: DeploymentItem;
+  readonly entry: PutEventsRequestEntry;
+  /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
+  readonly replacesJobId?: string;
+}
+
 /**
  * `bulkDeployEvent` は Event / Teams を読み、選択された problems 全てに対して
  * teams × problems の deployment 行を一括 PUT し、既存 `DeployCreateRequested` を
@@ -200,12 +207,6 @@ export async function bulkDeployEvent(
   // #528: deploy target の awsAccountId は team から (= 各 team は自社 AWS account)、region は
   // problem から (= 問題テンプレが特定 region 依存)。team.awsAccountId が無い旧 Event は
   // problem.defaultAwsAccountId に fallback (Phase 2 で fallback も削除予定)。
-  interface PlanEntry {
-    readonly item: DeploymentItem;
-    readonly entry: PutEventsRequestEntry;
-    /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
-    readonly replacesJobId?: string;
-  }
   const plan: PlanEntry[] = [];
   let skipped = 0;
   const unverifiedAccounts = new Set<string>();
@@ -351,15 +352,14 @@ export async function bulkDeployEvent(
   await Promise.all(transactChunks);
 
   const items = plan.map((p) => p.item);
-  const entries = plan.map((p) => p.entry);
 
   // EventBridge PutEvents は 1 call 10 entries まで。chunk を Promise.all で並列発火。
-  // 途中で publish が失敗した chunk があると半端な行が残るが、operator が再度 deploy を
-  // 呼ぶと既行は idempotent skip され、未 publish 分だけ publish される (= 結果整合性)。
-  const putChunks: Promise<unknown>[] = [];
-  for (let i = 0; i < entries.length; i += PUT_EVENTS_BATCH) {
-    const chunk = entries.slice(i, i + PUT_EVENTS_BATCH);
-    putChunks.push(shared.events.send(new PutEventsCommand({ Entries: chunk })));
+  // DDB row 作成後の publish 失敗は PENDING 放置にしない。失敗分だけ FAILED に倒せば
+  // operator が retryFailedOnly で復旧でき、duplicate deploy は既存 row として skip される。
+  const putChunks: Promise<PublishFailure[]>[] = [];
+  for (let i = 0; i < plan.length; i += PUT_EVENTS_BATCH) {
+    const chunk = plan.slice(i, i + PUT_EVENTS_BATCH);
+    putChunks.push(publishPlanChunk(shared, chunk));
   }
 
   // Event status を DRAFT → DEPLOYING に倒す。operator が EventDetail の status badge で
@@ -388,12 +388,88 @@ export async function bulkDeployEvent(
         throw err;
       }
     });
-  await Promise.all([...putChunks, updateStatus]);
+  const [publishFailures] = await Promise.all([Promise.all(putChunks), updateStatus]);
+  const failures = publishFailures.flat();
+  if (failures.length > 0) {
+    await markPublishFailuresFailed(shared, tenantId, failures, createdAt);
+    throw new Error(
+      `EventBridge PutEvents failed for ${failures.length} deployment(s): ${failures
+        .map((f) => `${f.jobId} ${f.reason}`)
+        .join("; ")}`,
+    );
+  }
 
   return {
     kind: "ok",
     result: buildResult({ eventId, enqueued: items.length, skipped, unverifiedAccounts }),
   };
+}
+
+interface PublishFailure {
+  readonly jobId: string;
+  readonly reason: string;
+}
+
+async function publishPlanChunk(
+  shared: EventSharedResources,
+  chunk: readonly PlanEntry[],
+): Promise<PublishFailure[]> {
+  try {
+    const out = await shared.events.send(
+      new PutEventsCommand({ Entries: chunk.map((p) => p.entry) }),
+    );
+    if ((out.FailedEntryCount ?? 0) === 0) return [];
+    const failures = (out.Entries ?? [])
+      .map((entry, i): PublishFailure | undefined =>
+        entry.ErrorCode
+          ? {
+              jobId: chunk[i]?.item.jobId ?? "<unknown>",
+              reason: `${entry.ErrorCode}: ${entry.ErrorMessage ?? "unknown error"}`,
+            }
+          : undefined,
+      )
+      .filter((f): f is PublishFailure => f !== undefined);
+    return failures.length > 0
+      ? failures
+      : chunk.map((p) => ({ jobId: p.item.jobId, reason: "unknown error" }));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return chunk.map((p) => ({ jobId: p.item.jobId, reason }));
+  }
+}
+
+async function markPublishFailuresFailed(
+  shared: EventSharedResources,
+  tenantId: string,
+  failures: readonly PublishFailure[],
+  updatedAt: string,
+): Promise<void> {
+  await Promise.all(
+    failures.map(async (failure) => {
+      try {
+        await shared.ddb.send(
+          new UpdateCommand({
+            TableName: shared.deploymentsTableName,
+            Key: { PK: `DEPLOYMENT#${failure.jobId}`, SK: "META" },
+            UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+            ConditionExpression: "tenantId = :tenantId AND #s = :pending",
+            ExpressionAttributeNames: { "#s": "status" },
+            ExpressionAttributeValues: {
+              ":failed": "FAILED",
+              ":pending": "PENDING",
+              ":tenantId": tenantId,
+              ":updatedAt": updatedAt,
+              ":reason": `Failed to publish DeployCreateRequested event: ${failure.reason}`,
+            },
+          }),
+        );
+      } catch (err) {
+        if (!(err instanceof Error) || err.name !== "ConditionalCheckFailedException") {
+          throw err;
+        }
+      }
+    }),
+  );
 }
 
 /**

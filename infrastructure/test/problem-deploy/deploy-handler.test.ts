@@ -1,5 +1,5 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DeployContext,
@@ -152,6 +152,31 @@ describe("startDeployment", () => {
     putSend.mockRejectedValueOnce(new Error("DDB down"));
     await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow("DDB down");
     expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  it("EventBridge publish が失敗したら deployment を FAILED に補償更新すべき", async () => {
+    const { ctx, putSend, eventsSend } = buildContext();
+    eventsSend.mockResolvedValueOnce({
+      FailedEntryCount: 1,
+      Entries: [{ ErrorCode: "InternalFailure", ErrorMessage: "event bus down" }],
+    });
+
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/EventBridge PutEvents/);
+
+    const putCmd = putSend.mock.calls[0]?.[0] as PutCommand;
+    const updateCmd = putSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is UpdateCommand => c instanceof UpdateCommand);
+    expect(updateCmd).toBeInstanceOf(UpdateCommand);
+    expect(updateCmd?.input.Key).toEqual(
+      putCmd.input.Item ? { PK: putCmd.input.Item.PK, SK: "META" } : undefined,
+    );
+    expect(updateCmd?.input.UpdateExpression).toContain("#s = :failed");
+    expect(updateCmd?.input.ConditionExpression).toBe("#s = :pending");
+    expect(updateCmd?.input.ExpressionAttributeValues?.[":failed"]).toBe("FAILED");
+    expect(updateCmd?.input.ExpressionAttributeValues?.[":reason"]).toBe(
+      "Failed to publish DeployCreateRequested event",
+    );
   });
 
   it("forward-compat フィールド (accountGroupId / problemSetId) も保存するべき", async () => {

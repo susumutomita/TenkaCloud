@@ -84,6 +84,17 @@ export const DeployDeleteRequestedDetailSchema = z.object({
 });
 export type DeployDeleteRequestedDetail = z.infer<typeof DeployDeleteRequestedDetailSchema>;
 
+export class ProblemEventPublishError extends Error {
+  constructor(
+    public readonly detailType: string,
+    public readonly jobId: string,
+    public readonly reason: string,
+  ) {
+    super(`EventBridge PutEvents failed for ${detailType} ${jobId}: ${reason}`);
+    this.name = "ProblemEventPublishError";
+  }
+}
+
 /**
  * `tenkacloud.deploy` event を 1 件 publish する shared helper。
  * Resources は `tenkacloud:deployment:<jobId>` で統一し、subscriber が job 単位で
@@ -96,7 +107,7 @@ export async function publishProblemEvent(args: {
   jobId: string;
   detail: Record<string, unknown>;
 }): Promise<void> {
-  await args.client.send(
+  const out = await args.client.send(
     new PutEventsCommand({
       Entries: [
         {
@@ -108,5 +119,14 @@ export async function publishProblemEvent(args: {
         },
       ],
     }),
+  );
+  if ((out.FailedEntryCount ?? 0) === 0) return;
+  const failed = out.Entries?.[0];
+  throw new ProblemEventPublishError(
+    args.detailType,
+    args.jobId,
+    failed?.ErrorCode
+      ? `${failed.ErrorCode}: ${failed.ErrorMessage ?? "unknown error"}`
+      : "unknown error",
   );
 }

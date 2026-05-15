@@ -1,7 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
@@ -184,13 +184,36 @@ export async function startDeployment(
     externalIdParameterName: verified.externalIdParameterName,
     ...(challengePayloadUrl ? { challengePayloadUrl } : {}),
   };
-  await publishProblemEvent({
-    client: ctx.events,
-    busName: ctx.eventBusName,
-    detailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-    jobId,
-    detail,
-  });
+  try {
+    await publishProblemEvent({
+      client: ctx.events,
+      busName: ctx.eventBusName,
+      detailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
+      jobId,
+      detail,
+    });
+  } catch (err) {
+    try {
+      await ctx.ddb.send(
+        new UpdateCommand({
+          TableName: ctx.tableName,
+          Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+          UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+          ConditionExpression: "#s = :pending",
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: {
+            ":failed": "FAILED",
+            ":pending": "PENDING",
+            ":updatedAt": new Date(ctx.now()).toISOString(),
+            ":reason": "Failed to publish DeployCreateRequested event",
+          },
+        }),
+      );
+    } catch {
+      // best-effort: compensation failure should not hide the original publish error.
+    }
+    throw err;
+  }
 
   return {
     jobId,
