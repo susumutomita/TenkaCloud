@@ -102,6 +102,7 @@
         "cdk": "bin/infrastructure.js",
       },
       "dependencies": {
+        "@TenkaCloud/trust-bridge": "workspace:*",
         "@aws-cdk/aws-lambda-python-alpha": "^2.140.0-alpha.0",
         "@aws-sdk/client-codepipeline": "^3.1045.0",
         "@cdklabs/sbt-aws": "0.3.9",
