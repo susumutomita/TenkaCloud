@@ -203,6 +203,13 @@ export class IdentityProvider extends Construct {
         tenantTier: new aws_cognito.StringAttribute({
           mutable: true,
         }),
+        // Issue #748: tenant 作成 form の tenantName を id_token claim に乗せて
+        // application-admin-console の Home 画面 (= 「ようこそ {tenantName} さん」 / 「テナント名」)
+        // で表示する。 admin (= provision-tenant.sh の admin-create-user) のみ書き込み可、
+        // tenant user 自身は writeAttributes から外して cross-tenant 改名を防ぐ。
+        tenantName: new aws_cognito.StringAttribute({
+          mutable: true,
+        }),
       },
     });
 
@@ -213,11 +220,12 @@ export class IdentityProvider extends Construct {
     });
     this.cognitoDomainUrl = `https://${domainPrefix}.auth.${stack.region}.amazoncognito.com`;
 
-    // `custom:tenantId` / `userRole` / `apiKey` / `tenantTier` は admin (provision-tenant.sh
-    // が `admin-create-user` で初期化、必要なら `admin-update-user-attributes` で更新) のみ
-    // 書き換える。Client の `writeAttributes` から外すことで、ユーザの access_token から
-    // `UpdateUserAttributes` で `custom:tenantId` を別テナントに書き換えてクロステナント
-    // 操作する経路を塞ぐ (Deploy API の JWT authorizer が claim を信頼するため)。
+    // `custom:tenantId` / `userRole` / `apiKey` / `tenantTier` / `tenantName` は admin
+    // (provision-tenant.sh が `admin-create-user` で初期化、必要なら
+    // `admin-update-user-attributes` で更新) のみ書き換える。Client の `writeAttributes`
+    // から外すことで、ユーザの access_token から `UpdateUserAttributes` で
+    // `custom:tenantId` 等を別テナントに書き換えてクロステナント操作する経路を塞ぐ
+    // (Deploy API の JWT authorizer が claim を信頼するため)。
     const writeAttributes = new aws_cognito.ClientAttributes().withStandardAttributes({
       email: true,
     });
@@ -226,12 +234,14 @@ export class IdentityProvider extends Construct {
     // tenant 識別ができなかった。 Cognito の readAttributes が unset だと default で全
     // 標準 attribute が読めるが、 **custom: は明示的に追加しないと id_token claim に
     // 出ない**。 readAttributes に `custom:tenantId` 等を明示する。
+    // Issue #748: 同じ理由で `custom:tenantName` も明示しないと application-admin-console
+    // の Home 画面 (= JWT 経由の displayName) が ULID にフォールバックする。
     const readAttributes = new aws_cognito.ClientAttributes()
       .withStandardAttributes({
         email: true,
         emailVerified: true,
       })
-      .withCustomAttributes("tenantId", "userRole", "apiKey", "tenantTier");
+      .withCustomAttributes("tenantId", "userRole", "apiKey", "tenantTier", "tenantName");
 
     this.tenantUserPoolClient = new aws_cognito.UserPoolClient(this, "tenantUserPoolClient", {
       userPool: this.tenantUserPool,
