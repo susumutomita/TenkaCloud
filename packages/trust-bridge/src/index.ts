@@ -30,6 +30,28 @@ export type {
   StsAssumeRoleClient,
 } from "./aws-assume-role.js";
 export { AwsAssumeRoleExchange } from "./aws-assume-role.js";
+
+export type {
+  AzureAdapterOptions,
+  AzureCredential,
+  AzureExchangeContext,
+  AzureTokenEndpointClient,
+  AzureTokenExchangeInput,
+  AzureTokenExchangeOutput,
+} from "./azure-federated-credential.js";
+export { AzureFederatedCredentialExchange } from "./azure-federated-credential.js";
+
+export type {
+  GcpAdapterOptions,
+  GcpCredential,
+  GcpExchangeContext,
+  GcpStsClient,
+  GcpStsExchangeInput,
+  GcpStsExchangeOutput,
+  GenerateServiceAccountTokenInput,
+  GenerateServiceAccountTokenOutput,
+} from "./gcp-workload-identity.js";
+export { GcpWorkloadIdentityFederationExchange } from "./gcp-workload-identity.js";
 export type {
   JwsHeader,
   SignOptions,
