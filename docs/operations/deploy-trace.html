@@ -202,6 +202,54 @@
 </tr>
 </tbody></table>
 <p>Shell 経路の <code>correlationId</code> / <code>jobId</code> field は <code>TENKACLOUD_CORRELATION_ID</code> (現状 <code>PROBLEM_EXTERNAL_ID</code> と同値) を State Machine から伝搬する。 fallback として両 env のどちらか空でない方を採用する。</p>
+<h3>Participant Portal SSO 境界 (= Issue #759)</h3>
+<table>
+<thead>
+<tr>
+<th>event</th>
+<th>出所</th>
+<th>level</th>
+<th>主な field</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>portal.sso.not_ready.in_progress</code></td>
+<td><code>participant-handler/sso.ts</code> (= status IN_PROGRESS / PENDING)</td>
+<td>info</td>
+<td><code>jobId</code>, <code>problemId</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>portal.sso.not_ready.namePrefix_missing</code></td>
+<td>同上</td>
+<td>info</td>
+<td><code>jobId</code>, <code>problemId</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>portal.sso.not_ready.region_missing</code></td>
+<td>同上</td>
+<td>info</td>
+<td><code>jobId</code>, <code>problemId</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>portal.sso.not_ready.tenantId_missing</code></td>
+<td>同上</td>
+<td>info</td>
+<td><code>jobId</code>, <code>problemId</code>, <code>status</code></td>
+</tr>
+<tr>
+<td><code>portal.sso.not_ready.competitorRoleArn_missing</code></td>
+<td>同上</td>
+<td>info</td>
+<td><code>jobId</code>, <code>problemId</code>, <code>tenantId</code></td>
+</tr>
+<tr>
+<td><code>portal.sso.not_ready.participantViewerRole_missing</code></td>
+<td>同上</td>
+<td>info</td>
+<td><code>jobId</code>, <code>problemId</code>, <code>tenantId</code>, <code>outputKeys</code> (= 世代不一致即特定用に CFn Outputs の他 key 一覧)</td>
+</tr>
+</tbody></table>
+<p>SSO の <code>not_ready</code> 6 経路は旧実装ではすべてサイレントで、 operator が DDB item を引いて目視確認するしかなかった。 #759 で各 gate に structured log を 1 件 emit するようにし、 Insights query E (下記) で 1 引きに切り分け可能にした。</p>
 <h2>CloudWatch Logs Insights クエリ</h2>
 <h3>A. jobId 1 つで全 phase を時系列に並べる (= 障害 triage の起点)</h3>
 <pre><code>fields @timestamp, @log, event, level, stackName, region, stackStatus, detailType
@@ -237,6 +285,13 @@
 | limit 50
 </code></pre>
 <p>連発しているなら ExternalId rotation 直後の窓に並走している兆候。 増加トレンドは <code>ExternalIdAudit</code> Lambda の metric と相関させる。</p>
+<h3>E. SSO <code>not_ready</code> がどの gate で落ちたかを 1 引きで切り分け (= Issue #759)</h3>
+<pre><code>fields @timestamp, jobId, problemId, event, status, tenantId, outputKeys
+| filter event like /^portal\.sso\.not_ready\./
+| sort @timestamp desc
+| limit 100
+</code></pre>
+<p>特定 jobId に絞るときは <code>filter jobId = &quot;01KRX...&quot;</code> を AND 結合する。 <code>portal.sso.not_ready.participantViewerRole_missing</code> の <code>outputKeys</code> field を見ると、 問題 template が古い世代 (= <code>ParticipantViewerRoleArn</code> Output 不在) かどうかが他 outputs の有無で即判定できる。</p>
 <h2>実装方針 (= 後続 PR で増やすときの拘束)</h2>
 <ol>
 <li><strong>新規 trace event を増やすときは <code>event</code> field を <code>deploy.&lt;phase&gt;.&lt;outcome&gt;</code> 形式で命名する</strong>。 既存名と衝突しないこと。 <code>phase</code> は CloudWatch Logs Insights で <code>like /^deploy\.cfn\./</code> 等の prefix filter を効かせやすいよう dot-separated に保つ。</li>
