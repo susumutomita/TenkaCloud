@@ -28,11 +28,24 @@ export type ScoringKind =
   | "phased-polling"
   | "attack-detection";
 
+/**
+ * Issue #742 Phase 4: progressive hint view shape (= backend
+ * `ParticipantHintView` と同じ)。 revealed=false な hint は content 不在 (= 答えを
+ * frontend に漏らさない)、 revealed=true は content + revealedAt を含む。
+ */
+export interface ParticipantHintView {
+  readonly id: string;
+  readonly penalty: number;
+  readonly revealed: boolean;
+  readonly content?: string;
+  readonly revealedAt?: string;
+}
+
 export interface ParticipantScoringInfo {
   readonly kind: ScoringKind;
   readonly points?: number;
   readonly pointsPerSuccess?: number;
-  readonly hints?: readonly string[];
+  readonly hints?: readonly ParticipantHintView[];
   readonly flagSubmitted?: boolean;
 }
 
@@ -376,6 +389,37 @@ export async function getNotifications(
     teamLoginKey,
     { query, throwOn400: true, returnUndefinedOn404: true, signal },
   );
+}
+
+/**
+ * Issue #742 Phase 4: progressive hint reveal API。 `POST /portal/me/problems/{problemId}/hints/{hintId}/reveal`。
+ * 同 hintId 重複 reveal は idempotent (= 200 で kind=already_revealed)。
+ */
+export interface RevealHintResponse {
+  readonly kind: "ok" | "already_revealed";
+  readonly content: string;
+  readonly penaltyApplied: number;
+  readonly totalScore: number;
+  readonly revealedAt?: string;
+}
+
+export async function revealHint(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  problemId: string,
+  hintId: string,
+  signal?: AbortSignal,
+): Promise<RevealHintResponse> {
+  return (await portalFetch<RevealHintResponse>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(problemId)}/hints/${encodeURIComponent(hintId)}/reveal`,
+    teamLoginKey,
+    {
+      method: "POST",
+      throwOn400: true,
+      signal,
+    },
+  )) as RevealHintResponse;
 }
 
 /**

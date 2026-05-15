@@ -3,6 +3,7 @@ import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.j
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
+import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -11,6 +12,25 @@ import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
  * stackOutputs は DDB に JSON 文字列で入っているが、UI に返す前に object へ展開する。
  * `flagOutputKey` で指定された field は **競技者に出さない** (= 当てる対象なので)。
  */
+
+/**
+ * Issue #742 Phase 4: progressive hint の view shape。 reveal 済 hint には content が乗り、
+ * 未 reveal hint は content を含まない (= server-side で revealed=false な行は content を
+ * 落として送り、 frontend に答えを漏らさない)。
+ *
+ *   - id: stable identifier (= scoring.hints[].id と同じ)
+ *   - penalty: reveal すると差し引かれるポイント (= 表示用、 0 許容)
+ *   - revealed: 既に reveal 済なら true
+ *   - content: revealed=true のときのみ存在
+ *   - revealedAt: revealed=true のときのみ、 ISO 8601 (= UI で reveal 時刻表示用)
+ */
+export interface ParticipantHintView {
+  readonly id: string;
+  readonly penalty: number;
+  readonly revealed: boolean;
+  readonly content?: string;
+  readonly revealedAt?: string;
+}
 
 /**
  * Participant 側に出してよい scoring 情報の view。`kind` は 5 種 builtin DSL のいずれか
@@ -29,7 +49,12 @@ export interface ParticipantScoringInfo {
   readonly pointsPerSuccess?: number;
   readonly pointsAllOk?: number;
   readonly pointsPerAttack?: number;
-  readonly hints?: readonly string[];
+  /**
+   * Issue #742 Phase 4: progressive hint。 revealed=false な hint は content を持たず、
+   * frontend は locked 表示 + reveal button を出す。 revealed=true は content を含み
+   * unlocked 表示 (= 旧 string[] 形式から正式 view 形式に migrate)。
+   */
+  readonly hints?: readonly ParticipantHintView[];
   /** Challenge / flag のとき、提出済みなら true。再提出は加点されない。 */
   readonly flagSubmitted?: boolean;
 }
@@ -159,15 +184,29 @@ function toScoringInfo(
   item: Partial<DeploymentItem>,
 ): ParticipantScoringInfo {
   if (scoring.kind === "flag") {
-    // Issue #742 Phase 1: hints は ProgressiveHint[] (= {id, content, penalty}) に正規化済。
-    // frontend (= ProblemPanel) は現状 string[] を期待しているので、 Phase 1 互換のため
-    // content だけを取り出して string[] に flatten する (= 既存挙動 = 全 hint 常時露出 を維持)。
-    // Phase 2 で reveal API + UI を追加するとき、 view interface を ProgressiveHint[] に
-    // 切り替える (= 別 PR でやる)。
+    // Issue #742 Phase 4: progressive hint view を組み立てる。 revealed=false な hint は
+    // content を落として送る (= 答えを frontend に漏らさない)。 revealed=true は content +
+    // revealedAt を含める。 reveal 状態は item.hintsRevealed (= Phase 2 で DDB に保存) から
+    // 読む。
+    const revealed = parseHintRevealedAttribute(item.hintsRevealed);
+    const revealedMap = new Map(revealed.map((r) => [r.hintId, r] as const));
+    const hintViews: ParticipantHintView[] | undefined = scoring.hints?.map((h) => {
+      const r = revealedMap.get(h.id);
+      if (r) {
+        return {
+          id: h.id,
+          penalty: h.penalty,
+          revealed: true,
+          content: h.content,
+          revealedAt: r.revealedAt,
+        };
+      }
+      return { id: h.id, penalty: h.penalty, revealed: false };
+    });
     return {
       kind: "flag",
       points: scoring.points,
-      ...(scoring.hints ? { hints: scoring.hints.map((h) => h.content) } : {}),
+      ...(hintViews ? { hints: hintViews } : {}),
       flagSubmitted: item.flagSubmitted === true,
     };
   }
