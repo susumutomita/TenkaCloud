@@ -22,6 +22,15 @@
 export type { AuditInput, CloudActionAuditRecord } from "./audit.js";
 export { buildAuditRecord } from "./audit.js";
 export type {
+  AssumeRoleInput,
+  AssumeRoleOutput,
+  AwsAssumeRoleExchangeOptions,
+  AwsCredential,
+  AwsExchangeContext,
+  StsAssumeRoleClient,
+} from "./aws-assume-role.js";
+export { AwsAssumeRoleExchange } from "./aws-assume-role.js";
+export type {
   JwsHeader,
   SignOptions,
   VerifyFailureReason,
@@ -29,6 +38,15 @@ export type {
   VerifyOutcome,
 } from "./jws.js";
 export { signIntent, verifySignature } from "./jws.js";
+
+export type {
+  ExchangeContext,
+  ExchangeFailureReason,
+  ProviderCredential,
+  ProviderId,
+  ProviderTokenExchange,
+} from "./provider.js";
+export { ExchangeError } from "./provider.js";
 export type { CloudActionIntent, VerifiedCloudActionIntent } from "./schema.js";
 export {
   brandVerified,
