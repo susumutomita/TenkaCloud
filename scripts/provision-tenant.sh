@@ -80,13 +80,23 @@ APPLICATION_ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name 
 
 # Create tenant admin user (idempotent — provisioning が中途で失敗 → SBT が再実行
 # したとき UsernameExistsException で死なないよう、既存 user は skip)。
+# Issue #748: custom:tenantName を一緒に埋める (= application-admin-console の Home 画面が
+# JWT claim から「ようこそ {tenantName} さん」を表示する。 未設定だと ULID にフォールバックする)。
+# CDK_PARAM_TENANT_NAME は SBT BashJobRunner 経由で `$.detail.tenantName` から伝搬。
+# 空のときは Cognito 属性に空文字を入れる (= 画面側で "(未設定)" 表示にフォールバック)。
 if aws cognito-idp admin-get-user --user-pool-id "$SAAS_APP_USERPOOL_ID" --username "$TENANT_ADMIN_USERNAME" >/dev/null 2>&1; then
-  echo "Tenant admin user already exists: $TENANT_ADMIN_USERNAME (skip create)"
+  echo "Tenant admin user already exists: $TENANT_ADMIN_USERNAME (update custom:tenantName)"
+  # 既存 user (= #748 fix 前に作成された user) には custom:tenantName が無いので
+  # admin-update-user-attributes で埋め直す。 同じ値で 2 回呼んでも no-op で安全。
+  aws cognito-idp admin-update-user-attributes \
+    --user-pool-id "$SAAS_APP_USERPOOL_ID" \
+    --username "$TENANT_ADMIN_USERNAME" \
+    --user-attributes Name="custom:tenantName",Value="$CDK_PARAM_TENANT_NAME"
 else
   aws cognito-idp admin-create-user \
     --user-pool-id "$SAAS_APP_USERPOOL_ID" \
     --username "$TENANT_ADMIN_USERNAME" \
-    --user-attributes Name=email,Value="$TENANT_ADMIN_EMAIL" Name=email_verified,Value="True" Name=phone_number,Value="+11234567890" Name="custom:userRole",Value="TenantAdmin" Name="custom:tenantId",Value="$CDK_PARAM_TENANT_ID" Name="custom:tenantTier",Value="$TIER" \
+    --user-attributes Name=email,Value="$TENANT_ADMIN_EMAIL" Name=email_verified,Value="True" Name=phone_number,Value="+11234567890" Name="custom:userRole",Value="TenantAdmin" Name="custom:tenantId",Value="$CDK_PARAM_TENANT_ID" Name="custom:tenantTier",Value="$TIER" Name="custom:tenantName",Value="$CDK_PARAM_TENANT_NAME" \
     --desired-delivery-mediums EMAIL
 fi
 

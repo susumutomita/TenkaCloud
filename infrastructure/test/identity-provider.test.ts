@@ -84,7 +84,14 @@ describe("IdentityProvider", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       const clients = template.findResources("AWS::Cognito::UserPoolClient");
       const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
-      const blocked = ["custom:tenantId", "custom:userRole", "custom:apiKey", "custom:tenantTier"];
+      const blocked = [
+        "custom:tenantId",
+        "custom:userRole",
+        "custom:apiKey",
+        "custom:tenantTier",
+        // Issue #748: tenant 名も tenant user 自身に書き換えさせない (cross-tenant 改名防止)
+        "custom:tenantName",
+      ];
       for (const attr of blocked) {
         expect(writeAttrs).not.toContain(attr);
       }
@@ -95,6 +102,29 @@ describe("IdentityProvider", () => {
       const clients = template.findResources("AWS::Cognito::UserPoolClient");
       const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
       expect(writeAttrs).toContain("email");
+    });
+
+    it("Issue #748: UserPool schema に custom:tenantName が含まれるべき (mutable=true、 admin 経由で書き換える)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPool",
+        Match.objectLike({
+          Schema: Match.arrayWith([
+            Match.objectLike({
+              Name: "tenantName",
+              AttributeDataType: "String",
+              Mutable: true,
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it("Issue #748: UserPoolClient の readAttributes は custom:tenantName を含むべき (id_token claim 経路)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      const clients = template.findResources("AWS::Cognito::UserPoolClient");
+      const readAttrs = Object.values(clients)[0]?.Properties?.ReadAttributes ?? [];
+      expect(readAttrs).toContain("custom:tenantName");
     });
 
     it("#529 i18n: 招待メール body に JA / EN / ES / ZH 4 言語が含まれ console URL + placeholder も embed されるべき", () => {
