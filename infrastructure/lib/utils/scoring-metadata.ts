@@ -51,6 +51,12 @@ export interface UptimeFlatEndpoint {
   readonly pointsPerSuccess?: number;
 }
 
+/**
+ * Issue #742 Phase 5: 全 5 種 builtin kind が hints を持てるよう共通 shape として
+ * `ProgressiveHint[]` を再利用。 flag 以外でも metadata に hints を書けば
+ * Phase 4 で導入した reveal UI が同じ動作で機能する (= phased-polling や
+ * uptime 系でも 「攻撃に対する初動 hint」 を penalty 付きで開放できる)。
+ */
 export interface UptimeFlatScoringMetadata {
   /**
    * `uptime-flat` は新名。`uptime` は legacy SCHEMA (= Phase 1) との互換を保つための alias。
@@ -59,6 +65,8 @@ export interface UptimeFlatScoringMetadata {
   readonly kind: "uptime-flat" | "uptime";
   readonly endpoints: readonly UptimeFlatEndpoint[];
   readonly pointsPerSuccess: number;
+  /** Issue #742 Phase 5: 全 5 種 builtin kind で hints を許容する共通 field。 */
+  readonly hints?: readonly ProgressiveHint[];
 }
 
 export interface UptimeMultiProbedSlot {
@@ -72,6 +80,8 @@ export interface UptimeMultiScoringMetadata {
   readonly probedSlots: readonly UptimeMultiProbedSlot[];
   readonly pointsAllOk: number;
   readonly failurePenalty?: number;
+  /** Issue #742 Phase 5: hints 共通 field。 */
+  readonly hints?: readonly ProgressiveHint[];
 }
 
 export interface PhasedPollingPlatformRule {
@@ -104,6 +114,8 @@ export interface PhasedPollingScoringMetadata {
   readonly failurePenalty?: number;
   readonly responsePenalties?: readonly PhasedPollingResponsePenalty[];
   readonly bonuses?: readonly PhasedPollingBonus[];
+  /** Issue #742 Phase 5: hints 共通 field。 */
+  readonly hints?: readonly ProgressiveHint[];
 }
 
 export interface AttackDetectionCategory {
@@ -116,6 +128,8 @@ export interface AttackDetectionScoringMetadata {
   readonly statsOutputKey: string;
   readonly pointsPerAttack: number;
   readonly categories?: readonly AttackDetectionCategory[];
+  /** Issue #742 Phase 5: hints 共通 field。 */
+  readonly hints?: readonly ProgressiveHint[];
 }
 
 export type ProblemScoringMetadata =
@@ -188,7 +202,7 @@ function parseUptimeFlat(
   value: unknown,
   kindLiteral: "uptime" | "uptime-flat",
 ): UptimeFlatScoringMetadata | undefined {
-  const u = value as { endpoints?: unknown; pointsPerSuccess?: unknown };
+  const u = value as { endpoints?: unknown; pointsPerSuccess?: unknown; hints?: unknown };
   if (!Array.isArray(u.endpoints) || u.endpoints.length === 0) return undefined;
   if (typeof u.pointsPerSuccess !== "number" || u.pointsPerSuccess <= 0) return undefined;
   const endpoints: UptimeFlatEndpoint[] = [];
@@ -222,11 +236,22 @@ function parseUptimeFlat(
   if (endpoints.length === 0) return undefined;
   // 入力 kind を保ったまま返す (= legacy `uptime` 採用 metadata の view 互換)。
   // dispatcher 側は両者を flat probe として処理する。
-  return { kind: kindLiteral, endpoints, pointsPerSuccess: u.pointsPerSuccess };
+  const hints = parseHints(u.hints);
+  return {
+    kind: kindLiteral,
+    endpoints,
+    pointsPerSuccess: u.pointsPerSuccess,
+    ...(hints ? { hints } : {}),
+  };
 }
 
 function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefined {
-  const u = value as { probedSlots?: unknown; pointsAllOk?: unknown; failurePenalty?: unknown };
+  const u = value as {
+    probedSlots?: unknown;
+    pointsAllOk?: unknown;
+    failurePenalty?: unknown;
+    hints?: unknown;
+  };
   if (!Array.isArray(u.probedSlots) || u.probedSlots.length === 0) return undefined;
   if (typeof u.pointsAllOk !== "number" || u.pointsAllOk <= 0) return undefined;
   const probedSlots: UptimeMultiProbedSlot[] = [];
@@ -240,11 +265,13 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     probedSlots.push({ slot: e.slot, path: e.path, expectStatus });
   }
   if (probedSlots.length === 0) return undefined;
+  const hints = parseHints(u.hints);
   return {
     kind: "uptime-multi",
     probedSlots,
     pointsAllOk: u.pointsAllOk,
     ...(typeof u.failurePenalty === "number" ? { failurePenalty: u.failurePenalty } : {}),
+    ...(hints ? { hints } : {}),
   };
 }
 
@@ -256,6 +283,7 @@ function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | unde
     failurePenalty?: unknown;
     responsePenalties?: unknown;
     bonuses?: unknown;
+    hints?: unknown;
   };
   if (typeof p.intervalMinutes !== "number" || p.intervalMinutes <= 0) return undefined;
   if (!p.probe || typeof p.probe !== "object") return undefined;
@@ -307,6 +335,7 @@ function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | unde
     }
   }
 
+  const hints = parseHints(p.hints);
   return {
     kind: "phased-polling",
     intervalMinutes: p.intervalMinutes,
@@ -315,6 +344,7 @@ function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | unde
     ...(typeof p.failurePenalty === "number" ? { failurePenalty: p.failurePenalty } : {}),
     ...(responsePenalties.length > 0 ? { responsePenalties } : {}),
     ...(bonuses.length > 0 ? { bonuses } : {}),
+    ...(hints ? { hints } : {}),
   };
 }
 
@@ -323,6 +353,7 @@ function parseAttackDetection(value: unknown): AttackDetectionScoringMetadata | 
     statsOutputKey?: unknown;
     pointsPerAttack?: unknown;
     categories?: unknown;
+    hints?: unknown;
   };
   if (typeof a.statsOutputKey !== "string" || a.statsOutputKey.length === 0) return undefined;
   if (typeof a.pointsPerAttack !== "number" || a.pointsPerAttack <= 0) return undefined;
@@ -338,11 +369,13 @@ function parseAttackDetection(value: unknown): AttackDetectionScoringMetadata | 
       });
     }
   }
+  const hints = parseHints(a.hints);
   return {
     kind: "attack-detection",
     statsOutputKey: a.statsOutputKey,
     pointsPerAttack: a.pointsPerAttack,
     ...(categories.length > 0 ? { categories } : {}),
+    ...(hints ? { hints } : {}),
   };
 }
 
