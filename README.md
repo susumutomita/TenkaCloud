@@ -120,6 +120,38 @@ make deploy   # ENV=development が default
 
 teardown は `make destroy` (`scripts/cleanup.sh`)。途中失敗状態からも冪等に動く。
 
+## TenkaCloud Lite mode (試したい人向け)
+
+ADR-016 で導入した **Lite mode** は SBT / Pipeline / 動的 tenant 作成のフル機能を持ち込まず、 `tenantId=local` 固定 + ApplicationAdminConsole + ProblemDeploy backend だけを 1 コマンドで AWS account に立てるための「触ってみる」向けエントリ。 OSS readers や Product Hunt 訪問者を迷わせない最小経路。
+
+| 比較軸                   | Full mode (= `make deploy`)                                                            | Lite mode (= `make lite-up`)                                                |
+| ------------------------ | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Tenant                   | SBT が動的に作成 (BASIC / STANDARD / PREMIUM = pooled、 PLATINUM = silo)                | `tenantId=local` 固定 (= 1 tenant)                                          |
+| Stacks                   | ControlPlane + Bootstrap + Pipeline + pooled tenant + AdminConsole + ProblemDeploy 等 | TenkaCloudLiteStack (= AppPlaneCore) + ProblemDeployBackendStack の 2 つだけ |
+| 招待メール               | SystemAdmin / TenantAdmin に Cognito 招待                                              | 自分で UserPool に user を追加 (= manual)                                    |
+| EventBridge bus          | ControlPlane が払い出した shared bus                                                   | ProblemDeployBackendStack 内 local bus (= ADR-016 + #791 で optional 化)     |
+| 3-phase deploy           | あり (= ControlPlane 再 deploy で CORS 更新)                                           | 単発 deploy のみ                                                            |
+| 用途                     | 本格的な競技イベント、 multi-team                                                      | OSS 評価、 1 人ハンズオン、 動作確認                                         |
+
+### `make lite-*` ターゲット
+
+```bash
+make lite-up            # Lite stack 2 個 (= AppPlane + ProblemDeploy) を deploy + URL を表示
+make lite-down          # Lite stack 2 個を destroy
+make lite-status        # 両 stack の StackStatus を 1 行で表示
+make lite-portal-url    # Participant Portal の CloudFront URL を CFn output から取得
+make lite-console-url   # Application Admin Console の CloudFront URL を取得
+```
+
+CLI 単体での起動は次の通り。
+
+```bash
+bun run scripts/tenkacloud-lite.ts <subcommand>
+bun run scripts/tenkacloud-lite.ts help   # 5 subcommand の help を表示
+```
+
+> **Phase 4 scope の限界**: `tenkacloud-lite.ts` は CLI scaffold + Makefile target + unit test の最小単位で出荷している。 実 AWS deploy 経路に必要な `infrastructure/bin/tenkacloud-lite.ts` (= Lite 専用 bin entry) は Phase 5 で追加する。 現状の `make lite-up` は CDK の bin entry が無いと synth で失敗する。 Lite mode を本気で deploy したい場合は Phase 5 完了まで待つか、 Issue #778 に張られている Phase 5 PR を待ってほしい。
+
 ## 競技者側のセットアップ
 
 競技者は自分の AWS アカウントで `infrastructure/templates/competitor-bootstrap.yaml` を 1 回 deploy する。これで TenkaCloud から AssumeRole + ExternalId で問題 CFn を deploy できる IAM Role が払い出される。詳細は [`infrastructure/templates/README.md`](./infrastructure/templates/README.md)。
@@ -150,6 +182,7 @@ make validate-problems
 | `make destroy`           | `scripts/cleanup.sh` で全 stack + S3 を冪等に破棄     |
 | `make harness`           | architecture invariant チェック                       |
 | `make tech-debt`         | 技術的負債スキャン                                    |
+| `make lite-up` / `down`  | Lite mode (= 1 tenant 固定) の deploy / destroy       |
 | `make help`              | 全ターゲット一覧                                      |
 
 ## コントリビューション
