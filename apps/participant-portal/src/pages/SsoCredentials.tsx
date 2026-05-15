@@ -134,6 +134,84 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
             />
           </Container>
         ))}
+
+      {view && view.problems.length > 0 && (
+        <PostCompetitionCleanupPanel
+          firstAccount={view.problems[0]?.awsAccountId}
+          firstRegion={view.problems[0]?.region}
+        />
+      )}
     </SpaceBetween>
+  );
+}
+
+/**
+ * Issue #840: 競技終了後の片付け案内。 競技者 AWS Account には `tenkacloud-competitor-bootstrap`
+ * stack (= TenkaCloud 運営側が AssumeRole するための IAM Role) が残り続けるので、 競技を終えたら
+ * 競技者自身が CFn DeleteStack することで TenkaCloud 側からの AssumeRole 経路を即時撤回できる。
+ *
+ * Phase 1 (本 PR): doc + AWS Console deep link を出す。 portal から cross-account で
+ * cleanup する経路は backend 側の追加実装が必要なため Phase 2 で扱う (= 別 PR、 CDK 担当範囲)。
+ */
+function PostCompetitionCleanupPanel({
+  firstAccount,
+  firstRegion,
+}: {
+  firstAccount: string | undefined;
+  firstRegion: string | undefined;
+}) {
+  const region = firstRegion || "ap-northeast-1";
+  // AWS Console deep link to CloudFormation の stack detail page (= 競技者 account にログイン中なら直接遷移可)。
+  const consoleUrl = `https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks?filteringText=tenkacloud-competitor-bootstrap`;
+  return (
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description="競技を終えたら IAM Role を撤回して TenkaCloud からの AssumeRole 経路を閉じます。"
+        >
+          競技後の環境片付け
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        <Box variant="p">
+          competition 中に作成した <code>tenkacloud-competitor-bootstrap</code> stack (= IAM Role)
+          は、 競技後も AWS Account に残ります。 残ったままだと TenkaCloud 運営側からの AssumeRole
+          が 有効なままなので、 競技を終えたら次のいずれかの方法で削除してください。
+        </Box>
+        <Box variant="h4">方法 A: CLI で 1 行削除</Box>
+        <Box variant="code">
+          aws cloudformation delete-stack --stack-name tenkacloud-competitor-bootstrap
+        </Box>
+        <Box variant="h4">方法 B: AWS Console から削除</Box>
+        <Button
+          variant="normal"
+          iconName="external"
+          href={consoleUrl}
+          target="_blank"
+          ariaLabel="競技者 AWS Account の CloudFormation スタック一覧を新しいタブで開く"
+        >
+          CloudFormation スタック一覧を開く
+        </Button>
+        <Alert type="info">
+          {firstAccount && (
+            <>
+              対象 Account: <code>{firstAccount}</code> / Region: <code>{region}</code>。
+            </>
+          )}
+          stack を削除すると Role も同時に消え、 以降 TenkaCloud 側からの AssumeRole は即時 deny
+          されます。 AWS Console での手動 delete も同じ効果です。 詳しい手順とセキュリティ前提は{" "}
+          <a
+            href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#%E6%92%A4%E5%9B%9E--%E3%82%AF%E3%83%AA%E3%83%BC%E3%83%B3%E3%82%A2%E3%83%83%E3%83%97"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            infrastructure/templates/README.md
+          </a>{" "}
+          を参照してください。
+        </Alert>
+      </SpaceBetween>
+    </Container>
   );
 }
