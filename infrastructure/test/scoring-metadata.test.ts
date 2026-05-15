@@ -145,6 +145,70 @@ describe("parseScoringMetadata", () => {
     });
   });
 
+  describe("[#742 Phase 5] hints は全 5 kind に共通拡張", () => {
+    it("uptime-flat kind が hints を受け入れて ProgressiveHint[] に正規化すべき", () => {
+      const result = parseScoringMetadata({
+        kind: "uptime-flat",
+        endpoints: [{ slot: "main", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 50,
+        hints: [{ id: "h1", content: "first endpoint", penalty: 5 }],
+      });
+      expect(result?.kind).toBe("uptime-flat");
+      if (result?.kind !== "uptime-flat") return;
+      expect(result.hints).toEqual([{ id: "h1", content: "first endpoint", penalty: 5 }]);
+    });
+
+    it("uptime-multi kind が hints を受け入れるべき (v1 legacy も同様に動く)", () => {
+      const result = parseScoringMetadata({
+        kind: "uptime-multi",
+        probedSlots: [{ slot: "frontend", path: "/", expectStatus: [200] }],
+        pointsAllOk: 100,
+        hints: ["legacy hint"],
+      });
+      expect(result?.kind).toBe("uptime-multi");
+      if (result?.kind !== "uptime-multi") return;
+      expect(result.hints).toEqual([{ id: "hint-1", content: "legacy hint", penalty: 0 }]);
+    });
+
+    it("phased-polling kind が hints を受け入れるべき", () => {
+      const result = parseScoringMetadata({
+        kind: "phased-polling",
+        intervalMinutes: 1,
+        probe: { metaPath: "/meta", scorePath: "/score" },
+        platformRules: { ec2: { points: 100 } },
+        hints: [{ id: "phase-hint", content: "migrate to lambda first", penalty: 50 }],
+      });
+      expect(result?.kind).toBe("phased-polling");
+      if (result?.kind !== "phased-polling") return;
+      expect(result.hints).toEqual([
+        { id: "phase-hint", content: "migrate to lambda first", penalty: 50 },
+      ]);
+    });
+
+    it("attack-detection kind が hints を受け入れるべき", () => {
+      const result = parseScoringMetadata({
+        kind: "attack-detection",
+        statsOutputKey: "AttackCount",
+        pointsPerAttack: 10,
+        hints: [{ id: "attack-hint", content: "watch WAF logs", penalty: 5 }],
+      });
+      expect(result?.kind).toBe("attack-detection");
+      if (result?.kind !== "attack-detection") return;
+      expect(result.hints).toEqual([{ id: "attack-hint", content: "watch WAF logs", penalty: 5 }]);
+    });
+
+    it("hints を持たない既存 problem (= 全 4 kind) は touch されない", () => {
+      const uf = parseScoringMetadata({
+        kind: "uptime-flat",
+        endpoints: [{ slot: "main", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 50,
+      });
+      expect(uf?.kind).toBe("uptime-flat");
+      if (uf?.kind !== "uptime-flat") return;
+      expect(uf.hints).toBeUndefined();
+    });
+  });
+
   describe("uptime 形式 (legacy alias of uptime-flat)", () => {
     it("endpoints が array + pointsPerSuccess が number なら narrow するべき", () => {
       const cfg = {
