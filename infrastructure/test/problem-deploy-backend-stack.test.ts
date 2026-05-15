@@ -600,3 +600,73 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
     );
   });
 });
+
+describe("ProblemDeployBackendStack (#778 ADR-016 Phase 2: eventBusArn optional 化)", () => {
+  // synth は 5 個の NodejsFunction (= esbuild bundling) を含むため CI 上で ~7s かかる。
+  // vitest の default 5s timeout を 30s に拡張する (= 既存 #538 test と同じ pattern)。
+  const SYNTH_TIMEOUT_MS = 30_000;
+
+  // describe scope で 1 度だけ synth して、 3 件の it で再利用 (= per-test の重複 synth で
+  // 21s 消費するのを 7s に圧縮)。
+  let liteTemplate: Template;
+  let fullTemplate: Template;
+
+  it(
+    "eventBusArn を省略すると local EventBus を 1 つ新規に作るべき (= Lite mode の自己完結)",
+    () => {
+      const app = new cdk.App();
+      const stack = new ProblemDeployBackendStack(app, "LiteStack", {
+        sourceBucketName: "test-source-bucket-lite",
+        sourceObjectKey: "source.zip",
+        problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+        problemsScoring: {},
+        problemsEndpoints: {},
+        environmentName: "development",
+        // eventBusArn を省略 (= Lite mode)
+      });
+      liteTemplate = Template.fromStack(stack);
+      liteTemplate.resourceCountIs("AWS::Events::EventBus", 1);
+      liteTemplate.hasResourceProperties(
+        "AWS::Events::EventBus",
+        Match.objectLike({
+          Name: Match.stringLikeRegexp("^tenkacloud-problem-deploy-local-"),
+        }),
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "eventBusArn を渡した既存 (= Full mode) では local EventBus を作らないべき",
+    () => {
+      fullTemplate = synthDefault();
+      fullTemplate.resourceCountIs("AWS::Events::EventBus", 0);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "eventBusArn 省略でも DeployApi / EventApi / CompetitorAccountsApi / GenericScoring Lambda は同じ構成で生えるべき (= 機能 dormant にならない)",
+    () => {
+      // 前の test で立てた liteTemplate を再利用 (= synth コストを節約)。
+      if (!liteTemplate) {
+        const app = new cdk.App();
+        const stack = new ProblemDeployBackendStack(app, "LiteStack2", {
+          sourceBucketName: "test-source-bucket-lite-2",
+          sourceObjectKey: "source.zip",
+          problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+          problemsScoring: {},
+          problemsEndpoints: {},
+          environmentName: "development",
+        });
+        liteTemplate = Template.fromStack(stack);
+      }
+      const lambdaCount = Object.keys(liteTemplate.findResources("AWS::Lambda::Function")).length;
+      expect(lambdaCount).toBeGreaterThan(0);
+      // EventBridge Rule (= Step Functions trigger) も local bus にぶら下がる。
+      const ruleCount = Object.keys(liteTemplate.findResources("AWS::Events::Rule")).length;
+      expect(ruleCount).toBeGreaterThan(0);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+});
