@@ -14,7 +14,6 @@ import StatusIndicator, {
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
-  type DeploymentStatus,
   getConsoleSigninUrl,
   type ParticipantProblemView,
   type ParticipantScoringInfo,
@@ -26,14 +25,43 @@ import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 
-const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
-  PENDING: "pending",
-  IN_PROGRESS: "in-progress",
-  COMPLETE: "success",
-  FAILED: "error",
-  DELETING: "in-progress",
-  DELETED: "stopped",
-};
+/**
+ * Issue #821 / #822: 競技者向けの 「解答状態」 (= 解けた / 解けてない) を可視化する。
+ *
+ * 旧 UI は `DeploymentStatus` (PENDING / IN_PROGRESS / COMPLETE / FAILED) を表示
+ * していたが、 これは 「deploy 進行状態」 であり競技者にとっては無関係。 競技者は
+ * 「flag 提出が成功したか」 / 「Battle が進行中か」 が知りたい。
+ *
+ * Challenge (flag):
+ *   - deploy 失敗 → \"デプロイ失敗\" (error)
+ *   - deploy 中    → \"準備中\" (in-progress)
+ *   - 未提出      → \"未解答\" (pending)
+ *   - 提出済 (正解) → \"クリア\" (success) + 獲得 pt を score 列で表示
+ *
+ * Battle (uptime / phased-polling / attack-detection):
+ *   - deploy 失敗 → \"デプロイ失敗\" (error)
+ *   - deploy 中    → \"準備中\" (in-progress)
+ *   - それ以外    → \"挑戦中\" (info) — Battle は 「解く」 ものでなく継続採点
+ *
+ * `applicationStatus.overall` は別 section で詳細化 (= 既存挙動を維持)。
+ */
+function renderSubmissionState(problem: ParticipantProblemView): {
+  readonly type: StatusIndicatorProps.Type;
+  readonly label: string;
+} {
+  if (problem.status === "FAILED") return { type: "error", label: "デプロイ失敗" };
+  if (problem.status === "DELETED") return { type: "stopped", label: "終了" };
+  if (problem.status === "PENDING" || problem.status === "IN_PROGRESS") {
+    return { type: "in-progress", label: "準備中" };
+  }
+  // status === COMPLETE / DELETING
+  if (problem.scoring?.kind === "flag") {
+    if (problem.scoring.flagSubmitted) return { type: "success", label: "クリア" };
+    return { type: "pending", label: "未解答" };
+  }
+  // Battle 系 (= uptime / phased-polling / attack-detection)。 採点は別 section で表示。
+  return { type: "info", label: "挑戦中" };
+}
 
 type CategoryFilter = "all" | "battle" | "challenge";
 
@@ -169,13 +197,14 @@ export function QuestsPage({ config }: { config: AppConfig }) {
           ),
           sections: [
             {
-              id: "status",
-              header: t("quests.status_env_header"),
-              content: (problem) => (
-                <StatusIndicator type={STATUS_TYPE[problem.status]}>
-                  {t(`quests.status_label.${problem.status}`)}
-                </StatusIndicator>
-              ),
+              // Issue #821 / #822: 「deploy 進行状況」 ではなく 「解答状態」 を出す
+              // (= COMPLETE / FAILED 等の internal deploy term を競技者に見せない)。
+              id: "submission",
+              header: "解答状態",
+              content: (problem) => {
+                const s = renderSubmissionState(problem);
+                return <StatusIndicator type={s.type}>{s.label}</StatusIndicator>;
+              },
             },
             {
               id: "score",

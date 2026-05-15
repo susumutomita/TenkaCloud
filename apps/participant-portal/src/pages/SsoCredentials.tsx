@@ -123,12 +123,13 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               </Header>
             }
           >
+            {/* Issue #821: deploy status (= COMPLETE 等) は競技者には無関係なので
+                出さない。 AWS Account ID + Region で足りる。 */}
             <KeyValuePairs
-              columns={3}
+              columns={2}
               items={[
                 { label: "AWS Account", value: <code>{problem.awsAccountId}</code> },
                 { label: "Region", value: problem.region },
-                { label: "Status", value: problem.status },
               ]}
             />
           </Container>
