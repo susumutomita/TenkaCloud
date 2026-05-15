@@ -55,7 +55,7 @@ export async function fetchTenantsInsightSummary(
   });
   if (!res.ok) {
     if (res.status === StatusCodes.FORBIDDEN) {
-      // Tenant Admin が token を持ってきた場合 (= cognito:groups に SystemAdmin が無い)。
+      // Tenant Admin が token を持ってきた場合 (= custom:userRole が "SystemAdmin" でない)。
       // 例外を throw すると tenant 一覧本体まで巻き込んで UI が壊れる。null を返して
       // caller が「未表示」扱いにする (= 集計 column 単体だけ static 値 0 を出す)。
       return null;

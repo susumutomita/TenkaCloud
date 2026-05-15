@@ -38,8 +38,9 @@ const { app } = await import("../../lib/admin-insight/handlers/admin-insight-han
 
 /**
  * API GW v2 JWT Authorizer 経由で渡される event の最小 shape。
- * `c.env.event.requestContext.authorizer.jwt.claims` に `cognito:groups` / `sub` を入れる
- * (= handler の `isSystemAdmin` / `resolveCognitoSub` がこのパスを読む)。
+ * `c.env.event.requestContext.authorizer.jwt.claims` に `custom:userRole` / `sub` を入れる
+ * (= handler の `isSystemAdmin` / `resolveCognitoSub` がこのパスを読む)。SBT 0.3.9 の
+ * `auth-custom-resource` が admin user に埋める `custom:userRole = "SystemAdmin"` を再現する。
  */
 function withClaims(claims: Record<string, unknown>) {
   return {
@@ -55,14 +56,14 @@ const VALID_JOB_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B3";
 describe("GET /admin/insight/tenants/summary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("SystemAdmin group claim があれば 200 を返すべき", async () => {
+  it("SystemAdmin role claim があれば 200 を返すべき", async () => {
     mocks.summarizeTenants.mockResolvedValueOnce({
       items: [{ tenantId: "t-1", activeDeploys: 2, failedDeploys: 0, totalEvents: 3 }],
     });
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "user-1" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "user-1" }) },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -75,7 +76,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
       {},
-      { event: withClaims({ "cognito:groups": ["TenantAdmin"], sub: "user-1" }) },
+      { event: withClaims({ "custom:userRole": "TenantAdmin", sub: "user-1" }) },
     );
     expect(res.status).toBe(403);
     expect(mocks.summarizeTenants).not.toHaveBeenCalled();
@@ -86,12 +87,12 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(res.status).toBe(403);
   });
 
-  it("cognito:groups が string で SystemAdmin を含むなら認可するべき", async () => {
+  it("custom:userRole の前後 whitespace は trim して認可するべき", async () => {
     mocks.summarizeTenants.mockResolvedValueOnce({ items: [] });
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
       {},
-      { event: withClaims({ "cognito:groups": "[SystemAdmin]", sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "  SystemAdmin  ", sub: "u" }) },
     );
     expect(res.status).toBe(200);
   });
@@ -100,7 +101,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     const res = await app.request(
       "/admin/insight/tenants/summary",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -112,7 +113,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=tenant%201",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(400);
     expect(mocks.summarizeTenants).not.toHaveBeenCalled();
@@ -123,7 +124,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     const res = await app.request(
       `/admin/insight/tenants/summary?tenantIds=${many}`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(400);
     expect(mocks.summarizeTenants).not.toHaveBeenCalled();
@@ -134,7 +135,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(500);
     const body = await res.json();
@@ -149,7 +150,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "admin-sub-xyz" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "admin-sub-xyz" }) },
     );
     const calls = spy.mock.calls.map((c) => c[0]);
     expect(
@@ -183,7 +184,7 @@ describe("GET /admin/insight/tenants/:tenantId/events (Phase 1.B)", () => {
     const res = await app.request(
       "/admin/insight/tenants/t1/events",
       {},
-      { event: withClaims({ "cognito:groups": ["TenantAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "TenantAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(403);
     expect(mocks.listEventsForTenant).not.toHaveBeenCalled();
@@ -207,7 +208,7 @@ describe("GET /admin/insight/tenants/:tenantId/events (Phase 1.B)", () => {
     const res = await app.request(
       "/admin/insight/tenants/t-acme/events?limit=10",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(200);
     expect(mocks.listEventsForTenant).toHaveBeenCalledWith(
@@ -220,7 +221,7 @@ describe("GET /admin/insight/tenants/:tenantId/events (Phase 1.B)", () => {
     const res = await app.request(
       "/admin/insight/tenants/has%20space/events",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(400);
     expect(mocks.listEventsForTenant).not.toHaveBeenCalled();
@@ -230,7 +231,7 @@ describe("GET /admin/insight/tenants/:tenantId/events (Phase 1.B)", () => {
     const res = await app.request(
       "/admin/insight/tenants/t1/events?limit=9999",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(400);
   });
@@ -240,7 +241,7 @@ describe("GET /admin/insight/tenants/:tenantId/events (Phase 1.B)", () => {
     const res = await app.request(
       "/admin/insight/tenants/t1/events",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(500);
     const body = await res.json();
@@ -255,7 +256,7 @@ describe("GET /admin/insight/tenants/:tenantId/events/:eventId (Phase 1.B)", () 
     const res = await app.request(
       `/admin/insight/tenants/t1/events/${VALID_EVENT_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["TenantAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "TenantAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(403);
     expect(mocks.getEventDetailForTenant).not.toHaveBeenCalled();
@@ -278,7 +279,7 @@ describe("GET /admin/insight/tenants/:tenantId/events/:eventId (Phase 1.B)", () 
     const res = await app.request(
       `/admin/insight/tenants/t1/events/${VALID_EVENT_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(200);
     expect(mocks.getEventDetailForTenant).toHaveBeenCalledWith(
@@ -292,7 +293,7 @@ describe("GET /admin/insight/tenants/:tenantId/events/:eventId (Phase 1.B)", () 
     const res = await app.request(
       "/admin/insight/tenants/t1/events/bad-event",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(400);
   });
@@ -302,7 +303,7 @@ describe("GET /admin/insight/tenants/:tenantId/events/:eventId (Phase 1.B)", () 
     const res = await app.request(
       `/admin/insight/tenants/t1/events/${VALID_EVENT_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(404);
   });
@@ -328,7 +329,7 @@ describe("GET /admin/insight/tenants/:tenantId/events/:eventId (Phase 1.B)", () 
     const res = await app.request(
       `/admin/insight/tenants/t1/events/${VALID_EVENT_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     const body = (await res.json()) as {
       teams: Array<{ teamLoginKey?: string }>;
@@ -344,7 +345,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId (Phase 1.B)", 
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["TenantAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "TenantAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(403);
     expect(mocks.getDeploymentForTenant).not.toHaveBeenCalled();
@@ -367,7 +368,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId (Phase 1.B)", 
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(200);
     expect(mocks.getDeploymentForTenant).toHaveBeenCalledWith(
@@ -381,7 +382,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId (Phase 1.B)", 
     const res = await app.request(
       "/admin/insight/tenants/t1/deployments/not-a-ulid",
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(400);
   });
@@ -391,7 +392,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId (Phase 1.B)", 
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(404);
   });
@@ -404,7 +405,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}/stack-progress`,
       {},
-      { event: withClaims({ "cognito:groups": ["TenantAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "TenantAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(403);
     expect(mocks.getStackProgressForTenant).not.toHaveBeenCalled();
@@ -425,7 +426,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}/stack-progress`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { jobId: string; consoleUrl: string };
@@ -437,7 +438,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}/stack-progress`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(404);
   });
@@ -447,7 +448,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}/stack-progress`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(409);
   });
@@ -460,7 +461,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}/stack-progress`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -478,7 +479,7 @@ describe("GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
     const res = await app.request(
       `/admin/insight/tenants/t1/deployments/${VALID_JOB_ID}/stack-progress`,
       {},
-      { event: withClaims({ "cognito:groups": ["SystemAdmin"], sub: "u" }) },
+      { event: withClaims({ "custom:userRole": "SystemAdmin", sub: "u" }) },
     );
     expect(res.status).toBe(500);
     const body = await res.json();

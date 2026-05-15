@@ -14,24 +14,21 @@ function buildContext(claims?: Record<string, unknown>): Context {
 }
 
 describe("isSystemAdmin", () => {
-  it("cognito:groups が string[] で SystemAdmin を含むなら true", () => {
-    expect(isSystemAdmin(buildContext({ "cognito:groups": ["SystemAdmin"] }))).toBe(true);
+  it("custom:userRole === 'SystemAdmin' なら true (= SBT が createAdminUser 経由で埋める claim)", () => {
+    expect(isSystemAdmin(buildContext({ "custom:userRole": "SystemAdmin" }))).toBe(true);
   });
 
-  it("cognito:groups が string[] で SystemAdmin を含まないなら false", () => {
-    expect(isSystemAdmin(buildContext({ "cognito:groups": ["TenantAdmin"] }))).toBe(false);
+  it("custom:userRole === 'TenantAdmin' なら false (= Tenant Admin token が誤って届いた case)", () => {
+    expect(isSystemAdmin(buildContext({ "custom:userRole": "TenantAdmin" }))).toBe(false);
   });
 
-  it("cognito:groups が string で `[SystemAdmin]` 形式でも true", () => {
-    expect(isSystemAdmin(buildContext({ "cognito:groups": "[SystemAdmin]" }))).toBe(true);
+  it("custom:userRole が大文字小文字違いなら false (= 完全一致以外は SystemAdmin と見なさない)", () => {
+    expect(isSystemAdmin(buildContext({ "custom:userRole": "systemadmin" }))).toBe(false);
+    expect(isSystemAdmin(buildContext({ "custom:userRole": "SYSTEMADMIN" }))).toBe(false);
   });
 
-  it("cognito:groups が string で comma 区切りに SystemAdmin が混じるなら true", () => {
-    expect(isSystemAdmin(buildContext({ "cognito:groups": "Foo,SystemAdmin,Bar" }))).toBe(true);
-  });
-
-  it("cognito:groups が string で SystemAdmin を含まないなら false", () => {
-    expect(isSystemAdmin(buildContext({ "cognito:groups": "TenantAdmin" }))).toBe(false);
+  it("custom:userRole の前後 whitespace は trim して評価すべき", () => {
+    expect(isSystemAdmin(buildContext({ "custom:userRole": "  SystemAdmin  " }))).toBe(true);
   });
 
   it("claim が無いなら false", () => {
@@ -39,8 +36,13 @@ describe("isSystemAdmin", () => {
     expect(isSystemAdmin(buildContext({}))).toBe(false);
   });
 
-  it("cognito:groups が未知 type (例: number) なら false", () => {
-    expect(isSystemAdmin(buildContext({ "cognito:groups": 42 }))).toBe(false);
+  it("custom:userRole が string 以外 (例: number / array) なら false", () => {
+    expect(isSystemAdmin(buildContext({ "custom:userRole": 42 }))).toBe(false);
+    expect(isSystemAdmin(buildContext({ "custom:userRole": ["SystemAdmin"] }))).toBe(false);
+  });
+
+  it("cognito:groups だけ届いていても custom:userRole が無ければ false (= 旧経路の互換は持たない)", () => {
+    expect(isSystemAdmin(buildContext({ "cognito:groups": ["SystemAdmin"] }))).toBe(false);
   });
 });
 
