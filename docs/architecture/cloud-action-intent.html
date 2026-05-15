@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>CloudActionIntent — protocol spec (TenkaCloud Trust Bridge)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .ascii { white-space: pre; font-family: ui-monospace, monospace; font-size: 0.8rem;
+           background: var(--c-bg-soft); border: 1px solid var(--c-border); padding: 0.8rem; border-radius: 4px;
+           overflow-x: auto; line-height: 1.35; }
+  .threat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin: 1rem 0; }
+  .threat-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .threat-card h4 { margin: 0 0 .4rem; color: var(--c-reject); font-size: 0.92rem; }
+  .threat-card p { margin: 0; font-size: 0.88rem; }
+  .note { background: #fff8c5; border-left: 4px solid var(--c-warn); padding: .6rem 1rem;
+          border-radius: 3px; margin: 1rem 0; font-size: 0.92rem; }
+</style>
+</head>
+<body>
+
+<h1>CloudActionIntent — protocol spec</h1>
+
+<div class="meta">
+  <span><b>Status:</b> <span class="badge accept">Phase 1 published</span></span>
+  <span><b>Version:</b> <code>tenkacloud.cloud-action-intent.v1</code></span>
+  <span><b>Audience:</b> implementors of cross-cloud authority transfer</span>
+  <span><b>Relates:</b> Issue #795, ADR-017</span>
+</div>
+
+<h2>1. Purpose</h2>
+
+<p>
+  Multi-cloud automation の hard part は「あるクラウドのワークロードが、 別クラウド/別アカウントで cloud action を安全に要求すること」 である。 既存 primitive (OAuth Token Exchange, AWS AssumeRole, GCP Workload Identity Federation, Azure Federated Credential, SPIFFE, OPA/Cedar) はすでに揃っているが、 これらを束ねる higher-level な「<b>cloud action authority transfer</b>」 protocol 層が欠けている。
+</p>
+
+<p>
+  CloudActionIntent はこの層を埋める最小プロトコル仕様である。 中心原則は次の 1 文に集約される。
+</p>
+
+<div class="note">
+  <b>Do not move credentials. Move signed intents. Exchange them for short-lived, provider-native authority.</b>
+</div>
+
+<h2>2. Protocol Pipeline</h2>
+
+<div class="ascii">CloudActionIntent
+  → canonicalize (= sorted-key JSON)
+  → sign (JWS compact)
+  → transport (network / queue)
+  → verify (signature)
+  → schema check (strict)
+  → TTL / notBefore check
+  → nonce / replay check
+  → policy evaluation (allow / deny / needs_approval)
+  → provider token exchange (= AssumeRole / WIF / FederatedCredential 等)
+  → cloud action execution
+  → audit record (= 失敗系も含む)</div>
+
+<p>
+  本 spec は上 4 ステップ (canonicalize / sign / verify / schema/TTL/nonce) の wire format を pin する。 policy / provider exchange / audit は本 spec の<b>拡張点</b>として hook 形で開放する (= 各組織が自分の policy engine / provider adapter / audit sink を差し込めばよい)。
+</p>
+
+<h2>3. Claim Model</h2>
+
+<p>
+  CloudActionIntent は次の 4 サブオブジェクトを必須で持つ JSON object である。
+</p>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Required</th><th>意味</th></tr>
+  <tr><td><code>version</code></td><td>literal string</td><td>yes</td><td><code>tenkacloud.cloud-action-intent.v1</code> 固定。 将来 v2 で discriminate するため</td></tr>
+  <tr><td><code>requestId</code></td><td>string</td><td>yes</td><td>要求の一意 ID。 audit log の primary key</td></tr>
+  <tr><td><code>nonce</code></td><td>string</td><td>yes</td><td>replay 防御。 verifier 側 nonce store と組み合わせて idempotent 判定</td></tr>
+  <tr><td><code>source</code></td><td>object</td><td>yes</td><td>誰がこの intent を出したか (= workload identity + TenkaCloud domain)</td></tr>
+  <tr><td><code>target</code></td><td>object</td><td>yes</td><td>どの provider / どのアカウント / どの region を狙うか</td></tr>
+  <tr><td><code>action</code></td><td>object</td><td>yes</td><td>何の action か (deploy / destroy / inspect / collectOutputs / verifyTrust)</td></tr>
+  <tr><td><code>constraints</code></td><td>object</td><td>yes</td><td>TTL / 失効時刻 / 推定コスト上限 / 権限昇格許可</td></tr>
+</table>
+
+<h3>3.1 source</h3>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Required</th><th>意味</th></tr>
+  <tr><td><code>system</code></td><td>literal <code>"tenkacloud"</code></td><td>yes</td><td>発行システム識別子</td></tr>
+  <tr><td><code>tenantId</code></td><td>string</td><td>yes</td><td>tenant boundary (= SaaS 多 tenant の隔離 key)</td></tr>
+  <tr><td><code>workloadId</code></td><td>string</td><td>yes</td><td>発行 workload の識別子 (= SPIFFE ID / Lambda function ARN 等)</td></tr>
+  <tr><td><code>eventId</code></td><td>string</td><td>no</td><td>競技イベント等の文脈 ID</td></tr>
+  <tr><td><code>teamId</code></td><td>string</td><td>no</td><td>チーム ID (= 競技参加者)</td></tr>
+  <tr><td><code>problemId</code></td><td>string</td><td>no</td><td>問題 ID (= 問題ごと scope を絞るため)</td></tr>
+  <tr><td><code>deploymentId</code></td><td>string</td><td>no</td><td>deploy 単位の ID</td></tr>
+  <tr><td><code>targetId</code></td><td>string</td><td>no</td><td>endpoint / resource scope を識別する key</td></tr>
+</table>
+
+<h3>3.2 target</h3>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Required</th><th>意味</th></tr>
+  <tr><td><code>provider</code></td><td>enum <code>"aws" | "azure" | "gcp" | "cloudflare"</code></td><td>yes</td><td>対象 cloud provider</td></tr>
+  <tr><td><code>providerAccountRef</code></td><td>string</td><td>yes</td><td>AWS account ID / GCP project ID / Azure subscription GUID 等</td></tr>
+  <tr><td><code>region</code></td><td>string</td><td>no</td><td>provider-native region 識別子</td></tr>
+  <tr><td><code>resourceScope</code></td><td>string</td><td>no</td><td>resource path / ARN prefix 等の追加 scope</td></tr>
+</table>
+
+<h3>3.3 action</h3>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Required</th><th>意味</th></tr>
+  <tr><td><code>type</code></td><td>enum <code>"deploy" | "destroy" | "inspect" | "collectOutputs" | "verifyTrust"</code></td><td>yes</td><td>実行する action 種別</td></tr>
+  <tr><td><code>engine</code></td><td>enum <code>"cloudformation" | "terraform" | "bicep" | "pulumi" | "script"</code></td><td>yes</td><td>provisioning engine 種別</td></tr>
+  <tr><td><code>entry</code></td><td>string</td><td>no</td><td>template path / module path / entrypoint script</td></tr>
+  <tr><td><code>requestedScopes</code></td><td>string[]</td><td>yes (空配列可)</td><td>要求する provider-native scope (= IAM action / GCP role 等)</td></tr>
+</table>
+
+<h3>3.4 constraints</h3>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Required</th><th>意味</th></tr>
+  <tr><td><code>ttlSeconds</code></td><td>integer (1〜3600)</td><td>yes</td><td>credential 短命 TTL。 spec 上限 1 時間</td></tr>
+  <tr><td><code>notBefore</code></td><td>ISO datetime</td><td>no</td><td>有効化時刻 (= 将来 trigger)</td></tr>
+  <tr><td><code>expiresAt</code></td><td>ISO datetime</td><td>yes</td><td>失効時刻。 verify 時 <code>now &gt;= expiresAt</code> なら expired</td></tr>
+  <tr><td><code>maxEstimatedCostUsd</code></td><td>number (≥0)</td><td>no</td><td>cost 上限 (= 暴走防御)</td></tr>
+  <tr><td><code>allowPrivilegeEscalation</code></td><td>boolean</td><td>yes</td><td>true なら policy 側で更に検査される (= explicit opt-in)</td></tr>
+</table>
+
+<h2>4. Canonical Serialization</h2>
+
+<p>
+  確定的 byte 表現を作るため、 JSON object の key を lexicographic sort し、 array は順序を保ったまま recurse する。 <code>undefined</code> property は drop、 <code>null</code> は preserve する。 number / string / boolean は <code>JSON.stringify</code> と同等の表現を使う (= JCS RFC 8785 の subset)。
+</p>
+
+<h4>例</h4>
+
+<pre>{ "b": 1, "a": 2 }                  →  {"a":2,"b":1}
+{ "outer": { "z": 1, "a": 2 } }     →  {"outer":{"a":2,"z":1}}
+[3, 1, 2]                           →  [3,1,2]
+{ "a": 1, "b": undefined }          →  {"a":1}
+{ "a": null }                       →  {"a":null}</pre>
+
+<p>
+  確定的表現の用途は (1) JWS payload の byte 一致を保証すること、 (2) audit log の hashing を再現可能にすること。
+</p>
+
+<h2>5. Wire Format (JWS Compact)</h2>
+
+<p>
+  CloudActionIntent は JWS compact serialization (RFC 7515) で transport される。 形式は <code>&lt;header&gt;.&lt;payload&gt;.&lt;signature&gt;</code> の 3 part dot-separated base64url。
+</p>
+
+<h3>5.1 Header</h3>
+
+<pre>{
+  "alg": "HS256",        // Phase 1 は HS256 のみ、 Phase 2 で ES256 / RS256 を追加
+  "typ": "JWS",
+  "kid": "key-001"        // optional (= rotation 時の鍵識別)
+}</pre>
+
+<h3>5.2 Payload</h3>
+
+<p>
+  Section 4 の canonical serialization 出力 (= sorted-key JSON) を UTF-8 → base64url する。 verifier 側は payload を decode して再 parse してから schema check に通す。
+</p>
+
+<h3>5.3 Signature</h3>
+
+<p>
+  <code>HMAC_SHA256(secret, "&lt;header_b64&gt;.&lt;payload_b64&gt;")</code> を base64url 表現で。 verifier は同じ計算をして <code>timingSafeEqual</code> で照合する (= side channel 防御)。
+</p>
+
+<h2>6. Verification Order</h2>
+
+<p>
+  verifier は<b>必ず次の順序</b>で検査を進める。 途中で fail したら以降は実行しない (= short-circuit)。
+</p>
+
+<table>
+  <tr><th>順</th><th>step</th><th>fail 時 reason</th></tr>
+  <tr><td>1</td><td>token 形式 (= 3 part) check</td><td><code>jws-malformed</code></td></tr>
+  <tr><td>2</td><td>header parse + <code>typ === "JWS"</code></td><td><code>jws-malformed</code></td></tr>
+  <tr><td>3</td><td>alg whitelist 照合</td><td><code>jws-unknown-algorithm</code></td></tr>
+  <tr><td>4</td><td>secret resolve (= kid 等から鍵を引く)</td><td><code>jws-secret-not-resolved</code></td></tr>
+  <tr><td>5</td><td>signature 検証 (timingSafeEqual)</td><td><code>jws-signature-mismatch</code></td></tr>
+  <tr><td>6</td><td>payload base64url decode + JSON parse</td><td><code>jws-payload-parse-failed</code></td></tr>
+  <tr><td>7</td><td>schema strict check (= section 3)</td><td><code>schema-invalid</code></td></tr>
+  <tr><td>8</td><td><code>expiresAt &gt; now</code></td><td><code>expired</code></td></tr>
+  <tr><td>9</td><td><code>notBefore &le; now</code> (省略時 pass)</td><td><code>not-yet-valid</code></td></tr>
+  <tr><td>10</td><td>nonce store record (= 重複 reject)</td><td><code>nonce-replay</code></td></tr>
+  <tr><td>11</td><td>policy 評価 (= 拡張点)</td><td><code>policy-deny</code> / <code>needs-approval</code></td></tr>
+</table>
+
+<p>
+  step 11 (policy) より前で fail した場合も、 audit record は必ず生成する (= attacker による fuzzing を後追い分析可能にする)。
+</p>
+
+<h2>7. Threat Model</h2>
+
+<div class="threat-grid">
+  <div class="threat-card">
+    <h4>Token replay</h4>
+    <p>同じ token を 2 回 verify されないよう、 nonce store で <code>(tenantId, nonce)</code> の重複を reject。 store TTL は <code>expiresAt + 安全マージン</code>。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Confused deputy</h4>
+    <p>verifier は intent の <code>target.provider</code> / <code>target.providerAccountRef</code> を必ず policy decision に渡し、 別アカウントの credential を payload と紐付けて発行することを禁ずる。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Over-broad provider scope</h4>
+    <p>policy 側で <code>requestedScopes</code> を element 単位に allowlist 照合。 ワイルドカード scope (<code>*</code>) は <code>allowPrivilegeEscalation: true</code> を必須にする。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Tenant boundary escape</h4>
+    <p>nonce store / audit sink は tenant 単位に partitioned。 verifier は <code>source.tenantId</code> と caller principal の tenant claim を必ず照合する。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Leaked signed token</h4>
+    <p>短 TTL (= 上限 1 時間) で blast radius を抑える。 鍵 rotation は <code>kid</code> 経由。 emergency revocation は nonce store に negative cache (= explicit deny) を入れる方法を recommend。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Malicious template / module</h4>
+    <p>policy 側で template / module の risk analysis を実施する hook を expose。 specific: CFn template scan / Terraform plan diff / Pulumi preview。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Destroy without context</h4>
+    <p><code>action.type === "destroy"</code> は <code>source.deploymentId</code> の存在を必須化することを recommend。 reproducible context が無い destroy は policy で reject。</p>
+  </div>
+  <div class="threat-card">
+    <h4>Schema drift attack</h4>
+    <p>schema check は strict mode (= 不明 property reject)。 attacker が将来 field を仕込んで未来版で reinterpret される攻撃を防ぐ。</p>
+  </div>
+</div>
+
+<h2>8. Provider Mapping</h2>
+
+<p>
+  本 spec は <b>provider exchange interface</b> を hook 形で expose する。 具体的なマッピングは provider adapter 側の責務。
+</p>
+
+<table>
+  <tr><th>Provider</th><th>Phase 1 adapter ref</th><th>マッピング</th></tr>
+  <tr>
+    <td><code>aws</code></td>
+    <td><code>AwsAssumeRoleExchange</code> (Phase 2)</td>
+    <td><code>providerAccountRef</code> = account ID。 <code>STS:AssumeRole</code> with ExternalId. <code>ttlSeconds</code> → <code>DurationSeconds</code>. <code>requestedScopes</code> → session policy</td>
+  </tr>
+  <tr>
+    <td><code>gcp</code></td>
+    <td><code>GcpWorkloadIdentityFederationExchange</code> (Phase 4)</td>
+    <td><code>providerAccountRef</code> = project ID。 <code>STS Token API</code> + WIF pool. <code>ttlSeconds</code> → token lifetime</td>
+  </tr>
+  <tr>
+    <td><code>azure</code></td>
+    <td><code>AzureFederatedCredentialExchange</code> (Phase 4)</td>
+    <td><code>providerAccountRef</code> = subscription GUID。 <code>OIDC federated credential</code> + RBAC. <code>ttlSeconds</code> → token lifetime</td>
+  </tr>
+  <tr>
+    <td><code>cloudflare</code></td>
+    <td><code>CloudflareScopedTokenExchange</code> (future)</td>
+    <td><code>providerAccountRef</code> = account ID。 <code>Scoped API Token API</code>. <code>ttlSeconds</code> → expiration</td>
+  </tr>
+</table>
+
+<h2>9. Audit Record</h2>
+
+<p>
+  すべての decision に audit record を生成する。 失敗系も同じ shape で記録し、 attacker の fuzzing を後追い分析可能にする。
+</p>
+
+<pre>{
+  "requestId":   "req-001",
+  "tenantId":    "tenant-a",
+  "eventId":     "event-001",        // optional
+  "teamId":      "team-alpha",       // optional
+  "problemId":   "hello-world",      // optional
+  "deploymentId": "deploy-9",        // optional
+  "targetId":    "endpoint-main",    // optional
+  "provider":    "aws",
+  "action":      "deploy",
+  "decision":    "allow" | "deny" | "needs_approval",
+  "denialReason": "expired",         // only when decision !== "allow"
+  "issuedCredentialExpiresAt": "2026-05-15T20:00:00.000Z", // only when allow
+  "policyVersion": "policy-v1",      // optional
+  "createdAt":   "2026-05-15T19:30:00.000Z"
+}</pre>
+
+<h2>10. Non-Goals (= This Spec Does NOT...)</h2>
+
+<table>
+  <tr><th>非 goal</th><th>理由</th></tr>
+  <tr><td>OAuth / OIDC / JWT を replace すること</td><td>本 spec は higher-level な「cloud action authority transfer」 protocol。 OAuth / OIDC は workload identity の wire layer であり、 本 spec はその上の semantic layer を埋める</td></tr>
+  <tr><td>SPIFFE / SPIRE を replace すること</td><td>SPIFFE は <code>source.workloadId</code> field の供給源として活用される (= 競合せず compose)</td></tr>
+  <tr><td>custom cryptography を導入すること</td><td>JWS (RFC 7515) + 既存 HMAC / ECDSA / RSA を使う。 spec 全体で「no custom crypto」 原則を守る</td></tr>
+  <tr><td>universal standard を直ちに主張すること</td><td>Phase 1 は TenkaCloud 内部での testable / reusable な最小実装。 real use case で abstraction が proven されたあとで standard 化を議論する</td></tr>
+  <tr><td>full policy engine を内蔵すること</td><td>policy 評価は hook のみ。 inline allowlist / OPA / Cedar / tenant policy doc / template risk analysis は呼び出し側で組み立てる</td></tr>
+</table>
+
+<h2>11. Versioning</h2>
+
+<p>
+  <code>version</code> field は literal <code>tenkacloud.cloud-action-intent.v1</code>。 将来の breaking change は新 literal (例: <code>v2</code>) で出荷し、 schema は <code>oneOf</code> で discriminate する (= TS 側の discriminated union + zod の <code>z.discriminatedUnion</code>)。 v1 / v2 が共存する期間は短くする (= 6 ヶ月以内)。
+</p>
+
+<h2>12. Reference Implementation</h2>
+
+<p>
+  TenkaCloud 内 reference 実装は <code>packages/trust-bridge</code> (= <code>@TenkaCloud/trust-bridge</code>) に置く。 Phase 1 (= 本 spec が pin する範囲) は次を export する。
+</p>
+
+<ul>
+  <li><code>CloudActionIntentSchema</code> (zod strict)</li>
+  <li><code>canonicalize(value)</code></li>
+  <li><code>parseCloudActionIntent(raw)</code></li>
+  <li><code>signIntent(intent, options)</code> / <code>verifySignature(token, options)</code></li>
+  <li><code>verifyIntent(token, options)</code> (= JWS → schema → TTL → nonce 全部)</li>
+  <li><code>NonceStore</code> interface</li>
+  <li><code>buildAuditRecord(input)</code></li>
+</ul>
+
+<p>
+  Phase 2 で <code>AwsAssumeRoleExchange</code> adapter を、 Phase 3 で <code>tenkacloud-deploy</code> backend への internal integration を、 Phase 4 で GCP / Azure adapter prototype を追加する。
+</p>
+
+<h2>13. References</h2>
+
+<ul>
+  <li><a href="https://datatracker.ietf.org/doc/html/rfc7515">RFC 7515 — JSON Web Signature (JWS)</a></li>
+  <li><a href="https://datatracker.ietf.org/doc/html/rfc8785">RFC 8785 — JSON Canonicalization Scheme (JCS)</a></li>
+  <li><a href="https://datatracker.ietf.org/doc/html/rfc8693">RFC 8693 — OAuth 2.0 Token Exchange</a></li>
+  <li><a href="https://spiffe.io/">SPIFFE / SPIRE</a></li>
+  <li>ADR-017 — Cloud Action Intent / Trust Bridge (TenkaCloud internal architectural decision)</li>
+  <li>Issue #795 — initial proposal</li>
+</ul>
+
+</body>
+</html>

@@ -151,6 +151,18 @@
         "react": "^19.0.0",
       },
     },
+    "packages/trust-bridge": {
+      "name": "@TenkaCloud/trust-bridge",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^3.23.8",
+      },
+      "devDependencies": {
+        "@types/node": "^24.0.0",
+        "typescript": "^5.7.0",
+        "vitest": "^4.1.5",
+      },
+    },
   },
   "packages": {
     "@TenkaCloud/admin-console": ["@TenkaCloud/admin-console@workspace:apps/admin-console"],
@@ -160,6 +172,8 @@
     "@TenkaCloud/infrastructure": ["@TenkaCloud/infrastructure@workspace:infrastructure"],
 
     "@TenkaCloud/participant-portal": ["@TenkaCloud/participant-portal@workspace:apps/participant-portal"],
+
+    "@TenkaCloud/trust-bridge": ["@TenkaCloud/trust-bridge@workspace:packages/trust-bridge"],
 
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],
 

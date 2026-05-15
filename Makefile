@@ -16,7 +16,8 @@ export JSII_DEPRECATED := quiet
         check-http-status check-template-ascii \
         env-check synth check-synth diff bootstrap \
         deploy deploy-control-plane deploy-bootstrap destroy \
-        deploy-battles destroy-battles
+        deploy-battles destroy-battles \
+        lite-up lite-down lite-status lite-portal-url lite-console-url
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -145,3 +146,14 @@ destroy-battles:
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
+
+# ===== TenkaCloud Lite mode (Issue #778 ADR-016 Phase 4) =====
+# 「OSS / Product Hunt 向けに 1 コマンドで TenkaCloud を試す」体験を提供する CLI wrapper。
+# Lite stack は tenantId=local 固定で SBT / Pipeline / 動的 tenant 作成を持ち込まない (= ADR-016)。
+# 実 deploy 経路は Phase 5 で追加する `infrastructure/bin/tenkacloud-lite.ts` (= 専用 bin entry)
+# と組み合わせて完成する。 本ターゲットは CLI runner を委譲するのみ。
+lite-up:           ; bun run scripts/tenkacloud-lite.ts up
+lite-down:         ; bun run scripts/tenkacloud-lite.ts down
+lite-status:       ; bun run scripts/tenkacloud-lite.ts status
+lite-portal-url:   ; bun run scripts/tenkacloud-lite.ts portal-url
+lite-console-url:  ; bun run scripts/tenkacloud-lite.ts console-url

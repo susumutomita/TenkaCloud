@@ -48,6 +48,60 @@ function deps(options: { externalId?: string } = {}) {
   };
 }
 
+describe("describeStackForDeployment input-shape diagnostics (regression #?)", () => {
+  it("detail.jobId が undefined のとき deploy.describe-stack.input-received を error level で emit し、 既存の missing required field エラーを保つべき", async () => {
+    const { deps: d } = deps();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        describeStackForDeployment({ detail: { namePrefix: "x", region: "ap-northeast-1" } }, d),
+      ).rejects.toThrow("missing required field: detail.jobId");
+      const calls = errSpy.mock.calls.map((c) => String(c[0]));
+      const traceCall = calls.find((c) => c.includes("deploy.describe-stack.input-received"));
+      expect(traceCall).toBeDefined();
+      // shape の non-secret な field のみが出ること (= jobId 自体は出ない)。
+      expect(traceCall).toContain('"hasDetail":true');
+      expect(traceCall).toContain('"hasJobId":false');
+      expect(traceCall).toContain('"hasNamePrefix":true');
+      expect(traceCall).toContain('"hasRegion":true');
+      expect(traceCall).toContain('"detailKeys":"namePrefix,region"');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it("detail 自体が undefined のときも shape log を emit して missing required field を保つべき", async () => {
+    const { deps: d } = deps();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(describeStackForDeployment({}, d)).rejects.toThrow(
+        "missing required field: detail.jobId",
+      );
+      const calls = errSpy.mock.calls.map((c) => String(c[0]));
+      const traceCall = calls.find((c) => c.includes("deploy.describe-stack.input-received"));
+      expect(traceCall).toBeDefined();
+      expect(traceCall).toContain('"hasDetail":false');
+      expect(traceCall).toContain('"hasJobId":false');
+      expect(traceCall).toContain('"detailKeys":""');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it("正常 path (= jobId / namePrefix / region 全部揃う) では shape log を出さないべき", async () => {
+    const { deps: d } = deps();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await describeStackForDeployment(input, d);
+      const calls = errSpy.mock.calls.map((c) => String(c[0]));
+      const traceCall = calls.find((c) => c.includes("deploy.describe-stack.input-received"));
+      expect(traceCall).toBeUndefined();
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+});
+
 describe("describeStackForDeployment", () => {
   it("competitorRoleArn がある場合は ExternalId 付き AssumeRole 後に DescribeStacks すべき", async () => {
     const { deps: d, ssmSend, stsSend, cfnSend, cfnClient } = deps();
