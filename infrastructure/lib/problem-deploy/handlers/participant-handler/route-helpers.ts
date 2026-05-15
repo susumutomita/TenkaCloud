@@ -32,6 +32,8 @@ const ERROR_STATUS = {
   missing_jobid: HTTP_BAD_REQUEST,
   not_ready: HTTP_BAD_REQUEST,
   not_flag_problem: HTTP_BAD_REQUEST,
+  invalid_hint_id: HTTP_BAD_REQUEST,
+  unknown_hint: HTTP_NOT_FOUND,
   no_outputs: HTTP_BAD_REQUEST,
   no_event: HTTP_NOT_FOUND,
   not_found: HTTP_NOT_FOUND,

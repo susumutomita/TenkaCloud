@@ -14,6 +14,7 @@ import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-at
 import { getLeaderboard } from "./leaderboard.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
 import { listNotifications, NOTIFICATIONS_DEFAULT_LIMIT } from "./notifications.js";
+import { revealHint } from "./reveal-hint.js";
 import { respondError, withBearerAuth } from "./route-helpers.js";
 import { listScoreEvents } from "./score-events.js";
 import { buildParticipantSharedResources } from "./shared.js";
@@ -150,6 +151,33 @@ app.post("/portal/me/submit-flag", (c) =>
       if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
       if (outcome.kind === "no_outputs") return respondError(c, "no_outputs");
       if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
+      return c.json(outcome, HTTP_OK);
+    },
+    RATE_LIMITS.WRITE_LOW,
+  ),
+);
+
+// Issue #742 Phase 3: progressive hint reveal route。 idempotent (= 同 hintId 重複 reveal は
+// no-op、 既存 record の content + score を返す)。 rate limit は WRITE_LOW (= 10 burst /
+// 12 RPM、 hint をブルートフォースで全部 reveal させない壁)。
+app.post("/portal/me/problems/:problemId/hints/:hintId/reveal", (c) =>
+  withBearerAuth(
+    c,
+    "reveal-hint",
+    async (token) => {
+      const problemId = c.req.param("problemId");
+      if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
+        return respondError(c, "invalid_problem_id");
+      }
+      const hintId = c.req.param("hintId");
+      if (!hintId || hintId.length === 0 || hintId.length > 64) {
+        return respondError(c, "invalid_hint_id");
+      }
+      const outcome = await revealHint(shared, shared.problemsScoring, token, problemId, hintId);
+      if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
+      if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
+      if (outcome.kind === "unknown_hint") return respondError(c, "unknown_hint");
+      // ok / already_revealed どちらも 200 で content + score を返す (= idempotent UX)。
       return c.json(outcome, HTTP_OK);
     },
     RATE_LIMITS.WRITE_LOW,
