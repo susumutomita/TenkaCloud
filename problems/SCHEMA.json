@@ -3,6 +3,43 @@
   "$id": "https://tenkacloud.example/schemas/problem-metadata.json",
   "title": "TenkaCloud Problem Metadata",
   "description": "1 つの問題ディレクトリ (problems/<category>/<id>/) に置く metadata.json の構造を定義する。frontend カタログ表示と backend deploy パイプラインの両方が参照する正本。ADR-012 Phase 2 で thick metadata DSL に拡張済み (endpoints / phases / disruptions / dashboard.slots / scoring.kind 5 種)。Phase 3 で platform 側の generic scoring dispatcher が新 kind を読み始めるまでの間、旧 scoring.kind (flag/uptime) も legacy alias として valid。",
+  "$defs": {
+    "progressiveHints": {
+      "type": "array",
+      "description": "競技者画面に表示するヒント。 Issue #742 Phase 1: v1 (string) と v2 (ProgressiveHint object) の混在を許容する (= 後方互換)。 v2 で `penalty` を指定すると reveal 時にその値が `points` から減算される (= Phase 5 で全 5 builtin kind 共通)。",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "[Legacy v1] テキスト 1 行 (= penalty 0 で reveal される hint)。 parser が `{id: \"hint-N\", content, penalty: 0}` に正規化する。"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "content", "penalty"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable identifier (= DDB `hintsRevealed` key、 metadata 順序変更で reveal 記録が drift しないため)。"
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "description": "表示テキスト (markdown 可)。"
+              },
+              "penalty": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Reveal すると `points` (= flag) / `pointsPerSuccess` (= uptime 系) / `pointsAllOk` (= uptime-multi) / 累計 score (= phased-polling / attack-detection) から減算される値。 0 は減点無し。"
+              }
+            },
+            "description": "[v2] Progressive hint (id + content + penalty)。"
+          }
+        ]
+      }
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -217,41 +254,7 @@
               "minimum": 1,
               "description": "正解時の獲得ポイント (1 deploy につき 1 回まで加算)。"
             },
-            "hints": {
-              "type": "array",
-              "description": "競技者画面に表示するヒント。Issue #742 Phase 1: v1 (string) と v2 (ProgressiveHint object) の混在を許容する (= 後方互換)。 v2 で `penalty` を指定すると reveal 時にその値が `points` から減算される (= Phase 2 以降で API/DDB/UI を追加予定)。",
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "string",
-                    "description": "[Legacy v1] テキスト 1 行 (= penalty 0 で reveal される hint)。 parser が `{id: \"hint-N\", content, penalty: 0}` に正規化する。"
-                  },
-                  {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["id", "content", "penalty"],
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "Stable identifier (= 将来 DDB の `hintsRevealed` key で使う、 metadata 順序変更で reveal 記録が drift しないため)。"
-                      },
-                      "content": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "表示テキスト (markdown 可)。"
-                      },
-                      "penalty": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "Reveal すると `points` から減算される値。 0 は減点無し。 Phase 2 で API/DDB/UI 追加時に実 deduction する。"
-                      }
-                    },
-                    "description": "[v2] Progressive hint (id + content + penalty)。"
-                  }
-                ]
-              }
-            }
+            "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。"
         },
@@ -294,7 +297,8 @@
               "type": "integer",
               "minimum": 1,
               "description": "1 回の health check 成功あたりの獲得ポイント。"
-            }
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=uptime (legacy)。 Phase 2 transition 期間中の互換用。 新規問題は kind=uptime-flat を使うこと。"
         },
@@ -346,7 +350,8 @@
               "type": "integer",
               "minimum": 1,
               "description": "1 endpoint 成功あたりの獲得ポイント (= デフォルト値)。endpoints[].pointsPerSuccess で個別上書き可。"
-            }
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=uptime-flat。example: hello-world-battle (FrontendUrl + ApiUrl を独立に probe)。"
         },
@@ -390,7 +395,8 @@
             "failurePenalty": {
               "type": "integer",
               "description": "1 つでも fail が混ざった時の加点 (通常 0 または負値)。省略時 0。"
-            }
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=uptime-multi。example: security-battle-royale (frontend + api 同時生存中だけ加点)。"
         },
@@ -487,7 +493,8 @@
                   }
                 }
               }
-            }
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=phased-polling。example: microservice-migration-battle (EC2 vs Lambda/ECS/App Runner の hosting platform 分類 + 60 分劣化 + 90 分 legacy 切替)。"
         },
@@ -527,7 +534,8 @@
                   }
                 }
               }
-            }
+            },
+            "hints": { "$ref": "#/$defs/progressiveHints" }
           },
           "description": "kind=attack-detection。example: security-battle-royale の攻撃検知部 (= 防御側が WAF/IAM で塞ぐと検知数が頭打ちする設計)。"
         }
