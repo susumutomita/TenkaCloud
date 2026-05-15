@@ -219,8 +219,38 @@
             },
             "hints": {
               "type": "array",
-              "items": { "type": "string" },
-              "description": "競技者画面に表示するヒント。複数行表示可。"
+              "description": "競技者画面に表示するヒント。Issue #742 Phase 1: v1 (string) と v2 (ProgressiveHint object) の混在を許容する (= 後方互換)。 v2 で `penalty` を指定すると reveal 時にその値が `points` から減算される (= Phase 2 以降で API/DDB/UI を追加予定)。",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "description": "[Legacy v1] テキスト 1 行 (= penalty 0 で reveal される hint)。 parser が `{id: \"hint-N\", content, penalty: 0}` に正規化する。"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "content", "penalty"],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Stable identifier (= 将来 DDB の `hintsRevealed` key で使う、 metadata 順序変更で reveal 記録が drift しないため)。"
+                      },
+                      "content": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "表示テキスト (markdown 可)。"
+                      },
+                      "penalty": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Reveal すると `points` から減算される値。 0 は減点無し。 Phase 2 で API/DDB/UI 追加時に実 deduction する。"
+                      }
+                    },
+                    "description": "[v2] Progressive hint (id + content + penalty)。"
+                  }
+                ]
+              }
             }
           },
           "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。"

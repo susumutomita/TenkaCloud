@@ -13,11 +13,31 @@
  *   - `attack-detection`  — stack output 内の counter 増分検知で配点
  */
 
+/**
+ * Issue #742 Phase 1: progressive hint の正式 shape。
+ *
+ *   - id: stable identifier (= 将来 DDB の `hintsRevealed` key に使う、 metadata 順序変更で
+ *         reveal 記録が drift しないため)
+ *   - content: 表示テキスト (= markdown 可)
+ *   - penalty: reveal 時に `points` から減算する値 (positive integer、 0 許容)
+ *
+ * 後方互換: `hints: string[]` (= legacy v1 shape) は parser が
+ * `{ id: \`hint-${index + 1}\`, content, penalty: 0 }` に変換する。 既存問題は 0 減点。
+ *
+ * 本 Phase 1 では schema migration + parser のみ。 reveal API / DDB persistence /
+ * frontend UI / 減点 logic は Phase 2-4 で順次追加 (= Issue #742 の design 案 B/C/D に対応)。
+ */
+export interface ProgressiveHint {
+  readonly id: string;
+  readonly content: string;
+  readonly penalty: number;
+}
+
 export interface FlagScoringMetadata {
   readonly kind: "flag";
   readonly flagOutputKey: string;
   readonly points: number;
-  readonly hints?: readonly string[];
+  readonly hints?: readonly ProgressiveHint[];
 }
 
 export interface UptimeFlatEndpoint {
@@ -127,15 +147,41 @@ function parseFlag(value: unknown): FlagScoringMetadata | undefined {
   const f = value as { flagOutputKey?: unknown; points?: unknown; hints?: unknown };
   if (typeof f.flagOutputKey !== "string") return undefined;
   if (typeof f.points !== "number" || !Number.isFinite(f.points) || f.points <= 0) return undefined;
-  // legacy 互換: hints が無い場合も `hints: undefined` を明示的に返す (= 既存 test 互換)。
   return {
     kind: "flag",
     flagOutputKey: f.flagOutputKey,
     points: f.points,
-    hints: Array.isArray(f.hints)
-      ? (f.hints.filter((h) => typeof h === "string") as string[])
-      : undefined,
+    hints: parseHints(f.hints),
   };
+}
+
+/**
+ * Issue #742 Phase 1: hints の v1 (string[]) と v2 (object[]) を共通 `ProgressiveHint[]` に
+ * 正規化する。 不正な要素は filter で落とす (= test pin) ことで、 partial 不正でも全体 reject
+ * しない (= 既存 metadata.json の hints 部分の typo が問題 deploy を止めないように)。
+ *
+ * v1 (legacy): `["text1", "text2"]` → `[{id: "hint-1", content: "text1", penalty: 0}, ...]`
+ * v2 (new):    `[{id, content, penalty}]` → そのまま (= penalty が unsafe な値なら 0 にクランプ)
+ */
+function parseHints(value: unknown): readonly ProgressiveHint[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const hints: ProgressiveHint[] = [];
+  for (const [index, raw] of value.entries()) {
+    if (typeof raw === "string") {
+      hints.push({ id: `hint-${index + 1}`, content: raw, penalty: 0 });
+      continue;
+    }
+    if (typeof raw !== "object" || raw === null) continue;
+    const obj = raw as { id?: unknown; content?: unknown; penalty?: unknown };
+    if (typeof obj.id !== "string" || obj.id.length === 0) continue;
+    if (typeof obj.content !== "string" || obj.content.length === 0) continue;
+    const penalty =
+      typeof obj.penalty === "number" && Number.isFinite(obj.penalty) && obj.penalty >= 0
+        ? Math.floor(obj.penalty)
+        : 0;
+    hints.push({ id: obj.id, content: obj.content, penalty });
+  }
+  return hints.length > 0 ? hints : undefined;
 }
 
 function parseUptimeFlat(

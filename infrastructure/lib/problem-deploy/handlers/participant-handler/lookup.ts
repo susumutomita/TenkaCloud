@@ -159,10 +159,15 @@ function toScoringInfo(
   item: Partial<DeploymentItem>,
 ): ParticipantScoringInfo {
   if (scoring.kind === "flag") {
+    // Issue #742 Phase 1: hints は ProgressiveHint[] (= {id, content, penalty}) に正規化済。
+    // frontend (= ProblemPanel) は現状 string[] を期待しているので、 Phase 1 互換のため
+    // content だけを取り出して string[] に flatten する (= 既存挙動 = 全 hint 常時露出 を維持)。
+    // Phase 2 で reveal API + UI を追加するとき、 view interface を ProgressiveHint[] に
+    // 切り替える (= 別 PR でやる)。
     return {
       kind: "flag",
       points: scoring.points,
-      ...(scoring.hints ? { hints: scoring.hints } : {}),
+      ...(scoring.hints ? { hints: scoring.hints.map((h) => h.content) } : {}),
       flagSubmitted: item.flagSubmitted === true,
     };
   }
