@@ -18,6 +18,7 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../shared/events.js";
+import { logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
 import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
 import type { BulkDeployRequest, EventItem, EventProblemTarget, TeamItem } from "./types.js";
 
@@ -110,6 +111,16 @@ export async function bulkDeployEvent(
   const allTeams = (teamsOut.Items ?? []) as TeamItem[];
   const allProblems = (Array.isArray(event.problems) ? event.problems : []) as EventProblemTarget[];
   if (allTeams.length === 0 || allProblems.length === 0) {
+    // Issue #813: silent 0 を観測可能にする。 operator が 「なぜ retry / deploy が
+    // 0 件で帰ってきたか」 を CloudWatch Logs Insights 1 query で引けるよう、
+    // skip 理由を JSON 1 行で出す。
+    warnDeployTrace("bulk-deploy.skip.no_teams_or_problems", {
+      correlationId: eventId,
+      tenantId,
+      allTeamsCount: allTeams.length,
+      allProblemsCount: allProblems.length,
+      retryFailedOnly: request?.retryFailedOnly === true,
+    });
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
   }
 
@@ -125,6 +136,16 @@ export async function bulkDeployEvent(
     ? allProblems.filter((p) => problemIdFilter.has(p.problemId))
     : allProblems;
   if (teams.length === 0 || problems.length === 0) {
+    warnDeployTrace("bulk-deploy.skip.filter_eliminated_all", {
+      correlationId: eventId,
+      tenantId,
+      allTeamsCount: allTeams.length,
+      filteredTeamsCount: teams.length,
+      allProblemsCount: allProblems.length,
+      filteredProblemsCount: problems.length,
+      hasTeamIdFilter: teamIdFilter !== undefined,
+      hasProblemIdFilter: problemIdFilter !== undefined,
+    });
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
   }
 
@@ -163,6 +184,21 @@ export async function bulkDeployEvent(
   const forceRedeploy = request?.forceRedeploy === true;
   // retryFailedOnly でかつ FAILED 行が 0 件 → 何もしない (= enqueued: 0、skipped: 0)。
   if (retryFailedOnly && failedByKey.size === 0) {
+    warnDeployTrace("bulk-deploy.skip.no_failed_rows", {
+      correlationId: eventId,
+      tenantId,
+      retryFailedOnly: true,
+      existingDeploymentsCount: existingDeployments.length,
+      // event-scope query で見えた deployment の status 分布 (= UI 上 \"失敗 1 件\" と
+      // backend 観測が食い違うときの原因切り分け用)
+      statusBreakdown: Object.fromEntries(
+        existingDeployments.reduce((acc, d) => {
+          const s = String(d.status ?? "<unset>");
+          acc.set(s, (acc.get(s) ?? 0) + 1);
+          return acc;
+        }, new Map<string, number>()),
+      ),
+    });
     return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
   }
 
@@ -309,11 +345,43 @@ export async function bulkDeployEvent(
   }
 
   if (plan.length === 0) {
+    // Issue #813: retryFailedOnly で failedByKey.size > 0 だが plan が 0 件 = team/
+    // problem mismatch (例: event から team が消えたが旧 FAILED row が残っている)
+    // OR 全 team の verified account が無い、 のいずれか。 切り分けに必要な情報を
+    // 1 行 JSON で残す。
+    warnDeployTrace("bulk-deploy.skip.plan_empty_after_iteration", {
+      correlationId: eventId,
+      tenantId,
+      retryFailedOnly,
+      forceRedeploy,
+      teamsCount: teams.length,
+      problemsCount: problems.length,
+      failedByKeyCount: failedByKey.size,
+      forceRedeployByKeyCount: forceRedeployByKey.size,
+      existingKeyCount: existingKey.size,
+      skipped,
+      unverifiedAccountsCount: unverifiedAccounts.size,
+      // failedByKey のキー (= 残った FAILED 行が想定する team/problem 組) と、 live
+      // teams × problems の組を出して、 mismatch を肉眼で確認可能にする
+      failedKeys: Array.from(failedByKey.keys()),
+      liveTeamIds: teams.map((t) => t.teamId),
+      liveProblemIds: problems.map((p) => p.problemId),
+    });
     return {
       kind: "ok",
       result: buildResult({ eventId, enqueued: 0, skipped, unverifiedAccounts }),
     };
   }
+  // success path も 1 行残す (= operator が \"何件 enqueue した\" を CloudWatch 1 query で引ける)
+  logDeployTrace("bulk-deploy.enqueued", {
+    correlationId: eventId,
+    tenantId,
+    retryFailedOnly,
+    forceRedeploy,
+    planCount: plan.length,
+    skipped,
+    unverifiedAccountsCount: unverifiedAccounts.size,
+  });
 
   // DDB TransactWrite は 1 call 25 items まで (Put + Delete を合算)。retry / force redeploy
   // では 1 plan entry につき Put + Delete の 2 op が要るので chunk 上限を半減させる。
