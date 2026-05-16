@@ -124,6 +124,9 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
       apiKeyId: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.platinum.keyId),
       value: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.platinum.value),
     },
+    // Issue #860: CORS allowOrigins を application-admin-console URL に絞る。
+    applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
+    environment: props.environment,
   });
 
   applicationAdminConsoleHosting.deployRuntimeConfig({
