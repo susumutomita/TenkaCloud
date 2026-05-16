@@ -1,8 +1,29 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { getPortalMe, PortalAuthError } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import { toAsciiSlug } from "../lib/slug";
 import { clearSession, loadSession, type ParticipantSession, saveSession } from "./storage";
+
+/**
+ * Issue #859: participant portal の idle session 自動ログアウト。
+ *
+ * **6 hours** で auto logout する。 admin console の 15 min より長い理由:
+ *   - 競技中 (= 90 min ~ 4 h) は participant が席を離れる時間も含めて session 維持が必要
+ *   - admin operator は監視業務で 15 min 周期で操作するが、 participant は問題に集中する
+ *     ため操作頻度が低い (= 解析 / 思考時間で 30 min 以上 idle になる)
+ *   - 競技時間上限 (= TenkaCloud Battle 仕様で最大 6 h 想定) 後に自動 logout で安全弁
+ */
+const PARTICIPANT_IDLE_TIMEOUT_MS = 6 * 60 * 60 * 1000;
+const IDLE_EVENTS = ["mousedown", "keydown", "touchstart", "focus", "scroll"] as const;
 
 const DEFAULT_DEV_TTL_MS = 4 * 60 * 60 * 1000;
 // Phase 1 以前 (jobId-based) の deployment は eventId / teamId を持たない。
@@ -82,6 +103,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   const [session, setSession] = useState<ParticipantSession | null>(() => loadSession());
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const login = useCallback(
     async (teamLoginKey: string) => {
@@ -96,6 +118,27 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
     clearSession();
     setSession(null);
   }, []);
+
+  // Issue #859: session 存在中のみ 6 時間 idle timer を回す。 user 操作で reset。
+  useEffect(() => {
+    if (!session) return;
+    const resetTimer = (): void => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        logout();
+      }, PARTICIPANT_IDLE_TIMEOUT_MS);
+    };
+    resetTimer();
+    for (const evt of IDLE_EVENTS) {
+      window.addEventListener(evt, resetTimer, { passive: true });
+    }
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      for (const evt of IDLE_EVENTS) {
+        window.removeEventListener(evt, resetTimer);
+      }
+    };
+  }, [session, logout]);
 
   const updateSession = useCallback<AuthState["updateSession"]>((patch) => {
     setSession((prev) => {
