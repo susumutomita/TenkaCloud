@@ -86,9 +86,14 @@ describe("createRateLimiter", () => {
     expect(limiter.take("k", config).allowed).toBe(true);
   });
 
-  it("RATE_LIMITS.WRITE_LOW は 10 burst / 0.2 RPS (= 12 RPM) であるべき (= submit-flag 設計値)", () => {
+  it("RATE_LIMITS.WRITE_LOW は 10 burst / 0.2 RPS (= 12 RPM) であるべき (= 人手 write 一般)", () => {
     expect(RATE_LIMITS.WRITE_LOW.capacity).toBe(10);
     expect(RATE_LIMITS.WRITE_LOW.refillPerSec).toBe(0.2);
+  });
+
+  it("Issue #870: RATE_LIMITS.WRITE_VERY_LOW は 3 burst / 0.1 RPS (= 6 RPM) であるべき (= submit-flag brute force 抑制)", () => {
+    expect(RATE_LIMITS.WRITE_VERY_LOW.capacity).toBe(3);
+    expect(RATE_LIMITS.WRITE_VERY_LOW.refillPerSec).toBe(0.1);
   });
 
   it("RATE_LIMITS.READ_HIGH は 60 burst / 2 RPS であるべき (= 5s polling 阻害しない)", () => {

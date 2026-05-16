@@ -131,6 +131,9 @@ app.patch("/portal/me", (c) =>
   ),
 );
 
+// Issue #870: submit-flag は brute force の標的になりうるため WRITE_VERY_LOW で更に絞る
+// (= 3 burst / 6 RPM = 1 attempt / 10s)。 旧 WRITE_LOW (= 12 RPM) 適用時は 1 team / day で
+// 17,000 attempts 可能だった。 hint reveal / teamName 編集など他の write は WRITE_LOW のまま。
 app.post("/portal/me/submit-flag", (c) =>
   withBearerAuth(
     c,
@@ -153,7 +156,7 @@ app.post("/portal/me/submit-flag", (c) =>
       if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
       return c.json(outcome, HTTP_OK);
     },
-    RATE_LIMITS.WRITE_LOW,
+    RATE_LIMITS.WRITE_VERY_LOW,
   ),
 );
 

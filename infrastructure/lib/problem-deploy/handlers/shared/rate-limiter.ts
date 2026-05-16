@@ -90,12 +90,17 @@ export function createRateLimiter(clock: RateLimiterClock = defaultClock) {
  *
  *   - READ_HIGH: notification polling (= 5s 間隔) を 12 RPS burst で許容、 sustained 2 RPS
  *   - READ_MID: leaderboard / score-events (= 60s 間隔) を 30 RPS burst で許容
- *   - WRITE_LOW: submit-flag / endpoint override (= 人手の write) を 5 RPS burst、 1 RPS sustained
+ *   - WRITE_LOW: 人手の write (= teamName / hint reveal) を 10 burst / 12 RPM で絞る
+ *   - WRITE_VERY_LOW: brute force 標的になりうる write (= submit-flag) を 3 burst / 6 RPM
+ *     (= 1 attempt / 10s sustained) で更に絞る。 Issue #870: 旧 WRITE_LOW 適用時は
+ *     1 team / day で 17,000 attempts 可能だった。 6 RPM なら 1 day = 8,640 attempts、
+ *     2 day = 17k と倍以上の遅延を強制でき、 短時間 brute force 経路を実質遮断する。
  */
 export const RATE_LIMITS = {
   READ_HIGH: { capacity: 60, refillPerSec: 2 } as const satisfies RateLimitConfig,
   READ_MID: { capacity: 60, refillPerSec: 1 } as const satisfies RateLimitConfig,
   WRITE_LOW: { capacity: 10, refillPerSec: 0.2 } as const satisfies RateLimitConfig,
+  WRITE_VERY_LOW: { capacity: 3, refillPerSec: 0.1 } as const satisfies RateLimitConfig,
 };
 
 /** Lambda module-scope singleton (warm invoke で共有)。 */
