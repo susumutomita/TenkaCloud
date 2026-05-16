@@ -45,9 +45,11 @@ export async function completeLogin(
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
   if (!verifier) throw new Error("PKCE verifier missing (session lost before callback)");
 
+  // Issue #861: state check を fail-closed に。 不在 (= session 切れ / sessionStorage clear)
+  // を CSRF / phishing 経路の signal として throw する。
   const expectedState = sessionStorage.getItem(STATE_KEY);
-  if (expectedState && returnedState !== expectedState) {
-    throw new Error("OAuth state mismatch (possible CSRF attempt)");
+  if (!expectedState || returnedState !== expectedState) {
+    throw new Error("OAuth state mismatch or missing (possible CSRF attempt or session lost)");
   }
 
   const body = new URLSearchParams({

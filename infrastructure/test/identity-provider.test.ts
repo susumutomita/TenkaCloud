@@ -3,6 +3,7 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import type { SamlIdpConfig } from "../lib/config/config-interface";
 import {
+  buildAllowedRedirectUrls,
   buildSupportedIdentityProviders,
   IdentityProvider,
 } from "../lib/tenant-template/identity-provider";
@@ -325,5 +326,93 @@ describe("buildSupportedIdentityProviders (pure helper)", () => {
   it("cognito=false / saml 無し (= 想定外 input) は COGNITO fallback (= safe default)", () => {
     const r = buildSupportedIdentityProviders({ cognito: false });
     expect(r.map((p) => p.name)).toEqual(["COGNITO"]);
+  });
+});
+
+describe("buildAllowedRedirectUrls (Issue #861)", () => {
+  it("development では primary + dev localhost を返すべき", () => {
+    expect(
+      buildAllowedRedirectUrls(
+        "https://app.example.com/callback",
+        "development",
+        "http://localhost:5174/callback",
+      ),
+    ).toEqual(["https://app.example.com/callback", "http://localhost:5174/callback"]);
+  });
+
+  it("staging も localhost を含めて debug 経路を維持", () => {
+    expect(
+      buildAllowedRedirectUrls(
+        "https://app.example.com/callback",
+        "staging",
+        "http://localhost:5174/callback",
+      ),
+    ).toEqual(["https://app.example.com/callback", "http://localhost:5174/callback"]);
+  });
+
+  it("production は localhost を含めない (= phishing 経路の attack surface 縮減)", () => {
+    expect(
+      buildAllowedRedirectUrls(
+        "https://app.example.com/callback",
+        "production",
+        "http://localhost:5174/callback",
+      ),
+    ).toEqual(["https://app.example.com/callback"]);
+  });
+
+  it("environment の casing は無視 (= Production / PRODUCTION も同等)", () => {
+    expect(
+      buildAllowedRedirectUrls("https://app.example.com/", "PRODUCTION", "http://localhost:5174/"),
+    ).toEqual(["https://app.example.com/"]);
+  });
+});
+
+describe("OAuth flow hardening (Issue #861)", () => {
+  function synthFor(environment: string): Template {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    new IdentityProvider(stack, "Identity", {
+      tenantId: "tenant-1",
+      environment,
+      applicationAdminConsoleUrl: "https://app.example.com",
+    });
+    return Template.fromStack(stack);
+  }
+
+  it("UserPoolClient で implicitCodeGrant が無効 (= ALLOW_FLOWS に implicit が含まれない)", () => {
+    const template = synthFor("development");
+    template.hasResourceProperties(
+      "AWS::Cognito::UserPoolClient",
+      Match.objectLike({
+        AllowedOAuthFlows: Match.arrayWith(["code"]),
+      }),
+    );
+    const clients = template.findResources("AWS::Cognito::UserPoolClient");
+    const flows = (Object.values(clients)[0]?.Properties?.AllowedOAuthFlows ?? []) as string[];
+    expect(flows).not.toContain("implicit");
+  });
+
+  it("production env では CallbackURLs に localhost が含まれないべき", () => {
+    const template = synthFor("production");
+    const clients = template.findResources("AWS::Cognito::UserPoolClient");
+    const callbacks = (Object.values(clients)[0]?.Properties?.CallbackURLs ?? []) as string[];
+    expect(callbacks).toEqual(["https://app.example.com/callback"]);
+    expect(callbacks).not.toContain("http://localhost:5174/callback");
+  });
+
+  it("development env では CallbackURLs に localhost が含まれる (= dev 経路維持)", () => {
+    const template = synthFor("development");
+    const clients = template.findResources("AWS::Cognito::UserPoolClient");
+    const callbacks = (Object.values(clients)[0]?.Properties?.CallbackURLs ?? []) as string[];
+    expect(callbacks).toContain("http://localhost:5174/callback");
+  });
+
+  it("production env では LogoutURLs に localhost が含まれない", () => {
+    const template = synthFor("production");
+    const clients = template.findResources("AWS::Cognito::UserPoolClient");
+    const logouts = (Object.values(clients)[0]?.Properties?.LogoutURLs ?? []) as string[];
+    expect(logouts).toEqual(["https://app.example.com/"]);
   });
 });
