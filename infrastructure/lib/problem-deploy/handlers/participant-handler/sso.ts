@@ -25,6 +25,18 @@ const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const FEDERATION_SESSION_DURATION_SEC = 3600;
 const TENKACLOUD_ISSUER = "https://tenkacloud.example/portal";
 
+/**
+ * Issue #862: deployment 行の field を URL に埋める前に format を再 validate する。
+ * deploy 時に validation 済だが、 DB を直接編集された場合や schema drift 時の防御層。
+ *
+ *   - AWS region: `[a-z]{2,3}-[a-z]+-\d+` (= aws-* / aws-cn-* / aws-us-gov-* も含めて緩めに pin)
+ *   - namePrefix: ULID 由来の slugify 後 (`[a-z][a-z0-9-]*`) なので英数 + hyphen のみ
+ *   - IAM Role ARN: `arn:aws:iam::<12 digit>:role/<name>` を厳密 match
+ */
+const AWS_REGION_RE = /^[a-z]{2,3}-[a-z]+-\d{1,2}$/;
+const NAME_PREFIX_RE = /^[a-z][a-z0-9-]{0,127}$/;
+const IAM_ROLE_ARN_RE = /^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/;
+
 const sts = new STSClient({});
 
 type StsCredentialShape = {
@@ -90,11 +102,16 @@ export async function getConsoleSigninUrl(
     logDeployTrace("portal.sso.not_ready.in_progress", { jobId, problemId, status });
     return { kind: "not_ready" };
   }
-  if (typeof deployment.namePrefix !== "string") {
+  // Issue #862: namePrefix の format pin (= URL query injection 防御)
+  if (typeof deployment.namePrefix !== "string" || !NAME_PREFIX_RE.test(deployment.namePrefix)) {
     logDeployTrace("portal.sso.not_ready.namePrefix_missing", { jobId, problemId, status });
     return { kind: "not_ready" };
   }
-  const region = typeof deployment.region === "string" ? deployment.region : undefined;
+  // Issue #862: AWS region pattern を再 validate (= URL injection 経路を塞ぐ defense-in-depth)
+  const region =
+    typeof deployment.region === "string" && AWS_REGION_RE.test(deployment.region)
+      ? deployment.region
+      : undefined;
   if (!region) {
     logDeployTrace("portal.sso.not_ready.region_missing", { jobId, problemId, status });
     return { kind: "not_ready" };
@@ -104,8 +121,12 @@ export async function getConsoleSigninUrl(
     logDeployTrace("portal.sso.not_ready.tenantId_missing", { jobId, problemId, status });
     return { kind: "not_ready" };
   }
+  // Issue #862: competitorRoleArn の format pin (= IAM Role ARN regex で再 validate)
   const competitorRoleArn =
-    typeof deployment.competitorRoleArn === "string" ? deployment.competitorRoleArn : undefined;
+    typeof deployment.competitorRoleArn === "string" &&
+    IAM_ROLE_ARN_RE.test(deployment.competitorRoleArn)
+      ? deployment.competitorRoleArn
+      : undefined;
   if (!competitorRoleArn) {
     logDeployTrace("portal.sso.not_ready.competitorRoleArn_missing", {
       jobId,
@@ -114,8 +135,13 @@ export async function getConsoleSigninUrl(
     });
     return { kind: "not_ready" };
   }
+  // Issue #862: ParticipantViewerRoleArn の format pin (= stack output 改竄経路の防御)
   const parsedOutputs = parseStackOutputs(deployment.stackOutputs);
-  const participantRoleArn = parsedOutputs.ParticipantViewerRoleArn;
+  const participantRoleArnRaw = parsedOutputs.ParticipantViewerRoleArn;
+  const participantRoleArn =
+    typeof participantRoleArnRaw === "string" && IAM_ROLE_ARN_RE.test(participantRoleArnRaw)
+      ? participantRoleArnRaw
+      : undefined;
   if (!participantRoleArn) {
     // 世代不一致 (= problem template が ParticipantViewerRole を持つ世代より古い) の
     // 切り分けを 1 引きで可能にするため、 stack outputs の他 key 一覧を log に残す。

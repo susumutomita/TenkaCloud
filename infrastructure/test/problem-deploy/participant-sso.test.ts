@@ -125,6 +125,33 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "not_ready" });
   });
 
+  it("Issue #862: namePrefix が injection-pattern (= 特殊文字含) なら not_ready", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ namePrefix: "tc-abc#evil&injection" })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+  });
+
+  it("Issue #862: region が AWS region pattern に合わなければ not_ready", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ region: "evil-region; rm -rf" })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+  });
+
+  it("Issue #862: competitorRoleArn が IAM Role ARN 形式でなければ not_ready", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ competitorRoleArn: "not-an-arn-at-all" })],
+    });
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
+    expect(result).toEqual({ kind: "not_ready" });
+  });
+
   it("正常系: STS AssumeRole + getSigninToken fetch を経由して signin login URL を返すべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });

@@ -92,13 +92,31 @@ function encodeCursor(key: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
 }
 
+/**
+ * Issue #862: cursor は DDB ExclusiveStartKey にそのまま渡るので、 attacker が任意 shape
+ * の JSON を送ると pagination 経路を破壊 / 推測攻撃に使える。 base64 + JSON 形式は保証
+ * できるが、 値のセマンティック (= PK が `DEPLOYMENT#<ulid>` / SK が `META` /
+ * GSI1 query なので GSI1PK / GSI1SK もあり得る) に絞ったキー allowlist で shape を pin。
+ *
+ * 不一致なら undefined を返し、 最初から page し直す (= silent reset の方が attacker に
+ * 情報を与えない)。
+ */
+const ALLOWED_CURSOR_KEYS = new Set(["PK", "SK", "GSI1PK", "GSI1SK", "GSI2PK", "GSI2SK"]);
+const MAX_CURSOR_LENGTH = 512;
+
 function decodeCursor(cursor: string): Record<string, unknown> | undefined {
+  if (cursor.length > MAX_CURSOR_LENGTH) return undefined;
   try {
     const json = Buffer.from(cursor, "base64url").toString("utf8");
     const parsed = JSON.parse(json);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    // 各 key が allowlist 内、 各 value が string であることを pin。 数値 / boolean /
+    // ネスト object は弾く (= DDB Key は string-only の運用想定)。
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!ALLOWED_CURSOR_KEYS.has(k)) return undefined;
+      if (typeof v !== "string" || v.length === 0 || v.length > 256) return undefined;
     }
+    return parsed as Record<string, unknown>;
   } catch {
     // 不正な cursor は undefined として最初から開始
   }

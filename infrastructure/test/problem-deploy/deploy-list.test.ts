@@ -139,6 +139,44 @@ describe("listDeployments", () => {
     expect(cmd.input.ExclusiveStartKey).toBeUndefined();
   });
 
+  it("Issue #862: cursor が allowlist 外の key を含むなら無視するべき (= injection 防御)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+    // 攻撃者が任意 key/value を送る試行
+    const evilKey = { PK: "DEPLOYMENT#X", SK: "META", evilAttribute: "exfil" };
+    const cursor = Buffer.from(JSON.stringify(evilKey), "utf8").toString("base64url");
+
+    await listDeployments(shared, { tenantId: "tenant-acme", cursor });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    // evilAttribute が混入したので cursor 全体を reject、 ExclusiveStartKey 無し
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
+  });
+
+  it("Issue #862: cursor が長すぎたら無視するべき (= DoS 防御)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+    const cursor = "a".repeat(1024); // 512 上限超え
+
+    await listDeployments(shared, { tenantId: "tenant-acme", cursor });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
+  });
+
+  it("Issue #862: cursor の value が string でなければ reject", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+    // 数値 / オブジェクトをキー値に詰めようとする試行
+    const evilKey = { PK: { $type: "S", value: "evil" } };
+    const cursor = Buffer.from(JSON.stringify(evilKey), "utf8").toString("base64url");
+
+    await listDeployments(shared, { tenantId: "tenant-acme", cursor });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
+  });
+
   it("limit は 1〜200 にクランプされるべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValue({ Items: [], LastEvaluatedKey: undefined });
