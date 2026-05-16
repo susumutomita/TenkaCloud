@@ -11,6 +11,7 @@ import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers";
 
 interface ApplicationAdminConsoleHostingProps {
   /** TenantTemplateStack を識別するためのテナント ID。pooled の場合は "pooled" */
@@ -101,10 +102,23 @@ export class ApplicationAdminConsoleHosting extends Construct {
     const oai = new OriginAccessIdentity(this, "OAI");
     this.bucket.grantRead(oai);
 
+    // Issue #855: CloudFront に security headers を強制。 application-admin-console は tenant
+    // 別の API GW + Cognito UserPool 経路に connect するが、 具体 URL は per-tenant で動的に決まる
+    // (= runtime-config.json 経由)。 CSP connect-src / form-action は AWS の domain wildcard で
+    // 許容する (= 厳格化は別 issue、 全 tenant で共通のため individual URL の追加配線は別途検討)。
+    const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
+      connectSrcAllowedOrigins: [
+        "https://*.amazoncognito.com",
+        "https://*.execute-api.*.amazonaws.com",
+      ],
+      formActionAllowedOrigins: ["https://*.amazoncognito.com"],
+    });
+
     this.distribution = new Distribution(this, "Distribution", {
       defaultBehavior: {
         origin: new S3Origin(this.bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        responseHeadersPolicy: securityHeaders,
       },
       defaultRootObject: "index.html",
       httpVersion: HttpVersion.HTTP2,

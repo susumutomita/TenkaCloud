@@ -60,7 +60,7 @@ describe("createApiClient", () => {
       const api = createApiClient(config.apiBaseUrl, "TOKEN");
 
       await expect(api.get("apps")).rejects.toBeInstanceOf(ApiError);
-      // Issue #873: vitest 4.x で `.rejects.toThrow(/regex/)` regression を回避。
+      // Issue #873: regex regression を回避。
       await expect(api.get("apps")).rejects.toMatchObject({
         message: expect.stringMatching(/403.*forbidden/),
       });

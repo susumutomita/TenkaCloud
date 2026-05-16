@@ -59,7 +59,7 @@ describe("completeLogin", () => {
 
   describe("PKCE verifier が session に無いとき", () => {
     it("エラーを投げるべき", async () => {
-      // Issue #873: vitest 4.x で `.rejects.toThrow(/regex/)` の message 照合 regression を回避。
+      // Issue #873: regex regression を回避。
       await expect(completeLogin(config, "code")).rejects.toMatchObject({
         message: expect.stringContaining("PKCE verifier missing"),
       });

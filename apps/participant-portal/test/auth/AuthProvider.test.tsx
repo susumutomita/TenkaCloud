@@ -47,7 +47,7 @@ describe("AuthProvider", () => {
   it("空白のみのキーを渡したら throw、session は変わらないべき", async () => {
     const { result } = renderAuth(devConfig);
     await act(async () => {
-      // Issue #873: vitest 4.x `.rejects.toThrow(/regex/)` regression を回避。
+      // Issue #873: regex regression を回避。
       await expect(result.current.login("   ")).rejects.toMatchObject({
         message: expect.stringContaining("チームログインキー"),
       });
