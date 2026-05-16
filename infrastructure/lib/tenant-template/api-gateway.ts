@@ -38,6 +38,17 @@ interface ApiGatewayProps {
   apiKeyStandardTier: CustomApiKey;
   apiKeyPremiumTier: CustomApiKey;
   apiKeyPlatinumTier: CustomApiKey;
+  /**
+   * Issue #860: CORS \`allowOrigins\` に乗せる application-admin-console の CloudFront URL。
+   * 旧コードは \`["*"]\` だったが、 phishing 経路で attacker サイトから fetch される攻撃面が
+   * 残るため、 同 tenant の SPA origin のみ許可する。 未指定なら dev fallback (= localhost のみ)。
+   */
+  applicationAdminConsoleUrl?: string;
+  /**
+   * Issue #860: environment 名 (development / staging / production)。 production のみ
+   * localhost を CORS allowOrigins から除外する (= phishing 経路で localhost への redirect を弾く)。
+   */
+  environment?: string;
 }
 
 /**
@@ -55,9 +66,25 @@ export class ApiGateway extends Construct {
   constructor(scope: Construct, id: string, props: ApiGatewayProps) {
     super(scope, id);
 
+    // Issue #860: CORS allowOrigins を `["*"]` から具体 origin に絞る (= phishing サイトから
+    // 任意 origin で fetch される攻撃面を縮減)。 application-admin-console URL + dev localhost。
+    // localhost は production env では除外する (= prod 環境の operator が dev tooling 経由で
+    // 本番 API を叩く経路を塞ぐ)。
+    const isProduction = (props.environment ?? "").toLowerCase() === "production";
+    const allowOrigins: string[] = [];
+    if (props.applicationAdminConsoleUrl) {
+      allowOrigins.push(props.applicationAdminConsoleUrl);
+    }
+    if (!isProduction) {
+      allowOrigins.push("http://localhost:5174");
+    }
+    if (allowOrigins.length === 0) {
+      // synth-only / dev-fallback で URL が解決できないときは安全側に localhost のみ。
+      allowOrigins.push("http://localhost:5174");
+    }
     this.restApi = new RestApi(this, `TenantAPI-${props.tenantId}`, {
       defaultCorsPreflightOptions: {
-        allowOrigins: ["*"],
+        allowOrigins,
         allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
         allowHeaders: ["Content-Type", "Authorization"],
       },
