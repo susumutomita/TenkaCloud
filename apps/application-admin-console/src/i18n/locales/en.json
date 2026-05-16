@@ -27,7 +27,10 @@
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — Tenant admin console",
     "open_catalog": "Open problem catalog",
-    "welcome": "Welcome, {displayName}"
+    "welcome": "Welcome, {displayName}",
+    "welcome_fallback_name": "Tenant",
+    "tenant_name_missing_header": "Tenant name is missing from your JWT",
+    "tenant_name_missing_body": "Sign out and sign back in. If the issue persists, ask the System Admin to set the custom:tenantName attribute on your Cognito user."
   },
   "event_list": {
     "header": "Events",
