@@ -43,12 +43,54 @@ interface RuntimeConfig {
   readonly adminInsightApiUrl?: string;
 }
 
+/**
+ * Issue #871: runtime-config.json は S3 + CloudFront 経由なので tampering surface は
+ * 限定的だが、 万一 bucket compromise / MITM で apiUrl が attacker URL に書き換えられた
+ * 場合に frontend が JWT を漏らさないよう、 URL の protocol / host を validate する。
+ *
+ *   - apiUrl: \`https://\` 必須 (= mixed content / MITM 防御)
+ *   - cognitoDomain: \`https://\` 必須 かつ \`.amazoncognito.com\` 終端
+ *     (= Cognito Hosted UI ドメインの allowlist)
+ *
+ * 検証失敗時は null を返し、 caller を env-based dev fallback に倒す
+ * (= production deploy では env が空なので throw に倒れ、 早期に検知できる)。
+ */
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isCognitoDomain(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "https:" && u.host.endsWith(".amazoncognito.com");
+  } catch {
+    return false;
+  }
+}
+
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   try {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<RuntimeConfig>;
     if (!data.apiUrl || !data.cognitoDomain || !data.userClientId) return null;
+    // Issue #871: protocol / host を validate (= tampering 対策)
+    if (!isHttpsUrl(data.apiUrl)) {
+      console.error("[config] runtime-config.json apiUrl is not HTTPS, rejecting", {
+        apiUrl: data.apiUrl,
+      });
+      return null;
+    }
+    if (!isCognitoDomain(data.cognitoDomain)) {
+      console.error("[config] runtime-config.json cognitoDomain failed allowlist, rejecting", {
+        cognitoDomain: data.cognitoDomain,
+      });
+      return null;
+    }
     return {
       apiUrl: data.apiUrl,
       cognitoDomain: data.cognitoDomain,

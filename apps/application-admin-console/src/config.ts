@@ -39,6 +39,30 @@ interface RuntimeConfig {
   readonly competitorBootstrapTemplateUrl?: string;
 }
 
+/**
+ * Issue #871: runtime-config.json の URL validate (= S3 / CloudFront tampering 対策)。
+ *   - apiUrl: \`https://\` 必須
+ *   - cognitoDomain: \`https://\` 必須 + \`.amazoncognito.com\` 終端 (allowlist)
+ *
+ * 検証失敗時は null → caller が env fallback に倒れる (= production では env が空で throw)。
+ */
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isCognitoDomain(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "https:" && u.host.endsWith(".amazoncognito.com");
+  } catch {
+    return false;
+  }
+}
+
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   try {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
@@ -52,6 +76,19 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       !data.apiUrl
     )
       return null;
+    // Issue #871: protocol / host を validate (= tampering 対策)
+    if (!isHttpsUrl(data.apiUrl)) {
+      console.error("[config] runtime-config.json apiUrl is not HTTPS, rejecting", {
+        apiUrl: data.apiUrl,
+      });
+      return null;
+    }
+    if (!isCognitoDomain(data.cognitoDomain)) {
+      console.error("[config] runtime-config.json cognitoDomain failed allowlist, rejecting", {
+        cognitoDomain: data.cognitoDomain,
+      });
+      return null;
+    }
     return {
       cognitoDomain: data.cognitoDomain,
       userClientId: data.userClientId,

@@ -33,6 +33,19 @@ const DEV_FALLBACK: AppConfig = {
   mode: "dev-mock",
 };
 
+/**
+ * Issue #871: backend mode で apiBaseUrl が tampered で attacker URL を指すと、 portal が
+ * teamLoginKey (= bearer) を attacker に送ってしまう。 backend mode のときは HTTPS を強制
+ * (= dev-mock mode では localhost http を許容)。
+ */
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function loadConfig(): Promise<AppConfig> {
   try {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
@@ -41,11 +54,20 @@ export async function loadConfig(): Promise<AppConfig> {
       return DEV_FALLBACK;
     }
     const runtime = (await res.json()) as RuntimeConfig;
+    const mode = runtime.mode ?? DEV_FALLBACK.mode;
+    const apiBaseUrl = runtime.apiBaseUrl ?? DEV_FALLBACK.apiBaseUrl;
+    // Issue #871: backend mode は HTTPS 必須 (= teamLoginKey を attacker に漏らさない)
+    if (mode === "backend" && apiBaseUrl && !isHttpsUrl(apiBaseUrl)) {
+      console.error("[config] runtime-config.json apiBaseUrl is not HTTPS in backend mode", {
+        apiBaseUrl,
+      });
+      return DEV_FALLBACK;
+    }
     return {
-      apiBaseUrl: runtime.apiBaseUrl ?? DEV_FALLBACK.apiBaseUrl,
+      apiBaseUrl,
       eventTitle: runtime.eventTitle ?? DEV_FALLBACK.eventTitle,
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
-      mode: runtime.mode ?? DEV_FALLBACK.mode,
+      mode,
     };
   } catch {
     return DEV_FALLBACK;
