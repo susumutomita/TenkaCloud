@@ -112,5 +112,27 @@ export class CompetitorAccountsApiLambda extends Construct {
         resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
       }),
     );
+
+    // 4. Issue #839 follow-up Phase B: Tenant 管理者が自社の SAML IdP を画面から設定できるよう、
+    //    同 Lambda に Cognito IdP mutation 権限を付ける。 Resource は自 account / region 配下の
+    //    全 UserPool に絞り (= account-level blast radius)、 runtime 側で JWT iss claim から
+    //    呼び出した UserPool ID を抽出して self-targeting のみ許可する。
+    //
+    //    cross-stack で具体 UserPool ARN を渡すと TenantTemplateStack ↔ ProblemDeployBackendStack
+    //    間に CFn export 依存が増えるため、 wildcard + runtime guard で代用する設計判断。
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "cognito-idp:CreateIdentityProvider",
+          "cognito-idp:UpdateIdentityProvider",
+          "cognito-idp:DescribeIdentityProvider",
+          "cognito-idp:DeleteIdentityProvider",
+          "cognito-idp:DescribeUserPoolClient",
+          "cognito-idp:UpdateUserPoolClient",
+        ],
+        resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
+      }),
+    );
   }
 }

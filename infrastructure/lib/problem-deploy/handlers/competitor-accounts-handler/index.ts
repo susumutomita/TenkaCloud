@@ -8,6 +8,7 @@ import {
   resolveCognitoSub,
   resolveTenantId,
 } from "../deploy-handler/auth.js";
+import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
   CompetitorAccountNotFoundError,
@@ -73,6 +74,26 @@ app.onError((err, c) => {
 });
 
 app.get("/admin/competitor-accounts/healthz", (c) => c.json({ ok: true }));
+
+// Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する経路。
+// 同 Lambda に同居させる (= 同 IAM / auth、 別 handler 化は Phase 3 で再評価)。
+app.get("/admin/tenant-saml-config", async (c) => {
+  const result = await routeGet({ shared }, c);
+  return c.json(result.body as never, result.status as 200);
+});
+// 互換のため PATCH + PUT 両方受ける (= frontend は PATCH、 curl 直叩き / OpenAPI は PUT で書く)。
+app.patch("/admin/tenant-saml-config", async (c) => {
+  const result = await routePut({ shared }, c);
+  return c.json(result.body as never, result.status as 200 | 400 | 422);
+});
+app.put("/admin/tenant-saml-config", async (c) => {
+  const result = await routePut({ shared }, c);
+  return c.json(result.body as never, result.status as 200 | 400 | 422);
+});
+app.delete("/admin/tenant-saml-config", async (c) => {
+  const result = await routeDelete({ shared }, c);
+  return c.json(result.body as never, result.status as 200 | 422);
+});
 
 app.post("/admin/competitor-accounts", async (c) => {
   let body: unknown;

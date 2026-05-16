@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>SAML federation セットアップ (Issue #839 follow-up)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>SAML federation セットアップ (Issue #839 follow-up)</h1>
+<p>TenkaCloud の <strong>System Admin (Control Plane)</strong> と <strong>Tenant Admin (Tenant Template)</strong> の Cognito UserPool に SAML IdP を連携し、 会社の SSO (Entra ID / Okta / Google Workspace 等) で sign-in 可能にする手順です。</p>
+<p><code>username/password</code> 経路と並列で運用するか、 SAML だけに絞るかは <code>enforceSamlOnly</code> フラグで切り替えます。</p>
+<h2>1. IdP 側 (= 会社の IdP) で application 登録</h2>
+<p>各 IdP の手順は以下のとおりです。</p>
+<ul>
+<li><strong>Microsoft Entra ID</strong>: Enterprise applications → New application → Non-gallery → SAML</li>
+<li><strong>Okta</strong>: Applications → Create App Integration → SAML 2.0</li>
+<li><strong>Google Workspace</strong>: Apps → Web and mobile apps → Add custom SAML app</li>
+</ul>
+<p>IdP には次の値を設定してください。</p>
+<ul>
+<li><strong>SP エンティティ ID (Audience)</strong>: <code>urn:amazon:cognito:sp:&lt;USER_POOL_ID&gt;</code><ul>
+<li>System Admin: ControlPlaneStack の <code>UserPoolId</code> Output を control に貼る</li>
+<li>Tenant Admin: <code>tenkacloud-tenant-template-pooled</code> の <code>UserPoolId</code> を貼る</li>
+</ul>
+</li>
+<li><strong>ACS URL (Reply URL)</strong>: <code>https://&lt;COGNITO_DOMAIN_PREFIX&gt;.auth.&lt;region&gt;.amazoncognito.com/saml2/idpresponse</code><ul>
+<li><code>&lt;COGNITO_DOMAIN_PREFIX&gt;</code> は <code>tenkacloud-&lt;env&gt;-&lt;tenantId&gt;-&lt;accountId&gt;</code> (= identity-provider.ts の <code>buildCognitoDomainPrefix</code>)</li>
+</ul>
+</li>
+<li><strong>NameID format</strong>: <code>EmailAddress</code></li>
+<li><strong>Attribute mapping</strong>:<ul>
+<li><code>email</code> → <code>http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress</code></li>
+<li>(任意) <code>name</code> / <code>groups</code> 等を追加するときは下記「config.json での有効化」で <code>attributeMapping</code> に書く</li>
+</ul>
+</li>
+</ul>
+<p>IdP 設定完了後、 <strong>federation metadata URL</strong> を控えてください。 これを Cognito に渡します。</p>
+<ul>
+<li>Entra ID:「App Federation Metadata Url」</li>
+<li>Okta:「Identity Provider metadata」</li>
+<li>Google Workspace:「IDP metadata URL」</li>
+</ul>
+<h2>2. config.json での有効化</h2>
+<p><code>infrastructure/environments/&lt;env&gt;/config.json</code> に次の section を追加します。</p>
+<h3>Tenant Admin (全 tenant 共有の SAML)</h3>
+<pre><code class="language-json">{
+  &quot;tenantSamlConfig&quot;: {
+    &quot;metadataUrl&quot;: &quot;https://login.microsoftonline.com/&lt;tenant&gt;/federationmetadata/2007-06/federationmetadata.xml&quot;,
+    &quot;providerName&quot;: &quot;AcmeSAML&quot;,
+    &quot;enforceSamlOnly&quot;: false,
+    &quot;attributeMapping&quot;: {
+      &quot;email&quot;: &quot;http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress&quot;
+    }
+  }
+}
+</code></pre>
+<h3>System Admin (= TenkaCloud operator 会社の SSO)</h3>
+<pre><code class="language-json">{
+  &quot;controlPlaneConfig&quot;: {
+    &quot;systemAdminEmail&quot;: &quot;ops@example.com&quot;,
+    &quot;samlIdp&quot;: {
+      &quot;metadataUrl&quot;: &quot;https://login.microsoftonline.com/&lt;tenant&gt;/federationmetadata/2007-06/federationmetadata.xml&quot;,
+      &quot;providerName&quot;: &quot;AcmeSAML&quot;,
+      &quot;enforceSamlOnly&quot;: false
+    }
+  }
+}
+</code></pre>
+<h3>フィールドの意味</h3>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>必須</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>metadataUrl</code></td>
+<td>yes</td>
+<td>IdP の federation metadata XML を取得する HTTPS URL。 IdP 側 cert rotation 時も自動追従。</td>
+</tr>
+<tr>
+<td><code>providerName</code></td>
+<td>no</td>
+<td>Cognito 内で IdP を識別する名前 (Hosted UI button label にもなる)。 default <code>CompanySAML</code>。 英数字 + <code>-_</code> のみ。</td>
+</tr>
+<tr>
+<td><code>enforceSamlOnly</code></td>
+<td>no</td>
+<td><code>true</code> なら username/password 経路を閉じる (= Hosted UI に SAML button のみ)。 default <code>false</code> (= 並列許可)。</td>
+</tr>
+<tr>
+<td><code>attributeMapping</code></td>
+<td>no</td>
+<td>SAML AttributeStatement 名 → Cognito attribute 名のマップ。 default は email のみ自動。</td>
+</tr>
+</tbody></table>
+<h2>3. deploy</h2>
+<pre><code class="language-bash">make deploy ENV=development
+</code></pre>
+<p><code>infrastructure/lib/tenant-template/identity-provider.ts</code> と <code>infrastructure/lib/control-plane-stack.ts</code> の両方が config を読み込み、 SAML IdP を CFn 上に作ります。</p>
+<p>deploy 完了後、 Cognito Hosted UI を開くと「Sign in with <code>&lt;providerName&gt;</code>」button が表示されます。</p>
+<h2>4. ロールアウトの推奨手順</h2>
+<p>既存 user に SAML 強制をかけるとログイン経路が一夜で変わるので、 次の段階で進めることを推奨します。</p>
+<ol>
+<li><strong>dev / staging で並列 (<code>enforceSamlOnly: false</code>)</strong>: SAML 経路を operator で 1 人テスト</li>
+<li><strong>production で並列</strong>: operator 全員が SAML 経由でログインできることを確認 (最低 1 週間)</li>
+<li><strong>production で <code>enforceSamlOnly: true</code></strong>: username/password 経路を閉じる</li>
+</ol>
+<p><code>enforceSamlOnly: true</code> に flip した後、 旧 username/password の user は Cognito Admin Console から削除する運用にすることで遺漏を防げます。</p>
+<h2>5. トラブルシューティング</h2>
+<h3>Hosted UI に SAML button が出ない</h3>
+<ul>
+<li><code>make synth</code> で UserPoolClient の <code>SupportedIdentityProviders</code> を確認: SAML provider 名が入っているか</li>
+<li>Cognito Hosted UI の <strong>App Client &gt; Identity Providers</strong> タブで provider が enable されているか確認 (= deploy 直後は反映に数分かかる場合あり)</li>
+</ul>
+<h3>Sign-in 時に「No email」 / 「No NameID」 エラー</h3>
+<ul>
+<li>IdP の attribute mapping が <code>emailaddress</code> を出力しているか確認 (NameID format=EmailAddress でない IdP は明示的に <code>email</code> claim を別の URN で出す必要あり)</li>
+<li><code>attributeMapping</code> の <code>email</code> キーを IdP 側の Attribute Name に合わせて override</li>
+</ul>
+<h3>「Untrusted ACS URL」 エラー</h3>
+<ul>
+<li>IdP 側の Reply URL が Cognito の <code>/saml2/idpresponse</code> を指しているか確認</li>
+<li>domain prefix は env / tenantId / accountId で組まれるので、 deploy 後の <strong>実 URL を IdP 側に貼る</strong> 順番が正しい (= deploy → URL 取得 → IdP 設定)</li>
+</ul>
+<h2>関連</h2>
+<ul>
+<li><a href="../../infrastructure/lib/tenant-template/identity-provider.ts"><code>infrastructure/lib/tenant-template/identity-provider.ts</code></a> — Tenant Admin SAML 連携の実装</li>
+<li><a href="../../infrastructure/lib/control-plane-stack.ts"><code>infrastructure/lib/control-plane-stack.ts</code></a> — System Admin SAML 連携の escape hatch</li>
+<li><a href="../../infrastructure/lib/config/config-interface.ts"><code>infrastructure/lib/config/config-interface.ts</code></a> — <code>SamlIdpConfig</code> 型定義</li>
+<li>Issue #839 — 本機能の親 issue</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/operations/saml-federation.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/operations/saml-federation.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

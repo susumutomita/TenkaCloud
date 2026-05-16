@@ -14,6 +14,7 @@ import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { ProblemsPage } from "./pages/Problems";
+import { SamlSsoPage } from "./pages/SamlSso";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -51,6 +52,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/competitor-accounts"
           element={guarded(config, <CompetitorAccountsPage config={config} />)}
         />
+        <Route path="/settings/sso" element={guarded(config, <SamlSsoPage config={config} />)} />
         <Route path="/events" element={guarded(config, <EventListPage config={config} />)} />
         <Route path="/events/new" element={guarded(config, <EventCreatePage config={config} />)} />
         <Route
