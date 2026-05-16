@@ -78,7 +78,10 @@ describe("getPortalMe", () => {
       vi.fn().mockImplementation(() => Promise.resolve(new Response("ddb down", { status: 500 }))),
     );
     await expect(getPortalMe("https://x", KEY)).rejects.toBeInstanceOf(PortalNetworkError);
-    await expect(getPortalMe("https://x", KEY)).rejects.toThrow(/500.*ddb down/);
+    // Issue #873: regex regression を回避。
+    await expect(getPortalMe("https://x", KEY)).rejects.toMatchObject({
+      message: expect.stringMatching(/500.*ddb down/),
+    });
   });
 
   it("AbortSignal を fetch に伝播するべき", async () => {

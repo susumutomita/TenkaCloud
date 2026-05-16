@@ -11,6 +11,7 @@ Battle (リアルタイム対戦) と Challenge (個別演習) の問題を、 �
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
+[![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
 ![GitHub last commit (by committer)](https://img.shields.io/github/last-commit/susumutomita/TenkaCloud)
 ![GitHub top language](https://img.shields.io/github/languages/top/susumutomita/TenkaCloud)
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/susumutomita/TenkaCloud)

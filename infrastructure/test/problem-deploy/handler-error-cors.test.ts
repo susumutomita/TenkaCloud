@@ -1,4 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+// Issue #854: handler middleware が TenantAdmin role を要求するので test 環境では env で inject。
+beforeAll(() => {
+  process.env.DEFAULT_TENANT_ID = "tenant-test";
+  process.env.DEFAULT_USER_ROLE = "TenantAdmin";
+});
 
 /**
  * #559 defensive layer の test (PR-570 review 指摘で書き直し)。

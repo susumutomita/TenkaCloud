@@ -47,7 +47,10 @@ describe("AuthProvider", () => {
   it("空白のみのキーを渡したら throw、session は変わらないべき", async () => {
     const { result } = renderAuth(devConfig);
     await act(async () => {
-      await expect(result.current.login("   ")).rejects.toThrow(/チームログインキー/);
+      // Issue #873: vitest 4.x `.rejects.toThrow(/regex/)` regression を回避。
+      await expect(result.current.login("   ")).rejects.toMatchObject({
+        message: expect.stringContaining("チームログインキー"),
+      });
     });
     expect(result.current.session).toBeNull();
   });
@@ -117,9 +120,10 @@ describe("AuthProvider", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
     const { result } = renderAuth(prodConfig);
     await act(async () => {
-      await expect(result.current.login("AbCdEfGhIjKlMnOpQrStUvWx")).rejects.toThrow(
-        /チームログインキーが無効/,
-      );
+      // Issue #873: regex regression を回避。
+      await expect(result.current.login("AbCdEfGhIjKlMnOpQrStUvWx")).rejects.toMatchObject({
+        message: expect.stringContaining("チームログインキーが無効"),
+      });
     });
     expect(result.current.session).toBeNull();
   });

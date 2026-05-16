@@ -12,7 +12,12 @@ import {
   HTTP_NOT_FOUND,
   HTTP_OK,
 } from "../shared/http-status.js";
-import { MissingTenantClaimError, resolveTenantId } from "./auth.js";
+import {
+  ForbiddenRoleError,
+  MissingTenantClaimError,
+  requireTenantAdmin,
+  resolveTenantId,
+} from "./auth.js";
 import { requestTeardown } from "./delete.js";
 import {
   buildContext,
@@ -91,9 +96,33 @@ app.onError((err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
+  // Issue #854: role 不一致は 403、 detail は body に出さず log のみ。
+  if (err instanceof ForbiddenRoleError) {
+    console.warn("[deploy] forbidden role", {
+      path: c.req.path,
+      actualRole: err.actualRole,
+      requiredRoles: err.requiredRoles,
+    });
+    return c.json(
+      { error: "forbidden_role", message: "this endpoint requires TenantAdmin role" },
+      StatusCodes.FORBIDDEN,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[deploy] uncaught handler error", { path: c.req.path, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+});
+
+// Issue #854: deploy / list 全 route で TenantAdmin role を要求 (= 一般 user / monitor bot に
+// destructive 操作を許さない、 GET 経路でも tenant 配下の全 deployment が見えるので admin scope)。
+// healthz だけ skip。 path prefix が無い (= "/problems/*" / "/deployments/*" 両方) ので
+// `app.use("*", ...)` で全 route を gate、 healthz は path 比較で skip する。
+app.use("*", async (c, next) => {
+  if (c.req.path === "/healthz" || c.req.path.endsWith("/healthz")) {
+    return next();
+  }
+  requireTenantAdmin(c);
+  return next();
 });
 
 app.get("/healthz", (c) => c.json({ ok: true }));
