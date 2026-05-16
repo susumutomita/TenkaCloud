@@ -257,15 +257,18 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "federation_endpoint_failed", status: 500 });
   });
 
-  it("STS AssumeRole が throw したら assume_role_failed + reason を返すべき (#705)", async () => {
+  it("STS AssumeRole が throw したら assume_role_failed + reason (error name) を返すべき (#705, #864)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockRejectedValueOnce(new Error("AccessDenied: role not assumable"));
+    // Issue #864: reason は error.name (= 種別) のみを返す。 message / ARN は log に残さない。
+    stsSend.mockRejectedValueOnce(
+      Object.assign(new Error("role not assumable"), { name: "AccessDenied" }),
+    );
 
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
     expect(result.kind).toBe("assume_role_failed");
     if (result.kind === "assume_role_failed") {
-      expect(result.reason).toMatch(/AccessDenied/);
+      expect(result.reason).toBe("AccessDenied");
     }
   });
 

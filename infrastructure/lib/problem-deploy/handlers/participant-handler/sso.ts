@@ -128,13 +128,14 @@ export async function getConsoleSigninUrl(
     return { kind: "not_ready" };
   }
   if (!shared.ssm || !shared.env) {
-    console.error("[sso] ExternalId store is not configured", { jobId, tenantId });
+    // Issue #864: tenantId / ARN は CloudWatch Logs に残さない (= 情報漏洩面の縮小)。
+    console.error("[sso] ExternalId store is not configured", { jobId });
     return { kind: "assume_role_failed", reason: "ExternalId store is not configured" };
   }
 
   const tenantExternalId = await getExternalId({ ssm: shared.ssm, env: shared.env }, tenantId);
   if (!tenantExternalId) {
-    console.error("[sso] tenant ExternalId missing", { jobId, tenantId });
+    console.error("[sso] tenant ExternalId missing", { jobId });
     return { kind: "assume_role_failed", reason: "Tenant ExternalId missing" };
   }
 
@@ -152,10 +153,9 @@ export async function getConsoleSigninUrl(
     );
     const competitorCredentials = toSdkCredentials(competitorSession.Credentials);
     if (!competitorCredentials) {
-      console.error("[sso] CompetitorDeployRole AssumeRole returned empty Credentials", {
-        competitorRoleArn,
-        jobId,
-      });
+      // Issue #864: ARN を log に出さない。 jobId のみで CloudWatch Logs Insights から
+      // deployment item に join できる (= ARN は item 側から後追い参照可能、 log 側に重複させない)。
+      console.error("[sso] CompetitorDeployRole AssumeRole returned empty Credentials", { jobId });
       return { kind: "assume_role_failed", reason: "Credentials field empty" };
     }
     const innerSts = new STSClient({ credentials: competitorCredentials });
@@ -168,21 +168,15 @@ export async function getConsoleSigninUrl(
       }),
     );
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    console.error("[sso] AssumeRole failed", {
-      competitorRoleArn,
-      participantRoleArn,
-      jobId,
-      reason,
-    });
-    return { kind: "assume_role_failed", reason };
+    // Issue #864: ARN / message を log に残さず、 error 種別 (= class name) のみで切り分け可能にする。
+    // operator は jobId で deployment item を引いて ARN を確認できる (= 別経路で参照可能)。
+    const errorName = err instanceof Error ? err.name : "Unknown";
+    console.error("[sso] AssumeRole failed", { jobId, errorName });
+    return { kind: "assume_role_failed", reason: errorName };
   }
   const creds = session.Credentials;
   if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
-    console.error("[sso] ParticipantViewerRole AssumeRole returned empty Credentials", {
-      participantRoleArn,
-      jobId,
-    });
+    console.error("[sso] ParticipantViewerRole AssumeRole returned empty Credentials", { jobId });
     return { kind: "assume_role_failed", reason: "Credentials field empty" };
   }
 

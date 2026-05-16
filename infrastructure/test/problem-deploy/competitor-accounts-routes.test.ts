@@ -302,9 +302,42 @@ describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id", () 
       expect(parsed.event).toBe("competitor-accounts.rotate");
       expect(parsed.awsAccountId).toBe("222222222222");
       expect(parsed.rotatedAt).toBe("2026-05-12T00:00:00.000Z");
+      // Issue #864: rotatedAt は audit log では分単位に粗化する (= timing 分析を困難に)。
+      // 秒 .000 でちょうど minute-aligned なので、 :SS.SSS は :00.000 のまま。
+      expect((parsed.rotatedAt as string).endsWith(":00.000Z")).toBe(true);
       // tenantId は test の `DEFAULT_TENANT_ID` env (= "tenant-test")、 rotatedBy は JWT 不在で "unknown" fallback。
       expect(typeof parsed.tenantId).toBe("string");
       expect(typeof parsed.rotatedBy).toBe("string");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("#864: rotatedAt の秒以下は audit log で分単位に粗化する (timing 分析対策)", async () => {
+    mocks.rotateExternalIdForAccount.mockResolvedValueOnce({
+      awsAccountId: "222222222222",
+      region: "ap-northeast-1",
+      competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+      verified: true,
+      verifiedAt: "2026-05-11T00:00:00.000Z",
+      createdAt: "2026-05-11T00:00:00.000Z",
+      updatedAt: "2026-05-12T08:42:37.123Z",
+      rotatedAt: "2026-05-12T08:42:37.123Z",
+      externalId: "new-rotated-id",
+      tenkaCloudAccountId: "111111111111",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const res = await app.request("/admin/competitor-accounts/222222222222/rotate-external-id", {
+        method: "POST",
+      });
+      expect(res.status).toBe(StatusCodes.OK);
+      const auditLine = logSpy.mock.calls
+        .map((args) => String(args[0] ?? ""))
+        .find((line) => line.includes("competitor-accounts.rotate"));
+      const parsed = JSON.parse(auditLine ?? "{}") as Record<string, unknown>;
+      // 秒以下を 00.000 に切り詰めた値を期待 (attacker に rotate timing の精細解像度を渡さない)。
+      expect(parsed.rotatedAt).toBe("2026-05-12T08:42:00.000Z");
     } finally {
       logSpy.mockRestore();
     }
