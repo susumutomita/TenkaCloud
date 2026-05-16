@@ -2,6 +2,7 @@ import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core";
+import type { SamlIdpConfig } from "../config/config-interface";
 
 /**
  * Issue #778 ADR-016 Phase 3: TenkaCloud Lite mode の専用 stack。
@@ -34,6 +35,11 @@ export interface TenkaCloudLiteStackProps extends StackProps {
   readonly competitorAccountsApiLambda: IFunction;
   /** Participant Portal の CloudFront URL (= application-admin-console の runtime-config に注入)。 */
   readonly participantPortalUrl?: string;
+  /**
+   * Issue #839 follow-up: Lite mode 1 tenant 用 SAML IdP 連携。 未設定なら従来通り
+   * Cognito username/password。 wire.ts が `Config.tenantSamlConfig` をそのまま渡す。
+   */
+  readonly samlConfig?: SamlIdpConfig;
 }
 
 /**
@@ -83,6 +89,7 @@ export class TenkaCloudLiteStack extends Stack {
         },
         ssmLookup: dummyLookup,
       },
+      samlConfig: props.samlConfig,
     });
 
     this.applicationAdminConsoleUrl = appPlane.applicationAdminConsoleUrl;

@@ -1,5 +1,6 @@
 import { aws_cognito, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
+import type { SamlIdpConfig } from "../config/config-interface";
 import type { IdentityDetails } from "../interfaces/identity-details";
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
@@ -118,6 +119,15 @@ interface IdentityProviderProps {
    * 末尾スラッシュは付けないこと。
    */
   readonly applicationAdminConsoleUrl: string;
+  /**
+   * Issue #839 follow-up: 全 tenant 共有の SAML IdP 設定 (= operator 会社 SSO)。 未設定なら
+   * 従来通り Cognito username/password + Hosted UI fallback。 設定時:
+   *  - `UserPoolIdentityProviderSaml` を作る
+   *  - UserPoolClient の `supportedIdentityProviders` に追加する
+   *  - `enforceSamlOnly: true` なら Cognito provider を `supportedIdentityProviders` から外し
+   *    `authFlows.userPassword / userSrp` も無効化する (= SAML 1 経路のみ)
+   */
+  readonly samlConfig?: SamlIdpConfig;
 }
 
 /**
@@ -243,17 +253,31 @@ export class IdentityProvider extends Construct {
       })
       .withCustomAttributes("tenantId", "userRole", "apiKey", "tenantTier", "tenantName");
 
+    // Issue #839 follow-up: SAML IdP を作る (= 設定時)。 UserPoolClient より前に instantiate して
+    // `supportedIdentityProviders` から参照する。 CDK は IdP construct の dependency を内部で解決して
+    // UserPoolClient より前に CFn 上に置く。
+    const samlProvider = props.samlConfig
+      ? buildSamlIdentityProvider(this, this.tenantUserPool, props.samlConfig)
+      : undefined;
+
+    // `enforceSamlOnly: true` のとき、 UserPoolClient の supportedIdentityProviders から COGNITO
+    // を外し、 username/password / SRP authFlow も無効化する (= SAML のみ)。
+    const enforceSamlOnly = props.samlConfig?.enforceSamlOnly === true;
+    const supportedIdentityProviders = buildSupportedIdentityProviders({
+      cognito: !enforceSamlOnly,
+      saml: samlProvider,
+    });
+    const authFlows: aws_cognito.AuthFlow = enforceSamlOnly
+      ? { userPassword: false, adminUserPassword: false, userSrp: false, custom: false }
+      : { userPassword: true, adminUserPassword: false, userSrp: true, custom: false };
+
     this.tenantUserPoolClient = new aws_cognito.UserPoolClient(this, "tenantUserPoolClient", {
       userPool: this.tenantUserPool,
       generateSecret: false,
-      authFlows: {
-        userPassword: true,
-        adminUserPassword: false,
-        userSrp: true,
-        custom: false,
-      },
+      authFlows,
       writeAttributes: writeAttributes,
       readAttributes: readAttributes,
+      supportedIdentityProviders,
       oAuth: {
         scopes: [
           aws_cognito.OAuthScope.EMAIL,
@@ -272,6 +296,11 @@ export class IdentityProvider extends Construct {
         logoutUrls: [`${props.applicationAdminConsoleUrl}/`, "http://localhost:5174/"],
       },
     });
+    if (samlProvider) {
+      // CDK は SupportedIdentityProviders に IdP を渡しても dependency edge を自動生成しないので
+      // 明示的に addDependency する (= CFn 上で IdP → UserPoolClient の順で作られることを保証)。
+      this.tenantUserPoolClient.node.addDependency(samlProvider);
+    }
 
     this.identityDetails = {
       name: "Cognito",
@@ -281,4 +310,56 @@ export class IdentityProvider extends Construct {
       },
     };
   }
+}
+
+/**
+ * Issue #839 follow-up: Cognito UserPool に SAML IdP (= Entra ID / Okta / Google Workspace)
+ * を `UserPoolIdentityProviderSaml` (L2) で追加する。 IdP 側の federation metadata XML は
+ * URL から fetch する (= rotation 追従)。 attribute mapping は default email のみ自動、 caller が
+ * 渡したものが優先。
+ */
+function buildSamlIdentityProvider(
+  scope: Construct,
+  userPool: aws_cognito.UserPool,
+  config: SamlIdpConfig,
+): aws_cognito.UserPoolIdentityProviderSaml {
+  const providerName = config.providerName ?? "CompanySAML";
+  // SAML AttributeStatement → Cognito attribute の mapping。 email は最低限必要 (= UserPool が
+  // email を NameID として扱う設定)、 caller の渡しが無ければ標準 emailaddress namespace に倒す。
+  const defaultEmail = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
+  const userMapping = config.attributeMapping ?? {};
+  const attributeMapping: aws_cognito.AttributeMapping = {
+    email: { attributeName: userMapping.email ?? defaultEmail },
+  };
+  return new aws_cognito.UserPoolIdentityProviderSaml(scope, "TenantSamlIdp", {
+    userPool,
+    name: providerName,
+    metadata: aws_cognito.UserPoolIdentityProviderSamlMetadata.url(config.metadataUrl),
+    attributeMapping,
+    idpSignout: true,
+  });
+}
+
+/**
+ * UserPoolClient.supportedIdentityProviders を組み立てる pure helper。 SAML / Cognito を独立に
+ * 入れ替えられるので test しやすい (= 引数で挙動が決まる)。
+ *
+ * - SAML only (`{cognito: false, saml: <provider>}`)  → SAML provider のみ
+ * - 並列 (`{cognito: true, saml: <provider>}`)        → COGNITO + SAML provider
+ * - SAML 無設定 (`{cognito: true, saml: undefined}`)  → COGNITO のみ (= 旧挙動)
+ * - 全 false (= 想定外) は COGNITO fallback (= UserPoolClient が validation error にならない安全側)
+ */
+export function buildSupportedIdentityProviders(input: {
+  readonly cognito: boolean;
+  readonly saml?: { readonly providerName: string };
+}): aws_cognito.UserPoolClientIdentityProvider[] {
+  const out: aws_cognito.UserPoolClientIdentityProvider[] = [];
+  if (input.cognito) out.push(aws_cognito.UserPoolClientIdentityProvider.COGNITO);
+  if (input.saml) {
+    out.push(aws_cognito.UserPoolClientIdentityProvider.custom(input.saml.providerName));
+  }
+  if (out.length === 0) {
+    out.push(aws_cognito.UserPoolClientIdentityProvider.COGNITO);
+  }
+  return out;
 }

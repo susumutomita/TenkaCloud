@@ -1,18 +1,27 @@
 import { CognitoAuth, ControlPlane } from "@cdklabs/sbt-aws";
 import * as cdk from "aws-cdk-lib";
-import type {
-  CfnUserPool,
-  CfnUserPoolClient,
-  IUserPool,
-  UserPoolClient,
+import {
+  type CfnUserPool,
+  type CfnUserPoolClient,
+  CfnUserPoolIdentityProvider,
+  type IUserPool,
+  type UserPoolClient,
 } from "aws-cdk-lib/aws-cognito";
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
+import type { SamlIdpConfig } from "./config/config-interface";
 import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message";
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;
+  /**
+   * Issue #839 follow-up: System Admin (= TenkaCloud operator 会社) 用 SAML IdP 連携。
+   * SBT が wrap した Cognito UserPool に `CfnUserPoolIdentityProvider` (= SAML) を escape hatch で
+   * 後付けし、 UserPoolClient の `SupportedIdentityProviders` に追加する。 未設定なら従来通り
+   * username/password。
+   */
+  samlIdp?: SamlIdpConfig;
 }
 
 /**
@@ -125,6 +134,28 @@ export class ControlPlaneStack extends cdk.Stack {
       retention: RetentionDays.ONE_WEEK,
     });
 
+    // Issue #839 follow-up: SBT が wrap した UserPool に SAML IdP を escape hatch で後付け。
+    // `CfnUserPoolIdentityProvider` を SBT UserPool の userPoolId 参照で作り、
+    // UserPoolClient.SupportedIdentityProviders / authFlow を `addPropertyOverride` で書き換える。
+    if (props.samlIdp) {
+      const samlIdp = buildControlPlaneSamlIdp(
+        this,
+        cognitoAuth.userPool.userPoolId,
+        props.samlIdp,
+      );
+      // SupportedIdentityProviders を flip。 `enforceSamlOnly` なら SAML 単独、 そうでなければ
+      // COGNITO + SAML 並列 (= Hosted UI に両方の sign-in button が出る)。
+      const idps = props.samlIdp.enforceSamlOnly ? [samlIdp.ref] : ["COGNITO", samlIdp.ref];
+      cfnUserClient.addPropertyOverride("SupportedIdentityProviders", idps);
+      if (props.samlIdp.enforceSamlOnly) {
+        // SAML 単独運用のときは password / SRP 経路を完全に閉じる。 SBT default は USER_SRP_AUTH
+        // + ADMIN_NO_SRP_AUTH を含むので、 上書きで minimum set (= SAML が要る REFRESH_TOKEN のみ) に絞る。
+        cfnUserClient.addPropertyOverride("ExplicitAuthFlows", ["ALLOW_REFRESH_TOKEN_AUTH"]);
+      }
+      // IdP は UserPoolClient より前に存在する必要がある (= CFn 依存)。
+      cfnUserClient.addDependency(samlIdp);
+    }
+
     this.eventBusArn = controlPlane.eventManager.busArn;
     this.regApiGatewayUrl = controlPlane.controlPlaneAPIGatewayUrl;
     // SBT CognitoAuth が払い出した UserPool / UserClient を兄弟 stack
@@ -132,4 +163,33 @@ export class ControlPlaneStack extends cdk.Stack {
     this.cognitoUserPool = cognitoAuth.userPool;
     this.cognitoUserClientId = cognitoAuth.userClientId;
   }
+}
+
+/**
+ * Issue #839 follow-up: SBT-wrapped Cognito UserPool に SAML IdP を escape hatch で追加する。
+ * SBT 0.3.9 が UserPool を expose しているので、 そこに `CfnUserPoolIdentityProvider` を直接 attach。
+ *
+ * AttributeMapping は最低限 email を SAML 標準 namespace から取る。 caller の override があれば優先。
+ */
+function buildControlPlaneSamlIdp(
+  scope: Construct,
+  userPoolId: string,
+  config: SamlIdpConfig,
+): CfnUserPoolIdentityProvider {
+  const providerName = config.providerName ?? "CompanySAML";
+  const defaultEmail = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
+  const userMapping = config.attributeMapping ?? {};
+  const attributeMapping: Record<string, string> = {
+    email: userMapping.email ?? defaultEmail,
+  };
+  return new CfnUserPoolIdentityProvider(scope, "SystemAdminSamlIdp", {
+    userPoolId,
+    providerName,
+    providerType: "SAML",
+    providerDetails: {
+      MetadataURL: config.metadataUrl,
+      IDPSignout: "true",
+    },
+    attributeMapping,
+  });
 }

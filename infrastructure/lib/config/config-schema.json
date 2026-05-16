@@ -9,6 +9,34 @@
     "controlPlaneConfig",
     "bootstrapConfig"
   ],
+  "$defs": {
+    "samlIdpConfig": {
+      "type": "object",
+      "required": ["metadataUrl"],
+      "properties": {
+        "metadataUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "IdP の SAML federation metadata XML を取得する HTTPS URL。 Entra ID / Okta / Google Workspace が expose する URL を貼る。"
+        },
+        "attributeMapping": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "SAML AttributeStatement Name → Cognito attribute name のマップ。 未指定なら email のみ自動。"
+        },
+        "providerName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{3,32}$",
+          "description": "Cognito IdP の表示名 (= Hosted UI button label)。 URL 安全な英数字 + -_ のみ。 default `CompanySAML`。"
+        },
+        "enforceSamlOnly": {
+          "type": "boolean",
+          "description": "true で username/password 経路を無効化 (= SAML のみで sign-in 可)。 既存 user 救済のため初回展開は false 推奨。"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "appName": {
       "type": "string",
@@ -50,10 +78,12 @@
           "type": "array",
           "items": { "type": "string", "format": "uri" },
           "minItems": 1
-        }
+        },
+        "samlIdp": { "$ref": "#/$defs/samlIdpConfig" }
       },
       "additionalProperties": false
     },
+    "tenantSamlConfig": { "$ref": "#/$defs/samlIdpConfig" },
     "bootstrapConfig": {
       "type": "object",
       "required": ["tenantCfnStackPrefix"],
