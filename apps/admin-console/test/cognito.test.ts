@@ -68,6 +68,8 @@ describe("completeLogin", () => {
     let tokens: TokenSet;
     beforeEach(async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
+      // Issue #861: state validation が fail-closed になったので、 valid な state を inject。
+      sessionStorage.setItem("TenkaCloud.oauth_state", "STATE-OK");
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -82,7 +84,7 @@ describe("completeLogin", () => {
           ),
         ),
       );
-      tokens = await completeLogin(config, "code");
+      tokens = await completeLogin(config, "code", "STATE-OK");
     });
 
     it("id_token を TokenSet.idToken に入れるべき", () => {
@@ -109,6 +111,8 @@ describe("completeLogin", () => {
   describe("Cognito が 4xx を返したとき", () => {
     it("ステータスと detail を含むエラーを投げるべき", async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
+      // Issue #861: state validation 経由で state を渡す。
+      sessionStorage.setItem("TenkaCloud.oauth_state", "STATE-OK");
       vi.stubGlobal(
         "fetch",
         vi
@@ -116,9 +120,36 @@ describe("completeLogin", () => {
           .mockResolvedValue(new Response("invalid_grant", { status: 400, statusText: "Bad" })),
       );
 
-      // Issue #873: regex regression を回避。
-      await expect(completeLogin(config, "bad")).rejects.toMatchObject({
+      // Issue #861 + #873: state validation 経由で state を渡しつつ、 vitest 4.x regex
+      // regression を回避するため toMatchObject で message を照合する。
+      await expect(completeLogin(config, "bad", "STATE-OK")).rejects.toMatchObject({
         message: expect.stringMatching(/400.*invalid_grant/),
+      });
+    });
+  });
+
+  describe("Issue #861: state validation fail-closed", () => {
+    it("returnedState 不一致は throw", async () => {
+      sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
+      sessionStorage.setItem("TenkaCloud.oauth_state", "EXPECTED");
+      await expect(completeLogin(config, "code", "ATTACKER-STATE")).rejects.toMatchObject({
+        message: expect.stringContaining("OAuth state mismatch"),
+      });
+    });
+
+    it("sessionStorage に state が無いとき (= session clear / CSRF 経路) も throw", async () => {
+      sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
+      // STATE_KEY を入れない
+      await expect(completeLogin(config, "code", "ATTACKER-STATE")).rejects.toMatchObject({
+        message: expect.stringContaining("OAuth state mismatch"),
+      });
+    });
+
+    it("returnedState 未指定でも throw (= 旧 silent skip の bypass を塞ぐ)", async () => {
+      sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
+      sessionStorage.setItem("TenkaCloud.oauth_state", "EXPECTED");
+      await expect(completeLogin(config, "code")).rejects.toMatchObject({
+        message: expect.stringContaining("OAuth state mismatch"),
       });
     });
   });

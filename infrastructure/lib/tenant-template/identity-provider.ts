@@ -143,6 +143,22 @@ interface IdentityProviderProps {
  * env / tenantId / accountId のいずれかが空文字 (synth-only context など) のときは
  * placeholder で synth が通るようにフォールバックする。
  */
+/**
+ * Issue #861: production では localhost callback URL を含めない (= phishing 経路で localhost
+ * dev tool に redirect される攻撃面を縮減)。 development / staging では dev 経路を維持。
+ *
+ * pure function、 input が同じなら output 不変。 test も容易。
+ */
+export function buildAllowedRedirectUrls(
+  primaryUrl: string,
+  environment: string,
+  devUrl: string,
+): readonly string[] {
+  const env = environment.toLowerCase();
+  if (env === "production") return [primaryUrl];
+  return [primaryUrl, devUrl];
+}
+
 function buildCognitoDomainPrefix(
   environment: string,
   tenantId: string,
@@ -286,14 +302,29 @@ export class IdentityProvider extends Construct {
         ],
         flows: {
           authorizationCodeGrant: true,
-          implicitCodeGrant: true,
+          // Issue #861: Implicit Grant は OAuth 2.0 で legacy 認定 (RFC 8252 / OAuth 2.1 で廃止)。
+          // token を URL fragment で渡し browser history / referrer / log に残るため漏れリスクあり。
+          // PKCE + Authorization Code Grant のみで OK なので無効化する。
+          implicitCodeGrant: false,
         },
+        // Issue #861: localhost callback URL は production では Allowed list に含めない。
+        // attacker が phishing 経路で localhost (= dev tooling) への redirect を試みるリスクを
+        // 下げる。 dev / staging では引き続き許容して \`make dev\` で application-admin-console を
+        // localhost:5174 で立てたデバッグ経路を壊さない。
         callbackUrls: [
-          `${props.applicationAdminConsoleUrl}/callback`,
-          // dev (apps/application-admin-console を make dev で立てる場合)
-          "http://localhost:5174/callback",
+          ...buildAllowedRedirectUrls(
+            `${props.applicationAdminConsoleUrl}/callback`,
+            props.environment,
+            "http://localhost:5174/callback",
+          ),
         ],
-        logoutUrls: [`${props.applicationAdminConsoleUrl}/`, "http://localhost:5174/"],
+        logoutUrls: [
+          ...buildAllowedRedirectUrls(
+            `${props.applicationAdminConsoleUrl}/`,
+            props.environment,
+            "http://localhost:5174/",
+          ),
+        ],
       },
     });
     if (samlProvider) {

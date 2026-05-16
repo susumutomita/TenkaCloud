@@ -86,19 +86,24 @@ export class ControlPlaneStack extends cdk.Stack {
     });
 
     // SBT 内蔵 UserPoolUserClient の callbackUrls を escape hatch で上書きして
-    // localhost 多ポート + CloudFront URL + ref デフォルトの 'http://localhost' を許可する。
+    // CloudFront URL を許可する。
+    // Issue #861: production では localhost callback URL を含めない (= phishing 経路で
+    // localhost dev tool に redirect される攻撃面を縮減)。 dev / staging は維持。
+    const isProduction = process.env.CDK_PARAM_ENVIRONMENT === "production";
     const userClient = cognitoAuth.node.findChild("UserPoolUserClient") as UserPoolClient;
     const cfnUserClient = userClient.node.defaultChild as CfnUserPoolClient;
-    cfnUserClient.addPropertyOverride("CallbackURLs", [
-      "http://localhost",
-      ...LOCALHOST_CALLBACK_URLS,
-      ...extraCallbackUrls,
-    ]);
-    cfnUserClient.addPropertyOverride("LogoutURLs", [
-      "http://localhost",
-      ...LOCALHOST_LOGOUT_URLS,
-      ...extraLogoutUrls,
-    ]);
+    cfnUserClient.addPropertyOverride(
+      "CallbackURLs",
+      isProduction
+        ? [...extraCallbackUrls]
+        : ["http://localhost", ...LOCALHOST_CALLBACK_URLS, ...extraCallbackUrls],
+    );
+    cfnUserClient.addPropertyOverride(
+      "LogoutURLs",
+      isProduction
+        ? [...extraLogoutUrls]
+        : ["http://localhost", ...LOCALHOST_LOGOUT_URLS, ...extraLogoutUrls],
+    );
 
     // Issue #653: SBT default の SystemAdmin 招待メール本文は `http://localhost` を
     // 埋めてしまうため、 admin-console origin に書き換える。 Phase 1 deploy 時は
