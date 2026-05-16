@@ -79,7 +79,7 @@ describe("problem template ParticipantViewerRole (#744)", () => {
         if (hasWildcard) {
           expect(
             /^(List|Describe)/.test(sid),
-            `Sid \"${sid}\" uses Resource:\"*\" — only allowed for List*/Describe-all read APIs`,
+            `Sid "${sid}" uses Resource:"*" — only allowed for List*/Describe-all read APIs`,
           ).toBe(true);
         }
       }

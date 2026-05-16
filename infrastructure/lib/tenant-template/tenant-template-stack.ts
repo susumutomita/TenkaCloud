@@ -9,6 +9,7 @@ import {
 } from "aws-cdk-lib/custom-resources";
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core";
+import type { SamlIdpConfig } from "../config/config-interface";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
 
 interface TenantTemplateStackProps extends StackProps {
@@ -64,6 +65,12 @@ interface TenantTemplateStackProps extends StackProps {
    * install.sh が tenant-template-pooled を再 deploy するときに埋まる。
    */
   competitorBootstrapTemplateUrl?: string;
+  /**
+   * Issue #839 follow-up: 全 tenant 共有の SAML IdP 連携 (= operator 会社 SSO)。
+   * 未設定なら従来通り Cognito username/password。 wire.ts が `Config.tenantSamlConfig` を
+   * そのまま渡す。
+   */
+  samlConfig?: SamlIdpConfig;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -106,6 +113,7 @@ export class TenantTemplateStack extends Stack {
         ssmParameterNames: props.ApiKeySSMParameterNames,
         ssmLookup: (name) => this.ssmLookup(name),
       },
+      samlConfig: props.samlConfig,
     });
     const applicationAdminConsoleHosting = appPlaneCore.applicationAdminConsoleHosting;
     const identityProvider = appPlaneCore.identityProvider;

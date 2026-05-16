@@ -1,4 +1,5 @@
 import type { BillingMode } from "aws-cdk-lib/aws-dynamodb";
+import type { SamlIdpConfig } from "../config/config-interface";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
 
@@ -86,6 +87,18 @@ export interface AppConfig {
 
   /** Phase 2 hosting stack を立てるための 3 つの env (全部揃ったときだけ deploy する)。 */
   readonly adminConsoleHostingInputs: AdminConsoleHostingInputs | undefined;
+
+  /**
+   * Issue #839 follow-up: 全 tenant 共有の SAML IdP 連携。 config.json の `tenantSamlConfig`
+   * からそのまま渡す。 未設定なら従来通り Cognito username/password。
+   */
+  readonly tenantSamlConfig: SamlIdpConfig | undefined;
+  /**
+   * Issue #839 follow-up: System Admin (= Control Plane) 用 SAML IdP 連携。 config.json の
+   * `controlPlaneConfig.samlIdp` からそのまま渡す。 ControlPlaneStack が SBT UserPool に escape
+   * hatch で IdP を付ける。
+   */
+  readonly controlPlaneSamlConfig: SamlIdpConfig | undefined;
 }
 
 export interface ProblemsCatalogBundle {

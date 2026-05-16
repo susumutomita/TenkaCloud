@@ -188,6 +188,12 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
 
   const adminConsoleHostingInputs = buildHostingInputs(env);
 
+  // Issue #839 follow-up: SAML IdP 設定を config.json から取り出す (= 未設定なら undefined)。
+  // tenant-stack 側 (= application-admin-console / pooled tenant + per-tenant silo + Lite) と
+  // control-plane 側 (= admin-console / SBT ControlPlane) で独立して enable できる。
+  const tenantSamlConfig = config?.tenantSamlConfig;
+  const controlPlaneSamlConfig = config?.controlPlaneConfig?.samlIdp;
+
   return {
     environment,
     isProductionLike,
@@ -224,6 +230,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     adminConsoleOriginForCors,
     competitorBootstrapTemplateUrlEnv,
     adminConsoleHostingInputs,
+    tenantSamlConfig,
+    controlPlaneSamlConfig,
   };
 }
 

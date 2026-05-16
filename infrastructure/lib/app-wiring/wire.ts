@@ -36,6 +36,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   const controlPlaneStack = new ControlPlaneStack(app, "tenkacloud-control-plane", {
     ...config.stackEnv,
     systemAdminEmail: config.systemAdminEmail,
+    samlIdp: config.controlPlaneSamlConfig,
   });
 
   // SBT が ControlPlane 内部で作る TenantDetails table は default 5/5 (CDK Table の
@@ -127,6 +128,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
       participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
       competitorBootstrapTemplateUrl: config.competitorBootstrapTemplateUrlEnv,
+      samlConfig: config.tenantSamlConfig,
     },
   );
   tenantTemplateStack.addDependency(problemDeployBackendStack);
