@@ -9,7 +9,7 @@ import {
 } from "aws-cdk-lib/aws-cloudfront";
 import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 
 interface ApplicationAdminConsoleHostingProps {
@@ -165,12 +165,15 @@ export class ApplicationAdminConsoleHosting extends Construct {
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }
         : {}),
     };
+    // Issue #867: runtime-config.json は CloudFront cache 無効化。 pooled tenants 共有 CDN
+    // でも tenant 別 config を返すため cache はリスク (= 設定混線)。
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", data)],
       destinationBucket: this.bucket,
       distribution: this.distribution,
       distributionPaths: ["/runtime-config.json"],
       prune: false,
+      cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
     });
   }
 }

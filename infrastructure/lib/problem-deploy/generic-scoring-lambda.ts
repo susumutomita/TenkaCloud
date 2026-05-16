@@ -7,7 +7,11 @@ import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { encodeLargeEnvValue } from "../utils/env-encoding";
-import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
+import {
+  LAMBDA_NODEJS_BUNDLING_TARGET,
+  LAMBDA_NODEJS_RUNTIME,
+  LAMBDA_SOURCE_MAP_ENABLED,
+} from "../utils/lambda-runtime";
 
 export interface GenericScoringLambdaProps {
   readonly deploymentsTable: ITable;
@@ -96,7 +100,7 @@ export class GenericScoringLambda extends Construct {
       bundling: {
         minify: true,
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: true,
+        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
       },
     });

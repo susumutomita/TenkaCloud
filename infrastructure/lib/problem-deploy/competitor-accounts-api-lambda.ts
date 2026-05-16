@@ -5,7 +5,11 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import { LAMBDA_NODEJS_BUNDLING_TARGET, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime";
+import {
+  LAMBDA_NODEJS_BUNDLING_TARGET,
+  LAMBDA_NODEJS_RUNTIME,
+  LAMBDA_SOURCE_MAP_ENABLED,
+} from "../utils/lambda-runtime";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface CompetitorAccountsApiLambdaProps {
@@ -59,7 +63,7 @@ export class CompetitorAccountsApiLambda extends Construct {
       bundling: {
         minify: true,
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: true,
+        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
       },
     });
