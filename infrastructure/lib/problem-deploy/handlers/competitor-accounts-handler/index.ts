@@ -225,13 +225,17 @@ app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c
     // 「いつ・どの operator (Cognito sub) が・どの (tenant, account) を rotate したか」を
     // 後追いできる。DDB の専用 audit table を作らない代わりに log を正本にする
     // (= ZERO 新 infra、operator 監査は infrequent なので Logs Insights で十分)。
+    //
+    // Issue #864: timing 分析で attack window を絞られないように `rotatedAt` を分単位に
+    // 粗化する (= ISO8601 の秒以下を 00 に切り詰め)。 audit 用途では分単位で十分。
+    const rotatedAtCoarse = response.rotatedAt.replace(/:\d{2}\.\d+Z$/, ":00.000Z");
     console.log(
       JSON.stringify({
         event: "competitor-accounts.rotate",
         tenantId,
         awsAccountId,
         rotatedBy,
-        rotatedAt: response.rotatedAt,
+        rotatedAt: rotatedAtCoarse,
       }),
     );
     return c.json(response, StatusCodes.OK);
