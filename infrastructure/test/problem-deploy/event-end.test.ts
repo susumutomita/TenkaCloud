@@ -85,6 +85,9 @@ describe("endEvent", () => {
     for (const cmd of updCmds) {
       expect(cmd.input.UpdateExpression).toContain("eventEndsAt = :e");
       expect(cmd.input.ExpressionAttributeValues?.[":e"]).toBe(NOW_ISO);
+      // #872: deployment write も tenantId 一致を atomic に強制する defense-in-depth
+      expect(cmd.input.ConditionExpression).toBe("tenantId = :tenantId");
+      expect(cmd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
     }
   });
 

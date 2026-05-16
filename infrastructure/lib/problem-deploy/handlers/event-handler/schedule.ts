@@ -170,7 +170,10 @@ export async function setEventSchedule(
 
   // deployment 側も dynamic UpdateExpression — startsAt のみ / endsAt のみ / 両方 を対応
   const depSetParts: string[] = ["updatedAt = :now"];
-  const depExprValues: Record<string, string> = { ":now": exprValues[":now"] ?? "" };
+  const depExprValues: Record<string, string> = {
+    ":now": exprValues[":now"] ?? "",
+    ":tenantId": tenantId,
+  };
   if (startsAt !== undefined) {
     depSetParts.push("eventStartsAt = :s");
     depExprValues[":s"] = startsAt;
@@ -182,16 +185,25 @@ export async function setEventSchedule(
   const depUpdateExpression = `SET ${depSetParts.join(", ")}`;
 
   // Promise.all で並列 update。各 row は冪等な field update。
+  // #872: tenantId 一致を atomic に強制 (= queryDeploymentsByEvent が GSI1=TENANT#... で
+  // 引いているので transitively 安全だが、 write 自体に condition を載せて defense-in-depth)。
   await Promise.all(
     targets.map((d) =>
-      shared.ddb.send(
-        new UpdateCommand({
-          TableName: shared.deploymentsTableName,
-          Key: { PK: d.PK, SK: "META" },
-          UpdateExpression: depUpdateExpression,
-          ExpressionAttributeValues: depExprValues,
+      shared.ddb
+        .send(
+          new UpdateCommand({
+            TableName: shared.deploymentsTableName,
+            Key: { PK: d.PK, SK: "META" },
+            UpdateExpression: depUpdateExpression,
+            ConditionExpression: "tenantId = :tenantId",
+            ExpressionAttributeValues: depExprValues,
+          }),
+        )
+        .catch((err: unknown) => {
+          // CCF = item が消えた / tenant 不一致 → skip (= idempotent な field 伝播なので無視 OK)。
+          if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
+          throw err;
         }),
-      ),
     ),
   );
 

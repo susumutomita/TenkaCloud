@@ -172,11 +172,13 @@ describe("startDeployment", () => {
       putCmd.input.Item ? { PK: putCmd.input.Item.PK, SK: "META" } : undefined,
     );
     expect(updateCmd?.input.UpdateExpression).toContain("#s = :failed");
-    expect(updateCmd?.input.ConditionExpression).toBe("#s = :pending");
+    // #872: compensation 経路でも tenantId と #s の両方を condition で AND。
+    expect(updateCmd?.input.ConditionExpression).toBe("tenantId = :tenantId AND #s = :pending");
     expect(updateCmd?.input.ExpressionAttributeValues?.[":failed"]).toBe("FAILED");
     expect(updateCmd?.input.ExpressionAttributeValues?.[":reason"]).toBe(
       "Failed to publish DeployCreateRequested event",
     );
+    expect(updateCmd?.input.ExpressionAttributeValues?.[":tenantId"]).toBeDefined();
   });
 
   it("forward-compat フィールド (accountGroupId / problemSetId) も保存するべき", async () => {
