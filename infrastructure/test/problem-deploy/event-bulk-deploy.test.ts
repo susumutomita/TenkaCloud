@@ -465,6 +465,9 @@ describe("bulkDeployEvent", () => {
     // TEARDOWN/ARCHIVED は触らない (ConditionExpression で DRAFT/READY/DEPLOYING のみ許可)
     expect(cmd.input.ExpressionAttributeValues?.[":draft"]).toBe("DRAFT");
     expect(cmd.input.ExpressionAttributeValues).not.toHaveProperty(":teardown");
+    // #872: tenantId condition で他 tenant の event を踏み越えない defense-in-depth
+    expect(cmd.input.ConditionExpression).toContain("tenantId = :tenantId");
+    expect(cmd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
   });
 
   // #555: 既存 (teamId, problemId) と衝突する組は再 PUT しない (= idempotent skip)

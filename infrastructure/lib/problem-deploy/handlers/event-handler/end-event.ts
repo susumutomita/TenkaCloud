@@ -77,16 +77,25 @@ export async function endEvent(
     .map((d) => d as Pick<DeploymentItem, "PK">)
     .filter((d) => typeof d.PK === "string");
 
+  // #872: tenantId 一致を atomic に強制 (= queryDeploymentsByEvent が GSI1=TENANT#... で
+  // 引いているので transitively 安全だが、 write レベルで明示する defense-in-depth)。
   await Promise.all(
     targets.map((d) =>
-      shared.ddb.send(
-        new UpdateCommand({
-          TableName: shared.deploymentsTableName,
-          Key: { PK: d.PK, SK: "META" },
-          UpdateExpression: "SET eventEndsAt = :e, updatedAt = :now",
-          ExpressionAttributeValues: { ":e": now, ":now": now },
+      shared.ddb
+        .send(
+          new UpdateCommand({
+            TableName: shared.deploymentsTableName,
+            Key: { PK: d.PK, SK: "META" },
+            UpdateExpression: "SET eventEndsAt = :e, updatedAt = :now",
+            ConditionExpression: "tenantId = :tenantId",
+            ExpressionAttributeValues: { ":e": now, ":now": now, ":tenantId": tenantId },
+          }),
+        )
+        .catch((err: unknown) => {
+          // CCF = item が消えた / tenant 不一致 → idempotent な denormalize なので skip。
+          if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
+          throw err;
         }),
-      ),
     ),
   );
 

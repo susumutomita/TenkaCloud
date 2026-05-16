@@ -442,13 +442,17 @@ export async function bulkDeployEvent(
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
         UpdateExpression: "SET #status = :deploying, updatedAt = :now",
-        ConditionExpression: "#status = :draft OR #status = :ready OR #status = :deploying",
+        // #872: tenantId 一致を atomic に強制 (= 他 tenant の event を踏み越えない defense-in-depth)。
+        // 状態遷移条件 (DRAFT/READY/DEPLOYING) と AND で評価。
+        ConditionExpression:
+          "tenantId = :tenantId AND (#status = :draft OR #status = :ready OR #status = :deploying)",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
           ":deploying": "DEPLOYING",
           ":draft": "DRAFT",
           ":ready": "READY",
           ":now": createdAt,
+          ":tenantId": tenantId,
         },
       }),
     )

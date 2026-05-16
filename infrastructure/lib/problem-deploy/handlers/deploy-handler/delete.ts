@@ -138,13 +138,15 @@ export async function requestTeardown(
           TableName: shared.tableName,
           Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
           UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
-          ConditionExpression: "#s = :deleting",
+          // #872: compensation path にも tenantId condition を載せ defense-in-depth。
+          ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
           ExpressionAttributeNames: { "#s": "status" },
           ExpressionAttributeValues: {
             ":failed": "FAILED",
             ":deleting": "DELETING",
             ":updatedAt": new Date(nowMs).toISOString(),
             ":reason": "Failed to publish DeployDeleteRequested event",
+            ":tenantId": tenantId,
           },
         }),
       );

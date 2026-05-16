@@ -223,13 +223,16 @@ export async function startDeployment(
           TableName: ctx.tableName,
           Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
           UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
-          ConditionExpression: "#s = :pending",
+          // #872: compensation 経路に tenantId condition (= 直前 PutItem 自身が item.tenantId を
+          // 書いているので transitively 一致するが、 write レベルで明示する defense-in-depth)。
+          ConditionExpression: "tenantId = :tenantId AND #s = :pending",
           ExpressionAttributeNames: { "#s": "status" },
           ExpressionAttributeValues: {
             ":failed": "FAILED",
             ":pending": "PENDING",
             ":updatedAt": new Date(ctx.now()).toISOString(),
             ":reason": "Failed to publish DeployCreateRequested event",
+            ":tenantId": item.tenantId,
           },
         }),
       );
