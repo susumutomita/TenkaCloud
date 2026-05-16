@@ -131,4 +131,79 @@ describe("AuthProvider", () => {
   it("Provider 外で useAuth() を呼んだら error を throw するべき", () => {
     expect(() => renderHook(() => useAuth())).toThrow(/AuthProvider/);
   });
+
+  describe("Issue #859: idle timeout (6 hours)", () => {
+    it("5h 59min 経過しても logout しないべき (= 競技中の長時間 idle を許容)", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderAuth(devConfig);
+        await act(async () => {
+          await result.current.login("abc-123-team");
+        });
+        expect(result.current.session).not.toBeNull();
+
+        await act(async () => {
+          vi.advanceTimersByTime(5 * 60 * 60 * 1000 + 59 * 60 * 1000);
+          await Promise.resolve();
+        });
+        // 6h 未満ではまだ session 維持
+        expect(result.current.session).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("6h 無操作で auto-logout するべき (= 競技後の安全弁)", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderAuth(devConfig);
+        await act(async () => {
+          await result.current.login("abc-123-team");
+        });
+        expect(result.current.session).not.toBeNull();
+
+        await act(async () => {
+          vi.advanceTimersByTime(6 * 60 * 60 * 1000 + 1000);
+          await Promise.resolve();
+        });
+        expect(result.current.session).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("user 操作で 6h timer は reset されるべき", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderAuth(devConfig);
+        await act(async () => {
+          await result.current.login("abc-123-team");
+        });
+
+        // 5h 経過 → keydown で reset → 5h 59min 経過 (合計 10h 59min) でも logout しない
+        await act(async () => {
+          vi.advanceTimersByTime(5 * 60 * 60 * 1000);
+          await Promise.resolve();
+        });
+        await act(async () => {
+          window.dispatchEvent(new KeyboardEvent("keydown"));
+          await Promise.resolve();
+        });
+        await act(async () => {
+          vi.advanceTimersByTime(5 * 60 * 60 * 1000 + 59 * 60 * 1000);
+          await Promise.resolve();
+        });
+        expect(result.current.session).not.toBeNull();
+
+        // 残り 1 min 進めて (= reset 後 6h 経過) logout 発火
+        await act(async () => {
+          vi.advanceTimersByTime(2 * 60 * 1000);
+          await Promise.resolve();
+        });
+        expect(result.current.session).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
