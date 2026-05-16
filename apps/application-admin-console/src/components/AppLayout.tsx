@@ -112,6 +112,7 @@ export function ShellLayout({
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
               { type: "link", href: "/competitor-accounts", text: "Competitor Accounts" },
+              { type: "link", href: "/settings/sso", text: t("nav.saml_sso") },
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {

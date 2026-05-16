@@ -1,3 +1,4 @@
+import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
@@ -9,6 +10,7 @@ import { getEnv } from "../../../helper-functions.js";
  *
  * - `tableName` = `CompetitorAccounts` DDB (Issue #459 / ADR-002)
  * - `env` / `tenkaCloudAccountId` = SSM path 構築 + 「Add account」レスポンスで返す値
+ * - `cognito` = Issue #839 Phase B で SAML IdP CRUD に使う Cognito-IDP client
  *
  * Lambda は warm invoke で SDK client を 1 つだけ持つ (= cold start 軽減)。
  */
@@ -19,6 +21,7 @@ export interface CompetitorAccountsSharedResources {
   readonly ddb: DynamoDBDocumentClient;
   readonly ssm: SSMClient;
   readonly sts: STSClient;
+  readonly cognito: CognitoIdentityProviderClient;
 }
 
 export function buildCompetitorAccountsSharedResources(): CompetitorAccountsSharedResources {
@@ -29,5 +32,6 @@ export function buildCompetitorAccountsSharedResources(): CompetitorAccountsShar
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     ssm: new SSMClient({}),
     sts: new STSClient({}),
+    cognito: new CognitoIdentityProviderClient({}),
   };
 }

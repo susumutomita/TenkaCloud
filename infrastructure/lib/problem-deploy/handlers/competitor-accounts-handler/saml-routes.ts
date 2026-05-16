@@ -1,0 +1,286 @@
+import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
+import type { Context } from "hono";
+import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
+import {
+  allowCognitoOnClient,
+  type CognitoSamlDeps,
+  deleteSamlProvider,
+  enforceSamlOnlyOnClient,
+  extractUserPoolIdFromIss,
+  upsertSamlProvider,
+} from "./cognito-saml.js";
+import { deleteTenantSamlConfig, getTenantSamlConfig, putTenantSamlConfig } from "./saml-store.js";
+import {
+  DEFAULT_SAML_PROVIDER_NAME,
+  normalizeAttributeMapping,
+  type TenantSamlConfigInput,
+  TenantSamlConfigInputSchema,
+  type TenantSamlConfigView,
+} from "./saml-types.js";
+import type { CompetitorAccountsSharedResources } from "./shared.js";
+
+/**
+ * Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する route 群。
+ *
+ *   GET    /admin/tenant-saml-config       — 現在の設定 view (= disabled なら enabled:false)
+ *   PUT    /admin/tenant-saml-config       — upsert (= Cognito IdP create/update + UserPoolClient
+ *                                            mutation + DDB persist)
+ *   DELETE /admin/tenant-saml-config       — disable (= UserPoolClient から SAML を外し + COGNITO
+ *                                            復元 → IdP 削除 → DDB row 削除)
+ *
+ * 設計判断:
+ *  - **UserPool ID は JWT iss から runtime 抽出**: cross-stack で具体 UserPool ARN を渡さず、
+ *    呼び出した user の token issuer の UserPool だけを mutate する self-targeting にする。
+ *  - **UserPoolClient ID は JWT aud (= client_id) から抽出**: UserPool 内に複数 client がある
+ *    ケースを想定せず、 token が来た client を対象にする。
+ *  - **enforceSamlOnly: true への flip は破壊的**: caller (UI) は 2-step 確認 modal を要求する。
+ *    backend は単純に flag を見て enforce する (= 確認 UX は frontend 責任)。
+ *  - **lock-out からの復旧経路**: 万一 SAML 設定が壊れて誰もログインできなくなったら、 operator は
+ *    `make deploy` で CDK 経由に戻すか、 AWS Console から手動で UserPoolClient.SupportedIdentityProviders
+ *    に COGNITO を足す。 これは security ops doc に残す前提。
+ */
+
+export interface SamlRouteResult {
+  /** HTTP status を caller (Hono) が読む。 */
+  readonly status: number;
+  /** body を caller が `c.json` する。 */
+  readonly body: unknown;
+}
+
+interface JwtClaims {
+  readonly iss?: string;
+  readonly aud?: string;
+  readonly client_id?: string;
+  readonly sub?: string;
+  readonly [k: string]: unknown;
+}
+
+/**
+ * JWT claims から Cognito self-targeting に必要な情報を取り出す。 必要な claim が無ければ
+ * `undefined` を返し、 caller が 401 / 422 に倒す。
+ */
+export function extractSelfPoolFromContext(c: Context): CognitoSamlDeps | undefined {
+  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
+  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
+  const userPoolId = extractUserPoolIdFromIss(claims?.iss);
+  // Cognito access_token は aud ではなく client_id を持つ場合がある (= access_token vs id_token)。
+  // API GW JWT Authorizer は id_token を要求するので aud を優先しつつ、 client_id fallback も持つ。
+  const userPoolClientId =
+    typeof claims?.aud === "string" && claims.aud.length > 0
+      ? claims.aud
+      : typeof claims?.client_id === "string" && claims.client_id.length > 0
+        ? claims.client_id
+        : undefined;
+  if (!userPoolId || !userPoolClientId) return undefined;
+  return {
+    client: { send: () => Promise.reject(new Error("client not injected")) },
+    userPoolId,
+    userPoolClientId,
+  };
+}
+
+/**
+ * GET の DDB 経由実装。 caller の Hono ルートから呼ばれる pure-ish function (= shared + tenantId のみ依存)。
+ */
+export async function handleGetTenantSamlConfig(
+  shared: CompetitorAccountsSharedResources,
+  tenantId: string,
+): Promise<SamlRouteResult> {
+  const view = await getTenantSamlConfig(
+    { ddb: shared.ddb, tableName: shared.tableName },
+    tenantId,
+  );
+  if (!view) {
+    const disabled: TenantSamlConfigView = { enabled: false };
+    return { status: 200, body: disabled };
+  }
+  return { status: 200, body: view };
+}
+
+/**
+ * PUT 本体。 validation → Cognito upsert → UserPoolClient mutate → DDB persist の順。
+ * 失敗時の rollback は半端 (= DDB だけ書いて Cognito 失敗、 など) になり得るが、 再送で必ず
+ * eventual consistency に倒れる (= idempotent) ことで許容する。
+ */
+export async function handlePutTenantSamlConfig(
+  shared: CompetitorAccountsSharedResources,
+  cognitoDeps: CognitoSamlDeps,
+  ctx: { readonly tenantId: string; readonly updatedBy: string; readonly nowIso: string },
+  rawBody: unknown,
+): Promise<SamlRouteResult> {
+  const parsed = TenantSamlConfigInputSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return {
+      status: 400,
+      body: { error: "validation_failed", issues: parsed.error.issues },
+    };
+  }
+  const input: TenantSamlConfigInput = parsed.data;
+  const providerName = input.providerName ?? DEFAULT_SAML_PROVIDER_NAME;
+  const attributeMapping = normalizeAttributeMapping(input.attributeMapping);
+
+  // 1. Cognito IdP を upsert (= 既存なら Update、 無ければ Create)。
+  await upsertSamlProvider(cognitoDeps, {
+    providerName,
+    metadataUrl: input.metadataUrl,
+    attributeMapping,
+  });
+
+  // 2. UserPoolClient.SupportedIdentityProviders と ExplicitAuthFlows を flip。
+  if (input.enforceSamlOnly === true) {
+    await enforceSamlOnlyOnClient(cognitoDeps, providerName);
+  } else {
+    // 並列許可 (= COGNITO 経路は維持)。 SAML を SupportedIdentityProviders に追加。
+    // helper の名前が "allow" + "attach" で動詞 split されているため、 順序は:
+    //   - 先に COGNITO を残しつつ SAML を追加 (= attach)
+    //   - allowCognitoOnClient は逆方向 (= SAML を外す経路) なので使わない
+    const { attachSamlToClient } = await import("./cognito-saml.js");
+    await attachSamlToClient(cognitoDeps, providerName);
+  }
+
+  // 3. DDB persist (= UI が次回 GET で current state を見れる)。
+  const view = await putTenantSamlConfig(
+    { ddb: shared.ddb, tableName: shared.tableName },
+    ctx.tenantId,
+    { ...input, providerName, attributeMapping },
+    { updatedAt: ctx.nowIso, updatedBy: ctx.updatedBy },
+  );
+
+  // 4. 監査ログ (= console.log 経路、 ZERO 新 infra)。
+  console.log(
+    JSON.stringify({
+      event: "tenant-saml.upsert",
+      tenantId: ctx.tenantId,
+      providerName,
+      enforceSamlOnly: input.enforceSamlOnly === true,
+      updatedBy: ctx.updatedBy,
+      updatedAt: ctx.nowIso,
+    }),
+  );
+
+  return { status: 200, body: view };
+}
+
+/**
+ * DELETE 本体。 idempotent: 不在の SAML config を消しても OK。
+ *
+ * 順序:
+ *   1. UserPoolClient から SAML を外し COGNITO を必ず復元 (= lock-out 防止)
+ *   2. Cognito IdP を削除 (= 残ったままだと UserPool 内で provider name 衝突するため)
+ *   3. DDB row 削除
+ *
+ * 1 と 2 の間で Lambda が落ちると IdP だけ残る (= UserPoolClient 側では参照外れているので
+ * 実害なし、 次回 PUT で同 provider name の Update を打てる)。 caller の再送で eventual consistency。
+ */
+export async function handleDeleteTenantSamlConfig(
+  shared: CompetitorAccountsSharedResources,
+  cognitoDeps: CognitoSamlDeps,
+  ctx: { readonly tenantId: string; readonly updatedBy: string; readonly nowIso: string },
+): Promise<SamlRouteResult> {
+  // 既存 config を読んで providerName を決める。 無ければ default 名で attempt (= 不在なら no-op)。
+  const existing = await getTenantSamlConfig(
+    { ddb: shared.ddb, tableName: shared.tableName },
+    ctx.tenantId,
+  );
+  const providerName = existing?.providerName ?? DEFAULT_SAML_PROVIDER_NAME;
+
+  // 1. UserPoolClient revert: SAML を外し COGNITO + 標準 ExplicitAuthFlows を復元。
+  await allowCognitoOnClient(cognitoDeps, providerName);
+
+  // 2. Cognito IdP delete (idempotent)。
+  await deleteSamlProvider(cognitoDeps, providerName);
+
+  // 3. DDB row 削除。
+  await deleteTenantSamlConfig({ ddb: shared.ddb, tableName: shared.tableName }, ctx.tenantId);
+
+  console.log(
+    JSON.stringify({
+      event: "tenant-saml.delete",
+      tenantId: ctx.tenantId,
+      providerName,
+      deletedBy: ctx.updatedBy,
+      deletedAt: ctx.nowIso,
+    }),
+  );
+
+  return { status: 200, body: { deleted: true } };
+}
+
+/**
+ * Hono route handlers から呼ぶ thin orchestration: tenantId + sub を context から取り、
+ * Cognito self-targeting deps を組んで、 route-specific handler を呼ぶ。
+ *
+ * 各 route handler は **pure-ish** (= ctx 引数のみ取る) なので test しやすい。
+ */
+export interface SamlOrchestratorDeps {
+  readonly shared: CompetitorAccountsSharedResources;
+  /** test injection 用: Cognito SDK の動的 client。 prod では `shared.cognito` がそのまま入る。 */
+  readonly makeCognitoDeps?: (
+    c: Context,
+  ) => Promise<CognitoSamlDeps | undefined> | CognitoSamlDeps | undefined;
+}
+
+export function defaultMakeCognitoDeps(
+  shared: CompetitorAccountsSharedResources,
+): (c: Context) => CognitoSamlDeps | undefined {
+  return (c) => {
+    const skeleton = extractSelfPoolFromContext(c);
+    if (!skeleton) return undefined;
+    return {
+      client: shared.cognito,
+      userPoolId: skeleton.userPoolId,
+      userPoolClientId: skeleton.userPoolClientId,
+    };
+  };
+}
+
+export async function routeGet(deps: SamlOrchestratorDeps, c: Context): Promise<SamlRouteResult> {
+  const tenantId = resolveTenantId(c);
+  return handleGetTenantSamlConfig(deps.shared, tenantId);
+}
+
+export async function routePut(deps: SamlOrchestratorDeps, c: Context): Promise<SamlRouteResult> {
+  const tenantId = resolveTenantId(c);
+  const sub = resolveCognitoSub(c);
+  const cognitoDeps = await (deps.makeCognitoDeps?.(c) ?? defaultMakeCognitoDeps(deps.shared)(c));
+  if (!cognitoDeps) {
+    return {
+      status: 422,
+      body: { error: "missing_cognito_claims", message: "iss / aud claims are required" },
+    };
+  }
+  const body = await c.req.json().catch(() => null);
+  if (body === null) {
+    return { status: 400, body: { error: "invalid_body" } };
+  }
+  return handlePutTenantSamlConfig(
+    deps.shared,
+    cognitoDeps,
+    {
+      tenantId,
+      updatedBy: sub,
+      nowIso: new Date().toISOString(),
+    },
+    body,
+  );
+}
+
+export async function routeDelete(
+  deps: SamlOrchestratorDeps,
+  c: Context,
+): Promise<SamlRouteResult> {
+  const tenantId = resolveTenantId(c);
+  const sub = resolveCognitoSub(c);
+  const cognitoDeps = await (deps.makeCognitoDeps?.(c) ?? defaultMakeCognitoDeps(deps.shared)(c));
+  if (!cognitoDeps) {
+    return {
+      status: 422,
+      body: { error: "missing_cognito_claims", message: "iss / aud claims are required" },
+    };
+  }
+  return handleDeleteTenantSamlConfig(deps.shared, cognitoDeps, {
+    tenantId,
+    updatedBy: sub,
+    nowIso: new Date().toISOString(),
+  });
+}

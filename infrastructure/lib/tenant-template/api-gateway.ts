@@ -133,5 +133,14 @@ export class ApiGateway extends Construct {
     competitorAccount
       .addResource("rotate-external-id")
       .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
+
+    // Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する経路。
+    // 同 Lambda (competitor-accounts) に相乗りさせ、 IAM 拡張 (cognito-idp) は Lambda 側で済ませる。
+    //   /admin/tenant-saml-config  GET=read / PUT=upsert / DELETE=disable
+    const tenantSamlConfig = admin.addResource("tenant-saml-config");
+    tenantSamlConfig.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
+    tenantSamlConfig.addMethod("PUT", competitorAccountsIntegration, deployMethodOptions);
+    tenantSamlConfig.addMethod("PATCH", competitorAccountsIntegration, deployMethodOptions);
+    tenantSamlConfig.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
   }
 }

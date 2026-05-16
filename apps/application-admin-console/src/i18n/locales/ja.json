@@ -11,7 +11,8 @@
     "events": "イベント",
     "teams": "チーム",
     "problems": "問題",
-    "deployments": "デプロイ"
+    "deployments": "デプロイ",
+    "saml_sso": "SAML SSO 設定"
   },
   "auth": {
     "sign_out": "サインアウト"
@@ -56,5 +57,39 @@
     "archive_modal_confirm": "アーカイブ",
     "archive_conflict_known": "Event \"{name}\" はアーカイブできません (現在: {current}、許可: DRAFT / ENDED / TEARDOWN)",
     "archive_conflict_unknown": "Event \"{name}\" はアーカイブできません"
+  },
+  "saml_sso": {
+    "header": "SAML SSO 設定",
+    "description": "会社の認証基盤 (Entra ID / Okta / Google Workspace 等) と Cognito UserPool を SAML 2.0 で連携します。 設定後の sign-in は会社の SSO 経由になります。",
+    "pooled_warning_header": "共有 UserPool に注意",
+    "pooled_warning_body": "本テナントが pooled mode (= 複数 tenant が UserPool を共有) の場合、 ここでの設定は他 tenant の sign-in にも影響します。 silo (PLATINUM) tenant なら独立した UserPool なので影響範囲は本 tenant 内です。",
+    "current_header": "現在の設定",
+    "setup_header": "SAML を設定する",
+    "update_header": "SAML 設定を更新する",
+    "field_metadata_url": "Metadata URL",
+    "field_metadata_url_desc": "IdP の federation metadata XML を取得する HTTPS URL。 IdP 側 cert rotation 時も自動追従されます。",
+    "field_provider_name": "Provider 名",
+    "field_provider_name_desc": "Cognito Hosted UI の sign-in button に表示される名前 (英数字 + - _ の 3-32 字)。",
+    "field_enforce": "SAML のみで sign-in を許可",
+    "field_enforce_desc": "ON で username/password 経路を無効化し、 SAML のみで sign-in 可能になります。 既存 user の救済余地が無くなるので flip 前に確認 modal が出ます。",
+    "field_updated_at": "最終更新",
+    "enforce_on": "ON (SAML のみ)",
+    "enforce_off": "OFF (並列)",
+    "save_button": "保存",
+    "update_button": "更新",
+    "disable_button": "SAML を無効化",
+    "save_success_header": "更新しました",
+    "save_success": "Cognito UserPool に SAML IdP を反映しました。 次のサインインから新しい設定が有効になります。 既にサインイン中の user は影響を受けません。",
+    "save_error_header": "保存に失敗しました",
+    "load_error_header": "現在の設定を取得できませんでした",
+    "delete_success": "SAML 設定を無効化しました。 username/password 経路が復元され、 Hosted UI から SAML button が消えます。",
+    "modal_cancel": "キャンセル",
+    "enforce_modal_header": "SAML のみで sign-in を許可しますか?",
+    "enforce_modal_body": "ON にすると username/password / SRP 経路が無効化され、 SAML 経由でのみログイン可能になります。 lock-out 防止のため staging で SAML 経由の sign-in が確認できてから本番に flip することを推奨します。",
+    "enforce_modal_warning": "SAML 設定が壊れている / IdP 側 cert が rotation 失敗していると、 誰もログインできなくなります。 万一のときは AWS Console から UserPoolClient の SupportedIdentityProviders に COGNITO を手動で戻して復旧してください。",
+    "enforce_modal_confirm": "SAML のみに切り替える",
+    "delete_modal_header": "SAML 設定を無効化しますか?",
+    "delete_modal_body": "Cognito UserPool から SAML IdP を削除し、 UserPoolClient を username/password 経路に戻します。 SAML 経由の sign-in は今後できなくなります。 設定を再度有効化したいときは Metadata URL を入れて 「保存」 すれば復元できます。",
+    "delete_modal_confirm": "無効化する"
   }
 }

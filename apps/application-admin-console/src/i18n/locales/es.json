@@ -11,7 +11,8 @@
     "events": "Eventos",
     "teams": "Equipos",
     "problems": "Problemas",
-    "deployments": "Despliegues"
+    "deployments": "Despliegues",
+    "saml_sso": "SAML SSO"
   },
   "auth": {
     "sign_out": "Cerrar sesión"
@@ -56,5 +57,39 @@
     "archive_modal_confirm": "Archivar",
     "archive_conflict_known": "El evento \"{name}\" no se puede archivar (actual: {current}, permitidos: DRAFT / ENDED / TEARDOWN)",
     "archive_conflict_unknown": "El evento \"{name}\" no se puede archivar"
+  },
+  "saml_sso": {
+    "header": "Configuración SAML SSO",
+    "description": "Federa el IdP de tu empresa (Entra ID / Okta / Google Workspace, etc.) con el UserPool de Cognito de este tenant mediante SAML 2.0. Tras guardar, el inicio de sesión fluye por el SSO corporativo.",
+    "pooled_warning_header": "Aviso de UserPool compartido",
+    "pooled_warning_body": "Si este tenant está en modo pooled (= varios tenants comparten un UserPool), los cambios aquí afectan al inicio de sesión de todos los tenants pooled. Los tenants silo (PLATINUM) tienen UserPool aislado.",
+    "current_header": "Configuración actual",
+    "setup_header": "Configurar SAML",
+    "update_header": "Actualizar configuración SAML",
+    "field_metadata_url": "URL de Metadata",
+    "field_metadata_url_desc": "URL HTTPS que sirve el metadata XML de federación del IdP. La rotación de certificado se sigue automáticamente.",
+    "field_provider_name": "Nombre del proveedor",
+    "field_provider_name_desc": "Etiqueta mostrada en el botón de inicio de sesión de Cognito Hosted UI (alfanumérico + - _ , 3-32 caracteres).",
+    "field_enforce": "Permitir solo SAML",
+    "field_enforce_desc": "Activarlo desactiva username/password. Se muestra un modal de confirmación antes del cambio.",
+    "field_updated_at": "Última actualización",
+    "enforce_on": "ON (solo SAML)",
+    "enforce_off": "OFF (paralelo)",
+    "save_button": "Guardar",
+    "update_button": "Actualizar",
+    "disable_button": "Desactivar SAML",
+    "save_success_header": "Guardado",
+    "save_success": "IdP SAML aplicado al UserPool de Cognito. Los nuevos inicios de sesión usan el flujo SAML. Los usuarios ya conectados no se ven afectados.",
+    "save_error_header": "Error al guardar",
+    "load_error_header": "Error al cargar la configuración actual",
+    "delete_success": "SAML desactivado. Se restaura username/password y el botón SAML desaparece de Hosted UI.",
+    "modal_cancel": "Cancelar",
+    "enforce_modal_header": "¿Permitir solo inicio SAML?",
+    "enforce_modal_body": "Desactiva username/password y SRP, permitiendo iniciar sesión solo via SAML. Verifica el inicio SAML en staging antes de aplicar en producción.",
+    "enforce_modal_warning": "Si SAML está roto o la rotación de certificado del IdP falla, nadie podrá iniciar sesión. Para recuperar, vuelve a añadir COGNITO manualmente a SupportedIdentityProviders en AWS Console.",
+    "enforce_modal_confirm": "Cambiar a solo SAML",
+    "delete_modal_header": "¿Desactivar la configuración SAML?",
+    "delete_modal_body": "Elimina el IdP SAML y revierte el UserPoolClient a username/password. El inicio SAML deja de funcionar. Puedes reactivarlo más tarde introduciendo una URL de Metadata.",
+    "delete_modal_confirm": "Desactivar"
   }
 }
