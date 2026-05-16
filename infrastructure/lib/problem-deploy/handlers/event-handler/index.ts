@@ -4,7 +4,9 @@ import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import {
+  ForbiddenRoleError,
   MissingTenantClaimError,
+  requireTenantAdmin,
   resolveCognitoSub,
   resolveTenantId,
 } from "../deploy-handler/auth.js";
@@ -89,9 +91,32 @@ app.onError((err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
+  // Issue #854: role 不一致は 403、 detail は body に出さず log のみ。
+  if (err instanceof ForbiddenRoleError) {
+    console.warn("[events] forbidden role", {
+      path: c.req.path,
+      actualRole: err.actualRole,
+      requiredRoles: err.requiredRoles,
+    });
+    return c.json(
+      { error: "forbidden_role", message: "this endpoint requires TenantAdmin role" },
+      StatusCodes.FORBIDDEN,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[events] uncaught handler error", { path: c.req.path, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+});
+
+// Issue #854: 全 /events/* route で TenantAdmin role を要求 (= 一般 user / monitor bot に
+// destructive 操作を許さない、 read 経路でも teamLoginKey が response に含まれるので admin scope)。
+// healthz だけ skip。
+app.use("/events/*", async (c, next) => {
+  if (c.req.path.endsWith("/healthz")) {
+    return next();
+  }
+  requireTenantAdmin(c);
+  return next();
 });
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));

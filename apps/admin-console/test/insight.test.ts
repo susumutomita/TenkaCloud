@@ -74,8 +74,9 @@ describe("fetchTenantsInsightSummary", () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "internal" }), { status: 500 }),
     );
-    await expect(fetchTenantsInsightSummary(baseConfig, "id-token", ["t-1"])).rejects.toThrow(
-      /500/,
+    // Issue #873: vitest 4.x で `.rejects.toThrow(/regex/)` regression を回避。
+    await expect(fetchTenantsInsightSummary(baseConfig, "id-token", ["t-1"])).rejects.toMatchObject(
+      { message: expect.stringContaining("500") },
     );
   });
 });

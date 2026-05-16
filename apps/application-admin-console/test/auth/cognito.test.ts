@@ -59,7 +59,10 @@ describe("completeLogin", () => {
 
   describe("PKCE verifier が session に無いとき", () => {
     it("エラーを投げるべき", async () => {
-      await expect(completeLogin(config, "code")).rejects.toThrow(/PKCE verifier missing/);
+      // Issue #873: vitest 4.x で `.rejects.toThrow(/regex/)` の message 照合 regression を回避。
+      await expect(completeLogin(config, "code")).rejects.toMatchObject({
+        message: expect.stringContaining("PKCE verifier missing"),
+      });
     });
   });
 
@@ -115,7 +118,10 @@ describe("completeLogin", () => {
           .mockResolvedValue(new Response("invalid_grant", { status: 400, statusText: "Bad" })),
       );
 
-      await expect(completeLogin(config, "bad")).rejects.toThrow(/400.*invalid_grant/);
+      // Issue #873: regex regression を回避。
+      await expect(completeLogin(config, "bad")).rejects.toMatchObject({
+        message: expect.stringMatching(/400.*invalid_grant/),
+      });
     });
   });
 });

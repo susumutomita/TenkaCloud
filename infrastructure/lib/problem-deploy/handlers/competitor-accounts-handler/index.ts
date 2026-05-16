@@ -4,7 +4,9 @@ import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import {
+  ForbiddenRoleError,
   MissingTenantClaimError,
+  requireTenantAdmin,
   resolveCognitoSub,
   resolveTenantId,
 } from "../deploy-handler/auth.js";
@@ -65,12 +67,37 @@ app.onError((err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
+  // Issue #854: role 不一致は 403。 actualRole / requiredRoles は body には出さない
+  // (= attacker に attack surface を教えない、 audit log にだけ残す)。
+  if (err instanceof ForbiddenRoleError) {
+    console.warn("[competitor-accounts] forbidden role", {
+      path: c.req.path,
+      actualRole: err.actualRole,
+      requiredRoles: err.requiredRoles,
+    });
+    return c.json(
+      { error: "forbidden_role", message: "this endpoint requires TenantAdmin role" },
+      StatusCodes.FORBIDDEN,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[competitor-accounts] uncaught handler error", {
     path: c.req.path,
     message,
   });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+});
+
+// Issue #854: `/admin/*` 全 route で TenantAdmin role を要求する middleware。
+// healthz だけは認証無しで通したいので path 比較で skip する (= 認証は API Gateway Cognito
+// authorizer で既に通っているが、 healthz は role check 自体を skip する設計)。
+// 個別 handler 内で再度 `requireTenantAdmin(c)` を呼ぶ必要は無い (= middleware が gate)。
+app.use("/admin/*", async (c, next) => {
+  if (c.req.path.endsWith("/healthz")) {
+    return next();
+  }
+  requireTenantAdmin(c);
+  return next();
 });
 
 app.get("/admin/competitor-accounts/healthz", (c) => c.json({ ok: true }));

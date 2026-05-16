@@ -1,11 +1,13 @@
 import { StatusCodes } from "http-status-codes";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // #686: `resolveTenantId` は JWT claim 欠落で MissingTenantClaimError を throw する。
 // route tests は `app.request()` で JWT を bypass するため、 dev override env で tenantId を
 // inject する。 prod では Cognito JWT が必ず claim を載せる前提なのでこの env は使わない。
 beforeAll(() => {
   process.env.DEFAULT_TENANT_ID = "tenant-test";
+  // Issue #854: handler middleware が TenantAdmin role を要求するので test 環境では env で inject。
+  process.env.DEFAULT_USER_ROLE = "TenantAdmin";
 });
 
 const mocks = vi.hoisted(() => ({
@@ -349,5 +351,35 @@ describe("DELETE /admin/competitor-accounts/:awsAccountId", () => {
       method: "DELETE",
     });
     expect(res.status).toBe(StatusCodes.NOT_FOUND);
+  });
+});
+
+/* ---- Issue #854: /admin/* middleware enforces TenantAdmin role ---- */
+
+describe("/admin/* middleware (Issue #854)", () => {
+  const originalRole = process.env.DEFAULT_USER_ROLE;
+  afterEach(() => {
+    if (originalRole === undefined) delete process.env.DEFAULT_USER_ROLE;
+    else process.env.DEFAULT_USER_ROLE = originalRole;
+  });
+
+  it("role 不一致 (= TenantUser) なら 403 forbidden_role を返すべき", async () => {
+    process.env.DEFAULT_USER_ROLE = "TenantUser";
+    const res = await app.request("/admin/competitor-accounts", { method: "GET" });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("forbidden_role");
+  });
+
+  it("role claim 不在 (= JWT 経由なし) なら 403", async () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const res = await app.request("/admin/competitor-accounts", { method: "GET" });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+  });
+
+  it("healthz は role check skip して 200 を返すべき", async () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const res = await app.request("/admin/competitor-accounts/healthz", { method: "GET" });
+    expect(res.status).toBe(StatusCodes.OK);
   });
 });

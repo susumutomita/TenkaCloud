@@ -4,6 +4,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 // tenantId を inject する。 prod では Cognito JWT が必ず claim を載せる前提。
 beforeAll(() => {
   process.env.DEFAULT_TENANT_ID = "tenant-test";
+  // Issue #854: handler middleware が TenantAdmin role を要求するので test 環境では env で inject。
+  process.env.DEFAULT_USER_ROLE = "TenantAdmin";
 });
 
 const mocks = vi.hoisted(() => ({

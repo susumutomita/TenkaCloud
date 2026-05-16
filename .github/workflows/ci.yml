@@ -70,3 +70,12 @@ jobs:
       - name: Build
         run: |
           make build
+
+      # 3rd-party action は tag (mutable) ではなく commit SHA (immutable) で pin する
+      # (= supply-chain attack 防御、 maintainer / attacker が tag を移動できなくする)。 v5.5.4 SHA。
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@aa56896cf108bd10b5eb883cd1d24196da57f695 # v5.5.4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          # Codecov 側 outage で CI 全体を落とさない。 coverage 計測は補助、 必須でない。
+          fail_ci_if_error: false

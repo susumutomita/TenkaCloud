@@ -60,3 +60,65 @@ export function resolveCognitoSub(c: Context): string {
   const sub = claims?.sub;
   return typeof sub === "string" && sub.length > 0 ? sub : "unknown";
 }
+
+/**
+ * Issue #854: TenantAdmin / SystemAdmin の role enforcement。
+ *
+ * 旧コードは Cognito JWT authorizer (= 署名 + expiry 検証) を通った request を 「TenantAdmin
+ * 認可済」 と comment で書いていたが、 実態は **誰でも (= tenant 内の一般 user / monitor bot 等)
+ * destructive 操作ができる** 状態だった。 \`custom:userRole\` claim を見て role check しないと
+ * \`/admin/*\` route + destructive event route が tenant 内の誰でも実行できてしまう。
+ *
+ * `provision-tenant.sh` は admin-create-user で **TenantAdmin** を set する (= line 99)。
+ * 将来別 role (= 例 TenantViewer / Auditor) を増やすなら、 allowedRoles を caller で渡す形に
+ * 拡張する想定。
+ *
+ * `DEFAULT_USER_ROLE` env (= test / local override 用) を持ち、 unit test (= app.request で
+ * JWT bypass) が role check を pass できるようにする。 prod では env を渡さない。
+ */
+export class ForbiddenRoleError extends Error {
+  constructor(
+    public readonly actualRole: string | undefined,
+    public readonly requiredRoles: readonly string[],
+  ) {
+    super(
+      `role "${actualRole ?? "(none)"}" is not authorized to perform this action (required: ${requiredRoles.join(", ")})`,
+    );
+    this.name = "ForbiddenRoleError";
+  }
+}
+
+const TENANT_ADMIN_ROLE = "TenantAdmin";
+
+export function extractUserRoleFromClaims(claims: JwtClaims | undefined): string | undefined {
+  if (!claims) return undefined;
+  const raw = claims["custom:userRole"];
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * `custom:userRole` claim を取り出す。 JWT 不在経路 (= test) では env fallback。
+ */
+export function resolveUserRole(c: Context): string | undefined {
+  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
+  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
+  const fromJwt = extractUserRoleFromClaims(claims);
+  if (fromJwt) return fromJwt;
+  const fromEnv = process.env.DEFAULT_USER_ROLE;
+  return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+}
+
+/**
+ * `custom:userRole === "TenantAdmin"` を要求する。 不一致 / 不在なら `ForbiddenRoleError`
+ * を throw。 handler 側 onError で 403 にマップする。
+ *
+ * caller (handler) は \`/admin/*\` route と destructive event route の 1 行目で呼ぶ。
+ */
+export function requireTenantAdmin(c: Context): void {
+  const role = resolveUserRole(c);
+  if (role !== TENANT_ADMIN_ROLE) {
+    throw new ForbiddenRoleError(role, [TENANT_ADMIN_ROLE]);
+  }
+}
