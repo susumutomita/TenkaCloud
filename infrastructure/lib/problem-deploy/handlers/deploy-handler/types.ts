@@ -129,6 +129,11 @@ export interface DeploymentItem {
    */
   flagSubmitted?: boolean;
   /**
+   * Issue #817: Challenge (flag) で不正解 submit を受けた累計回数。 0 default。
+   * `wrongAnswerPenalty > 0` の問題で 1 不正解ごとに ADD 1 + score 減算する経路で使う。
+   */
+  wrongAnswerCount?: number;
+  /**
    * 直近の health check で endpoint ごとに probe した結果の JSON 文字列。
    * shape: `{ [outputKey]: { ok, checkedAt, since? } }`。
    * `since` は ok=false が続いている開始時刻 (= attack を検知した時刻)。

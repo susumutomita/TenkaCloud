@@ -8,7 +8,12 @@ import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 export type SubmitFlagOutcome =
   | { kind: "ok"; scoreDelta: number; totalScore: number }
   | { kind: "already_scored"; totalScore: number }
-  | { kind: "wrong" }
+  /**
+   * Issue #817: 不正解。 wrongAnswerPenalty が問題 metadata で正の整数で設定されていれば
+   * score を減算する (= brute-force 対策、 team score は 0 で clamp)。 旧来の wrong (= 0 pt) は
+   * `scoreDelta: 0, totalScore: <変化なし>` で互換維持。
+   */
+  | { kind: "wrong"; scoreDelta: number; totalScore: number; wrongCount: number }
   | { kind: "not_flag_problem" }
   | { kind: "no_outputs" }
   | { kind: "scoring_locked" }
@@ -85,7 +90,73 @@ export async function submitFlag(
   const expected = outputs[scoring.flagOutputKey];
   if (typeof expected !== "string") return { kind: "no_outputs" };
 
-  if (!flagMatches(submittedFlag, expected)) return { kind: "wrong" };
+  if (!flagMatches(submittedFlag, expected)) {
+    // Issue #817: wrongAnswerPenalty が設定されていれば不正解時に score を減算 + wrongAnswerCount を ADD。
+    // - penalty が 0 / 未設定なら旧挙動 (= UpdateItem 発火せず、 scoreDelta=0、 score 変化なし) を維持
+    //   (= Free Tier 1 WCU/sec の DynamoDbLowCapacity 制約下で不要 write を出さない)
+    // - penalty > 0 なら conditional Update (flagSubmitted ≠ true 一致時のみ) で減点 + count
+    // - score は出口で 0 未満を clamp (= UI 期待を守る、 内部値の clamp は別 PR)
+    const penalty = scoring.wrongAnswerPenalty ?? 0;
+    if (penalty === 0) {
+      // 旧来挙動互換: UI 用に scoreDelta=0、 score / wrongCount は現状値 fallback。
+      return {
+        kind: "wrong",
+        scoreDelta: 0,
+        totalScore: Math.max(0, Number(item.score ?? 0)),
+        wrongCount: Number(item.wrongAnswerCount ?? 0),
+      };
+    }
+    const wrongNow = new Date().toISOString();
+    try {
+      const updated = await shared.ddb.send(
+        new UpdateCommand({
+          TableName: shared.tableName,
+          Key: { PK: item.PK, SK: "META" },
+          UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
+          // race / 正解済との同時提出を防ぐ: flagSubmitted は false / 未設定のみ減点。
+          ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
+          ExpressionAttributeValues: {
+            ":one": 1,
+            ":neg": -penalty,
+            ":false": false,
+            ":now": wrongNow,
+          },
+          ReturnValues: "ALL_NEW",
+        }),
+      );
+      const attrs = updated.Attributes as
+        | { score?: unknown; wrongAnswerCount?: unknown }
+        | undefined;
+      const rawScore = Number(attrs?.score ?? 0);
+      const totalScore = rawScore < 0 ? 0 : rawScore;
+      const wrongCount = Number(attrs?.wrongAnswerCount ?? 1);
+      if (item.jobId) {
+        // 不正解 audit event は score delta=-penalty で score_event に追記する (= 正解の "flag" と
+        // 対称な "flag-wrong" として lock-out UI / 監査の証跡に使う)。
+        await writeScoreEvent(
+          shared.ddb,
+          shared.tableName,
+          {
+            jobId: item.jobId,
+            problemId: item.problemId,
+            teamId: item.teamId,
+            eventId: item.eventId,
+            expiresAt: item.expiresAt ?? 0,
+          },
+          "flag-wrong",
+          -penalty,
+          wrongNow,
+        );
+      }
+      return { kind: "wrong", scoreDelta: -penalty, totalScore, wrongCount };
+    } catch (err) {
+      // flagSubmitted=true との race (= 正解と不正解が同時) は wrong 扱いを諦めて already_scored を返す。
+      if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
+        return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
+      }
+      throw err;
+    }
+  }
 
   // ConditionExpression で flagSubmitted=true への 2 重加算を防ぐ。レース勝者だけが
   // 加点される。

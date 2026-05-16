@@ -254,9 +254,14 @@
               "minimum": 1,
               "description": "正解時の獲得ポイント (1 deploy につき 1 回まで加算)。"
             },
+            "wrongAnswerPenalty": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "[Issue #817] 不正解 1 回ごとに score から減算する値 (= brute-force 対策)。 0 は減点無し (default)。 team score は 0 未満にならない (= clamp)。"
+            },
             "hints": { "$ref": "#/$defs/progressiveHints" }
           },
-          "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。"
+          "description": "kind=flag (= Challenge 1 回提出形式)。example: hello-world は SSM Parameter 値を当てて +100 pt。 wrongAnswerPenalty を設定すると不正解 1 回ごとに減点する (= brute-force 防止)。"
         },
         {
           "type": "object",

@@ -244,8 +244,23 @@ function FlagSubmissionPanel({
         </Alert>
       )}
       {outcome?.kind === "wrong" && (
-        <Alert type="warning" header="不正解">
-          値を確認して再度提出してください。
+        <Alert
+          type="warning"
+          header={
+            outcome.scoreDelta < 0
+              ? `不正解 (${outcome.scoreDelta} pt) — 累計 ${outcome.totalScore} pt`
+              : "不正解"
+          }
+        >
+          {outcome.scoreDelta < 0 ? (
+            <>
+              これまで {outcome.wrongCount} 回 不正解です。 値を確認して再度提出してください。
+              ペナルティは不正解 1 回あたり {-outcome.scoreDelta} pt で、 累計スコアは 0 pt
+              未満になりません。
+            </>
+          ) : (
+            <>値を確認して再度提出してください。</>
+          )}
         </Alert>
       )}
       {outcome?.kind === "already_scored" && (

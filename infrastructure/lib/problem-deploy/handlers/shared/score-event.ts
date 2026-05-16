@@ -26,23 +26,25 @@ export interface ScoreEventItem {
    * イベント発生源。
    * - `uptime`: HealthCheck の probe で全 endpoint OK
    * - `flag`: 競技者の flag 提出が正解
+   * - `flag-wrong`: 競技者の flag 提出が不正解で wrongAnswerPenalty が減点された (Issue #817)
    * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
    *   Battle Portal の Attack Statistics / History で使う)
    */
-  source: "uptime" | "flag" | "attack-detected";
+  source: "uptime" | "flag" | "flag-wrong" | "attack-detected";
   /**
    * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
-   * `attack-detected` = 0 (= イベント marker のみ、score 加算なし)。
+   * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)。
    */
   points: number;
   /**
    * 結果。
    * - `ok`: `uptime` で全 endpoint OK or `flag` で正解
+   * - `wrong`: `flag-wrong` (= 不正解で減点、 Issue #817)
    * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた)
    *
    * Phase 2 以前の event 行は `"ok"` のみ書かれているので backward compatible。
    */
-  result: "ok" | "down";
+  result: "ok" | "wrong" | "down";
   occurredAt: string;
   /** 親 deployment の TTL を継承。0 なら無期限 (旧 deployment 互換)。 */
   expiresAt: number;
@@ -73,7 +75,7 @@ export async function writeScoreEvent(
     eventId: parent.eventId,
     source,
     points,
-    result: source === "attack-detected" ? "down" : "ok",
+    result: source === "attack-detected" ? "down" : source === "flag-wrong" ? "wrong" : "ok",
     occurredAt,
     expiresAt: Number(parent.expiresAt ?? 0),
   };
