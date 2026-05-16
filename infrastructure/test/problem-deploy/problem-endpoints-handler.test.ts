@@ -224,13 +224,20 @@ describe("upsertProblemEndpointOverride", () => {
 
   // SSRF defense-in-depth: metadata service / loopback literal を write 時に拒否する。
   // Phase 3.B fetcher で DNS-rebinding-safe resolve-then-connect を行うまでの blocklist。
+  // Issue #863: IPv6-mapped IPv4 / IMDS v6 expanded form bypass を追加検証。
   it.each([
     ["AWS IMDS v4", "http://169.254.169.254/latest/meta-data/iam/security-credentials/"],
     ["AWS IMDS v6", "http://[fd00:ec2::254]/latest/meta-data/"],
+    ["AWS IMDS v6 expanded", "http://[fd00:ec2:0:0:0:0:0:254]/latest/meta-data/"],
     ["GCE metadata", "http://metadata.google.internal/computeMetadata/v1/"],
     ["loopback IPv4", "http://127.0.0.1:9001/admin"],
+    ["loopback all-zero IPv4", "http://0.0.0.0:9001/admin"],
     ["loopback IPv6", "http://[::1]/"],
+    ["loopback IPv6 expanded", "http://[0:0:0:0:0:0:0:1]/"],
     ["localhost literal", "http://localhost/"],
+    ["IPv6-mapped IMDS (dotted)", "http://[::ffff:169.254.169.254]/latest/meta-data/"],
+    ["IPv6-mapped IMDS (hex)", "http://[::ffff:a9fe:a9fe]/latest/meta-data/"],
+    ["IPv6-mapped loopback", "http://[::ffff:127.0.0.1]/admin"],
   ])("SSRF blocklist: %s host は invalid_url を返すべき", async (_, url) => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn();
