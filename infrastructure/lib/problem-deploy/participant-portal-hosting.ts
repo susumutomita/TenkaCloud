@@ -9,7 +9,7 @@ import {
 } from "aws-cdk-lib/aws-cloudfront";
 import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers";
 
@@ -101,6 +101,8 @@ export class ParticipantPortalHosting extends Construct {
   }
 
   deployRuntimeConfig(config: ParticipantPortalRuntimeConfig): void {
+    // Issue #867: runtime-config.json は CloudFront / browser キャッシュさせない。
+    // event 切替 / mode 切替時に古い設定が残ると participant 全員の画面が壊れる。
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [
         Source.jsonData("runtime-config.json", {
@@ -114,6 +116,7 @@ export class ParticipantPortalHosting extends Construct {
       distribution: this.distribution,
       distributionPaths: ["/runtime-config.json"],
       prune: false,
+      cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
     });
   }
 }

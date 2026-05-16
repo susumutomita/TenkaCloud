@@ -9,7 +9,7 @@ import {
 } from "aws-cdk-lib/aws-cloudfront";
 import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers";
 
@@ -178,12 +178,15 @@ export class AdminConsoleHostingStack extends cdk.Stack {
       // #718: 競技者向け bootstrap template の public S3 URL (CFn TemplateURL 経由 fetch 用)
       competitorBootstrapTemplateUrl: this.competitorBootstrapTemplateUrl,
     };
+    // Issue #867: runtime-config.json は **絶対にキャッシュさせない** (= CloudFront edge で
+    // tenant 間混線するリスク + deploy 後 1 時間反映されない問題を避けるため)。
     new BucketDeployment(this, "RuntimeConfigDeployment", {
       sources: [Source.jsonData("runtime-config.json", runtimeConfig)],
       destinationBucket: bucket,
       distribution,
       distributionPaths: ["/runtime-config.json"],
       prune: false,
+      cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
     });
 
     new cdk.CfnOutput(this, "AdminConsoleUrl", {
