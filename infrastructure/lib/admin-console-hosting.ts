@@ -11,6 +11,7 @@ import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers";
 
 export interface AdminConsoleHostingStackProps extends cdk.StackProps {
   /** Control Plane API Gateway URL (末尾スラッシュ無し) */
@@ -88,10 +89,19 @@ export class AdminConsoleHostingStack extends cdk.Stack {
     const oai = new OriginAccessIdentity(this, "OAI");
     bucket.grantRead(oai);
 
+    // Issue #855: CloudFront に security headers (HSTS / CSP / X-Frame-Options 等) を強制。
+    // admin-console は Control Plane API (= props.apiUrl) と SBT Cognito (= props.cognitoDomain)
+    // に connect する。 form-action は Cognito Hosted UI への sign-in form 投稿で使う。
+    const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
+      connectSrcAllowedOrigins: [props.apiUrl, props.cognitoDomain],
+      formActionAllowedOrigins: [props.cognitoDomain],
+    });
+
     const distribution = new Distribution(this, "Distribution", {
       defaultBehavior: {
         origin: new S3Origin(bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        responseHeadersPolicy: securityHeaders,
       },
       defaultRootObject: "index.html",
       httpVersion: HttpVersion.HTTP2,

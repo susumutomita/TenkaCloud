@@ -111,7 +111,7 @@ describe("createTenant", () => {
       const { api, post } = buildApiMock();
       post.mockRejectedValueOnce(new Error("API 500"));
 
-      // Issue #873: vitest 4.x で `.rejects.toThrow(string)` regression を回避。
+      // Issue #873: vitest 4.x `.rejects.toThrow(string)` regression を回避。
       await expect(
         createTenant(api, { tenantName: "X", email: "a@b.com", tier: "basic" }),
       ).rejects.toMatchObject({ message: "API 500" });

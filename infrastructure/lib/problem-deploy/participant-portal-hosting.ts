@@ -11,6 +11,7 @@ import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers";
 
 export type ParticipantPortalMode = "dev-mock" | "backend";
 
@@ -61,10 +62,21 @@ export class ParticipantPortalHosting extends Construct {
     const oai = new OriginAccessIdentity(this, "OAI");
     this.bucket.grantRead(oai);
 
+    // Issue #855: CloudFront に security headers を強制。 participant-portal は teamLoginKey 経路
+    // (= bearer token 専用) で外部 Cognito は使わないが、 backend API (= Lambda Function URL)
+    // への connect は許可する必要がある。 form-action は teamLoginKey login の form 投稿で同 origin。
+    const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
+      connectSrcAllowedOrigins: [
+        "https://*.lambda-url.*.on.aws",
+        "https://*.execute-api.*.amazonaws.com",
+      ],
+    });
+
     this.distribution = new Distribution(this, "Distribution", {
       defaultBehavior: {
         origin: new S3Origin(this.bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        responseHeadersPolicy: securityHeaders,
       },
       defaultRootObject: "index.html",
       httpVersion: HttpVersion.HTTP2,
