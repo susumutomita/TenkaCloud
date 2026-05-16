@@ -26,6 +26,8 @@ import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
 import { createNotification } from "./create-notification.js";
+import { fireDisruption, listDisruptionAudit, listDisruptionCatalog } from "./disruption-fire.js";
+import type { DisruptionFireScope } from "./disruption-types.js";
 import { endEvent } from "./end-event.js";
 import { getEventDetail, listEvents } from "./list.js";
 import { lockScoring, unlockScoring } from "./lock-scoring.js";
@@ -445,6 +447,122 @@ app.post("/events/:eventId/deploy", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] bulkDeployEvent failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+// Issue #888 Phase A: Red Team Disruption Injection
+//   GET    /events/:eventId/disruptions          — event 内 disruption catalog
+//   GET    /events/:eventId/disruptions/audit    — 発火履歴 (pagination)
+//   POST   /events/:eventId/disruptions/fire     — disruption を fire
+app.get("/events/:eventId/disruptions", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    const out = await listDisruptionCatalog(shared, eventId);
+    return c.json(out, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[disruptions] catalog failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.get("/events/:eventId/disruptions/audit", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
+  }
+  const limitRaw = c.req.query("limit");
+  const parsed = parseLimit(limitRaw);
+  if (!parsed) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
+  const cursor = c.req.query("cursor");
+  try {
+    const out = await listDisruptionAudit(shared, eventId, {
+      limit: parsed.limit,
+      cursor,
+    });
+    return c.json(out, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[disruptions] audit list failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.post("/events/:eventId/disruptions/fire", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
+  }
+  const body = (await c.req.json().catch(() => null)) as {
+    disruptionId?: unknown;
+    problemId?: unknown;
+    parameters?: unknown;
+    scope?: unknown;
+    targetTeamIds?: unknown;
+    randomCount?: unknown;
+    requestId?: unknown;
+  } | null;
+  if (!body) return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
+  if (typeof body.disruptionId !== "string" || body.disruptionId.length === 0) {
+    return c.json({ error: "invalid_disruption_id" }, HTTP_BAD_REQUEST);
+  }
+  if (typeof body.problemId !== "string" || body.problemId.length === 0) {
+    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
+  }
+  if (
+    typeof body.requestId !== "string" ||
+    body.requestId.length < 8 ||
+    body.requestId.length > 128
+  ) {
+    return c.json({ error: "invalid_request_id" }, HTTP_BAD_REQUEST);
+  }
+  const scope = body.scope;
+  if (scope !== "all" && scope !== "team" && scope !== "random-n") {
+    return c.json({ error: "invalid_scope" }, HTTP_BAD_REQUEST);
+  }
+  const targetTeamIds =
+    Array.isArray(body.targetTeamIds) && scope === "team"
+      ? body.targetTeamIds.filter((id): id is string => typeof id === "string")
+      : [];
+  const randomCount =
+    scope === "random-n" && typeof body.randomCount === "number" ? body.randomCount : undefined;
+  const parameters =
+    body.parameters && typeof body.parameters === "object" && !Array.isArray(body.parameters)
+      ? (body.parameters as Record<string, unknown>)
+      : {};
+  try {
+    const outcome = await fireDisruption(shared, {
+      tenantId: resolveTenantId(c),
+      eventId,
+      problemId: body.problemId,
+      disruptionId: body.disruptionId,
+      parameters,
+      scope: scope as DisruptionFireScope,
+      targetTeamIds,
+      ...(randomCount !== undefined ? { randomCount } : {}),
+      requestId: body.requestId,
+      firedBy: resolveCognitoSub(c),
+      nowMs: Date.now(),
+    });
+    if (outcome.kind === "ok") return c.json(outcome.result, HTTP_CREATED);
+    if (outcome.kind === "duplicate") return c.json(outcome.result, HTTP_OK);
+    if (outcome.kind === "unknown_problem")
+      return c.json({ error: "unknown_problem" }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "unknown_disruption")
+      return c.json({ error: "unknown_disruption" }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "invalid_parameters")
+      return c.json({ error: "invalid_parameters", message: outcome.reason }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "invalid_scope")
+      return c.json({ error: "invalid_scope", message: outcome.reason }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "no_targets") return c.json({ error: "no_targets" }, HTTP_CONFLICT);
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[disruptions] fire failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });

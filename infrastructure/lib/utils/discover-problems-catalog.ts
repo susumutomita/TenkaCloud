@@ -146,6 +146,81 @@ export function discoverProblemsVisibility(problemsRoot: string): Record<string,
   return result;
 }
 
+/**
+ * Issue #888: 各 problem metadata.json から `disruptions[]` 宣言を抽出する。
+ *
+ * Lambda runtime に渡す形は `{ [problemId]: ProblemDisruptionEntry[] }`。 fire API が
+ * `(problemId, disruptionId)` の組で declaration を引き、 `operatorEditable` allow-list /
+ * `eventDetailType` などを参照する。
+ *
+ * `disruptions` を持たない問題はキーごと出さない (= env var を最小化)。
+ */
+export interface ProblemDisruptionEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly eventDetailType: string;
+  readonly description?: string;
+  readonly defaultAfterMinutes?: number;
+  readonly operatorEditable?: readonly string[];
+  readonly parameters?: Readonly<Record<string, unknown>>;
+  readonly publicHint?: boolean;
+}
+
+export function discoverProblemsDisruptions(
+  problemsRoot: string,
+): Record<string, readonly ProblemDisruptionEntry[]> {
+  const result: Record<string, readonly ProblemDisruptionEntry[]> = {};
+  for (const meta of iterateProblemsMetadata(problemsRoot)) {
+    if (!Array.isArray(meta.disruptions)) continue;
+    const entries: ProblemDisruptionEntry[] = [];
+    for (const raw of meta.disruptions) {
+      const entry = parseDisruptionEntry(raw);
+      if (entry) entries.push(entry);
+    }
+    if (entries.length > 0) result[meta.id] = entries;
+  }
+  return result;
+}
+
+function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const v = value as {
+    id?: unknown;
+    name?: unknown;
+    eventDetailType?: unknown;
+    description?: unknown;
+    defaultAfterMinutes?: unknown;
+    operatorEditable?: unknown;
+    parameters?: unknown;
+    publicHint?: unknown;
+  };
+  if (
+    typeof v.id !== "string" ||
+    typeof v.name !== "string" ||
+    typeof v.eventDetailType !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    id: v.id,
+    name: v.name,
+    eventDetailType: v.eventDetailType,
+    ...(typeof v.description === "string" ? { description: v.description } : {}),
+    ...(typeof v.defaultAfterMinutes === "number"
+      ? { defaultAfterMinutes: v.defaultAfterMinutes }
+      : {}),
+    ...(Array.isArray(v.operatorEditable)
+      ? {
+          operatorEditable: v.operatorEditable.filter((s): s is string => typeof s === "string"),
+        }
+      : {}),
+    ...(v.parameters && typeof v.parameters === "object"
+      ? { parameters: v.parameters as Record<string, unknown> }
+      : {}),
+    ...(typeof v.publicHint === "boolean" ? { publicHint: v.publicHint } : {}),
+  };
+}
+
 interface ProblemMetadataEntry {
   id: string;
   category: string;
@@ -154,6 +229,7 @@ interface ProblemMetadataEntry {
   endpoints: unknown;
   phases: unknown;
   visibility: unknown;
+  disruptions: unknown;
 }
 
 function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetadataEntry> {
@@ -178,6 +254,7 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
           endpoints?: unknown;
           phases?: unknown;
           visibility?: unknown;
+          disruptions?: unknown;
         };
         if (typeof meta.id !== "string" || meta.id.length === 0) {
           console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
@@ -191,6 +268,7 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
           endpoints: meta.endpoints,
           phases: meta.phases,
           visibility: meta.visibility,
+          disruptions: meta.disruptions,
         };
       } catch (err) {
         console.warn(

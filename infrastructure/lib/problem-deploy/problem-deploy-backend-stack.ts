@@ -14,6 +14,7 @@ import { DeployDeleteStateMachine } from "./deploy-delete-state-machine";
 import { DeployDeleteEventRule, DeployEventRule } from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
 import { DescribeStackLambda } from "./describe-stack-lambda";
+import { DisruptionsTable } from "./disruptions-table";
 import { EventApiLambda } from "./event-api-lambda";
 import { EventsTable } from "./events-table";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
@@ -77,6 +78,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * 等が `phases` を持たないので) で受ける。
    */
   readonly problemsPhases?: Readonly<Record<string, unknown>>;
+  /**
+   * Issue #888: `problemId → disruptions[]` の map。 `discoverProblemsDisruptions` で
+   * metadata.json から自動収集。 Red Team Disruption Injection の fire API が
+   * `(problemId, disruptionId)` の declaration lookup に参照する。 未宣言の問題はキーが無い。
+   */
+  readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   /**
    * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
    * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
@@ -194,6 +201,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
     this.competitorAccountsTable = competitorAccounts.table;
     this.problemEndpointsTable = endpoints.table;
+    // Issue #888: Red Team Disruption Injection の audit log + idempotency
+    const disruptions = new DisruptionsTable(this, "Disruptions");
     // Issue #778 ADR-016 Phase 2: eventBusArn が渡されていれば既存の SBT bus を import、
     // 渡されていなければ Lite mode と判定して local EventBus を新規に作る。 後者では Step
     // Functions Rule も local bus にぶら下がるため、 cross-stack 依存が増えない。
@@ -232,6 +241,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsCatalog: props.problemsCatalog,
       defaultTenantId: props.defaultTenantId,
       environmentName: props.environmentName,
+      // Issue #888: disruption fire / audit / catalog で参照
+      disruptionsTable: disruptions.table,
+      problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<
+        Record<string, readonly unknown[]>
+      >,
     });
     this.eventApiLambda = eventApi.fn;
 

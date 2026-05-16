@@ -142,6 +142,15 @@ export class ApiGateway extends Construct {
     lockScoring.addMethod("POST", eventIntegration, deployMethodOptions);
     lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
 
+    // Issue #888 Phase A: Red Team Disruption Injection
+    //   /events/{eventId}/disruptions          GET  = catalog
+    //   /events/{eventId}/disruptions/audit    GET  = 発火履歴 (pagination)
+    //   /events/{eventId}/disruptions/fire     POST = disruption を fire
+    const disruptions = event.addResource("disruptions");
+    disruptions.addMethod("GET", eventIntegration, deployMethodOptions);
+    disruptions.addResource("audit").addMethod("GET", eventIntegration, deployMethodOptions);
+    disruptions.addResource("fire").addMethod("POST", eventIntegration, deployMethodOptions);
+
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
     //   /admin/competitor-accounts                                     POST=register, GET=list
     //   /admin/competitor-accounts/{awsAccountId}                      DELETE=remove (last row なら SSM 鍵も掃除)

@@ -107,6 +107,8 @@ export interface ProblemsCatalogBundle {
   readonly endpoints: unknown;
   readonly phases: unknown;
   readonly visibility: unknown;
+  /** Issue #888: per-problem `disruptions[]` 宣言。 未宣言の問題はキー無し。 */
+  readonly disruptions: unknown;
 }
 
 export interface AdminConsoleHostingInputs {

@@ -26,11 +26,11 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
   describe("Deployments DDB table", () => {
-    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts / ProblemEndpoints の 5 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
+    it("DDB テーブルを Deployments / Events / Teams / CompetitorAccounts / ProblemEndpoints / Disruptions の 6 つ持ち、各 PK/SK + PROVISIONED 1/1 であるべき", () => {
       // ADR-004 Phase 1 で Events / Teams、Issue #459 / ADR-002 Phase 2.1 で CompetitorAccounts、
-      // ADR-012 Phase 3.A で ProblemEndpoints。
-      // 5 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
-      tpl.resourceCountIs("AWS::DynamoDB::Table", 5);
+      // ADR-012 Phase 3.A で ProblemEndpoints、 Issue #888 で Disruptions (Red Team audit + idempotency)。
+      // 6 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
+      tpl.resourceCountIs("AWS::DynamoDB::Table", 6);
       tpl.hasResourceProperties(
         "AWS::DynamoDB::Table",
         Match.objectLike({

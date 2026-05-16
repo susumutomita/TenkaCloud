@@ -2,6 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 
@@ -23,11 +24,15 @@ export interface EventSharedResources {
   readonly teamsTableName: string;
   readonly deploymentsTableName: string;
   readonly competitorAccountsTableName: string;
+  /** Issue #888: disruption audit + idempotency 用 DDB table。 deploy 時に env で wire。 */
+  readonly disruptionsTableName: string;
   readonly eventBusName: string;
   readonly env: string;
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
+  readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
 }
 
 export function buildEventSharedResources(): EventSharedResources {
@@ -36,12 +41,26 @@ export function buildEventSharedResources(): EventSharedResources {
     teamsTableName: getEnv("TEAMS_TABLE_NAME"),
     deploymentsTableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
+    disruptionsTableName: getEnv("DISRUPTIONS_TABLE_NAME"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
     env: getEnv("DEPLOY_ENVIRONMENT"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
+    problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
   };
+}
+
+function parseProblemsDisruptions(
+  raw: string | undefined,
+): Readonly<Record<string, readonly ProblemDisruptionEntry[]>> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, ProblemDisruptionEntry[]>;
+    return parsed;
+  } catch {
+    return {};
+  }
 }
 
 /**
