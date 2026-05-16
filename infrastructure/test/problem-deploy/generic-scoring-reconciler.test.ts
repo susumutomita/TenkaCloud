@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  isStuckDeletingForTeardown,
   type ReconcileEventStatusesContext,
   reconcileEventStatuses,
+  rescueStuckDeletingDeployments,
   resolveEventStatusTransition,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
 
@@ -256,6 +258,130 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
       GSI1PK: "TENANT#tenant-acme",
       GSI1SK: "cursor",
     });
+  });
+
+  // Issue #828: stuck DELETING rescue path の test
+  it("TEARDOWN で `DELETING` が 30 min 以上停滞していたら FAILED に rescue + ARCHIVED に遷移すべき", async () => {
+    const now = "2026-05-15T01:00:00.000Z";
+    const stale = "2026-05-15T00:25:00.000Z"; // 35 min 前 (= threshold 30 min を超過)
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { PK: "EVENT#EV-STUCK", tenantId: "tenant-acme", eventId: "EV-STUCK", status: "TEARDOWN" },
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { PK: "DEPLOYMENT#FRESH", status: "DELETED", updatedAt: now },
+        { PK: "DEPLOYMENT#STUCK", status: "DELETING", updatedAt: stale },
+      ],
+    });
+    // rescue UpdateItem (= stuck row を FAILED に倒す)
+    ddbSend.mockResolvedValueOnce({});
+    // event Update (= TEARDOWN → ARCHIVED)
+    ddbSend.mockResolvedValueOnce({});
+
+    await reconcileEventStatuses(ctx, now);
+
+    expect(ddbSend).toHaveBeenCalledTimes(4);
+    const rescueCmd = ddbSend.mock.calls[2]?.[0] as {
+      input: {
+        TableName: string;
+        Key: Record<string, string>;
+        ExpressionAttributeValues: Record<string, string>;
+        ConditionExpression: string;
+      };
+    };
+    expect(rescueCmd.input.TableName).toBe("TestDeployments");
+    expect(rescueCmd.input.Key).toEqual({ PK: "DEPLOYMENT#STUCK", SK: "META" });
+    expect(rescueCmd.input.ExpressionAttributeValues[":failed"]).toBe("FAILED");
+    expect(rescueCmd.input.ExpressionAttributeValues[":deleting"]).toBe("DELETING");
+    expect(rescueCmd.input.ConditionExpression).toContain("#status = :deleting");
+    const eventUpdate = ddbSend.mock.calls[3]?.[0] as {
+      input: { ExpressionAttributeValues: Record<string, string> };
+    };
+    expect(eventUpdate.input.ExpressionAttributeValues[":next"]).toBe("ARCHIVED");
+  });
+
+  it("TEARDOWN でも `DELETING` が threshold 未満 (= まだ削除中) なら rescue も ARCHIVED 遷移も発火させないべき", async () => {
+    const now = "2026-05-15T01:00:00.000Z";
+    const recent = "2026-05-15T00:50:00.000Z"; // 10 min 前 (= threshold 未満)
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { PK: "EVENT#EV-FRESH", tenantId: "tenant-acme", eventId: "EV-FRESH", status: "TEARDOWN" },
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { PK: "DEPLOYMENT#A", status: "DELETED", updatedAt: now },
+        { PK: "DEPLOYMENT#B", status: "DELETING", updatedAt: recent },
+      ],
+    });
+
+    await reconcileEventStatuses(ctx, now);
+
+    // Scan + Query のみで Update は無し (= rescue も transition も skip)
+    expect(ddbSend).toHaveBeenCalledTimes(2);
+  });
+
+  it("`isStuckDeletingForTeardown` pure logic は eventStatus / status / threshold を組み合わせて判定すべき", () => {
+    const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
+    const stale = "2026-05-15T00:00:00.000Z"; // 60 min 前
+    const recent = "2026-05-15T00:55:00.000Z"; // 5 min 前
+    // 該当
+    expect(
+      isStuckDeletingForTeardown("TEARDOWN", { status: "DELETING", updatedAt: stale }, nowMs),
+    ).toBe(true);
+    // eventStatus が TEARDOWN 以外
+    expect(
+      isStuckDeletingForTeardown("DEPLOYING", { status: "DELETING", updatedAt: stale }, nowMs),
+    ).toBe(false);
+    // status が DELETING 以外
+    expect(
+      isStuckDeletingForTeardown("TEARDOWN", { status: "DELETED", updatedAt: stale }, nowMs),
+    ).toBe(false);
+    // updatedAt が threshold 未満
+    expect(
+      isStuckDeletingForTeardown("TEARDOWN", { status: "DELETING", updatedAt: recent }, nowMs),
+    ).toBe(false);
+    // updatedAt 未設定 (= 旧 row) は safe default で false
+    expect(isStuckDeletingForTeardown("TEARDOWN", { status: "DELETING" }, nowMs)).toBe(false);
+    // nowMs が NaN なら false (= 異常入力で副作用を出さない)
+    expect(
+      isStuckDeletingForTeardown("TEARDOWN", { status: "DELETING", updatedAt: stale }, Number.NaN),
+    ).toBe(false);
+  });
+
+  it("`rescueStuckDeletingDeployments` は PK 欠落行を rescue skip すべき (= projection 漏れ safety)", async () => {
+    const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
+    await rescueStuckDeletingDeployments(
+      ctx,
+      [{ status: "DELETING", updatedAt: "2026-05-15T00:00:00.000Z" }],
+      nowMs,
+    );
+    // PK 無しは silent skip (= UpdateItem 発火しない)
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("`rescueStuckDeletingDeployments` の UpdateItem CCF (= 並行 MarkDeleted/MarkFailed) は silent skip すべき", async () => {
+    const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
+    ddbSend.mockImplementationOnce(async () => {
+      const err: Error & { name?: string } = new Error("conditional check failed");
+      err.name = "ConditionalCheckFailedException";
+      throw err;
+    });
+    await expect(
+      rescueStuckDeletingDeployments(
+        ctx,
+        [
+          {
+            PK: "DEPLOYMENT#X",
+            status: "DELETING",
+            updatedAt: "2026-05-15T00:00:00.000Z",
+          },
+        ],
+        nowMs,
+      ),
+    ).resolves.toBe(0);
   });
 
   it("Event filter は DEPLOYING または TEARDOWN のみであるべき (= READY / ENDED は触らない)", async () => {
