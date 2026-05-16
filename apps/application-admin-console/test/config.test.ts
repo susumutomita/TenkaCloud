@@ -17,7 +17,7 @@ describe("loadConfig", () => {
           Promise.resolve(
             new Response(
               JSON.stringify({
-                cognitoDomain: "https://prod-cognito.example.com",
+                cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
                 userClientId: "prod-client-id",
                 tenantId: "tenant-prod-1",
                 tenantName: "DENSO 第一事業部",
@@ -32,7 +32,9 @@ describe("loadConfig", () => {
     }
 
     it("cognitoDomain を runtime-config から取るべき", async () => {
-      expect((await loadWithFullRuntime()).cognitoDomain).toBe("https://prod-cognito.example.com");
+      expect((await loadWithFullRuntime()).cognitoDomain).toBe(
+        "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+      );
     });
 
     it("cognitoClientId を runtime-config.userClientId から取るべき (key が異なる)", async () => {
@@ -95,6 +97,71 @@ describe("loadConfig", () => {
               userClientId: "prod-client-id",
               tenantId: "tenant-prod-1",
               tenantName: "T",
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      const config = await loadConfig(env);
+      expect(config.apiBaseUrl).toBe("http://localhost:3999");
+    });
+  });
+
+  describe("Issue #871: runtime-config.json validation", () => {
+    it("apiUrl が http:// なら env fallback に倒れるべき (= mixed content / MITM 防御)", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+              userClientId: "x",
+              tenantId: "t",
+              tenantName: "n",
+              apiUrl: "http://attacker.evil.com/",
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      const config = await loadConfig(env);
+      expect(config.apiBaseUrl).toBe("http://localhost:3999");
+    });
+
+    it("cognitoDomain が amazoncognito.com 以外なら env fallback に倒れるべき (= allowlist)", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://attacker-cognito.evil.com",
+              userClientId: "x",
+              tenantId: "t",
+              tenantName: "n",
+              apiUrl: "https://api.example.com",
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      const config = await loadConfig(env);
+      expect(config.cognitoDomain).toBe("https://dev-cognito.example.com");
+    });
+
+    it("apiUrl が `javascript:` などの非 URL ならは env fallback に倒れるべき", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+              userClientId: "x",
+              tenantId: "t",
+              tenantName: "n",
+              apiUrl: "javascript:alert(1)",
             }),
             { status: 200 },
           ),

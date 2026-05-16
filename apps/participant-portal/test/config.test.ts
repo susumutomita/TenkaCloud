@@ -63,4 +63,21 @@ describe("loadConfig", () => {
     const cfg = await loadConfig();
     expect(cfg.apiBaseUrl).toContain("dev-mock");
   });
+
+  it("Issue #871: backend mode で apiBaseUrl が http:// なら fallback に倒れるべき", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "http://attacker.evil.com/portal",
+        eventTitle: "Spoofed",
+        eventRegion: "us-east-1",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    // fallback の dev-mock URL に倒れる (= teamLoginKey を attacker に送らない)
+    expect(cfg.apiBaseUrl).toContain("dev-mock");
+    expect(cfg.mode).toBe("dev-mock");
+  });
 });
