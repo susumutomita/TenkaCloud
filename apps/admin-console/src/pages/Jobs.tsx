@@ -3,9 +3,11 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Header from "@cloudscape-design/components/header";
+import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
+import Tabs from "@cloudscape-design/components/tabs";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -167,12 +169,8 @@ export function JobsPage({ config }: { config: AppConfig }) {
     );
   }
 
-  return (
-    <SpaceBetween size="l">
-      <Header variant="h1" description={t("jobs_page.description")}>
-        {t("jobs_page.header")}
-      </Header>
-
+  const provisioningContent = (
+    <SpaceBetween size="m">
       {error && (
         <Alert
           type="error"
@@ -190,7 +188,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
         </Box>
       ) : (
         <Table<PipelineExecutionItem>
-          variant="container"
+          variant="embedded"
           items={[...(items ?? [])]}
           trackBy="executionId"
           empty={
@@ -201,6 +199,65 @@ export function JobsPage({ config }: { config: AppConfig }) {
           columnDefinitions={columns}
         />
       )}
+    </SpaceBetween>
+  );
+
+  return (
+    <SpaceBetween size="l">
+      <Header variant="h1" description={t("jobs_page.description")}>
+        {t("jobs_page.header")}
+      </Header>
+
+      <Tabs
+        tabs={[
+          {
+            id: "provisioning",
+            label: t("jobs_page.tab_provisioning"),
+            content: provisioningContent,
+          },
+          {
+            id: "deprovisioning",
+            label: t("jobs_page.tab_deprovisioning"),
+            content: <DeprovisioningJobsTab awsRegion={config.awsRegion} />,
+          },
+        ]}
+      />
+    </SpaceBetween>
+  );
+}
+
+/**
+ * Issue #814: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
+ * Step Functions State Machine の execution 履歴) を表示するタブ。
+ *
+ * Phase 1 (本 PR): 既存 admin-insight Lambda は \`tenkacloud-saas-pipeline\` CodePipeline 専用で、
+ * Step Functions ListExecutions に対する route が未配線。 そのため operator を AWS Console
+ * の Step Functions list (= "deprovisioning" を含むステートマシンで絞り込み可能) に誘導する。
+ *
+ * Phase 2 (= 別 PR): admin-insight Lambda に \`GET /admin/insight/state-machine-executions\`
+ * route を追加し、 deprovisioningJobRunner.stateMachine.stateMachineArn を env 経由で渡して
+ * SFN ListExecutions を呼ぶ。 当 tab 内に Provisioning tab と同じ Table を表示する。
+ */
+function DeprovisioningJobsTab({ awsRegion }: { awsRegion: string }) {
+  const t = useT();
+  // 「Step Functions コンソールを開く」 deep link。 awsRegion が空文字 (= dev fallback)
+  // の場合は ap-northeast-1 を仮置きする (= 本 link は production 用途、 dev では押せても無効)。
+  const region = awsRegion || "ap-northeast-1";
+  const sfnListUrl = `https://${region}.console.aws.amazon.com/states/home?region=${region}#/statemachines`;
+  return (
+    <SpaceBetween size="m">
+      <Alert type="info" header={t("jobs_page.deprovisioning_phase1_header")}>
+        {t("jobs_page.deprovisioning_phase1_body")}
+      </Alert>
+      <Box>
+        <Link
+          external
+          href={sfnListUrl}
+          ariaLabel={t("jobs_page.deprovisioning_open_console_aria")}
+        >
+          {t("jobs_page.deprovisioning_open_console")}
+        </Link>
+      </Box>
     </SpaceBetween>
   );
 }

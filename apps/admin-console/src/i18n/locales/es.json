@@ -87,7 +87,13 @@
     "col_start_time": "Inicio",
     "col_elapsed": "Tiempo transcurrido",
     "col_last_update": "Última actualización",
-    "open_console_aria": "Abrir la ejecución {executionId} en la consola de AWS"
+    "open_console_aria": "Abrir la ejecución {executionId} en la consola de AWS",
+    "tab_provisioning": "Provisioning",
+    "tab_deprovisioning": "Deprovisioning",
+    "deprovisioning_phase1_header": "La integración en esta consola está prevista en Phase 2",
+    "deprovisioning_phase1_body": "La eliminación de tenants (deprovisioning) se ejecuta a través de la state machine de Step Functions del BashJobRunner de SBT. Por ahora, el Lambda admin-insight solo conoce el CodePipeline; revisa las ejecuciones de deprovisioning desde la consola AWS > Step Functions y filtra las state machines cuyo nombre contiene 'deprovisioning'.",
+    "deprovisioning_open_console": "Abrir Step Functions en la consola AWS",
+    "deprovisioning_open_console_aria": "Abrir la consola de AWS Step Functions (lista de state machines) en una nueva pestaña"
   },
   "tenant_events": {
     "missing_tenant_id": "Falta el tenantId.",
