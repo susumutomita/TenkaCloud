@@ -62,9 +62,35 @@ TenkaCloud 側はこの ARN と ExternalId を用いて AssumeRole し、問題 
 
 このスタックを削除すると Role も消える ⇒ TenkaCloud からの AssumeRole が即時に拒否される。
 
+#### 競技後の片付け (推奨)
+
+競技を終えたら、 必ず stack を削除してください。 残したままにすると TenkaCloud
+運営側が AssumeRole 可能な状態が継続します (= 攻撃面 + コスト両面でクリーンに
+保つため)。
+
+##### 方法 A: CLI で 1 行削除 (推奨)
+
 ```bash
 aws cloudformation delete-stack --stack-name tenkacloud-competitor-bootstrap
+# 削除完了を待つ場合 (option):
+aws cloudformation wait stack-delete-complete --stack-name tenkacloud-competitor-bootstrap
 ```
+
+##### 方法 B: AWS Console から削除
+
+1. AWS Console > CloudFormation > スタック一覧
+2. `tenkacloud-competitor-bootstrap` を選択
+3. 「削除」→「スタックの削除」を確認
+
+Console / CLI どちらの経路でも結果は同じ (= IAM Role が即時消える)。 Issue #840 は
+Participant Portal 側に「環境を片付ける」button を追加して同操作を 1-click 化する
+予定ですが、 現状は上記いずれかを競技者ご自身で実行してください。
+
+#### 即時撤回 (競技中の trust 取り消し)
+
+万が一 External ID が漏れた場合などは、 競技中でも上記コマンドで stack を削除して
+trust を即時撤回できます。 削除後はあらためて生成した External ID で再 deploy
+すれば trust が復旧します。
 
 ### セキュリティ上の前提
 
