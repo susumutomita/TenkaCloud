@@ -37,7 +37,12 @@ source ./scripts/lib/install-node.sh
 install_node_from_nvmrc
 
 cd cdk
-npm install
+# Issue #916 (2 層目): `infrastructure/package.json` は `@TenkaCloud/trust-bridge:
+# workspace:*` で sibling workspace を参照する。 npm は `workspace:` protocol を理解せず
+# `EUNSUPPORTEDPROTOCOL` で fail するので bun install に切替。 staging root の monorepo
+# package.json (= install.sh が copy) と `packages/trust-bridge` (= install.sh が
+# 同梱) が揃った状態で bun が workspace resolve する。
+bun install
 
 # Parse tenant details from the input message from step function
 export CDK_PARAM_TENANT_ID=$tenantId

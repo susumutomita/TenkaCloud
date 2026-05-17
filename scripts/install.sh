@@ -91,6 +91,13 @@ cp "${TenkaCloud_ROOT}/.nvmrc" "${STAGING}/.nvmrc"
 # `packageManager: "bun@<version>"` field から Bun version を読む。 無いと ENOENT で
 # tenant provisioning / update CodeBuild job が fail する (= "package.json not found")。
 cp "${TenkaCloud_ROOT}/package.json" "${STAGING}/package.json"
+# packages/ を staging root に同梱。 infrastructure/package.json (= cdk/package.json) は
+# `@TenkaCloud/trust-bridge: workspace:*` で sibling workspace を参照する。 CodeBuild の
+# bun install (= update-tenant.sh / provision-tenant.sh で npm install → bun install に
+# 切替済) が workspace を resolve できるよう同梱する。 無いと
+# `EUNSUPPORTEDPROTOCOL: Unsupported URL Type "workspace:"` で fail する (= 旧 npm install
+# 経路、 #916 の 2 層目 regression)。
+cp -R packages "${STAGING}/packages"
 # 旧 ref-arch では src/ を staging に含めていたが、#76 で
 # infrastructure/lib/tenant-pipeline/handlers/ に移動済 (cdk/ 配下に同梱されるので不要)。
 
