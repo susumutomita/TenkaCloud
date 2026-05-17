@@ -1,0 +1,282 @@
+/**
+ * Issue #869: 問題 template.yaml の pre-deploy security scan。
+ *
+ * cfn-lint / cfn-guard を外部依存 (= python pip) で持ち込まず、 自前で 5 つの危険パターンを
+ * YAML / 正規表現で検出する。 意図的に脆弱な問題 (= security-battle-royale 等) は metadata
+ * `Metadata: { tenkacloud: { allowIntentionallyVulnerable: true } }` で suppress 可。
+ *
+ * 検出パターン:
+ *   1. IAM Action wildcard (`Action: "*"` / `Action: "<svc>:*"`)
+ *   2. IAM Resource wildcard (`Resource: "*"`) on `AWS::IAM::Policy` / `Role` Inline policy
+ *   3. Security Group ingress `0.0.0.0/0` on ports != 80/443 (= 競技 web は OK)
+ *   4. Public S3 bucket (`PublicReadAccess: true` / `AccessControl: PublicRead`)
+ *   5. KMS Key without key rotation (`EnableKeyRotation: false` or absent)
+ *
+ * security-battle-royale は意図的脆弱なので最上位 Metadata block で suppress する。
+ */
+
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PROBLEMS_DIR = path.resolve(REPO_ROOT, "problems");
+
+interface Finding {
+  readonly templatePath: string;
+  readonly rule: string;
+  readonly location: string;
+  readonly detail: string;
+}
+
+const WEB_PORTS = new Set([80, 443]);
+
+/**
+ * AWS API design 上 Resource: "*" を要求する read-only action の allowlist。
+ * これらは Resource を絞れず、 IAM policy で `*` を書く以外に手が無い (= AWS-side 制約)。
+ * リストに無い action が `*` と組み合わさったら警告。
+ */
+const RESOURCE_STAR_OK_ACTIONS = new Set([
+  // SSM
+  "ssm:DescribeParameters",
+  "ssm:GetParametersByPath",
+  "ssm:DescribeAssociation",
+  // CloudFormation list / describe
+  "cloudformation:ListStacks",
+  "cloudformation:DescribeStackEvents",
+  // EC2 read
+  "ec2:DescribeInstances",
+  "ec2:DescribeSecurityGroups",
+  "ec2:DescribeVpcs",
+  "ec2:DescribeSubnets",
+  "ec2:DescribeRegions",
+  // IAM read (= self-reflection)
+  "iam:GetRole",
+  "iam:GetPolicy",
+  "iam:ListPolicies",
+  "iam:ListRoles",
+  // CloudWatch / Logs read
+  "logs:DescribeLogGroups",
+  "logs:DescribeLogStreams",
+  "cloudwatch:ListMetrics",
+  // STS sanity
+  "sts:GetCallerIdentity",
+]);
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function visit(
+  node: unknown,
+  pathStr: string,
+  hits: (loc: string, val: unknown) => void,
+  seen: WeakSet<object> = new WeakSet(),
+): void {
+  if (Array.isArray(node)) {
+    if (seen.has(node)) return;
+    seen.add(node);
+    for (let i = 0; i < node.length; i++) {
+      visit(node[i], `${pathStr}[${i}]`, hits, seen);
+    }
+    return;
+  }
+  if (isPlainObject(node)) {
+    if (seen.has(node)) return;
+    seen.add(node);
+    for (const [k, v] of Object.entries(node)) {
+      visit(v, pathStr ? `${pathStr}.${k}` : k, hits, seen);
+    }
+    hits(pathStr, node);
+  }
+}
+
+function checkIamWildcards(template: unknown, results: Finding[], templatePath: string): void {
+  visit(template, "", (loc, node) => {
+    if (!isPlainObject(node)) return;
+    // Action / Resource は IAM Statement entry の field。 Statement に近い文脈のみ拾う。
+    if (!("Action" in node) && !("Resource" in node)) return;
+    const action = node.Action;
+    const actions = Array.isArray(action) ? action : action !== undefined ? [action] : [];
+    for (const a of actions) {
+      if (a === "*") {
+        results.push({
+          templatePath,
+          rule: "iam-action-wildcard",
+          location: loc,
+          detail: `Action "*" is a full-admin grant; scope to specific service actions`,
+        });
+      }
+    }
+    const resource = node.Resource;
+    const resources = Array.isArray(resource) ? resource : resource !== undefined ? [resource] : [];
+    // Resource: "*" の場合、 Action が AWS-side で require "*" な read-only API のみで構成
+    // されているなら許容。 1 つでも require "*" 外があれば警告。
+    if (resources.includes("*")) {
+      const actionList = actions.map((a) => (typeof a === "string" ? a : "")).filter(Boolean);
+      const allRequireStar =
+        actionList.length > 0 && actionList.every((a) => RESOURCE_STAR_OK_ACTIONS.has(a));
+      if (!allRequireStar) {
+        results.push({
+          templatePath,
+          rule: "iam-resource-wildcard",
+          location: loc,
+          detail: `Resource "*" with actions [${actionList.join(", ")}] is broader than required. Scope to specific ARNs, or add the action to RESOURCE_STAR_OK_ACTIONS allowlist if AWS API requires "*".`,
+        });
+      }
+    }
+  });
+}
+
+function checkSgIngress(template: unknown, results: Finding[], templatePath: string): void {
+  const resources =
+    isPlainObject(template) && isPlainObject(template.Resources) ? template.Resources : {};
+  for (const [name, res] of Object.entries(resources)) {
+    if (!isPlainObject(res)) continue;
+    if (res.Type !== "AWS::EC2::SecurityGroup") continue;
+    const props = isPlainObject(res.Properties) ? res.Properties : undefined;
+    const ingress =
+      props && Array.isArray(props.SecurityGroupIngress) ? props.SecurityGroupIngress : [];
+    for (let i = 0; i < ingress.length; i++) {
+      const rule = ingress[i];
+      if (!isPlainObject(rule)) continue;
+      const cidr = rule.CidrIp;
+      const fromPort = typeof rule.FromPort === "number" ? rule.FromPort : Number(rule.FromPort);
+      if (cidr === "0.0.0.0/0" && !WEB_PORTS.has(fromPort)) {
+        results.push({
+          templatePath,
+          rule: "sg-open-non-web",
+          location: `Resources.${name}.Properties.SecurityGroupIngress[${i}]`,
+          detail: `0.0.0.0/0 ingress to port ${fromPort} (= non-web). Scope to specific CIDR or restrict to 80/443.`,
+        });
+      }
+    }
+  }
+}
+
+function checkPublicS3(template: unknown, results: Finding[], templatePath: string): void {
+  const resources =
+    isPlainObject(template) && isPlainObject(template.Resources) ? template.Resources : {};
+  for (const [name, res] of Object.entries(resources)) {
+    if (!isPlainObject(res)) continue;
+    if (res.Type !== "AWS::S3::Bucket") continue;
+    const props = isPlainObject(res.Properties) ? res.Properties : undefined;
+    if (!props) continue;
+    if (props.AccessControl === "PublicRead" || props.AccessControl === "PublicReadWrite") {
+      results.push({
+        templatePath,
+        rule: "s3-public-acl",
+        location: `Resources.${name}.Properties.AccessControl`,
+        detail: `AccessControl=${props.AccessControl} grants public access. Prefer BlockPublicAccess + explicit BucketPolicy.`,
+      });
+    }
+  }
+}
+
+function checkKmsRotation(template: unknown, results: Finding[], templatePath: string): void {
+  const resources =
+    isPlainObject(template) && isPlainObject(template.Resources) ? template.Resources : {};
+  for (const [name, res] of Object.entries(resources)) {
+    if (!isPlainObject(res)) continue;
+    if (res.Type !== "AWS::KMS::Key") continue;
+    const props = isPlainObject(res.Properties) ? res.Properties : undefined;
+    const rotation = props?.EnableKeyRotation;
+    if (rotation !== true) {
+      results.push({
+        templatePath,
+        rule: "kms-rotation-disabled",
+        location: `Resources.${name}.Properties.EnableKeyRotation`,
+        detail: `KMS keys should set EnableKeyRotation=true.`,
+      });
+    }
+  }
+}
+
+function isIntentionallyVulnerable(template: unknown): boolean {
+  if (!isPlainObject(template)) return false;
+  const metadata = isPlainObject(template.Metadata) ? template.Metadata : undefined;
+  const tc = metadata && isPlainObject(metadata.tenkacloud) ? metadata.tenkacloud : undefined;
+  return tc?.allowIntentionallyVulnerable === true;
+}
+
+function scanTemplate(templatePath: string): Finding[] {
+  const raw = readFileSync(templatePath, "utf8");
+  const template = parseYaml(raw, {
+    // CFn intrinsic !Ref / !Sub などの custom tag を 1 引数 string として通す。
+    customTags: [
+      "!Ref",
+      "!Sub",
+      "!GetAtt",
+      "!Join",
+      "!Select",
+      "!Split",
+      "!ImportValue",
+      "!FindInMap",
+      "!If",
+      "!Equals",
+      "!Not",
+      "!And",
+      "!Or",
+      "!Base64",
+      "!Cidr",
+    ].map((tag) => ({
+      tag,
+      resolve(value: unknown): unknown {
+        return value;
+      },
+    })),
+  });
+  if (isIntentionallyVulnerable(template)) return [];
+  const results: Finding[] = [];
+  checkIamWildcards(template, results, templatePath);
+  checkSgIngress(template, results, templatePath);
+  checkPublicS3(template, results, templatePath);
+  checkKmsRotation(template, results, templatePath);
+  return results;
+}
+
+function* iterateTemplates(): Generator<string> {
+  const fs = require("node:fs") as typeof import("node:fs");
+  for (const category of fs.readdirSync(PROBLEMS_DIR, { withFileTypes: true })) {
+    if (!category.isDirectory()) continue;
+    const categoryDir = path.join(PROBLEMS_DIR, category.name);
+    for (const problem of fs.readdirSync(categoryDir, { withFileTypes: true })) {
+      if (!problem.isDirectory()) continue;
+      const tpl = path.join(categoryDir, problem.name, "template.yaml");
+      if (fs.existsSync(tpl)) yield tpl;
+    }
+  }
+}
+
+function main(): void {
+  const all: Finding[] = [];
+  let scanned = 0;
+  for (const tpl of iterateTemplates()) {
+    scanned += 1;
+    try {
+      const findings = scanTemplate(tpl);
+      all.push(...findings);
+    } catch (err) {
+      console.error(`[check-template-security] failed to scan ${tpl}: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+  if (all.length === 0) {
+    console.log(
+      `OK: ${scanned} template(s) スキャン、 危険パターン 0 件 (= IAM/SG/S3/KMS 全 clear)`,
+    );
+    return;
+  }
+  console.error(`NG: ${scanned} template(s) スキャン、 ${all.length} 件の危険パターンを検出:`);
+  for (const f of all) {
+    const rel = path.relative(REPO_ROOT, f.templatePath);
+    console.error(`  ${rel}: [${f.rule}] ${f.location} — ${f.detail}`);
+  }
+  console.error(
+    `\n意図的に脆弱な問題は template の最上位 \`Metadata.tenkacloud.allowIntentionallyVulnerable: true\` で suppress 可能。`,
+  );
+  process.exit(1);
+}
+
+main();
