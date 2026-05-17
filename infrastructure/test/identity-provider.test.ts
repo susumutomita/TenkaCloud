@@ -134,22 +134,24 @@ describe("IdentityProvider", () => {
       expect(readAttrs).toContain("custom:tenantName");
     });
 
-    it("#529 i18n: 招待メール body に JA / EN / ES / ZH 4 言語が含まれ console URL + placeholder も embed されるべき", () => {
+    it("Issue #903: 招待メール subject は英語のみであるべき (4 言語混在を廃止)", () => {
       const consoleUrl = "https://d123abc.cloudfront.net";
       const { template } = synth("tenant-1", consoleUrl);
-      // Subject は 4 言語並列 (mail client preview での言語識別用)
       template.hasResourceProperties(
         "AWS::Cognito::UserPool",
         Match.objectLike({
           AdminCreateUserConfig: Match.objectLike({
             InviteMessageTemplate: Match.objectLike({
-              EmailSubject: Match.stringLikeRegexp(
-                "テナント管理コンソール招待.*Tenant Admin Invitation",
-              ),
+              EmailSubject: "[TenkaCloud] Tenant Admin Invitation",
             }),
           }),
         }),
       );
+    });
+
+    it("Issue #903: 招待メール body は英語のみで、 console URL + Cognito placeholder を含むべき", () => {
+      const consoleUrl = "https://d123abc.cloudfront.net";
+      const { template } = synth("tenant-1", consoleUrl);
       const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
       const body =
         (
@@ -157,20 +159,25 @@ describe("IdentityProvider", () => {
             AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
           }
         )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
-      // 4 言語の greeting (= operator がどの言語でも 1 段落見つけられる)
-      expect(body).toContain("ようこそ TenkaCloud"); // JA
-      expect(body).toContain("Welcome to TenkaCloud"); // EN
-      expect(body).toContain("Bienvenido a TenkaCloud"); // ES
-      expect(body).toContain("欢迎使用 TenkaCloud"); // ZH
+      // 英語 greeting + 各 field
+      expect(body).toContain("Welcome to TenkaCloud");
+      expect(body).toContain("Username:");
+      expect(body).toContain("Temporary password:");
+      expect(body).toContain("Sign-in URL:");
+      // 旧 4 言語混在の痕跡が無いこと (= regression 防止)
+      expect(body).not.toContain("ようこそ TenkaCloud");
+      expect(body).not.toContain("Bienvenido a TenkaCloud");
+      expect(body).not.toContain("欢迎使用 TenkaCloud");
+      expect(body).not.toContain("▼");
       // Cognito placeholder と console URL
       expect(body).toContain("{username}");
       expect(body).toContain("{####}");
       expect(body).toContain(consoleUrl);
     });
 
-    it("#660: 各 field (ユーザー名 / 一時パスワード / URL) が paragraph break (= 二重改行) で区切られるべき", () => {
+    it("Issue #903: 各 field (Username / Temporary password / Sign-in URL) が paragraph break (= 二重改行) で区切られるべき", () => {
       // Gmail / Outlook は単一改行を space に re-flow するので、 fields は \n\n で区切らないと
-      // 1 行に潰れて読めなくなる (= PR-582 で起きた regression)。
+      // 1 行に潰れて読めなくなる (= PR-582 で起きた regression、 Issue #903 でも継続維持)。
       const consoleUrl = "https://d123abc.cloudfront.net";
       const { template } = synth("tenant-1", consoleUrl);
       const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
@@ -180,17 +187,9 @@ describe("IdentityProvider", () => {
             AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
           }
         )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
-      // 各 field の前後に \n\n がある (= paragraph break)
-      expect(body).toMatch(/\n\n■ ユーザー名: \{username\}\n\n/);
-      expect(body).toMatch(/\n\n■ 一時パスワード: \{####\}\n\n/);
-      expect(body).toMatch(/\n\n■ Username: \{username\}\n\n/);
-      // 言語間の divider が存在する (= 視覚的セクション区切り)
-      expect(body).toContain("═══");
-      // 言語 prefix が各セクション冒頭にある (= 受信者が読める段落をすぐ見つけられる)
-      expect(body).toContain("▼ 日本語");
-      expect(body).toContain("▼ English");
-      expect(body).toContain("▼ Español");
-      expect(body).toContain("▼ 中文 (简体)");
+      expect(body).toMatch(/\n\nUsername: \{username\}\n\n/);
+      expect(body).toMatch(/\n\nTemporary password: \{####\}\n\n/);
+      expect(body).toMatch(/\n\nSign-in URL: /);
     });
 
     it("#529: SMS message も InviteMessageTemplate 整合のため Cognito placeholder 込みで置かれるべき", () => {
