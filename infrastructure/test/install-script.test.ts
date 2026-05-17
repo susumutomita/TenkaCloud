@@ -47,4 +47,12 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
   it("staging root に `packages` directory を copy すべき (= workspace:* protocol の resolve)", () => {
     expect(source).toContain('cp -R packages "${STAGING}/packages"');
   });
+
+  // Issue #916 (3 層目): repo root の workspaces 配列は `infrastructure` を含むが、 staging では
+  // SBT ref-arch 互換のため `cdk/` にリネームされる。 root package.json の workspaces を staging で
+  // も `cdk` に書き換えないと bun が CWD=cdk を workspace member と認識せず、
+  // `Workspace dependency "@TenkaCloud/trust-bridge" not found / Searched in "./*"` で fail する。
+  it("staging package.json の workspaces を `infrastructure` → `cdk` に書き換えるべき", () => {
+    expect(source).toContain("pkg['workspaces'] = [w if w != 'infrastructure' else 'cdk'");
+  });
 });

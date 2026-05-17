@@ -91,12 +91,30 @@ cp "${TenkaCloud_ROOT}/.nvmrc" "${STAGING}/.nvmrc"
 # `packageManager: "bun@<version>"` field から Bun version を読む。 無いと ENOENT で
 # tenant provisioning / update CodeBuild job が fail する (= "package.json not found")。
 cp "${TenkaCloud_ROOT}/package.json" "${STAGING}/package.json"
-# packages/ を staging root に同梱。 infrastructure/package.json (= cdk/package.json) は
-# `@TenkaCloud/trust-bridge: workspace:*` で sibling workspace を参照する。 CodeBuild の
-# bun install (= update-tenant.sh / provision-tenant.sh で npm install → bun install に
-# 切替済) が workspace を resolve できるよう同梱する。 無いと
-# `EUNSUPPORTEDPROTOCOL: Unsupported URL Type "workspace:"` で fail する (= 旧 npm install
-# 経路、 #916 の 2 層目 regression)。
+# Issue #916 (3 層目): repo root の workspaces 宣言は `["infrastructure", "apps/*", "packages/*"]`
+# だが、 staging では SBT ref-arch 互換のため `infrastructure/` を `cdk/` にリネームしている (= 上の
+# `cp -R infrastructure "${STAGING}/cdk"`)。 結果 root package.json の workspaces 宣言と staging の
+# 実ディレクトリ名が乖離し、 CodeBuild の `cd cdk && bun install` で bun が `cdk` を workspace
+# member と認識せず、 `@TenkaCloud/trust-bridge: workspace:*` を `./*` (= cdk 内 siblings) で探して
+# fail する (= "Workspace dependency '@TenkaCloud/trust-bridge' not found / Searched in './*'")。
+#
+# 対策: staging root の package.json の workspaces 配列で `infrastructure` を `cdk` に置換する。
+# 他に staging 名と repo 名が乖離している workspace は無いので 1 置換で十分。 sed の in-place 編集は
+# BSD/GNU 互換に注意 (macOS は `sed -i ''`)。
+python3 -c "
+import json, sys
+p = '${STAGING}/package.json'
+with open(p, 'r') as f:
+    pkg = json.load(f)
+pkg['workspaces'] = [w if w != 'infrastructure' else 'cdk' for w in pkg.get('workspaces', [])]
+with open(p, 'w') as f:
+    json.dump(pkg, f, indent=2)
+"
+# packages/ を staging root に同梱。 cdk/package.json は \`@TenkaCloud/trust-bridge: workspace:*\` で
+# sibling workspace を参照する。 CodeBuild の bun install (= update-tenant.sh / provision-tenant.sh で
+# npm install → bun install に切替済) が workspace を resolve できるよう同梱する。 無いと
+# \`EUNSUPPORTEDPROTOCOL: Unsupported URL Type "workspace:"\` で fail する (= 旧 npm install 経路、
+# #916 の 2 層目 regression)。
 cp -R packages "${STAGING}/packages"
 # 旧 ref-arch では src/ を staging に含めていたが、#76 で
 # infrastructure/lib/tenant-pipeline/handlers/ に移動済 (cdk/ 配下に同梱されるので不要)。
