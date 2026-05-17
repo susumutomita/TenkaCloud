@@ -17,33 +17,94 @@ export type SubmitFlagOutcome =
   | { kind: "not_flag_problem" }
   | { kind: "no_outputs" }
   | { kind: "scoring_locked" }
+  /**
+   * Issue #13 / scoring gate: 競技が開始前 (= Event.startsAt 未設定 / now < startsAt) または
+   * 終了後 (= now > endsAt) / status=ENDED|ARCHIVED の状態で flag 提出を受けない。
+   * 旧コードはこの gate が欠落しており、 deploy 直後から flag 提出で得点が入っていた (= JAM/GameDay
+   * 前提違反、 大会の公平性を完全に壊す)。
+   */
+  | { kind: "scoring_not_started"; startsAt?: string }
+  | { kind: "scoring_ended"; endsAt?: string }
   | { kind: "unauthorized" };
 
+interface EventGate {
+  readonly scoringLocked: boolean;
+  readonly startsAt: string | undefined;
+  readonly endsAt: string | undefined;
+  readonly status: string | undefined;
+}
+
 /**
- * #558: Event の scoringLocked flag を read-through で取得する。
- * - 行不在 / フィールド無し → false (= unlocked と同義)
- * - error → false (fail-open。lock が効かない方が「採点ストップ」より運用上マシ、健全な状態に戻る)
+ * Issue #13: Event の gate flags を read-through で取得する。 scoringLocked + startsAt + endsAt +
+ * status を 1 GetItem (= 1 RCU) でまとめて読む。 不在 / error は fail-closed で 「採点不可」 扱い
+ * (= old fail-open とは逆。 JAM/GameDay 前提では「採点しないより、 まずデータ取れなかったら
+ * 採点を止める」 が安全側)。
  */
-async function isEventScoringLocked(
+async function getEventGate(
   shared: ParticipantSharedResources,
   eventId: string,
-): Promise<boolean> {
+): Promise<EventGate | undefined> {
   try {
     const out = await shared.ddb.send(
       new GetCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        ProjectionExpression: "scoringLocked",
+        ProjectionExpression: "scoringLocked, startsAt, endsAt, #s",
+        ExpressionAttributeNames: { "#s": "status" },
       }),
     );
-    return (out.Item as { scoringLocked?: boolean } | undefined)?.scoringLocked === true;
+    const item = out.Item as
+      | {
+          scoringLocked?: boolean;
+          startsAt?: string;
+          endsAt?: string;
+          status?: string;
+        }
+      | undefined;
+    if (!item) return undefined;
+    return {
+      scoringLocked: item.scoringLocked === true,
+      startsAt: item.startsAt,
+      endsAt: item.endsAt,
+      status: item.status,
+    };
   } catch (err) {
-    console.warn("[submit-flag] isEventScoringLocked failed (fail-open)", {
+    console.warn("[submit-flag] getEventGate failed", {
       eventId,
       message: err instanceof Error ? err.message : String(err),
     });
-    return false;
+    return undefined;
   }
+}
+
+/**
+ * Issue #13: scoring gate を評価する。 順序は次のとおり (= 上から先に該当した outcome を返す):
+ *   1. event 行が無い          → "scoring_not_started" (= 安全側)
+ *   2. status=ENDED / ARCHIVED → "scoring_ended"
+ *   3. startsAt 未設定         → "scoring_not_started"
+ *   4. now < startsAt          → "scoring_not_started"
+ *   5. endsAt 設定 + now > endsAt → "scoring_ended"
+ *   6. scoringLocked           → "scoring_locked"
+ *   7. それ以外                → undefined (= scoring active、 加点経路へ)
+ */
+function evaluateGate(gate: EventGate | undefined, nowMs: number): SubmitFlagOutcome | undefined {
+  if (!gate) return { kind: "scoring_not_started" };
+  if (gate.status === "ENDED" || gate.status === "ARCHIVED") {
+    return { kind: "scoring_ended", endsAt: gate.endsAt };
+  }
+  if (!gate.startsAt) return { kind: "scoring_not_started" };
+  const startMs = Date.parse(gate.startsAt);
+  if (Number.isFinite(startMs) && nowMs < startMs) {
+    return { kind: "scoring_not_started", startsAt: gate.startsAt };
+  }
+  if (gate.endsAt) {
+    const endMs = Date.parse(gate.endsAt);
+    if (Number.isFinite(endMs) && nowMs > endMs) {
+      return { kind: "scoring_ended", endsAt: gate.endsAt };
+    }
+  }
+  if (gate.scoringLocked) return { kind: "scoring_locked" };
+  return undefined;
 }
 
 /**
@@ -71,12 +132,14 @@ export async function submitFlag(
   const item = items.find((i) => i.problemId === problemId);
   if (!item?.PK || !item.problemId) return { kind: "unauthorized" };
 
-  // #558: scoring lock check — Event 単位で lock されていたら加点経路を返さない
-  // (= 提出履歴は残さず、`scoring_locked` outcome で UI に伝える)。Event GET は 1 RCU、
-  // submit-flag は per-attempt の rare path なので read-through で十分。
+  // Issue #13 / scoring gate: 競技開始前 / 終了後 / lock 時は加点経路を返さない
+  // (= 提出履歴は残さず、 該当 outcome を UI に伝える)。 Event GET は 1 RCU、 submit-flag は
+  // per-attempt の rare path なので read-through で十分。 旧来 (#558) は scoringLocked
+  // のみ checked。 本 PR で startsAt / endsAt / status も追加し、 competition gate を完全化。
   if (typeof item.eventId === "string" && item.eventId.length > 0) {
-    const locked = await isEventScoringLocked(shared, item.eventId);
-    if (locked) return { kind: "scoring_locked" };
+    const gate = await getEventGate(shared, item.eventId);
+    const blocked = evaluateGate(gate, Date.now());
+    if (blocked) return blocked;
   }
 
   const scoring = scoringMap[item.problemId];

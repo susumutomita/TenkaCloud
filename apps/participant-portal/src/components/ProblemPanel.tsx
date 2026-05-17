@@ -200,7 +200,22 @@ function FlagSubmissionPanel({
       }
     } catch (err) {
       if (err instanceof PortalValidationError) {
-        setSubmitError(`バリデーションエラー: ${err.errorCode}`);
+        // Issue #13 / scoring gate: 競技開始前 / 終了後 / lock の error code を
+        // 人間可読 message に変換 (= 「バリデーションエラー: scoring_not_started」 では何が
+        // 起きているか参加者に伝わらない)。
+        const friendly = (() => {
+          switch (err.errorCode) {
+            case "scoring_not_started":
+              return "競技はまだ開始していません。 運営の開始合図をお待ちください。";
+            case "scoring_ended":
+              return "競技は終了しました。 採点 gate は閉じています。";
+            case "scoring_locked":
+              return "採点が一時停止されています。 運営にお問い合わせください。";
+            default:
+              return `エラー: ${err.errorCode}`;
+          }
+        })();
+        setSubmitError(friendly);
       } else {
         setSubmitError(err instanceof Error ? err.message : String(err));
       }

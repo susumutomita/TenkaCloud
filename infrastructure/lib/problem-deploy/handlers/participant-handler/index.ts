@@ -154,6 +154,10 @@ app.post("/portal/me/submit-flag", (c) =>
       if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
       if (outcome.kind === "no_outputs") return respondError(c, "no_outputs");
       if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
+      // Issue #13 / scoring gate: 競技開始前 / 終了後の提出は raw outcome を 409 で返し、
+      // UI で「競技開始までお待ちください」 / 「競技は終了しました」 の文言に分岐させる。
+      if (outcome.kind === "scoring_not_started") return respondError(c, "scoring_not_started");
+      if (outcome.kind === "scoring_ended") return respondError(c, "scoring_ended");
       return c.json(outcome, HTTP_OK);
     },
     RATE_LIMITS.WRITE_VERY_LOW,
