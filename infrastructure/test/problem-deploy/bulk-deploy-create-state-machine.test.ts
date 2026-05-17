@@ -1,0 +1,116 @@
+import * as cdk from "aws-cdk-lib";
+import { Match, Template } from "aws-cdk-lib/assertions";
+import { Bucket } from "aws-cdk-lib/aws-s3";
+import { Pass, StateMachine } from "aws-cdk-lib/aws-stepfunctions";
+import { describe, expect, it } from "vitest";
+import { BulkDeployCreateStateMachine } from "../../lib/problem-deploy/bulk-deploy-create-state-machine";
+
+/**
+ * Issue #910 (#895 Phase 2.C.1): BulkDeployCreateStateMachine の CFn shape を pin する
+ * regression test。 Distributed Map / S3JsonItemReader / MaxConcurrency=50 / Standard
+ * child execution の 4 つの設計判断が ASL に反映されているかを assertion する。
+ */
+
+function buildStack(): { stack: cdk.Stack; template: Template } {
+  const app = new cdk.App();
+  const stack = new cdk.Stack(app, "Test", {
+    env: { account: "123456789012", region: "ap-northeast-1" },
+  });
+  const payloadBucket = new Bucket(stack, "PayloadBucket");
+  // child State Machine は本 PR scope 外 (= 別 PR で DeployCreateStateMachine を渡す)。
+  // テスト的には任意の Standard SM があれば良いので minimal Pass で組む。
+  const childSm = new StateMachine(stack, "ChildSm", {
+    definition: new Pass(stack, "ChildPass"),
+  });
+  new BulkDeployCreateStateMachine(stack, "Bulk", {
+    childStateMachine: childSm,
+    payloadBucket,
+  });
+  return { stack, template: Template.fromStack(stack) };
+}
+
+function asJsonString(definitionString: unknown): string {
+  if (typeof definitionString === "string") return definitionString;
+  const join = (definitionString as { "Fn::Join": [string, unknown[]] })["Fn::Join"];
+  const parts = join[1] as Array<string | Record<string, unknown>>;
+  return parts.map((p) => (typeof p === "string" ? p : "ARN_PLACEHOLDER")).join("");
+}
+
+describe("BulkDeployCreateStateMachine", () => {
+  it("Distributed Map state を含むべき (= Standard Map ではない、 750 batch のため)", () => {
+    const { template } = buildStack();
+    const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine")).find(
+      (r) => {
+        const def = asJsonString(r.Properties?.DefinitionString);
+        return def.includes("DeployItemsMap");
+      },
+    );
+    expect(sm).toBeDefined();
+    const def = asJsonString(sm?.Properties?.DefinitionString);
+    expect(def).toContain('"Type":"Map"');
+    expect(def).toContain('"ProcessorConfig"');
+    expect(def).toContain('"Mode":"DISTRIBUTED"');
+    expect(def).toContain('"ExecutionType":"STANDARD"');
+  });
+
+  it("MaxConcurrency が ADR-001 §3 で fix された 50 であるべき", () => {
+    const { template } = buildStack();
+    const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine")).find(
+      (r) => {
+        const def = asJsonString(r.Properties?.DefinitionString);
+        return def.includes("DeployItemsMap");
+      },
+    );
+    const def = asJsonString(sm?.Properties?.DefinitionString);
+    expect(def).toContain('"MaxConcurrency":50');
+  });
+
+  it("S3 ItemReader を含む (= JSON array of deployments を読む)", () => {
+    const { template } = buildStack();
+    const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine")).find(
+      (r) => {
+        const def = asJsonString(r.Properties?.DefinitionString);
+        return def.includes("DeployItemsMap");
+      },
+    );
+    const def = asJsonString(sm?.Properties?.DefinitionString);
+    expect(def).toContain('"ItemReader"');
+    expect(def).toContain('"Resource":"arn:');
+    expect(def).toContain("s3:getObject");
+    expect(def).toContain('"ReaderConfig"');
+    expect(def).toContain('"InputType":"JSON"');
+  });
+
+  it("S3 Bucket への Read 権限が State Machine Role に付くべき", () => {
+    const { template } = buildStack();
+    // IAM policy で s3:GetObject + s3:ListBucket が付く
+    template.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: Match.arrayWith(["s3:GetObject*"]),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("Child State Machine の StartExecution 権限が付くべき", () => {
+    const { template } = buildStack();
+    template.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: "states:StartExecution",
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+});

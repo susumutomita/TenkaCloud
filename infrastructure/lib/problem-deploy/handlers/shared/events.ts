@@ -18,6 +18,14 @@ import { logDeployTrace } from "./trace-log.js";
 export const EVENT_SOURCE = "tenkacloud.deploy" as const;
 export const EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED = "DeployCreateRequested" as const;
 export const EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED = "DeployDeleteRequested" as const;
+/**
+ * Issue #910 (#895 Phase 2.C): bulk batch (= 1 event で N×M deployments) を Distributed Map
+ * state machine に渡すための event type。 detail に S3 URI を載せ、 state machine が
+ * S3JsonItemReader で deployments 配列を読む。 個別 deploy は `DeployCreateRequested` (=
+ * 単発経路) を使い続け、 bulk と単発を異なる EventBridge Rule で 2 つの state machine に
+ * route する。
+ */
+export const EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED = "BulkDeployCreateRequested" as const;
 
 export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" as const;
 
@@ -86,6 +94,28 @@ export const DeployDeleteRequestedDetailSchema = z.object({
   externalIdParameterName: z.string().optional(),
 });
 export type DeployDeleteRequestedDetail = z.infer<typeof DeployDeleteRequestedDetailSchema>;
+
+/**
+ * Issue #910 (#895 Phase 2.C): `BulkDeployCreateRequested` event の `detail` schema。
+ * tenant API Lambda が bulk deploy 時 (= 1 event で N×M deployments) に publish し、
+ * `BulkDeployCreate` State Machine が `S3JsonItemReader` で deployment 配列を読み込む。
+ *
+ * - `s3Bucket` / `s3Key`: deployment 配列 (\`DeployCreateRequestedDetail[]\`) を JSON で保存
+ *   した S3 object。 Step Functions の Distributed Map が ItemReader で iteration する
+ * - `batchId`: 1 bulk 実行を識別する ULID。 各 deployment の CFn stack に Tag として
+ *   打たれ、 operator が後で同 batch を逆引きできる (= ADR-001 §6 + Phase 2.A)
+ * - `tenantId`: caller tenant の scope。 Distributed Map child execution に渡され、
+ *   個別 deploy の TenantId に伝搬する
+ */
+export const BulkDeployCreateRequestedDetailSchema = z.object({
+  batchId: z.string().min(1),
+  tenantId: z.string().min(1),
+  s3Bucket: z.string().min(1),
+  s3Key: z.string().min(1),
+  /** batch 内 item 数 (= operator の参考表示用、 state machine の挙動には影響しない)。 */
+  itemCount: z.number().int().nonnegative().optional(),
+});
+export type BulkDeployCreateRequestedDetail = z.infer<typeof BulkDeployCreateRequestedDetailSchema>;
 
 export class ProblemEventPublishError extends Error {
   constructor(
