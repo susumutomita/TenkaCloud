@@ -77,6 +77,10 @@
     "empty_challenge": "Challenge カテゴリに該当する問題がありません",
     "empty_hint_all": "このチームには deploy 済みの問題がありません。operator にお問い合わせください。",
     "empty_hint_filtered": "他カテゴリは「すべて」タブで確認できます。",
+    "status_filter_label": "解答状態で絞り込み",
+    "status_filter_all": "すべて",
+    "status_filter_unsolved": "未解答",
+    "status_filter_cleared": "クリア済",
     "status_label": {
       "PENDING": "起動準備中",
       "IN_PROGRESS": "起動中…",
