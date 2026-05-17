@@ -59,6 +59,21 @@ export interface DeployCreateStateMachineProps {
  *
  * single-shot deploy のみ。Distributed Map による bulk 化と、
  * `cloudformation:describeStacks` による stackOutputs / stackId の取り込みは Phase 2。
+ *
+ * Issue #909 (#895 Phase 2.B): ADR-001 §2 は \"Create / Update / Delete の 3 state machine\"
+ * を提示したが、 実装では **Create と Update を 1 state machine に collapse** している。
+ * 理由: \`deploy-battles.sh\` が \`aws cloudformation deploy\` を使っており、 これが
+ * CREATE / UPDATE を **idempotent** に扱う (= stack が無ければ Create、 あれば Update、
+ * 差分無しは no-op で 0 終了)。 別 Update state machine を立てても操作上の差は無く、
+ * 維持対象が増えるだけ。
+ *
+ * 残る semantics:
+ *   - Delete: \`DeployDeleteStateMachine\` (= 別ファイル) で分離。 CFn API が異なるため
+ *   - Create-or-Update: 本 state machine が両方を担当
+ *
+ * Update 専用 API (\`POST /deployments/update\`) も同様に不要。 同 deployment row への
+ * 再 POST が事実上 update として動く (= deploy.ts handler 側で jobId 既存なら新 stack 名
+ * 衝突を避ける仕組みが必要なら handler 側に追加するが、 state machine 設計とは独立)。
  */
 export class DeployCreateStateMachine extends Construct {
   public readonly stateMachine: StateMachine;
