@@ -26,13 +26,7 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
  * placeholder のまま漏れるので、ここでは表示しない。Home ページ側で JWT custom 属性
  * (custom:tenantId / 将来 custom:tenantName) からユーザの所属テナントを描画する。
  */
-export function ShellLayout({
-  config: _config,
-  children,
-}: {
-  config: AppConfig;
-  children: ReactNode;
-}) {
+export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -112,7 +106,11 @@ export function ShellLayout({
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
               { type: "link", href: "/competitor-accounts", text: "Competitor Accounts" },
-              { type: "link", href: "/settings/sso", text: t("nav.saml_sso") },
+              // Issue #897: SAML SSO 設定は silo (PLATINUM) tenant のみ。 pooled tenant の
+              // UserPool は共有で、 1 tenant の SAML 設定が他 tenant に副作用するため。
+              ...(config.isolation === "silo"
+                ? [{ type: "link" as const, href: "/settings/sso", text: t("nav.saml_sso") }]
+                : []),
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {
