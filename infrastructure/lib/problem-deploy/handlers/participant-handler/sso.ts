@@ -37,6 +37,35 @@ const AWS_REGION_RE = /^[a-z]{2,3}-[a-z]+-\d{1,2}$/;
 const NAME_PREFIX_RE = /^[a-z][a-z0-9-]{0,127}$/;
 const IAM_ROLE_ARN_RE = /^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/;
 
+/**
+ * Issue #946: AWS Console federation destination として SSM Parameter detail を埋めるとき、
+ * Parameter 名は URL に直接挿入される (= `/systems-manager/parameters/<urlencoded>/description`)。
+ * 攻撃者が namePrefix を改竄して `#`/`?`/`/` 等の特殊文字を入れることで Destination を曲げる
+ * 経路を塞ぐため、 strict pattern を再 validate する (= 先頭 `/` 必須 + 英数 / `.` / `_` / `-` / `/` のみ)。
+ */
+const SSM_PARAM_NAME_RE = /^\/[A-Za-z0-9._\-/]{1,1023}$/;
+
+/**
+ * Issue #946: stack outputs から destination を決定する pure function (= testable に切り出し)。
+ *
+ * - `ssmParameterName` が strict regex に合致するなら SSM Parameter detail URL (= list view を
+ *   経由しないため `ssm:DescribeParameters` 不要)
+ * - そうでなければ CFn stacks 画面 (= multi-resource 問題で Resources tab から辿る前提)
+ *
+ * caller は `region` / `namePrefix` を事前 validate 済 (= URL injection 防御済) で渡す責務を負う。
+ */
+export function buildConsoleDestination(args: {
+  readonly region: string;
+  readonly namePrefix: string;
+  readonly ssmParameterName: string | undefined;
+}): string {
+  const { region, namePrefix, ssmParameterName } = args;
+  if (ssmParameterName && SSM_PARAM_NAME_RE.test(ssmParameterName)) {
+    return `https://${region}.console.aws.amazon.com/systems-manager/parameters/${encodeURIComponent(ssmParameterName)}/description?region=${encodeURIComponent(region)}`;
+  }
+  return `https://${region}.console.aws.amazon.com/cloudformation/home?region=${encodeURIComponent(region)}#/stacks?filteringText=${encodeURIComponent(namePrefix)}`;
+}
+
 const sts = new STSClient({});
 
 type StsCredentialShape = {
@@ -240,9 +269,16 @@ export async function getConsoleSigninUrl(
     return { kind: "federation_token_malformed" };
   }
 
-  // CloudFormation スタック画面に直接遷移するための destination URL。
-  // 自分の deployment の namePrefix で stacks フィルタ済の view にする。
-  const destination = `https://${region}.console.aws.amazon.com/cloudformation/home?region=${encodeURIComponent(region)}#/stacks?filteringText=${encodeURIComponent(deployment.namePrefix)}`;
+  // Issue #946: stack outputs に `ParameterName` があれば SSM Parameter detail page に直接遷移
+  // させる (= AWS Console SSM Parameter Store の list view を経由しないため
+  // ssm:DescribeParameters 不要、 JAM/GameDay baseline IAM (PR-933 / ADR-021) と整合)。
+  // それ以外は従来通り CFn stacks 画面 (= multi-resource 問題で Resources tab 経由)。
+  const ssmParameterNameRaw = parsedOutputs.ParameterName;
+  const destination = buildConsoleDestination({
+    region,
+    namePrefix: deployment.namePrefix,
+    ssmParameterName: typeof ssmParameterNameRaw === "string" ? ssmParameterNameRaw : undefined,
+  });
   const loginUrl = `${FEDERATION_ENDPOINT}?Action=login&Issuer=${encodeURIComponent(TENKACLOUD_ISSUER)}&Destination=${encodeURIComponent(destination)}&SigninToken=${encodeURIComponent(tokenJson.SigninToken)}`;
 
   return { kind: "ok", loginUrl };
