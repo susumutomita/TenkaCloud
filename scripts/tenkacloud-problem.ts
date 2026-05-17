@@ -49,10 +49,18 @@ const KIND_TO_DEFAULT_CATEGORY: Record<Kind, "Battle" | "Challenge"> = {
 };
 
 interface CliArgs {
-  command: "create" | "validate" | "list-kinds" | "help";
+  command: "create" | "validate" | "list-kinds" | "dry-run" | "help";
   problemId?: string;
   kind?: Kind;
   category?: "Battle" | "Challenge";
+  /** dry-run --submitted <flag> (flag kind) */
+  submitted?: string;
+  /** dry-run --reveal-hints <count> (flag / uptime kinds) */
+  revealHints?: number;
+  /** dry-run --cycles <N> (uptime-flat kind) */
+  cycles?: number;
+  /** dry-run --pattern <s|f sequence> (uptime-flat kind, e.g. "ssfsf") */
+  pattern?: string;
 }
 
 function parseArgs(argv: readonly string[]): CliArgs {
@@ -61,8 +69,10 @@ function parseArgs(argv: readonly string[]): CliArgs {
   }
   const command = argv[0];
   if (command === "list-kinds") return { command };
-  if (command !== "create" && command !== "validate") {
-    throw new Error(`unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate'.`);
+  if (command !== "create" && command !== "validate" && command !== "dry-run") {
+    throw new Error(
+      `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run'.`,
+    );
   }
   const problemId = argv[1];
   if (!problemId) throw new Error(`${command} requires <problemId>`);
@@ -83,6 +93,30 @@ function parseArgs(argv: readonly string[]): CliArgs {
       }
       result.category = v;
       i += 1;
+    } else if (flag === "--submitted") {
+      result.submitted = argv[i + 1] ?? "";
+      i += 1;
+    } else if (flag === "--reveal-hints") {
+      const n = Number(argv[i + 1]);
+      if (!Number.isInteger(n) || n < 0) {
+        throw new Error("--reveal-hints must be a non-negative integer");
+      }
+      result.revealHints = n;
+      i += 1;
+    } else if (flag === "--cycles") {
+      const n = Number(argv[i + 1]);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error("--cycles must be a positive integer");
+      }
+      result.cycles = n;
+      i += 1;
+    } else if (flag === "--pattern") {
+      const v = argv[i + 1];
+      if (typeof v !== "string" || !/^[sf]+$/.test(v)) {
+        throw new Error("--pattern must be a non-empty string of 's' / 'f' (e.g. 'ssfsf')");
+      }
+      result.pattern = v;
+      i += 1;
     } else {
       throw new Error(`unknown flag: ${flag}`);
     }
@@ -96,6 +130,8 @@ function printHelp(): void {
 Usage:
   bun run scripts/tenkacloud-problem.ts create <id> --kind <kind> [--category Battle|Challenge]
   bun run scripts/tenkacloud-problem.ts validate <id>
+  bun run scripts/tenkacloud-problem.ts dry-run <id> [--submitted <flag>] [--reveal-hints N]
+                                                    [--cycles N] [--pattern <s|f sequence>]
   bun run scripts/tenkacloud-problem.ts list-kinds
 
 Available kinds:  ${KINDS.join(", ")}
@@ -104,6 +140,8 @@ Examples:
   bun run scripts/tenkacloud-problem.ts create my-battle --kind uptime-multi
   bun run scripts/tenkacloud-problem.ts create hello-flag --kind flag
   bun run scripts/tenkacloud-problem.ts validate microservice-migration-battle
+  bun run scripts/tenkacloud-problem.ts dry-run hello-world --submitted "actual-flag-value"
+  bun run scripts/tenkacloud-problem.ts dry-run hello-world-battle --cycles 60 --pattern "ssssffssssss"
 
 See also:
   docs/problems/AUTHORING.html  — 30 分 onboarding guide
@@ -285,6 +323,172 @@ export function runValidate(problemId: string): ValidateResult {
   return { ok: errors.length === 0, errors };
 }
 
+interface DryRunResult {
+  readonly ok: boolean;
+  readonly summary: string;
+  readonly lines: readonly string[];
+}
+
+/**
+ * 問題の `metadata.scoring` を読んで、 与えられた input に対する得点を local 計算する。
+ * 実 deploy 不要 (= scoring engine の Lambda 経路を回さない) で採点ロジックの妥当性を
+ * 確認できる。 #951 sub #3。
+ *
+ * 対応 kind:
+ *   - flag: --submitted <flag> + --reveal-hints <n>
+ *   - uptime-flat: --cycles <N> + --pattern <s/f...> + --reveal-hints <n>
+ *   - 他 kind: 「未対応」 を明示して exit 0 (= dry-run の存在自体は壊さない)
+ */
+export function runDryRun(args: {
+  problemId: string;
+  submitted?: string;
+  revealHints?: number;
+  cycles?: number;
+  pattern?: string;
+}): DryRunResult {
+  const dir = findProblemDir(args.problemId);
+  if (!dir) {
+    return {
+      ok: false,
+      summary: `Problem dir not found for id="${args.problemId}"`,
+      lines: [],
+    };
+  }
+  const metaPath = join(dir, "metadata.json");
+  if (!existsSync(metaPath)) {
+    return { ok: false, summary: "metadata.json not found", lines: [] };
+  }
+  const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<string, unknown>;
+  const scoring = (meta.scoring ?? {}) as Record<string, unknown>;
+  const kind = String(scoring.kind ?? "");
+  const lines: string[] = [];
+
+  if (kind === "flag") {
+    const expectedKey = scoring.flagOutputKey;
+    const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
+    const templatePath = join(dir, cfnTemplate);
+    if (!existsSync(templatePath)) {
+      return { ok: false, summary: `template ${cfnTemplate} not found`, lines };
+    }
+    const yaml = readFileSync(templatePath, "utf8");
+    const expectedFlag = extractFlagFromTemplate(yaml, String(expectedKey));
+    const points = Number(scoring.points ?? 0);
+    const submitted = args.submitted ?? "";
+    const correct = expectedFlag !== null && submitted === expectedFlag;
+    const hintsRevealed = args.revealHints ?? 0;
+    const hints = Array.isArray(scoring.hints) ? scoring.hints : [];
+    let penaltyTotal = 0;
+    for (let i = 0; i < Math.min(hintsRevealed, hints.length); i += 1) {
+      const h = hints[i] as Record<string, unknown> | string;
+      const p = typeof h === "object" && h !== null ? Number(h.penalty ?? 0) : 0;
+      penaltyTotal += p;
+    }
+    const earned = correct ? Math.max(0, points - penaltyTotal) : 0;
+
+    lines.push(`kind:           flag`);
+    lines.push(`flagOutputKey:  ${String(expectedKey)}`);
+    lines.push(
+      `expectedFlag:   ${expectedFlag === null ? "(could not extract from template — set Value directly to test)" : expectedFlag}`,
+    );
+    lines.push(`submitted:      ${submitted || "(empty)"}`);
+    lines.push(`correct:        ${correct ? "yes" : "no"}`);
+    lines.push(`baseline:       ${points} pt`);
+    lines.push(`hintsRevealed:  ${hintsRevealed} (penalty -${penaltyTotal})`);
+    lines.push(`earned:         ${earned} pt`);
+
+    return {
+      ok: true,
+      summary: `flag dry-run: ${correct ? "正解" : "不正解"} → earned=${earned}`,
+      lines,
+    };
+  }
+
+  if (kind === "uptime-flat" || kind === "uptime") {
+    const pointsPerSuccess = Number(scoring.pointsPerSuccess ?? 0);
+    const failurePenalty = Number(scoring.failurePenalty ?? 0);
+    const endpointsInScoring = Array.isArray(scoring.endpoints) ? scoring.endpoints : [];
+    const endpointCount = endpointsInScoring.length;
+    if (endpointCount === 0) {
+      return {
+        ok: false,
+        summary: "uptime-flat metadata has no scoring.endpoints; cannot dry-run",
+        lines,
+      };
+    }
+
+    const cycles = args.cycles ?? 10;
+    const pattern = args.pattern ?? "s".repeat(cycles);
+    if (pattern.length !== cycles) {
+      lines.push(
+        `note: pattern length (${pattern.length}) !== cycles (${cycles}). Pattern を cycles に揃えるか、 cycles を pattern.length に合わせてください。`,
+      );
+    }
+
+    let score = 0;
+    let okCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < cycles; i += 1) {
+      const sym = pattern[i % pattern.length];
+      if (sym === "s") {
+        score += pointsPerSuccess * endpointCount;
+        okCount += 1;
+      } else {
+        score -= failurePenalty * endpointCount;
+        failCount += 1;
+      }
+    }
+
+    const hintsRevealed = args.revealHints ?? 0;
+    const hints = Array.isArray(scoring.hints) ? scoring.hints : [];
+    let penaltyTotal = 0;
+    for (let i = 0; i < Math.min(hintsRevealed, hints.length); i += 1) {
+      const h = hints[i] as Record<string, unknown> | string;
+      const p = typeof h === "object" && h !== null ? Number(h.penalty ?? 0) : 0;
+      penaltyTotal += p;
+    }
+    const earned = Math.max(0, score - penaltyTotal);
+
+    lines.push(`kind:             ${kind}`);
+    lines.push(`endpoints:        ${endpointCount}`);
+    lines.push(`pointsPerSuccess: ${pointsPerSuccess}`);
+    lines.push(`failurePenalty:   ${failurePenalty}`);
+    lines.push(`cycles:           ${cycles}`);
+    lines.push(`pattern:          ${pattern} (s=success, f=fail)`);
+    lines.push(`okCycles:         ${okCount}`);
+    lines.push(`failCycles:       ${failCount}`);
+    lines.push(`subtotal:         ${score} pt`);
+    lines.push(`hintsRevealed:    ${hintsRevealed} (penalty -${penaltyTotal})`);
+    lines.push(`earned:           ${earned} pt`);
+
+    return {
+      ok: true,
+      summary: `${kind} dry-run: ${cycles} cycles → earned=${earned}`,
+      lines,
+    };
+  }
+
+  // 他 kind は未対応 (= ok=true で「未対応」 を明示)
+  lines.push(`kind="${kind}" の dry-run は未対応です。 #951 sub #3 で順次実装予定:`);
+  lines.push(`  - uptime-multi: --cycles N --pattern <ss|sf|fs|ff> (slot 数 2 想定)`);
+  lines.push(`  - phased-polling: phases[].afterMinutes ごとの rule 切替を simulate`);
+  lines.push(`  - attack-detection: counter delta から得点`);
+  return { ok: true, summary: `kind=${kind} dry-run unsupported`, lines };
+}
+
+/**
+ * CFn YAML から Output `key:` 配下の `Value:` を抽出する素朴 parser。
+ * `Value: "TC{...}"` / `Value: !GetAtt X.Value` の前者だけハンドルする。
+ * 後者は実 deploy しないと値が解決しないため null を返す。
+ */
+function extractFlagFromTemplate(yaml: string, key: string): string | null {
+  const re = new RegExp(`${key}:[\\s\\S]*?Value:\\s*("[^"\\n]+"|'[^'\\n]+'|[^\\n!]+)\\n`, "m");
+  const m = yaml.match(re);
+  if (!m || !m[1]) return null;
+  const raw = m[1].trim();
+  if (raw.startsWith("!")) return null;
+  return raw.replace(/^["']|["']$/g, "");
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   switch (args.command) {
@@ -317,6 +521,22 @@ async function main(): Promise<void> {
         for (const e of r.errors) console.error(`  - ${e}`);
         process.exit(1);
       }
+      return;
+    }
+    case "dry-run": {
+      const r = runDryRun({
+        problemId: args.problemId ?? "",
+        ...(args.submitted !== undefined ? { submitted: args.submitted } : {}),
+        ...(args.revealHints !== undefined ? { revealHints: args.revealHints } : {}),
+        ...(args.cycles !== undefined ? { cycles: args.cycles } : {}),
+        ...(args.pattern !== undefined ? { pattern: args.pattern } : {}),
+      });
+      if (!r.ok) {
+        console.error(`NG ${r.summary}`);
+        process.exit(1);
+      }
+      for (const line of r.lines) console.log(line);
+      console.log(`\nsummary: ${r.summary}`);
       return;
     }
     default: {
