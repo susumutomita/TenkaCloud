@@ -24,6 +24,7 @@ import {
   TERMINAL_STATUSES,
 } from "../api/portal-client";
 import { describeAgo } from "../lib/format";
+import { CelebrationOverlay } from "./CelebrationOverlay";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -173,9 +174,10 @@ function FlagSubmissionPanel({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   if (flagSubmitted) {
+    // audit #6: 既出提出 (= reload した後の表示)。 「事務的 提出済み」 ではなく祝祭的 message。
     return (
-      <Alert type="success" header="提出済み">
-        この problem は既に正解を提出済みです (+{points} pt)。
+      <Alert type="success" header={`🏆 クリア済み +${points} pt`}>
+        この問題は正解済みです。 引き続き他の問題に挑戦してください！
       </Alert>
     );
   }
@@ -247,9 +249,13 @@ function FlagSubmissionPanel({
           </FormField>
         </Form>
       </form>
+      {/* audit #6: 正解時の祝祭演出。 alert は大きめの emoji + ハイライト、 同時に画面全体に
+          confetti animation を 3 秒被せる。 旧 「正解 (+100 pt) 合計スコア: 100 pt」 の事務的
+          message から、 達成感を伴う UX に差し替え。 */}
+      <CelebrationOverlay visible={outcome?.kind === "ok"} />
       {outcome?.kind === "ok" && (
-        <Alert type="success" header={`正解 (+${outcome.scoreDelta} pt)`}>
-          合計スコア: {outcome.totalScore} pt
+        <Alert type="success" header={`🎉 正解！  +${outcome.scoreDelta} pt`}>
+          おめでとうございます。 合計スコアは <strong>{outcome.totalScore} pt</strong> です。
         </Alert>
       )}
       {outcome?.kind === "wrong" && (
