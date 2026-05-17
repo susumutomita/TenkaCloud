@@ -86,6 +86,11 @@ cp -R problems "${STAGING}/problems"
 # `.nvmrc` を staging root に同梱 (= source of truth、CodeBuild 内 provision/update-tenant.sh が
 # `nvm install $(cat .nvmrc)` で参照する)。repo root から copy。
 cp "${TenkaCloud_ROOT}/.nvmrc" "${STAGING}/.nvmrc"
+# repo root `package.json` を staging root に同梱。 CodeBuild 内
+# `scripts/lib/install-node.sh:install_bun_from_package_manager` が CWD/`package.json` の
+# `packageManager: "bun@<version>"` field から Bun version を読む。 無いと ENOENT で
+# tenant provisioning / update CodeBuild job が fail する (= "package.json not found")。
+cp "${TenkaCloud_ROOT}/package.json" "${STAGING}/package.json"
 # 旧 ref-arch では src/ を staging に含めていたが、#76 で
 # infrastructure/lib/tenant-pipeline/handlers/ に移動済 (cdk/ 配下に同梱されるので不要)。
 

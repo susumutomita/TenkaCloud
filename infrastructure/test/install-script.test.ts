@@ -31,4 +31,12 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
     expect(exportIdx).toBeGreaterThan(0);
     expect(deployIdx).toBeGreaterThan(exportIdx);
   });
+
+  // tenant provisioning / update CodeBuild job が `scripts/lib/install-node.sh:
+  // install_bun_from_package_manager` で CWD/`package.json` の `packageManager` field から
+  // Bun version を読む。 install.sh が staging root に `package.json` を copy していないと
+  // ENOENT で CodeBuild job が \"package.json not found\" で fail する (= 直近 regression)。
+  it("staging root に repo root `package.json` を copy すべき (= CodeBuild が packageManager を読む)", () => {
+    expect(source).toContain('cp "${TenkaCloud_ROOT}/package.json" "${STAGING}/package.json"');
+  });
 });
