@@ -9,6 +9,7 @@ import { useNavigate } from "react-router";
 import type { ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { ScoreTimelineChart } from "../components/ScoreTimelineChart";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
@@ -26,6 +27,7 @@ function truncateTeamName(name: string): string {
 
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const sessionToken = auth.session?.sessionToken ?? null;
   const isBackend = config.mode === "backend";
   const t = useT();
   const navigate = useNavigate();
@@ -53,6 +55,11 @@ export function HomePage({ config }: { config: AppConfig }) {
       {isBackend && !view && !error && <Box>{t("app.loading")}</Box>}
 
       {view && <TeamScorePanel view={view} />}
+
+      {/* Audit table #12: 競技開始からのスコア推移を 折れ線グラフで可視化 (= dashboard 中段)。 */}
+      {isBackend && sessionToken && view && view.problems.length > 0 && (
+        <ScoreTimelineChart apiBaseUrl={config.apiBaseUrl} sessionToken={sessionToken} />
+      )}
 
       {/* Audit table #10: ホームは dashboard。 問題詳細 (ProblemPanel) を embed しない (=
        *  「一等地に何を出すか」 のティアリング、 問題の deep dive は /problems から)。 */}
