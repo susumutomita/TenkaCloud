@@ -7,7 +7,7 @@ import {
   PriceClass,
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
-import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
+import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
@@ -105,7 +105,10 @@ export class AdminConsoleHostingStack extends cdk.Stack {
 
     const distribution = new Distribution(this, "Distribution", {
       defaultBehavior: {
-        origin: new S3Origin(bucket, { originAccessIdentity: oai }),
+        // CDK 2.252+ で `S3Origin` は deprecated。 `S3BucketOrigin.withOriginAccessIdentity` は
+        // 既存 OAI を渡せる同等 API (= bucket policy + Signer 経路を変えずに移行可)。 OAC への
+        // 完全移行は別 PR で trade-off (= 既存 deploy stack の OAI を OAC に置換する操作) を含めて扱う。
+        origin: S3BucketOrigin.withOriginAccessIdentity(bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         responseHeadersPolicy: securityHeaders,
       },
