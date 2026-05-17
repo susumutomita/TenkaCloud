@@ -39,4 +39,12 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
   it("staging root に repo root `package.json` を copy すべき (= CodeBuild が packageManager を読む)", () => {
     expect(source).toContain('cp "${TenkaCloud_ROOT}/package.json" "${STAGING}/package.json"');
   });
+
+  // Issue #916 (2 層目): `infrastructure/package.json` は `@TenkaCloud/trust-bridge:
+  // workspace:*` で sibling workspace を参照する。 staging に `packages/` を同梱しないと
+  // bun が workspace を resolve できず `EUNSUPPORTEDPROTOCOL` (npm) /
+  // `package not found` (bun) で fail する。
+  it("staging root に `packages` directory を copy すべき (= workspace:* protocol の resolve)", () => {
+    expect(source).toContain('cp -R packages "${STAGING}/packages"');
+  });
 });
