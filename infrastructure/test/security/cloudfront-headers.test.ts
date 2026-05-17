@@ -54,6 +54,15 @@ describe("buildContentSecurityPolicy (pure helper)", () => {
   it("frame-ancestors 'none' が含まれる (= clickjacking 防御の主経路)", () => {
     expect(buildContentSecurityPolicy()).toContain("frame-ancestors 'none'");
   });
+
+  it("Issue #899: additionalScriptSrcs を script-src / style-src / connect-src に追加するべき", () => {
+    const csp = buildContentSecurityPolicy({
+      additionalScriptSrcs: ["https://cdn.jsdelivr.net"],
+    });
+    expect(csp).toContain("script-src 'self' https://cdn.jsdelivr.net");
+    expect(csp).toContain("style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net");
+    expect(csp).toContain("connect-src 'self' https://cdn.jsdelivr.net");
+  });
 });
 
 describe("buildSecurityHeadersPolicy (CDK ResponseHeadersPolicy synth)", () => {

@@ -10,7 +10,8 @@
     "menu": "Menú de administración",
     "tenants": "Tenants",
     "tenants_new": "Crear tenant",
-    "jobs": "Trabajos de aprovisionamiento"
+    "jobs": "Trabajos de aprovisionamiento",
+    "api_docs": "Referencia de API ↗"
   },
   "auth": {
     "sign_out": "Cerrar sesión"
