@@ -7,6 +7,7 @@ import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participa
 import { loadConfig } from "../utils/config-loader";
 import {
   discoverProblemsCatalog,
+  discoverProblemsDisruptions,
   discoverProblemsEndpoints,
   discoverProblemsPhases,
   discoverProblemsScoring,
@@ -170,6 +171,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
           endpoints: discoverProblemsEndpoints(problemsRoot),
           phases: discoverProblemsPhases(problemsRoot),
           visibility: discoverProblemsVisibility(problemsRoot),
+          disruptions: discoverProblemsDisruptions(problemsRoot),
         } satisfies ProblemsCatalogBundle);
 
   const challengePayloadBucketName = env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;

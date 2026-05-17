@@ -35,6 +35,15 @@ export interface EventApiLambdaProps {
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
+   * Issue #888: Red Team Disruption Injection の audit + idempotency 用 DDB table。
+   */
+  readonly disruptionsTable: Table;
+  /**
+   * Issue #888: problem metadata.json の `disruptions[]` 宣言。 Lambda runtime で
+   * `(problemId, disruptionId)` lookup に使う。
+   */
+  readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
+  /**
    * tenantId として handler に渡す `DEFAULT_TENANT_ID` env (DeployApi と同じ fallback)。
    * Cognito JWT 結線後は JWT claim から取る。
    */
@@ -85,6 +94,9 @@ export class EventApiLambda extends Construct {
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
         BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
+        // Issue #888: disruption fire / catalog / audit Lambda 経路で参照
+        DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
+        BATTLE_PROBLEMS_DISRUPTIONS: JSON.stringify(props.problemsDisruptions),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -105,5 +117,8 @@ export class EventApiLambda extends Construct {
     // RW を付与しない (= 最小権限)。
     props.competitorAccountsTable.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
+    // Issue #888: disruption audit + idempotency 用に RW、 EventBus PutEvents は既存付与で十分
+    // (= disruption fire でも同 bus に publish するため)。
+    props.disruptionsTable.grantReadWriteData(this.fn);
   }
 }

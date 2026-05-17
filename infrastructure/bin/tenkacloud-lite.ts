@@ -44,6 +44,8 @@ const problemDeployBackend = new ProblemDeployBackendStack(app, "tenkacloud-lite
   problemsEndpoints: config.problems.endpoints as Readonly<Record<string, unknown>>,
   problemsPhases: (config.problems.phases ?? {}) as Readonly<Record<string, unknown>>,
   problemsVisibility: (config.problems.visibility ?? {}) as Readonly<Record<string, "private">>,
+  // Issue #888: Lite mode でも problemsDisruptions を Lambda env に渡す。
+  problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
   // Lite では participant portal を runtime-config "default-dev-mock" で立てる
   // (= portal Lambda + S3+CloudFront を持ち込む)。 frontend は backend mode で動く。
   participantPortal: { runtimeConfig: "default-dev-mock" },

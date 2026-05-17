@@ -293,3 +293,38 @@ export const BulkDeployRequestSchema = z
     path: ["forceRedeploy"],
   });
 export type BulkDeployRequest = z.infer<typeof BulkDeployRequestSchema>;
+
+/**
+ * Issue #888 FR-1 + PR #889 review: Red Team Disruption Fire request の Zod schema。
+ *
+ * `scope` ごとに必須 / 禁止 field が異なるため refine で cross-field 制約を表現する。
+ * `randomCount` は integer + finite を要求 (= NaN / Infinity / 小数を reject)。
+ */
+export const DisruptionFireRequestSchema = z
+  .object({
+    disruptionId: z.string().min(1).max(64),
+    problemId: z.string().min(1).max(128),
+    parameters: z.record(z.unknown()).optional(),
+    scope: z.enum(["all", "team", "random-n"]),
+    targetTeamIds: z.array(z.string().min(1).max(128)).max(200).optional(),
+    randomCount: z.number().int().finite().min(1).max(200).optional(),
+    requestId: z.string().min(8).max(128),
+  })
+  .strict()
+  .refine((v) => v.scope !== "team" || (v.targetTeamIds && v.targetTeamIds.length > 0), {
+    message: "targetTeamIds is required when scope is 'team'",
+    path: ["targetTeamIds"],
+  })
+  .refine((v) => v.scope !== "random-n" || v.randomCount !== undefined, {
+    message: "randomCount is required when scope is 'random-n'",
+    path: ["randomCount"],
+  })
+  .refine((v) => v.scope === "team" || !v.targetTeamIds || v.targetTeamIds.length === 0, {
+    message: "targetTeamIds is only valid for scope='team'",
+    path: ["targetTeamIds"],
+  })
+  .refine((v) => v.scope === "random-n" || v.randomCount === undefined, {
+    message: "randomCount is only valid for scope='random-n'",
+    path: ["randomCount"],
+  });
+export type DisruptionFireRequest = z.infer<typeof DisruptionFireRequestSchema>;

@@ -26,6 +26,12 @@ import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
 import { createNotification } from "./create-notification.js";
+import {
+  fireDisruption,
+  isEventOwnedByTenant,
+  listDisruptionAudit,
+  listDisruptionCatalog,
+} from "./disruption-fire.js";
 import { endEvent } from "./end-event.js";
 import { getEventDetail, listEvents } from "./list.js";
 import { lockScoring, unlockScoring } from "./lock-scoring.js";
@@ -34,6 +40,7 @@ import { buildEventSharedResources } from "./shared.js";
 import {
   BulkDeployRequestSchema,
   CreateEventRequestSchema,
+  DisruptionFireRequestSchema,
   ScheduleEventRequestSchema,
 } from "./types.js";
 
@@ -445,6 +452,109 @@ app.post("/events/:eventId/deploy", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[events] bulkDeployEvent failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+// Issue #888 Phase A: Red Team Disruption Injection
+//   GET    /events/:eventId/disruptions          — event 内 disruption catalog
+//   GET    /events/:eventId/disruptions/audit    — 発火履歴 (pagination)
+//   POST   /events/:eventId/disruptions/fire     — disruption を fire
+app.get("/events/:eventId/disruptions", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
+  }
+  try {
+    // PR #889 review: 他 tenant の event を obscured ID で覗くのを防ぐため tenant ownership 必須
+    if (!(await isEventOwnedByTenant(shared, eventId, resolveTenantId(c)))) {
+      return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    }
+    const out = await listDisruptionCatalog(shared, eventId);
+    return c.json(out, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[disruptions] catalog failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.get("/events/:eventId/disruptions/audit", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
+  }
+  const limitRaw = c.req.query("limit");
+  const parsed = parseLimit(limitRaw);
+  if (!parsed) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
+  const cursor = c.req.query("cursor");
+  try {
+    // PR #889 review: 他 tenant の audit log を覗かれないよう tenant ownership 必須
+    if (!(await isEventOwnedByTenant(shared, eventId, resolveTenantId(c)))) {
+      return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    }
+    const out = await listDisruptionAudit(shared, eventId, {
+      limit: parsed.limit,
+      cursor,
+    });
+    return c.json(out, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[disruptions] audit list failed", { eventId, message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  }
+});
+
+app.post("/events/:eventId/disruptions/fire", async (c) => {
+  const eventId = c.req.param("eventId");
+  if (!eventId || !EVENT_ID_RE.test(eventId)) {
+    return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
+  }
+  // PR #889 review: 既存 route と整合する Zod parse に統一 (= cross-field 制約も含めて検証)
+  const parsed = DisruptionFireRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+  }
+  const req = parsed.data;
+  try {
+    // PR #889 review: 他 tenant の event に fire できないよう ownership 必須
+    if (!(await isEventOwnedByTenant(shared, eventId, resolveTenantId(c)))) {
+      return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    }
+    const outcome = await fireDisruption(shared, {
+      tenantId: resolveTenantId(c),
+      eventId,
+      problemId: req.problemId,
+      disruptionId: req.disruptionId,
+      parameters: req.parameters ?? {},
+      scope: req.scope,
+      targetTeamIds: req.targetTeamIds ?? [],
+      ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
+      requestId: req.requestId,
+      firedBy: resolveCognitoSub(c),
+      nowMs: Date.now(),
+    });
+    if (outcome.kind === "ok") return c.json(outcome.result, HTTP_CREATED);
+    if (outcome.kind === "duplicate") return c.json(outcome.result, HTTP_OK);
+    if (outcome.kind === "unknown_problem")
+      return c.json({ error: "unknown_problem" }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "unknown_disruption")
+      return c.json({ error: "unknown_disruption" }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "invalid_parameters")
+      return c.json({ error: "invalid_parameters", message: outcome.reason }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "invalid_scope")
+      return c.json({ error: "invalid_scope", message: outcome.reason }, HTTP_BAD_REQUEST);
+    if (outcome.kind === "no_targets") return c.json({ error: "no_targets" }, HTTP_CONFLICT);
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[disruptions] fire failed", { eventId, message });
     return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });
