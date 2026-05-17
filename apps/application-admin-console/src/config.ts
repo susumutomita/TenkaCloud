@@ -27,6 +27,12 @@ export interface AppConfig {
    * fallback する (= dev / 初回 deploy 用、 deeplink としては不正だが手 download 可能)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
+  /**
+   * Issue #897: テナント isolation mode。 "pooled" は UserPool 共有なので SAML SSO のような
+   * UserPool mutate 機能は提供しない。 "silo" (= PLATINUM) のみ有効化する。
+   * 未注入 / undefined は安全側に倒して "pooled" 扱い (= SAML SSO 隠す)。
+   */
+  readonly isolation?: "pooled" | "silo";
 }
 
 interface RuntimeConfig {
@@ -37,6 +43,7 @@ interface RuntimeConfig {
   readonly apiUrl: string;
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
+  readonly isolation?: "pooled" | "silo";
 }
 
 /**
@@ -101,6 +108,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
         typeof data.competitorBootstrapTemplateUrl === "string"
           ? data.competitorBootstrapTemplateUrl
           : undefined,
+      isolation: data.isolation === "silo" ? "silo" : "pooled",
     };
   } catch {
     return null;
@@ -127,6 +135,7 @@ export async function loadConfig(
       apiBaseUrl: runtime.apiUrl,
       participantPortalUrl: runtime.participantPortalUrl,
       competitorBootstrapTemplateUrl: runtime.competitorBootstrapTemplateUrl,
+      isolation: runtime.isolation ?? "pooled",
       redirectUri,
       scope,
     };
@@ -143,6 +152,7 @@ export async function loadConfig(
     tenantId: DEV_FALLBACK_TENANT_ID,
     tenantName: DEV_FALLBACK_TENANT_NAME,
     apiBaseUrl: env.VITE_API_BASE_URL ?? DEV_FALLBACK_API_BASE_URL,
+    isolation: env.VITE_ISOLATION === "silo" ? "silo" : "pooled",
     redirectUri,
     scope,
   };

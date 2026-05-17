@@ -60,6 +60,14 @@ interface RuntimeConfigProps {
    * 未設定なら frontend は GitHub raw URL に fallback する (= dev / 初回 deploy 用)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
+  /**
+   * Issue #897: テナント isolation mode (= "pooled" | "silo")。
+   * "pooled" は UserPool を全 pooled tenant が共有しているため、 SAML SSO のように
+   * UserPool を mutate する機能は他 tenant に副作用を及ぼす。 frontend はこの値を見て
+   * SAML SSO page を非表示にし、 \"upgrade to PLATINUM\" promo を出す。
+   * "silo" は PLATINUM tier の独立 UserPool。 SAML SSO 設定が安全に有効化できる。
+   */
+  readonly isolation: "pooled" | "silo";
 }
 
 /**
@@ -174,6 +182,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: props.apiUrl.replace(/\/$/, ""),
+      isolation: props.isolation,
       ...(props.participantPortalUrl ? { participantPortalUrl: props.participantPortalUrl } : {}),
       ...(props.competitorBootstrapTemplateUrl
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }
