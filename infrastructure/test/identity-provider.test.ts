@@ -93,6 +93,19 @@ describe("IdentityProvider", () => {
       );
     });
 
+    it("UserPoolClient の logoutUrls に /login も含むべき (= beginLogout の logout_uri と一致)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPoolClient",
+        Match.objectLike({
+          LogoutURLs: Match.arrayWith([
+            "https://d123abc.cloudfront.net/login",
+            "http://localhost:5174/login",
+          ]),
+        }),
+      );
+    });
+
     it("cognitoDomainUrl を property として公開すべき (https://{prefix}.auth.{region}.amazoncognito.com 形式)", () => {
       const { provider } = synth("tenant-1", "https://example.cloudfront.net");
       expect(provider.cognitoDomainUrl).toBe(
@@ -425,6 +438,7 @@ describe("OAuth flow hardening (Issue #861)", () => {
     const template = synthFor("production");
     const clients = template.findResources("AWS::Cognito::UserPoolClient");
     const logouts = (Object.values(clients)[0]?.Properties?.LogoutURLs ?? []) as string[];
-    expect(logouts).toEqual(["https://app.example.com/"]);
+    // \`/login\` も Cognito の logout_uri 一致用に追加されている (= production でも localhost 無し)。
+    expect(logouts).toEqual(["https://app.example.com/", "https://app.example.com/login"]);
   });
 });
