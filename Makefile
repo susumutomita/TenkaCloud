@@ -107,15 +107,22 @@ env-check:
 		echo "ERROR: SYSTEM_ADMIN_EMAIL が $(ENV_FILE) にありません"; exit 1; \
 	}
 
-# Lite mode は SBT ControlPlane を立てないため SYSTEM_ADMIN_EMAIL を必須にしない。
-# .env が存在するかだけ確認する (= AWS_ACCOUNT_ID / AWS_REGION の解決は CDK 側で行う)。
+# Lite mode は SBT ControlPlane を立てないため SYSTEM_ADMIN_EMAIL は必須にしない。
+# ただし Application Admin Console にログインする tenant admin の email は必須 (= deploy
+# 後に Cognito UserPool へ admin-create-user で 1 user を起こすため、 無いとログイン不能)。
+# 互換のため SYSTEM_ADMIN_EMAIL でも fallback 可。
 env-check-lite:
 	@[ -f "$(ENV_FILE)" ] || { \
 		echo "ERROR: $(ENV_FILE) が存在しません。"; \
 		echo "       cp infrastructure/environments/$(ENV)/.env.example infrastructure/environments/$(ENV)/.env"; \
-		echo "       してから AWS_ACCOUNT_ID / AWS_REGION を埋めてください。"; \
+		echo "       してから AWS_ACCOUNT_ID / TENANT_ADMIN_EMAIL を埋めてください。"; \
 		exit 1; \
 	}
+	@if [ -z "$${TENANT_ADMIN_EMAIL}" ] && [ -z "$${SYSTEM_ADMIN_EMAIL}" ]; then \
+		echo "ERROR: TENANT_ADMIN_EMAIL が $(ENV_FILE) にありません (= Application Admin Console の初期ユーザー宛先)"; \
+		echo "       SYSTEM_ADMIN_EMAIL でも代用可能ですが、 Lite mode では TENANT_ADMIN_EMAIL を推奨します"; \
+		exit 1; \
+	fi
 
 synth:                build           ; $(CDK) synth
 diff:                 build           ; $(CDK) diff --all
