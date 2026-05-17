@@ -269,11 +269,21 @@ export class IdentityProvider extends Construct {
             "http://localhost:5174/callback",
           ),
         ],
+        // frontend beginLogout は `logout_uri=<origin>/login` で /logout に redirect する
+        // (application-admin-console/src/auth/cognito.ts)。 Cognito は logout_uri が
+        // UserPoolClient の logoutUrls に登録されていないと `Required String parameter
+        // 'redirect_uri' is not present` で fail するので、 \`/login\` も含めて allow する。
+        // \`/\` は legacy 経路 (= 旧 frontend が `<origin>/` に飛ばしていた時の互換) として残す。
         logoutUrls: [
           ...buildAllowedRedirectUrls(
             `${props.applicationAdminConsoleUrl}/`,
             props.environment,
             "http://localhost:5174/",
+          ),
+          ...buildAllowedRedirectUrls(
+            `${props.applicationAdminConsoleUrl}/login`,
+            props.environment,
+            "http://localhost:5174/login",
           ),
         ],
       },
