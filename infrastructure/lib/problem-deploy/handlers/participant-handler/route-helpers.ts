@@ -38,6 +38,9 @@ const ERROR_STATUS = {
   no_event: HTTP_NOT_FOUND,
   not_found: HTTP_NOT_FOUND,
   scoring_locked: HTTP_CONFLICT,
+  // Issue #13 / scoring gate: 競技開始前 / 終了後の提出。 409 (= 状態的に受け付けない)。
+  scoring_not_started: HTTP_CONFLICT,
+  scoring_ended: HTTP_CONFLICT,
   misconfigured: HTTP_INTERNAL_ERROR,
   // Issue #705: SSO の "misconfigured" を細分化 (= 原因切り分け可能に)。
   assume_role_failed: HTTP_INTERNAL_ERROR,

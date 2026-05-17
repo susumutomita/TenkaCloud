@@ -231,4 +231,130 @@ describe("submitFlag", () => {
     expect(queryCmd.input.IndexName).toBe("GSI2");
     expect(queryCmd.input.ExpressionAttributeValues).toEqual({ ":pk": "TEAMKEY#MYKEY" });
   });
+
+  // ---- Issue #13 / scoring gate (startsAt / endsAt / status) ----
+  // event-scoped deployment は EventMeta から gate flags を読んで、 競技開始前 / 終了後の
+  // 提出を加点経路に通さない。
+  describe("competition scoring gate (Issue #13)", () => {
+    const eventRow = sampleRow({ eventId: "EVT1", score: 0 });
+
+    it("Event 行が無い場合 fail-closed で scoring_not_started を返すべき", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({}); // EventMeta GetItem returns no Item
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out).toEqual({ kind: "scoring_not_started" });
+    });
+
+    it("startsAt 未設定 (READY だが時刻未指定) なら scoring_not_started を返すべき", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({ Item: { status: "READY" } });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out.kind).toBe("scoring_not_started");
+    });
+
+    it("now < startsAt なら scoring_not_started を返し startsAt を含めるべき", async () => {
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({ Item: { status: "READY", startsAt: future } });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out).toEqual({ kind: "scoring_not_started", startsAt: future });
+    });
+
+    it("endsAt 設定 + now > endsAt なら scoring_ended を返すべき", async () => {
+      const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const before = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({
+        Item: { status: "READY", startsAt: before, endsAt: past },
+      });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out).toEqual({ kind: "scoring_ended", endsAt: past });
+    });
+
+    it("status=ENDED なら startsAt があっても scoring_ended を返すべき", async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({ Item: { status: "ENDED", startsAt: before } });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out.kind).toBe("scoring_ended");
+    });
+
+    it("startsAt 過去 + endsAt 未来 + status=READY なら gate を通って ok 加点すべき", async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({
+        Item: { status: "READY", startsAt: before, endsAt: future },
+      });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out.kind).toBe("ok");
+    });
+
+    it("scoringLocked=true は startsAt OK でも scoring_locked を返す (= 既存挙動)", async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({
+        Item: { status: "READY", startsAt: before, scoringLocked: true },
+      });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out).toEqual({ kind: "scoring_locked" });
+    });
+
+    it("eventId 不在の row (= standalone deploy) では gate を skip して ok を返すべき (旧挙動互換)", async () => {
+      // event scope 無し → gate check しない → 即加点経路へ
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] }); // eventId 無し
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+      );
+      expect(out.kind).toBe("ok");
+    });
+  });
 });
