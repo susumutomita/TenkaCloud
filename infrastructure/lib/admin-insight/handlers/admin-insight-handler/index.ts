@@ -13,6 +13,7 @@ import {
 import { getEventDetailForTenant, listEventsForTenant } from "./events.js";
 import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
 import { buildSharedResources } from "./shared.js";
+import { defaultSfnClient, listStateMachineExecutions } from "./state-machine-executions.js";
 import { summarizeTenants } from "./summary.js";
 
 /**
@@ -313,6 +314,37 @@ app.get("/admin/insight/pipeline-executions", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[admin-insight] listPipelineExecutions failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// ====== Issue #814 Phase 2: Deprovisioning Jobs (Step Functions executions) ======
+
+app.get("/admin/insight/state-machine-executions", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/state-machine-executions");
+  if (forbidden) return forbidden;
+
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) {
+    return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
+  }
+
+  try {
+    const region = process.env.AWS_REGION ?? "ap-northeast-1";
+    const arn = process.env.DEPROVISIONING_STATE_MACHINE_ARN || undefined;
+    const response = await listStateMachineExecutions(
+      { client: defaultSfnClient, region, stateMachineArn: arn },
+      { limit: parsedLimit.limit },
+    );
+    if (response.kind === "not_configured") {
+      // Lambda env が未設定の旧 stack 互換 (= 503 Service Unavailable)。 frontend は legacy
+      // placeholder にフォールバックする。
+      return c.json({ error: "not_configured" }, StatusCodes.SERVICE_UNAVAILABLE);
+    }
+    return c.json(response, StatusCodes.OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] listStateMachineExecutions failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });

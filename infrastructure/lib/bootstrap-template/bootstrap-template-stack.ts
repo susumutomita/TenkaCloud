@@ -40,6 +40,12 @@ interface BootstrapTemplateStackProps extends StackProps {
 
 export class BootstrapTemplateStack extends Stack {
   public readonly tenantMappingTable: Table;
+  /**
+   * Issue #814 Phase 2: SBT BashJobRunner が立てる deprovisioning state machine の ARN。
+   * admin-insight Lambda が \`states:ListExecutions\` で実行履歴を取得し、 admin-console の
+   * 「Deprovisioning Jobs」 タブで参加者運営に見せるために cross-stack 参照する。
+   */
+  public readonly deprovisioningStateMachineArn: string;
 
   constructor(scope: Construct, id: string, props: BootstrapTemplateStackProps) {
     super(scope, id, props);
@@ -145,6 +151,11 @@ export class BootstrapTemplateStack extends Stack {
       "deprovisioningJobRunner",
       deprovisioningJobRunnerProps,
     );
+
+    // Issue #814 Phase 2: deprovisioning Step Functions SM ARN を public export し、
+    // admin-insight Lambda が ListExecutions で執行履歴を引けるようにする。
+    this.deprovisioningStateMachineArn =
+      deprovisioningJobRunner.provisioningStateMachine.stateMachineArn;
 
     new CoreApplicationPlane(this, "CoreApplicationPlane", {
       eventManager: eventManager,

@@ -96,10 +96,11 @@
     "open_console_aria": "Open execution {executionId} in AWS Console",
     "tab_provisioning": "Provisioning",
     "tab_deprovisioning": "Deprovisioning",
-    "deprovisioning_phase1_header": "Integration into this console is planned in Phase 2",
-    "deprovisioning_phase1_body": "Tenant deletion (deprovisioning) runs through the SBT BashJobRunner Step Functions state machine. The admin-insight Lambda currently only knows about the CodePipeline, so for now please inspect deprovisioning executions from the AWS Console > Step Functions list and filter state machines that contain 'deprovisioning' in their name.",
+    "deprovisioning_phase1_header": "Deprovisioning Jobs API is not wired",
+    "deprovisioning_phase1_body": "The admin-insight Lambda has not received the deprovisioning state machine ARN. Run the latest 'make deploy' (= Issue #814 Phase 2).",
     "deprovisioning_open_console": "Open Step Functions in AWS Console",
-    "deprovisioning_open_console_aria": "Open AWS Step Functions console (state machine list) in a new tab"
+    "deprovisioning_open_console_aria": "Open AWS Step Functions console (state machine list) in a new tab",
+    "empty_deprovisioning": "No deprovisioning executions yet. Triggering a tenant deletion will record entries here."
   },
   "tenant_events": {
     "missing_tenant_id": "tenantId is required.",
