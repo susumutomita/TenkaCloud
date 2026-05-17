@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-018: pooled tenant の UserPool 分離問題 — SAML SSO は PLATINUM 限定で短期 mitigation、 long-term は per-tenant UserPool 化を保留</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  summary { cursor: pointer; font-weight: 600; }
+  .callout { padding: .8rem 1rem; border-left: 4px solid var(--c-warn); background: #fff8c5; border-radius: 3px; margin: 1rem 0; }
+  .callout.danger { border-color: var(--c-reject); background: #ffe9e9; }
+  .callout.info { border-color: var(--c-link); background: #ddf4ff; }
+</style>
+</head>
+<body>
+
+<h1>ADR-018: pooled tenant の UserPool 分離問題 — SAML SSO は PLATINUM 限定で短期 mitigation、 long-term は per-tenant UserPool 化を保留</h1>
+
+<div class="meta">
+  <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-05-17</div>
+  <div><b>Supersedes:</b> (なし)</div>
+  <div><b>Superseded-by:</b> (なし)</div>
+</div>
+
+<h2>1. Context</h2>
+
+<p>TenkaCloud は SBT (<code>@cdklabs/sbt-aws</code>) ベースの multi-tenant SaaS。 tier 設計:</p>
+
+<ul>
+  <li><b>BASIC / ADVANCED (= pooled tier)</b>: <code>serverless-saas-ref-arch-tenant-template-pooled</code> stack を **全 pooled tenant が共有**。 内部の Cognito UserPool / API Gateway / Lambda が共有リソース。 tenant 分離は DDB の partition key + JWT claim (<code>custom:tenantId</code>) で実現</li>
+  <li><b>PLATINUM (= silo tier)</b>: <code>provision-tenant.sh</code> が CodeBuild 経由で per-tenant に <code>serverless-saas-ref-arch-tenant-template-&lt;tenantId&gt;</code> stack を立て、 Cognito UserPool / API Gateway / Lambda がすべて tenant 専用</li>
+</ul>
+
+<p>この設計のもとで、 application-admin-console から SAML IdP federation を tenant 別に設定できる機能を加えた (Issue #839)。 pooled tier の operator が \"うちの会社 SSO で sign-in を統一したい\" と requirement を出したのが背景。 当該機能は <code>cognito-idp:CreateIdentityProvider</code> / <code>UpdateIdentityProvider</code> / <code>UpdateUserPoolClient</code> を call し、 当該 tenant の (= pooled なら共有) UserPool に SAML IdP を attach する。</p>
+
+<div class="callout danger">
+  <b>問題</b>: pooled tier の tenant が SAML を有効化すると、 **同 UserPool 上の全 pooled tenant の Cognito Hosted UI に追加 IdP が表示される**。 1 tenant の SAML 設定が他 tenant の sign-in 経路に副作用する。 SaaS isolation 観点で受け入れ不可。
+</div>
+
+<p>Issue #897 で短期 mitigation (= Application Admin Console から SAML SSO page を隠して PLATINUM 限定にする) は実装済 (PR #904)。 しかし long-term の architecture 判断 (= pooled UserPool 分離そのものをどう扱うか) が未決のまま Issue #898 として残っていた。</p>
+
+<h2>2. Decision</h2>
+
+<p>本 ADR で次の 2 件を decide する。</p>
+
+<table>
+  <tr><th style="width:18%">decision</th><th>本 ADR の結論</th><th>根拠</th></tr>
+  <tr>
+    <td><b>D1. 短期</b></td>
+    <td>SAML SSO 機能は <b>PLATINUM (silo) tier 限定</b>。 pooled (BASIC / ADVANCED) tenant の Application Admin Console からは menu / route ともに hide。 既に Issue #897 / PR #904 で実装済 (= 本 ADR では \"採用判断の正本\" として明文化)</td>
+    <td>per-tenant UserPool 分離は cost / 構造影響が大きい (D2 参照)。 SAML は \"あれば嬉しい\" 機能で、 \"無いとサービス成立しない\" 機能ではない。 PLATINUM upgrade promo に倒すことで価値訴求にも転用</td>
+  </tr>
+  <tr>
+    <td><b>D2. 長期</b></td>
+    <td>pooled tenant の UserPool を per-tenant 化 (= 全 tenant silo 化) は <b>採用しない</b>。 当面は D1 の機能 gate で十分。 ただし条件が変われば本 ADR を re-evaluate する trigger (D3) を明示</td>
+    <td>SBT の <code>tenant-template-pooled</code> は \"pooled tier = 共有リソース\" を前提に設計されており、 per-tenant UserPool 化は SBT 構造から大幅に逸脱する。 cost 試算 (= 後述 §3) でも Free Tier 範囲を超え、 BASIC / ADVANCED の price point に合わない</td>
+  </tr>
+  <tr>
+    <td><b>D3. re-evaluate trigger</b></td>
+    <td>次のいずれかが起きたら本 ADR を見直し:<br>
+      (a) PLATINUM tier の採用率が pooled tier を超え、 pooled の存在意義 (= cost optimization) が薄れたとき<br>
+      (b) Application Admin から SAML 以外にも UserPool に副作用する機能要求が複数 issue 化されたとき (= SAML を hide するだけで対応できない multi-tenant 競合が増えたとき)<br>
+      (c) SBT が pooled 内 sub-isolation (= 1 UserPool 内 multiple-IdP per-tenant-attribute filter) のような mechanism を支援したとき
+    </td>
+    <td>(a) は cost meta から自然に判断材料が出る、 (b) (c) は手動 review</td>
+  </tr>
+</table>
+
+<h2>3. なぜ per-tenant UserPool 化を採用しないか (= D2 の根拠)</h2>
+
+<h3>3.1 cost 試算</h3>
+
+<p>Cognito 料金は MAU (monthly active users) per UserPool ベース。 50,000 MAU まで無料、 超過後は MAU 単価。 ただし UserPool は無料、 課金は user / MAU。</p>
+
+<p>一見 \"UserPool を分けても課金は user 数に依存するので cost は変わらない\" に見える。 しかし real cost は:</p>
+
+<ul>
+  <li><b>operational cost</b>: per-tenant に UserPool を作ると tenant 数 × Hosted UI domain × callback / logout URL × IdP / Client 設定の管理対象が線形に増える。 SBT pipeline / deploy 時間も伸びる</li>
+  <li><b>CloudFormation 制約</b>: AWS account あたり UserPool は 1,000 件 / region (= service quota)。 pooled tier の tenant が 1,000 を超えたら quota 引き上げ申請が必要</li>
+  <li><b>CFn deploy 時間</b>: per-tenant UserPool は <code>CodeBuild</code> 経由で個別 stack を立てるため、 1 tenant あたり 5-15 分の deploy 時間 (= 現状 PLATINUM tier の所要時間)。 全 pooled tenant を silo 化すると onboarding が線形に slow になる</li>
+</ul>
+
+<h3>3.2 SBT 構造との不整合</h3>
+
+<p>SBT の <code>tenant-template-pooled</code> は明示的に \"複数 tenant が共有する stack\" を意図している (= ref-arch の前提)。 per-tenant UserPool 化は事実上 \"全 tenant silo 化\" であり、 pooled tier を廃止することと等価。 既存 tier 区分 (basic / standard / premium / platinum) のうち pooled 3 つを silo に統合すると pricing model も整理が必要になり、 影響範囲が architecture を超えて business model に及ぶ。</p>
+
+<h3>3.3 isolation の現状評価</h3>
+
+<p>pooled UserPool 共有が generate する isolation hole は次の 3 種類:</p>
+
+<table>
+  <tr><th>hole</th><th>現状</th><th>本 ADR での扱い</th></tr>
+  <tr>
+    <td>SAML IdP 表示</td>
+    <td>1 tenant の SAML 設定が同 UserPool の他 tenant の Hosted UI に IdP button を表示</td>
+    <td>D1 で機能 gate (= pooled では SAML disable)</td>
+  </tr>
+  <tr>
+    <td>UserPool email 設定</td>
+    <td>1 tenant が UserPool の SES sender / email template を変えると他 tenant の招待メールも変わる</td>
+    <td>当該機能は Application Admin に開放していない (= System Admin only)。 影響なし</td>
+  </tr>
+  <tr>
+    <td>UserPool 削除 / 再構成</td>
+    <td>SBT の pooled stack delete は全 pooled tenant を同時 deprovision する</td>
+    <td>System Admin のみ可。 Application Admin 経路無し。 影響なし</td>
+  </tr>
+</table>
+
+<p>= UserPool 共有が generate する <b>cross-tenant 副作用は SAML だけ</b>。 D1 で塞げば D2 (UserPool 分離) は不要。</p>
+
+<h2>4. Implications</h2>
+
+<h3>4.1 Application Admin Console</h3>
+
+<ul>
+  <li>pooled tenant の Application Admin は SAML SSO menu / route が見えない (= PR #904 で実装済)</li>
+  <li>PLATINUM tenant の Application Admin は従来通り SAML 設定可能</li>
+  <li>SAML を使いたい pooled tenant への messaging は \"upgrade to PLATINUM\" promo に倒す (= UI strings は \`platinum_only_*\` keys、 4 locale 完備)</li>
+</ul>
+
+<h3>4.2 System Admin (= サービス提供元) の責務</h3>
+
+<ul>
+  <li>pooled UserPool の email template / SES sender / IdP 設定は System Admin のみ。 Application Admin に露出させない</li>
+  <li>pooled tenant から SAML 設定の手動依頼があった場合、 サービス提供元としては \"PLATINUM tier への upgrade をご案内\" 一本で対応。 個別の SAML 仲介はしない (= 1 tenant の都合で他 tenant に副作用させない)</li>
+</ul>
+
+<h3>4.3 SBT migration / 将来の SBT version 上げ</h3>
+
+<ul>
+  <li>SBT 0.3.9 → 0.4.x の upgrade で pooled stack の構成が変わる場合、 本 ADR の D2 を再評価する。 SBT 側が pooled 内 sub-isolation を支援したら D3 (c) trigger で path 変更</li>
+</ul>
+
+<h3>4.4 cost / SLA</h3>
+
+<ul>
+  <li>cost: 現状の pooled stack 1 つ運用は維持。 per-tenant UserPool 化による cost 増は発生しない</li>
+  <li>SLA: pooled tenant の SAML 不可は SLA / 契約書 / tier comparison page に明記 (= 後述 §7 follow-up)</li>
+</ul>
+
+<h2>5. Alternatives considered</h2>
+
+<h3>Alt-A: 全 tenant silo 化 (= pooled tier 廃止)</h3>
+
+<ul>
+  <li>cost / SBT structural impact が大きい (§3)</li>
+  <li>BASIC tier の price point を維持できなくなる (= silo cost が basic price を上回る)</li>
+  <li><b>Rejected</b>: business model / SBT 整合性で受け入れ不可</li>
+</ul>
+
+<h3>Alt-B: pooled UserPool 内で provider 名に tenantId prefix を付けて分離</h3>
+
+<ul>
+  <li>provider 名は UserPool 内 unique なので、 <code>tenant-acme-saml</code> / <code>tenant-beta-saml</code> のように prefix を付ければ衝突回避可能</li>
+  <li>しかし <b>Cognito Hosted UI の sign-in button は UserPool 内 provider を全件表示する</b>。 別 tenant の user が別 tenant の IdP を選択する経路は残る</li>
+  <li>API 側で IdP-initiated SSO の <code>identityProviderName</code> を tenant claim と check しても、 user-initiated 経路は防げない</li>
+  <li><b>Rejected</b>: Hosted UI の表示制御が UserPool 単位のため、 prefix だけでは isolation 保証にならない</li>
+</ul>
+
+<h3>Alt-C: Application Admin に SAML を見せつつ \"co-tenant impact\" warning を出す (= 旧実装)</h3>
+
+<ul>
+  <li>UI で \"shared UserPool warning\" を表示し、 ユーザに risk を transparent に伝える</li>
+  <li>しかし Application Admin は SaaS の <b>customer 側 admin</b> であり、 service provider の infrastructure 事情を判断する立場にない。 risk 通知は責任 punt</li>
+  <li>1 tenant の Application Admin が UI を操作したら他 tenant の sign-in を壊せる経路を service provider が <b>残してはいけない</b>
+  <li><b>Rejected</b>: 責務設計の誤り (= Issue #897 で議論済)</li>
+</ul>
+
+<h3>Alt-D: System Admin が pooled tenant の SAML を代理設定する</h3>
+
+<ul>
+  <li>pooled tenant が SAML 希望時、 Application Admin から System Admin に ticket を切ってもらい System Admin が pooled UserPool に provider 名 = tenantId prefix で設定</li>
+  <li>= Alt-B + ticket 運用。 Hosted UI 表示の問題 (= 別 tenant の user が別 tenant の IdP button を見る) は残る</li>
+  <li>service provider 側 operational burden が増え、 Alt-B の根本問題 (Hosted UI 単位の表示制御) も解消しない</li>
+  <li><b>Rejected</b>: cost と効果が見合わない</li>
+</ul>
+
+<h3>Alt-E: pooled UserPool を \"per-tier UserPool\" に分割 (= BASIC = pool-A、 ADVANCED = pool-B 等)</h3>
+
+<ul>
+  <li>tenant 数より tier 数 (3 個) は少ないので per-tenant 分割より cost が控えめ</li>
+  <li>しかし同 tier 内では tenant 共有は変わらず、 SAML 影響範囲は \"同 tier の全 tenant\" になるだけで isolation はまだ不完全</li>
+  <li><b>Rejected</b>: 中間解で根本問題が解けていない</li>
+</ul>
+
+<h2>6. Consequences</h2>
+
+<table>
+  <tr><th>影響</th><th>positive</th><th>negative</th></tr>
+  <tr>
+    <td>cost</td>
+    <td>pooled stack 1 つ運用維持、 cost 増 0</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td>operator UX</td>
+    <td>pooled tenant の Application Admin は危険な機能 (= SAML 設定で他 tenant を壊す) に触れない</td>
+    <td>pooled tenant の Application Admin が SAML を希望しても直ちには使えない (= upgrade promo に倒す)</td>
+  </tr>
+  <tr>
+    <td>service provider 責務</td>
+    <td>isolation boundary を明示し、 customer に \"気をつけて\" と punt しない</td>
+    <td>pooled tier の SAML 需要が高い場合、 PLATINUM への upgrade prompt が UX 摩擦になる可能性</td>
+  </tr>
+  <tr>
+    <td>technical debt</td>
+    <td>SBT 構造に逆らわず integration 維持</td>
+    <td>D3 trigger が発火するまで根本解決が後ろ倒し</td>
+  </tr>
+</table>
+
+<h2>7. Follow-up</h2>
+
+<ul>
+  <li><b>tier comparison page</b>: <code>https://&lt;product-page&gt;/tier-comparison</code> で SAML SSO を PLATINUM 限定として明記 (= sales 側に伝達、 product page 改修は本 ADR の scope 外)</li>
+  <li><b>SLA / 契約書</b>: BASIC / ADVANCED の SLA に \"SAML SSO は PLATINUM tier で提供\" を明記</li>
+  <li><b>metrics</b>: PLATINUM upgrade conversion rate を計測する dashboard を追加 (= D3 (a) trigger を客観評価できるよう)</li>
+  <li><b>D3 trigger review</b>: 6 ヶ月後に再評価する review meeting を schedule</li>
+</ul>
+
+<h2>8. References</h2>
+
+<ul>
+  <li><a href="adr-016-tenkacloud-lite-app-plane-core.html">ADR-016</a>: tenant template の App Plane core 抽出 — 本 ADR と並行して pooled / silo 共通 builder を整理した</li>
+  <li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/897">#897</a>: 短期 mitigation の元 issue (= D1 の実装根拠)</li>
+  <li>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/898">#898</a>: 本 ADR の trigger (= UserPool 分離 review 要求)</li>
+  <li>PR <a href="https://github.com/susumutomita/TenkaCloud/pull/904">#904</a>: D1 (= Application Admin から SAML を hide) の実装</li>
+  <li>SBT pooled tier: <code>@cdklabs/sbt-aws</code> の <code>tenant-template-pooled</code> blueprint</li>
+  <li>AWS Cognito service quota: <a href="https://docs.aws.amazon.com/cognito/latest/developerguide/limits.html">Cognito Quotas</a></li>
+</ul>
+
+</body>
+</html>
