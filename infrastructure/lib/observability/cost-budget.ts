@@ -54,7 +54,8 @@ export class CostBudget extends Construct {
     this.topic = new aws_sns.Topic(this, "BudgetAlarmTopic", {
       displayName: `${props.budgetNamePrefix} cost budget alarm`,
     });
-    for (const email of props.notificationEmails ?? []) {
+    // 重複 email で同じ宛先に 2 重 subscription を作らないように Set で一意化する。
+    for (const email of new Set(props.notificationEmails ?? [])) {
       this.topic.addSubscription(new aws_sns_subscriptions.EmailSubscription(email));
     }
 

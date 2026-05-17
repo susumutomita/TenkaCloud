@@ -224,7 +224,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   if (config.monthlyCostLimitUsd && config.monthlyCostLimitUsd > 0) {
     const adminEmail = config.systemAdminEmail;
     const extraEmails = config.budgetAlarmEmails ?? [];
-    const allEmails = adminEmail ? [adminEmail, ...extraEmails] : extraEmails;
+    // adminEmail と extraEmails の重複を排して同一宛先への重複 subscription を防ぐ。
+    const allEmails = Array.from(new Set(adminEmail ? [adminEmail, ...extraEmails] : extraEmails));
     new CostBudget(observabilityStack, "CostBudget", {
       budgetNamePrefix: `tenkacloud-${config.environment}`,
       monthlyLimitUsd: config.monthlyCostLimitUsd,

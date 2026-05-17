@@ -197,9 +197,16 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const controlPlaneSamlConfig = config?.controlPlaneConfig?.samlIdp;
 
   // Issue #952 epic / cost guardrails
+  // schema (config-schema.json) は integer / 数値文字列 ("50") の双方を許容するため、
+  // ここでも `${MONTHLY_COST_LIMIT_USD:-50}` 経由で来た文字列を Number で正規化する。
+  const rawMonthlyCostLimit = config?.monthlyCostLimitUsd;
+  const parsedMonthlyCostLimit =
+    rawMonthlyCostLimit !== undefined && rawMonthlyCostLimit !== null
+      ? Number(rawMonthlyCostLimit)
+      : Number.NaN;
   const monthlyCostLimitUsd =
-    typeof config?.monthlyCostLimitUsd === "number" && config.monthlyCostLimitUsd > 0
-      ? config.monthlyCostLimitUsd
+    Number.isFinite(parsedMonthlyCostLimit) && parsedMonthlyCostLimit > 0
+      ? parsedMonthlyCostLimit
       : undefined;
   const budgetAlarmEmails =
     Array.isArray(config?.budgetAlarmEmails) && config.budgetAlarmEmails.length > 0
