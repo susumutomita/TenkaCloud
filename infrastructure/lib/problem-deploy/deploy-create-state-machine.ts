@@ -88,6 +88,13 @@ export class DeployCreateStateMachine extends Construct {
     // Phase 2.2 (Issue #459): AssumeRole metadata は 2 fields が両方あるときだけ
     // CodeBuild env に渡す。Step Functions の optional path 直接参照は field 欠落時に
     // States.Runtime で即死するため、Choice で cross-account / same-account を明示分岐する。
+    //
+    // Issue #895 Phase 2.A: ADR-001 §6 の stack tagging に必要な tenantId / jobId /
+    // batchId を CodeBuild env に渡す。 deploy-battles.sh が `cloudformation deploy --tags`
+    // に展開し、 operator が `cloudformation:ListStacks` + tag filter で batch を逆引き
+    // できるようにする。 batchId は bulk 発火 (= 同一 event で N×M 個の deploy を撒く
+    // ケース) で 1 batch を識別する。 単発 / authoring iteration では未指定 = jobId と
+    // 同値 fallback で扱う (= deploy-battles.sh 側で fallback)。
     const startCodeBuildSameAccount = new CodeBuildStartBuild(this, "StartDeployCodeBuild", {
       project: props.codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
@@ -97,6 +104,8 @@ export class DeployCreateStateMachine extends Construct {
         DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
         PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
         TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+        TENKACLOUD_TENANT_ID: { value: JsonPath.stringAt("$.detail.tenantId") },
+        TENKACLOUD_JOB_ID: { value: JsonPath.stringAt("$.detail.jobId") },
       },
       resultPath: "$.codebuild",
     });
@@ -113,6 +122,8 @@ export class DeployCreateStateMachine extends Construct {
           DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
           PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+          TENKACLOUD_TENANT_ID: { value: JsonPath.stringAt("$.detail.tenantId") },
+          TENKACLOUD_JOB_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           COMPETITOR_ROLE_ARN: {
             value: JsonPath.stringAt("$.detail.competitorRoleArn"),
           },

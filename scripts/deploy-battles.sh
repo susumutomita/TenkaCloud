@@ -191,6 +191,17 @@ deploy_one() {
   #   - stack が無ければ Create
   #   - stack があれば Update (差分が無ければ "No changes" で 0 終了)
   #   - --no-fail-on-empty-changeset で「差分無し」を成功扱いにする (rerun 時の運用上の都合)
+  #
+  # Issue #895 Phase 2.A (ADR-001 §6): stack カタログ用 tag を打つ。 operator が
+  # `cloudformation:ListStacks` / Resource Groups Tagging API で次の用途で逆引きできる:
+  #   - TenantId    : tenant 別の deploy 一覧
+  #   - JobId       : 1 deploy = 1 job、 retry / drill-down の identity
+  #   - BatchId     : bulk 発火 (= 同一 event の N×M 個 deploy) のグルーピング、
+  #                   未指定なら JobId と同値 fallback (= 単発 / authoring iteration)
+  # 既存 NamePrefix / Problem / TeamSlug / DeployedBy tag は維持する (旧 operator UI 互換)。
+  TENKACLOUD_TENANT_ID="${TENKACLOUD_TENANT_ID:-unknown}"
+  TENKACLOUD_JOB_ID="${TENKACLOUD_JOB_ID:-${TENKACLOUD_CORRELATION_ID:-unknown}}"
+  TENKACLOUD_BATCH_ID="${TENKACLOUD_BATCH_ID:-${TENKACLOUD_JOB_ID}}"
   if ! aws cloudformation deploy \
     --region "${AWS_REGION}" \
     --stack-name "${name_prefix}" \
@@ -201,7 +212,11 @@ deploy_one() {
     --tags \
       "TenkaCloud:NamePrefix=${name_prefix}" \
       "TenkaCloud:Problem=${problem_slug}" \
+      "TenkaCloud:ProblemId=${problem_slug}" \
       "TenkaCloud:TeamSlug=${TEAM_SLUG}" \
+      "TenkaCloud:TenantId=${TENKACLOUD_TENANT_ID}" \
+      "TenkaCloud:JobId=${TENKACLOUD_JOB_ID}" \
+      "TenkaCloud:BatchId=${TENKACLOUD_BATCH_ID}" \
       "TenkaCloud:DeployedBy=deploy-battles.sh"; then
     trace_log "deploy.cfn.deploy.failed" stackName "${name_prefix}" region "${AWS_REGION}" teamSlug "${TEAM_SLUG}" problemDir "${problem_dir}"
     echo "error: CloudFormation deploy failed for ${name_prefix}" >&2
