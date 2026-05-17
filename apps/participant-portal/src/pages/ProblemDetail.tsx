@@ -133,33 +133,30 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 }
 
 /**
- * #550: 「問題情報」 section。metadata.json 由来の narrative を競技者目線で表示する。
+ * #550 + audit #1/#2: 「問題情報」 section。 metadata 由来 narrative を competition 目線で表示。
  * 内訳:
- *   - カテゴリ (Battle / Challenge) + 難易度 + 想定プレイ時間 + tags (基本情報 row)
- *   - 問題説明 (= `description`、改行保持の長文)
- *   - 学習目的 (= `learningGoals`、bullet list)
+ *   - カテゴリ (Battle / Challenge) + 難易度 (= 競技者の戦略決定に必要な 2 軸)
+ *   - 問題説明 (= description、 改行保持の長文)
  *
- * 表示しない field: `cfnTemplate` / `cfnParameters` / `exposedPorts` (= 競技者が見ても
- * 答えの hint にしかならない deploy 内部情報)。
- *
- * 「シナリオ」「達成条件」「参考資料」「Battle 用ヒント」は schema 拡張が要るため別 PR で
- * 対応 (= #550 issue 本文の段階的実装、schema 拡張は `problems/SCHEMA.json` + 既存 3 問の
- * metadata.json 全更新が要りスコープ大)。
+ * 表示しない field (audit table):
+ *   - 想定プレイ時間 → 大会 timing を競技者に漏らさない (audit #1)
+ *   - 学習目的 / 背景 / 世界観 → 出題意図のメタ情報、 競技中は不要 (audit #2)
+ *   - タグ → 一覧の category filter で十分、 詳細では noise
+ *   - cfnTemplate / cfnParameters / exposedPorts → deploy 内部情報
  */
 function ProblemInfoSection({
   metadata,
   narrative,
 }: {
   metadata: ProblemCatalogEntry;
-  narrative: {
-    readonly description: string;
-    readonly learningGoals: readonly string[];
-  };
+  narrative: { readonly description: string };
 }) {
+  // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
+  // (= timing 漏洩 + 出題意図メタの暴露)。 残すのは カテゴリ + 難易度 + 問題説明 のみ。
   return (
     <Container header={<Header variant="h2">問題情報</Header>}>
       <SpaceBetween size="m">
-        <ColumnLayout columns={4} variant="text-grid">
+        <ColumnLayout columns={2} variant="text-grid">
           <InfoCell label="カテゴリ">
             <SpaceBetween direction="horizontal" size="xxs">
               <Badge color={metadata.category === "Battle" ? "red" : "blue"}>
@@ -170,22 +167,6 @@ function ProblemInfoSection({
             </SpaceBetween>
           </InfoCell>
           <InfoCell label="難易度">{DIFFICULTY_LABEL[metadata.difficulty]}</InfoCell>
-          <InfoCell label="想定プレイ時間">{metadata.estimatedDuration}</InfoCell>
-          <InfoCell label="タグ">
-            <SpaceBetween direction="horizontal" size="xxs">
-              {metadata.tags.length === 0 ? (
-                <Box variant="small" color="text-status-inactive">
-                  —
-                </Box>
-              ) : (
-                metadata.tags.map((t) => (
-                  <Badge key={t} color="grey">
-                    {t}
-                  </Badge>
-                ))
-              )}
-            </SpaceBetween>
-          </InfoCell>
         </ColumnLayout>
 
         <div>
@@ -199,17 +180,6 @@ function ProblemInfoSection({
             dangerouslySetInnerHTML={{ __html: renderMarkdownToSafeHtml(narrative.description) }}
           />
         </div>
-
-        {narrative.learningGoals.length > 0 && (
-          <div>
-            <Box variant="awsui-key-label">学習目的</Box>
-            <ul>
-              {narrative.learningGoals.map((g) => (
-                <li key={g}>{g}</li>
-              ))}
-            </ul>
-          </div>
-        )}
       </SpaceBetween>
     </Container>
   );
