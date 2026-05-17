@@ -6,9 +6,12 @@ import { StatusCodes } from "http-status-codes";
 import {
   ForbiddenRoleError,
   MissingTenantClaimError,
-  requireTenantAdmin,
+  requireRole,
   resolveCognitoSub,
   resolveTenantId,
+  TENANT_ADMIN_ROLE,
+  TENANT_OPERATOR_ROLE,
+  TENANT_ROLES,
 } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import {
@@ -98,15 +101,19 @@ app.onError((err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
-  // Issue #854: role 不一致は 403、 detail は body に出さず log のみ。
+  // Issue #854 / ADR-020 Phase B.1 (#948): role 不一致は 403、 detail は body に出さず log のみ。
   if (err instanceof ForbiddenRoleError) {
     console.warn("[events] forbidden role", {
       path: c.req.path,
+      method: c.req.method,
       actualRole: err.actualRole,
       requiredRoles: err.requiredRoles,
     });
     return c.json(
-      { error: "forbidden_role", message: "this endpoint requires TenantAdmin role" },
+      {
+        error: "forbidden_role",
+        message: "あなたの tenant role ではこの操作を実行できません",
+      },
       StatusCodes.FORBIDDEN,
     );
   }
@@ -115,20 +122,23 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
 });
 
-// Issue #854: 全 /events/* route で TenantAdmin role を要求 (= 一般 user / monitor bot に
-// destructive 操作を許さない、 read 経路でも teamLoginKey が response に含まれるので admin scope)。
-// healthz だけ skip。
+// ADR-020 Phase B.1 (#948): /events/* は 「tenant 内の認証済 user」 (= Admin / Operator /
+// Viewer のいずれか) を要求し、 destructive / mutate 操作は各 route の 1 行目で `requireRole(c,
+// [...])` を呼んで absolute に絞る。 GET 系 (= list / detail / disruption catalog / audit) は
+// 3 role 全部 OK (= Viewer も event 観覧可)。
+// healthz は skip。
 app.use("/events/*", async (c, next) => {
   if (c.req.path.endsWith("/healthz")) {
     return next();
   }
-  requireTenantAdmin(c);
+  requireRole(c, TENANT_ROLES);
   return next();
 });
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));
 
 app.post("/events", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   let body: unknown;
   try {
     body = await c.req.json();
@@ -195,6 +205,7 @@ app.get("/events/:eventId", async (c) => {
 });
 
 app.patch("/events/:eventId/schedule", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -282,6 +293,7 @@ app.patch("/events/:eventId/schedule", async (c) => {
 });
 
 app.post("/events/:eventId/end", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -309,6 +321,7 @@ app.post("/events/:eventId/end", async (c) => {
 // idempotent: already locked / unlocked のときは 200 + body に現状を返す。
 // status=READY / ENDED のみ lockable (= 加点経路があり得る state)。
 app.post("/events/:eventId/lock-scoring", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -341,6 +354,7 @@ app.post("/events/:eventId/lock-scoring", async (c) => {
 });
 
 app.delete("/events/:eventId/lock-scoring", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -366,6 +380,7 @@ app.delete("/events/:eventId/lock-scoring", async (c) => {
 });
 
 app.post("/events/:eventId/notifications", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -401,6 +416,7 @@ app.post("/events/:eventId/notifications", async (c) => {
 });
 
 app.post("/events/:eventId/archive", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -420,6 +436,7 @@ app.post("/events/:eventId/archive", async (c) => {
 });
 
 app.post("/events/:eventId/deploy", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -506,6 +523,7 @@ app.get("/events/:eventId/disruptions/audit", async (c) => {
 });
 
 app.post("/events/:eventId/disruptions/fire", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
@@ -560,6 +578,7 @@ app.post("/events/:eventId/disruptions/fire", async (c) => {
 });
 
 app.delete("/events/:eventId", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const eventId = c.req.param("eventId");
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);

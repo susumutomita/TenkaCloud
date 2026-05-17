@@ -6,9 +6,11 @@ import { StatusCodes } from "http-status-codes";
 import {
   ForbiddenRoleError,
   MissingTenantClaimError,
-  requireTenantAdmin,
+  requireRole,
   resolveCognitoSub,
   resolveTenantId,
+  TENANT_ADMIN_ROLE,
+  TENANT_ROLES,
 } from "../deploy-handler/auth.js";
 import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
@@ -77,16 +79,20 @@ app.onError((err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
-  // Issue #854: role 不一致は 403。 actualRole / requiredRoles は body には出さない
-  // (= attacker に attack surface を教えない、 audit log にだけ残す)。
+  // Issue #854 / ADR-020 Phase B.1 (#948): role 不一致は 403、 actualRole / requiredRoles は
+  // body に出さず log にだけ残す (= attacker に attack surface を教えない)。
   if (err instanceof ForbiddenRoleError) {
     console.warn("[competitor-accounts] forbidden role", {
       path: c.req.path,
+      method: c.req.method,
       actualRole: err.actualRole,
       requiredRoles: err.requiredRoles,
     });
     return c.json(
-      { error: "forbidden_role", message: "this endpoint requires TenantAdmin role" },
+      {
+        error: "forbidden_role",
+        message: "あなたの tenant role ではこの操作を実行できません",
+      },
       StatusCodes.FORBIDDEN,
     );
   }
@@ -98,15 +104,18 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
 });
 
-// Issue #854: `/admin/*` 全 route で TenantAdmin role を要求する middleware。
-// healthz だけは認証無しで通したいので path 比較で skip する (= 認証は API Gateway Cognito
-// authorizer で既に通っているが、 healthz は role check 自体を skip する設計)。
-// 個別 handler 内で再度 `requireTenantAdmin(c)` を呼ぶ必要は無い (= middleware が gate)。
+// ADR-020 Phase B.1 (#948): /admin/* は 「tenant 内の認証済 user」 (= Admin / Operator / Viewer
+// のいずれか) を要求する。 destructive 操作 (= POST / DELETE / PATCH) は各 route の 1 行目で
+// `requireRole(c, [TENANT_ADMIN_ROLE])` を呼んで Admin 限定にする。 GET 系のうち
+// `/admin/competitor-accounts` は 3 role 全部 pass (= EventCreate 画面 dropdown populate に
+// 必要、 Viewer も verified accounts を見る)。 SAML 設定 / user 管理 は GET も含めて Admin only
+// (= sensitive config / user 一覧)。
+// healthz は role check 自体を skip。
 app.use("/admin/*", async (c, next) => {
   if (c.req.path.endsWith("/healthz")) {
     return next();
   }
-  requireTenantAdmin(c);
+  requireRole(c, TENANT_ROLES);
   return next();
 });
 
@@ -114,25 +123,31 @@ app.get("/admin/competitor-accounts/healthz", (c) => c.json({ ok: true }));
 
 // Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する経路。
 // 同 Lambda に同居させる (= 同 IAM / auth、 別 handler 化は Phase 3 で再評価)。
+// ADR-020 Phase B.1 (#948): SAML 設定は sensitive config なので GET も含めて Admin only。
 app.get("/admin/tenant-saml-config", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeGet({ shared }, c);
   return c.json(result.body as never, result.status as 200);
 });
 // 互換のため PATCH + PUT 両方受ける (= frontend は PATCH、 curl 直叩き / OpenAPI は PUT で書く)。
 app.patch("/admin/tenant-saml-config", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routePut({ shared }, c);
   return c.json(result.body as never, result.status as 200 | 400 | 422);
 });
 app.put("/admin/tenant-saml-config", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routePut({ shared }, c);
   return c.json(result.body as never, result.status as 200 | 400 | 422);
 });
 app.delete("/admin/tenant-saml-config", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeDelete({ shared }, c);
   return c.json(result.body as never, result.status as 200 | 422);
 });
 
 app.post("/admin/competitor-accounts", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   let body: unknown;
   try {
     body = await c.req.json();
@@ -182,6 +197,7 @@ app.get("/admin/competitor-accounts", async (c) => {
 });
 
 app.post("/admin/competitor-accounts/:awsAccountId/verify", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const awsAccountId = c.req.param("awsAccountId");
   if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
     return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
@@ -217,6 +233,7 @@ app.post("/admin/competitor-accounts/:awsAccountId/verify", async (c) => {
 });
 
 app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const awsAccountId = c.req.param("awsAccountId");
   if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
     return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
@@ -268,6 +285,7 @@ app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c
 });
 
 app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const awsAccountId = c.req.param("awsAccountId");
   if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
     return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
@@ -285,16 +303,18 @@ app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
   }
 });
 
-// Issue #925 Phase 1: Tenant 内 user の CRUD。 `/admin/*` middleware で既に TenantAdmin role が
-// gate されているため、 各 handler では tenantId resolve のみ行う。 削除は self-delete 防止 +
-// tenant 越境チェック (AdminGetUser) → AdminDeleteUser。
+// Issue #925 Phase 1 / ADR-020 Phase B.1 (#948): Tenant 内 user の CRUD は **GET も含めて
+// Admin only** (= user 一覧 / 招待 / 削除 / role 変更 はいずれも sensitive 操作)。
+// 削除は self-delete 防止 + tenant 越境チェック (AdminGetUser) → AdminDeleteUser。
 app.get("/admin/users", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const tenantId = resolveTenantId(c);
   const result = await routeListUsers({ shared }, c, tenantId);
   return c.json(result.body as never, result.status as 200 | 401);
 });
 
 app.post("/admin/users", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   let body: unknown;
   try {
     body = await c.req.json();
@@ -323,6 +343,7 @@ app.post("/admin/users", async (c) => {
 });
 
 app.delete("/admin/users/:username", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const username = c.req.param("username");
   if (!username || username.length === 0) {
     return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
@@ -352,6 +373,7 @@ app.delete("/admin/users/:username", async (c) => {
 
 // Issue #17: 既存 user の custom:userRole を変更する PATCH。 越境チェック + 自己変更禁止。
 app.patch("/admin/users/:username", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
   const username = c.req.param("username");
   if (!username || username.length === 0) {
     return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);

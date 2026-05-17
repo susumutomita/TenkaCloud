@@ -15,8 +15,11 @@ import {
 import {
   ForbiddenRoleError,
   MissingTenantClaimError,
-  requireTenantAdmin,
+  requireRole,
   resolveTenantId,
+  TENANT_ADMIN_ROLE,
+  TENANT_OPERATOR_ROLE,
+  TENANT_ROLES,
 } from "./auth.js";
 import { requestTeardown } from "./delete.js";
 import {
@@ -97,15 +100,21 @@ app.onError((err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
-  // Issue #854: role 不一致は 403、 detail は body に出さず log のみ。
+  // Issue #854 / ADR-020 Phase B.1 (#948): role 不一致は 403、 detail は body に出さず log のみ
+  // (= attacker に attack surface を教えない)。 frontend は error code "forbidden_role" を
+  // FriendlyErrorAlert にマップする。
   if (err instanceof ForbiddenRoleError) {
     console.warn("[deploy] forbidden role", {
       path: c.req.path,
+      method: c.req.method,
       actualRole: err.actualRole,
       requiredRoles: err.requiredRoles,
     });
     return c.json(
-      { error: "forbidden_role", message: "this endpoint requires TenantAdmin role" },
+      {
+        error: "forbidden_role",
+        message: "あなたの tenant role ではこの操作を実行できません",
+      },
       StatusCodes.FORBIDDEN,
     );
   }
@@ -114,21 +123,24 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
 });
 
-// Issue #854: deploy / list 全 route で TenantAdmin role を要求 (= 一般 user / monitor bot に
-// destructive 操作を許さない、 GET 経路でも tenant 配下の全 deployment が見えるので admin scope)。
-// healthz だけ skip。 path prefix が無い (= "/problems/*" / "/deployments/*" 両方) ので
-// `app.use("*", ...)` で全 route を gate、 healthz は path 比較で skip する。
+// ADR-020 Phase B.1 (#948): blanket middleware は **「tenant 内のいずれかの role を持つ
+// 認証済 user」** であることだけ要求する (= Admin / Operator / Viewer のいずれか)。 各 route の
+// 1 行目で `requireRole(c, [...])` を呼び、 destructive 操作には Admin 限定 / mutate には
+// Admin + Operator のように **route 単位で** 絞り込む (= Viewer も dropdown populate のため
+// GET には pass、 旧 broken-glass 規律で 403 になっていた regression を解消)。
+// healthz は authn / authz どちらも skip (= API GW 側で auth bypass 設定)。
 app.use("*", async (c, next) => {
   if (c.req.path === "/healthz" || c.req.path.endsWith("/healthz")) {
     return next();
   }
-  requireTenantAdmin(c);
+  requireRole(c, TENANT_ROLES);
   return next();
 });
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
 app.post("/problems/:problemId/deploy", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const problemId = c.req.param("problemId");
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
     return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
@@ -288,6 +300,7 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
  * 出力: \`{ items: [{ jobId, action: \"requeued\" | \"skipped\", reason? }, ...] }\`
  */
 app.post("/deployments/retry", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   let body: unknown;
   try {
     body = await c.req.json();
@@ -314,6 +327,7 @@ app.post("/deployments/retry", async (c) => {
 });
 
 app.delete("/deployments/:jobId", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const jobId = c.req.param("jobId");
   if (!jobId || !JOB_ID_RE.test(jobId)) {
     return c.json({ error: "invalid_job_id" }, HTTP_BAD_REQUEST);
