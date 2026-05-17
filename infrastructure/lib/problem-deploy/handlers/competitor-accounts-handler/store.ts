@@ -50,6 +50,21 @@ export class CompetitorAccountNotFoundError extends Error {
   }
 }
 
+/**
+ * Issue #868: register 直後 / verify 未完了 (verified=false) の row に対する operation を
+ * 拒否するエラー。 `POST /verify` で AssumeRole sanity check が成功するまで、 deploy /
+ * rotate などの downstream operation を gate する。
+ */
+export class CompetitorAccountNotVerifiedError extends Error {
+  constructor(public readonly awsAccountId: string) {
+    super(
+      `competitor account ${awsAccountId} is registered but not yet verified; ` +
+        "call POST /admin/competitor-accounts/{awsAccountId}/verify first",
+    );
+    this.name = "CompetitorAccountNotVerifiedError";
+  }
+}
+
 export interface CreateCompetitorAccountContext {
   readonly tenantId: string;
   readonly nowMs: number;
@@ -264,6 +279,11 @@ export async function rotateExternalIdForAccount(
     }),
   );
   if (!existing.Item) throw new CompetitorAccountNotFoundError(ctx.awsAccountId);
+  // Issue #868: verified=false な行に対する rotate は禁止 (= ownership 未確認の account に
+  // 鍵を回す経路で attacker spoof が成立しないように、 verify を必須前提にする)。
+  if (existing.Item.verified !== true) {
+    throw new CompetitorAccountNotVerifiedError(ctx.awsAccountId);
+  }
 
   // 2. 現 ExternalId 存在確認 (= 鍵が完全消失している tenant に対する rotate は誤操作のサイン)。
   const currentExternalId = await getExternalId(
