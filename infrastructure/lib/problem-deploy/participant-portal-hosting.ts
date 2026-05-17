@@ -7,7 +7,7 @@ import {
   PriceClass,
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
-import { S3Origin } from "aws-cdk-lib/aws-cloudfront-origins";
+import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
@@ -80,7 +80,7 @@ export class ParticipantPortalHosting extends Construct {
 
     this.distribution = new Distribution(this, "Distribution", {
       defaultBehavior: {
-        origin: new S3Origin(this.bucket, { originAccessIdentity: oai }),
+        origin: S3BucketOrigin.withOriginAccessIdentity(this.bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         responseHeadersPolicy: securityHeaders,
       },
