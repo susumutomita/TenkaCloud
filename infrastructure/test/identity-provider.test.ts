@@ -36,6 +36,19 @@ describe("IdentityProvider", () => {
       template.resourceCountIs("AWS::Cognito::UserPoolDomain", 1);
     });
 
+    it("ADR-020 Phase E: tenant UserPool は MFA REQUIRED + TOTP-only に設定するべき", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      // MFA を REQUIRED にし、 SMS を無効化、 TOTP (SOFTWARE_TOKEN_MFA) のみ許可。
+      // destructive 操作を扱う tenant admin console の baseline (OPTIONAL は不可)。
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPool",
+        Match.objectLike({
+          MfaConfiguration: "ON",
+          EnabledMfas: ["SOFTWARE_TOKEN_MFA"],
+        }),
+      );
+    });
+
     it("UserPoolDomain prefix は TenkaCloud-{env}-{tenantId}-{accountId} を lowercase 化して使うべき", () => {
       const { template } = synth("Tenant-ABC", "https://example.cloudfront.net", "Development");
       template.hasResourceProperties("AWS::Cognito::UserPoolDomain", {
