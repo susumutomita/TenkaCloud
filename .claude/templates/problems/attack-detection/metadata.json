@@ -9,7 +9,7 @@
   "estimatedDuration": "60〜90 分",
   "shortDescription": "攻撃検知 counter 差分で加点する attack-detection Battle skeleton。",
   "description": "competitor account 内の counter (= 攻撃検知件数、 SQLi 阻止件数、 SOC alert 件数 等) を CFn Output で露出し、 platform が 1 分毎に diff を取って加点する。\\n\\n典型用途: WAF 防御 / SOC monitoring / IDS 設定の効果を数値で評価したい問題。 counter 値は問題側 Lambda / CloudWatch metrics → SSM Parameter Store 経由で CFn Output に書く方式が一般的。",
-  "tags": ["__TAG__", "security"],
+  "tags": ["sample", "security"],
   "exposedPorts": [{ "port": 80, "name": "monitored-service" }],
   "learningGoals": ["__LEARNING_GOAL_1__"],
   "cfnTemplate": "template.yaml",

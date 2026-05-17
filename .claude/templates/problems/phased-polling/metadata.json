@@ -9,7 +9,7 @@
   "estimatedDuration": "90〜120 分",
   "shortDescription": "時間経過で rule が変わる phased-polling 採点の Battle skeleton。",
   "description": "競技時間中に複数 phase が自動進行する Battle 型。 phases[].afterMinutes で発火 offset を持ち、 phase ごとに `effect` で scoring engine の挙動を切り替える (= platform 加点分類 / scorePath override 等)。\\n\\n典型用途: マイクロサービス分割レース、 段階的負荷試験、 時系列的に変わる game rule。 phased-polling は probe 1 回ごとに platform 自己申告 (`/meta`) を読み platform 分類 (ec2/lambda/ecs/apprunner) で加点する。",
-  "tags": ["__TAG__"],
+  "tags": ["sample", "battle"],
   "exposedPorts": [{ "port": 80, "name": "service" }],
   "learningGoals": ["__LEARNING_GOAL_1__"],
   "cfnTemplate": "template.yaml",
