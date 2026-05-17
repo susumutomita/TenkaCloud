@@ -1,4 +1,4 @@
-import { Duration, Stack } from "aws-cdk-lib";
+import { Annotations, Duration, Stack } from "aws-cdk-lib";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import {
@@ -95,17 +95,17 @@ export class BulkDeployCreateStateMachine extends Construct {
     // ADR-001 §4: 失敗を error 扱いにせず最後まで試す。 ToleratedFailure* は未設定で
     // "any failure tolerated" になり、 親 execution は success で終わる。
     //
-    // CDK 2.252 の DistributedMap は inconsistent API:
-    //   - 新 API: \`mapExecutionType\` (= DistributedMap props、 ASL 出力で使われる)
-    //   - 旧 API: \`itemProcessor(processor, { executionType })\` (= ASL に影響しないが
-    //     validation がここを check する。 無いと synth error \"You must specify an
-    //     execution type for the distributed Map workflow\")
-    // 両方指定すると CDK が \"ProcessorConfig.executionType is ignored\" warning を出すが、
-    // 旧 API を消すと validation で fail するため両方指定する。 warning は informational
-    // (= ASL 上の挙動は \`mapExecutionType\` が支配的、 実行に影響なし) で受け入れる。
-    // CDK の \`Annotations.acknowledgeWarning\` は 2.252 で この warning タイプを suppress
-    // しないため、 cosmetic な log noise として残る。 upstream で API 整合される将来 CDK
-    // upgrade 時に旧 API を撤廃する。
+    // CDK 2.252 の DistributedMap には API duplication がある:
+    //   - 新 API: \`mapExecutionType\` (= DistributedMap props、 ASL 出力で実際に使われる)
+    //   - 旧 API: \`itemProcessor(processor, { executionType })\` (= MapBase.validateState で
+    //     "You must specify an execution type for the distributed Map workflow" 検査される。
+    //     ASL には反映されない (= DistributedMap.toStateJson が上書きで overwrite する))
+    // 両方を残さないと validation で fail する一方、 両方残すと CDK が synth 時に warning
+    // \`@aws-cdk/aws-stepfunctions:propertyIgnored\` を出す。 これは CDK の bug-shaped な
+    // 整合不全だが、 既知の suppress 方法がある:
+    // \`Annotations.of(map).acknowledgeWarning(id)\` を constructor で呼び、 後段の
+    // \`addWarningV2\` に「この警告は ack 済」 と覚えさせる (= core/annotations.js の
+    // \`Acknowledgements.has\` 経由で skip される)。
     const map = new DistributedMap(this, "DeployItemsMap", {
       maxConcurrency: MAX_CONCURRENCY,
       mapExecutionType: StateMachineType.STANDARD,
@@ -120,6 +120,14 @@ export class BulkDeployCreateStateMachine extends Construct {
       mode: ProcessorMode.DISTRIBUTED,
       executionType: ProcessorType.STANDARD,
     });
+
+    // 上記コメント参照: validation のために itemProcessor.executionType を残しつつ、
+    // CDK が出す \`propertyIgnored\` warning を ack で suppress する。 register 先は **親 scope** (= \`this\`)
+    // である必要がある。 CDK の \`Acknowledgements.searchPaths\` (core/annotations.js) は node path の
+    // 先頭からの prefix を末尾まで含めずに reverse して返す (= 自 path は含まれず、 ancestor だけ
+    // が match 対象になる) ため、 ack を child (= DistributedMap) に register しても child 自身の
+    // \`addWarningV2\` では検出されない。 親に register することで child へ伝播し suppress される。
+    Annotations.of(this).acknowledgeWarning("@aws-cdk/aws-stepfunctions:propertyIgnored");
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
       stateMachineType: StateMachineType.STANDARD,
