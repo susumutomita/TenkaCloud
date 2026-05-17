@@ -17,7 +17,8 @@ export JSII_DEPRECATED := quiet
         env-check synth check-synth diff bootstrap \
         deploy deploy-control-plane deploy-bootstrap destroy \
         deploy-battles destroy-battles \
-        lite-up lite-down lite-status lite-portal-url lite-console-url
+        lite-up lite-down lite-status lite-portal-url lite-console-url \
+        ops-health
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -159,3 +160,9 @@ lite-down:         ; bun run scripts/tenkacloud-lite.ts down
 lite-status:       ; bun run scripts/tenkacloud-lite.ts status
 lite-portal-url:   ; bun run scripts/tenkacloud-lite.ts portal-url
 lite-console-url:  ; bun run scripts/tenkacloud-lite.ts console-url
+
+# ===== Ops observation (read-only CLI for AI / operator) =====
+# Issue #952: AI 無人運用の足場。 全 TenkaCloud stack の状態を 1 コマンドで観察する
+# read-only CLI。 exit code は 0=全 healthy / 1=in_progress あり / 2=failed あり。
+# 外部 cron / AI agent が spawn して platform 状態を判断する経路。
+ops-health:        ; bun run scripts/tenkacloud-ops.ts health

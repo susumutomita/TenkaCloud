@@ -51,6 +51,22 @@ CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format ch
 
 加えて TenkaCloud 関係なく使える共通 skill (`/review`、`/security-review`、`/simplify`、`/init` 等) は Claude Code 本体側に同梱されている。
 
+## Codex CLI との併用 (= 総力戦)
+
+OpenAI の Codex CLI も本 repo を AGENTS.md (本ファイル) 経由で読み込める。 並列に走らせて作業分担する典型パターンは次の通り。
+
+- **Claude Code** が `apps/*` と `scripts/*` の実装を主導 (= 本ファイルの「役割分担」通り)
+- **Codex CLI** で別ブランチを切り、 cross-cutting concern (= naming refactor / dead code 削除 / 同型 helper の抽出) を並行で進める
+- 結果は別々の PR にし、 conflict は user (= 最終 reviewer) が手で潰す
+
+Codex CLI を起動する前に次を確認する。
+
+1. `make harness` が通る状態であること (= invariant 違反のある branch を渡さない)
+2. 作業範囲を本ファイルの「役割分担」と「禁止事項」に従わせること (= CDK を弄らせない / `rm` 等を実行させない)
+3. Codex の出力 PR にも `## Regression 分析` / `## 物理影響` セクションを書かせること
+
+Codex CLI 専用の skill / config は持たない (= AGENTS.md 1 つで両者をガイドする方針)。 Claude Code 側で `.claude/skills/*` を使う subcommand は Codex からは見えないので、 Codex には slash command (`/<skill>`) を要求しない普通の自然言語タスクを与えること。
+
 ## ブランチと PR
 
 - **マージ済みブランチに push しない**。PR を出す前に必ず `gh pr view --json state` で state を確認。`MERGED` / `CLOSED` なら新ブランチを切る。
