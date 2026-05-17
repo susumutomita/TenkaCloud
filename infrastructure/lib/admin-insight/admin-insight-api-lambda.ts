@@ -97,6 +97,8 @@ export class AdminInsightApiLambda extends Construct {
     // Issue #658: Provisioning Jobs page が tenkacloud-saas-pipeline の execution 履歴を
     // 引くため CodePipeline read 権限を付与。 ListPipelineExecutions は ARN ベースの絞り込みが
     // 可能なので最小権限で固定。 GetPipelineExecution は将来の "Failed phase 詳細" routes 用。
+    // Issue #857 justify: codepipeline:ListPipelineExecutions は ARN 必須だが、 同 stack 内で
+    // pipeline ARN を循環参照しないために `*` で残す。 read-only 操作で blast radius 限定的。
     this.fn.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,

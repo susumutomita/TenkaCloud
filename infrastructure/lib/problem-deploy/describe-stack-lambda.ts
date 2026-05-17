@@ -44,6 +44,8 @@ export class DescribeStackLambda extends Construct {
       },
     });
 
+    // Issue #857 justify: CloudFormation:DescribeStacks は AWS API 制約上 Resource: "*" 必須
+    // (= stack 名は動的、 ARN を synth 時に knowable でない)。 read-only 操作で blast radius 限定的。
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
