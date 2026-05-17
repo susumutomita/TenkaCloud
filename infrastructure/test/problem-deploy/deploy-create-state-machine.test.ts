@@ -110,4 +110,29 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
       }),
     );
   });
+
+  // Issue #895 Phase 2.A: ADR-001 §6 の stack tagging に必要な tenantId / jobId を
+  // CodeBuild env に渡す経路の regression test。 これらが欠けると deploy-battles.sh が
+  // tag 値を \"unknown\" にして CFn → tenant 逆引きが効かなくなる。
+  it("Issue #895: CodeBuild env に TENKACLOUD_TENANT_ID / TENKACLOUD_JOB_ID が渡されるべき", () => {
+    const { template } = buildTestStack();
+    const stateMachines = template.findResources("AWS::StepFunctions::StateMachine");
+    const sm = Object.values(stateMachines)[0];
+    const definitionString = sm?.Properties?.DefinitionString;
+    let asJson: string;
+    if (typeof definitionString === "string") {
+      asJson = definitionString;
+    } else {
+      const join = definitionString["Fn::Join"];
+      const parts = join[1] as Array<string | Record<string, unknown>>;
+      asJson = parts.map((p) => (typeof p === "string" ? p : "ARN_PLACEHOLDER")).join("");
+    }
+    // ASL 上 EnvironmentVariablesOverride は `Name / Type / Value.$` 形式。
+    expect(asJson).toContain('"Name":"TENKACLOUD_TENANT_ID"');
+    expect(asJson).toContain('"Value.$":"$.detail.tenantId"');
+    expect(asJson).toContain('"Name":"TENKACLOUD_JOB_ID"');
+    // 既存 TENKACLOUD_CORRELATION_ID と PROBLEM_EXTERNAL_ID も維持されているべき (regression 防止)
+    expect(asJson).toContain('"Name":"TENKACLOUD_CORRELATION_ID"');
+    expect(asJson).toContain('"Name":"PROBLEM_EXTERNAL_ID"');
+  });
 });

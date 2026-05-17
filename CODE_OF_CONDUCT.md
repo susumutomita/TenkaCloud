@@ -1,3 +1,11 @@
+<!-- textlint-disable -->
+<!--
+  Contributor Covenant 2.1 (https://www.contributor-covenant.org/version/2/1/code_of_conduct.html)
+  の vendor 翻訳。 textlint の社内 style rule (= 句点 / 接続詞 / 曖昧表現) を当てると
+  原典の意図がずれるため、 本ファイル全体は textlint rule 適用外とする。
+  原典更新時は本翻訳も同期する (= 連絡先 oyster880@gmail.com を維持しつつ、 それ以外は原典準拠)。
+-->
+
 # Contributor Covenant 行動規範
 
 ## 私たちの誓い
@@ -81,3 +89,5 @@
 [mozilla coc]: https://github.com/mozilla/diversity
 [faq]: https://www.contributor-covenant.org/faq
 [translations]: https://www.contributor-covenant.org/translations
+
+<!-- textlint-enable -->

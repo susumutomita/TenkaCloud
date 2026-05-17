@@ -50,6 +50,12 @@ export interface SecurityHeadersOptions {
    * production では必ず false にする。 default false。
    */
   readonly allowUnsafeEval?: boolean;
+  /**
+   * Issue #899: SPA 内で外部 CDN 由来の script を読み込む場合の追加 allow-list。
+   * 例: API reference (Scalar) を CDN から読み込むときの \`https://cdn.jsdelivr.net\`。
+   * 同時に \`style-src\` にも追加 (Scalar が inline 風 CSS を出すため一部 CDN style も必要)。
+   */
+  readonly additionalScriptSrcs?: readonly string[];
 }
 
 /**
@@ -91,13 +97,17 @@ export function buildSecurityHeadersPolicy(
  * CSP 文字列を組み立てる pure helper。 test しやすい (= options で挙動が決まる)。
  */
 export function buildContentSecurityPolicy(opts: SecurityHeadersOptions = {}): string {
-  const connectSrc = ["'self'", ...(opts.connectSrcAllowedOrigins ?? [])];
+  const additionalScripts = opts.additionalScriptSrcs ?? [];
+  const connectSrc = ["'self'", ...(opts.connectSrcAllowedOrigins ?? []), ...additionalScripts];
   const formAction = ["'self'", ...(opts.formActionAllowedOrigins ?? [])];
-  const scriptSrc = opts.allowUnsafeEval ? ["'self'", "'unsafe-eval'"] : ["'self'"];
+  const scriptSrc = opts.allowUnsafeEval
+    ? ["'self'", "'unsafe-eval'", ...additionalScripts]
+    : ["'self'", ...additionalScripts];
+  const styleSrc = ["'self'", "'unsafe-inline'", ...additionalScripts];
   const directives: readonly string[] = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
-    "style-src 'self' 'unsafe-inline'",
+    `style-src ${styleSrc.join(" ")}`,
     "img-src 'self' data:",
     "font-src 'self' data:",
     `connect-src ${connectSrc.join(" ")}`,

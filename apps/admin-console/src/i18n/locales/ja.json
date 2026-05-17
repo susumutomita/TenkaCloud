@@ -10,7 +10,8 @@
     "menu": "管理メニュー",
     "tenants": "テナント一覧",
     "tenants_new": "テナント作成",
-    "jobs": "プロビジョニング Jobs"
+    "jobs": "プロビジョニング Jobs",
+    "api_docs": "API リファレンス ↗"
   },
   "auth": {
     "sign_out": "サインアウト"
@@ -38,6 +39,11 @@
     "progress_warning_suffix": "想定より長い",
     "col_active_deploys": "進行中の問題 deploy",
     "col_failed_deploys": "失敗した問題 deploy",
+    "col_problem_deploys": "問題 deploy",
+    "col_problem_deploys_short": "Deploy",
+    "col_problem_deploys_explain": "競技者 AWS account 上の問題 CFn stack の集計。 青 = 進行中 (CFn CREATE/UPDATE/DELETE 進行中)、 赤 = 失敗 (CFn error)。 tenant をクリックすると個別 deployment を確認できます。",
+    "deploys_active": "進行中 {count}",
+    "deploys_failed": "失敗 {count}",
     "col_app_console": "Application Console",
     "col_logs": "ログ",
     "col_actions": "操作",

@@ -64,6 +64,15 @@ export function ShellLayout({ children }: { children: ReactNode }) {
               { type: "link", href: "/tenants", text: t("nav.tenants") },
               { type: "link", href: "/tenants/new", text: t("nav.tenants_new") },
               { type: "link", href: "/jobs", text: t("nav.jobs") },
+              { type: "divider" },
+              // Issue #899: Scalar による API reference。 同 origin の static file (public/api-docs.html)
+              // へ external link。 SPA route と分離 (= API spec を SPA bundle に混ぜない)。
+              {
+                type: "link",
+                href: "/api-docs.html",
+                text: t("nav.api_docs"),
+                external: true,
+              },
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {

@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { RemovalPolicy } from "aws-cdk-lib";
+import { RemovalPolicy, Stack } from "aws-cdk-lib";
 import {
   Distribution,
   HttpVersion,
@@ -60,6 +60,14 @@ interface RuntimeConfigProps {
    * 未設定なら frontend は GitHub raw URL に fallback する (= dev / 初回 deploy 用)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
+  /**
+   * Issue #897: テナント isolation mode (= "pooled" | "silo")。
+   * "pooled" は UserPool を全 pooled tenant が共有しているため、 SAML SSO のように
+   * UserPool を mutate する機能は他 tenant に副作用を及ぼす。 frontend はこの値を見て
+   * SAML SSO page を非表示にし、 \"upgrade to PLATINUM\" promo を出す。
+   * "silo" は PLATINUM tier の独立 UserPool。 SAML SSO 設定が安全に有効化できる。
+   */
+  readonly isolation: "pooled" | "silo";
 }
 
 /**
@@ -102,14 +110,18 @@ export class ApplicationAdminConsoleHosting extends Construct {
     const oai = new OriginAccessIdentity(this, "OAI");
     this.bucket.grantRead(oai);
 
-    // Issue #855: CloudFront に security headers を強制。 application-admin-console は tenant
-    // 別の API GW + Cognito UserPool 経路に connect するが、 具体 URL は per-tenant で動的に決まる
-    // (= runtime-config.json 経由)。 CSP connect-src / form-action は AWS の domain wildcard で
-    // 許容する (= 厳格化は別 issue、 全 tenant で共通のため individual URL の追加配線は別途検討)。
+    // Issue #855 + #896: CloudFront に security headers を強制。 application-admin-console は
+    // tenant 別の API GW + Cognito UserPool 経路に connect するが、 具体 URL は per-tenant で
+    // 動的に決まる (= runtime-config.json 経由)。 CSP host-source の wildcard は **leftmost のみ**
+    // 仕様 (CSP3) で許可される。 旧 `*.execute-api.*.amazonaws.com` は中段 `*` を含み spec 違反、
+    // ブラウザは silently ignore → 全 fetch が \"Refused to connect by CSP\" で fail していた。
+    // 単一 wildcard に倒すため region は synth 時に Stack.region から inject する。
+    const region = Stack.of(this).region;
     const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
       connectSrcAllowedOrigins: [
         "https://*.amazoncognito.com",
-        "https://*.execute-api.*.amazonaws.com",
+        `https://*.execute-api.${region}.amazonaws.com`,
+        `https://*.lambda-url.${region}.on.aws`,
       ],
       formActionAllowedOrigins: ["https://*.amazoncognito.com"],
     });
@@ -174,6 +186,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: props.apiUrl.replace(/\/$/, ""),
+      isolation: props.isolation,
       ...(props.participantPortalUrl ? { participantPortalUrl: props.participantPortalUrl } : {}),
       ...(props.competitorBootstrapTemplateUrl
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }

@@ -137,6 +137,10 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     apiUrl: apiGateway.restApi.url,
     participantPortalUrl: props.participantPortalUrl,
     competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
+    // Issue #897: pooled stack の UserPool は全 pooled tenant が共有するため、 SAML SSO のような
+    // UserPool mutate を伴う機能は他 tenant に副作用を及ぼす。 frontend は isolation を見て
+    // pooled では SAML SSO page を隠し、 silo (PLATINUM) でのみ有効にする。
+    isolation: props.isPooledDeploy ? "pooled" : "silo",
   });
 
   return {

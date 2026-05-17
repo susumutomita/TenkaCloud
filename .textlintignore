@@ -24,3 +24,8 @@ references/**
 # spellcheck-tech-word の日本語側 dictionary) の対象外。 README.ja.md だけは
 # 日本語版なので除外しない。
 README.md
+
+# 外部 spec の vendor 翻訳。 textlint の社内 style rule (= 句点 / 接続詞 / 曖昧表現)
+# を当てると原典の意図がずれる。
+# - CODE_OF_CONDUCT.md: Contributor Covenant 2.1 (https://www.contributor-covenant.org)
+CODE_OF_CONDUCT.md

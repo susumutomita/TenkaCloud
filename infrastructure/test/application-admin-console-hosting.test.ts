@@ -80,6 +80,30 @@ describe("ApplicationAdminConsoleHosting", () => {
       });
     });
 
+    // Issue #896: CSP3 spec で wildcard は **leftmost only**。 中段 `*` 入りの host-source は
+    // ブラウザが silently ignore して全 fetch が \"Refused to connect by CSP\" で fail する。
+    it("Content-Security-Policy connect-src は middle wildcard を含むべきでない (CSP3 spec)", () => {
+      const template = synth("tenant-1");
+      const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
+      const policy = Object.values(policies)[0];
+      const cspJson = JSON.stringify(policy);
+      // 旧 regression pattern (= middle wildcard) が混入していないことを直接 string で検査
+      expect(cspJson).not.toContain("*.execute-api.*");
+      expect(cspJson).not.toContain("*.lambda-url.*");
+    });
+
+    it("Content-Security-Policy connect-src に execute-api / lambda-url / cognito を含むべき", () => {
+      const template = synth("tenant-1");
+      const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
+      const policy = Object.values(policies)[0];
+      // region は Stack.region で token 化されるため、 CFn template 上は Fn::Join 配下の
+      // string fragment に含まれる。 stringify した template 全体に対して string match。
+      const cspJson = JSON.stringify(policy);
+      expect(cspJson).toContain(".execute-api.");
+      expect(cspJson).toContain(".lambda-url.");
+      expect(cspJson).toContain("amazoncognito.com");
+    });
+
     it("distributionDomainName と distributionUrl を property として公開すべき", () => {
       const app = new cdk.App();
       const stack = new cdk.Stack(app, "TestStack");

@@ -10,99 +10,33 @@ const COGNITO_USERNAME = "{username}";
 const COGNITO_TEMP_PASSWORD = "{####}";
 
 /**
- * #529 i18n + #660: 1 通の招待メールに 4 言語 (JA / EN / ES / ZH) を順に並べる + Gmail 等で
- * 単一改行が space に re-flow される問題を回避するため、 各 field を `\n\n` (paragraph
- * break) で区切る。
+ * Issue #903: 招待メール文面を英語のみに統一する (= 旧 4 言語混在は Gmail で改行が collapse
+ * して読めなくなる問題があった)。 Control Plane の System Admin 招待 (Issue #714) と同じ
+ * 方針。 各 field を `\n\n` (paragraph break) で区切り、 Gmail / Outlook で改行が保たれる
+ * よう整形する。
  *
- * Cognito の `InviteMessageTemplate` は **UserPool あたり 1 言語**しか保持できない (= 4 言語
- * 同梱で送る理由)、 かつ Cognito default 送信は **plain text** で HTML タグが literal text
- * になる (= Option A: HTML 化 は SES verified identity が必要で infra 影響大、 ここでは
- * Option B: plain text 整形強化 を採用)。
- *
- * Phase 2 で `custom:locale` 属性 + CustomMessage Lambda Trigger + SES への移行を予定。
+ * Cognito `InviteMessageTemplate` は **UserPool あたり 1 言語**しか保持できないので、
+ * 多言語化が必要なら `custom:locale` 属性 + CustomMessage Lambda Trigger + SES への移行が
+ * 必要 (= 別 issue)。 当面は SaaS の lingua franca = 英語のみ。
  */
 function buildInviteEmailBody(consoleUrl: string): string {
-  const divider = "═══════════════════════════════════════════";
-  const sections: readonly string[] = [
-    // --- 日本語 ---
-    [
-      "▼ 日本語",
-      "",
-      "ようこそ TenkaCloud Battle / Challenge へ。",
-      "",
-      "テナント管理コンソールへサインインするための一時アカウントを発行しました。",
-      "",
-      `■ ユーザー名: ${COGNITO_USERNAME}`,
-      "",
-      `■ 一時パスワード: ${COGNITO_TEMP_PASSWORD}`,
-      "",
-      `■ サインイン URL: ${consoleUrl}`,
-      "",
-      "初回サインイン時に新しいパスワードを設定してください。 競技イベント (Event) の作成 / 競技者向け Portal URL の払い出しは、 テナント管理コンソールから操作できます。",
-    ].join("\n"),
-
-    // --- English ---
-    [
-      "▼ English",
-      "",
-      "Welcome to TenkaCloud Battle / Challenge.",
-      "",
-      "A temporary account has been issued so you can sign in to the Tenant Admin Console.",
-      "",
-      `■ Username: ${COGNITO_USERNAME}`,
-      "",
-      `■ Temporary password: ${COGNITO_TEMP_PASSWORD}`,
-      "",
-      `■ Sign-in URL: ${consoleUrl}`,
-      "",
-      "Set a new password on first sign-in. From the Tenant Admin Console you can create competition Events and hand out Participant Portal URLs.",
-    ].join("\n"),
-
-    // --- Español ---
-    [
-      "▼ Español",
-      "",
-      "Bienvenido a TenkaCloud Battle / Challenge.",
-      "",
-      "Se ha emitido una cuenta temporal para iniciar sesión en la consola de administración de inquilinos.",
-      "",
-      `■ Usuario: ${COGNITO_USERNAME}`,
-      "",
-      `■ Contraseña temporal: ${COGNITO_TEMP_PASSWORD}`,
-      "",
-      `■ URL de inicio de sesión: ${consoleUrl}`,
-      "",
-      "Establezca una nueva contraseña al iniciar sesión por primera vez. Desde la consola puede crear eventos de competición y emitir URLs del portal para los participantes.",
-    ].join("\n"),
-
-    // --- 中文 (简体) ---
-    [
-      "▼ 中文 (简体)",
-      "",
-      "欢迎使用 TenkaCloud Battle / Challenge。",
-      "",
-      "已为您颁发临时账号,用于登录租户管理控制台。",
-      "",
-      `■ 用户名: ${COGNITO_USERNAME}`,
-      "",
-      `■ 临时密码: ${COGNITO_TEMP_PASSWORD}`,
-      "",
-      `■ 登录地址: ${consoleUrl}`,
-      "",
-      "首次登录时请设置新密码。 在租户管理控制台中,您可以创建比赛活动 (Event) 并发放参赛者门户 URL。",
-    ].join("\n"),
-  ];
-
-  const footer = [
-    "If this email looks unfamiliar, please discard it.",
-    "本メールに心当たりがない場合は破棄してください。",
-    "Si este correo no le resulta familiar, descártelo.",
-    "如果您不认识此邮件,请忽略。",
+  return [
+    "Welcome to TenkaCloud Battle / Challenge.",
     "",
-    "-- TenkaCloud Operations / 運営 / Operaciones / 运营",
+    "A temporary account has been issued so you can sign in to the Tenant Admin Console.",
+    "",
+    `Username: ${COGNITO_USERNAME}`,
+    "",
+    `Temporary password: ${COGNITO_TEMP_PASSWORD}`,
+    "",
+    `Sign-in URL: ${consoleUrl}`,
+    "",
+    "Set a new password on first sign-in. From the Tenant Admin Console you can create competition Events and hand out Participant Portal URLs.",
+    "",
+    "If this email looks unfamiliar, please discard it.",
+    "",
+    "-- TenkaCloud Operations",
   ].join("\n");
-
-  return [...sections, footer].join(`\n\n${divider}\n\n`);
 }
 
 interface IdentityProviderProps {
@@ -193,16 +127,14 @@ export class IdentityProvider extends Construct {
   constructor(scope: Construct, id: string, props: IdentityProviderProps) {
     super(scope, id);
 
-    // #529: tenant admin 招待 — 4 言語の multilingual body (JA / EN / ES / ZH) を 1 通に並べる。
-    // Cognito は UserPool ごとに 1 template しか持てないため、locale 別配信は CustomMessage
-    // Lambda Trigger が要る (Phase 2)。MVP は 4 言語並列で各 operator が読める段落を選ぶ。
+    // Issue #903: tenant admin 招待は英語のみ (Control Plane #714 と同方針)。 旧 4 言語混在
+    // は Gmail で改行が collapse して読めない問題があった。 多言語化が必要なら CustomMessage
+    // Lambda Trigger + SES への移行 (= 別 issue) で対応する。
     this.tenantUserPool = new aws_cognito.UserPool(this, "tenantUserPool", {
       autoVerify: { email: true },
       accountRecovery: aws_cognito.AccountRecovery.EMAIL_ONLY,
       userInvitation: {
-        // 多言語 subject (= mail client preview で言語識別できるよう全部入り)
-        emailSubject:
-          "[TenkaCloud] テナント管理コンソール招待 / Tenant Admin Invitation / Invitación / 租户管理控制台邀请",
+        emailSubject: "[TenkaCloud] Tenant Admin Invitation",
         emailBody: buildInviteEmailBody(props.applicationAdminConsoleUrl),
         // Cognito CFn は `InviteMessageTemplate` 設定時に SMSMessage も整合性チェックする
         // (aws-cdk#30315 系の挙動)。SMS は使わないが空にできないため最短形を入れる。

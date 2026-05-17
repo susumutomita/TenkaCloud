@@ -10,7 +10,8 @@
     "menu": "Admin menu",
     "tenants": "Tenants",
     "tenants_new": "Create tenant",
-    "jobs": "Provisioning Jobs"
+    "jobs": "Provisioning Jobs",
+    "api_docs": "API Reference ↗"
   },
   "auth": {
     "sign_out": "Sign out"
@@ -38,6 +39,11 @@
     "progress_warning_suffix": "taking longer than expected",
     "col_active_deploys": "In-progress problem deploys",
     "col_failed_deploys": "Failed problem deploys",
+    "col_problem_deploys": "Problem deploys",
+    "col_problem_deploys_short": "Deploys",
+    "col_problem_deploys_explain": "Per-tenant aggregate of problem CFn stacks on competitor AWS accounts. Blue = in-progress, red = failed (CFn CREATE/UPDATE/DELETE error). Click a tenant to drill into individual deployments.",
+    "deploys_active": "{count} active",
+    "deploys_failed": "{count} failed",
     "col_app_console": "Application Console",
     "col_logs": "Logs",
     "col_actions": "Actions",

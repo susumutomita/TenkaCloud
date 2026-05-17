@@ -137,15 +137,28 @@ export function SamlSsoPage({ config }: { config: AppConfig }) {
     }
   };
 
+  // Issue #897: pooled tenant の Application Admin に SAML SSO 設定 page を出すのは責務違反
+  // (= 自 tenant の設定が同 UserPool 上の他 tenant に副作用)。 pooled では完全に hide し、
+  // PLATINUM (silo) tier への upgrade を促す。 UI 上で警告を出して \"気をつけて\" と punt
+  // する従来の挙動は廃止。 未注入 (undefined) は安全側 = pooled 扱い。
+  if (config.isolation !== "silo") {
+    return (
+      <SpaceBetween size="l">
+        <Header variant="h1" description={t("saml_sso.platinum_only_description")}>
+          {t("saml_sso.header")}
+        </Header>
+        <Alert type="info" header={t("saml_sso.platinum_only_header")}>
+          {t("saml_sso.platinum_only_body")}
+        </Alert>
+      </SpaceBetween>
+    );
+  }
+
   return (
     <SpaceBetween size="l">
       <Header variant="h1" description={t("saml_sso.description")}>
         {t("saml_sso.header")}
       </Header>
-
-      <Alert type="info" header={t("saml_sso.pooled_warning_header")}>
-        {t("saml_sso.pooled_warning_body")}
-      </Alert>
 
       {loadError && (
         <Alert
