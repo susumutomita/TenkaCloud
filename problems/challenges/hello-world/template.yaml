@@ -48,22 +48,21 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Issue #820 retraction / ADR-021: JAM/GameDay baseline = participant IAM
+              # Role MUST only touch its own problem's resources. Previous policy
+              # granted ssm:DescribeParameters / ssm:GetParametersByPath /
+              # cloudformation:ListStacks at Resource:*, leaking other tenants' SSM
+              # parameter names and CFn stack metadata via CLI. List-style IAM actions
+              # are no longer granted (AWS Console list view stays empty by design;
+              # the participant portal provides deep links to specific resources).
               - Sid: ReadOwnSsmParameters
                 Effect: Allow
                 Action:
                   - ssm:GetParameter
                   - ssm:GetParameters
-                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
-              # Issue #820: AWS Console SSM Parameter Store list view requires
-              # DescribeParameters / GetParametersByPath (list APIs cannot be
-              # resource-scoped, but the Console filters by path so the user only
-              # sees their own problem's parameters).
-              - Sid: ListSsmParametersForConsole
-                Effect: Allow
-                Action:
-                  - ssm:DescribeParameters
+                  # GetParametersByPath is resource-scopable via path-prefix ARN.
                   - ssm:GetParametersByPath
-                Resource: "*"
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
               - Sid: DescribeOwnStack
                 Effect: Allow
                 Action:
@@ -72,14 +71,6 @@ Resources:
                   - cloudformation:DescribeStackEvents
                   - cloudformation:GetTemplate
                 Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
-              # Issue #820: required for CFn Console stack list view
-              # (ListStacks cannot be resource-scoped). List-only, no impact on
-              # the solution path (reading the SSM Parameter value).
-              - Sid: ListCfnStacksForConsole
-                Effect: Allow
-                Action:
-                  - cloudformation:ListStacks
-                Resource: "*"
 
   HelloParameter:
     Type: AWS::SSM::Parameter
