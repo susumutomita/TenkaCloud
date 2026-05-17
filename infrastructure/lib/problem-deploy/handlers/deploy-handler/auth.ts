@@ -1,8 +1,35 @@
-import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
+import type {
+  APIGatewayProxyEventV2WithJWTAuthorizer,
+  APIGatewayProxyWithCognitoAuthorizerEvent,
+} from "aws-lambda";
 import type { Context } from "hono";
 
 type JwtClaimValue = string | number | boolean | string[];
 type JwtClaims = { readonly [name: string]: JwtClaimValue };
+
+/**
+ * tenant API は REST API + `CognitoUserPoolsAuthorizer`、 admin-insight などは HTTP API +
+ * JWT Authorizer。 claims が出る位置が違うので両方を見る。
+ *  - REST API + Cognito: `event.requestContext.authorizer.claims`
+ *  - HTTP API V2 + JWT:  `event.requestContext.authorizer.jwt.claims`
+ *
+ * Hono が乗っているのは aws-lambda adapter (= raw event は `c.env.event` で参照可)。 どちらの
+ * authorizer 形式でも handler が同じ claim を引けるようにする。
+ */
+type AuthorizerEvent =
+  | APIGatewayProxyEventV2WithJWTAuthorizer
+  | APIGatewayProxyWithCognitoAuthorizerEvent;
+
+export function extractClaims(c: Context): JwtClaims | undefined {
+  const event = (c.env as { event?: AuthorizerEvent } | undefined)?.event;
+  const authorizer = event?.requestContext?.authorizer;
+  if (!authorizer) return undefined;
+  const v2 = (authorizer as { jwt?: { claims?: unknown } }).jwt?.claims;
+  if (v2 && typeof v2 === "object") return v2 as JwtClaims;
+  const v1 = (authorizer as { claims?: unknown }).claims;
+  if (v1 && typeof v1 === "object") return v1 as JwtClaims;
+  return undefined;
+}
 
 export function extractTenantIdFromClaims(claims: JwtClaims | undefined): string | undefined {
   if (!claims) return undefined;
@@ -40,9 +67,7 @@ export class MissingTenantClaimError extends Error {
 }
 
 export function resolveTenantId(c: Context): string {
-  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
-  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
-  const fromJwt = extractTenantIdFromClaims(claims);
+  const fromJwt = extractTenantIdFromClaims(extractClaims(c));
   if (fromJwt) return fromJwt;
   const fromEnv = process.env.DEFAULT_TENANT_ID;
   if (fromEnv) return fromEnv;
@@ -55,9 +80,7 @@ export function resolveTenantId(c: Context): string {
  * `"unknown"` を返す。
  */
 export function resolveCognitoSub(c: Context): string {
-  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
-  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
-  const sub = claims?.sub;
+  const sub = extractClaims(c)?.sub;
   return typeof sub === "string" && sub.length > 0 ? sub : "unknown";
 }
 
@@ -102,9 +125,7 @@ export function extractUserRoleFromClaims(claims: JwtClaims | undefined): string
  * `custom:userRole` claim を取り出す。 JWT 不在経路 (= test) では env fallback。
  */
 export function resolveUserRole(c: Context): string | undefined {
-  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
-  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
-  const fromJwt = extractUserRoleFromClaims(claims);
+  const fromJwt = extractUserRoleFromClaims(extractClaims(c));
   if (fromJwt) return fromJwt;
   const fromEnv = process.env.DEFAULT_USER_ROLE;
   return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;

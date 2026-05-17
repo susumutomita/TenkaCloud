@@ -1,11 +1,13 @@
 import type { Context } from "hono";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  extractClaims,
   extractTenantIdFromClaims,
   extractUserRoleFromClaims,
   ForbiddenRoleError,
   MissingTenantClaimError,
   requireTenantAdmin,
+  resolveCognitoSub,
   resolveTenantId,
   resolveUserRole,
 } from "../../lib/problem-deploy/handlers/deploy-handler/auth";
@@ -163,5 +165,66 @@ describe("requireTenantAdmin (Issue #854)", () => {
       expect(forbidden.actualRole).toBe("TenantUser");
       expect(forbidden.requiredRoles).toEqual(["TenantAdmin"]);
     }
+  });
+});
+
+/* ---- REST API + CognitoUserPoolsAuthorizer の claim path ---- */
+// tenant API は `RestApi` + `CognitoUserPoolsAuthorizer`、 admin-insight 等は HTTP API +
+// JWT Authorizer。 REST API は `event.requestContext.authorizer.claims` (= .jwt. wrap 無し)、
+// HTTP API は `event.requestContext.authorizer.jwt.claims`。 auth helper は両方を見るべき。
+
+function buildRestCtx(claims?: Record<string, string>): Context {
+  return {
+    env: {
+      event: {
+        requestContext: claims ? { authorizer: { claims } } : {},
+      },
+    },
+  } as unknown as Context;
+}
+
+describe("extractClaims (REST API vs HTTP API authorizer 形式)", () => {
+  it("HTTP API V2 形式 (= authorizer.jwt.claims) を読むべき", () => {
+    const c = buildCtx({ "custom:tenantId": "tenant-http-api" });
+    expect(extractClaims(c)).toEqual({ "custom:tenantId": "tenant-http-api" });
+  });
+
+  it("REST API + Cognito 形式 (= authorizer.claims、 .jwt. wrap 無し) を読むべき", () => {
+    const c = buildRestCtx({ "custom:tenantId": "tenant-rest-api" });
+    expect(extractClaims(c)).toEqual({ "custom:tenantId": "tenant-rest-api" });
+  });
+
+  it("authorizer が無いなら undefined", () => {
+    const c = { env: { event: { requestContext: {} } } } as unknown as Context;
+    expect(extractClaims(c)).toBeUndefined();
+  });
+});
+
+describe("resolveTenantId / resolveUserRole / resolveCognitoSub (REST API path)", () => {
+  const originalTenant = process.env.DEFAULT_TENANT_ID;
+  const originalRole = process.env.DEFAULT_USER_ROLE;
+  afterEach(() => {
+    if (originalTenant === undefined) delete process.env.DEFAULT_TENANT_ID;
+    else process.env.DEFAULT_TENANT_ID = originalTenant;
+    if (originalRole === undefined) delete process.env.DEFAULT_USER_ROLE;
+    else process.env.DEFAULT_USER_ROLE = originalRole;
+  });
+
+  it("REST API claim path から tenantId を resolve するべき", () => {
+    delete process.env.DEFAULT_TENANT_ID;
+    const c = buildRestCtx({ "custom:tenantId": "tenant-rest-api" });
+    expect(resolveTenantId(c)).toBe("tenant-rest-api");
+  });
+
+  it("REST API claim path から userRole を resolve するべき (Issue #903 forbidden_role 修正)", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildRestCtx({ "custom:userRole": "TenantAdmin" });
+    expect(resolveUserRole(c)).toBe("TenantAdmin");
+    expect(() => requireTenantAdmin(c)).not.toThrow();
+  });
+
+  it("REST API claim path から Cognito sub を resolve するべき", () => {
+    const c = buildRestCtx({ sub: "user-rest-api" });
+    expect(resolveCognitoSub(c)).toBe("user-rest-api");
   });
 });
