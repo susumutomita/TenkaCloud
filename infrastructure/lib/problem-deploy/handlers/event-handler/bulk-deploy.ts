@@ -1,4 +1,5 @@
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   GetCommand,
   QueryCommand,
@@ -15,6 +16,7 @@ import {
 } from "../shared/competitor-account-lookup.js";
 import {
   type DeployCreateRequestedDetail,
+  EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../shared/events.js";
@@ -422,13 +424,41 @@ export async function bulkDeployEvent(
 
   const items = plan.map((p) => p.item);
 
-  // EventBridge PutEvents は 1 call 10 entries まで。chunk を Promise.all で並列発火。
-  // DDB row 作成後の publish 失敗は PENDING 放置にしない。失敗分だけ FAILED に倒せば
-  // operator が retryFailedOnly で復旧でき、duplicate deploy は既存 row として skip される。
+  // Issue #910 (#895 Phase 2.C.2.b): feature flag で publish 経路を分岐。
+  //   - true  → S3 PutObject + 1 BulkDeployCreateRequested → Distributed Map
+  //   - false → 旧 fan-out (= N×M 個の DeployCreateRequested を PutEvents、 default 維持)
+  // 切替の rollback safety:
+  //   - 旧 path は完全 untouched (= 切り戻し時 env を false にするだけ)
+  //   - 新 path で publish が失敗したら 既存 markPublishFailuresFailed で全 plan を
+  //     FAILED に倒して operator が retryFailedOnly で復旧する
+  const useDistributedMap =
+    shared.useBulkDistributedMap && shared.bulkDeployPayloadBucket.length > 0;
+
   const putChunks: Promise<PublishFailure[]>[] = [];
-  for (let i = 0; i < plan.length; i += PUT_EVENTS_BATCH) {
-    const chunk = plan.slice(i, i + PUT_EVENTS_BATCH);
-    putChunks.push(publishPlanChunk(shared, chunk));
+  if (useDistributedMap) {
+    // 新 path: deployment 配列を S3 に PutObject → 1 BulkDeployCreateRequested publish。
+    // batchId は eventId-tenantId-timestamp で衝突回避。 retry (= operator が同 event を
+    // 再叩き) でも別 batchId になり、 旧 batch の S3 object は lifecycle (7 日) で自動削除。
+    const batchId = ulid();
+    const details = plan.map(
+      (p) => JSON.parse(p.entry.Detail ?? "{}") as DeployCreateRequestedDetail,
+    );
+    putChunks.push(
+      publishViaDistributedMap(shared, {
+        batchId,
+        tenantId,
+        details,
+        eventId,
+      }),
+    );
+  } else {
+    // 旧 path: EventBridge PutEvents は 1 call 10 entries まで。chunk を Promise.all で並列発火。
+    // DDB row 作成後の publish 失敗は PENDING 放置にしない。失敗分だけ FAILED に倒せば
+    // operator が retryFailedOnly で復旧でき、duplicate deploy は既存 row として skip される。
+    for (let i = 0; i < plan.length; i += PUT_EVENTS_BATCH) {
+      const chunk = plan.slice(i, i + PUT_EVENTS_BATCH);
+      putChunks.push(publishPlanChunk(shared, chunk));
+    }
   }
 
   // Event status を DRAFT → DEPLOYING に倒す。operator が EventDetail の status badge で
@@ -481,6 +511,99 @@ export async function bulkDeployEvent(
 interface PublishFailure {
   readonly jobId: string;
   readonly reason: string;
+}
+
+/**
+ * Issue #910 (#895 Phase 2.C.2.b): Distributed Map 経路。 deployment 配列を S3 に PutObject
+ * (= 1 call で payload を整理)、 続いて 1 \`BulkDeployCreateRequested\` event を publish。
+ * Step Functions State Machine 側で \`S3JsonItemReader\` が読んで Distributed Map で N×M
+ * child execution を並列起動する (= PR #921 で構築済の foundation)。
+ *
+ * 失敗モード:
+ *   - S3 PutObject 失敗 → 全 plan を FAILED に倒す (= 旧 path の "1 event publish 失敗時
+ *     全件 FAILED" と同セマンティクス)
+ *   - PutEvents 失敗 → 同上
+ *   - State Machine 内 child 失敗 → 個別 deployment は child SM 内で FAILED に倒れる (=
+ *     既存 DeployCreateStateMachine の挙動)。 親 Map は ToleratedFailure 未設定で全 item
+ *     を最後まで試す
+ */
+async function publishViaDistributedMap(
+  shared: EventSharedResources,
+  args: {
+    readonly batchId: string;
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly details: readonly DeployCreateRequestedDetail[];
+  },
+): Promise<PublishFailure[]> {
+  const { batchId, tenantId, eventId, details } = args;
+  const s3Key = `batches/${batchId}/deployments.json`;
+  // S3 PutObject: payload = deployment 配列。 Distributed Map の S3JsonItemReader が
+  // この shape (= top-level array) を要求する。 Content-Type は明示しないと Step Functions
+  // 側で text/plain と誤認することがあるので application/json を強制。
+  try {
+    await shared.s3.send(
+      new PutObjectCommand({
+        Bucket: shared.bulkDeployPayloadBucket,
+        Key: s3Key,
+        Body: JSON.stringify(details),
+        ContentType: "application/json",
+        // 短命 + バケット自体に lifecycle (7 日) が掛かっているので追加 expires は不要。
+      }),
+    );
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return details.map((d) => ({
+      jobId: d.jobId,
+      reason: `S3 PutObject failed for bulk payload: ${reason}`,
+    }));
+  }
+
+  // 1 BulkDeployCreateRequested event を publish。 EventBridge Rule (PR #922 で wire 済) が
+  // BulkDeployCreateStateMachine を起動する。 親 1 execution = 1 batch、 child は item 数分。
+  try {
+    const out = await shared.events.send(
+      new PutEventsCommand({
+        Entries: [
+          {
+            EventBusName: shared.eventBusName,
+            Source: EVENT_SOURCE,
+            DetailType: EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED,
+            Detail: JSON.stringify({
+              batchId,
+              tenantId,
+              s3Bucket: shared.bulkDeployPayloadBucket,
+              s3Key,
+              itemCount: details.length,
+            }),
+            Resources: [`tenkacloud:bulk-deploy:${batchId}`, `tenkacloud:event:${eventId}`],
+          },
+        ],
+      }),
+    );
+    if ((out.FailedEntryCount ?? 0) > 0) {
+      const reason = out.Entries?.[0]?.ErrorMessage ?? "EventBridge PutEvents failed";
+      return details.map((d) => ({
+        jobId: d.jobId,
+        reason: `BulkDeployCreateRequested publish failed: ${reason}`,
+      }));
+    }
+    logDeployTrace("bulk-deploy.distributed_map.published", {
+      correlationId: batchId,
+      tenantId,
+      eventId,
+      itemCount: details.length,
+      s3Bucket: shared.bulkDeployPayloadBucket,
+      s3Key,
+    });
+    return [];
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return details.map((d) => ({
+      jobId: d.jobId,
+      reason: `BulkDeployCreateRequested publish failed: ${reason}`,
+    }));
+  }
 }
 
 async function publishPlanChunk(

@@ -761,4 +761,96 @@ describe("bulkDeployEvent", () => {
     );
     expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
+
+  // Issue #910 (#895 Phase 2.C.2.b): Distributed Map 経路の feature-flag 切替 test。
+  // useBulkDistributedMap=true + bulkDeployPayloadBucket 設定済のとき、 fan-out (= N×M
+  // 個の DeployCreateRequested publish) ではなく S3 PutObject + 1 BulkDeployCreateRequested
+  // publish に切替わるべき。
+  it("useBulkDistributedMap=true なら S3 PutObject + 1 BulkDeployCreateRequested に切替えるべき", async () => {
+    const s3Send = vi.fn().mockResolvedValue({});
+    const { shared, ddbSend, eventsSend } = buildShared({
+      s3: { send: s3Send } as unknown as EventSharedResources["s3"],
+      bulkDeployPayloadBucket: "test-bulk-bucket",
+      useBulkDistributedMap: true,
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    // S3 PutObject が exactly 1 回。 batches/<batchId>/deployments.json に書く。
+    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const s3Calls = s3Send.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is InstanceType<typeof PutObjectCommand> => c instanceof PutObjectCommand);
+    expect(s3Calls).toHaveLength(1);
+    expect(s3Calls[0]?.input.Bucket).toBe("test-bulk-bucket");
+    expect(s3Calls[0]?.input.Key).toMatch(/^batches\/[0-9A-Z]+\/deployments\.json$/);
+    expect(s3Calls[0]?.input.ContentType).toBe("application/json");
+    // S3 body は deployment 配列の JSON
+    const body = JSON.parse(String(s3Calls[0]?.input.Body ?? "[]"));
+    expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBeGreaterThan(0);
+    expect(body[0].jobId).toBeDefined();
+
+    // EventBridge は BulkDeployCreateRequested を **1 回だけ** publish (= fan-out 撤廃)。
+    const eventCalls = eventsSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is PutEventsCommand => c instanceof PutEventsCommand);
+    expect(eventCalls).toHaveLength(1);
+    expect(eventCalls[0]?.input.Entries?.[0]?.DetailType).toBe("BulkDeployCreateRequested");
+    const bulkDetail = JSON.parse(String(eventCalls[0]?.input.Entries?.[0]?.Detail ?? "{}"));
+    expect(bulkDetail.s3Bucket).toBe("test-bulk-bucket");
+    expect(bulkDetail.s3Key).toMatch(/^batches\/[0-9A-Z]+\/deployments\.json$/);
+    expect(bulkDetail.tenantId).toBe("tenant-acme");
+    expect(bulkDetail.itemCount).toBe(body.length);
+  });
+
+  it("useBulkDistributedMap=true でも S3 PutObject が失敗したら 全 plan を FAILED に倒すべき", async () => {
+    const s3Send = vi.fn().mockRejectedValue(new Error("S3 throttle"));
+    const { shared, ddbSend, eventsSend } = buildShared({
+      s3: { send: s3Send } as unknown as EventSharedResources["s3"],
+      bulkDeployPayloadBucket: "test-bulk-bucket",
+      useBulkDistributedMap: true,
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+
+    await expect(bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS)).rejects.toThrow(
+      /S3 PutObject failed|PutEvents failed/,
+    );
+    // EventBridge は呼ばれない (= S3 失敗で早期中止)
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  it("useBulkDistributedMap=false なら旧 fan-out 経路を維持すべき (= rollback safety)", async () => {
+    const s3Send = vi.fn().mockResolvedValue({});
+    const { shared, ddbSend, eventsSend } = buildShared({
+      s3: { send: s3Send } as unknown as EventSharedResources["s3"],
+      bulkDeployPayloadBucket: "test-bulk-bucket",
+      useBulkDistributedMap: false, // 明示的に旧 path を使う
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    // S3 は触らない (= 旧 path)
+    expect(s3Send).not.toHaveBeenCalled();
+    // EventBridge は fan-out で複数 DeployCreateRequested を publish (= problems 2 × team 1 = 2 events)
+    const eventCalls = eventsSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is PutEventsCommand => c instanceof PutEventsCommand);
+    expect(eventCalls.length).toBeGreaterThan(0);
+    // 旧 path は DeployCreateRequested を publish (= BulkDeployCreateRequested ではない)
+    expect(eventCalls[0]?.input.Entries?.[0]?.DetailType).toBe("DeployCreateRequested");
+  });
 });

@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { S3Client } from "@aws-sdk/client-s3";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
@@ -30,9 +31,22 @@ export interface EventSharedResources {
   readonly env: string;
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
+  readonly s3: S3Client;
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
+  /**
+   * Issue #910 (#895 Phase 2.C): bulk batch を Distributed Map 経路で実行するときの
+   * S3 payload bucket。 未配線 (= 旧 fan-out 経路) なら空文字。
+   */
+  readonly bulkDeployPayloadBucket: string;
+  /**
+   * Issue #910: Distributed Map 経路を使うかどうかの feature flag (= env 由来)。
+   * "true" のとき S3 PutObject + 1 BulkDeployCreateRequested publish に切替。
+   * それ以外 (= "" / "false" / 未設定) なら旧 fan-out (= N×M 個の DeployCreateRequested
+   * publish) を維持する。 段階移行で rollback 可能にする。
+   */
+  readonly useBulkDistributedMap: boolean;
 }
 
 export function buildEventSharedResources(): EventSharedResources {
@@ -46,8 +60,12 @@ export function buildEventSharedResources(): EventSharedResources {
     env: getEnv("DEPLOY_ENVIRONMENT"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
+    s3: new S3Client({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    bulkDeployPayloadBucket: process.env.BULK_DEPLOY_PAYLOAD_BUCKET ?? "",
+    useBulkDistributedMap:
+      (process.env.BULK_DEPLOY_VIA_DISTRIBUTED_MAP ?? "").toLowerCase() === "true",
   };
 }
 
