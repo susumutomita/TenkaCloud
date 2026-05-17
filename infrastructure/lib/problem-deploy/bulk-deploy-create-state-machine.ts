@@ -94,8 +94,21 @@ export class BulkDeployCreateStateMachine extends Construct {
 
     // ADR-001 §4: 失敗を error 扱いにせず最後まで試す。 ToleratedFailure* は未設定で
     // "any failure tolerated" になり、 親 execution は success で終わる。
+    //
+    // CDK 2.252 の DistributedMap は inconsistent API:
+    //   - 新 API: \`mapExecutionType\` (= DistributedMap props、 ASL 出力で使われる)
+    //   - 旧 API: \`itemProcessor(processor, { executionType })\` (= ASL に影響しないが
+    //     validation がここを check する。 無いと synth error \"You must specify an
+    //     execution type for the distributed Map workflow\")
+    // 両方指定すると CDK が \"ProcessorConfig.executionType is ignored\" warning を出すが、
+    // 旧 API を消すと validation で fail するため両方指定する。 warning は informational
+    // (= ASL 上の挙動は \`mapExecutionType\` が支配的、 実行に影響なし) で受け入れる。
+    // CDK の \`Annotations.acknowledgeWarning\` は 2.252 で この warning タイプを suppress
+    // しないため、 cosmetic な log noise として残る。 upstream で API 整合される将来 CDK
+    // upgrade 時に旧 API を撤廃する。
     const map = new DistributedMap(this, "DeployItemsMap", {
       maxConcurrency: MAX_CONCURRENCY,
+      mapExecutionType: StateMachineType.STANDARD,
       itemReader: new S3JsonItemReader({
         bucket: props.payloadBucket,
         // S3 Object Key は event detail の `$.detail.s3Key` から JSONPath で解決。
