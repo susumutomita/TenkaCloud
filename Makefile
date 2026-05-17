@@ -14,8 +14,8 @@ export JSII_DEPRECATED := quiet
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         check-http-status check-template-ascii check-template-security \
-        env-check synth check-synth diff bootstrap \
-        deploy deploy-control-plane deploy-bootstrap destroy \
+        env-check env-check-lite synth check-synth diff bootstrap \
+        deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
         ops-health
@@ -108,20 +108,45 @@ env-check:
 		echo "ERROR: SYSTEM_ADMIN_EMAIL が $(ENV_FILE) にありません"; exit 1; \
 	}
 
+# Lite mode は SBT ControlPlane を立てないため SYSTEM_ADMIN_EMAIL は必須にしない。
+# ただし Application Admin Console にログインする tenant admin の email は必須 (= deploy
+# 後に Cognito UserPool へ admin-create-user で 1 user を起こすため、 無いとログイン不能)。
+# 互換のため SYSTEM_ADMIN_EMAIL でも fallback 可。
+env-check-lite:
+	@[ -f "$(ENV_FILE)" ] || { \
+		echo "ERROR: $(ENV_FILE) が存在しません。"; \
+		echo "       cp infrastructure/environments/$(ENV)/.env.example infrastructure/environments/$(ENV)/.env"; \
+		echo "       してから AWS_ACCOUNT_ID / TENANT_ADMIN_EMAIL を埋めてください。"; \
+		exit 1; \
+	}
+	@if [ -z "$${TENANT_ADMIN_EMAIL}" ] && [ -z "$${SYSTEM_ADMIN_EMAIL}" ]; then \
+		echo "ERROR: TENANT_ADMIN_EMAIL が $(ENV_FILE) にありません (= Application Admin Console の初期ユーザー宛先)"; \
+		echo "       SYSTEM_ADMIN_EMAIL でも代用可能ですが、 Lite mode では TENANT_ADMIN_EMAIL を推奨します"; \
+		exit 1; \
+	fi
+
 synth:                build           ; $(CDK) synth
 diff:                 build           ; $(CDK) diff --all
 bootstrap:            env-check build ; $(CDK) bootstrap
-# ref の install.sh 準拠の orchestration:
+# Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
+# 大半の利用者は 1 人 1 大会の主催で multi-tenant 抽象 (= SBT ControlPlane / tenant pipeline /
+# tenant mapping table) を必要としない。 Lite mode は Application Plane (= Tenant Admin Console)
+# と Participant Portal を `tenantId="local"` 固定で立てる (ADR-016)。
+#   - Lite で deploy: tenkacloud-lite + tenkacloud-lite-problem-deploy
+#   - SaaS が必要なら `make deploy-saas` (= 旧 default、 3-phase orchestration)
+deploy:               env-check-lite  ; bun run scripts/tenkacloud-lite.ts up
+# ref の install.sh 準拠の orchestration (= SaaS mode、 SBT ControlPlane を立てる):
 #   1. S3 source bucket (serverless-saas-${ACCOUNT_ID}-${REGION}) を作成
 #   2. infrastructure/ を source.zip にして S3 に upload
 #   3. cdk bootstrap + cdk deploy --all (ControlPlane + Bootstrap + Tenant-pooled)
 #   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
-deploy:               env-check
+deploy-saas:          env-check
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
 # stack 単位の deploy (直接呼ぶ時用。source.zip + CDK_PARAM_COMMIT_ID を事前 export しておく前提)
 deploy-control-plane: env-check build ; $(CDK) deploy tenkacloud-control-plane $(APPROVAL)
 deploy-bootstrap:     env-check build ; $(CDK) deploy tenkacloud-bootstrap $(APPROVAL)
-destroy:              env-check       ; bash scripts/cleanup.sh
+destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
+destroy-saas:         env-check       ; bash scripts/cleanup.sh
 
 # ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。

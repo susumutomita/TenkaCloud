@@ -185,4 +185,162 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(text).toContain("CREATE_COMPLETE");
     expect(text).toContain("UPDATE_IN_PROGRESS");
   });
+
+  // Issue #955 follow-up (= PR-959 CodeRabbit / user feedback): Lite mode は SBT を
+  // 持たないため tenant admin user を自前で起こす必要がある (= 無いと console にログイン
+  // できない)。 cmdUp の post-deploy 段階で describe-user-pool-domain → admin-create-user
+  // を idempotent に呼ぶ。
+  describe("up post-deploy: tenant admin user 作成 (#955 follow-up)", () => {
+    const originalEmail = process.env.TENANT_ADMIN_EMAIL;
+    const originalSystem = process.env.SYSTEM_ADMIN_EMAIL;
+
+    function restoreEnv(): void {
+      if (originalEmail === undefined) {
+        delete process.env.TENANT_ADMIN_EMAIL;
+      } else {
+        process.env.TENANT_ADMIN_EMAIL = originalEmail;
+      }
+      if (originalSystem === undefined) {
+        delete process.env.SYSTEM_ADMIN_EMAIL;
+      } else {
+        process.env.SYSTEM_ADMIN_EMAIL = originalSystem;
+      }
+    }
+
+    it("TENANT_ADMIN_EMAIL が空でも deploy は通り、 admin-create-user は呼ばないべき", async () => {
+      delete process.env.TENANT_ADMIN_EMAIL;
+      delete process.env.SYSTEM_ADMIN_EMAIL;
+      try {
+        const { io, calls, stderr } = buildIO({
+          inheritExitCode: 0,
+          capture: () => ({ code: 0, stdout: "https://abc.cloudfront.net", stderr: "" }),
+        });
+        const code = await main(["up"], io);
+        expect(code).toBe(0);
+        expect(stderr.join("")).toContain("TENANT_ADMIN_EMAIL");
+        const createCall = calls.find((c) => c.args.includes("admin-create-user"));
+        expect(createCall).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it("TENANT_ADMIN_EMAIL が設定されているとき、 describe-user-pool-domain → admin-get-user → admin-create-user の順で呼ぶべき", async () => {
+      process.env.TENANT_ADMIN_EMAIL = "admin@example.com";
+      try {
+        let capturedDomain: string | undefined;
+        const { io, calls } = buildIO({
+          inheritExitCode: 0,
+          capture: (_cmd, args) => {
+            if (args.includes("describe-stacks")) {
+              if (args.join(" ").includes("CognitoDomainUrl")) {
+                return {
+                  code: 0,
+                  stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com\n",
+                  stderr: "",
+                };
+              }
+              return { code: 0, stdout: "https://example.cloudfront.net\n", stderr: "" };
+            }
+            if (args.includes("describe-user-pool-domain")) {
+              capturedDomain = args[args.indexOf("--domain") + 1];
+              return { code: 0, stdout: "ap-northeast-1_AbCdEf\n", stderr: "" };
+            }
+            if (args.includes("admin-get-user")) {
+              // 未存在 → admin-create-user に進む
+              return { code: 1, stdout: "", stderr: "UserNotFoundException" };
+            }
+            if (args.includes("admin-create-user")) {
+              return { code: 0, stdout: "{}", stderr: "" };
+            }
+            return { code: 0, stdout: "", stderr: "" };
+          },
+        });
+        const code = await main(["up"], io);
+        expect(code).toBe(0);
+        expect(capturedDomain).toBe("tc-app-prefix");
+        const createCall = calls.find((c) => c.args.includes("admin-create-user"));
+        expect(createCall).toBeDefined();
+        const createArgs = createCall?.args.join(" ") ?? "";
+        expect(createArgs).toContain("admin@example.com");
+        expect(createArgs).toContain("Name=custom:userRole,Value=TenantAdmin");
+        expect(createArgs).toContain("--user-pool-id");
+        expect(createArgs).toContain("ap-northeast-1_AbCdEf");
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it("admin-get-user が成功すれば既存 user として admin-create-user を呼ばないべき (idempotent)", async () => {
+      process.env.TENANT_ADMIN_EMAIL = "admin@example.com";
+      try {
+        const { io, calls } = buildIO({
+          inheritExitCode: 0,
+          capture: (_cmd, args) => {
+            if (args.includes("describe-stacks") && args.join(" ").includes("CognitoDomainUrl")) {
+              return {
+                code: 0,
+                stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com",
+                stderr: "",
+              };
+            }
+            if (args.includes("describe-stacks")) {
+              return { code: 0, stdout: "https://example.cloudfront.net", stderr: "" };
+            }
+            if (args.includes("describe-user-pool-domain")) {
+              return { code: 0, stdout: "ap-northeast-1_AbCdEf", stderr: "" };
+            }
+            if (args.includes("admin-get-user")) {
+              // 既存 user
+              return { code: 0, stdout: '{"Username":"admin@example.com"}', stderr: "" };
+            }
+            return { code: 0, stdout: "", stderr: "" };
+          },
+        });
+        await main(["up"], io);
+        const createCall = calls.find((c) => c.args.includes("admin-create-user"));
+        expect(createCall).toBeUndefined();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it("TENANT_ADMIN_EMAIL 未設定でも SYSTEM_ADMIN_EMAIL があれば fallback すべき", async () => {
+      delete process.env.TENANT_ADMIN_EMAIL;
+      process.env.SYSTEM_ADMIN_EMAIL = "system@example.com";
+      try {
+        const { io, calls } = buildIO({
+          inheritExitCode: 0,
+          capture: (_cmd, args) => {
+            if (args.includes("describe-stacks") && args.join(" ").includes("CognitoDomainUrl")) {
+              return {
+                code: 0,
+                stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com",
+                stderr: "",
+              };
+            }
+            if (args.includes("describe-stacks")) {
+              return { code: 0, stdout: "https://example.cloudfront.net", stderr: "" };
+            }
+            if (args.includes("describe-user-pool-domain")) {
+              return { code: 0, stdout: "ap-northeast-1_AbCdEf", stderr: "" };
+            }
+            if (args.includes("admin-get-user")) {
+              return { code: 1, stdout: "", stderr: "UserNotFoundException" };
+            }
+            if (args.includes("admin-create-user")) {
+              return { code: 0, stdout: "{}", stderr: "" };
+            }
+            return { code: 0, stdout: "", stderr: "" };
+          },
+        });
+        await main(["up"], io);
+        const createCall = calls.find((c) => c.args.includes("admin-create-user"));
+        expect(createCall).toBeDefined();
+        expect(createCall?.args.join(" ")).toContain("system@example.com");
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
 });

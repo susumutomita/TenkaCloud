@@ -34,9 +34,9 @@ Battle (リアルタイム対戦) と Challenge (個別演習) の問題を、 �
 
 ## クイックスタート
 
-### Lite mode (5 分、 1 tenant)
+### デフォルト: Lite mode (5 分、 1 tenant) — `make deploy`
 
-OSS contributor が SBT の Control Plane なしで TenkaCloud を試したい場合の手順は次の通り。
+ほとんどの運営者は 1 大会 1 主催で multi-tenant SaaS の抽象 (= ControlPlane / tenant pipeline / tenant mapping) を必要としない。 Issue #955 で `make deploy` のデフォルトを Lite に切替えたため、 SBT Control Plane なしで Application Admin Console + Participant Portal が立ち上がる。
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -44,12 +44,12 @@ cd TenkaCloud
 make install
 cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
-# SYSTEM_ADMIN_EMAIL + AWS_ACCOUNT_ID を編集
+# AWS_ACCOUNT_ID (+ ap-northeast-1 以外を使うなら AWS_REGION) を編集
 
-make lite-up    # cdk deploy 2 stack (初回 ~10 分)
+make deploy   # = make lite-up — cdk deploy 2 stack (初回 ~10 分)
 ```
 
-`make lite-up` で得られるものは次の通り。
+得られるものは次の通り。
 
 - **Application Admin Console** — Tenant Admin UI (CloudFront)
 - **Participant Portal** — 競技者 UI (CloudFront)
@@ -60,18 +60,19 @@ make lite-up    # cdk deploy 2 stack (初回 ~10 分)
 撤収は次のコマンドで実施する。
 
 ```bash
-make lite-down
+make destroy   # = make lite-down
 ```
 
-### Full mode (マルチテナント SaaS)
+### Opt-in: SaaS mode (マルチテナント) — `make deploy-saas`
 
 複数 tenant / pooled tier / System Admin 招待を含む本格運用の起動コマンド。
 
 ```bash
-make deploy   # 3-phase install.sh: backend → admin console → callback CORS
+make deploy-saas    # 3-phase install.sh: backend → admin console → callback CORS
+make destroy-saas   # teardown
 ```
 
-`scripts/install.sh` が SBT の 3-phase deploy を担当 (Control Plane → admin console hosting → callback CORS 更新)。
+`scripts/install.sh` が SBT の 3-phase deploy を担当 (Control Plane → admin console hosting → callback CORS 更新)。 env file に `SYSTEM_ADMIN_EMAIL` が必須。
 
 ## アーキテクチャ
 

@@ -113,6 +113,24 @@ function printHelp(io: CliIO): void {
 }
 
 async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
+  // Issue #955 follow-up: Lite mode は SBT ControlPlane と provision-tenant.sh を持たないため、
+  // tenant admin user を別経路で作る必要がある。 deploy 後に Cognito UserPool ID を
+  // domain output から逆引き → admin-create-user 1 回で済ませる (idempotent)。
+  // TENANT_ADMIN_EMAIL は env-check-lite で必須化されているので process.env から拾える。
+  // TENANT_ADMIN_EMAIL を優先、 未設定なら SYSTEM_ADMIN_EMAIL に fallback (= SaaS mode と
+  // env 共用したい運用向け)。 どちらも空なら警告して deploy 自体は続行する。
+  const tenantAdminEmail = (
+    process.env.TENANT_ADMIN_EMAIL ??
+    process.env.SYSTEM_ADMIN_EMAIL ??
+    ""
+  ).trim();
+  if (!tenantAdminEmail) {
+    io.stderr(
+      "[lite] TENANT_ADMIN_EMAIL / SYSTEM_ADMIN_EMAIL is not set. Set it in infrastructure/environments/<env>/.env\n" +
+        "[lite] (deploy はしますが、 完了後に手動で admin-create-user する必要があります)\n",
+    );
+  }
+
   io.stdout("[lite] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n");
   const code = await io.spawnInherit("bunx", [
     "cdk",
@@ -140,6 +158,96 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     "  Participant Portal:        ",
     io,
   );
+
+  // Tenant Admin user を Cognito に作る (= 初回 sign-in のため)。
+  if (tenantAdminEmail) {
+    const created = await ensureTenantAdminUser(tenantAdminEmail, io);
+    if (created !== 0) {
+      io.stderr(
+        "[lite] admin-create-user failed. CognitoDomainUrl output が見えない / IAM 権限不足が原因の可能性があります。\n" +
+          "[lite] 手動で以下を実行してください:\n" +
+          "[lite]   aws cognito-idp list-user-pools --max-results 60\n" +
+          "[lite]   aws cognito-idp admin-create-user --user-pool-id <id> --username <email> --user-attributes Name=email,Value=<email> Name=email_verified,Value=True --desired-delivery-mediums EMAIL\n",
+      );
+    }
+  }
+  return 0;
+}
+
+/**
+ * Lite mode の Tenant Admin user を Cognito に登録する。 idempotent:
+ *   1. CognitoDomainUrl output から domain prefix を抜き出す
+ *   2. describe-user-pool-domain で UserPool ID を解決
+ *   3. admin-get-user で重複 check → 既存なら skip、 無ければ admin-create-user
+ *
+ * 失敗時は 0 以外を返し、 呼び出し側で手動手順を案内する。
+ */
+async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> {
+  const domainUrl = await readStackOutput(LITE_STACK_NAMES.app, "CognitoDomainUrl", io);
+  if (!domainUrl) {
+    io.stderr("[lite] CognitoDomainUrl output not found\n");
+    return 1;
+  }
+  // `https://<prefix>.auth.<region>.amazoncognito.com` から prefix を抽出。
+  const match = domainUrl.match(/^https?:\/\/([^.]+)\.auth\./);
+  if (!match || !match[1]) {
+    io.stderr(`[lite] failed to parse CognitoDomainUrl: ${domainUrl}\n`);
+    return 1;
+  }
+  const domainPrefix = match[1];
+
+  const describeOut = await io.spawnCapture("aws", [
+    "cognito-idp",
+    "describe-user-pool-domain",
+    "--domain",
+    domainPrefix,
+    "--query",
+    "DomainDescription.UserPoolId",
+    "--output",
+    "text",
+  ]);
+  const userPoolId = describeOut.stdout.trim();
+  if (describeOut.code !== 0 || !userPoolId || userPoolId === "None") {
+    io.stderr(`[lite] describe-user-pool-domain failed: ${describeOut.stderr}\n`);
+    return describeOut.code === 0 ? 1 : describeOut.code;
+  }
+
+  // 既存 user の有無を check (= 重複作成で UsernameExistsException にならないよう)。
+  const checkOut = await io.spawnCapture("aws", [
+    "cognito-idp",
+    "admin-get-user",
+    "--user-pool-id",
+    userPoolId,
+    "--username",
+    email,
+  ]);
+  if (checkOut.code === 0) {
+    io.stdout(`\n[lite] Tenant Admin already exists: ${email} (skip)\n`);
+    return 0;
+  }
+
+  io.stdout(`\n[lite] creating Tenant Admin: ${email}\n`);
+  const createOut = await io.spawnCapture("aws", [
+    "cognito-idp",
+    "admin-create-user",
+    "--user-pool-id",
+    userPoolId,
+    "--username",
+    email,
+    "--user-attributes",
+    `Name=email,Value=${email}`,
+    "Name=email_verified,Value=True",
+    "Name=custom:userRole,Value=TenantAdmin",
+    "Name=custom:tenantId,Value=local",
+    "Name=custom:tenantName,Value=TenkaCloud Lite",
+    "--desired-delivery-mediums",
+    "EMAIL",
+  ]);
+  if (createOut.code !== 0) {
+    io.stderr(`[lite] admin-create-user failed: ${createOut.stderr}\n`);
+    return createOut.code === 0 ? 1 : createOut.code;
+  }
+  io.stdout(`[lite] invite email sent to ${email}\n`);
   return 0;
 }
 
