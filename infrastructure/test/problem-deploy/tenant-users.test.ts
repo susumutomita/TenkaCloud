@@ -80,13 +80,40 @@ describe("listUsersByTenant", () => {
   });
   afterEach(() => vi.clearAllMocks());
 
-  it("ListUsersCommand に custom:tenantId filter を渡すべき", async () => {
+  it("ListUsersCommand は Filter を **渡さない** べき (= Cognito 仕様: custom:* は filter 不可)", async () => {
     mock.client.send.mockResolvedValueOnce({ Users: [] });
     await listUsersByTenant(mock as CognitoUserClientDeps, "tenant-acme");
     const cmd = mock.client.send.mock.calls[0]?.[0] as ListUsersCommand;
     expect(cmd).toBeInstanceOf(ListUsersCommand);
-    expect(cmd.input.Filter).toBe('"custom:tenantId" = "tenant-acme"');
+    expect(cmd.input.Filter).toBeUndefined();
     expect(cmd.input.UserPoolId).toBe(mock.userPoolId);
+  });
+
+  it("Lambda 側で custom:tenantId が一致する user だけを返すべき (= pooled tier の越境防止)", async () => {
+    mock.client.send.mockResolvedValueOnce({
+      Users: [
+        {
+          Username: "alice@example.com",
+          Enabled: true,
+          UserStatus: "CONFIRMED",
+          Attributes: [{ Name: "custom:tenantId", Value: "tenant-acme" }],
+        },
+        {
+          Username: "bob@example.com",
+          Enabled: true,
+          UserStatus: "CONFIRMED",
+          Attributes: [{ Name: "custom:tenantId", Value: "tenant-other" }],
+        },
+        {
+          Username: "ghost@example.com",
+          Enabled: true,
+          UserStatus: "CONFIRMED",
+          Attributes: [],
+        },
+      ],
+    });
+    const out = await listUsersByTenant(mock as CognitoUserClientDeps, "tenant-acme");
+    expect(out.map((u) => u.username)).toEqual(["alice@example.com"]);
   });
 
   it("Cognito の Users[] を CognitoUserSummary[] に整形して返すべき", async () => {
