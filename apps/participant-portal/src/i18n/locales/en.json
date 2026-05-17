@@ -77,6 +77,10 @@
     "empty_challenge": "No problems in the Challenge category",
     "empty_hint_all": "This team has no deployed problems. Please contact the operator.",
     "empty_hint_filtered": "Check other categories under the \"All\" tab.",
+    "status_filter_label": "Filter by status",
+    "status_filter_all": "All",
+    "status_filter_unsolved": "Unsolved",
+    "status_filter_cleared": "Cleared",
     "status_label": {
       "PENDING": "Preparing",
       "IN_PROGRESS": "Starting…",

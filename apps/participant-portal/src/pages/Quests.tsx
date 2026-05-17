@@ -1,7 +1,6 @@
 import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
-import Button from "@cloudscape-design/components/button";
 import Cards from "@cloudscape-design/components/cards";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
@@ -11,39 +10,19 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
+import type * as React from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  getConsoleSigninUrl,
-  type ParticipantProblemView,
-  type ParticipantScoringInfo,
-  PortalAuthError,
-} from "../api/portal-client";
-import { useAuth } from "../auth/AuthProvider";
+import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { findProblemMetadata, type ProblemCatalogEntry } from "../data/problems";
 import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 
 /**
- * Issue #821 / #822: 競技者向けの 「解答状態」 (= 解けた / 解けてない) を可視化する。
- *
- * 旧 UI は `DeploymentStatus` (PENDING / IN_PROGRESS / COMPLETE / FAILED) を表示
- * していたが、 これは 「deploy 進行状態」 であり競技者にとっては無関係。 競技者は
- * 「flag 提出が成功したか」 / 「Battle が進行中か」 が知りたい。
- *
- * Challenge (flag):
- *   - deploy 失敗 → \"デプロイ失敗\" (error)
- *   - deploy 中    → \"準備中\" (in-progress)
- *   - 未提出      → \"未解答\" (pending)
- *   - 提出済 (正解) → \"クリア\" (success) + 獲得 pt を score 列で表示
- *
- * Battle (uptime / phased-polling / attack-detection):
- *   - deploy 失敗 → \"デプロイ失敗\" (error)
- *   - deploy 中    → \"準備中\" (in-progress)
- *   - それ以外    → \"挑戦中\" (info) — Battle は 「解く」 ものでなく継続採点
- *
- * `applicationStatus.overall` は別 section で詳細化 (= 既存挙動を維持)。
+ * 競技者向けの 「解答状態」 (= 解けた / 解けてない)。 #821 / #822 で導入、 issue #34 で
+ * 一覧カードの右上 icon に圧縮 (= ラベル無し、 視線を奪わない)。
  */
 function renderSubmissionState(problem: ParticipantProblemView): {
   readonly type: StatusIndicatorProps.Type;
@@ -54,22 +33,55 @@ function renderSubmissionState(problem: ParticipantProblemView): {
   if (problem.status === "PENDING" || problem.status === "IN_PROGRESS") {
     return { type: "in-progress", label: "準備中" };
   }
-  // status === COMPLETE / DELETING
   if (problem.scoring?.kind === "flag") {
     if (problem.scoring.flagSubmitted) return { type: "success", label: "クリア" };
     return { type: "pending", label: "未解答" };
   }
-  // Battle 系 (= uptime / phased-polling / attack-detection)。 採点は別 section で表示。
   return { type: "info", label: "挑戦中" };
 }
 
 type CategoryFilter = "all" | "battle" | "challenge";
+type StatusFilter = "all" | "unsolved" | "cleared";
 
 function categoryBadge(scoring: ParticipantScoringInfo | undefined, uncategorizedLabel: string) {
   const cat = categoryOf(scoring);
   if (cat === "battle") return <Badge color="red">Battle</Badge>;
   if (cat === "challenge") return <Badge color="blue">Challenge</Badge>;
   return <Badge color="grey">{uncategorizedLabel}</Badge>;
+}
+
+/**
+ * issue #4 (audit table): 一覧カードに見せるのは **タイトル / 難易度 / カテゴリ + 解答状態 icon** だけ。
+ * Score / Region / NamePrefix / ParticipantViewerRoleArn / ParameterName / AWS Console ボタンは
+ * 詳細画面に集約。 大会の戦略決定はカードを並べて 「どれをやるか」 を決める用途なので、 過剰な
+ * 詳細を出すと逆に「どれを見ればよいかわからない」 を生む (= image #35 の指摘)。
+ */
+const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
+  1: "入門",
+  2: "初級",
+  3: "中級",
+  4: "上級",
+  5: "エキスパート",
+};
+
+function difficultyBadge(problemId: string): React.ReactElement | null {
+  const meta = findProblemMetadata(problemId);
+  if (!meta) return null;
+  return <Badge color="grey">難易度: {DIFFICULTY_LABEL[meta.difficulty]}</Badge>;
+}
+
+/**
+ * issue #9: 解答状態 filter chip。 「未解答」 を default に切り替えると残タスクが俯瞰できる。
+ * Challenge (flag) は flagSubmitted で判定、 Battle は採点が継続するので「未解答 / クリア済」 軸では
+ * 分類困難 → "unsolved" filter のとき Battle は **常に含める** (= 取りこぼし防止)。
+ */
+function matchesStatusFilter(problem: ParticipantProblemView, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  const submitted = problem.scoring?.kind === "flag" && problem.scoring.flagSubmitted === true;
+  if (filter === "cleared") return submitted;
+  // filter === "unsolved": Challenge 未提出 OR Battle (= 継続採点なので残タスク扱い)
+  if (problem.scoring?.kind === "flag") return !submitted;
+  return true;
 }
 
 /**
@@ -83,61 +95,38 @@ function categoryBadge(scoring: ParticipantScoringInfo | undefined, uncategorize
 export function QuestsPage({ config }: { config: AppConfig }) {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
-  const auth = useAuth();
   const t = useT();
   const isBackend = config.mode === "backend";
   const [filter, setFilter] = useState<CategoryFilter>("all");
-  // #551: 問題ごとの「AWS Console を開く」 button 進行中フラグ。1 card につき 1 click だけ
-  // signin URL 発行 API を叩き window.open するための loading state (jobId → boolean)。
-  const [consoleInFlight, setConsoleInFlight] = useState<Record<string, boolean>>({});
-  const [consoleError, setConsoleError] = useState<string | null>(null);
-
-  const openAwsConsole = async (jobId: string) => {
-    if (consoleInFlight[jobId]) return;
-    const sessionToken = auth.session?.sessionToken ?? null;
-    if (!sessionToken) {
-      setConsoleError(t("quests.session_expired"));
-      return;
-    }
-    setConsoleInFlight((prev) => ({ ...prev, [jobId]: true }));
-    setConsoleError(null);
-    try {
-      const url = await getConsoleSigninUrl(config.apiBaseUrl, sessionToken, jobId);
-      // 別 tab で開く (= popup 系 blocker は同期 click 直下なら基本通る)。
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      if (err instanceof PortalAuthError) {
-        auth.logout();
-        return;
-      }
-      setConsoleError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setConsoleInFlight((prev) => ({ ...prev, [jobId]: false }));
-    }
-  };
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const counts = useMemo(() => {
     const all = view?.problems ?? [];
+    const unsolved = all.filter((p) => matchesStatusFilter(p, "unsolved")).length;
+    const cleared = all.filter((p) => matchesStatusFilter(p, "cleared")).length;
     return {
       all: all.length,
       battle: all.filter((p) => categoryOf(p.scoring) === "battle").length,
       challenge: all.filter((p) => categoryOf(p.scoring) === "challenge").length,
+      unsolved,
+      cleared,
     };
   }, [view]);
 
   const filteredItems = useMemo(() => {
     const all = view?.problems ?? [];
-    if (filter === "all") return [...all];
-    return all.filter((p) => categoryOf(p.scoring) === filter);
-  }, [view, filter]);
+    return all.filter(
+      (p) =>
+        (filter === "all" || categoryOf(p.scoring) === filter) &&
+        matchesStatusFilter(p, statusFilter),
+    );
+  }, [view, filter, statusFilter]);
 
   const emptyMessage =
-    filter === "all"
+    filter === "all" && statusFilter === "all"
       ? t("quests.empty_all")
-      : filter === "battle"
-        ? t("quests.empty_battle")
-        : t("quests.empty_challenge");
-  const emptyHint = filter === "all" ? t("quests.empty_hint_all") : t("quests.empty_hint_filtered");
+      : t("quests.empty_hint_filtered");
+  const emptyHint = t("quests.empty_hint_filtered");
 
   return (
     <SpaceBetween size="l">
@@ -149,16 +138,6 @@ export function QuestsPage({ config }: { config: AppConfig }) {
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
-        </Alert>
-      )}
-      {consoleError && (
-        <Alert
-          type="error"
-          dismissible
-          onDismiss={() => setConsoleError(null)}
-          header={t("quests.console_failed_header")}
-        >
-          {consoleError}
         </Alert>
       )}
 
@@ -173,6 +152,18 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         label={t("quests.filter_label")}
       />
 
+      {/* issue #9: 解答状態 filter */}
+      <SegmentedControl
+        selectedId={statusFilter}
+        onChange={({ detail }) => setStatusFilter(detail.selectedId as StatusFilter)}
+        options={[
+          { id: "all", text: `${t("quests.status_filter_all")} (${counts.all})` },
+          { id: "unsolved", text: `${t("quests.status_filter_unsolved")} (${counts.unsolved})` },
+          { id: "cleared", text: `${t("quests.status_filter_cleared")} (${counts.cleared})` },
+        ]}
+        label={t("quests.status_filter_label")}
+      />
+
       <Cards<ParticipantProblemView>
         items={filteredItems}
         loading={isBackend && !view && !error}
@@ -180,85 +171,30 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         cardDefinition={{
           // jobId (ULID) を URL key にする。problemId (slug) は metadata 上 unique 前提だが、
           // 将来 problemId を意図せず重複登録された場合の link 衝突を回避する防御。
-          header: (problem) => (
-            <SpaceBetween size="xs" direction="horizontal" alignItems="center">
-              <Link
-                fontSize="heading-m"
-                href={`/problems/${encodeURIComponent(problem.jobId)}`}
-                onFollow={(e) => {
-                  e.preventDefault();
-                  navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
-                }}
-              >
-                <code>{problem.problemId}</code>
-              </Link>
-              {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
-            </SpaceBetween>
-          ),
-          sections: [
-            {
-              // Issue #821 / #822: 「deploy 進行状況」 ではなく 「解答状態」 を出す
-              // (= COMPLETE / FAILED 等の internal deploy term を競技者に見せない)。
-              id: "submission",
-              header: "解答状態",
-              content: (problem) => {
-                const s = renderSubmissionState(problem);
-                return <StatusIndicator type={s.type}>{s.label}</StatusIndicator>;
-              },
-            },
-            {
-              id: "score",
-              header: t("quests.score_header"),
-              content: (problem) => (
-                <Box variant="strong" color="text-status-success">
-                  {problem.score} pt
-                </Box>
-              ),
-            },
-            {
-              id: "region",
-              header: t("quests.region_header"),
-              content: (problem) => problem.region,
-            },
-            {
-              id: "outputs",
-              header: t("quests.outputs_header"),
-              content: (problem) => {
-                const entries = Object.entries(problem.stackOutputs);
-                if (entries.length === 0) {
-                  return (
-                    <Box variant="small" color="text-status-inactive">
-                      {t("quests.outputs_pending")}
-                    </Box>
-                  );
-                }
-                return (
-                  <SpaceBetween size="xs">
-                    {entries.map(([label, value]) => (
-                      <Box key={label}>
-                        <Box variant="awsui-key-label">{label}</Box>
-                        <a href={value} target="_blank" rel="noreferrer noopener">
-                          <code>{value}</code>
-                        </a>
-                      </Box>
-                    ))}
-                    {/* #551: 問題詳細から 1 click で competitor AWS account の Console を開く。
-                     *   backend は POST /portal/me/console-signin-url で短命の federation URL を
-                     *   発行 (= /tools/sso の 2-step フローを 1-step に短縮)。*/}
-                    <Button
-                      iconName="external"
-                      iconAlign="right"
-                      disabled={!isBackend}
-                      loading={consoleInFlight[problem.jobId] === true}
-                      onClick={() => void openAwsConsole(problem.jobId)}
-                    >
-                      {t("quests.open_console")}
-                    </Button>
-                  </SpaceBetween>
-                );
-              },
-            },
-          ],
+          //
+          // issue #4 (audit): カードは **タイトル + 難易度 + カテゴリ + 解答状態 icon** だけ。
+          // Score / Region / NamePrefix / IAM ARN / ParameterName / Console ボタン は 詳細画面に集約。
+          header: (problem) => {
+            const s = renderSubmissionState(problem);
+            return (
+              <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+                <Link
+                  fontSize="heading-m"
+                  href={`/problems/${encodeURIComponent(problem.jobId)}`}
+                  onFollow={(e) => {
+                    e.preventDefault();
+                    navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
+                  }}
+                >
+                  <code>{problem.problemId}</code>
+                </Link>
+                {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
+                {difficultyBadge(problem.problemId)}
+                <StatusIndicator type={s.type}>{s.label}</StatusIndicator>
+              </SpaceBetween>
+            );
+          },
+          sections: [],
         }}
         cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
         empty={
