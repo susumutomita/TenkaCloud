@@ -75,22 +75,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
   );
 
-  const adminConsoleInsightStack = new AdminConsoleInsightStack(
-    app,
-    "tenkacloud-admin-console-insight",
-    {
-      ...config.stackEnv,
-      cognitoUserPool: controlPlaneStack.cognitoUserPool,
-      cognitoUserClientId: controlPlaneStack.cognitoUserClientId,
-      deploymentsTable: problemDeployBackendStack.deploymentsTable,
-      eventsTable: problemDeployBackendStack.eventsTable,
-      teamsTable: problemDeployBackendStack.teamsTable,
-      adminConsoleOrigin: config.adminConsoleOriginForCors,
-    },
-  );
-  adminConsoleInsightStack.addDependency(controlPlaneStack);
-  adminConsoleInsightStack.addDependency(problemDeployBackendStack);
-
+  // Issue #814 Phase 2: bootstrap を adminConsoleInsight より先に instantiate する。
+  // adminConsoleInsight が bootstrap の `deprovisioningStateMachineArn` を受け取り、
+  // ListExecutions の IAM scope に使うため (= forward dependency が必要)。
   const bootstrapTemplateStack = new BootstrapTemplateStack(app, "tenkacloud-bootstrap", {
     ...config.stackEnv,
     systemAdminEmail: config.systemAdminEmail,
@@ -109,6 +96,26 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       : undefined,
   });
   cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
+
+  const adminConsoleInsightStack = new AdminConsoleInsightStack(
+    app,
+    "tenkacloud-admin-console-insight",
+    {
+      ...config.stackEnv,
+      cognitoUserPool: controlPlaneStack.cognitoUserPool,
+      cognitoUserClientId: controlPlaneStack.cognitoUserClientId,
+      deploymentsTable: problemDeployBackendStack.deploymentsTable,
+      eventsTable: problemDeployBackendStack.eventsTable,
+      teamsTable: problemDeployBackendStack.teamsTable,
+      adminConsoleOrigin: config.adminConsoleOriginForCors,
+      // Issue #814 Phase 2: SBT BashJobRunner の deprovisioning state machine ARN を渡し、
+      // admin-insight Lambda が ListExecutions で履歴を引けるようにする。
+      deprovisioningStateMachineArn: bootstrapTemplateStack.deprovisioningStateMachineArn,
+    },
+  );
+  adminConsoleInsightStack.addDependency(controlPlaneStack);
+  adminConsoleInsightStack.addDependency(problemDeployBackendStack);
+  adminConsoleInsightStack.addDependency(bootstrapTemplateStack);
 
   const tenantTemplateStack = new TenantTemplateStack(
     app,

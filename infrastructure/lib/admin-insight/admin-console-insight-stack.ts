@@ -39,6 +39,12 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * 未設定 (= phase 1 初回 deploy 時) は localhost dev origin のみ許可。
    */
   readonly adminConsoleOrigin?: string;
+  /**
+   * Issue #814 Phase 2: SBT BashJobRunner の deprovisioning state machine ARN。
+   * admin-insight Lambda が \`states:ListExecutions\` で実行履歴を取得し、 admin-console の
+   * Deprovisioning Jobs タブで参加者運営に見せる。 未指定なら route は未配線 (= legacy 互換)。
+   */
+  readonly deprovisioningStateMachineArn?: string;
 }
 
 /**
@@ -74,6 +80,9 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       deploymentsTable: props.deploymentsTable,
       eventsTable: props.eventsTable,
       teamsTable: props.teamsTable,
+      ...(props.deprovisioningStateMachineArn
+        ? { deprovisioningStateMachineArn: props.deprovisioningStateMachineArn }
+        : {}),
     });
     this.lambdaFunctionName = lambda.fn.functionName;
 
@@ -151,6 +160,14 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     // (= CORS preflight が 404 に当たって TypeError) が出ていた。本 PR で追加。
     httpApi.addRoutes({
       path: "/admin/insight/pipeline-executions",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+
+    // Issue #814 Phase 2: Deprovisioning Jobs ページが叩く Step Functions ListExecutions route。
+    // SBT BashJobRunner の deprovisioning state machine の execution 履歴を返す。
+    httpApi.addRoutes({
+      path: "/admin/insight/state-machine-executions",
       methods: [HttpMethod.GET],
       integration,
     });

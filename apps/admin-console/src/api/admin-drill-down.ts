@@ -275,6 +275,43 @@ export async function fetchPipelineExecutions(
 }
 
 /**
+ * Issue #814 Phase 2: SBT BashJobRunner deprovisioning state machine の execution 履歴 item。
+ * \`GET /admin/insight/state-machine-executions\` の response item shape。
+ */
+export interface StateMachineExecutionItem {
+  readonly executionArn: string;
+  readonly name: string;
+  readonly status: string;
+  readonly startTimeIso: string | undefined;
+  readonly stopTimeIso: string | undefined;
+  readonly consoleUrl: string;
+}
+
+export interface ListStateMachineExecutionsResponse {
+  readonly kind: "ok";
+  readonly stateMachineArn: string;
+  readonly items: readonly StateMachineExecutionItem[];
+}
+
+/**
+ * Issue #814 Phase 2: \`GET /admin/insight/state-machine-executions\` を叩いて SBT BashJobRunner
+ * の deprovisioning Step Functions の execution 履歴を取得する。 503 (= not_configured、 旧 stack
+ * 互換) は \`null\` を返し、 caller (Jobs page Deprovisioning tab) が legacy placeholder に
+ * フォールバックする。
+ */
+export async function fetchStateMachineExecutions(
+  config: AppConfig,
+  idToken: string,
+  options: { limit?: number } = {},
+): Promise<ListStateMachineExecutionsResponse | null> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const qs = params.toString();
+  const path = `admin/insight/state-machine-executions${qs ? `?${qs}` : ""}`;
+  return adminInsightGet<ListStateMachineExecutionsResponse>(config, idToken, path);
+}
+
+/**
  * CFn ResourceStatus を Cloudscape の StatusIndicator type に map する。
  * application-admin-console の `statusToIndicator` と同じセマンティクス。
  */

@@ -13,7 +13,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AdminInsightApiError,
   fetchPipelineExecutions,
+  fetchStateMachineExecutions,
   type PipelineExecutionItem,
+  type StateMachineExecutionItem,
 } from "../api/admin-drill-down";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
@@ -218,7 +220,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
           {
             id: "deprovisioning",
             label: t("jobs_page.tab_deprovisioning"),
-            content: <DeprovisioningJobsTab awsRegion={config.awsRegion} />,
+            content: <DeprovisioningJobsTab config={config} />,
           },
         ]}
       />
@@ -227,37 +229,129 @@ export function JobsPage({ config }: { config: AppConfig }) {
 }
 
 /**
- * Issue #814: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
+ * Issue #814 Phase 2: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
  * Step Functions State Machine の execution 履歴) を表示するタブ。
  *
- * Phase 1 (本 PR): 既存 admin-insight Lambda は \`tenkacloud-saas-pipeline\` CodePipeline 専用で、
- * Step Functions ListExecutions に対する route が未配線。 そのため operator を AWS Console
- * の Step Functions list (= "deprovisioning" を含むステートマシンで絞り込み可能) に誘導する。
- *
- * Phase 2 (= 別 PR): admin-insight Lambda に \`GET /admin/insight/state-machine-executions\`
- * route を追加し、 deprovisioningJobRunner.stateMachine.stateMachineArn を env 経由で渡して
- * SFN ListExecutions を呼ぶ。 当 tab 内に Provisioning tab と同じ Table を表示する。
+ * admin-insight Lambda が \`GET /admin/insight/state-machine-executions\` で
+ * deprovisioning SM の ListExecutions を返す。 503 (= not_configured、 旧 stack 互換) は
+ * legacy placeholder にフォールバック。
  */
-function DeprovisioningJobsTab({ awsRegion }: { awsRegion: string }) {
+function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
+  const auth = useAuth();
   const t = useT();
-  // 「Step Functions コンソールを開く」 deep link。 awsRegion が空文字 (= dev fallback)
-  // の場合は ap-northeast-1 を仮置きする (= 本 link は production 用途、 dev では押せても無効)。
-  const region = awsRegion || "ap-northeast-1";
-  const sfnListUrl = `https://${region}.console.aws.amazon.com/states/home?region=${region}#/statemachines`;
+  const [items, setItems] = useState<readonly StateMachineExecutionItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [notConfigured, setNotConfigured] = useState(false);
+
+  const idToken = auth.tokens?.idToken;
+  const region = config.awsRegion || "ap-northeast-1";
+
+  const fetchOnce = useCallback(async () => {
+    if (!idToken) return;
+    try {
+      const res = await fetchStateMachineExecutions(config, idToken, { limit: PAGE_SIZE });
+      if (res === null) {
+        setNotConfigured(true);
+        setItems([]);
+        return;
+      }
+      setItems(res.items);
+      setError(null);
+      setForbidden(false);
+      setNotConfigured(false);
+    } catch (err) {
+      if (err instanceof AdminInsightApiError && err.status === StatusCodes.FORBIDDEN) {
+        setForbidden(true);
+        return;
+      }
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [config, idToken]);
+
+  useEffect(() => {
+    if (!idToken) return;
+    void fetchOnce();
+    const interval = setInterval(() => void fetchOnce(), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchOnce, idToken]);
+
+  const sfnListUrl = useMemo(
+    () => `https://${region}.console.aws.amazon.com/states/home?region=${region}#/statemachines`,
+    [region],
+  );
+
+  if (notConfigured) {
+    return (
+      <SpaceBetween size="m">
+        <Alert type="info" header={t("jobs_page.deprovisioning_phase1_header")}>
+          {t("jobs_page.deprovisioning_phase1_body")}
+        </Alert>
+        <Box>
+          <Link
+            external
+            href={sfnListUrl}
+            ariaLabel={t("jobs_page.deprovisioning_open_console_aria")}
+          >
+            {t("jobs_page.deprovisioning_open_console")}
+          </Link>
+        </Box>
+      </SpaceBetween>
+    );
+  }
+
   return (
     <SpaceBetween size="m">
-      <Alert type="info" header={t("jobs_page.deprovisioning_phase1_header")}>
-        {t("jobs_page.deprovisioning_phase1_body")}
-      </Alert>
-      <Box>
-        <Link
-          external
-          href={sfnListUrl}
-          ariaLabel={t("jobs_page.deprovisioning_open_console_aria")}
-        >
-          {t("jobs_page.deprovisioning_open_console")}
-        </Link>
-      </Box>
+      {forbidden && (
+        <Alert type="error" header={t("jobs_page.forbidden_header")}>
+          {t("jobs_page.forbidden_body")}
+        </Alert>
+      )}
+      {error && !forbidden && (
+        <Alert type="error" header={t("jobs_page.fetch_failed_header")}>
+          {error}
+        </Alert>
+      )}
+      <Table
+        items={items ?? []}
+        loading={items === null && !forbidden && !error}
+        loadingText={t("jobs_page.loading")}
+        columnDefinitions={[
+          {
+            id: "name",
+            header: t("jobs_page.col_execution_id"),
+            cell: (e) => (
+              <Link external href={e.consoleUrl}>
+                <code>{e.name}</code>
+              </Link>
+            ),
+          },
+          {
+            id: "status",
+            header: t("jobs_page.col_status"),
+            cell: (e) => <Badge color={colorFor(e.status)}>{e.status}</Badge>,
+          },
+          {
+            id: "started",
+            header: t("jobs_page.col_started"),
+            cell: (e) => e.startTimeIso ?? "—",
+          },
+          {
+            id: "elapsed",
+            header: t("jobs_page.col_elapsed"),
+            cell: (e) => formatElapsed(e.startTimeIso, e.stopTimeIso),
+          },
+        ]}
+        empty={
+          items && items.length === 0 ? (
+            <Box textAlign="center" padding="m">
+              <Box variant="strong">{t("jobs_page.empty_deprovisioning")}</Box>
+            </Box>
+          ) : (
+            <Spinner />
+          )
+        }
+      />
     </SpaceBetween>
   );
 }

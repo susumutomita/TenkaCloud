@@ -29,6 +29,13 @@ export interface AdminInsightApiLambdaProps {
    * かけない (= GetItem/Query レベルで全 attribute を引けるが、handler が出口で塗りつぶす)。
    */
   readonly teamsTable: Table;
+  /**
+   * Issue #814 Phase 2: SBT BashJobRunner の deprovisioning state machine ARN。
+   * 指定時は \`states:ListExecutions\` 権限と env を付与し、 admin-insight handler が
+   * Deprovisioning Jobs route で履歴を返せるようにする。 未指定なら旧挙動 (= 該当 route は env なしで
+   * 503 を返す or placeholder)。
+   */
+  readonly deprovisioningStateMachineArn?: string;
 }
 
 /**
@@ -63,6 +70,9 @@ export class AdminInsightApiLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         TEAMS_TABLE_NAME: props.teamsTable.tableName,
+        // Issue #814 Phase 2: deprovisioning Step Functions ARN を env に渡す (= 未指定なら空)。
+        // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
+        DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -106,5 +116,28 @@ export class AdminInsightApiLambda extends Construct {
         resources: ["*"],
       }),
     );
+
+    // Issue #814 Phase 2: Deprovisioning Jobs route の Step Functions ListExecutions 権限。
+    // 指定された SBT BashJobRunner の state machine ARN に scope する。 未指定なら付与しない
+    // (= 旧 stack の互換維持)。 DescribeExecution は将来の "Failed step 詳細" 用に同梱。
+    if (props.deprovisioningStateMachineArn) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["states:ListExecutions", "states:DescribeExecution"],
+          resources: [
+            props.deprovisioningStateMachineArn,
+            // DescribeExecution は execution ARN を要求する。 同 state machine 配下の全 execution
+            // を許可するため `<sm-arn>:*` で wildcard。
+            `${props.deprovisioningStateMachineArn}:*`,
+            // execution ARN は実際には `arn:aws:states:<region>:<acct>:execution:<sm-name>:<id>` 形式で
+            // state-machine の prefix と異なる。 両方含めて grant。
+            props.deprovisioningStateMachineArn
+              .replace(":stateMachine:", ":execution:")
+              .concat(":*"),
+          ],
+        }),
+      );
+    }
   }
 }
