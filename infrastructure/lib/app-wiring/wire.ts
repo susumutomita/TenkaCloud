@@ -9,6 +9,7 @@ import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity";
 import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-window";
 import { ControlPlaneStack } from "../control-plane-stack";
 import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack";
+import { CostBudget } from "../observability/cost-budget";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
 import { ProblemDeployBackendStack } from "../problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../tenant-pipeline/serverless-saas-pipeline";
@@ -25,6 +26,16 @@ import { TenantTemplateStack } from "../tenant-template/tenant-template-stack";
  * を発生させない) ことを invariant とする。
  */
 export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudAppHandles {
+  // Issue #952 / PR-957 user feedback: cost allocation tag を App scope で全リソースに
+  // 強制付与する。 名前 prefix 識別ではなく tag で resource ownership を表明することで:
+  //   - 同一 AWS account 内に他 workload があっても混ざらない (= cost / drift / cleanup 識別)
+  //   - AWS Budgets / Cost Explorer の `TagKeyValue` filter (= `user:Project$TenkaCloud`) で
+  //     TenkaCloud 分だけを抽出して予算管理できる
+  //   - user は AWS Billing console で 1 回 "Project" tag を "Cost Allocation Tag" として
+  //     activate する必要がある (= 既存リソースへの遡及反映には最大 24h)
+  cdk.Tags.of(app).add("Project", "TenkaCloud");
+  cdk.Tags.of(app).add("Environment", config.environment);
+
   // App scope Aspect: KMS Key 削除待機期間を `config.kmsPendingWindowInDays` に揃える。
   // SBT が内部生成する CodeBuild EncryptionKey 等も含む全 `AWS::KMS::Key` が対象。
   cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(config.kmsPendingWindowInDays));
@@ -217,6 +228,23 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   observabilityStack.addDependency(bootstrapTemplateStack);
   observabilityStack.addDependency(tenantTemplateStack);
   observabilityStack.addDependency(serverlessSaaSPipeline);
+
+  // Issue #952 epic / cost guardrails: 月次 AWS Budget を立てる。 limit / alarm 通知先は config から。
+  // limit が 0 / 未指定なら budget は立てない (= legacy 互換)。
+  if (config.monthlyCostLimitUsd && config.monthlyCostLimitUsd > 0) {
+    const adminEmail = config.systemAdminEmail;
+    const extraEmails = config.budgetAlarmEmails ?? [];
+    // adminEmail と extraEmails の重複を排して同一宛先への重複 subscription を防ぐ。
+    const allEmails = Array.from(new Set(adminEmail ? [adminEmail, ...extraEmails] : extraEmails));
+    new CostBudget(observabilityStack, "CostBudget", {
+      budgetNamePrefix: `tenkacloud-${config.environment}`,
+      monthlyLimitUsd: config.monthlyCostLimitUsd,
+      notificationEmails: allEmails,
+      // App scope の cdk.Tags.of(app).add("Project", "TenkaCloud") と整合させ、
+      // TenkaCloud で deploy したリソース分だけを集計対象にする。
+      costAllocationTags: { Project: ["TenkaCloud"] },
+    });
+  }
 
   let adminConsoleHosting: AdminConsoleHostingStack | undefined;
   if (config.adminConsoleHostingInputs) {

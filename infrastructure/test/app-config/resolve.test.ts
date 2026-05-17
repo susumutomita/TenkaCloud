@@ -257,6 +257,22 @@ describe("resolveAppConfig", () => {
     expect(env.CDK_PARAM_IDP_NAME).toBe("COGNITO");
     expect(env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME).toBe("SystemAdmin");
   });
+
+  // Issue #952 / PR-957 CodeRabbit follow-up: schema は `monthlyCostLimitUsd` に数値文字列を
+  // 許容する (`${MONTHLY_COST_LIMIT_USD:-50}` で `"50"` が JSON に入る) ため、 resolve は
+  // string を Number として扱う必要がある。 env override は process.env 直読みのため本
+  // test では config.json default (= "50") が正しく Number 化されることだけを pin する。
+  it("monthlyCostLimitUsd は config.json の string '50' を number 50 に正規化するべき", () => {
+    const cfg = resolveAppConfig({
+      env: baseEnv(),
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.monthlyCostLimitUsd).toBe(50);
+    expect(typeof cfg.monthlyCostLimitUsd).toBe("number");
+  });
 });
 
 describe("resolveApiKeyValue", () => {

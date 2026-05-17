@@ -18,6 +18,17 @@ export interface Config {
    * + Hosted UI fallback。 per-tenant の独立 IdP は Phase 2 で onboarding 経由で扱う。
    */
   readonly tenantSamlConfig?: SamlIdpConfig;
+  /**
+   * Issue #952 epic / cost guardrails: AWS Budgets の monthly limit (USD)。
+   * 未指定 / 0 なら budget は立てない (= 旧挙動互換)。 development 50 / production 200 を
+   * config.json で指定するのを推奨。
+   */
+  readonly monthlyCostLimitUsd?: number;
+  /**
+   * Budget alarm 通知の追加 email 宛先。 systemAdminEmail は自動で含めるので、 追加 cc / oncall
+   * を渡すときに使う。
+   */
+  readonly budgetAlarmEmails?: readonly string[];
 }
 
 /**

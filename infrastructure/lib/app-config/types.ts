@@ -99,6 +99,14 @@ export interface AppConfig {
    * hatch で IdP を付ける。
    */
   readonly controlPlaneSamlConfig: SamlIdpConfig | undefined;
+
+  /**
+   * Issue #952 epic / cost guardrails: AWS Budgets monthly limit (USD)。 未指定 / 0 なら
+   * budget を立てない (= 旧挙動互換)。 development: 50, production: 200 を推奨。
+   */
+  readonly monthlyCostLimitUsd: number | undefined;
+  /** Budget alarm 通知の追加 email 宛先 (systemAdminEmail は自動同梱)。 */
+  readonly budgetAlarmEmails: readonly string[] | undefined;
 }
 
 export interface ProblemsCatalogBundle {
