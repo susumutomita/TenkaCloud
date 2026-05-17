@@ -131,7 +131,14 @@
     "delete_modal_body": "Deletes {email}. The user can no longer sign in. You cannot delete yourself (lock-out prevention).",
     "delete_confirm": "Delete",
     "delete_error_header": "Delete failed",
-    "delete_success": "Deleted {email}."
+    "delete_success": "Deleted {email}.",
+    "role_change_button": "Change role",
+    "role_change_aria": "Change role of {email}",
+    "role_change_modal_header": "Change role?",
+    "role_change_modal_body": "Change the role of {email} (current: {current}) to the value selected below. The change takes effect immediately; the user will be authorised under the new role at next sign-in. You cannot change your own role (lock-out prevention).",
+    "role_change_confirm": "Change role",
+    "role_change_error_header": "Role change failed",
+    "role_change_success": "Changed role of {email} to {role}."
   },
   "problems": {
     "header": "Problem catalog",

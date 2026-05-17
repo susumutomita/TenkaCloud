@@ -151,6 +151,8 @@ export class CompetitorAccountsApiLambda extends Construct {
           "cognito-idp:AdminCreateUser",
           "cognito-idp:AdminDeleteUser",
           "cognito-idp:AdminGetUser",
+          // Issue #17: AdminUpdateUserAttributes で custom:userRole を書き換える経路。
+          "cognito-idp:AdminUpdateUserAttributes",
           "cognito-idp:ListUsers",
         ],
         resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],

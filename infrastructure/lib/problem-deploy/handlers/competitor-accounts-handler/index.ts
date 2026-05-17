@@ -25,7 +25,9 @@ import {
 import { CreateCompetitorAccountRequestSchema } from "./types.js";
 import { DuplicateUserError, TenantMismatchError, UserNotFoundError } from "./users-cognito.js";
 import {
+  ChangeRoleRequestSchema,
   InviteUserRequestSchema,
+  routeChangeUserRole,
   routeCreateUser,
   routeDeleteUser,
   routeListUsers,
@@ -344,6 +346,47 @@ app.delete("/admin/users/:username", async (c) => {
     }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[competitor-accounts] user delete failed", { username, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// Issue #17: 既存 user の custom:userRole を変更する PATCH。 越境チェック + 自己変更禁止。
+app.patch("/admin/users/:username", async (c) => {
+  const username = c.req.param("username");
+  if (!username || username.length === 0) {
+    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
+  }
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
+  }
+  const parsed = ChangeRoleRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation_failed", issues: parsed.error.issues },
+      StatusCodes.BAD_REQUEST,
+    );
+  }
+  const tenantId = resolveTenantId(c);
+  try {
+    const result = await routeChangeUserRole({ shared }, c, tenantId, username, parsed.data);
+    return c.json(result.body as never, result.status as 200 | 401 | 409);
+  } catch (err) {
+    if (err instanceof UserNotFoundError) {
+      return c.json({ error: "not_found", username: err.username }, StatusCodes.NOT_FOUND);
+    }
+    if (err instanceof TenantMismatchError) {
+      console.warn("[competitor-accounts] tenant mismatch on role change", {
+        username,
+        expected: err.expectedTenantId,
+        actual: err.actualTenantId,
+      });
+      return c.json({ error: "not_found", username }, StatusCodes.NOT_FOUND);
+    }
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[competitor-accounts] user role change failed", { username, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });

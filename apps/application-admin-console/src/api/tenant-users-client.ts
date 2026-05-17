@@ -48,3 +48,18 @@ export async function deleteTenantUser(api: ApiClient, username: string): Promis
   // username は email 形式が来るので URL-safe に encode する。
   await api.del(`admin/users/${encodeURIComponent(username)}`);
 }
+
+/**
+ * Issue #17: 既存 user の role を変更する。 backend が AdminUpdateUserAttributes で
+ * \`custom:userRole\` を書き換える。 self-target は 409 cannot_change_own_role。
+ */
+export async function changeTenantUserRole(
+  api: ApiClient,
+  username: string,
+  userRole: TenantRole,
+): Promise<{ username: string; userRole: TenantRole }> {
+  return api.patch<{ username: string; userRole: TenantRole }>(
+    `admin/users/${encodeURIComponent(username)}`,
+    { userRole },
+  );
+}
