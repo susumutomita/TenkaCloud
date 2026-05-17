@@ -14,6 +14,7 @@ import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
   CompetitorAccountNotFoundError,
+  CompetitorAccountNotVerifiedError,
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
@@ -242,6 +243,11 @@ app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c
   } catch (err) {
     if (err instanceof CompetitorAccountNotFoundError) {
       return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+    }
+    // Issue #868: verified=false な row への rotate は 409 + 明示メッセージで operator に
+    // 「先に verify を成功させて」 と返す。 attacker spoof 経路に鍵を回さない。
+    if (err instanceof CompetitorAccountNotVerifiedError) {
+      return c.json({ error: "not_verified" }, StatusCodes.CONFLICT);
     }
     if (err instanceof ExternalIdMissingForRotationError) {
       return c.json({ error: "external_id_missing" }, StatusCodes.CONFLICT);

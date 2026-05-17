@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompetitorAccountsSharedResources } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/shared";
 import {
   CompetitorAccountNotFoundError,
+  CompetitorAccountNotVerifiedError,
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
@@ -405,5 +406,35 @@ describe("rotateExternalIdForAccount", () => {
 
     // SSM Get 1 度のみ、Put は呼ばない
     expect(ssmSend.mock.calls.length).toBe(1);
+  });
+
+  it("Issue #868: verified=false な row への rotate は CompetitorAccountNotVerifiedError を投げ SSM Put しないべき", async () => {
+    const { shared, ddbSend, ssmSend } = buildShared();
+    // verified=false な row
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        PK: "TENANT#tenant-acme",
+        SK: "ACCOUNT#222222222222",
+        tenantId: "tenant-acme",
+        awsAccountId: "222222222222",
+        region: "ap-northeast-1",
+        competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+        verified: false,
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+      },
+    });
+
+    await expect(
+      rotateExternalIdForAccount(shared, {
+        tenantId: "tenant-acme",
+        awsAccountId: "222222222222",
+        nowMs: NOW_MS,
+      }),
+    ).rejects.toBeInstanceOf(CompetitorAccountNotVerifiedError);
+
+    // DDB Get 1 度のみ。SSM は touch しない (= unverified row に対して鍵を回さない)
+    expect(ddbSend.mock.calls.length).toBe(1);
+    expect(ssmSend.mock.calls.length).toBe(0);
   });
 });

@@ -34,6 +34,12 @@ const mocks = vi.hoisted(() => ({
       this.name = "ExternalIdMissingForRotationError";
     }
   },
+  CompetitorAccountNotVerifiedError: class extends Error {
+    constructor(public readonly awsAccountId: string) {
+      super("not verified");
+      this.name = "CompetitorAccountNotVerifiedError";
+    }
+  },
   AssumeRoleSanityCheckFailedError: class extends Error {
     constructor(
       public readonly awsAccountId: string,
@@ -70,6 +76,7 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/store", (
   rotateExternalIdForAccount: mocks.rotateExternalIdForAccount,
   DuplicateCompetitorAccountError: mocks.DuplicateCompetitorAccountError,
   CompetitorAccountNotFoundError: mocks.CompetitorAccountNotFoundError,
+  CompetitorAccountNotVerifiedError: mocks.CompetitorAccountNotVerifiedError,
   ExternalIdMissingForRotationError: mocks.ExternalIdMissingForRotationError,
 }));
 
@@ -264,6 +271,18 @@ describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id", () 
     expect(res.status).toBe(StatusCodes.CONFLICT);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("external_id_missing");
+  });
+
+  it("Issue #868: verified=false な row への rotate は 409 (not_verified) を返すべき", async () => {
+    mocks.rotateExternalIdForAccount.mockRejectedValueOnce(
+      new mocks.CompetitorAccountNotVerifiedError("222222222222"),
+    );
+    const res = await app.request("/admin/competitor-accounts/222222222222/rotate-external-id", {
+      method: "POST",
+    });
+    expect(res.status).toBe(StatusCodes.CONFLICT);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe("not_verified");
   });
 
   it("awsAccountId が 12 桁でないと 400", async () => {
