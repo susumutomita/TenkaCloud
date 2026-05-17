@@ -1,6 +1,5 @@
-import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
 import type { Context } from "hono";
-import { resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
+import { extractClaims, resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
 import {
   allowCognitoOnClient,
   type CognitoSamlDeps,
@@ -60,8 +59,7 @@ interface JwtClaims {
  * `undefined` を返し、 caller が 401 / 422 に倒す。
  */
 export function extractSelfPoolFromContext(c: Context): CognitoSamlDeps | undefined {
-  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
-  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
+  const claims = extractClaims(c) as JwtClaims | undefined;
   const userPoolId = extractUserPoolIdFromIss(claims?.iss);
   // Cognito access_token は aud ではなく client_id を持つ場合がある (= access_token vs id_token)。
   // API GW JWT Authorizer は id_token を要求するので aud を優先しつつ、 client_id fallback も持つ。
