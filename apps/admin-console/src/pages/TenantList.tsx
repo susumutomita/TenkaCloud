@@ -5,6 +5,7 @@ import Button from "@cloudscape-design/components/button";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
+import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { useCallback, useEffect, useState } from "react";
@@ -236,33 +237,49 @@ export function TenantListPage({ config }: { config: AppConfig }) {
               );
             },
           },
-          // ADR-011 #590 Phase 1.A: AdminInsight 集計 column。insightByTenantId が null
-          // (= API 未配線 / fetch 失敗 / 403) なら cell は "—" を返し、deprovision 済みは
-          // 灰色 "(deprovisioned)" にする。背景色 / badge で異常 (failed > 0) を識別可能。
+          // Issue #898: 旧 2 column (activeDeploys / failedDeploys) を 1 column に統合。
+          // 旧実装は header が長すぎて画面に収まらず、 \"問題 deploy\" が何を指すか
+          // operator から見て不明瞭だった。 短い header + Popover による説明 + 単一 cell
+          // (active blue badge と failed red badge を inline 並置) で意味を圧縮する。
+          // insightByTenantId が null (= API 未配線 / fetch 失敗 / 403) なら "—" を返し、
+          // deprovision 済みは灰色 "(deprovisioned)" にする (旧挙動を維持)。
           {
-            id: "activeDeploys",
-            header: t("tenant_list.col_active_deploys"),
+            id: "problemDeploys",
+            header: (
+              <Popover
+                triggerType="text"
+                header={t("tenant_list.col_problem_deploys")}
+                content={t("tenant_list.col_problem_deploys_explain")}
+                size="medium"
+              >
+                {t("tenant_list.col_problem_deploys_short")}
+              </Popover>
+            ),
             cell: (row) => {
               if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
               if (insightByTenantId === null) {
                 return <Box color="text-status-inactive">—</Box>;
               }
               const summary = insightByTenantId[row.tenantId];
-              const count = summary?.activeDeploys ?? 0;
-              return <Badge color={count > 0 ? "blue" : "grey"}>{count}</Badge>;
-            },
-          },
-          {
-            id: "failedDeploys",
-            header: t("tenant_list.col_failed_deploys"),
-            cell: (row) => {
-              if (isDeprovisioned(row)) return inactiveCell(deprovisionedLabel);
-              if (insightByTenantId === null) {
-                return <Box color="text-status-inactive">—</Box>;
+              const active = summary?.activeDeploys ?? 0;
+              const failed = summary?.failedDeploys ?? 0;
+              if (active === 0 && failed === 0) {
+                return <Badge color="grey">0</Badge>;
               }
-              const summary = insightByTenantId[row.tenantId];
-              const count = summary?.failedDeploys ?? 0;
-              return <Badge color={count > 0 ? "red" : "grey"}>{count}</Badge>;
+              return (
+                <SpaceBetween direction="horizontal" size="xs">
+                  {active > 0 && (
+                    <Badge color="blue">
+                      {interpolate(t("tenant_list.deploys_active"), { count: String(active) })}
+                    </Badge>
+                  )}
+                  {failed > 0 && (
+                    <Badge color="red">
+                      {interpolate(t("tenant_list.deploys_failed"), { count: String(failed) })}
+                    </Badge>
+                  )}
+                </SpaceBetween>
+              );
             },
           },
           {
