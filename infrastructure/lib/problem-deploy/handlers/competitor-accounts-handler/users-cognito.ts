@@ -76,10 +76,22 @@ function pickAttr(
 }
 
 /**
- * tenant 内の全 user を返す。 Cognito の \`ListUsersCommand\` filter は \`attr = "value"\` 形式
- * のみ対応 (= prefix match の \`^=\` は string attr で、 custom: は完全一致 = だけ)。
- * 1 page = 60 件 (Cognito 上限) を超える tenant は paginate。 Phase 1 は 60 件まで暗黙仮定 (=
- * P0 は SPOF 解消が主目的、 paginate UI は follow-up)。
+ * tenant 内の全 user を返す。
+ *
+ * **Cognito ListUsers の Filter は custom:* 属性に対応していない** (= built-in attr のみ:
+ * username / email / phone_number / name / given_name / family_name / preferred_username /
+ * cognito:user_status / status / sub)。 \`"custom:tenantId" = "..."\` を渡すと
+ * \`InvalidParameterException\` で 500 になる。
+ *
+ * そのため:
+ *   1. UserPool の全 user を 1 ページ取得 (Limit 60)
+ *   2. Lambda 側で \`custom:tenantId === tenantId\` を絞り込む
+ *
+ * pooled tier (= 複数 tenant が UserPool を共有) では Lambda 側 filter が **正当性の必須条件** (=
+ * 何もしないと他 tenant の user が見える)。 silo tier (= PLATINUM) は UserPool が tenant 専用なので
+ * filter があっても無くても漏洩しないが、 統一のため常に適用する。
+ *
+ * 60 件超の tenant は paginate を追加する必要がある (= 本 Phase の暗黙仮定)。
  */
 export async function listUsersByTenant(
   deps: CognitoUserClientDeps,
@@ -88,19 +100,20 @@ export async function listUsersByTenant(
   const out = await deps.client.send(
     new ListUsersCommand({
       UserPoolId: deps.userPoolId,
-      Filter: `"custom:tenantId" = "${tenantId}"`,
       Limit: 60,
     }),
   );
-  return (out.Users ?? []).map((u) => ({
-    username: u.Username ?? "",
-    email: pickAttr(u.Attributes, "email"),
-    enabled: u.Enabled ?? false,
-    status: u.UserStatus,
-    createdAt: u.UserCreateDate?.toISOString(),
-    tenantId: pickAttr(u.Attributes, "custom:tenantId"),
-    userRole: pickAttr(u.Attributes, "custom:userRole"),
-  }));
+  return (out.Users ?? [])
+    .map((u) => ({
+      username: u.Username ?? "",
+      email: pickAttr(u.Attributes, "email"),
+      enabled: u.Enabled ?? false,
+      status: u.UserStatus,
+      createdAt: u.UserCreateDate?.toISOString(),
+      tenantId: pickAttr(u.Attributes, "custom:tenantId"),
+      userRole: pickAttr(u.Attributes, "custom:userRole"),
+    }))
+    .filter((u) => u.tenantId === tenantId);
 }
 
 export interface CreateUserInput {
