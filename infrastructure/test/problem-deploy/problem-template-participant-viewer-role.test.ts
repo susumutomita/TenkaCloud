@@ -68,20 +68,20 @@ describe("problem template ParticipantViewerRole (#744)", () => {
       expect(role).toContain(`AWS: !Sub "arn:aws:iam::\${TenkaCloudAccountId}:root"`);
       expect(role).toContain("sts:ExternalId: !Ref ExternalId");
       expect(role).toContain("PolicyName: ProblemSpecific");
-      // Issue #820: \`Resource: \"*\"\` is permitted ONLY when paired with a
-      // List* / Describe-all Sid (AWS list-only APIs cannot be resource-scoped).
-      // Any \`Resource: \"*\"\` outside such a Sid indicates overprovisioning.
-      // Split by \`- Sid:\` markers to scope the search to each statement.
+      // Issue #820 撤回 / ADR-021: AWS JAM/GameDay 前提 — 参加者の IAM Role は
+      // **その問題の resource しか触れない** を IAM レベルで強制する。 旧 policy は
+      // \`ssm:DescribeParameters\` / \`ssm:GetParametersByPath\` / \`cloudformation:ListStacks\`
+      // を Resource:* で付与しており、 CLI 越しに platform / 他 tenant の Parameter Store と
+      // CFn stack の存在 / 値が見えていた (= security 事故レベル)。 list 系 IAM action は
+      // 一切付与しない。 Resource:"*" がどの statement にあっても test を fail させる。
       const statements = role.split(/^\s+- Sid: /m).slice(1);
       for (const stmt of statements) {
         const sid = stmt.split(/\s/, 1)[0] ?? "";
         const hasWildcard = stmt.includes('Resource: "*"') || stmt.includes("Resource: '*'");
-        if (hasWildcard) {
-          expect(
-            /^(List|Describe)/.test(sid),
-            `Sid "${sid}" uses Resource:"*" — only allowed for List*/Describe-all read APIs`,
-          ).toBe(true);
-        }
+        expect(
+          hasWildcard,
+          `Sid "${sid}" uses Resource:"*" — JAM/GameDay 前提では参加者 Role に list 系を付与しない方針 (#820 撤回)`,
+        ).toBe(false);
       }
       expect(template).toContain("ParticipantViewerRoleArn:");
       expect(template).toContain("Value: !GetAtt ParticipantViewerRole.Arn");
