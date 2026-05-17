@@ -27,6 +27,7 @@ import {
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
 import { getDeployment, listDeployments } from "./list.js";
+import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
 import {
   defaultCfnClient,
   defaultCfnClientForCompetitor,
@@ -274,6 +275,41 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] getStackProgress failed", { jobId, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+/**
+ * Issue #911 (#895 Phase 2.D): bulk batch で FAILED になった item の jobId 配列を再投入する
+ * idempotent retry API。 caller の tenantId scope に閉じ、 FAILED row のみ PENDING に
+ * 巻き戻して event 再 publish。 成功済 / in-progress / 別 tenant の row は skip して結果に
+ * 含める (= partial success を一括 response で表現)。
+ *
+ * 入力: \`{ failedJobIds: ["01HX...", ...] }\`、 最大 750 件
+ * 出力: \`{ items: [{ jobId, action: \"requeued\" | \"skipped\", reason? }, ...] }\`
+ */
+app.post("/deployments/retry", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
+  }
+  let request: ReturnType<typeof validateRetryRequest>;
+  try {
+    request = validateRetryRequest(body);
+  } catch (err) {
+    if (err instanceof InvalidRetryRequestError) {
+      return c.json({ error: "invalid_request", message: err.message }, HTTP_BAD_REQUEST);
+    }
+    throw err;
+  }
+  try {
+    const result = await retryDeployments(shared, resolveTenantId(c), request);
+    return c.json(result, HTTP_OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[deploy] retryDeployments failed", { message });
+    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
   }
 });
 
