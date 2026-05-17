@@ -10,7 +10,8 @@
     "menu": "Admin menu",
     "tenants": "Tenants",
     "tenants_new": "Create tenant",
-    "jobs": "Provisioning Jobs"
+    "jobs": "Provisioning Jobs",
+    "api_docs": "API Reference ↗"
   },
   "auth": {
     "sign_out": "Sign out"
