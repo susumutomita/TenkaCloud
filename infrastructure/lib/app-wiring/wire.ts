@@ -26,6 +26,16 @@ import { TenantTemplateStack } from "../tenant-template/tenant-template-stack";
  * を発生させない) ことを invariant とする。
  */
 export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudAppHandles {
+  // Issue #952 / PR-957 user feedback: cost allocation tag を App scope で全リソースに
+  // 強制付与する。 名前 prefix 識別ではなく tag で resource ownership を表明することで:
+  //   - 同一 AWS account 内に他 workload があっても混ざらない (= cost / drift / cleanup 識別)
+  //   - AWS Budgets / Cost Explorer の `TagKeyValue` filter (= `user:Project$TenkaCloud`) で
+  //     TenkaCloud 分だけを抽出して予算管理できる
+  //   - user は AWS Billing console で 1 回 "Project" tag を "Cost Allocation Tag" として
+  //     activate する必要がある (= 既存リソースへの遡及反映には最大 24h)
+  cdk.Tags.of(app).add("Project", "TenkaCloud");
+  cdk.Tags.of(app).add("Environment", config.environment);
+
   // App scope Aspect: KMS Key 削除待機期間を `config.kmsPendingWindowInDays` に揃える。
   // SBT が内部生成する CodeBuild EncryptionKey 等も含む全 `AWS::KMS::Key` が対象。
   cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(config.kmsPendingWindowInDays));
@@ -230,6 +240,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       budgetNamePrefix: `tenkacloud-${config.environment}`,
       monthlyLimitUsd: config.monthlyCostLimitUsd,
       notificationEmails: allEmails,
+      // App scope の cdk.Tags.of(app).add("Project", "TenkaCloud") と整合させ、
+      // TenkaCloud で deploy したリソース分だけを集計対象にする。
+      costAllocationTags: { Project: ["TenkaCloud"] },
     });
   }
 

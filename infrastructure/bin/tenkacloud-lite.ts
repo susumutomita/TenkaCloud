@@ -30,6 +30,13 @@ import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite";
 const app = new cdk.App();
 const config = resolveAppConfig({ env: process.env, binDir: __dirname });
 
+// Issue #952 / PR-957: cost allocation tag を App scope で全リソースに付与する。
+// SaaS mode (wire.ts) と同じ規則。 AWS Billing console で `Project` を Cost
+// Allocation Tag として activate すれば Budget / Cost Explorer で TenkaCloud
+// 分だけを抽出できる。
+cdk.Tags.of(app).add("Project", "TenkaCloud");
+cdk.Tags.of(app).add("Environment", config.environment);
+
 cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(config.kmsPendingWindowInDays));
 cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
 

@@ -82,4 +82,43 @@ describe("CostBudget", () => {
       | undefined;
     expect(notifications?.length).toBe(3);
   });
+
+  // Issue #952 / PR-957 user feedback: TenkaCloud リソースだけを集計するため、 user-defined
+  // cost allocation tag (= App scope `Project=TenkaCloud`) で filter を絞る経路を pin する。
+  it("costAllocationTags を渡すと CfnBudget の CostFilters に `user:<Key>$<Value>` 形式で入るべき", () => {
+    const app = new App();
+    const stack = new Stack(app, "TestStack");
+    new CostBudget(stack, "Budget", {
+      budgetNamePrefix: "tenkacloud-test",
+      monthlyLimitUsd: 50,
+      notificationEmails: ["alarm@example.com"],
+      costAllocationTags: { Project: ["TenkaCloud"] },
+    });
+
+    const template = Template.fromStack(stack);
+    const budgetProps = template.findResources("AWS::Budgets::Budget");
+    const key = Object.keys(budgetProps)[0];
+    if (!key) throw new Error("budget resource not found");
+    const budgetSpec = budgetProps[key]?.Properties?.Budget as Record<string, unknown>;
+    const costFilters = budgetSpec?.CostFilters as Record<string, readonly string[]>;
+    expect(costFilters).toBeDefined();
+    expect(costFilters["user:Project"]).toEqual(["Project$TenkaCloud"]);
+  });
+
+  it("costAllocationTags 未指定なら CostFilters key 自体が無いべき (= 全アカウント費用が対象)", () => {
+    const app = new App();
+    const stack = new Stack(app, "TestStack");
+    new CostBudget(stack, "Budget", {
+      budgetNamePrefix: "tenkacloud-test",
+      monthlyLimitUsd: 50,
+      notificationEmails: ["alarm@example.com"],
+    });
+
+    const template = Template.fromStack(stack);
+    const budgetProps = template.findResources("AWS::Budgets::Budget");
+    const key = Object.keys(budgetProps)[0];
+    if (!key) throw new Error("budget resource not found");
+    const budgetSpec = budgetProps[key]?.Properties?.Budget as Record<string, unknown>;
+    expect(budgetSpec?.CostFilters).toBeUndefined();
+  });
 });

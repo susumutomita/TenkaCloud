@@ -35,6 +35,15 @@ export interface CostBudgetProps {
    * 通知 threshold (%)。 default は [80, 100]。
    */
   readonly thresholdPercents?: readonly number[];
+  /**
+   * Cost allocation tag filter (= Budget が拾う tag key/value)。
+   * 例: \`{ Project: ["TenkaCloud"] }\` で App scope tag `Project=TenkaCloud` の付いたリソース
+   * だけを集計対象にする。 user は AWS Billing console で 「Project」 を Cost Allocation Tag
+   * として activate する必要がある (= 既存リソースへの遡及反映は最大 24h、 未 activate でも
+   * Budget 自体は壊れないが filter が効かず全アカウント費用が対象になる)。
+   * 未指定 (default) なら filter なし (= 全アカウント費用)。
+   */
+  readonly costAllocationTags?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -65,6 +74,17 @@ export class CostBudget extends Construct {
       // BudgetActions の SNS topic policy は AWS Budgets が自動で付ける (= 明示的 grant 不要)。
     ];
 
+    // Cost allocation tag filter を CfnBudget の costFilters に変換する。
+    //   - AWS Budgets は user-defined tag を `user:<Key>$<Value>` 形式の key で参照する
+    //   - 同一 key に複数 value (e.g. multiple Project values) を持たせるなら配列で羅列
+    //   - 未指定なら全リソースを集計 (= 既存挙動と互換、 ただし wire.ts default で
+    //     `Project=TenkaCloud` を渡す前提)
+    const tagFilters: Record<string, readonly string[]> = {};
+    for (const [tagKey, values] of Object.entries(props.costAllocationTags ?? {})) {
+      const filterKey = `user:${tagKey}`;
+      tagFilters[filterKey] = values.map((v) => `${tagKey}$${v}`);
+    }
+
     this.budget = new aws_budgets.CfnBudget(this, "MonthlyCostBudget", {
       budget: {
         budgetName: `${props.budgetNamePrefix}-monthly-cost`,
@@ -88,6 +108,8 @@ export class CostBudget extends Construct {
           useAmortized: false,
           useBlended: false,
         },
+        // Cost allocation tag を渡されたときだけ filter を入れる (= 未指定なら全アカウント費用)。
+        ...(Object.keys(tagFilters).length > 0 ? { costFilters: tagFilters } : {}),
       },
       notificationsWithSubscribers: thresholds.map((threshold) => ({
         notification: {
