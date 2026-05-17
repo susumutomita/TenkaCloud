@@ -20,6 +20,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -49,7 +50,7 @@ const KIND_TO_DEFAULT_CATEGORY: Record<Kind, "Battle" | "Challenge"> = {
 };
 
 interface CliArgs {
-  command: "create" | "validate" | "list-kinds" | "dry-run" | "help";
+  command: "create" | "validate" | "list-kinds" | "dry-run" | "help" | "interactive";
   problemId?: string;
   kind?: Kind;
   category?: "Battle" | "Challenge";
@@ -69,13 +70,20 @@ function parseArgs(argv: readonly string[]): CliArgs {
   }
   const command = argv[0];
   if (command === "list-kinds") return { command };
+  // Issue #954: interactive mode は引数なしで起動する `tenkacloud problem interactive` か、
+  // `tenkacloud problem create` (= problemId / kind 省略時) のどちらでも入れる。
+  if (command === "interactive") return { command };
   if (command !== "create" && command !== "validate" && command !== "dry-run") {
     throw new Error(
-      `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run'.`,
+      `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run', 'interactive'.`,
     );
   }
   const problemId = argv[1];
-  if (!problemId) throw new Error(`${command} requires <problemId>`);
+  if (!problemId) {
+    // `create` without args → interactive で誘導する (= 初見の onboarding 体験を改善)
+    if (command === "create") return { command: "interactive" };
+    throw new Error(`${command} requires <problemId>`);
+  }
   const result: CliArgs = { command, problemId };
   for (let i = 2; i < argv.length; i += 1) {
     const flag = argv[i];
@@ -129,6 +137,8 @@ function printHelp(): void {
 
 Usage:
   bun run scripts/tenkacloud-problem.ts create <id> --kind <kind> [--category Battle|Challenge]
+  bun run scripts/tenkacloud-problem.ts create               # interactive (= 初心者向け、 引数なしで起動)
+  bun run scripts/tenkacloud-problem.ts interactive          # 上と同じ (= 明示形)
   bun run scripts/tenkacloud-problem.ts validate <id>
   bun run scripts/tenkacloud-problem.ts dry-run <id> [--submitted <flag>] [--reveal-hints N]
                                                     [--cycles N] [--pattern <s|f sequence>]
@@ -139,6 +149,7 @@ Available kinds:  ${KINDS.join(", ")}
 Examples:
   bun run scripts/tenkacloud-problem.ts create my-battle --kind uptime-multi
   bun run scripts/tenkacloud-problem.ts create hello-flag --kind flag
+  bun run scripts/tenkacloud-problem.ts create        # 対話形式で kind / id / category を選ぶ
   bun run scripts/tenkacloud-problem.ts validate microservice-migration-battle
   bun run scripts/tenkacloud-problem.ts dry-run hello-world --submitted "actual-flag-value"
   bun run scripts/tenkacloud-problem.ts dry-run hello-world-battle --cycles 60 --pattern "ssssffssssss"
@@ -167,6 +178,161 @@ function applyPlaceholders(content: string, problemId: string): string {
     .map((s) => (s.length > 0 ? s[0]?.toUpperCase() + s.slice(1) : ""))
     .join(" ");
   return content.replaceAll("__PROBLEM_ID__", problemId).replaceAll("__PROBLEM_NAME__", titleCase);
+}
+
+/**
+ * Issue #954: 5 kind の対話用ラベル + 1 行の使い分け説明。 issue 本文の onboarding flow と
+ * 揃える (= 「Flag Challenge / Uptime Battle / Multi-service Battle / Attack Detection /
+ * Migration Battle」)。 「Migration Battle」 は phased-polling kind に対応する (= 段階的に
+ * 移行する system を polling して各 phase の状態を採点する典型 use case)。
+ */
+const KIND_INTERACTIVE_LABELS: Record<Kind, string> = {
+  flag: "Flag Challenge       — SSM Parameter / CFn output を flag として提出",
+  "uptime-flat": "Uptime Flat Battle   — 1 endpoint × N cycles の SLA 測定",
+  "uptime-multi": "Multi-service Battle — N endpoints × N cycles、 全 OK で加点",
+  "phased-polling":
+    "Migration Battle     — 時系列 phase で system 状態が遷移、 各 phase を polling",
+  "attack-detection": "Attack Detection     — 攻撃を fire して participant が検出するかを採点",
+};
+
+/**
+ * Issue #954: テスト容易性のため input / output を依存注入できる prompt インターフェース。
+ * 本体は \`runInteractive\` が `node:readline/promises` で実装した default を渡す。
+ * unit test は scripted answer 配列を返す stub を渡して flow をなぞる。
+ */
+export interface InteractivePrompts {
+  readonly ask: (question: string) => Promise<string>;
+  readonly print: (line: string) => void;
+}
+
+export interface RunInteractiveResult {
+  readonly created: CreateResult;
+}
+
+/**
+ * Issue #954: `tenkacloud create problem` の対話モード。 初見の onboarding 体験を改善する
+ * ため、 kind / problemId / display name / category 上書きを順に訊いて scaffold する。
+ * 既存 `runCreate` を呼び出すだけで、 新規の生成ロジックは持たない (= Phase 1 は scaffold
+ * のみ、 metadata 編集 / AI prompt 生成は Phase 2 へ持ち越し)。
+ */
+export async function runInteractive(prompts: InteractivePrompts): Promise<RunInteractiveResult> {
+  const { ask, print } = prompts;
+  print("=== TenkaCloud problem authoring (interactive) ===");
+  print("");
+  print("どの 種別 (= scoring kind) で問題を作成しますか?");
+  const orderedKinds: readonly Kind[] = [
+    "flag",
+    "uptime-flat",
+    "uptime-multi",
+    "phased-polling",
+    "attack-detection",
+  ];
+  orderedKinds.forEach((k, i) => {
+    print(`  ${i + 1}) ${KIND_INTERACTIVE_LABELS[k]}`);
+  });
+  let kind: Kind | undefined;
+  while (!kind) {
+    const raw = (await ask("> 番号 (1-5) または kind 名: ")).trim();
+    if (raw.length === 0) continue;
+    const idx = Number.parseInt(raw, 10);
+    if (Number.isFinite(idx) && idx >= 1 && idx <= orderedKinds.length) {
+      kind = orderedKinds[idx - 1];
+      break;
+    }
+    if ((KINDS as readonly string[]).includes(raw)) {
+      kind = raw as Kind;
+      break;
+    }
+    print(
+      `  ✗ "${raw}" は無効です。 1-5 の番号か kind 名 (${KINDS.join(" / ")}) を入力してください。`,
+    );
+  }
+  print(`  → kind: ${kind}`);
+  print("");
+
+  let problemId: string | undefined;
+  while (!problemId) {
+    const raw = (await ask("問題 ID (kebab-case, 3-32 chars, 例: my-first-problem): ")).trim();
+    if (raw.length === 0) {
+      print("  ✗ 問題 ID は省略できません。");
+      continue;
+    }
+    if (!/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(raw)) {
+      print(
+        `  ✗ "${raw}" は無効です。 kebab-case (小文字 a-z 0-9 -)、 3-32 chars にしてください。`,
+      );
+      continue;
+    }
+    if (findProblemDir(raw)) {
+      print(`  ✗ "${raw}" は既に存在します。 別の ID にしてください。`);
+      continue;
+    }
+    problemId = raw;
+  }
+  print(`  → problemId: ${problemId}`);
+  print("");
+
+  // category は kind から自動決定。 上書きしたい場合だけ確認する。
+  const defaultCategory = KIND_TO_DEFAULT_CATEGORY[kind];
+  print(`category は kind から自動決定: ${defaultCategory} (default)`);
+  const overrideRaw = (
+    await ask(`  category を上書きしますか? [Enter で skip / Battle / Challenge]: `)
+  ).trim();
+  let category: "Battle" | "Challenge" | undefined;
+  if (overrideRaw.length === 0) {
+    category = undefined;
+  } else if (overrideRaw === "Battle" || overrideRaw === "Challenge") {
+    category = overrideRaw;
+  } else {
+    print(
+      `  ✗ "${overrideRaw}" は無効。 Battle / Challenge / Enter のいずれかを入力してください。`,
+    );
+    print(`  → default の ${defaultCategory} で進めます`);
+  }
+  const effectiveCategory = category ?? defaultCategory;
+  print(`  → category: ${effectiveCategory}`);
+  print("");
+
+  const categoryDir = effectiveCategory === "Battle" ? "battles" : "challenges";
+  const outputRel = `problems/${categoryDir}/${problemId}/`;
+  print("以下で scaffold を生成します:");
+  print(`  - id:       ${problemId}`);
+  print(`  - kind:     ${kind}`);
+  print(`  - category: ${effectiveCategory}`);
+  print(`  - 出力先:   ${outputRel}`);
+  print("");
+  const confirm = (await ask("作成しますか? [Y/n]: ")).trim().toLowerCase();
+  if (confirm === "n" || confirm === "no") {
+    print("中止しました (= ファイルは作成されていません)。");
+    throw new Error("aborted by user");
+  }
+
+  const created = runCreate({
+    problemId,
+    kind,
+    ...(category ? { category } : {}),
+  });
+  print("");
+  print(`✓ Created ${created.outputDir}`);
+  print("  生成されたファイル:");
+  for (const fileName of readdirSync(created.outputDir)) {
+    print(`    └ ${fileName}`);
+  }
+  print("");
+  print("Next steps:");
+  print(
+    `  1. ${created.outputDir}/metadata.json を編集 (name / description / tags / learningGoals)`,
+  );
+  print(`  2. ${created.outputDir}/template.yaml を編集 (実 AWS リソース)`);
+  print(`  3. bun run scripts/tenkacloud-problem.ts validate ${problemId}`);
+  print("  4. make validate-problems");
+  print("");
+  print("参照:");
+  print("  - docs/problems/AUTHORING.html  (= 30 分 onboarding guide)");
+  print("  - problems/SCHEMA.json          (= metadata.json schema)");
+  print("  - /create-problem               (= Claude Code skill、 同等の対話を AI で進める)");
+
+  return { created };
 }
 
 function findProblemDir(problemId: string): string | undefined {
@@ -498,6 +664,19 @@ async function main(): Promise<void> {
     case "list-kinds":
       listKinds();
       return;
+    case "interactive": {
+      // Issue #954: stdin / stdout を持つ default prompts で対話モード起動。
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        await runInteractive({
+          ask: (q) => rl.question(q),
+          print: (line) => console.log(line),
+        });
+      } finally {
+        rl.close();
+      }
+      return;
+    }
     case "create": {
       if (!args.kind) {
         throw new Error("create requires --kind <kind>. Use 'list-kinds' to see options.");
