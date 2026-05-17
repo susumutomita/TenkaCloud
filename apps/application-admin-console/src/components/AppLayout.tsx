@@ -106,6 +106,9 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
               { type: "link", href: "/competitor-accounts", text: "Competitor Accounts" },
+              // Issue #925 Phase 1: tenant 内 user の CRUD。 全 tier で表示 (= tenant 越境は
+              // backend が JWT custom:tenantId で gate するため pooled でも問題なし)。
+              { type: "link", href: "/settings/users", text: t("nav.users") },
               // Issue #897: SAML SSO 設定は silo (PLATINUM) tenant のみ。 pooled tenant の
               // UserPool は共有で、 1 tenant の SAML 設定が他 tenant に副作用するため。
               ...(config.isolation === "silo"
