@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TenkaCloud — クラウド競技を、もっとシンプルに。</title>
 <meta name="description" content="TenkaCloud は本物の AWS で構築・防御・コスト最適化を競う、オープンソースのクラウド競技基盤。Battle / Challenge を 1 イベントに混ぜて使える、Apache 2.0 の SaaS。" />
+<!--
+  Issue #952 / PR-958 follow-up: ウェイトリストの Google Form URL は本 meta tag を
+  書き換えるだけで差し替え可能。 GitHub Pages 配信 (= 静的 HTML) なので env 注入は
+  使わず、 deployer が直接編集する運用。 値が空 / placeholder のままなら waitlist
+  section は 「準備中」 alert に降格する。
+  Embedded URL format: `https://docs.google.com/forms/d/e/<FORM_ID>/viewform?embedded=true`
+-->
+<meta name="tenkacloud:waitlist-form-url" content="" />
 <meta property="og:title" content="TenkaCloud — クラウド競技を、もっとシンプルに。" />
 <meta property="og:description" content="本物の AWS で競う、オープンソースのクラウド競技基盤。Battle / Challenge を 1 イベントに混ぜて使える。Apache 2.0。" />
 <meta property="og:type" content="website" />
@@ -466,6 +474,7 @@ footer .legal {
       <a href="#modes" data-i18n="nav.product">プロダクト</a>
       <a href="#onboard" data-i18n="nav.problems">問題</a>
       <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="nav.docs">ドキュメント</a>
+      <a href="#waitlist" data-i18n="nav.waitlist">ウェイトリスト</a>
       <a href="#contact" data-i18n="nav.contact">お問い合わせ</a>
       <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
     </div>
@@ -646,6 +655,22 @@ footer .legal {
   </div>
 </section>
 
+<section id="waitlist">
+  <div class="wrap">
+    <div class="ent-cta">
+      <div class="eyebrow" data-i18n="waitlist.eyebrow">ベータの招待を受け取る</div>
+      <h2 data-i18n="waitlist.h2">ウェイトリストに登録する。</h2>
+      <p data-i18n="waitlist.p">公開アリーナの招待 / 開催ご相談の連絡先を残しておくと、 準備が整い次第お知らせします。 OSS なので料金はありません。</p>
+      <div id="waitlist-embed">
+        <noscript data-i18n="waitlist.noscript">JavaScript を有効にすると登録フォームが表示されます。</noscript>
+      </div>
+      <div class="btns" id="waitlist-fallback" hidden>
+        <a class="btn-primary" href="#" id="waitlist-fallback-link" target="_blank" rel="noopener noreferrer"><span data-i18n="waitlist.fallback">フォームを開く</span> ›</a>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="contact">
   <div class="wrap">
     <div class="ent-cta">
@@ -702,6 +727,7 @@ footer .legal {
       "nav.product": "プロダクト",
       "nav.problems": "問題",
       "nav.docs": "ドキュメント",
+      "nav.waitlist": "ウェイトリスト",
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
 
@@ -773,6 +799,13 @@ footer .legal {
         { n: "100", u: "%",   l: "OSS / Apache 2.0。すべて読める。" }
       ],
 
+      "waitlist.eyebrow": "ベータの招待を受け取る",
+      "waitlist.h2": "ウェイトリストに登録する。",
+      "waitlist.p": "公開アリーナの招待 / 開催ご相談の連絡先を残しておくと、 準備が整い次第お知らせします。 OSS なので料金はありません。",
+      "waitlist.noscript": "JavaScript を有効にすると登録フォームが表示されます。",
+      "waitlist.fallback": "フォームを開く",
+      "waitlist.unconfigured": "ウェイトリストはまもなく公開予定です。",
+
       "ent.eyebrow": "もし、こんな使い方をしたいなら",
       "ent.h2": "クローズドな会場で、走らせたい人へ。",
       "ent.p": "社内勉強会、学校の授業、クローズドなインシデントレスポンス演習 — 公開アリーナで難しい使い方を考えているなら、相談してください。OSS なので料金はありません。",
@@ -788,6 +821,7 @@ footer .legal {
       "nav.product": "Product",
       "nav.problems": "Problems",
       "nav.docs": "Docs",
+      "nav.waitlist": "Waitlist",
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
@@ -858,6 +892,13 @@ footer .legal {
         { n: "0",   u: "$/h", l: "Operating cost while idle." },
         { n: "100", u: "%",   l: "Open source. Apache 2.0. End to end." }
       ],
+
+      "waitlist.eyebrow": "Get an invite to the beta",
+      "waitlist.h2": "Join the waitlist.",
+      "waitlist.p": "Leave your email for the public arena invite or to discuss hosting your own event. We'll reach out when we're ready. OSS — no fee.",
+      "waitlist.noscript": "Enable JavaScript to see the signup form.",
+      "waitlist.fallback": "Open the form",
+      "waitlist.unconfigured": "The waitlist will be open soon.",
 
       "ent.eyebrow": "If you need it private",
       "ent.h2": "Running it in a closed setting?",
@@ -947,6 +988,46 @@ footer .legal {
     renderProductRows(lang);
     renderTrustBullets(lang);
     renderStats(lang);
+    renderWaitlist(lang);
+  }
+
+  /**
+   * Issue #952: Google Form の waitlist 埋め込み。 form URL は <meta name="tenkacloud:waitlist-form-url">
+   * から読む。 値が空 / placeholder のままなら waitlist section を「準備中」アラートに降格する。
+   * Google Forms の embed URL は `https://docs.google.com/forms/d/e/<FORM_ID>/viewform?embedded=true`。
+   */
+  function renderWaitlist(lang) {
+    var meta = document.querySelector('meta[name="tenkacloud:waitlist-form-url"]');
+    var url = (meta && meta.getAttribute("content") || "").trim();
+    var embed = document.getElementById("waitlist-embed");
+    var fallback = document.getElementById("waitlist-fallback");
+    var link = document.getElementById("waitlist-fallback-link");
+    if (!embed) return;
+    if (!url || url.indexOf("docs.google.com/forms") === -1) {
+      embed.innerHTML = '<p class="sub" style="margin-top:18px;">' + I18N[lang]["waitlist.unconfigured"] + '</p>';
+      if (fallback) fallback.hidden = true;
+      return;
+    }
+    // iframe を 1 回だけ inject (= lang 切替で再描画しない)。
+    if (!embed.querySelector("iframe")) {
+      var iframe = document.createElement("iframe");
+      iframe.src = url;
+      iframe.width = "100%";
+      iframe.height = "740";
+      iframe.frameBorder = "0";
+      iframe.marginHeight = "0";
+      iframe.marginWidth = "0";
+      iframe.setAttribute("title", "TenkaCloud waitlist (Google Forms)");
+      iframe.style.border = "0";
+      iframe.style.maxWidth = "720px";
+      iframe.style.display = "block";
+      iframe.style.margin = "24px auto 0";
+      embed.appendChild(iframe);
+    }
+    if (link && fallback) {
+      link.href = url;
+      fallback.hidden = false;
+    }
   }
 
   document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
