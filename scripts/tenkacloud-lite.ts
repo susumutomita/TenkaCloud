@@ -34,7 +34,10 @@ export const LITE_STACK_NAMES = {
   problemDeploy: "tenkacloud-lite-problem-deploy",
 } as const;
 
-const CDK_OPTS = ["--app", "bunx ts-node infrastructure/bin/tenkacloud-lite.ts"];
+// cdk.json と同じ tsx loader を使う。 ts-node は `./foo.js` → `./foo.ts` の
+// extension rewrite を CommonJS 文脈で解決できず、 `endpoints-metadata.ts` 等の
+// ESM-style import (`./env-encoding.js`) で MODULE_NOT_FOUND になる。
+const CDK_OPTS = ["--app", "bunx tsx infrastructure/bin/tenkacloud-lite.ts"];
 
 export interface SpawnCaptureResult {
   readonly code: number;
