@@ -90,6 +90,13 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   /**
+   * Issue #910 (#895 Phase 2.C.2.b): bulk batch deploy を Distributed Map 経路で実行するか
+   * (= EventApiLambda の \`BULK_DEPLOY_VIA_DISTRIBUTED_MAP\` env で切替)。 default=false で
+   * 旧 fan-out 経路を維持し、 deploy 後に true に切替えて Distributed Map に移行する。
+   * rollback も flag を false に戻すだけ。
+   */
+  readonly useBulkDistributedMap?: boolean;
+  /**
    * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
    * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
    */
@@ -244,6 +251,25 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
     this.deployApiLambda = deployApi.fn;
 
+    // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket。 EventApiLambda の
+    // bulk-deploy handler が PutObject で deployment 配列を書く。 default では feature flag
+    // off で旧 fan-out 維持、 flag flip で Distributed Map 経路 (= 後段 BulkDeployCreateStateMachine)
+    // に切替。 bucket 自体は flag に関係なく作る (= flip だけで切替可能、 段階移行)。
+    const bulkPayloadBucket = new Bucket(this, "BulkDeployPayloadBucket", {
+      encryption: BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      // 旧 batch の object はもう不要なので 7 日で自動削除 (= cost / GC)。
+      lifecycleRules: [
+        {
+          expiration: cdk.Duration.days(7),
+          abortIncompleteMultipartUploadAfter: cdk.Duration.days(1),
+        },
+      ],
+    });
+
     // ADR-004 Phase 1+2a: Event / Team CRUD + Bulk Deploy/Teardown Lambda。
     // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
@@ -261,6 +287,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<
         Record<string, readonly unknown[]>
       >,
+      // Issue #910 Phase 2.C.2.b: bulk batch payload bucket + feature flag。
+      bulkDeployPayloadBucket: bulkPayloadBucket,
+      useBulkDistributedMap: props.useBulkDistributedMap ?? false,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -315,26 +344,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       stateMachine: deleteStateMachine.stateMachine,
     });
 
-    // Issue #910 (#895 Phase 2.C): bulk batch (= 750 deployments) を Distributed Map で
-    // 並列実行するための State Machine + S3 Bucket + EventBridge Rule。 Phase 2.C.2.a
-    // 段階では bulk-deploy.ts handler はまだこの経路を使わない (= 旧 fan-out が継続)。
-    // 後続 PR (2.C.2.b) で handler を S3 PutObject + 1 BulkDeployCreateRequested publish
-    // に切替える。
-    const bulkPayloadBucket = new Bucket(this, "BulkDeployPayloadBucket", {
-      encryption: BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      // 旧 batch の object はもう不要なので 7 日で自動削除 (= cost / GC)。 retry API は
-      // jobId 単位で再投入する (= retry 経路で再 PutObject)、 batch object 自体は短命。
-      lifecycleRules: [
-        {
-          expiration: cdk.Duration.days(7),
-          abortIncompleteMultipartUploadAfter: cdk.Duration.days(1),
-        },
-      ],
-    });
+    // Issue #910 (#895 Phase 2.C): Distributed Map state machine + EventBridge Rule。
+    // bulkPayloadBucket は上で EventApiLambda 用に先行生成済 (= bucket logical ID 維持)。
     const bulkStateMachine = new BulkDeployCreateStateMachine(this, "BulkDeployCreate", {
       childStateMachine: stateMachine.stateMachine,
       payloadBucket: bulkPayloadBucket,

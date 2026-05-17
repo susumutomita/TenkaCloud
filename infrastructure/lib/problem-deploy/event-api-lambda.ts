@@ -4,6 +4,7 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -54,6 +55,17 @@ export interface EventApiLambdaProps {
    * Lambda と同じ env 名)。
    */
   readonly environmentName: string;
+  /**
+   * Issue #910 (#895 Phase 2.C): bulk batch payload を保存する S3 bucket。 未配線
+   * (= 旧 fan-out のみ) なら undefined。 wire 時に bulk-deploy.ts が PutObject で
+   * deployment 配列を書き、 1 BulkDeployCreateRequested event を publish する。
+   */
+  readonly bulkDeployPayloadBucket?: IBucket;
+  /**
+   * Issue #910: Distributed Map 経路への切替 flag。 "true" で bulk-deploy.ts が S3 PutObject
+   * + 1 event publish に切替。 未設定 / "false" は旧 fan-out 維持 (= rollback safety)。
+   */
+  readonly useBulkDistributedMap?: boolean;
 }
 
 /**
@@ -97,6 +109,10 @@ export class EventApiLambda extends Construct {
         // Issue #888: disruption fire / catalog / audit Lambda 経路で参照
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
         BATTLE_PROBLEMS_DISRUPTIONS: JSON.stringify(props.problemsDisruptions),
+        // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket + feature flag。
+        // bucket 未配線時は空文字、 flag は default false (= 旧 fan-out 維持)。
+        BULK_DEPLOY_PAYLOAD_BUCKET: props.bulkDeployPayloadBucket?.bucketName ?? "",
+        BULK_DEPLOY_VIA_DISTRIBUTED_MAP: props.useBulkDistributedMap ? "true" : "false",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -120,5 +136,11 @@ export class EventApiLambda extends Construct {
     // Issue #888: disruption audit + idempotency 用に RW、 EventBus PutEvents は既存付与で十分
     // (= disruption fire でも同 bus に publish するため)。
     props.disruptionsTable.grantReadWriteData(this.fn);
+    // Issue #910 (#895 Phase 2.C.2.b): bulk payload bucket への PutObject 権限。 bucket が
+    // 渡されたときのみ grant (= 未配線時の余分な IAM を避ける)。 useBulkDistributedMap が
+    // false でも grant を入れておくと、 flag を flip するだけで切替できる (= 段階移行)。
+    if (props.bulkDeployPayloadBucket) {
+      props.bulkDeployPayloadBucket.grantPut(this.fn);
+    }
   }
 }
