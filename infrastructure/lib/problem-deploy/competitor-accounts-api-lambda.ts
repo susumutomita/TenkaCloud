@@ -138,5 +138,23 @@ export class CompetitorAccountsApiLambda extends Construct {
         resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
       }),
     );
+
+    // 5. Issue #925 Phase 1: Tenant Admin が tenant 内 user を CRUD する route 用の Cognito 権限。
+    //    SAML route と同じ self-targeting (= JWT iss から UserPool ID を runtime 抽出) で
+    //    wildcard を絞り込む。 actions は最小権限:
+    //      - AdminCreateUser / AdminDeleteUser / AdminGetUser: invite / delete / 越境チェック
+    //      - ListUsers: tenant scoped list (= custom:tenantId filter で絞る)
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminDeleteUser",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:ListUsers",
+        ],
+        resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
+      }),
+    );
   }
 }

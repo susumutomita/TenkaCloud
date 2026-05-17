@@ -23,6 +23,13 @@ import {
   rotateExternalIdForAccount,
 } from "./store.js";
 import { CreateCompetitorAccountRequestSchema } from "./types.js";
+import { DuplicateUserError, TenantMismatchError, UserNotFoundError } from "./users-cognito.js";
+import {
+  InviteUserRequestSchema,
+  routeCreateUser,
+  routeDeleteUser,
+  routeListUsers,
+} from "./users-routes.js";
 import {
   AssumeRoleSanityCheckFailedError,
   ExternalIdMissingError,
@@ -272,6 +279,71 @@ app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
     }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[competitor-accounts] delete failed", { awsAccountId, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// Issue #925 Phase 1: Tenant 内 user の CRUD。 `/admin/*` middleware で既に TenantAdmin role が
+// gate されているため、 各 handler では tenantId resolve のみ行う。 削除は self-delete 防止 +
+// tenant 越境チェック (AdminGetUser) → AdminDeleteUser。
+app.get("/admin/users", async (c) => {
+  const tenantId = resolveTenantId(c);
+  const result = await routeListUsers({ shared }, c, tenantId);
+  return c.json(result.body as never, result.status as 200 | 401);
+});
+
+app.post("/admin/users", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
+  }
+  const parsed = InviteUserRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation_failed", issues: parsed.error.issues },
+      StatusCodes.BAD_REQUEST,
+    );
+  }
+  const tenantId = resolveTenantId(c);
+  try {
+    const result = await routeCreateUser({ shared }, c, tenantId, parsed.data);
+    return c.json(result.body as never, result.status as 201 | 401);
+  } catch (err) {
+    if (err instanceof DuplicateUserError) {
+      return c.json({ error: "duplicate_user", email: err.email }, StatusCodes.CONFLICT);
+    }
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[competitor-accounts] user create failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.delete("/admin/users/:username", async (c) => {
+  const username = c.req.param("username");
+  if (!username || username.length === 0) {
+    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
+  }
+  const tenantId = resolveTenantId(c);
+  try {
+    const result = await routeDeleteUser({ shared }, c, tenantId, username);
+    return c.json(result.body as never, result.status as 200 | 401 | 409);
+  } catch (err) {
+    if (err instanceof UserNotFoundError) {
+      return c.json({ error: "not_found", username: err.username }, StatusCodes.NOT_FOUND);
+    }
+    if (err instanceof TenantMismatchError) {
+      // 越境試行は 404 で隠蔽 (= attacker に「存在するが他 tenant の user」と教えない)。
+      console.warn("[competitor-accounts] tenant mismatch on delete", {
+        username,
+        expected: err.expectedTenantId,
+        actual: err.actualTenantId,
+      });
+      return c.json({ error: "not_found", username }, StatusCodes.NOT_FOUND);
+    }
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[competitor-accounts] user delete failed", { username, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });

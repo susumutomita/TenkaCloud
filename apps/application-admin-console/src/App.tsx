@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
+import { AdminUsersPage } from "./pages/AdminUsers";
 import { CallbackPage } from "./pages/Callback";
 import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
@@ -53,6 +54,10 @@ export function App({ config }: { config: AppConfig }) {
           element={guarded(config, <CompetitorAccountsPage config={config} />)}
         />
         <Route path="/settings/sso" element={guarded(config, <SamlSsoPage config={config} />)} />
+        <Route
+          path="/settings/users"
+          element={guarded(config, <AdminUsersPage config={config} />)}
+        />
         <Route path="/events" element={guarded(config, <EventListPage config={config} />)} />
         <Route path="/events/new" element={guarded(config, <EventCreatePage config={config} />)} />
         <Route

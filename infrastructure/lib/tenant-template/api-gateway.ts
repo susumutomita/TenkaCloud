@@ -178,5 +178,17 @@ export class ApiGateway extends Construct {
     tenantSamlConfig.addMethod("PUT", competitorAccountsIntegration, deployMethodOptions);
     tenantSamlConfig.addMethod("PATCH", competitorAccountsIntegration, deployMethodOptions);
     tenantSamlConfig.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
+
+    // Issue #925 Phase 1: Tenant 内 user の CRUD (= 初期 admin だけでなく追加ユーザーを招待できる)。
+    // 同 Lambda (competitor-accounts) に相乗りさせ、 Cognito AdminCreate / AdminDelete / ListUsers
+    // 権限は Lambda 側で付与済。
+    //   /admin/users                 GET=list / POST=invite
+    //   /admin/users/{username}      DELETE=remove (tenant 越境 + self-delete 防止 server 側で)
+    const users = admin.addResource("users");
+    users.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
+    users.addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
+    users
+      .addResource("{username}")
+      .addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
   }
 }
