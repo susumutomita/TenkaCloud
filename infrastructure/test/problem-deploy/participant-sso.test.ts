@@ -245,7 +245,9 @@ describe("getConsoleSigninUrl", () => {
     const second = stsSend.mock.calls[1]?.[0] as AssumeRoleCommand;
     expect(second.input).toMatchObject({
       RoleArn: "arn:aws:iam::999999999999:role/tc-security-battle-royale-alpha-participant-viewer",
-      RoleSessionName: `participant-viewer-${VALID_JOB_ID}`,
+      // Audit #8: session name に problemId を含める (= AWS Console 上部の federated user 表示で
+      // 問題名が判別できるようにする、 image #30 の改善)。 `${problemId}-${jobId}` 形式。
+      RoleSessionName: `security-battle-royale-${VALID_JOB_ID}`,
       ExternalId: VALID_JOB_ID,
       DurationSeconds: 3600,
     });

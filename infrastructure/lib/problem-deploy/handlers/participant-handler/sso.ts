@@ -185,10 +185,15 @@ export async function getConsoleSigninUrl(
       return { kind: "assume_role_failed", reason: "Credentials field empty" };
     }
     const innerSts = new STSClient({ credentials: competitorCredentials });
+    // Audit table #8: 旧 RoleSessionName は `participant-viewer-${jobId}` で generic だった (=
+    // AWS Console 上部 federation user 表示で問題名が分からない、 image #30 の指摘)。 problemId を
+    // 含めて `${problemId}-${jobId}` 形式に変更。 IAM の RoleSessionName 制約: 2-64 文字 / pattern
+    // `[\\w+=,.@-]+`。 problemId max ~30 文字 + '-' + ULID jobId 26 文字 = 最大 57 文字で収まる。
+    // problemId は metadata.json の id (= kebab-case slug) なので IAM 許容 pattern に合致する。
     session = await innerSts.send(
       new AssumeRoleCommand({
         RoleArn: participantRoleArn,
-        RoleSessionName: `participant-viewer-${jobId}`,
+        RoleSessionName: `${problemId}-${jobId}`,
         ExternalId: jobId,
         DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
       }),

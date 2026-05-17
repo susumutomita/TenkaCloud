@@ -133,6 +133,25 @@ export class IdentityProvider extends Construct {
     this.tenantUserPool = new aws_cognito.UserPool(this, "tenantUserPool", {
       autoVerify: { email: true },
       accountRecovery: aws_cognito.AccountRecovery.EMAIL_ONLY,
+      // ADR-020 Phase E / audit MFA: tenant admin consoles は destructive 操作を扱う
+      // (= user 管理 / SAML / 削除 / IAM mutate)。 OPTIONAL では参加率に依存して未設定の admin が
+      // 攻撃面に残るため、 REQUIRED で全 admin に TOTP 設定を強制する。
+      //
+      // signInAliases に email を使う運用なので SMS は使わず TOTP のみ (= 国際 SMS の到達率不安定
+      // 問題 + コスト)。 SMS をオフにしたい場合は \`mfaSecondFactor.sms: false\`、 TOTP 必須なので
+      // \`otp: true\`。
+      //
+      // 既存 user 向けの grace period 対策:
+      //   - Cognito の REQUIRED mode は first sign-in 時に MFA 登録を促す flow (= ChallengeName=MFA_SETUP)。
+      //   - 既存 user は 次回 sign-in 時に MFA 設定 step を 通る必要があるが、 forced reset ではなく
+      //     associate-software-token → verify の自然な流れ。
+      //   - 既存 TenantAdmin が lock-out された場合の救済は SystemAdmin (= control plane 側) が
+      //     AdminResetUserPassword + 再招待で復旧可能。
+      mfa: aws_cognito.Mfa.REQUIRED,
+      mfaSecondFactor: {
+        sms: false,
+        otp: true,
+      },
       userInvitation: {
         emailSubject: "[TenkaCloud] Tenant Admin Invitation",
         emailBody: buildInviteEmailBody(props.applicationAdminConsoleUrl),
