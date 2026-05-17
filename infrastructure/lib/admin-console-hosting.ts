@@ -89,11 +89,15 @@ export class AdminConsoleHostingStack extends cdk.Stack {
     const oai = new OriginAccessIdentity(this, "OAI");
     bucket.grantRead(oai);
 
-    // Issue #855: CloudFront に security headers (HSTS / CSP / X-Frame-Options 等) を強制。
-    // admin-console は Control Plane API (= props.apiUrl) と SBT Cognito (= props.cognitoDomain)
-    // に connect する。 form-action は Cognito Hosted UI への sign-in form 投稿で使う。
+    // Issue #855 + #896: CloudFront に security headers (HSTS / CSP / X-Frame-Options 等) を強制。
+    // admin-console は次の 3 経路に fetch する。 すべて allow-list に列挙する (= 漏れは
+    // ブラウザの \"Refused to connect by CSP\" を発生させ Provisioning Jobs 等を壊す):
+    //   - props.apiUrl              : Control Plane API GW (= tenant CRUD)
+    //   - props.cognitoDomain       : Cognito OAuth (/oauth2/token /authorize /revoke /logout)
+    //   - props.adminInsightApiUrl  : AdminInsight API GW (= Provisioning Jobs / TenantDrillDown)
+    // form-action は Cognito Hosted UI への sign-in form 投稿で使う。
     const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
-      connectSrcAllowedOrigins: [props.apiUrl, props.cognitoDomain],
+      connectSrcAllowedOrigins: [props.apiUrl, props.cognitoDomain, props.adminInsightApiUrl],
       formActionAllowedOrigins: [props.cognitoDomain],
     });
 

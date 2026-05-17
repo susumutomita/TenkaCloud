@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { RemovalPolicy } from "aws-cdk-lib";
+import { RemovalPolicy, Stack } from "aws-cdk-lib";
 import {
   Distribution,
   HttpVersion,
@@ -62,13 +62,19 @@ export class ParticipantPortalHosting extends Construct {
     const oai = new OriginAccessIdentity(this, "OAI");
     this.bucket.grantRead(oai);
 
-    // Issue #855: CloudFront に security headers を強制。 participant-portal は teamLoginKey 経路
-    // (= bearer token 専用) で外部 Cognito は使わないが、 backend API (= Lambda Function URL)
-    // への connect は許可する必要がある。 form-action は teamLoginKey login の form 投稿で同 origin。
+    // Issue #855 + #896: CloudFront に security headers を強制。 participant-portal は teamLoginKey
+    // 経路 (= bearer token 専用) で外部 Cognito は使わないが、 backend API (= Lambda Function URL
+    // または API GW) への connect は許可する必要がある。 form-action は teamLoginKey login の form
+    // 投稿で同 origin。
+    //
+    // CSP host-source の wildcard は **leftmost のみ** 仕様 (CSP3) で許可される。 旧 `*.lambda-url.*.on.aws`
+    // / `*.execute-api.*.amazonaws.com` は中段 `*` を含み spec 違反、 ブラウザは silently ignore →
+    // 全 fetch が \"Refused to connect by CSP\" で fail していた。 region は synth 時に inject する。
+    const region = Stack.of(this).region;
     const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
       connectSrcAllowedOrigins: [
-        "https://*.lambda-url.*.on.aws",
-        "https://*.execute-api.*.amazonaws.com",
+        `https://*.lambda-url.${region}.on.aws`,
+        `https://*.execute-api.${region}.amazonaws.com`,
       ],
     });
 
