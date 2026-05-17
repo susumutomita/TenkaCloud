@@ -50,9 +50,18 @@
     "kind": "flag",
     "flagOutputKey": "ParameterValue",
     "points": 100,
+    "wrongAnswerPenalty": 5,
     "hints": [
-      "AWS Console (SSM Parameter Store) または `aws ssm get-parameter --name /{NamePrefix}/hello` で値を読み出してください",
-      "値は `Hello from tc-...` の形式で、Stack 名 prefix を含みます"
+      {
+        "id": "hint-1",
+        "content": "AWS Console (SSM Parameter Store) または `aws ssm get-parameter --name /{NamePrefix}/hello` で値を読み出してください",
+        "penalty": 10
+      },
+      {
+        "id": "hint-2",
+        "content": "値は `Hello from tc-...` の形式で、Stack 名 prefix を含みます (= NamePrefix の値そのもの)",
+        "penalty": 20
+      }
     ]
   }
 }
