@@ -13,6 +13,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { listProblemSummaries, type ProblemSummary } from "../data/problems";
+import { interpolate, useT } from "../i18n";
 import {
   collectTagFacets,
   type DifficultyLevel,
@@ -23,38 +24,11 @@ import {
   toggleTagFilter,
 } from "../lib/problem-filter";
 
-const DIFFICULTY_LABEL: Record<ProblemSummary["difficulty"], string> = {
-  1: "入門",
-  2: "初級",
-  3: "中級",
-  4: "上級",
-  5: "エキスパート",
-};
-
 const STATUS_BADGE_COLOR: Record<ProblemSummary["status"], "green" | "blue" | "grey"> = {
   ready: "green",
   draft: "blue",
   deprecated: "grey",
 };
-
-const STATUS_LABEL: Record<ProblemSummary["status"], string> = {
-  ready: "公開中",
-  draft: "下書き",
-  deprecated: "停止予定",
-};
-
-const CATEGORY_SEGMENTS: SegmentedControlProps.Option[] = [
-  { id: "all", text: "全て" },
-  { id: "Battle", text: "Battle" },
-  { id: "Challenge", text: "Challenge" },
-];
-
-const STATUS_SEGMENTS: SegmentedControlProps.Option[] = [
-  { id: "all", text: "全て" },
-  { id: "ready", text: "公開中" },
-  { id: "draft", text: "下書き" },
-  { id: "deprecated", text: "停止予定" },
-];
 
 const DIFFICULTY_LEVELS: DifficultyLevel[] = [1, 2, 3, 4, 5];
 
@@ -64,30 +38,55 @@ const DIFFICULTY_LEVELS: DifficultyLevel[] = [1, 2, 3, 4, 5];
  *
  * Issue #834 / #835: 検索 box / category / status / 難易度 / タグ filter を提供。
  * tag badge は click で 「そのタグだけで絞り込み」 (= toggle、 同タグ 2 回 click で解除)。
+ *
+ * i18n: 全 UI strings は \`t()\` 経由で locale に追従する。 problem metadata (name /
+ * shortDescription / tag literal) は author が書いた JP 文字列なので i18n 対象外
+ * (= 別 issue で metadata に \`description_en\` 等を加える必要がある)。
  */
 export function ProblemsPage() {
   const navigate = useNavigate();
+  const t = useT();
   const problems = listProblemSummaries();
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
 
   const filtered = useMemo(() => filterProblems(problems, criteria), [problems, criteria]);
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
+
+  const difficultyLabel = (d: ProblemSummary["difficulty"]): string =>
+    t(`problems.difficulty_${d}`);
+  const statusLabel = (s: ProblemSummary["status"]): string => t(`problems.status_${s}`);
+
+  const categorySegments: SegmentedControlProps.Option[] = [
+    { id: "all", text: t("problems.all") },
+    { id: "Battle", text: "Battle" },
+    { id: "Challenge", text: "Challenge" },
+  ];
+  const statusSegments: SegmentedControlProps.Option[] = [
+    { id: "all", text: t("problems.all") },
+    { id: "ready", text: t("problems.status_ready") },
+    { id: "draft", text: t("problems.status_draft") },
+    { id: "deprecated", text: t("problems.status_deprecated") },
+  ];
+
   const tagOptions: MultiselectProps.Option[] = useMemo(
-    () => tagFacets.map((f) => ({ value: f.tag, label: f.tag, description: `${f.count} 件` })),
-    [tagFacets],
+    () =>
+      tagFacets.map((f) => ({
+        value: f.tag,
+        label: f.tag,
+        description: interpolate(t("problems.tag_facet_count"), { count: String(f.count) }),
+      })),
+    [tagFacets, t],
   );
   const tagSelected: MultiselectProps.Option[] = useMemo(
-    () => criteria.tags.map((t) => ({ value: t, label: t })),
+    () => criteria.tags.map((tag) => ({ value: tag, label: tag })),
     [criteria.tags],
   );
-  const difficultyOptions: MultiselectProps.Option[] = useMemo(
-    () =>
-      DIFFICULTY_LEVELS.map((d) => ({
-        value: String(d),
-        label: `${d} (${DIFFICULTY_LABEL[d]})`,
-      })),
-    [],
-  );
+  // difficulty options は DIFFICULTY_LEVELS (= 5 件 固定) を locale ごとに label 化する。
+  // useMemo にせず render ごとに作り直しても cost 無視できる範囲、 locale 切替時に追従させる。
+  const difficultyOptions: MultiselectProps.Option[] = DIFFICULTY_LEVELS.map((d) => ({
+    value: String(d),
+    label: `${d} (${difficultyLabel(d)})`,
+  }));
   const difficultySelected: MultiselectProps.Option[] = useMemo(
     () => criteria.difficulties.map((d) => ({ value: String(d), label: `${d}` })),
     [criteria.difficulties],
@@ -97,7 +96,7 @@ export function ProblemsPage() {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="競技アカウントへデプロイ可能な問題の一覧。 検索 / カテゴリ / 状態 / 難易度 / タグで絞り込みできます。"
+        description={t("problems.description")}
         counter={
           isFilterActive(criteria)
             ? `(${filtered.length} / ${problems.length})`
@@ -105,25 +104,27 @@ export function ProblemsPage() {
         }
         actions={
           isFilterActive(criteria) && (
-            <Button onClick={() => setCriteria(EMPTY_FILTER_CRITERIA)}>絞り込み解除</Button>
+            <Button onClick={() => setCriteria(EMPTY_FILTER_CRITERIA)}>
+              {t("problems.clear_filter")}
+            </Button>
           )
         }
       >
-        問題カタログ
+        {t("problems.header")}
       </Header>
 
       <SpaceBetween size="s">
         <Input
           type="search"
           value={criteria.search}
-          placeholder="問題名 / 説明 / タグから検索 (substring, 大文字小文字無視)"
+          placeholder={t("problems.search_placeholder")}
           onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
         />
         <SpaceBetween direction="horizontal" size="s">
           <SegmentedControl
             selectedId={criteria.categories.length === 1 ? criteria.categories[0] : "all"}
-            options={CATEGORY_SEGMENTS}
-            label="カテゴリ"
+            options={categorySegments}
+            label={t("problems.category_label")}
             onChange={({ detail }) =>
               setCriteria((prev) => ({
                 ...prev,
@@ -136,8 +137,8 @@ export function ProblemsPage() {
           />
           <SegmentedControl
             selectedId={criteria.statuses.length === 1 ? criteria.statuses[0] : "all"}
-            options={STATUS_SEGMENTS}
-            label="公開状態"
+            options={statusSegments}
+            label={t("problems.status_label")}
             onChange={({ detail }) =>
               setCriteria((prev) => ({
                 ...prev,
@@ -151,7 +152,7 @@ export function ProblemsPage() {
         </SpaceBetween>
         <SpaceBetween direction="horizontal" size="s">
           <Multiselect
-            placeholder="難易度を選択"
+            placeholder={t("problems.difficulty_placeholder")}
             options={difficultyOptions}
             selectedOptions={difficultySelected}
             tokenLimit={5}
@@ -167,7 +168,11 @@ export function ProblemsPage() {
             }
           />
           <Multiselect
-            placeholder={`タグを選択 (${criteria.tagMatchMode === "and" ? "全て含む" : "いずれか含む"})`}
+            placeholder={
+              criteria.tagMatchMode === "and"
+                ? t("problems.tag_placeholder_and")
+                : t("problems.tag_placeholder_or")
+            }
             options={tagOptions}
             selectedOptions={tagSelected}
             tokenLimit={10}
@@ -189,7 +194,9 @@ export function ProblemsPage() {
                 }))
               }
             >
-              タグ結合: {criteria.tagMatchMode === "and" ? "AND (全て含む)" : "OR (いずれか含む)"}
+              {criteria.tagMatchMode === "and"
+                ? t("problems.tag_match_and_button")
+                : t("problems.tag_match_or_button")}
             </Button>
           )}
         </SpaceBetween>
@@ -216,9 +223,17 @@ export function ProblemsPage() {
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xs">
                   <Badge color={item.category === "Battle" ? "red" : "blue"}>{item.category}</Badge>
-                  <Badge color={STATUS_BADGE_COLOR[item.status]}>{STATUS_LABEL[item.status]}</Badge>
-                  <Badge color="grey">難易度: {DIFFICULTY_LABEL[item.difficulty]}</Badge>
-                  <Badge color="grey">想定時間: {item.estimatedDuration}</Badge>
+                  <Badge color={STATUS_BADGE_COLOR[item.status]}>{statusLabel(item.status)}</Badge>
+                  <Badge color="grey">
+                    {interpolate(t("problems.badge_difficulty"), {
+                      label: difficultyLabel(item.difficulty),
+                    })}
+                  </Badge>
+                  <Badge color="grey">
+                    {interpolate(t("problems.badge_duration"), {
+                      duration: item.estimatedDuration,
+                    })}
+                  </Badge>
                 </SpaceBetween>
               ),
             },
@@ -228,7 +243,7 @@ export function ProblemsPage() {
             },
             {
               id: "tags",
-              header: "タグ",
+              header: t("problems.tags_header"),
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xxs">
                   {item.tags.map((tag) => {
@@ -238,9 +253,12 @@ export function ProblemsPage() {
                         key={tag}
                         variant={isActive ? "primary" : "inline-link"}
                         onClick={() => setCriteria((prev) => toggleTagFilter(prev, tag))}
-                        ariaLabel={
-                          isActive ? `タグ ${tag} の絞り込みを解除` : `タグ ${tag} で絞り込む`
-                        }
+                        ariaLabel={interpolate(
+                          isActive
+                            ? t("problems.tag_active_aria")
+                            : t("problems.tag_inactive_aria"),
+                          { tag },
+                        )}
                       >
                         {tag}
                       </Button>
@@ -256,11 +274,13 @@ export function ProblemsPage() {
           <Box textAlign="center" color="inherit" padding="xxl">
             {isFilterActive(criteria) ? (
               <SpaceBetween size="s">
-                <Box variant="p">条件に一致する問題はありません。</Box>
-                <Button onClick={() => setCriteria(EMPTY_FILTER_CRITERIA)}>絞り込み解除</Button>
+                <Box variant="p">{t("problems.empty_filtered")}</Box>
+                <Button onClick={() => setCriteria(EMPTY_FILTER_CRITERIA)}>
+                  {t("problems.clear_filter")}
+                </Button>
               </SpaceBetween>
             ) : (
-              "問題がまだ登録されていません。"
+              t("problems.empty")
             )}
           </Box>
         }
