@@ -26,8 +26,12 @@ import { bulkTeardownEvent } from "./bulk-delete.js";
 import { bulkDeployEvent } from "./bulk-deploy.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
 import { createNotification } from "./create-notification.js";
-import { fireDisruption, listDisruptionAudit, listDisruptionCatalog } from "./disruption-fire.js";
-import type { DisruptionFireScope } from "./disruption-types.js";
+import {
+  fireDisruption,
+  isEventOwnedByTenant,
+  listDisruptionAudit,
+  listDisruptionCatalog,
+} from "./disruption-fire.js";
 import { endEvent } from "./end-event.js";
 import { getEventDetail, listEvents } from "./list.js";
 import { lockScoring, unlockScoring } from "./lock-scoring.js";
@@ -36,6 +40,7 @@ import { buildEventSharedResources } from "./shared.js";
 import {
   BulkDeployRequestSchema,
   CreateEventRequestSchema,
+  DisruptionFireRequestSchema,
   ScheduleEventRequestSchema,
 } from "./types.js";
 
@@ -461,6 +466,10 @@ app.get("/events/:eventId/disruptions", async (c) => {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
   }
   try {
+    // PR #889 review: 他 tenant の event を obscured ID で覗くのを防ぐため tenant ownership 必須
+    if (!(await isEventOwnedByTenant(shared, eventId, resolveTenantId(c)))) {
+      return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    }
     const out = await listDisruptionCatalog(shared, eventId);
     return c.json(out, HTTP_OK);
   } catch (err) {
@@ -480,6 +489,10 @@ app.get("/events/:eventId/disruptions/audit", async (c) => {
   if (!parsed) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
   const cursor = c.req.query("cursor");
   try {
+    // PR #889 review: 他 tenant の audit log を覗かれないよう tenant ownership 必須
+    if (!(await isEventOwnedByTenant(shared, eventId, resolveTenantId(c)))) {
+      return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    }
     const out = await listDisruptionAudit(shared, eventId, {
       limit: parsed.limit,
       cursor,
@@ -497,54 +510,33 @@ app.post("/events/:eventId/disruptions/fire", async (c) => {
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
   }
-  const body = (await c.req.json().catch(() => null)) as {
-    disruptionId?: unknown;
-    problemId?: unknown;
-    parameters?: unknown;
-    scope?: unknown;
-    targetTeamIds?: unknown;
-    randomCount?: unknown;
-    requestId?: unknown;
-  } | null;
-  if (!body) return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
-  if (typeof body.disruptionId !== "string" || body.disruptionId.length === 0) {
-    return c.json({ error: "invalid_disruption_id" }, HTTP_BAD_REQUEST);
-  }
-  if (typeof body.problemId !== "string" || body.problemId.length === 0) {
-    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
-  }
-  if (
-    typeof body.requestId !== "string" ||
-    body.requestId.length < 8 ||
-    body.requestId.length > 128
-  ) {
-    return c.json({ error: "invalid_request_id" }, HTTP_BAD_REQUEST);
-  }
-  const scope = body.scope;
-  if (scope !== "all" && scope !== "team" && scope !== "random-n") {
-    return c.json({ error: "invalid_scope" }, HTTP_BAD_REQUEST);
-  }
-  const targetTeamIds =
-    Array.isArray(body.targetTeamIds) && scope === "team"
-      ? body.targetTeamIds.filter((id): id is string => typeof id === "string")
-      : [];
-  const randomCount =
-    scope === "random-n" && typeof body.randomCount === "number" ? body.randomCount : undefined;
-  const parameters =
-    body.parameters && typeof body.parameters === "object" && !Array.isArray(body.parameters)
-      ? (body.parameters as Record<string, unknown>)
-      : {};
+  let body: unknown;
   try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
+  }
+  // PR #889 review: 既存 route と整合する Zod parse に統一 (= cross-field 制約も含めて検証)
+  const parsed = DisruptionFireRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+  }
+  const req = parsed.data;
+  try {
+    // PR #889 review: 他 tenant の event に fire できないよう ownership 必須
+    if (!(await isEventOwnedByTenant(shared, eventId, resolveTenantId(c)))) {
+      return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    }
     const outcome = await fireDisruption(shared, {
       tenantId: resolveTenantId(c),
       eventId,
-      problemId: body.problemId,
-      disruptionId: body.disruptionId,
-      parameters,
-      scope: scope as DisruptionFireScope,
-      targetTeamIds,
-      ...(randomCount !== undefined ? { randomCount } : {}),
-      requestId: body.requestId,
+      problemId: req.problemId,
+      disruptionId: req.disruptionId,
+      parameters: req.parameters ?? {},
+      scope: req.scope,
+      targetTeamIds: req.targetTeamIds ?? [],
+      ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
+      requestId: req.requestId,
       firedBy: resolveCognitoSub(c),
       nowMs: Date.now(),
     });

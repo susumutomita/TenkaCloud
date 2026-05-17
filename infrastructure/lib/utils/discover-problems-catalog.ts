@@ -214,7 +214,8 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
           operatorEditable: v.operatorEditable.filter((s): s is string => typeof s === "string"),
         }
       : {}),
-    ...(v.parameters && typeof v.parameters === "object"
+    // PR #889 review: typeof [] === "object" のため array が漏れる。 Record/object のみ許容。
+    ...(v.parameters && typeof v.parameters === "object" && !Array.isArray(v.parameters)
       ? { parameters: v.parameters as Record<string, unknown> }
       : {}),
     ...(typeof v.publicHint === "boolean" ? { publicHint: v.publicHint } : {}),

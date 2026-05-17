@@ -1,13 +1,20 @@
 /**
  * Issue #888 Phase A: Red Team Disruption Fire の business logic。
  *
- * 流れ:
+ * 流れ (= race-safe ordering、 PR #889 review fix 後):
  *   1. problemId / disruptionId を problemsDisruptions catalog で解決
  *   2. parameters を operatorEditable allow-list で fold (= 不正 key を reject)
- *   3. scope に応じて targetTeamIds を解決 (= all / team / random-n)
- *   4. requestId Idempotency lookup (= GSI1 で `REQUEST#<id>` を引く)
- *   5. EventBridge に detail-type=<disruption.eventDetailType> で N team 分 publish
- *   6. DDB に 1 audit row + 1 idempotency row を書く
+ *   3. event 配下 team 一覧を取得し scope=all/team/random-n を解決 (= 母集団)
+ *   4. **Idempotency claim (= REQUEST# row を conditional Put で奪取)**:
+ *      - 成功 → こちらが winner、 publish + audit に進む
+ *      - CCF + 既存 row 有 → duplicate、 前回 result を返す
+ *      - CCF + race winner の row 未到達 → 短時間 sleep + 再 Get
+ *   5. EventBridge publish (= FailedEntryCount > 0 で throw)
+ *   6. AUDIT# row を Put
+ *
+ * 旧設計 (= 先 Query → publish → 後 Put) には race 窓があり、 同 requestId の 2 件が
+ * 両方 publish に進めてしまう問題があったため、 publish の **前** に conditional Put で
+ * 排他を取る形に書き換えた (PR #889 critical review)。
  *
  * cross-account publish (= 競技者アカウントへの forward) は Phase B で追加する。
  * 本 Phase A では同 account の event bus に publish するに留め、 audit + Logs Insights で
@@ -15,6 +22,7 @@
  */
 
 import { randomInt } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
@@ -32,10 +40,12 @@ import type { TeamItem } from "./types.js";
 const EVENT_SOURCE = "tenkacloud.disruptions";
 const AUDIT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_AFFECTED_TEAMS = 200;
+const DUPLICATE_RESOLVE_RETRY_MS = 200;
+const DUPLICATE_RESOLVE_RETRIES = 3;
 
 /**
- * `targetTeamIds` の subset selection。 scope=all なら全件、 scope=team は input そのまま、
- * scope=random-n は crypto-grade Fisher-Yates で randomCount 件抽選。
+ * `targetTeamIds` の subset selection。 scope=all なら全件、 scope=team は dedupe して
+ * 既存 team との intersection、 scope=random-n は crypto-grade Fisher-Yates で抽選。
  */
 function resolveTargetTeams(
   scope: DisruptionFireInput["scope"],
@@ -46,8 +56,16 @@ function resolveTargetTeams(
     return allTeams.map((t) => t.teamId);
   }
   if (scope === "team") {
-    const ids = new Set(allTeams.map((t) => t.teamId));
-    return input.targetTeamIds.filter((id) => ids.has(id));
+    // PR #889 review: input.targetTeamIds が同 id 重複を含む可能性があるため Set で dedupe。
+    const validIds = new Set(allTeams.map((t) => t.teamId));
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const id of input.targetTeamIds) {
+      if (!validIds.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      result.push(id);
+    }
+    return result;
   }
   // scope === "random-n"
   const n = Math.min(Math.max(input.randomCount ?? 1, 1), allTeams.length);
@@ -59,6 +77,77 @@ function resolveTargetTeams(
     pool[j] = tmp;
   }
   return pool.slice(0, n);
+}
+
+/**
+ * PR #889 review: race-safe idempotency claim。 REQUEST# row を conditional Put で
+ * 奪取し、 失敗時は同 row を Get して duplicate result を返す。
+ *
+ * loser 側で row の DDB 反映 (= 強い整合性ありの Get) を即時参照できる前提だが、 万一
+ * eventual な race で row 未到達のケースに備え、 短時間 sleep + 再 Get で 1 度だけ retry。
+ */
+async function tryClaimIdempotency(
+  shared: EventSharedResources,
+  input: DisruptionFireInput,
+  draft: DisruptionAuditRow,
+): Promise<{ kind: "claimed" } | { kind: "duplicate"; row: DisruptionAuditRow }> {
+  const idempotencyKey = `REQUEST#${input.tenantId}#${input.requestId}`;
+  try {
+    await shared.ddb.send(
+      new PutCommand({
+        TableName: shared.disruptionsTableName,
+        Item: {
+          PK: idempotencyKey,
+          SK: "METADATA",
+          GSI1PK: idempotencyKey,
+          GSI1SK: "METADATA",
+          ...draft,
+        },
+        ConditionExpression: "attribute_not_exists(PK)",
+      }),
+    );
+    return { kind: "claimed" };
+  } catch (err) {
+    if (!(err instanceof ConditionalCheckFailedException)) throw err;
+  }
+  // loser: 既存 row を Get で取り直し、 duplicate を返す
+  for (let attempt = 0; attempt <= DUPLICATE_RESOLVE_RETRIES; attempt++) {
+    const out = await shared.ddb.send(
+      new GetCommand({
+        TableName: shared.disruptionsTableName,
+        Key: { PK: idempotencyKey, SK: "METADATA" },
+        ConsistentRead: true,
+      }),
+    );
+    const item = out.Item as Partial<DisruptionAuditRow> | undefined;
+    if (item?.auditId) {
+      return {
+        kind: "duplicate",
+        row: {
+          auditId: item.auditId,
+          tenantId: String(item.tenantId ?? input.tenantId),
+          eventId: String(item.eventId ?? input.eventId),
+          problemId: String(item.problemId ?? input.problemId),
+          disruptionId: String(item.disruptionId ?? input.disruptionId),
+          firedBy: String(item.firedBy ?? input.firedBy),
+          firedAt: String(item.firedAt ?? new Date(input.nowMs).toISOString()),
+          scope: (item.scope ?? input.scope) as DisruptionFireInput["scope"],
+          targetTeamIds: Array.isArray(item.targetTeamIds) ? (item.targetTeamIds as string[]) : [],
+          parameters: (item.parameters && typeof item.parameters === "object"
+            ? item.parameters
+            : {}) as Readonly<Record<string, unknown>>,
+          requestId: String(item.requestId ?? input.requestId),
+          expiresAt: Number(item.expiresAt ?? 0),
+        },
+      };
+    }
+    if (attempt < DUPLICATE_RESOLVE_RETRIES) await sleep(DUPLICATE_RESOLVE_RETRY_MS);
+  }
+  // race winner が item 書き込み前に死んだ等の極端ケース: 自分が claim を取り直すために throw
+  throw new Error(
+    `disruption fire idempotency claim failed for requestId=${input.requestId}: ` +
+      "conditional check failed but no prior row visible after retries",
+  );
 }
 
 /**
@@ -91,33 +180,9 @@ export async function fireDisruption(
     ...input.parameters,
   };
 
-  // 3. Idempotency: requestId 既存 → 前回結果を返す
-  const idempotencyKey = `REQUEST#${input.tenantId}#${input.requestId}`;
-  const prior = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.disruptionsTableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      ExpressionAttributeValues: { ":pk": idempotencyKey },
-      Limit: 1,
-    }),
-  );
-  const priorItem = prior.Items?.[0] as Partial<DisruptionAuditRow> | undefined;
-  if (priorItem?.auditId) {
-    return {
-      kind: "duplicate",
-      result: {
-        auditId: priorItem.auditId,
-        firedAt: priorItem.firedAt ?? new Date(input.nowMs).toISOString(),
-        affectedTeamIds: priorItem.targetTeamIds ?? [],
-      },
-    };
-  }
-
-  // 4. event 配下 team 一覧を取得 (= scope 解決の母集団)
+  // 3. event 配下 team 一覧 → scope 解決
   const allTeams = await listTeamsByEvent(shared, input.eventId);
   if (allTeams.length === 0) return { kind: "no_targets" };
-
   const affected = resolveTargetTeams(input.scope, allTeams, input);
   if (affected.length === 0) return { kind: "no_targets" };
   if (affected.length > MAX_AFFECTED_TEAMS) {
@@ -126,15 +191,8 @@ export async function fireDisruption(
 
   const auditId = ulid();
   const firedAt = new Date(input.nowMs).toISOString();
-  const result: DisruptionFireResult = { auditId, firedAt, affectedTeamIds: affected };
-
-  // 5. EventBridge publish: 1 PutEvents = 10 entries 上限。 chunk 分割で全 affected を流す。
-  await publishEntries(shared, input, declaration.eventDetailType, affected, firedAt);
-
-  // 6. DDB audit + idempotency row を 2 PutItem で書く (= TransactWrite だと 25 row 制限が
-  //    別 audit 経路と相互作用するため Phase A では 2 separate PutItem)。
   const expiresAt = Math.floor(input.nowMs / 1000) + AUDIT_TTL_SECONDS;
-  const auditRow: DisruptionAuditRow = {
+  const draft: DisruptionAuditRow = {
     auditId,
     tenantId: input.tenantId,
     eventId: input.eventId,
@@ -148,42 +206,45 @@ export async function fireDisruption(
     requestId: input.requestId,
     expiresAt,
   };
-  try {
-    await shared.ddb.send(
-      new PutCommand({
-        TableName: shared.disruptionsTableName,
-        Item: {
-          PK: `EVENT#${input.eventId}`,
-          SK: `AUDIT#${firedAt}#${auditId}`,
-          GSI1PK: `TENANT#${input.tenantId}`,
-          GSI1SK: `AUDIT#${firedAt}#${auditId}`,
-          ...auditRow,
-        },
-        // append-only: 同 SK の上書きを防ぐ (= 万一 ULID collision でも reject)
-        ConditionExpression: "attribute_not_exists(SK)",
-      }),
-    );
-    await shared.ddb.send(
-      new PutCommand({
-        TableName: shared.disruptionsTableName,
-        Item: {
-          PK: idempotencyKey,
-          SK: "METADATA",
-          GSI1PK: idempotencyKey,
-          GSI1SK: "METADATA",
-          ...auditRow,
-        },
-        // requestId 重複は手前の Query 段で吸収するが、 並列 fire の race を condition で守る
-        ConditionExpression: "attribute_not_exists(PK)",
-      }),
-    );
-  } catch (err) {
-    if (err instanceof ConditionalCheckFailedException) {
-      // race で先勝されたらこちらは duplicate 扱いに倒す (= idempotent return)。
-      return { kind: "duplicate", result };
-    }
-    throw err;
+
+  // 4. Idempotency claim (= publish 前に排他を取る、 race-safe な順序)
+  const claim = await tryClaimIdempotency(shared, input, draft);
+  if (claim.kind === "duplicate") {
+    return {
+      kind: "duplicate",
+      result: {
+        auditId: claim.row.auditId,
+        firedAt: claim.row.firedAt,
+        affectedTeamIds: claim.row.targetTeamIds,
+      },
+    };
   }
+
+  // 5. EventBridge publish (= FailedEntryCount > 0 で throw、 audit 整合性確保)
+  await publishEntries(
+    shared,
+    input,
+    declaration.eventDetailType,
+    affected,
+    firedAt,
+    mergedParameters,
+  );
+
+  // 6. AUDIT# row を Put (= append-only audit log)
+  await shared.ddb.send(
+    new PutCommand({
+      TableName: shared.disruptionsTableName,
+      Item: {
+        PK: `EVENT#${input.eventId}`,
+        SK: `AUDIT#${firedAt}#${auditId}`,
+        GSI1PK: `TENANT#${input.tenantId}`,
+        GSI1SK: `AUDIT#${firedAt}#${auditId}`,
+        ...draft,
+      },
+      // 同 SK の上書きを防ぐ (= 万一 ULID collision でも reject)
+      ConditionExpression: "attribute_not_exists(SK)",
+    }),
+  );
 
   logDeployTrace("disruption.fire", {
     auditId,
@@ -194,7 +255,10 @@ export async function fireDisruption(
     affectedCount: affected.length,
   });
 
-  return { kind: "ok", result };
+  return {
+    kind: "ok",
+    result: { auditId, firedAt, affectedTeamIds: affected } satisfies DisruptionFireResult,
+  };
 }
 
 async function listTeamsByEvent(
@@ -217,7 +281,10 @@ async function publishEntries(
   detailType: string,
   affectedTeamIds: readonly string[],
   firedAt: string,
+  mergedParameters: Readonly<Record<string, unknown>>,
 ): Promise<void> {
+  // PR #889 review: publish 内容は audit に書く mergedParameters と一致させる
+  // (= 旧コードは input.parameters のみで base parameters を欠いていた)。
   const entries: PutEventsRequestEntry[] = affectedTeamIds.map((teamId) => ({
     Source: EVENT_SOURCE,
     DetailType: detailType,
@@ -228,16 +295,58 @@ async function publishEntries(
       problemId: input.problemId,
       tenantId: input.tenantId,
       teamId,
-      parameters: input.parameters,
+      parameters: mergedParameters,
       requestId: input.requestId,
       firedAt,
     }),
   }));
   const BATCH = 10;
+  const failureDetails: Array<{ entryIndex: number; errorCode: string; errorMessage: string }> = [];
   for (let i = 0; i < entries.length; i += BATCH) {
     const chunk = entries.slice(i, i + BATCH);
-    await shared.events.send(new PutEventsCommand({ Entries: chunk }));
+    const resp = await shared.events.send(new PutEventsCommand({ Entries: chunk }));
+    // PR #889 review: PutEvents は HTTP 200 でも entry 単位の失敗を返す。 FailedEntryCount を
+    // 必ず確認し、 失敗があれば throw して audit 行を書かないようにする (= 整合性確保)。
+    if ((resp.FailedEntryCount ?? 0) > 0) {
+      for (const [idx, e] of (resp.Entries ?? []).entries()) {
+        if (e.ErrorCode) {
+          failureDetails.push({
+            entryIndex: i + idx,
+            errorCode: e.ErrorCode,
+            errorMessage: e.ErrorMessage ?? "",
+          });
+        }
+      }
+    }
   }
+  if (failureDetails.length > 0) {
+    throw new Error(
+      `disruption publish partial failure: ${failureDetails
+        .map((f) => `entry[${f.entryIndex}]=${f.errorCode}`)
+        .join(", ")}`,
+    );
+  }
+}
+
+/**
+ * PR #889 review: tenant ownership check。 catalog / audit / fire の各 endpoint で
+ * 呼び出し前に event.tenantId === callerTenantId を確認するための shared helper。
+ *
+ * not found / tenant mismatch のどちらも `false` を返す (= info leak 防止のため区別しない)。
+ */
+export async function isEventOwnedByTenant(
+  shared: EventSharedResources,
+  eventId: string,
+  tenantId: string,
+): Promise<boolean> {
+  const out = await shared.ddb.send(
+    new GetCommand({
+      TableName: shared.eventsTableName,
+      Key: { PK: `EVENT#${eventId}`, SK: "META" },
+    }),
+  );
+  const item = out.Item as { tenantId?: string } | undefined;
+  return !!item && item.tenantId === tenantId;
 }
 
 /**
@@ -315,6 +424,8 @@ function decodeCursor(cursor: string): Record<string, unknown> | undefined {
  *
  * event item から problems[] を引き、 problemId 毎に problemsDisruptions catalog を merge。
  * publicHint=false の disruption も TenantAdmin 向けには返す (= operator view が前提)。
+ *
+ * PR #889 review: 呼び出し側 (handler/index.ts) で tenantId 一致を確認した上で呼ぶ前提。
  */
 export async function listDisruptionCatalog(
   shared: EventSharedResources,
