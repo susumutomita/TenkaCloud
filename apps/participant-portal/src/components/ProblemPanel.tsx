@@ -1,7 +1,6 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
-import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
@@ -107,20 +106,15 @@ export function ProblemPanel({
             期待通り応答していない可能性があります。
           </Alert>
         )}
-        <ColumnLayout columns={2} variant="text-grid">
-          <KeyValuePairs
-            items={[
-              { label: "Region", value: problem.region },
-              { label: "Job ID", value: <code>{problem.jobId}</code> },
-            ]}
-          />
-          <KeyValuePairs
-            items={[
-              { label: "現在の score", value: `${problem.score} pt` },
-              { label: "最終加点", value: describeAgo(problem.lastScoredAt, now) },
-            ]}
-          />
-        </ColumnLayout>
+        {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は AWS 多リージョン
+            の場合のみ意味があるが、 1 リージョン運用の現状では noise。 残すのは現在の score + 最終加点 */}
+        <KeyValuePairs
+          items={[
+            { label: "現在の score", value: `${problem.score} pt` },
+            { label: "最終加点", value: describeAgo(problem.lastScoredAt, now) },
+          ]}
+        />
+
         {Object.keys(problem.stackOutputs).length > 0 && (
           <Container header={<Header variant="h3">アクセス先 URL</Header>}>
             <KeyValuePairs
