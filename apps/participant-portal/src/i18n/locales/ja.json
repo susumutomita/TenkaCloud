@@ -42,7 +42,10 @@
     "score_problem_count": "問題数",
     "score_completed_count": "完了済",
     "no_problems_header": "問題がありません",
-    "no_problems_body": "このチームには deploy 済みの問題がありません。operator にお問い合わせください。"
+    "no_problems_body": "このチームには deploy 済みの問題がありません。operator にお問い合わせください。",
+    "quests_quick_link_header": "問題に挑戦",
+    "quests_quick_link_body": "{count} 問が deploy 済です。 問題一覧から挑戦してください。",
+    "quests_quick_link_button": "問題一覧を開く"
   },
   "login": {
     "header": "TenkaCloud Participant Portal",

@@ -1,25 +1,39 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { useNavigate } from "react-router";
 import type { ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
-import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
+/**
+ * Audit table #11: 超長 username (= Cognito sub-derived 名等) が header 全幅を占有して
+ * layout を壊す問題への対策。 長すぎる名前は ~24 文字で truncate + "…" を付ける (Cloudscape
+ * の Box variant に text overflow control が無いため自前で行う)。 詳細は detail 画面 / プロファイル
+ * 画面で fullName を出す経路を別途用意する。
+ */
+const TEAM_NAME_MAX = 24;
+function truncateTeamName(name: string): string {
+  if (name.length <= TEAM_NAME_MAX) return name;
+  return `${name.slice(0, TEAM_NAME_MAX)}…`;
+}
+
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
-  const sessionToken = auth.session?.sessionToken ?? null;
   const isBackend = config.mode === "backend";
   const t = useT();
+  const navigate = useNavigate();
   // Polling は ShellLayout の TeamViewProvider で一括管理される (TopNav も同じデータを共有)。
-  const { view, error, refresh } = useTeamView();
+  const { view, error } = useTeamView();
 
-  const teamName = view?.team.teamName ?? auth.session?.teamName ?? "(unknown)";
+  const teamNameRaw = view?.team.teamName ?? auth.session?.teamName ?? "(unknown)";
+  const teamName = truncateTeamName(teamNameRaw);
 
   return (
     <SpaceBetween size="l">
@@ -40,15 +54,18 @@ export function HomePage({ config }: { config: AppConfig }) {
 
       {view && <TeamScorePanel view={view} />}
 
-      {view?.problems.map((problem) => (
-        <ProblemPanel
-          key={problem.jobId}
-          problem={problem}
-          apiBaseUrl={config.apiBaseUrl}
-          sessionToken={sessionToken ?? ""}
-          onScored={refresh}
-        />
-      ))}
+      {/* Audit table #10: ホームは dashboard。 問題詳細 (ProblemPanel) を embed しない (=
+       *  「一等地に何を出すか」 のティアリング、 問題の deep dive は /problems から)。 */}
+      {view && view.problems.length > 0 && (
+        <Container header={<Header variant="h2">{t("home.quests_quick_link_header")}</Header>}>
+          <SpaceBetween size="m">
+            <Box>{t("home.quests_quick_link_body", { count: view.problems.length })}</Box>
+            <Button variant="primary" onClick={() => navigate("/problems")}>
+              {t("home.quests_quick_link_button")}
+            </Button>
+          </SpaceBetween>
+        </Container>
+      )}
 
       {view && view.problems.length === 0 && (
         <Container header={<Header variant="h2">{t("home.no_problems_header")}</Header>}>

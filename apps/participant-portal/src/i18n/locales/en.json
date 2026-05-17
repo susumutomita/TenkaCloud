@@ -42,7 +42,10 @@
     "score_problem_count": "Problems",
     "score_completed_count": "Completed",
     "no_problems_header": "No problems",
-    "no_problems_body": "This team has no deployed problems. Please contact the operator."
+    "no_problems_body": "This team has no deployed problems. Please contact the operator.",
+    "quests_quick_link_header": "Take on the problems",
+    "quests_quick_link_body": "{count} problem(s) deployed. Open the Quests list to start.",
+    "quests_quick_link_button": "Open Quests"
   },
   "login": {
     "header": "TenkaCloud Participant Portal",
