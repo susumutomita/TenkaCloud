@@ -3,15 +3,20 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import { Bucket } from "aws-cdk-lib/aws-s3";
+import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine";
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda";
 import { CompetitorAccountsTable } from "./competitor-accounts-table";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine";
 import { DeployDeleteStateMachine } from "./deploy-delete-state-machine";
-import { DeployDeleteEventRule, DeployEventRule } from "./deploy-event-rule";
+import {
+  BulkDeployCreateEventRule,
+  DeployDeleteEventRule,
+  DeployEventRule,
+} from "./deploy-event-rule";
 import { DeploymentsTable } from "./deployments-table";
 import { DescribeStackLambda } from "./describe-stack-lambda";
 import { DisruptionsTable } from "./disruptions-table";
@@ -180,6 +185,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly deployDeleteStateMachineArn: string;
   /** Problem deploy CodeBuild project name for CloudWatch metrics. */
   public readonly deployCodeBuildProjectName: string;
+  /**
+   * Issue #910 (#895 Phase 2.C): bulk batch deploy 用 Distributed Map State Machine ARN。
+   * 後続 PR (= 2.C.2.b) で API Lambda が `StartExecution` で起動する。
+   */
+  public readonly bulkDeployCreateStateMachineArn: string;
+  /**
+   * Issue #910: bulk batch payload S3 bucket。 後続 PR で API Lambda が deployment 配列を
+   * PutObject する。
+   */
+  public readonly bulkDeployPayloadBucketName: string;
 
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
@@ -299,6 +314,38 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       eventBus,
       stateMachine: deleteStateMachine.stateMachine,
     });
+
+    // Issue #910 (#895 Phase 2.C): bulk batch (= 750 deployments) を Distributed Map で
+    // 並列実行するための State Machine + S3 Bucket + EventBridge Rule。 Phase 2.C.2.a
+    // 段階では bulk-deploy.ts handler はまだこの経路を使わない (= 旧 fan-out が継続)。
+    // 後続 PR (2.C.2.b) で handler を S3 PutObject + 1 BulkDeployCreateRequested publish
+    // に切替える。
+    const bulkPayloadBucket = new Bucket(this, "BulkDeployPayloadBucket", {
+      encryption: BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      // 旧 batch の object はもう不要なので 7 日で自動削除 (= cost / GC)。 retry API は
+      // jobId 単位で再投入する (= retry 経路で再 PutObject)、 batch object 自体は短命。
+      lifecycleRules: [
+        {
+          expiration: cdk.Duration.days(7),
+          abortIncompleteMultipartUploadAfter: cdk.Duration.days(1),
+        },
+      ],
+    });
+    const bulkStateMachine = new BulkDeployCreateStateMachine(this, "BulkDeployCreate", {
+      childStateMachine: stateMachine.stateMachine,
+      payloadBucket: bulkPayloadBucket,
+    });
+    new BulkDeployCreateEventRule(this, "BulkDeployCreateRule", {
+      eventBus,
+      stateMachine: bulkStateMachine.stateMachine,
+    });
+    // outputs: handler refactor (= 2.C.2.b) で API Lambda が PutObject に使う。
+    this.bulkDeployPayloadBucketName = bulkPayloadBucket.bucketName;
+    this.bulkDeployCreateStateMachineArn = bulkStateMachine.stateMachine.stateMachineArn;
 
     // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
     // 2 つの責務を持つ:

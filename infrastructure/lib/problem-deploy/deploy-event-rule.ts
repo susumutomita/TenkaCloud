@@ -3,6 +3,7 @@ import { SfnStateMachine } from "aws-cdk-lib/aws-events-targets";
 import type { IStateMachine } from "aws-cdk-lib/aws-stepfunctions";
 import { Construct } from "constructs";
 import {
+  EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   EVENT_SOURCE,
@@ -68,6 +69,36 @@ export class DeployDeleteEventRule extends Construct {
       eventPattern: {
         source: [EVENT_SOURCE],
         detailType: [EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED],
+      },
+      targets: [new SfnStateMachine(props.stateMachine)],
+    });
+  }
+}
+
+export interface BulkDeployCreateEventRuleProps {
+  readonly eventBus: IEventBus;
+  /** Rule の Target になる State Machine (= `BulkDeployCreateStateMachine`)。 */
+  readonly stateMachine: IStateMachine;
+}
+
+/**
+ * Issue #910 (#895 Phase 2.C): `BulkDeployCreateRequested` event を
+ * `BulkDeployCreateStateMachine` (= Distributed Map) にルーティングする EventBridge Rule。
+ * 単発 `DeployCreateRequested` は従来通り `DeployCreateStateMachine` に流れ、 同 EventBus
+ * 上で detail-type で route 分岐する。
+ */
+export class BulkDeployCreateEventRule extends Construct {
+  public readonly rule: Rule;
+
+  constructor(scope: Construct, id: string, props: BulkDeployCreateEventRuleProps) {
+    super(scope, id);
+
+    this.rule = new Rule(this, "Rule", {
+      eventBus: props.eventBus,
+      description: `Route ${EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED} events to BulkDeployCreateStateMachine`,
+      eventPattern: {
+        source: [EVENT_SOURCE],
+        detailType: [EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED],
       },
       targets: [new SfnStateMachine(props.stateMachine)],
     });

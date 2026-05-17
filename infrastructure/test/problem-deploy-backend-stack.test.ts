@@ -152,8 +152,8 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {
-    it("Create / Delete の State Machine を 2 つ作るべき", () => {
-      tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 2);
+    it("Create / Delete / BulkCreate の State Machine を 3 つ作るべき (Issue #910 Phase 2.C.2.a)", () => {
+      tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 3);
     });
 
     it("Create State Machine は CodeBuild 起動前に PENDING → IN_PROGRESS の中間遷移を書くべき", () => {
@@ -247,12 +247,13 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(deleteStateMachine).toContain("MarkFailed");
     });
 
-    it("EventBridge Rule を Create / Delete / GenericScoring / ExternalIdAudit schedule で 4 つ持つべき", () => {
+    it("EventBridge Rule を Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule で 5 つ持つべき (Issue #910 Phase 2.C.2.a)", () => {
       // 旧 2 (Create / Delete state-machine event rules)
+      //   + BulkCreate (Issue #910 Phase 2.C: BulkDeployCreateRequested → Distributed Map)
       //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
       //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
-      // = 4。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
-      tpl.resourceCountIs("AWS::Events::Rule", 4);
+      // = 5。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
+      tpl.resourceCountIs("AWS::Events::Rule", 5);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
