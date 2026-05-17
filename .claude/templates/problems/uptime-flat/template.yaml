@@ -1,7 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   TenkaCloud problem — __PROBLEM_ID__ (uptime-flat Battle).
-  1 endpoint を 1〜2 時間維持する Battle 型 skeleton。
+  1〜N endpoint を 1 分毎の probe で独立に評価する Battle 型 skeleton。
+  本 skeleton は SNS Topic だけの placeholder。 実問題では EC2 + nginx / Lambda + API GW /
+  ECS 等で実際の HTTP endpoint を立て、 ServiceUrl Output に URL を入れてください。
 
 Parameters:
   NamePrefix:
@@ -14,19 +16,25 @@ Parameters:
     Type: String
     Default: "0.0.0.0/0"
     AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
-    Description: "公開 port を許可する CIDR。"
+    Description: "公開 port を許可する CIDR。 Battle 問題では platform 側 probe 経路を限定したい場合に絞り込み可。"
 
 Resources:
-  # TODO: 競技者が維持する service の AWS リソースを定義 (例: EC2 + nginx、 Lambda + API GW、 ECS 等)
-  # ここでは最小構成として EC2 + UserData での nginx を例示。
-  PlaceholderService:
+  # TODO: 競技者が維持する service の AWS リソースをここで定義してください。
+  # 例:
+  #   - EC2 + UserData で nginx 起動 (= 簡単、 SSM Session Manager で操作練習)
+  #   - Lambda + API Gateway (= cold start に注意)
+  #   - ECS Fargate (= タスク数を 1 に固定して Free Tier 内に収める工夫)
+  #   - App Runner (= source からビルド、 minScale=1 でアイドル課金あり)
+  #
+  # 下記は最小 placeholder。 実 service に置き換えてください。
+  PlaceholderTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: !Sub "${NamePrefix}-placeholder"
 
 Outputs:
   ServiceUrl:
-    Description: "metadata.endpoints[0].default.key が指す URL。 platform scoring が probe する。"
+    Description: "metadata.endpoints[0].default.key が指す URL。 platform scoring が 1 分毎に probe する。"
     Value: "https://example.com/__REPLACE_WITH_REAL_URL__"
   NamePrefix:
     Description: "Deploy 時に渡された prefix (echo)。"

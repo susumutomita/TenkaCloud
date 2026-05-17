@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   TenkaCloud problem — __PROBLEM_ID__ (flag-kind Challenge).
   競技者が AWS Console / CLI で正解値を発見して portal に提出する Challenge 型の skeleton。
+  本 skeleton は SSM Parameter に flag を仕込む最小構成。 実問題では Secrets Manager / S3 /
+  Lambda Env 等に置き換え、 IAM scope を最小化してください。
 
 Parameters:
   NamePrefix:
@@ -12,19 +14,34 @@ Parameters:
     Description: "tc-{problemSlug}-{teamSlug} 形式の共通リソース prefix。"
 
 Resources:
-  # 例: SSM Parameter に正解 flag を仕込む。 競技者は ssm:GetParameter で取り出す等。
+  # 競技者が SSM GetParameter で flag を取り出す想定。
+  # 本格運用では Type: SecureString + KMS で暗号化することを検討してください。
   FlagParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub "/${NamePrefix}/flag"
       Type: String
       Value: "TC{__REPLACE_WITH_REAL_FLAG__}"
-      Description: "本問題の正解 flag (competitor が発見すべき値)。"
+      Description: "本問題の正解 flag。 metadata.scoring.flagOutputKey で指す Output が scoring engine の比較対象。"
+
+  # 任意: 競技者用 discovery hint。 「どこに何があるか」 のヒントを SSM Parameter として置く。
+  # metadata.scoring.hints[] と二重持ちになるが、 競技者が AWS CLI を素振りする練習材料になる。
+  # 不要なら削除して問題ありません。
+  HintParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/hints/discovery"
+      Type: String
+      Value: "Find a parameter named /<NamePrefix>/flag and submit its value."
+      Description: "競技者向け discovery hint (任意削除可)。"
 
 Outputs:
   FlagValue:
     Description: "scoring engine が submitted flag と一致比較する正解値 (= metadata.scoring.flagOutputKey で参照)。"
     Value: !GetAtt FlagParameter.Value
+  FlagParameterPath:
+    Description: "競技者が CLI で読み取る SSM Parameter の path (= 問題文に載せる用)。"
+    Value: !Ref FlagParameter
   NamePrefix:
     Description: "Deploy 時に渡された prefix (echo)。"
     Value: !Ref NamePrefix

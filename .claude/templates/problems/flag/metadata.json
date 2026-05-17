@@ -7,16 +7,33 @@
   "visibility": "public",
   "difficulty": 2,
   "estimatedDuration": "30〜45 分",
-  "shortDescription": "1 行サマリ (~200 字) — どんな問題か。",
-  "description": "問題の長文説明。\\n\\n参加者が deploy 後に何をするか / どんな AWS リソースが立つか / 正解 flag はどこから取り出すかを書く。\\n\\nflag 型の典型: CFn template に SSM Parameter / Secrets Manager / 静的 Output で正解値を仕込み、 OutputKey を `scoring.flagOutputKey` で指す。 競技者は AWS Console / CLI で値を見つけ、 portal の flag form に提出する。",
-  "tags": ["__TAG__"],
-  "exposedPorts": [{ "port": 0, "name": "(no public endpoint)" }],
-  "learningGoals": ["__LEARNING_GOAL_1__", "__LEARNING_GOAL_2__"],
+  "shortDescription": "deploy 後に AWS Console / CLI で正解 flag を発見し portal に提出する Challenge (flag 採点)。",
+  "description": "本問題では deploy 直後に AWS リソース (例: SSM Parameter / Secrets Manager / S3 オブジェクト) が立ち上がります。 そのリソースのいずれかに正解 flag (`TC{...}` 形式) が仕込まれているので、 AWS Console / CLI から発見し、 portal の flag 提出フォームに submit してください。\\n\\n採点ロジック: scoring engine が `cfnTemplate` の Outputs から `scoring.flagOutputKey` で指定された値を読み取り、 提出値と一致比較します。 一致すれば `scoring.points` 点を加算します。 不正解は 0 点 (penalty なし)。 hint を表示すると hint ごとの `penalty` だけ最終得点から差し引かれます。\\n\\n想定経路: (1) deploy 後に payload を取得 → (2) Console / CLI で flag を発見 → (3) portal で提出。 hint は段階的に開示してください。",
+  "tags": ["sample", "challenge"],
+  "exposedPorts": [
+    { "port": 1, "name": "(no public endpoint — flag は SSM Parameter 等から取り出す)" }
+  ],
+  "learningGoals": [
+    "AWS Console / CLI でリソース属性を読み取る基本操作に慣れる",
+    "IAM の最小権限が与えられている状態で必要な情報だけを引き出す",
+    "問題文と CFn Outputs を突き合わせて 「採点対象の値」 を特定する"
+  ],
   "cfnTemplate": "template.yaml",
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "FlagValue",
     "points": 100,
-    "hints": ["__HINT_1__ (任意、 portal の hint 欄に表示)"]
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "competitor IAM role には `ssm:GetParameter` が付与されています。 まず `aws ssm get-parameter --name /<NamePrefix>/flag` を試してみてください。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-2",
+        "content": "flag は `TC{...}` の形式です。 SSM Parameter の `Value` をそのまま portal に提出してください。",
+        "penalty": 20
+      }
+    ]
   }
 }
