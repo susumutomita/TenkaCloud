@@ -214,6 +214,10 @@ export function TenantListPage({ config }: { config: AppConfig }) {
               );
               if (!isInProgress(row.tenantStatus)) return badge;
               const progress = computeTenantProgress({ createdAt: row.createdAt, nowMs });
+              // createdAt 未取得 (= SBT が field を返さない、 fresh tenant の race) のとき
+              // \`progress.label === \"—\"\` が出る。 細い em dash が badge 下に \"_\" のように
+              // 見えて誤解を生むので、 そのときは badge のみ表示する。
+              if (progress.label === "—") return badge;
               const progressColor =
                 progress.severity === "danger"
                   ? "text-status-error"
