@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { z } from "zod";
-import { extractClaims } from "../deploy-handler/auth.js";
+import { extractClaims, TENANT_ROLES } from "../deploy-handler/auth.js";
 import { extractUserPoolIdFromIss } from "./cognito-saml.js";
 import type { CompetitorAccountsSharedResources } from "./shared.js";
 import {
@@ -32,10 +32,13 @@ export interface UsersRouteResult {
   readonly body: unknown;
 }
 
-const ALLOWED_ROLES = ["TenantAdmin"] as const;
+/**
+ * ADR-020 / Issue #926 Phase B: 招待時に選べる role は \`TENANT_ROLES\` の 3 種類 (Admin /
+ * Operator / Viewer)。 任意文字列を \`custom:userRole\` に注入できないよう Zod enum で絞る。
+ */
 export const InviteUserRequestSchema = z.object({
   email: z.string().email(),
-  userRole: z.enum(ALLOWED_ROLES).default("TenantAdmin"),
+  userRole: z.enum(TENANT_ROLES).default("TenantAdmin"),
 });
 export type InviteUserRequest = z.infer<typeof InviteUserRequestSchema>;
 

@@ -6,10 +6,15 @@ import {
   extractUserRoleFromClaims,
   ForbiddenRoleError,
   MissingTenantClaimError,
+  requireRole,
   requireTenantAdmin,
   resolveCognitoSub,
   resolveTenantId,
   resolveUserRole,
+  TENANT_ADMIN_ROLE,
+  TENANT_OPERATOR_ROLE,
+  TENANT_ROLES,
+  TENANT_VIEWER_ROLE,
 } from "../../lib/problem-deploy/handlers/deploy-handler/auth";
 
 describe("extractTenantIdFromClaims", () => {
@@ -197,6 +202,84 @@ describe("extractClaims (REST API vs HTTP API authorizer 形式)", () => {
   it("authorizer が無いなら undefined", () => {
     const c = { env: { event: { requestContext: {} } } } as unknown as Context;
     expect(extractClaims(c)).toBeUndefined();
+  });
+});
+
+/* ---- ADR-020 / Issue #926 Phase B: role enum + requireRole ---- */
+
+describe("TENANT_ROLES enum (ADR-020)", () => {
+  it("3 role を持つべき (Admin / Operator / Viewer)", () => {
+    expect(TENANT_ROLES).toEqual(["TenantAdmin", "TenantOperator", "TenantViewer"]);
+  });
+
+  it("const exports は role 文字列と一致するべき", () => {
+    expect(TENANT_ADMIN_ROLE).toBe("TenantAdmin");
+    expect(TENANT_OPERATOR_ROLE).toBe("TenantOperator");
+    expect(TENANT_VIEWER_ROLE).toBe("TenantViewer");
+  });
+});
+
+describe("requireRole (ADR-020 / #926 Phase B)", () => {
+  const original = process.env.DEFAULT_USER_ROLE;
+  afterEach(() => {
+    if (original === undefined) delete process.env.DEFAULT_USER_ROLE;
+    else process.env.DEFAULT_USER_ROLE = original;
+  });
+
+  it("allowedRoles に含まれる role なら throw しない", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildCtx({ "custom:userRole": "TenantOperator" });
+    expect(() => requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE])).not.toThrow();
+  });
+
+  it("allowedRoles に含まれない role なら ForbiddenRoleError を throw", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildCtx({ "custom:userRole": "TenantViewer" });
+    expect(() => requireRole(c, [TENANT_ADMIN_ROLE])).toThrow(ForbiddenRoleError);
+  });
+
+  it("allowedRoles 空配列は always reject (= 設定ミスを fail-closed に倒す)", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildCtx({ "custom:userRole": "TenantAdmin" });
+    expect(() => requireRole(c, [])).toThrow(ForbiddenRoleError);
+  });
+
+  it("claim 不在 / env も無いなら ForbiddenRoleError を throw (= fail-closed)", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    expect(() => requireRole(buildCtx(), [TENANT_VIEWER_ROLE])).toThrow(ForbiddenRoleError);
+  });
+
+  it("ForbiddenRoleError に actualRole / requiredRoles を保持する", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildCtx({ "custom:userRole": "TenantViewer" });
+    try {
+      requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+      expect.fail("should have thrown");
+    } catch (err) {
+      const forbidden = err as ForbiddenRoleError;
+      expect(forbidden.actualRole).toBe("TenantViewer");
+      expect(forbidden.requiredRoles).toEqual([TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+    }
+  });
+});
+
+describe("requireTenantAdmin alias (= requireRole(c, [TENANT_ADMIN_ROLE]))", () => {
+  const original = process.env.DEFAULT_USER_ROLE;
+  afterEach(() => {
+    if (original === undefined) delete process.env.DEFAULT_USER_ROLE;
+    else process.env.DEFAULT_USER_ROLE = original;
+  });
+
+  it("TenantOperator は requireTenantAdmin で reject されるべき (= Phase B alias が degrade しない)", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildCtx({ "custom:userRole": "TenantOperator" });
+    expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
+  });
+
+  it("TenantViewer も同様に reject", () => {
+    delete process.env.DEFAULT_USER_ROLE;
+    const c = buildCtx({ "custom:userRole": "TenantViewer" });
+    expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
   });
 });
 

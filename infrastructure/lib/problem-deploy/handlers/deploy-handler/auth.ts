@@ -111,7 +111,21 @@ export class ForbiddenRoleError extends Error {
   }
 }
 
-const TENANT_ADMIN_ROLE = "TenantAdmin";
+/**
+ * ADR-020 / Issue #926 Phase B: tenant 内 role enum。 \`custom:userRole\` claim に入る値の正本。
+ *
+ *   TenantAdmin    — destructive 全部 (user 管理 / SAML / 削除 / IAM mutate)
+ *   TenantOperator — mutate 可 (deploy / event 進行 / disruption fire) だが user 管理は不可
+ *   TenantViewer   — read-only (= 監査担当 / dashboard 観覧)
+ *
+ * SystemAdmin は SBT ControlPlane が \`cognito:groups\` で払い出す別軸 (= admin-insight 専用、
+ * ADR-011 D2)。 tenant 側 helper では扱わない。
+ */
+export const TENANT_ADMIN_ROLE = "TenantAdmin";
+export const TENANT_OPERATOR_ROLE = "TenantOperator";
+export const TENANT_VIEWER_ROLE = "TenantViewer";
+export const TENANT_ROLES = [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE, TENANT_VIEWER_ROLE] as const;
+export type TenantRole = (typeof TENANT_ROLES)[number];
 
 export function extractUserRoleFromClaims(claims: JwtClaims | undefined): string | undefined {
   if (!claims) return undefined;
@@ -132,14 +146,26 @@ export function resolveUserRole(c: Context): string | undefined {
 }
 
 /**
- * `custom:userRole === "TenantAdmin"` を要求する。 不一致 / 不在なら `ForbiddenRoleError`
+ * ADR-020 / Issue #926 Phase B: 任意の \`allowedRoles\` array で role gate する helper。
+ * 一致なら return、 不一致 / 不在 / allowedRoles 空配列なら \`ForbiddenRoleError\` を throw。
+ *
+ * 既存 \`requireTenantAdmin(c)\` は \`requireRole(c, [TENANT_ADMIN_ROLE])\` の alias として
+ * 残し、 caller 互換を保つ。 Phase B.1 で各 handler の middleware を granular に置換する。
+ */
+export function requireRole(c: Context, allowedRoles: readonly string[]): void {
+  const role = resolveUserRole(c);
+  if (allowedRoles.length === 0 || role === undefined || !allowedRoles.includes(role)) {
+    throw new ForbiddenRoleError(role, allowedRoles);
+  }
+}
+
+/**
+ * \`custom:userRole === "TenantAdmin"\` を要求する。 不一致 / 不在なら \`ForbiddenRoleError\`
  * を throw。 handler 側 onError で 403 にマップする。
  *
  * caller (handler) は \`/admin/*\` route と destructive event route の 1 行目で呼ぶ。
+ * ADR-020 Phase B: \`requireRole(c, [TENANT_ADMIN_ROLE])\` の alias。 既存 caller 互換のため残す。
  */
 export function requireTenantAdmin(c: Context): void {
-  const role = resolveUserRole(c);
-  if (role !== TENANT_ADMIN_ROLE) {
-    throw new ForbiddenRoleError(role, [TENANT_ADMIN_ROLE]);
-  }
+  requireRole(c, [TENANT_ADMIN_ROLE]);
 }
