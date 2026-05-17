@@ -183,12 +183,12 @@ export class ApiGateway extends Construct {
     // 同 Lambda (competitor-accounts) に相乗りさせ、 Cognito AdminCreate / AdminDelete / ListUsers
     // 権限は Lambda 側で付与済。
     //   /admin/users                 GET=list / POST=invite
-    //   /admin/users/{username}      DELETE=remove (tenant 越境 + self-delete 防止 server 側で)
+    //   /admin/users/{username}      DELETE=remove / PATCH=change role (Issue #17)
     const users = admin.addResource("users");
     users.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
     users.addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
-    users
-      .addResource("{username}")
-      .addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
+    const usersById = users.addResource("{username}");
+    usersById.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
+    usersById.addMethod("PATCH", competitorAccountsIntegration, deployMethodOptions);
   }
 }

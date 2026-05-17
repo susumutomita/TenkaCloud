@@ -131,7 +131,14 @@
     "delete_modal_body": "{email} を削除します。 削除した user は二度とログインできません。 lock-out 防止のため自分自身は削除できません。",
     "delete_confirm": "削除する",
     "delete_error_header": "削除に失敗しました",
-    "delete_success": "{email} を削除しました。"
+    "delete_success": "{email} を削除しました。",
+    "role_change_button": "ロール変更",
+    "role_change_aria": "{email} のロールを変更",
+    "role_change_modal_header": "ロールを変更しますか?",
+    "role_change_modal_body": "{email} (現在: {current}) のロールを下のドロップダウンで選択した値に変更します。 変更は即時反映され、 次回ログイン時から新ロールで認可されます。 lock-out 防止のため自分自身のロールは変更できません。",
+    "role_change_confirm": "ロールを変更する",
+    "role_change_error_header": "ロール変更に失敗しました",
+    "role_change_success": "{email} のロールを {role} に変更しました。"
   },
   "problems": {
     "header": "問題カタログ",

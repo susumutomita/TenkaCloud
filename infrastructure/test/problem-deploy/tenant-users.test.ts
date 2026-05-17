@@ -2,6 +2,7 @@ import {
   AdminCreateUserCommand,
   AdminDeleteUserCommand,
   AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
   ListUsersCommand,
   UserNotFoundException,
   UsernameExistsException,
@@ -19,8 +20,12 @@ import {
   listUsersByTenant,
   TenantMismatchError,
   UserNotFoundError,
+  updateUserRole,
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/users-cognito";
-import { InviteUserRequestSchema } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/users-routes";
+import {
+  ChangeRoleRequestSchema,
+  InviteUserRequestSchema,
+} from "../../lib/problem-deploy/handlers/competitor-accounts-handler/users-routes";
 
 /**
  * Issue #925 Phase 1: Tenant user CRUD wrapper の単体テスト。 Cognito SDK は \`vi.fn\` でモック
@@ -275,6 +280,50 @@ describe("assertUserBelongsToTenant (越境チェック)", () => {
     );
     await expect(
       assertUserBelongsToTenant(mock as CognitoUserClientDeps, "ghost@example.com", "tenant-acme"),
+    ).rejects.toBeInstanceOf(UserNotFoundError);
+  });
+});
+
+/* ---- Issue #17 (user role change) ---- */
+
+describe("ChangeRoleRequestSchema (Issue #17)", () => {
+  it("3 role を全て受け入れるべき", () => {
+    for (const role of ["TenantAdmin", "TenantOperator", "TenantViewer"] as const) {
+      expect(ChangeRoleRequestSchema.safeParse({ userRole: role }).success).toBe(true);
+    }
+  });
+
+  it("未定義 role (= Auditor / SystemAdmin / 自由文字列) は reject", () => {
+    expect(ChangeRoleRequestSchema.safeParse({ userRole: "Auditor" }).success).toBe(false);
+    expect(ChangeRoleRequestSchema.safeParse({ userRole: "SystemAdmin" }).success).toBe(false);
+    expect(ChangeRoleRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("updateUserRole (Issue #17)", () => {
+  let mock: MockCognito;
+  beforeEach(() => {
+    mock = mockClient();
+  });
+  afterEach(() => vi.clearAllMocks());
+
+  it("AdminUpdateUserAttributes に custom:userRole を渡すべき", async () => {
+    mock.client.send.mockResolvedValueOnce({});
+    await updateUserRole(mock as CognitoUserClientDeps, "alice@example.com", "TenantOperator");
+    const cmd = mock.client.send.mock.calls[0]?.[0] as AdminUpdateUserAttributesCommand;
+    expect(cmd).toBeInstanceOf(AdminUpdateUserAttributesCommand);
+    expect(cmd.input.Username).toBe("alice@example.com");
+    expect(cmd.input.UserAttributes).toEqual([
+      { Name: "custom:userRole", Value: "TenantOperator" },
+    ]);
+  });
+
+  it("UserNotFoundException は UserNotFoundError に正規化すべき", async () => {
+    mock.client.send.mockRejectedValueOnce(
+      new UserNotFoundException({ message: "User does not exist", $metadata: {} }),
+    );
+    await expect(
+      updateUserRole(mock as CognitoUserClientDeps, "ghost@example.com", "TenantAdmin"),
     ).rejects.toBeInstanceOf(UserNotFoundError);
   });
 });

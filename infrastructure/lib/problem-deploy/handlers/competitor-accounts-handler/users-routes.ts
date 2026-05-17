@@ -10,6 +10,7 @@ import {
   createUser,
   deleteUser,
   listUsersByTenant,
+  updateUserRole,
 } from "./users-cognito.js";
 
 /**
@@ -40,6 +41,15 @@ export const InviteUserRequestSchema = z.object({
   email: z.string().email(),
   userRole: z.enum(TENANT_ROLES).default("TenantAdmin"),
 });
+
+/**
+ * Issue #17 (user role change): 既存 user の role を変更する PATCH request の schema。
+ * 招待と同じく Zod enum で 3 role に絞り、 任意文字列の inject を防ぐ。
+ */
+export const ChangeRoleRequestSchema = z.object({
+  userRole: z.enum(TENANT_ROLES),
+});
+export type ChangeRoleRequest = z.infer<typeof ChangeRoleRequestSchema>;
 export type InviteUserRequest = z.infer<typeof InviteUserRequestSchema>;
 
 function extractSelfPoolFromContext(
@@ -107,6 +117,41 @@ export async function routeCreateUser(
     tenantTier,
   });
   return { status: 201, body: summary };
+}
+
+/**
+ * Issue #17: 既存 user の role を変更する PATCH。 越境チェック (AdminGetUser) → AdminUpdateUserAttributes。
+ * 自分自身の role 変更は **403 cannot_change_own_role** で reject (= 誤って Viewer 等に
+ * downgrade して lock-out するのを防ぐ)。
+ */
+export async function routeChangeUserRole(
+  deps: UsersRouteDeps,
+  c: Context,
+  tenantId: string,
+  username: string,
+  request: ChangeRoleRequest,
+): Promise<UsersRouteResult> {
+  const pool = extractSelfPoolFromContext(c, deps.shared);
+  if (!pool) {
+    return {
+      status: 401,
+      body: { error: "user_pool_unresolved", message: "JWT iss から UserPool を抽出できません" },
+    };
+  }
+  const claims = extractClaims(c);
+  const callerUsername = claims?.["cognito:username"];
+  if (typeof callerUsername === "string" && callerUsername === username) {
+    return {
+      status: 409,
+      body: {
+        error: "cannot_change_own_role",
+        message: "lock-out 防止のため自分自身の role は変更できません",
+      },
+    };
+  }
+  await assertUserBelongsToTenant(pool, username, tenantId);
+  await updateUserRole(pool, username, request.userRole);
+  return { status: 200, body: { username, userRole: request.userRole } };
 }
 
 export async function routeDeleteUser(

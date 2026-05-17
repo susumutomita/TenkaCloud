@@ -2,6 +2,7 @@ import {
   AdminCreateUserCommand,
   AdminDeleteUserCommand,
   AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
   type CognitoIdentityProviderClient,
   DeliveryMediumType,
   ListUsersCommand,
@@ -174,6 +175,31 @@ export async function deleteUser(deps: CognitoUserClientDeps, username: string):
       new AdminDeleteUserCommand({
         UserPoolId: deps.userPoolId,
         Username: username,
+      }),
+    );
+  } catch (err) {
+    if (err instanceof UserNotFoundException) {
+      throw new UserNotFoundError(username);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Issue #17 (user role change): 既存 user の \`custom:userRole\` を書き換える。 caller は事前に
+ * \`assertUserBelongsToTenant\` で tenant 越境を防ぐこと。 不在なら \`UserNotFoundError\`。
+ */
+export async function updateUserRole(
+  deps: CognitoUserClientDeps,
+  username: string,
+  newRole: string,
+): Promise<void> {
+  try {
+    await deps.client.send(
+      new AdminUpdateUserAttributesCommand({
+        UserPoolId: deps.userPoolId,
+        Username: username,
+        UserAttributes: [{ Name: "custom:userRole", Value: newRole }],
       }),
     );
   } catch (err) {

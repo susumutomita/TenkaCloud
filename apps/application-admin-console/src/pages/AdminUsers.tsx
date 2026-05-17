@@ -13,6 +13,7 @@ import Table from "@cloudscape-design/components/table";
 import { useCallback, useEffect, useState } from "react";
 import { type ApiClient, useApiClient } from "../api/client";
 import {
+  changeTenantUserRole,
   deleteTenantUser,
   inviteTenantUser,
   listTenantUsers,
@@ -51,6 +52,11 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
   const [deleteTarget, setDeleteTarget] = useState<TenantUserSummary | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Issue #17: role 変更 modal state。 selected role は user の現在 role を初期値にする。
+  const [roleChangeTarget, setRoleChangeTarget] = useState<TenantUserSummary | null>(null);
+  const [roleChangeNew, setRoleChangeNew] = useState<TenantRole>("TenantAdmin");
+  const [roleChangeSubmitting, setRoleChangeSubmitting] = useState(false);
+  const [roleChangeError, setRoleChangeError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!apiClient) return;
@@ -108,6 +114,28 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
       setDeleteSubmitting(false);
     }
   }, [apiClient, deleteTarget, refresh, t]);
+
+  // Issue #17: role 変更 submit。 server 側 (= AdminUpdateUserAttributes) で実 attribute を書き換え。
+  const handleRoleChange = useCallback(async () => {
+    if (!apiClient || !roleChangeTarget) return;
+    setRoleChangeSubmitting(true);
+    setRoleChangeError(null);
+    try {
+      await changeTenantUserRole(apiClient as ApiClient, roleChangeTarget.username, roleChangeNew);
+      setSuccessMessage(
+        t("users.role_change_success", {
+          email: roleChangeTarget.email ?? roleChangeTarget.username,
+          role: roleChangeNew,
+        }),
+      );
+      setRoleChangeTarget(null);
+      await refresh();
+    } catch (err) {
+      setRoleChangeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoleChangeSubmitting(false);
+    }
+  }, [apiClient, roleChangeTarget, roleChangeNew, refresh, t]);
 
   return (
     <SpaceBetween size="l">
@@ -167,15 +195,30 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
               id: "actions",
               header: t("users.col_actions"),
               cell: (u) => (
-                <Button
-                  variant="link"
-                  onClick={() => setDeleteTarget(u)}
-                  ariaLabel={t("users.delete_aria", {
-                    email: u.email ?? u.username,
-                  })}
-                >
-                  {t("users.delete_button")}
-                </Button>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    variant="link"
+                    onClick={() => {
+                      setRoleChangeTarget(u);
+                      // 初期値は現在 role (= 未設定なら Viewer に倒す)
+                      setRoleChangeNew((u.userRole as TenantRole | undefined) ?? "TenantViewer");
+                    }}
+                    ariaLabel={t("users.role_change_aria", {
+                      email: u.email ?? u.username,
+                    })}
+                  >
+                    {t("users.role_change_button")}
+                  </Button>
+                  <Button
+                    variant="link"
+                    onClick={() => setDeleteTarget(u)}
+                    ariaLabel={t("users.delete_aria", {
+                      email: u.email ?? u.username,
+                    })}
+                  >
+                    {t("users.delete_button")}
+                  </Button>
+                </SpaceBetween>
               ),
             },
           ]}
@@ -296,6 +339,72 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
           {deleteError && (
             <Alert type="error" header={t("users.delete_error_header")}>
               {deleteError}
+            </Alert>
+          )}
+        </SpaceBetween>
+      </Modal>
+
+      {/* Issue #17: role 変更 modal。 select で新 role を選び confirm で PATCH。 */}
+      <Modal
+        visible={roleChangeTarget !== null}
+        onDismiss={() => {
+          setRoleChangeTarget(null);
+          setRoleChangeError(null);
+        }}
+        header={t("users.role_change_modal_header")}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => {
+                  setRoleChangeTarget(null);
+                  setRoleChangeError(null);
+                }}
+              >
+                {t("users.modal_cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                loading={roleChangeSubmitting}
+                onClick={() => void handleRoleChange()}
+                disabled={roleChangeTarget?.userRole === roleChangeNew}
+              >
+                {t("users.role_change_confirm")}
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            {t("users.role_change_modal_body", {
+              email: roleChangeTarget?.email ?? roleChangeTarget?.username ?? "",
+              current: roleChangeTarget?.userRole ?? "—",
+            })}
+          </Box>
+          <FormField label={t("users.field_role")} description={t("users.field_role_desc")}>
+            <Select
+              selectedOption={{
+                value: roleChangeNew,
+                label: t(`users.role_${roleChangeNew.replace("Tenant", "tenant_").toLowerCase()}`),
+              }}
+              onChange={(e) => {
+                if (e.detail.selectedOption.value)
+                  setRoleChangeNew(e.detail.selectedOption.value as TenantRole);
+              }}
+              options={TENANT_ROLE_OPTIONS.map((role) => ({
+                value: role,
+                label: t(`users.role_${role.replace("Tenant", "tenant_").toLowerCase()}`),
+                description: t(
+                  `users.role_${role.replace("Tenant", "tenant_").toLowerCase()}_desc`,
+                ),
+              }))}
+            />
+          </FormField>
+          {roleChangeError && (
+            <Alert type="error" header={t("users.role_change_error_header")}>
+              {roleChangeError}
             </Alert>
           )}
         </SpaceBetween>
