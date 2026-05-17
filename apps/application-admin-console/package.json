@@ -17,7 +17,7 @@
     "http-status-codes": "^2.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router": "^7.1.1"
+    "react-router": "^7.15.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
