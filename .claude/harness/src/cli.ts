@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { isBaselined, loadBaseline } from "./baseline.ts";
 import { adrMustBeHtml } from "./rules/adr-must-be-html.ts";
 import { adrSelfContained } from "./rules/adr-self-contained.ts";
+import { iamWildcardNeedsJustify } from "./rules/iam-wildcard-needs-justify.ts";
 import type { Finding, Rule, Severity } from "./types.ts";
 import { listAllTrackedFiles, listStagedFiles } from "./utils/staged-files.ts";
 
@@ -17,7 +18,7 @@ export interface RunResult {
   readonly exitCode: number;
 }
 
-const ALL_RULES: readonly Rule[] = [adrMustBeHtml, adrSelfContained];
+const ALL_RULES: readonly Rule[] = [adrMustBeHtml, adrSelfContained, iamWildcardNeedsJustify];
 
 const SEVERITY_RANK: Record<Severity, number> = {
   info: 0,

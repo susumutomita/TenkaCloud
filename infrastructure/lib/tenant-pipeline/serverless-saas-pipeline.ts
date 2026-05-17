@@ -95,6 +95,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
       }),
     );
 
+    // Issue #857 justify: SBT vendored — このファイルは aws-samples/serverless-saas-* の
+    // upstream pattern をそのまま導入したもの。 CodePipeline PutJob* / KMS Decrypt は API 制約上
+    // Resource: "*" が必要。 upstream に追従するため scope 変更を保留。
     lambdaFunctionPrep.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
@@ -164,6 +167,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     this.provisioningCodeBuildProjectName = codeBuildProject.projectName;
 
     // Add Permissions.
+    // Issue #857 justify: SBT vendored — provisioning CodeBuild は per-tenant CFn stack を
+    // deploy するため必要な全 AWS service への access が要る。 upstream pattern と完全互換に
+    // 保つため Resource/Action ともに `*` を残す。 cross-account 化で AssumeRole に絞る予定。
     codeBuildProject.addToRolePolicy(
       new iam.PolicyStatement({
         resources: ["*"],
@@ -243,6 +249,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
           resources: [`${artifactsBucket.bucketArn}/*`, `${sourceCodeBucket.bucketArn}/*`],
           actions: ["s3:*Object"],
         }),
+        // Issue #857 justify: SBT vendored — Step Functions が per-tenant deploy 中に
+        // 動的に作る AWS resource (= CFn stack / Lambda / API Gateway / DDB / etc.) の ARN は
+        // synth 時に knowable でない。 upstream pattern を保つため Resource: "*" を維持。
         new iam.PolicyStatement({
           resources: ["*"],
           actions: [
