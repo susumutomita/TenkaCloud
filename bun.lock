@@ -68,6 +68,27 @@
         "vitest": "^4.1.6",
       },
     },
+    "apps/landing-page": {
+      "name": "@TenkaCloud/landing-page",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cloudscape-design/components": "^3.0.960",
+        "@cloudscape-design/global-styles": "^1.0.44",
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0",
+      },
+      "devDependencies": {
+        "@testing-library/jest-dom": "^6.6.3",
+        "@testing-library/react": "^16.1.0",
+        "@types/react": "^19.0.2",
+        "@types/react-dom": "^19.0.2",
+        "@vitejs/plugin-react-swc": "^4.3.0",
+        "jsdom": "^25.0.1",
+        "typescript": "~5.9.3",
+        "vite": "^7.3.2",
+        "vitest": "^4.1.6",
+      },
+    },
     "apps/participant-portal": {
       "name": "@TenkaCloud/participant-portal",
       "version": "0.1.0",
@@ -173,6 +194,8 @@
     "@TenkaCloud/application-admin-console": ["@TenkaCloud/application-admin-console@workspace:apps/application-admin-console"],
 
     "@TenkaCloud/infrastructure": ["@TenkaCloud/infrastructure@workspace:infrastructure"],
+
+    "@TenkaCloud/landing-page": ["@TenkaCloud/landing-page@workspace:apps/landing-page"],
 
     "@TenkaCloud/participant-portal": ["@TenkaCloud/participant-portal@workspace:apps/participant-portal"],
 
