@@ -54,9 +54,21 @@ describe("InviteUserRequestSchema", () => {
     expect(r.userRole).toBe("TenantAdmin");
   });
 
-  it("未定義 role (= Auditor 等) は #926 で拡張するまで reject", () => {
+  it("ADR-020 / #926 Phase B: 3 role を全て受け入れるべき (Admin / Operator / Viewer)", () => {
+    for (const role of ["TenantAdmin", "TenantOperator", "TenantViewer"] as const) {
+      expect(
+        InviteUserRequestSchema.safeParse({ email: "u@example.com", userRole: role }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("ADR-020 で未定義の role (= Auditor 等) は reject", () => {
     expect(
       InviteUserRequestSchema.safeParse({ email: "u@example.com", userRole: "Auditor" }).success,
+    ).toBe(false);
+    expect(
+      InviteUserRequestSchema.safeParse({ email: "u@example.com", userRole: "SystemAdmin" })
+        .success,
     ).toBe(false);
   });
 });

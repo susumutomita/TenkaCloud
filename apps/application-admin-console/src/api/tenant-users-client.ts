@@ -15,9 +15,21 @@ export interface TenantUserSummary {
   readonly userRole?: string;
 }
 
+/**
+ * ADR-020 / Issue #926 Phase B: 招待時に選べる role は 3 種類。 Phase B.1 で route 単位の
+ * granular role check が入るまで middleware は TenantAdmin gate を維持するため、 Operator /
+ * Viewer は招待しても現状 admin 系 route 越しでは 403。 Phase B.1 で解放される。
+ */
+export type TenantRole = "TenantAdmin" | "TenantOperator" | "TenantViewer";
+export const TENANT_ROLE_OPTIONS: ReadonlyArray<TenantRole> = [
+  "TenantAdmin",
+  "TenantOperator",
+  "TenantViewer",
+];
+
 export interface InviteUserInput {
   readonly email: string;
-  readonly userRole?: "TenantAdmin";
+  readonly userRole?: TenantRole;
 }
 
 export async function listTenantUsers(api: ApiClient): Promise<TenantUserSummary[]> {

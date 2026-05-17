@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-020: 認可モデル — role enum (TenantAdmin / Operator / Viewer + SystemAdmin) と段階導入</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.admin td.role { background: #ffe9e9; font-weight: 600; }
+  tr.operator td.role { background: #fff8c5; font-weight: 600; }
+  tr.viewer td.role { background: #ddf4ff; font-weight: 600; }
+  tr.system td.role { background: #f0e6ff; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  summary { cursor: pointer; font-weight: 600; }
+  .callout { padding: .8rem 1rem; border-left: 4px solid var(--c-warn); background: #fff8c5; border-radius: 3px; margin: 1rem 0; }
+  .callout.danger { border-color: var(--c-reject); background: #ffe9e9; }
+  .callout.info { border-color: var(--c-link); background: #ddf4ff; }
+</style>
+</head>
+<body>
+<h1>ADR-020: 認可モデル — role enum (TenantAdmin / Operator / Viewer + SystemAdmin) と段階導入</h1>
+
+<div class="meta">
+  <span><b>Status</b><span class="badge accept">Accepted</span></span>
+  <span><b>Date</b>2026-05-17</span>
+  <span><b>Issue</b>#926</span>
+  <span><b>Related</b>ADR-011 (admin-insight 認可境界)、 ADR-018 (pooled UserPool)</span>
+</div>
+
+<h2>背景</h2>
+
+<p>TenkaCloud の Cognito JWT 認可は 2 段で動く:</p>
+<ol>
+  <li><b>API Gateway Cognito Authorizer</b> — token 署名 / expiry / aud を検証 (= 1 段目)</li>
+  <li><b>handler の role check</b> — Issue #854 で導入された <code>requireTenantAdmin(c)</code> が <code>custom:userRole</code> claim を見る (= 2 段目)</li>
+</ol>
+
+<p>ただし役割 (role) は <code>"TenantAdmin"</code> の <b>1 種類しか定義されていない</b>。 結果として:</p>
+<ul>
+  <li>監査担当に read-only token を渡せず、 destructive 操作可能な admin token を渡すしかない (= 最小権限違反)</li>
+  <li>オンコール / monitor bot に発火権を渡すと user 管理権まで一緒に渡る</li>
+  <li>削除 / archive のような重い操作と、 単なる list との 認可境界が同じ</li>
+</ul>
+
+<p>加えて次の認可関連ギャップが Issue #926 で flag された:</p>
+<ul>
+  <li>SystemAdmin endpoint の role 強制が SBT 任せで repo 側 audit 未済</li>
+  <li><code>custom:userRole</code> の set 経路が <code>provision-tenant.sh admin-create-user</code> の 1 回のみ (= 後から変える UI 無し)</li>
+  <li>認可エラー / 成功 admin 操作の audit log が CloudWatch Logs しか無く、 「誰が何をしたか」 を後追いする集約 storage が無い</li>
+  <li>destructive operation で MFA 再認証が無い (= 1 JWT で全部通る)</li>
+  <li>tenant 越境チェックが <code>resolveTenantId</code> 1 本に依存し、 path / body から到来する tenantId と JWT の照合 middleware が無い</li>
+</ul>
+
+<h2>判断</h2>
+
+<p>4 role を正本とする。 名称は SBT 同型 (= ControlPlane が <code>SystemAdmin</code> Cognito group を払い出す) に揃え、 tenant 内は 3 段とする。</p>
+
+<table>
+  <thead><tr><th>Role</th><th>scope</th><th>付与経路</th><th>主用途</th></tr></thead>
+  <tbody>
+    <tr class="system"><td class="role">SystemAdmin</td><td>control plane (= 全 tenant)</td><td>SBT ControlPlane の Cognito UserPool group。 control-plane 初期 deploy / 招待</td><td>tenant CRUD / cross-tenant insight / 緊急 op</td></tr>
+    <tr class="admin"><td class="role">TenantAdmin</td><td>1 tenant 内 destructive 全部</td><td>tenant の Cognito UserPool で <code>custom:userRole=TenantAdmin</code></td><td>user 招待 / SAML / 削除 / event lifecycle</td></tr>
+    <tr class="operator"><td class="role">TenantOperator</td><td>1 tenant 内 mutate (= user 管理 除外)</td><td>tenant の Cognito UserPool で <code>custom:userRole=TenantOperator</code></td><td>deploy 実行 / event 進行 / disruption fire</td></tr>
+    <tr class="viewer"><td class="role">TenantViewer</td><td>1 tenant 内 read-only</td><td>tenant の Cognito UserPool で <code>custom:userRole=TenantViewer</code></td><td>監査担当 / dashboard 観覧 / 外部監視</td></tr>
+  </tbody>
+</table>
+
+<h3>route → 必要 role の対応 (target state)</h3>
+
+<table>
+  <thead><tr><th>カテゴリ</th><th>route 例</th><th>allowedRoles</th></tr></thead>
+  <tbody>
+    <tr><td>tenant read</td><td><code>GET /events</code>、 <code>GET /deployments</code>、 <code>GET /events/:eventId/disruptions/audit</code></td><td>Admin / Operator / Viewer</td></tr>
+    <tr><td>tenant write (= mutate)</td><td><code>POST /events</code>、 <code>POST /problems/:id/deploy</code>、 <code>POST /events/:eventId/disruptions/fire</code></td><td>Admin / Operator</td></tr>
+    <tr><td>tenant admin (= destructive / IAM)</td><td><code>DELETE /events/:eventId</code>、 <code>/admin/users*</code>、 <code>/admin/tenant-saml-config*</code>、 <code>/admin/competitor-accounts*</code>、 <code>/events/:eventId/lock-scoring</code></td><td>Admin</td></tr>
+    <tr><td>control plane</td><td><code>POST /tenants</code>、 <code>GET /admin/insight/*</code></td><td>SystemAdmin</td></tr>
+  </tbody>
+</table>
+
+<h2>段階導入</h2>
+
+<table>
+  <thead><tr><th>Phase</th><th>scope</th><th>状態</th></tr></thead>
+  <tbody>
+    <tr><td>A</td><td>本 ADR (= 設計正本化)</td><td><span class="badge accept">Done</span></td></tr>
+    <tr><td>B</td><td><code>requireRole(c, allowedRoles[])</code> + role const enum を <code>auth.ts</code> に追加。 <code>requireTenantAdmin</code> は alias 化。 既存 middleware は <b>broken-glass safety</b> として TenantAdmin gate を維持 (= 新 role が誤って Operator/Viewer に降格しないよう)。 frontend invite modal に role dropdown 追加 (= TenantAdmin / Operator / Viewer の 3 択)</td><td><span class="badge accept">本 PR で実装</span></td></tr>
+    <tr><td>B.1</td><td>各 handler の <code>requireTenantAdmin(c)</code> middleware を <code>requireRole(c, [Admin, Operator, Viewer])</code> (read) / <code>requireRole(c, [Admin, Operator])</code> (write) / <code>requireRole(c, [Admin])</code> (admin) に分解。 route 単位で granular にする</td><td><span class="badge warn">follow-up PR</span></td></tr>
+    <tr><td>C</td><td>SystemAdmin 側の user 管理 UI (= apps/admin-console)。 SBT 内蔵 group への AdminAddUserToGroup 経路</td><td><span class="badge warn">#925 Phase 2 と coupling</span></td></tr>
+    <tr><td>D</td><td><code>AdminAuditLog</code> DDB table (= PROVISIONED 1/1) を 追加。 forbidden / 成功 admin 操作を 1 行ずつ append。 frontend に audit log viewer</td><td><span class="badge warn">未着手</span></td></tr>
+    <tr><td>E</td><td>destructive operation 前の MFA 再認証 (= step-up auth)。 Cognito Hosted UI の OPTIONAL MFA を REQUIRED に flip するか、 token attestation で step-up するかを ADR で再評価</td><td><span class="badge warn">未着手</span></td></tr>
+  </tbody>
+</table>
+
+<h2>不採用案</h2>
+
+<details>
+<summary>OPA / Cedar / IAM-style policy DSL の導入</summary>
+<p>policy DSL は将来 role 数が 10+ になり、 attribute-based access control (ABAC) が必要になったときの選択肢。 現状 4 role + route 単位の allow list で十分扱え、 DSL を導入すると runtime evaluator + policy storage + audit + テストのコストが <code>requireRole</code> array literal 1 行よりはるかに高い。 必要になった時点で別 ADR で再評価する。</p>
+</details>
+
+<details>
+<summary>Cognito Group ベースに移行</summary>
+<p>Cognito UserPool Group は 1 user が複数 group に属せて、 SAML 連携 / Federation 時に IdP attribute mapping で割り振れる利点がある。 ただし現行は <code>custom:userRole</code> string 1 個の単純モデルで Phase 1 user 管理 (#925) を出した直後。 Group 化は migration コスト (= 全 user の Group 振分 + handler の <code>cognito:groups</code> 検査への switch) が大きく、 Phase B では <code>custom:userRole</code> string で進める。 SAML federation で role mapping が必要になったら別 ADR で migration plan を立てる。</p>
+</details>
+
+<details>
+<summary>1 role per token (= scope claim) ではなく、 hybrid (= role + scope)</summary>
+<p>例えば read-only audit user に「 deployment は read 可、 user 管理 は不可」 のような細粒度を表現するには role + scope claims を組合せる必要がある。 これは Phase B (= 4 role string で十分) と Phase D (audit log で誰がどの粒度を触ったか可視化) を経て、 必要なら別 ADR で進める。</p>
+</details>
+
+<h2>影響</h2>
+
+<h3>Backwards-compat</h3>
+
+<ul>
+  <li><code>requireTenantAdmin(c)</code> は <code>requireRole(c, [TENANT_ADMIN_ROLE])</code> の alias として残す (= 既存 handler / test の caller 互換)</li>
+  <li>既存 <code>custom:userRole=TenantAdmin</code> な user は Admin 扱いで動作不変</li>
+  <li><code>provision-tenant.sh</code> で払い出される初期 admin は TenantAdmin。 後から AdminConsole 経由で Operator / Viewer を追加できる (#925 frontend を Phase B で role dropdown 拡張)</li>
+</ul>
+
+<h3>セキュリティ</h3>
+
+<ul>
+  <li>middleware は <b>blanket TenantAdmin gate</b> を Phase B で維持する (= 新 role の user が誤って destructive route を叩いても落ちる)。 Phase B.1 で route 単位 granular に置換するまで「 broken-glass safety 」 として残る</li>
+  <li><code>InviteUserRequestSchema</code> は Zod enum で <code>TenantAdmin | TenantOperator | TenantViewer</code> に絞る (= 任意文字列を <code>custom:userRole</code> に注入できない)</li>
+  <li>SystemAdmin 系 endpoint (admin-insight) は <code>isSystemAdmin(c)</code> 既存 helper が <code>cognito:groups</code> ⊇ {SystemAdmin} を検査済 (ADR-011 D2 採用)。 本 ADR では tenant 側 role のみ追加</li>
+</ul>
+
+<h3>運用</h3>
+
+<ul>
+  <li><b>AdminConsole 配下 user 管理</b>: TenantAdmin が自 tenant 内の Operator / Viewer を 招待 / 削除 できる (= #925 frontend を Phase B で role dropdown 拡張)</li>
+  <li><b>role 変更</b>: 既存 user の role を後から変える <code>PATCH /admin/users/:username</code> は Phase B.1 で追加</li>
+  <li><b>audit</b>: 当面 CloudWatch Logs ベース (= <code>ForbiddenRoleError</code> / 成功時の <code>console.log</code>)。 Phase D で DDB 集約</li>
+</ul>
+
+<h2>テスト要件</h2>
+
+<ul>
+  <li><code>requireRole(c, allowedRoles[])</code>: 一致なら pass、 不一致 / 不在なら <code>ForbiddenRoleError</code> を throw。 allowedRoles 空配列は always reject</li>
+  <li><code>requireTenantAdmin(c)</code> alias: Phase A の挙動と同じであることを既存 test で pin (= regression なし)</li>
+  <li><code>InviteUserRequestSchema</code>: 3 role を受け入れる + 未定義 role は reject</li>
+  <li><code>extractUserRoleFromClaims</code>: 既存テストを Operator / Viewer でも回す</li>
+</ul>
+
+<h2>参照</h2>
+
+<ul>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/926">#926</a> 認可機能 audit + 不足分の整理</li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/925">#925</a> ユーザー追加 UI (Phase 1 merged、 Phase B で role dropdown 拡張)</li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/854">#854</a> TenantAdmin role enforcement</li>
+  <li><a href="./adr-011-admin-insight-cross-tenant.html">ADR-011</a> SystemAdmin 認可境界</li>
+  <li><a href="./adr-018-pooled-userpool-saml-isolation.html">ADR-018</a> pooled UserPool の SAML 分離</li>
+</ul>
+
+</body>
+</html>

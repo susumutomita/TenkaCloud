@@ -7,6 +7,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
+import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { useCallback, useEffect, useState } from "react";
@@ -15,22 +16,25 @@ import {
   deleteTenantUser,
   inviteTenantUser,
   listTenantUsers,
+  TENANT_ROLE_OPTIONS,
+  type TenantRole,
   type TenantUserSummary,
 } from "../api/tenant-users-client";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
 /**
- * Issue #925 Phase 1: Tenant Admin が tenant 内 user を管理する画面。
+ * Issue #925 Phase 1 + #926 Phase B (= ADR-020): Tenant Admin が tenant 内 user を管理する画面。
  *
  * UI flow:
  *   1. mount で GET /admin/users → 一覧表示
- *   2. 「招待」 button → email + role (= TenantAdmin 固定 for now) modal → POST /admin/users
+ *   2. 「招待」 button → email + role (= TenantAdmin / TenantOperator / TenantViewer 選択) modal → POST /admin/users
  *   3. 行ごとの 「削除」 → 確認 modal → DELETE /admin/users/{username}
  *
  * 重要:
- *   - 自分自身は削除できない (server 側で 409 cannot_delete_self、 UI でも button disable)
- *   - role 選択は #926 で TenantViewer / TenantOperator を追加するまで TenantAdmin 固定
+ *   - 自分自身は削除できない (server 側で 409 cannot_delete_self)
+ *   - role enum は 3 種類 (ADR-020 / #926 Phase B)。 ただし Phase B.1 で route 単位 granular check
+ *     が入るまで destructive route は admin gate のまま (= Operator / Viewer 招待しても admin 系で 403)
  */
 export function AdminUsersPage({ config }: { config: AppConfig }) {
   const t = useT();
@@ -40,6 +44,7 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [inviteModal, setInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<TenantRole>("TenantAdmin");
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -70,8 +75,12 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
     setInviteSubmitting(true);
     setInviteError(null);
     try {
-      await inviteTenantUser(apiClient as ApiClient, { email: inviteEmail.trim() });
+      await inviteTenantUser(apiClient as ApiClient, {
+        email: inviteEmail.trim(),
+        userRole: inviteRole,
+      });
       setInviteEmail("");
+      setInviteRole("TenantAdmin");
       setInviteModal(false);
       setSuccessMessage(t("users.invite_success", { email: inviteEmail.trim() }));
       await refresh();
@@ -80,7 +89,7 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
     } finally {
       setInviteSubmitting(false);
     }
-  }, [apiClient, inviteEmail, refresh, t]);
+  }, [apiClient, inviteEmail, inviteRole, refresh, t]);
 
   const handleDelete = useCallback(async () => {
     if (!apiClient || !deleteTarget) return;
@@ -221,7 +230,23 @@ export function AdminUsersPage({ config }: { config: AppConfig }) {
               />
             </FormField>
             <FormField label={t("users.field_role")} description={t("users.field_role_desc")}>
-              <Box>{t("users.role_tenant_admin")}</Box>
+              <Select
+                selectedOption={{
+                  value: inviteRole,
+                  label: t(`users.role_${inviteRole.replace("Tenant", "tenant_").toLowerCase()}`),
+                }}
+                onChange={(e) => {
+                  if (e.detail.selectedOption.value)
+                    setInviteRole(e.detail.selectedOption.value as TenantRole);
+                }}
+                options={TENANT_ROLE_OPTIONS.map((role) => ({
+                  value: role,
+                  label: t(`users.role_${role.replace("Tenant", "tenant_").toLowerCase()}`),
+                  description: t(
+                    `users.role_${role.replace("Tenant", "tenant_").toLowerCase()}_desc`,
+                  ),
+                }))}
+              />
             </FormField>
           </Form>
           {inviteError && (
