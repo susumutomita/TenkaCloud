@@ -196,6 +196,16 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const tenantSamlConfig = config?.tenantSamlConfig;
   const controlPlaneSamlConfig = config?.controlPlaneConfig?.samlIdp;
 
+  // Issue #952 epic / cost guardrails
+  const monthlyCostLimitUsd =
+    typeof config?.monthlyCostLimitUsd === "number" && config.monthlyCostLimitUsd > 0
+      ? config.monthlyCostLimitUsd
+      : undefined;
+  const budgetAlarmEmails =
+    Array.isArray(config?.budgetAlarmEmails) && config.budgetAlarmEmails.length > 0
+      ? config.budgetAlarmEmails
+      : undefined;
+
   return {
     environment,
     isProductionLike,
@@ -234,6 +244,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     adminConsoleHostingInputs,
     tenantSamlConfig,
     controlPlaneSamlConfig,
+    monthlyCostLimitUsd,
+    budgetAlarmEmails,
   };
 }
 

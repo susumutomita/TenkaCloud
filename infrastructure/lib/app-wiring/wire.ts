@@ -9,6 +9,7 @@ import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity";
 import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-window";
 import { ControlPlaneStack } from "../control-plane-stack";
 import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack";
+import { CostBudget } from "../observability/cost-budget";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
 import { ProblemDeployBackendStack } from "../problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../tenant-pipeline/serverless-saas-pipeline";
@@ -217,6 +218,19 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   observabilityStack.addDependency(bootstrapTemplateStack);
   observabilityStack.addDependency(tenantTemplateStack);
   observabilityStack.addDependency(serverlessSaaSPipeline);
+
+  // Issue #952 epic / cost guardrails: 月次 AWS Budget を立てる。 limit / alarm 通知先は config から。
+  // limit が 0 / 未指定なら budget は立てない (= legacy 互換)。
+  if (config.monthlyCostLimitUsd && config.monthlyCostLimitUsd > 0) {
+    const adminEmail = config.systemAdminEmail;
+    const extraEmails = config.budgetAlarmEmails ?? [];
+    const allEmails = adminEmail ? [adminEmail, ...extraEmails] : extraEmails;
+    new CostBudget(observabilityStack, "CostBudget", {
+      budgetNamePrefix: `tenkacloud-${config.environment}`,
+      monthlyLimitUsd: config.monthlyCostLimitUsd,
+      notificationEmails: allEmails,
+    });
+  }
 
   let adminConsoleHosting: AdminConsoleHostingStack | undefined;
   if (config.adminConsoleHostingInputs) {

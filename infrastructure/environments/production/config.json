@@ -24,5 +24,6 @@
   },
   "kmsConfig": {
     "pendingWindowInDays": "${KMS_PENDING_WINDOW_DAYS:-7}"
-  }
+  },
+  "monthlyCostLimitUsd": "${MONTHLY_COST_LIMIT_USD:-200}"
 }
