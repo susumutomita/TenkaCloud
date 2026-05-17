@@ -172,6 +172,43 @@ else
   log "  no orphan SSM parameters found"
 fi
 
+# SBT ControlPlane の `CognitoAuth` construct が立てる UserPool は default RemovalPolicy.RETAIN
+# (= aws-cognito の安全側 default) なので、 `cdk destroy --all` で stack を消しても UserPool が
+# 残骸として残る (image #50)。 controlPlaneStack に DestroyPolicySetter を適用すると影響範囲が広い
+# (= EventBus / KMS / SystemAdmin Cognito group なども巻き込む) ため、 cleanup.sh で orphan sweep
+# する方針。 検出は CFn stack tag (= `aws:cloudformation:stack-name`) を見て、 参照先 stack が
+# 既に消えていれば orphan と判定する。
+log "scanning for orphan Cognito UserPools (= 元 stack が消えた pool)..."
+ORPHAN_POOLS=$(aws cognito-idp list-user-pools --max-results 60 --query "UserPools[].Id" --output text 2>/dev/null || true)
+for pool_id in ${ORPHAN_POOLS}; do
+  stack_tag=$(aws cognito-idp describe-user-pool --user-pool-id "${pool_id}" \
+    --query 'UserPool.UserPoolTags."aws:cloudformation:stack-name"' --output text 2>/dev/null || echo "")
+  if [ -z "${stack_tag}" ] || [ "${stack_tag}" = "None" ]; then
+    continue
+  fi
+  # TenkaCloud 由来の stack tag (= tenkacloud-* prefix) のみを対象にする (= 他プロジェクトの pool を
+  # 巻き込まない安全策)。
+  if [[ "${stack_tag}" != tenkacloud-* ]]; then
+    continue
+  fi
+  if aws cloudformation describe-stacks --stack-name "${stack_tag}" >/dev/null 2>&1; then
+    # 元 stack がまだ存在 (= 削除途中 / 残ってる) → スキップ
+    continue
+  fi
+  log "  deleting orphan UserPool ${pool_id} (was in stack ${stack_tag})"
+  # delete-user-pool は domain が attach されていると InvalidParameterException で fail する。
+  # domain を先に剥がす (= describe-user-pool-domain は domain prefix が分かっている前提だが、
+  # describe-user-pool で Domain field を引ける)。
+  domain=$(aws cognito-idp describe-user-pool --user-pool-id "${pool_id}" \
+    --query 'UserPool.Domain' --output text 2>/dev/null || echo "")
+  if [ -n "${domain}" ] && [ "${domain}" != "None" ]; then
+    aws cognito-idp delete-user-pool-domain --user-pool-id "${pool_id}" --domain "${domain}" 2>/dev/null \
+      || log "    domain ${domain} detach skipped"
+  fi
+  aws cognito-idp delete-user-pool --user-pool-id "${pool_id}" 2>/dev/null \
+    || log "    skip (in-use or already gone)"
+done
+
 log "scanning for orphan API Keys (server-Basic / Stand / Premi / Plati or tenkacloud-* tier keys)..."
 ORPHAN_KEY_IDS=$(aws apigateway get-api-keys --query \
   "items[?starts_with(name, 'server-Basic-') || starts_with(name, 'server-Stand-') || starts_with(name, 'server-Premi-') || starts_with(name, 'server-Plati-') || contains(name, '-basic-tier-key-') || contains(name, '-standard-tier-key-') || contains(name, '-premium-tier-key-') || contains(name, '-platinum-tier-key-')].id" \
