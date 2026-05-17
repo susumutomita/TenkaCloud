@@ -61,14 +61,16 @@ DynamoDB シングルテーブル設計はしない。stack ごとに専用テ�
 | `make synth`            | `cdk synth` (デフォルト `ENV=development`)                  |
 | `make diff`             | `cdk diff --all`                                            |
 | `make bootstrap`        | `cdk bootstrap`                                             |
-| `make deploy`           | `scripts/install.sh` を起動 (3-phase deploy)                |
-| `make destroy`          | `scripts/cleanup.sh` で全 stack + S3 を冪等に破棄           |
+| `make deploy`           | **Lite mode** (= single-tenant) を deploy。 `bin/tenkacloud-lite.ts` 経由で AppPlaneCore + Participant Portal を立てる (#955) |
+| `make deploy-saas`      | **SaaS mode** (= multi-tenant) を deploy。 `scripts/install.sh` を起動 (3-phase deploy、 SBT ControlPlane を立てる) |
+| `make destroy`          | Lite mode を destroy (= `make lite-down`)                   |
+| `make destroy-saas`     | SaaS mode を destroy (`scripts/cleanup.sh` で全 stack + S3 を冪等に破棄) |
 | `make harness`          | architecture invariant チェック (`docs/architecture/harness.md`) |
 | `make harness-test`     | harness 自体のユニットテスト (`.claude/harness/`)           |
 | `make tech-debt`        | 技術的負債スキャン (test smell / 結合 / 責務漏れ)           |
 | `make help`             | Makefile の全ターゲット一覧                                 |
 
-環境切替は `make deploy ENV=production` のように `ENV` 変数で行う。`infrastructure/environments/<env>/.env` を読み込み、無ければ `make env-check` がエラーで止める。
+環境切替は `make deploy ENV=production` のように `ENV` 変数で行う。`infrastructure/environments/<env>/.env` を読み込み、無ければ `make env-check` (SaaS mode) / `make env-check-lite` (Lite mode、 SYSTEM_ADMIN_EMAIL 不要) がエラーで止める。
 
 ## アーキテクチャ Invariants
 
@@ -86,7 +88,7 @@ DynamoDB シングルテーブル設計はしない。stack ごとに専用テ�
 | `INVARIANT_PR_REGRESSION_ANALYSIS_DOCUMENTED`         | PR body に `## Regression 分析` セクションで壊しうる挙動を列挙する              |
 | `INVARIANT_PR_PHYSICAL_IMPACT_DOCUMENTED`             | PR body に `## 物理影響` セクションで CFn / 成果物の差分を CREATE/UPDATE/REPLACE/DELETE/NO-OP で列挙 |
 | `ONE_PASS_LOCAL`                                      | ローカルで tenant 作成 → application console → 問題 deploy → participant join がブラウザ 1 回で通る |
-| `ONE_PASS_AWS`                                        | `make deploy` 1 発で 3-phase が通り、SystemAdmin 招待 → tenant 作成 → 問題 deploy → 競技者ログインまで一気通貫 |
+| `ONE_PASS_AWS`                                        | `make deploy-saas` (= SaaS mode) 1 発で 3-phase が通り、SystemAdmin 招待 → tenant 作成 → 問題 deploy → 競技者ログインまで一気通貫 |
 
 加えて次の Enforcement Rules を機械検査する。
 
@@ -215,13 +217,19 @@ if (res.status === 401) throw new PortalAuthError();                       // �
 
 ## デプロイの流れ
 
-`make deploy` (= `scripts/install.sh`) は次の 3 フェーズで動く。
+### Lite mode (= デフォルト、 `make deploy`)
+
+Issue #955 で `make deploy` のデフォルトを single-tenant Lite mode に切替えた。 SBT ControlPlane / tenant pipeline / SystemAdmin 招待を全て省き、 `bin/tenkacloud-lite.ts` 経由で AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (= Participant Portal) の 2 stack だけを deploy する。 主催者 1 人 1 大会の最短経路 (= 約 10 分)。 teardown は `make destroy` (= `make lite-down`)。
+
+### SaaS mode (= opt-in、 `make deploy-saas`)
+
+複数 tenant / pooled tier (BASIC/STANDARD/PREMIUM) / silo tier (PLATINUM) / SystemAdmin 招待を含む本格運用は SaaS mode を使う。 `make deploy-saas` (= `scripts/install.sh`) は次の 3 フェーズで動く。
 
 1. **Phase 1**: `ControlPlaneStack` + `serverless-saas-ref-arch-bootstrap-stack` + `serverless-saas-ref-arch-tenant-template-pooled` + `ServerlessSaaSPipeline` を deploy。CORS/callback は localhost のみ。
 2. **Phase 2**: Phase 1 の outputs を runtime-config 用 env に入れて `apps/admin-console` を host で build → `AdminConsoleHostingStack` (S3 + CloudFront) を deploy。
 3. **Phase 3**: CloudFront URL を `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` に入れて `ControlPlaneStack` を再 deploy → callback / CORS を更新。
 
-teardown は `make destroy` (= `scripts/cleanup.sh`)。途中失敗状態 / 部分削除済み状態からも冪等に動くよう書かれている。
+teardown は `make destroy-saas` (= `scripts/cleanup.sh`)。途中失敗状態 / 部分削除済み状態からも冪等に動くよう書かれている。
 
 ## ポインター
 

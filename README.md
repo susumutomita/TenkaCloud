@@ -34,9 +34,9 @@ Cloud competitions usually need three things that don't ship together: a multi-t
 
 ## Quick start
 
-### Lite mode (5 minutes, single tenant)
+### Default: Lite mode (5 minutes, single tenant) — `make deploy`
 
-For evaluators and OSS contributors who want to see TenkaCloud running without setting up the full SBT control plane:
+Most operators run **one competition at a time**, not a multi-tenant SaaS. `make deploy` defaults to Lite mode (Issue #955), so you get the Application Admin Console and Participant Portal without the SBT control plane:
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -44,12 +44,12 @@ cd TenkaCloud
 make install
 cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
-# edit SYSTEM_ADMIN_EMAIL + AWS_ACCOUNT_ID
+# edit AWS_ACCOUNT_ID (+ AWS_REGION if not ap-northeast-1)
 
-make lite-up    # cdk deploy 2 stacks (~10 min on first run)
+make deploy   # = make lite-up — cdk deploy 2 stacks (~10 min on first run)
 ```
 
-What you get with `make lite-up`:
+What you get:
 
 - **Application Admin Console** — Tenant Admin UI (CloudFront)
 - **Participant Portal** — Competitor UI (CloudFront)
@@ -60,18 +60,19 @@ What you get with `make lite-up`:
 Teardown:
 
 ```bash
-make lite-down
+make destroy   # = make lite-down
 ```
 
-### Full mode (multi-tenant SaaS)
+### Opt-in: SaaS mode (multi-tenant) — `make deploy-saas`
 
-For running real competitions with multiple tenants, pooled tiers, and System Admin onboarding:
+For running real SaaS deployments with multiple tenants, pooled tiers (BASIC/STANDARD/PREMIUM) and silo tier (PLATINUM), and System Admin onboarding:
 
 ```bash
-make deploy   # 3-phase install.sh: backend → admin console → callback CORS
+make deploy-saas    # 3-phase install.sh: backend → admin console → callback CORS
+make destroy-saas   # teardown
 ```
 
-`scripts/install.sh` handles the SBT 3-phase deploy (control plane → admin console hosting → callback CORS update).
+`scripts/install.sh` handles the SBT 3-phase deploy (control plane → admin console hosting → callback CORS update). Requires `SYSTEM_ADMIN_EMAIL` in the env file.
 
 ## Architecture at a glance
 
