@@ -166,6 +166,9 @@ export class DeployCodeBuildProject extends Construct {
     // のみなので Resource は account 内全リソースを許可 (CFn が必要な権限は問題テンプレ次第)。
     // Phase 2 で cross-account になったら ここを sts:AssumeRole に絞り、target account 側で
     // CFn 権限を持たせる。
+    // Issue #857 justify: same-account CFn deploy で問題 stack ARN を synth 時に決定不能
+    // (= competitor が CodeBuild script から動的に CreateStack するため)。 Phase 2 cross-account
+    // で AssumeRole + 競技者側 Role に CFn 権限を持たせる移行が予定済 (= MVP-1 の一時許容)。
     this.project.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -186,6 +189,7 @@ export class DeployCodeBuildProject extends Construct {
           "cloudformation:ListChangeSets",
           "cloudformation:ListStackResources",
         ],
+        // Issue #857 justify: same-account の動的 stack ARN を synth 時に決定不能 (= 上のコメント参照)
         resources: ["*"],
       }),
     );
