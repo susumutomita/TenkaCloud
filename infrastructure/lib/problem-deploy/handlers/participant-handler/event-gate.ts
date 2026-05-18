@@ -25,11 +25,17 @@ export interface EventGate {
   readonly startsAt: string | undefined;
   readonly endsAt: string | undefined;
   readonly status: string | undefined;
+  /**
+   * Issue #1038 P1 #9 follow-up: scoreboard freeze window (= 終了 N 分前 〜 終了時刻まで順位を
+   * 隠す) の分数。 0 (= freeze 無効)、 未設定 (= default 30 分)、 1〜180 の範囲を運用想定。
+   * operator が `PATCH /events/:eventId/schedule` で更新できる。
+   */
+  readonly scoreboardFreezeMinutes: number | undefined;
 }
 
 /**
- * Event 行の gate fields (scoringLocked / startsAt / endsAt / status) を 1 GetItem で取得。
- * 不在 / DDB error は fail-closed (= undefined 返却、 evaluateGate 側で
+ * Event 行の gate fields (scoringLocked / startsAt / endsAt / status / scoreboardFreezeMinutes)
+ * を 1 GetItem で取得。 不在 / DDB error は fail-closed (= undefined 返却、 evaluateGate 側で
  * scoring_not_started に変換) で安全側に倒す。
  */
 export async function getEventGate(
@@ -41,7 +47,7 @@ export async function getEventGate(
       new GetCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        ProjectionExpression: "scoringLocked, startsAt, endsAt, #s",
+        ProjectionExpression: "scoringLocked, startsAt, endsAt, #s, scoreboardFreezeMinutes",
         ExpressionAttributeNames: { "#s": "status" },
       }),
     );
@@ -51,6 +57,7 @@ export async function getEventGate(
           startsAt?: string;
           endsAt?: string;
           status?: string;
+          scoreboardFreezeMinutes?: number;
         }
       | undefined;
     if (!item) return undefined;
@@ -59,6 +66,8 @@ export async function getEventGate(
       startsAt: item.startsAt,
       endsAt: item.endsAt,
       status: item.status,
+      scoreboardFreezeMinutes:
+        typeof item.scoreboardFreezeMinutes === "number" ? item.scoreboardFreezeMinutes : undefined,
     };
   } catch (err) {
     console.warn("[event-gate] getEventGate failed", {

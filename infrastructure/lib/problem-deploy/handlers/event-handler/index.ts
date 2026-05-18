@@ -231,6 +231,7 @@ app.patch("/events/:eventId/schedule", async (c) => {
     const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, {
       startsAt: resolvedStartsAt,
       endsAt: resolvedEndsAt,
+      scoreboardFreezeMinutes: parsed.data.scoreboardFreezeMinutes,
       nowMs,
     });
     if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);

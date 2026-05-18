@@ -12,6 +12,11 @@ export interface SetEventScheduleParams {
   readonly startsAt?: string;
   /** 競技終了予約時刻 (ISO8601 Z、#536)。未指定なら既存値を保持 */
   readonly endsAt?: string;
+  /**
+   * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
+   * 未指定なら既存値を保持、 0 で freeze 無効化、 1〜180 が有効範囲。
+   */
+  readonly scoreboardFreezeMinutes?: number;
   /** 現在時刻 (ms)。validation の比較基準 */
   readonly nowMs: number;
 }
@@ -35,6 +40,7 @@ export type SetEventScheduleOutcome =
       kind: "ok";
       startsAt?: string;
       endsAt?: string;
+      scoreboardFreezeMinutes?: number;
       updatedDeployments: number;
     };
 
@@ -67,9 +73,9 @@ export async function setEventSchedule(
   eventId: string,
   params: SetEventScheduleParams,
 ): Promise<SetEventScheduleOutcome> {
-  const { startsAt, endsAt, nowMs } = params;
-  // zod 通過済なので両方 undefined にはならない想定だが、defense-in-depth。
-  if (startsAt === undefined && endsAt === undefined) {
+  const { startsAt, endsAt, scoreboardFreezeMinutes, nowMs } = params;
+  // zod 通過済なので 3 field 全 undefined にはならない想定だが、defense-in-depth。
+  if (startsAt === undefined && endsAt === undefined && scoreboardFreezeMinutes === undefined) {
     return { kind: "no_op" };
   }
 
@@ -138,6 +144,12 @@ export async function setEventSchedule(
     setParts.push("endsAt = :endsAt");
     exprValues[":endsAt"] = endsAt;
   }
+  // Issue #1038 P1 #9 follow-up: scoreboard freeze 分数を operator 可変設定
+  const exprNumberValues: Record<string, number> = {};
+  if (scoreboardFreezeMinutes !== undefined) {
+    setParts.push("scoreboardFreezeMinutes = :fz");
+    exprNumberValues[":fz"] = scoreboardFreezeMinutes;
+  }
   const updateExpression = `SET ${setParts.join(", ")}`;
 
   let updatedEvent: Partial<EventItem> | undefined;
@@ -148,7 +160,7 @@ export async function setEventSchedule(
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
         UpdateExpression: updateExpression,
         ConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: exprValues,
+        ExpressionAttributeValues: { ...exprValues, ...exprNumberValues },
         ReturnValues: "ALL_NEW",
       }),
     );
@@ -207,5 +219,11 @@ export async function setEventSchedule(
     ),
   );
 
-  return { kind: "ok", startsAt, endsAt, updatedDeployments: targets.length };
+  return {
+    kind: "ok",
+    startsAt,
+    endsAt,
+    ...(scoreboardFreezeMinutes !== undefined ? { scoreboardFreezeMinutes } : {}),
+    updatedDeployments: targets.length,
+  };
 }

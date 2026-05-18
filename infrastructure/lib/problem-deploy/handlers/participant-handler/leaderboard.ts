@@ -105,10 +105,12 @@ export async function getLeaderboard(
   const eventDeployments = (out.Items ?? []) as Partial<DeploymentItem>[];
 
   // Issue #1038 P1 #9: scoreboard freeze 判定。 event gate を引いて endsAt を取得し、
-  // 終了 30 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。
+  // 終了 N 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。
+  // N は Event 行の `scoreboardFreezeMinutes` で operator が可変設定 (default 30、 0 で無効化)。
   const gate = await getEventGate(shared, eventId);
   const endsAt = gate?.endsAt;
-  const scoreboardFrozen = isWithinFreezeWindow(endsAt, Date.now());
+  const freezeMinutes = gate?.scoreboardFreezeMinutes ?? DEFAULT_FREEZE_MINUTES;
+  const scoreboardFrozen = isWithinFreezeWindow(endsAt, Date.now(), freezeMinutes);
 
   return {
     kind: "ok",
@@ -125,21 +127,39 @@ export async function getLeaderboard(
 }
 
 /**
- * Issue #1038 P1 #9: scoreboard freeze window 判定。 終了 30 分前から終了時刻まで true。
+ * Issue #1038 P1 #9: scoreboard freeze window 判定。 終了 N 分前から終了時刻まで true。
  *
  *   - endsAt 不在            → false (= freeze 無効)
- *   - now < endsAt - 30 min  → false (= 通常表示)
- *   - endsAt - 30 min ≤ now < endsAt → **true** (= 凍結)
+ *   - N ≤ 0                  → false (= operator が freeze 機能を無効化、 PR follow-up)
+ *   - N が不正値              → default にフォールバック (= 安全側)
+ *   - now < endsAt - N min   → false (= 通常表示)
+ *   - endsAt - N min ≤ now < endsAt → **true** (= 凍結)
  *   - now ≥ endsAt           → false (= 終了済、 最終結果公開)
  */
-const FREEZE_WINDOW_MS = 30 * 60 * 1000;
+export const DEFAULT_FREEZE_MINUTES = 30;
+const FREEZE_MINUTES_MAX = 180;
 
-export function isWithinFreezeWindow(endsAt: string | undefined, nowMs: number): boolean {
+/** 入力の妥当性 check。 0 / N>180 / NaN は default にフォールバック。 */
+function normalizeFreezeMinutes(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_FREEZE_MINUTES;
+  if (!Number.isFinite(value)) return DEFAULT_FREEZE_MINUTES;
+  if (value < 0) return DEFAULT_FREEZE_MINUTES;
+  if (value > FREEZE_MINUTES_MAX) return DEFAULT_FREEZE_MINUTES;
+  return value;
+}
+
+export function isWithinFreezeWindow(
+  endsAt: string | undefined,
+  nowMs: number,
+  freezeMinutes: number | undefined = DEFAULT_FREEZE_MINUTES,
+): boolean {
   if (!endsAt) return false;
+  const minutes = normalizeFreezeMinutes(freezeMinutes);
+  if (minutes <= 0) return false; // operator 無効化
   const endsAtMs = Date.parse(endsAt);
   if (!Number.isFinite(endsAtMs)) return false;
   if (nowMs >= endsAtMs) return false; // 終了済
-  const freezeStartMs = endsAtMs - FREEZE_WINDOW_MS;
+  const freezeStartMs = endsAtMs - minutes * 60 * 1000;
   return nowMs >= freezeStartMs;
 }
 
