@@ -45,21 +45,39 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   // CloudFormation list / describe
   "cloudformation:ListStacks",
   "cloudformation:DescribeStackEvents",
-  // EC2 read
+  // EC2 read — AWS Describe* APIs do NOT support resource-level permissions.
+  // `ec2:Describe*` wildcard covers all describe verbs in 1 entry (matched by exact string).
+  "ec2:Describe*",
   "ec2:DescribeInstances",
   "ec2:DescribeSecurityGroups",
   "ec2:DescribeVpcs",
   "ec2:DescribeSubnets",
   "ec2:DescribeRegions",
+  "ec2:DescribeAvailabilityZones",
+  "ec2:DescribeAccountAttributes",
   // IAM read (= self-reflection)
   "iam:GetRole",
   "iam:GetPolicy",
   "iam:ListPolicies",
   "iam:ListRoles",
+  "iam:ListAttachedRolePolicies",
+  "iam:ListRolePolicies",
   // CloudWatch / Logs read
   "logs:DescribeLogGroups",
   "logs:DescribeLogStreams",
   "cloudwatch:ListMetrics",
+  "cloudwatch:GetMetricStatistics",
+  "cloudwatch:GetMetricData",
+  "cloudwatch:DescribeAlarms",
+  // S3 — only account-scoped list verbs (= participant browses their own account)
+  "s3:ListAllMyBuckets",
+  "s3:GetBucketLocation",
+  // Lambda — list verbs are global-scoped
+  "lambda:ListFunctions",
+  "lambda:ListEventSourceMappings",
+  // DynamoDB — list / describe per-account
+  "dynamodb:ListTables",
+  "dynamodb:DescribeTable",
   // STS sanity
   "sts:GetCallerIdentity",
 ]);

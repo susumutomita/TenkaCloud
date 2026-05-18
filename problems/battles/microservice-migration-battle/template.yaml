@@ -166,24 +166,42 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: DescribeOwnEc2
+              # Issue #1038 P2 #10: ec2:Describe* APIs do NOT accept resource-level ARN
+              # permissions per AWS IAM (= "Amazon EC2 Describe API actions don't support
+              # resource-level permissions"). Scoping by ARN makes IAM deny with AccessDenied
+              # even though the role has the permission (user-observed bug:
+              # "is not authorized to perform: ec2:DescribeInstances").
+              #
+              # ADR-021 (#820 retraction) "do not leak other tenants' resources" is preserved
+              # via tag-based IAM Condition: aws:ResourceTag/TenkaCloud:NamePrefix must
+              # match this team's prefix. The Describe call returns ONLY resources whose
+              # tag matches, even though the IAM Resource is "*".
+              - Sid: ConsoleEc2Describe
                 Effect: Allow
                 Action:
-                  - ec2:DescribeInstances
-                  - ec2:DescribeInstanceStatus
-                  - ec2:DescribeTags
-                  - ec2:DescribeSecurityGroups
-                  - ec2:DescribeSubnets
-                  - ec2:DescribeVpcs
-                  - ec2:DescribeRouteTables
-                  - ec2:DescribeInternetGateways
-                Resource:
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${Sg}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicSubnet}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${Vpc}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/${Rt}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/${Igw}"
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              # ec2 metadata APIs (= DescribeRegions / DescribeAvailabilityZones) don't carry
+              # tags. Per-team dedicated AWS account makes account-wide read of these
+              # metadata-only APIs safe (= no resource leakage; these return generic AWS
+              # info, not customer resources).
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              # Self-identity (= competitors often run `aws sts get-caller-identity` to
+              # confirm which account they're in).
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
               - Sid: StartSessionToOwnInstance
                 Effect: Allow
                 Action:

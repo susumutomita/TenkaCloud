@@ -12,7 +12,7 @@ const TEMPLATES = [
   {
     path: "problems/battles/hello-world-battle/template.yaml",
     actions: [
-      "ec2:DescribeInstances",
+      "ec2:Describe*",
       "ssm:StartSession",
       "ssm:TerminateSession",
       "cloudformation:DescribeStacks",
@@ -22,7 +22,7 @@ const TEMPLATES = [
   {
     path: "problems/battles/security-battle-royale/template.yaml",
     actions: [
-      "ec2:DescribeInstances",
+      "ec2:Describe*",
       "ssm:StartSession",
       "ssm:TerminateSession",
       "cloudformation:DescribeStacks",
@@ -33,7 +33,7 @@ const TEMPLATES = [
   {
     path: "problems/battles/microservice-migration-battle/template.yaml",
     actions: [
-      "ec2:DescribeInstances",
+      "ec2:Describe*",
       "ssm:StartSession",
       "ssm:TerminateSession",
       "lambda:GetFunction",
@@ -55,6 +55,23 @@ function roleBlock(template: string): string {
   return template.slice(start, end);
 }
 
+/**
+ * Issue #1038 P2 #10: ADR-021 (= 「参加者 IAM Role はその問題の resource しか触れない」) を
+ * 維持しつつ、 AWS IAM が resource-scope を許さない API (= ec2:Describe* / sts:GetCallerIdentity
+ * 等) も使えるようにする。 Resource:"*" は次の条件下でのみ許可:
+ *   1. tag-based Condition (= `aws:ResourceTag/TenkaCloud:NamePrefix`) で team scope を強制
+ *   2. または特定 Sid (= 後述 allowlist) で metadata-only / self-identity API のみ
+ *
+ * 旧 ADR-021 が厳格に禁止していた leak (= ssm:DescribeParameters / GetParametersByPath /
+ * cloudformation:ListStacks の Resource:* with no Condition) は引き続き fail させる。
+ */
+const RESOURCE_STAR_OK_SIDS = new Set([
+  // metadata-only API (= no per-team resource leak、 per-team dedicated AWS account 前提で安全)
+  "ConsoleEc2Metadata",
+  // self-identity (= sts:GetCallerIdentity は呼び出し元 token を返すだけ)
+  "ConsoleSelfIdentity",
+]);
+
 describe("problem template ParticipantViewerRole (#744)", () => {
   for (const t of TEMPLATES) {
     it(`${t.path} は ParticipantViewerRole と Output を宣言すべき`, () => {
@@ -68,20 +85,21 @@ describe("problem template ParticipantViewerRole (#744)", () => {
       expect(role).toContain(`AWS: !Sub "arn:aws:iam::\${TenkaCloudAccountId}:root"`);
       expect(role).toContain("sts:ExternalId: !Ref ExternalId");
       expect(role).toContain("PolicyName: ProblemSpecific");
-      // Issue #820 撤回 / ADR-021: AWS JAM/GameDay 前提 — 参加者の IAM Role は
-      // **その問題の resource しか触れない** を IAM レベルで強制する。 旧 policy は
-      // \`ssm:DescribeParameters\` / \`ssm:GetParametersByPath\` / \`cloudformation:ListStacks\`
-      // を Resource:* で付与しており、 CLI 越しに platform / 他 tenant の Parameter Store と
-      // CFn stack の存在 / 値が見えていた (= security 事故レベル)。 list 系 IAM action は
-      // 一切付与しない。 Resource:"*" がどの statement にあっても test を fail させる。
+      // ADR-021 を維持: 各 statement で Resource:"*" 単独 (= no Condition + no allowlisted Sid)
+      // を禁止する。 旧 ssm:DescribeParameters / GetParametersByPath / cloudformation:ListStacks
+      // を Resource:* で付与していた policy が platform / 他 tenant の Parameter Store と
+      // CFn stack を CLI 越しに leak していた問題 (= security 事故) の再発防止。
       const statements = role.split(/^\s+- Sid: /m).slice(1);
       for (const stmt of statements) {
         const sid = stmt.split(/\s/, 1)[0] ?? "";
         const hasWildcard = stmt.includes('Resource: "*"') || stmt.includes("Resource: '*'");
+        if (!hasWildcard) continue;
+        const hasCondition = /^\s+Condition:/m.test(stmt);
+        const sidAllowlisted = RESOURCE_STAR_OK_SIDS.has(sid);
         expect(
-          hasWildcard,
-          `Sid "${sid}" uses Resource:"*" — JAM/GameDay 前提では参加者 Role に list 系を付与しない方針 (#820 撤回)`,
-        ).toBe(false);
+          hasCondition || sidAllowlisted,
+          `Sid "${sid}" uses Resource:"*" without Condition and is not allowlisted — JAM/GameDay 前提では参加者 Role の Resource:"*" は tag-based Condition か metadata-only API allowlist が必要 (#820 撤回 / ADR-021)`,
+        ).toBe(true);
       }
       expect(template).toContain("ParticipantViewerRoleArn:");
       expect(template).toContain("Value: !GetAtt ParticipantViewerRole.Arn");
