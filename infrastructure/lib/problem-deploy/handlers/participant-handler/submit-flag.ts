@@ -1,8 +1,9 @@
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { writeScoreEvent } from "../shared/score-event.js";
+import { evaluateGate, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 export type SubmitFlagOutcome =
@@ -26,86 +27,6 @@ export type SubmitFlagOutcome =
   | { kind: "scoring_not_started"; startsAt?: string }
   | { kind: "scoring_ended"; endsAt?: string }
   | { kind: "unauthorized" };
-
-interface EventGate {
-  readonly scoringLocked: boolean;
-  readonly startsAt: string | undefined;
-  readonly endsAt: string | undefined;
-  readonly status: string | undefined;
-}
-
-/**
- * Issue #13: Event の gate flags を read-through で取得する。 scoringLocked + startsAt + endsAt +
- * status を 1 GetItem (= 1 RCU) でまとめて読む。 不在 / error は fail-closed で 「採点不可」 扱い
- * (= old fail-open とは逆。 JAM/GameDay 前提では「採点しないより、 まずデータ取れなかったら
- * 採点を止める」 が安全側)。
- */
-async function getEventGate(
-  shared: ParticipantSharedResources,
-  eventId: string,
-): Promise<EventGate | undefined> {
-  try {
-    const out = await shared.ddb.send(
-      new GetCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        ProjectionExpression: "scoringLocked, startsAt, endsAt, #s",
-        ExpressionAttributeNames: { "#s": "status" },
-      }),
-    );
-    const item = out.Item as
-      | {
-          scoringLocked?: boolean;
-          startsAt?: string;
-          endsAt?: string;
-          status?: string;
-        }
-      | undefined;
-    if (!item) return undefined;
-    return {
-      scoringLocked: item.scoringLocked === true,
-      startsAt: item.startsAt,
-      endsAt: item.endsAt,
-      status: item.status,
-    };
-  } catch (err) {
-    console.warn("[submit-flag] getEventGate failed", {
-      eventId,
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return undefined;
-  }
-}
-
-/**
- * Issue #13: scoring gate を評価する。 順序は次のとおり (= 上から先に該当した outcome を返す):
- *   1. event 行が無い          → "scoring_not_started" (= 安全側)
- *   2. status=ENDED / ARCHIVED → "scoring_ended"
- *   3. startsAt 未設定         → "scoring_not_started"
- *   4. now < startsAt          → "scoring_not_started"
- *   5. endsAt 設定 + now > endsAt → "scoring_ended"
- *   6. scoringLocked           → "scoring_locked"
- *   7. それ以外                → undefined (= scoring active、 加点経路へ)
- */
-function evaluateGate(gate: EventGate | undefined, nowMs: number): SubmitFlagOutcome | undefined {
-  if (!gate) return { kind: "scoring_not_started" };
-  if (gate.status === "ENDED" || gate.status === "ARCHIVED") {
-    return { kind: "scoring_ended", endsAt: gate.endsAt };
-  }
-  if (!gate.startsAt) return { kind: "scoring_not_started" };
-  const startMs = Date.parse(gate.startsAt);
-  if (Number.isFinite(startMs) && nowMs < startMs) {
-    return { kind: "scoring_not_started", startsAt: gate.startsAt };
-  }
-  if (gate.endsAt) {
-    const endMs = Date.parse(gate.endsAt);
-    if (Number.isFinite(endMs) && nowMs > endMs) {
-      return { kind: "scoring_ended", endsAt: gate.endsAt };
-    }
-  }
-  if (gate.scoringLocked) return { kind: "scoring_locked" };
-  return undefined;
-}
 
 /**
  * teamLoginKey で team の全 deployment 行を引き、`problemId` 一致する行に対し flag を
