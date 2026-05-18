@@ -60,7 +60,8 @@
     "deprovision_modal_header": "¿Deprovisionar este tenant?",
     "deprovision_modal_cancel": "Cancelar",
     "deprovision_modal_confirm": "Confirmar",
-    "deprovision_modal_body": "Se deprovisionará {tenantName} ({tenantId}). Se eliminarán su stack de CloudFormation y los registros de DynamoDB."
+    "deprovision_modal_body": "Se deprovisionará {tenantName} ({tenantId}). Se eliminarán su stack de CloudFormation y los registros de DynamoDB.",
+    "show_deprovisioned_toggle": "Mostrar eliminados ({count})"
   },
   "tenant_create": {
     "header": "Crear tenant",

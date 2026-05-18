@@ -8,7 +8,8 @@ import Modal from "@cloudscape-design/components/modal";
 import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
-import { useCallback, useEffect, useState } from "react";
+import Toggle from "@cloudscape-design/components/toggle";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
 import {
@@ -68,6 +69,9 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   const [tenants, setTenants] = useState<Tenant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingDeprovision, setPendingDeprovision] = useState<Tenant | null>(null);
+  // 2026-05-18 user feedback: 削除済 (= Deleted / Deprovisioned / isActive=false) tenant が
+  // 一覧に蓄積し続けて操作対象を見つけにくくなる。 default は非表示、 toggle で表示切替。
+  const [showDeprovisioned, setShowDeprovisioned] = useState(false);
   // #657: "In progress" の経過時間表示用 wall clock。 60 秒ごとに更新し severity 再評価。
   const [nowMs, setNowMs] = useState(() => Date.now());
   // ADR-011 #590 Phase 1.A: tenantId → 集計 の lookup。
@@ -140,6 +144,17 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   };
 
   const deprovisionedLabel = t("tenant_list.deprovisioned");
+
+  // 削除済 tenant の filter。 default は隠す、 toggle が ON なら全件表示。
+  const deprovisionedCount = useMemo(
+    () => (tenants ?? []).filter(isDeprovisioned).length,
+    [tenants],
+  );
+  const visibleTenants = useMemo(() => {
+    const all = tenants ?? [];
+    return showDeprovisioned ? all : all.filter((row) => !isDeprovisioned(row));
+  }, [tenants, showDeprovisioned]);
+
   return (
     <SpaceBetween size="l">
       <Header
@@ -164,11 +179,22 @@ export function TenantListPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
+      {deprovisionedCount > 0 && (
+        <Toggle
+          checked={showDeprovisioned}
+          onChange={({ detail }) => setShowDeprovisioned(detail.checked)}
+        >
+          {interpolate(t("tenant_list.show_deprovisioned_toggle"), {
+            count: String(deprovisionedCount),
+          })}
+        </Toggle>
+      )}
+
       <Table
         variant="container"
         loading={tenants === null && error === null}
         loadingText={t("tenant_list.loading")}
-        items={tenants ?? []}
+        items={visibleTenants}
         trackBy="tenantId"
         empty={
           <Box textAlign="center" color="inherit">

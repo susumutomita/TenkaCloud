@@ -60,7 +60,8 @@
     "deprovision_modal_header": "是否对该租户执行 deprovision?",
     "deprovision_modal_cancel": "取消",
     "deprovision_modal_confirm": "确认",
-    "deprovision_modal_body": "将对 {tenantName} ({tenantId}) 执行 deprovision。相关的 CloudFormation 堆栈和 DynamoDB 记录将被删除。"
+    "deprovision_modal_body": "将对 {tenantName} ({tenantId}) 执行 deprovision。相关的 CloudFormation 堆栈和 DynamoDB 记录将被删除。",
+    "show_deprovisioned_toggle": "显示已删除 ({count})"
   },
   "tenant_create": {
     "header": "创建租户",
