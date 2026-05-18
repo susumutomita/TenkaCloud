@@ -26,6 +26,20 @@ import { TenantTemplateStack } from "../tenant-template/tenant-template-stack";
  * `cdk synth` 結果が変わらない (= CFn / IAM / Lambda の意図しない CREATE/REPLACE/DELETE
  * を発生させない) ことを invariant とする。
  */
+/**
+ * Issue #992: 同 AWS account に複数 環境 (development / staging / production) を同居させるために、
+ * 全 stack ID に env suffix を付ける。 ただし `development` だけは旧 ID (= suffix 無し) を維持し
+ * (= 既存 deploy への影響 0)、 staging / production 等は `-<env>` で区別。
+ *
+ * CDK の Stack ID は default で physical CFn stackName と一致するため、 ID を変えると stack を
+ * 新規作成扱いになる (= 旧 stack は orphan)。 development は default 環境なので互換維持を優先、
+ * 他環境は名前空間が分かれることが主目的なので最初から suffix 付きで運用する。
+ */
+function stackId(base: string, environment: string): string {
+  if (environment === "development") return base;
+  return `${base}-${environment}`;
+}
+
 export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudAppHandles {
   // Issue #952 / PR-957 user feedback: cost allocation tag を App scope で全リソースに
   // 強制付与する。 名前 prefix 識別ではなく tag で resource ownership を表明することで:
@@ -45,11 +59,15 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // KMS Key を AWS-managed alias `alias/aws/s3` (無料) に置き換える Aspect (cost cleanup)。
   cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
 
-  const controlPlaneStack = new ControlPlaneStack(app, "tenkacloud-control-plane", {
-    ...config.stackEnv,
-    systemAdminEmail: config.systemAdminEmail,
-    samlIdp: config.controlPlaneSamlConfig,
-  });
+  const controlPlaneStack = new ControlPlaneStack(
+    app,
+    stackId("tenkacloud-control-plane", config.environment),
+    {
+      ...config.stackEnv,
+      systemAdminEmail: config.systemAdminEmail,
+      samlIdp: config.controlPlaneSamlConfig,
+    },
+  );
 
   // SBT が ControlPlane 内部で作る TenantDetails table は default 5/5 (CDK Table の
   // 既定値) なので Free Tier 枠 (25 RCU/WCU) を圧迫する。Aspect で全 CfnTable を
@@ -60,7 +78,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
 
   const problemDeployBackendStack = new ProblemDeployBackendStack(
     app,
-    "tenkacloud-problem-deploy",
+    stackId("tenkacloud-problem-deploy", config.environment),
     {
       ...config.stackEnv,
       eventBusArn: controlPlaneStack.eventBusArn,
@@ -90,28 +108,32 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // Issue #814 Phase 2: bootstrap を adminConsoleInsight より先に instantiate する。
   // adminConsoleInsight が bootstrap の `deprovisioningStateMachineArn` を受け取り、
   // ListExecutions の IAM scope に使うため (= forward dependency が必要)。
-  const bootstrapTemplateStack = new BootstrapTemplateStack(app, "tenkacloud-bootstrap", {
-    ...config.stackEnv,
-    systemAdminEmail: config.systemAdminEmail,
-    eventBusArn: controlPlaneStack.eventBusArn,
-    apiKeyPlatinumTierParameter: config.apiKeyPlatinumTierParameter,
-    apiKeyPremiumTierParameter: config.apiKeyPremiumTierParameter,
-    apiKeyStandardTierParameter: config.apiKeyStandardTierParameter,
-    apiKeyBasicTierParameter: config.apiKeyBasicTierParameter,
-    apiKeySSMParameterNames: config.apiKeySSMParameterNames,
-    tenantMappingTableBillingMode: config.dynamoBillingMode,
-    tenantMappingTableReadCapacity: config.isDynamoProvisioned
-      ? config.dynamoReadCapacity
-      : undefined,
-    tenantMappingTableWriteCapacity: config.isDynamoProvisioned
-      ? config.dynamoWriteCapacity
-      : undefined,
-  });
+  const bootstrapTemplateStack = new BootstrapTemplateStack(
+    app,
+    stackId("tenkacloud-bootstrap", config.environment),
+    {
+      ...config.stackEnv,
+      systemAdminEmail: config.systemAdminEmail,
+      eventBusArn: controlPlaneStack.eventBusArn,
+      apiKeyPlatinumTierParameter: config.apiKeyPlatinumTierParameter,
+      apiKeyPremiumTierParameter: config.apiKeyPremiumTierParameter,
+      apiKeyStandardTierParameter: config.apiKeyStandardTierParameter,
+      apiKeyBasicTierParameter: config.apiKeyBasicTierParameter,
+      apiKeySSMParameterNames: config.apiKeySSMParameterNames,
+      tenantMappingTableBillingMode: config.dynamoBillingMode,
+      tenantMappingTableReadCapacity: config.isDynamoProvisioned
+        ? config.dynamoReadCapacity
+        : undefined,
+      tenantMappingTableWriteCapacity: config.isDynamoProvisioned
+        ? config.dynamoWriteCapacity
+        : undefined,
+    },
+  );
   cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
 
   const adminConsoleInsightStack = new AdminConsoleInsightStack(
     app,
-    "tenkacloud-admin-console-insight",
+    stackId("tenkacloud-admin-console-insight", config.environment),
     {
       ...config.stackEnv,
       cognitoUserPool: controlPlaneStack.cognitoUserPool,
@@ -133,7 +155,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
 
   const tenantTemplateStack = new TenantTemplateStack(
     app,
-    `tenkacloud-tenant-template-${config.tenantId}`,
+    stackId(`tenkacloud-tenant-template-${config.tenantId}`, config.environment),
     {
       ...config.stackEnv,
       tenantId: config.tenantId,
@@ -160,71 +182,79 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(config.isPooledDeploy));
   cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
 
-  const serverlessSaaSPipeline = new ServerlessSaaSPipeline(app, "tenkacloud-saas-pipeline", {
-    ...config.stackEnv,
-    appName: config.appNameLower,
-    environmentName: config.environment,
-    tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
-    s3SourceBucket: config.s3SourceBucket,
-    sourceZip: config.sourceZip,
-  });
+  const serverlessSaaSPipeline = new ServerlessSaaSPipeline(
+    app,
+    stackId("tenkacloud-saas-pipeline", config.environment),
+    {
+      ...config.stackEnv,
+      appName: config.appNameLower,
+      environmentName: config.environment,
+      tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
+      s3SourceBucket: config.s3SourceBucket,
+      sourceZip: config.sourceZip,
+    },
+  );
   cdk.Aspects.of(serverlessSaaSPipeline).add(new DestroyPolicySetter());
 
-  const observabilityStack = new ObservabilityStack(app, "tenkacloud-observability", {
-    ...config.stackEnv,
-    environment: config.environment,
-    stateMachines: {
-      deployCreateArn: problemDeployBackendStack.deployCreateStateMachineArn,
-      deployDeleteArn: problemDeployBackendStack.deployDeleteStateMachineArn,
-    },
-    codeBuildProjectNames: {
-      problemDeploy: problemDeployBackendStack.deployCodeBuildProjectName,
-      provisioning: serverlessSaaSPipeline.provisioningCodeBuildProjectName,
-    },
-    dynamoDbTableNames: {
-      deployments: problemDeployBackendStack.deploymentsTable.tableName,
-      events: problemDeployBackendStack.eventsTable.tableName,
-      teams: problemDeployBackendStack.teamsTable.tableName,
-      competitorAccounts: problemDeployBackendStack.competitorAccountsTable.tableName,
-      problemEndpoints: problemDeployBackendStack.problemEndpointsTable.tableName,
-      tenantMappingTable: bootstrapTemplateStack.tenantMappingTable.tableName,
-    },
-    lambdaFunctionNames: {
-      deployApi: problemDeployBackendStack.deployApiLambda.functionName,
-      eventApi: problemDeployBackendStack.eventApiLambda.functionName,
-      participantPortal: problemDeployBackendStack.participantPortalLambda?.functionName,
-      adminInsight: adminConsoleInsightStack.lambdaFunctionName,
-      competitorAccounts: problemDeployBackendStack.competitorAccountsApiLambda.functionName,
-      externalIdAudit: problemDeployBackendStack.externalIdAuditLambda.functionName,
-      genericScoring: problemDeployBackendStack.genericScoringLambda.functionName,
-    },
-    apiGateways: {
-      controlPlane: {
-        kind: "http",
-        label: "control-plane",
-        apiId: apiIdFromExecuteApiUrl(controlPlaneStack.regApiGatewayUrl),
-        stage: "$default",
+  const observabilityStack = new ObservabilityStack(
+    app,
+    stackId("tenkacloud-observability", config.environment),
+    {
+      ...config.stackEnv,
+      environment: config.environment,
+      stateMachines: {
+        deployCreateArn: problemDeployBackendStack.deployCreateStateMachineArn,
+        deployDeleteArn: problemDeployBackendStack.deployDeleteStateMachineArn,
       },
-      tenant: {
-        kind: "rest",
-        label: "tenant",
-        apiName: tenantTemplateStack.tenantApiName,
-        stage: tenantTemplateStack.tenantApiStageName,
+      codeBuildProjectNames: {
+        problemDeploy: problemDeployBackendStack.deployCodeBuildProjectName,
+        provisioning: serverlessSaaSPipeline.provisioningCodeBuildProjectName,
       },
-      problemDeploy: {
-        kind: "rest",
-        label: "problem-deploy",
-        apiName: tenantTemplateStack.tenantApiName,
-        stage: tenantTemplateStack.tenantApiStageName,
+      dynamoDbTableNames: {
+        deployments: problemDeployBackendStack.deploymentsTable.tableName,
+        events: problemDeployBackendStack.eventsTable.tableName,
+        teams: problemDeployBackendStack.teamsTable.tableName,
+        competitorAccounts: problemDeployBackendStack.competitorAccountsTable.tableName,
+        problemEndpoints: problemDeployBackendStack.problemEndpointsTable.tableName,
+        tenantMappingTable: bootstrapTemplateStack.tenantMappingTable.tableName,
       },
-      adminInsight: {
-        kind: "http",
-        label: "admin-insight",
-        apiId: adminConsoleInsightStack.apiId,
-        stage: "$default",
+      lambdaFunctionNames: {
+        deployApi: problemDeployBackendStack.deployApiLambda.functionName,
+        eventApi: problemDeployBackendStack.eventApiLambda.functionName,
+        participantPortal: problemDeployBackendStack.participantPortalLambda?.functionName,
+        adminInsight: adminConsoleInsightStack.lambdaFunctionName,
+        competitorAccounts: problemDeployBackendStack.competitorAccountsApiLambda.functionName,
+        externalIdAudit: problemDeployBackendStack.externalIdAuditLambda.functionName,
+        genericScoring: problemDeployBackendStack.genericScoringLambda.functionName,
+      },
+      apiGateways: {
+        controlPlane: {
+          kind: "http",
+          label: "control-plane",
+          apiId: apiIdFromExecuteApiUrl(controlPlaneStack.regApiGatewayUrl),
+          stage: "$default",
+        },
+        tenant: {
+          kind: "rest",
+          label: "tenant",
+          apiName: tenantTemplateStack.tenantApiName,
+          stage: tenantTemplateStack.tenantApiStageName,
+        },
+        problemDeploy: {
+          kind: "rest",
+          label: "problem-deploy",
+          apiName: tenantTemplateStack.tenantApiName,
+          stage: tenantTemplateStack.tenantApiStageName,
+        },
+        adminInsight: {
+          kind: "http",
+          label: "admin-insight",
+          apiId: adminConsoleInsightStack.apiId,
+          stage: "$default",
+        },
       },
     },
-  });
+  );
   observabilityStack.addDependency(controlPlaneStack);
   observabilityStack.addDependency(problemDeployBackendStack);
   observabilityStack.addDependency(adminConsoleInsightStack);
@@ -275,18 +305,22 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
 
   let adminConsoleHosting: AdminConsoleHostingStack | undefined;
   if (config.adminConsoleHostingInputs) {
-    adminConsoleHosting = new AdminConsoleHostingStack(app, "tenkacloud-admin-console-hosting", {
-      ...config.stackEnv,
-      apiUrl: config.adminConsoleHostingInputs.apiUrl,
-      cognitoDomain: config.adminConsoleHostingInputs.cognitoDomain,
-      userClientId: config.adminConsoleHostingInputs.userClientId,
-      pooledApplicationAdminConsoleUrl:
-        config.adminConsoleHostingInputs.pooledApplicationAdminConsoleUrl,
-      provisioningCodeBuildProject: config.adminConsoleHostingInputs.provisioningCodeBuildProject,
-      awsRegion: config.awsRegion,
-      awsAccountId: config.awsAccountId,
-      adminInsightApiUrl: config.adminConsoleHostingInputs.adminInsightApiUrl,
-    });
+    adminConsoleHosting = new AdminConsoleHostingStack(
+      app,
+      stackId("tenkacloud-admin-console-hosting", config.environment),
+      {
+        ...config.stackEnv,
+        apiUrl: config.adminConsoleHostingInputs.apiUrl,
+        cognitoDomain: config.adminConsoleHostingInputs.cognitoDomain,
+        userClientId: config.adminConsoleHostingInputs.userClientId,
+        pooledApplicationAdminConsoleUrl:
+          config.adminConsoleHostingInputs.pooledApplicationAdminConsoleUrl,
+        provisioningCodeBuildProject: config.adminConsoleHostingInputs.provisioningCodeBuildProject,
+        awsRegion: config.awsRegion,
+        awsAccountId: config.awsAccountId,
+        adminInsightApiUrl: config.adminConsoleHostingInputs.adminInsightApiUrl,
+      },
+    );
     cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());
   }
 

@@ -30,6 +30,16 @@ import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite";
 const app = new cdk.App();
 const config = resolveAppConfig({ env: process.env, binDir: __dirname });
 
+/**
+ * Issue #992: 同 AWS account に複数 env を deploy できるよう stack ID に env suffix を付ける。
+ * development は default で suffix なし (= 旧 deploy 互換)、 staging / production 等は
+ * `-<env>` で別 stack 名前空間に置く。 wire.ts の同名 helper と一致させる。
+ */
+function stackId(base: string): string {
+  if (config.environment === "development") return base;
+  return `${base}-${config.environment}`;
+}
+
 // Issue #952 / PR-957: cost allocation tag を App scope で全リソースに付与する。
 // SaaS mode (wire.ts) と同じ規則。 AWS Billing console で `Project` を Cost
 // Allocation Tag として activate すれば Budget / Cost Explorer で TenkaCloud
@@ -41,24 +51,28 @@ cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(config.kmsPendingWindowInDa
 cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
 
 // Issue #778 ADR-016 Phase 2 / PR-#791: eventBusArn 省略で local bus 自動作成。
-const problemDeployBackend = new ProblemDeployBackendStack(app, "tenkacloud-lite-problem-deploy", {
-  ...config.stackEnv,
-  // eventBusArn は **明示的に渡さない** (= Lite では ControlPlane 不在のため)
-  sourceBucketName: config.s3SourceBucket,
-  sourceObjectKey: config.sourceZip,
-  problemsCatalog: config.problems.catalog as Readonly<Record<string, string>>,
-  problemsScoring: config.problems.scoring as Readonly<Record<string, unknown>>,
-  problemsEndpoints: config.problems.endpoints as Readonly<Record<string, unknown>>,
-  problemsPhases: (config.problems.phases ?? {}) as Readonly<Record<string, unknown>>,
-  problemsVisibility: (config.problems.visibility ?? {}) as Readonly<Record<string, "private">>,
-  // Issue #888: Lite mode でも problemsDisruptions を Lambda env に渡す。
-  problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
-  // Lite では participant portal を runtime-config "default-dev-mock" で立てる
-  // (= portal Lambda + S3+CloudFront を持ち込む)。 frontend は backend mode で動く。
-  participantPortal: { runtimeConfig: "default-dev-mock" },
-  deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
-  environmentName: config.environment,
-});
+const problemDeployBackend = new ProblemDeployBackendStack(
+  app,
+  stackId("tenkacloud-lite-problem-deploy"),
+  {
+    ...config.stackEnv,
+    // eventBusArn は **明示的に渡さない** (= Lite では ControlPlane 不在のため)
+    sourceBucketName: config.s3SourceBucket,
+    sourceObjectKey: config.sourceZip,
+    problemsCatalog: config.problems.catalog as Readonly<Record<string, string>>,
+    problemsScoring: config.problems.scoring as Readonly<Record<string, unknown>>,
+    problemsEndpoints: config.problems.endpoints as Readonly<Record<string, unknown>>,
+    problemsPhases: (config.problems.phases ?? {}) as Readonly<Record<string, unknown>>,
+    problemsVisibility: (config.problems.visibility ?? {}) as Readonly<Record<string, "private">>,
+    // Issue #888: Lite mode でも problemsDisruptions を Lambda env に渡す。
+    problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
+    // Lite では participant portal を runtime-config "default-dev-mock" で立てる
+    // (= portal Lambda + S3+CloudFront を持ち込む)。 frontend は backend mode で動く。
+    participantPortal: { runtimeConfig: "default-dev-mock" },
+    deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
+    environmentName: config.environment,
+  },
+);
 cdk.Aspects.of(problemDeployBackend).add(
   new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
 );
@@ -66,7 +80,7 @@ cdk.Aspects.of(problemDeployBackend).add(
 // AppPlaneCore (= tenantId="local" 固定) を抱える Lite stack。 ProblemDeploy stack
 // の Lambda refs を cross-stack で渡す (= 既存 Full mode の TenantTemplateStack
 // と同 pattern)。
-const liteStack = new TenkaCloudLiteStack(app, "tenkacloud-lite", {
+const liteStack = new TenkaCloudLiteStack(app, stackId("tenkacloud-lite"), {
   ...config.stackEnv,
   environment: config.environment,
   deployApiLambda: problemDeployBackend.deployApiLambda,
