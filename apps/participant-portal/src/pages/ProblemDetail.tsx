@@ -108,12 +108,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
-      {problem &&
-        metadata &&
-        narrative &&
-        view?.eventGate?.kind !== "scoring_not_started" && (
-          <ProblemInfoSection metadata={metadata} narrative={narrative} />
-        )}
+      {problem && metadata && narrative && view?.eventGate?.kind !== "scoring_not_started" && (
+        <ProblemInfoSection metadata={metadata} narrative={narrative} />
+      )}
       {/* 2026-05-18 user feedback: 「攻撃時刻を相手に予告する Red Team は存在しない」
        *   「種明かしをした おばけやしき はつまらない」
        *   ADR-012 Phase 4 / Issue #607 の `TimelinePredictSection` (= 残時間 countdown +
@@ -139,12 +136,12 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         metadata &&
         metadata.endpoints.length > 0 &&
         view?.eventGate?.kind !== "scoring_not_started" && (
-        <EndpointOverrideForm
-          apiBaseUrl={config.apiBaseUrl}
-          teamLoginKey={sessionToken ?? ""}
-          problemId={problem.problemId}
-        />
-      )}
+          <EndpointOverrideForm
+            apiBaseUrl={config.apiBaseUrl}
+            teamLoginKey={sessionToken ?? ""}
+            problemId={problem.problemId}
+          />
+        )}
 
       {/* ADR-012 Phase 5: problem 側 portal plugin (= metadata.dashboard.slots で宣言) を
        *   render する。 該当 slot が無い問題は section 全体が render されない。 */}

@@ -1060,7 +1060,7 @@ export function runInspect(args: { problemId: string }): InspectResult {
 function extractFlagFromTemplate(yaml: string, key: string): string | null {
   const re = new RegExp(`${key}:[\\s\\S]*?Value:\\s*("[^"\\n]+"|'[^'\\n]+'|[^\\n!]+)\\n`, "m");
   const m = yaml.match(re);
-  if (!m || !m[1]) return null;
+  if (!m?.[1]) return null;
   const raw = m[1].trim();
   if (raw.startsWith("!")) return null;
   return raw.replace(/^["']|["']$/g, "");

@@ -210,7 +210,7 @@ async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> 
   }
   // `https://<prefix>.auth.<region>.amazoncognito.com` から prefix を抽出。
   const match = domainUrl.match(/^https?:\/\/([^.]+)\.auth\./);
-  if (!match || !match[1]) {
+  if (!match?.[1]) {
     io.stderr(`[lite] failed to parse CognitoDomainUrl: ${domainUrl}\n`);
     return 1;
   }
