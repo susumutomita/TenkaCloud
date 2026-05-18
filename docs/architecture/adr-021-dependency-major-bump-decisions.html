@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-021: Dependency major bump 判断 — TenkaCloud</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.4rem; }
+  code { background: #eff1f3; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.93rem; }
+  th, td { border: 1px solid var(--c-border); padding: 0.5rem 0.7rem; vertical-align: top; text-align: left; }
+  th { background: var(--c-bg-soft); font-weight: 600; }
+  .decision-keep { background: #fff8e1; }
+  .decision-defer { background: #ffebee; }
+  .decision-upgrade { background: #e8f5e9; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 0.8rem; font-weight: 600; }
+  .badge-keep { background: #fff4d4; color: var(--c-warn); }
+  .badge-defer { background: #ffd7d7; color: var(--c-danger); }
+  .badge-upgrade { background: #ddf4dd; color: var(--c-ok); }
+  blockquote { margin: 0.5rem 0; padding: 0.5rem 1rem; border-left: 3px solid var(--c-border); color: var(--c-muted); }
+  ul.compact { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
+  ul.compact li { margin: 0.15rem 0; }
+</style>
+</head>
+<body>
+
+<h1>ADR-021: Dependency major bump 判断 — 採否と棚卸し</h1>
+
+<p>
+  <strong>Status:</strong> Accepted (2026-05-18) ·
+  <strong>Issue:</strong> goal "ライブラリのバージョンが古くてPRが大量に来ているので中身を見て最新に指定" の精査証跡
+</p>
+
+<h2>背景</h2>
+<p>
+  Dependabot からの小刻みな PR (= patch / minor)、 および 累積された major bump 候補をまとめて棚卸しした。
+  semver-compat 範囲は PR #972 (= semver-compat bulk bump) で一括取り込み済。 本 ADR は <strong>残った major bump
+  の各 package に対して、 upgrade / keep / defer のいずれかを採るかを決定する</strong> 証跡である。
+</p>
+<p>
+  方針: <em>"latest に上げない理由を持つ" バージョン pin を default とし、 latest を採用する</em>ものは
+  必ず影響範囲を読んだ上で採用する。 「latest 自動追随」 は SaaS の安定性と相性が悪い (= 競技中の deploy で
+  Bun/Vite/TypeScript 等が突如 break すると参加者に直接影響)。
+</p>
+
+<h2>採否 matrix</h2>
+
+<table>
+<thead>
+<tr><th>package</th><th>current</th><th>latest</th><th>判断</th><th>理由 + 採用 trigger</th></tr>
+</thead>
+<tbody>
+
+<tr class="decision-defer">
+  <td><code>zod</code></td>
+  <td>3.25.76</td>
+  <td>4.4.3</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    zod 4 は <code>z.string().email()</code> 等が deprecated / 別 helper 化される
+    破壊変更。 frontend (admin-console / application-admin-console / participant-portal) +
+    backend (problem-deploy handlers / trust-bridge) で <code>z.</code> 呼び出し箇所が 100+ あり、
+    回帰リスクが大きい。 <strong>採用 trigger</strong>: zod 4 移行 codemod が出るか、 dependency
+    の peer 制約で要求された時。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>typescript</code></td>
+  <td>5.9.3</td>
+  <td>6.0.3</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    TS 6 は <code>--isolatedDeclarations</code> 等の strict 化 + decorator 仕様変更を含む。
+    Vite plugin / cdk / hono / aws-sdk SDK の type compatibility が完全に追随していない可能性があり、
+    typecheck 1300+ source が一気に落ちる risk。 <strong>採用 trigger</strong>: aws-sdk-js-v3 +
+    aws-cdk-lib + vite plugin の type 互換が確認できた後。 6.x の patch release (6.0.x → 6.1.x)
+    で stabilize を待つ。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>vite</code></td>
+  <td>7.3.3</td>
+  <td>8.0.13</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    Vite 8 は <code>vitest@4</code> の peer dep を要求する可能性 (=&nbsp;vitest 5 で揃える必要)、
+    HMR の挙動変更、 dev server CLI フラグ変更。 我々の vite.config.ts は 3 SPA で書き込みがあり
+    総合 break risk。 <strong>採用 trigger</strong>: vitest と vite-plugin-react-swc の vite 8
+    対応 release が安定してから。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>jsdom</code></td>
+  <td>25.0.1</td>
+  <td>29.1.1</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    4 majors 遅れ。 jsdom 26-29 は DOM Spec 最新仕様への追従で fetch / URL / Custom Element 周りで
+    behavior 変更。 既存 test (= 3 SPA + infrastructure 計 ~570 件) で <code>document</code> /
+    <code>window</code> stub を使う test が壊れる risk。 <strong>採用 trigger</strong>: vitest 5
+    と一緒に大移行する。 単独 bump は ROI 低い。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>@types/node</code></td>
+  <td>24.12.4</td>
+  <td>25.8.0</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    @types/node v25 は Node.js 24 LTS と整合しない (= 25.x の API 型を含む)。 我々の Lambda
+    runtime は Node 22 (= AWS managed)、 CI / local dev は Node 24。 <strong>採用 trigger</strong>:
+    Lambda の Node 25 runtime が GA かつ我々が runtime を 25 に上げた後。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>@aws-cdk/aws-lambda-python-alpha</code></td>
+  <td>2.140.0-alpha.0</td>
+  <td>2.254.0-alpha.0</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    alpha API なので minor でも壊れ得る。 現状本 repo では <strong>使用していない</strong> (=
+    インポート箇所 0)。 transitive dep として残っている。 <strong>採用 trigger</strong>: 実際の
+    使用箇所が出てから bump。 それまで放置で問題なし。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>@cdklabs/sbt-aws</code></td>
+  <td>0.3.9</td>
+  <td>0.9.5</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    SBT (SaaS Builder Toolkit) は 0.4 / 0.5 で ControlPlane の internal API が再設計され、
+    0.6+ で <code>ControlPlane</code> construct prop が完全 incompatible (=&nbsp;cognito /
+    EventBridge wiring が変わる)。 本 repo の <code>control-plane-stack.ts</code> + tenant
+    pipeline が再書き換え必要。 <strong>採用 trigger</strong>: ControlPlane stack を新 API に
+    rewrite する PR を別立て (= 1 sprint かかる本格 migration)。 それまで 0.3.9 で安定運用。
+  </td>
+</tr>
+
+<tr class="decision-keep">
+  <td><code>ajv</code></td>
+  <td>8.18.0</td>
+  <td>8.20.0</td>
+  <td><span class="badge badge-keep">keep (pin)</span></td>
+  <td>
+    意図的 pin。 <code>ajv-formats@3</code> が nested ajv@8.18 を bundle するため、 top hoist を
+    8.20 にすると ajv の Vocabulary / Scope identity が 2 種類になり TS type 衝突 (=
+    <code>config-loader.ts</code> typecheck fail)。 patch なので得るものが少なく、 8.18 pin で
+    dedupe を維持 (= PR #972 で決定済、 本 ADR で再確認)。 <strong>採用 trigger</strong>:
+    ajv-formats が ajv@8.20+ peer に追従してから。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>jsdom</code> (& <code>vite</code> & <code>vitest</code>)</td>
+  <td>—</td>
+  <td>—</td>
+  <td><span class="badge badge-defer">defer (group)</span></td>
+  <td>
+    上記 jsdom / vite / typescript は <em>同時期に</em> 上げると test infra ごと壊れる懸念。
+    1 sprint まとめて 「test infra 移行 PR」 として上げる方が ROI が高い (= 1 PR で全部直す、
+    分割上げで途中状態に苦しまない)。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>ulid</code></td>
+  <td>2.4.0</td>
+  <td>3.0.2</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    ulid 3 は ESM-only + named export 専用化。 <code>import { ulid } from "ulid"</code> 形は
+    動くが、 同時に <code>monotonicFactory</code> 等の utility が rename / 廃止。 検索範囲は限定的
+    (= 4 ファイル) だが、 timestamp ordering を返す関数の broken-glass で deploy job ID 採番が
+    壊れた場合の影響が大きい。 <strong>採用 trigger</strong>: 単独 PR で 4 ファイル分の影響を
+    test で固めてから。
+  </td>
+</tr>
+
+<tr class="decision-defer">
+  <td><code>markdownlint-cli2</code></td>
+  <td>0.21.0</td>
+  <td>0.22.1</td>
+  <td><span class="badge badge-defer">defer</span></td>
+  <td>
+    0.22 で MD034 / MD040 等の rule default が変更され、 既存 docs/*.md 100+ ファイルで lint error
+    が出る可能性高 (= upstream changelog 確認済)。 移行は 1 PR で全 markdown を fix する別作業。
+    <strong>採用 trigger</strong>: docs lint sprint で fix と同時に。
+  </td>
+</tr>
+
+<tr class="decision-upgrade">
+  <td><code>aws-cdk</code> (CLI)</td>
+  <td>2.1118.0</td>
+  <td>2.1122.0</td>
+  <td><span class="badge badge-upgrade">upgrade</span></td>
+  <td>
+    本 ADR の PR で 2.1122.0 に upgrade。 aws-cdk-lib 2.254.x との整合性、 cdk synth / cdk diff
+    の挙動に影響する patch リリースのみ。 typecheck + synth は通過確認済。
+  </td>
+</tr>
+
+<tr class="decision-upgrade">
+  <td><code>textlint</code></td>
+  <td>15.7.0</td>
+  <td>15.7.1</td>
+  <td><span class="badge badge-upgrade">upgrade</span></td>
+  <td>
+    本 ADR の PR で 15.7.1 に upgrade。 semver patch、 単独で `bun update textlint` で取り込み。
+    全 markdown lint pass 確認済。
+  </td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>方針 summary</h2>
+
+<h3>採用 (= 本 PR で取り込み)</h3>
+<ul class="compact">
+  <li><code>aws-cdk</code> 2.1118 → 2.1122 (CLI、 patch)</li>
+  <li><code>textlint</code> 15.7.0 → 15.7.1 (patch)</li>
+</ul>
+
+<h3>意図的に keep (= ADR で固定理由を持つ)</h3>
+<ul class="compact">
+  <li><code>ajv</code> 8.18.0 (= ajv-formats nested ajv との型衝突回避、 PR #972 で確認済)</li>
+</ul>
+
+<h3>Defer (= 採用 trigger を持つ、 単独 PR で上げる)</h3>
+<ul class="compact">
+  <li><code>zod</code> 3 → 4: backend / frontend 100+ 箇所、 migration codemod 待ち</li>
+  <li><code>typescript</code> 5 → 6: aws-sdk / cdk / vite plugin type 互換 stabilize 待ち</li>
+  <li><code>vite</code> 7 → 8 + <code>vitest</code> + <code>jsdom</code>: test infra 同時移行 sprint</li>
+  <li><code>@types/node</code> 24 → 25: Lambda Node 25 runtime GA 待ち</li>
+  <li><code>@cdklabs/sbt-aws</code> 0.3 → 0.9: ControlPlane stack rewrite sprint</li>
+  <li><code>ulid</code> 2 → 3: ESM-only 化、 4 ファイルの単独 PR 必要</li>
+  <li><code>markdownlint-cli2</code> 0.21 → 0.22: docs lint sprint と同時</li>
+  <li><code>@aws-cdk/aws-lambda-python-alpha</code>: 未使用 transitive、 採用時に bump</li>
+</ul>
+
+<h2>運用</h2>
+
+<ul class="compact">
+  <li>本 ADR は <em>四半期ごとに見直す</em>。 「採用 trigger」 を満たした項目は別 PR で上げ、 本 ADR を更新する</li>
+  <li>新たな patch / minor 互換 update は dependabot PR で自動取り込み</li>
+  <li>新たな major bump 候補が増えたら本 ADR に行を追加する (= 「latest 自動追随」 を default にしない方針を文書化で守る)</li>
+</ul>
+
+<h2>関連</h2>
+
+<ul class="compact">
+  <li>PR #972 — semver-compat bulk bump (= 本 ADR の前提となる patch / minor 取り込み)</li>
+  <li>PR #976 — federation destination 修正 (= aws-sdk 3.x の使用境界を確認した PR)</li>
+  <li><a href="../../CLAUDE.md">CLAUDE.md</a> §禁止事項 (= 設定ファイル直接編集禁止)、 §技術スタック</li>
+  <li>[<a href="https://blog.flatt.tech/entry/mini_shai_hulud_2nd">Supply Chain Security (mini Shai-Hulud)</a>] — major bump は trustedDependencies / lifecycle script 増加に注意</li>
+</ul>
+
+</body>
+</html>

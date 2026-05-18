@@ -30,7 +30,7 @@
     "@biomejs/biome": "^2.4.15",
     "@types/aws-lambda": "^8.10.161",
     "@types/node": "^24.12.4",
-    "aws-cdk": "2.1118.0",
+    "aws-cdk": "2.1122.0",
     "cdk-nag": "^2.38.2",
     "hono": "^4.12.19",
     "ts-node": "^10.9.2",
