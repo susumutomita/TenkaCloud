@@ -184,6 +184,10 @@ app.post("/portal/me/problems/:problemId/hints/:hintId/reveal", (c) =>
       if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
       if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
       if (outcome.kind === "unknown_hint") return respondError(c, "unknown_hint");
+      // Issue #1005: scoring gate failures are the same 409 family as submit-flag.
+      if (outcome.kind === "scoring_not_started") return respondError(c, "scoring_not_started");
+      if (outcome.kind === "scoring_ended") return respondError(c, "scoring_ended");
+      if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
       // ok / already_revealed どちらも 200 で content + score を返す (= idempotent UX)。
       return c.json(outcome, HTTP_OK);
     },

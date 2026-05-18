@@ -188,4 +188,86 @@ describe("revealHint (#742 Phase 3)", () => {
       revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1"),
     ).rejects.toThrow(/DDB throttle/);
   });
+
+  // ---- Issue #1005 / scoring gate (= submit-flag と同じ gate を hint reveal でも通す) ----
+  describe("competition scoring gate (Issue #1005)", () => {
+    const eventRow = sampleRow({ eventId: "EVT1", score: 0 });
+
+    it("Event 行が無いときは fail-closed で scoring_not_started を返し UpdateItem を呼ばないべき", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({}); // EventMeta GetItem returns no Item
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("scoring_not_started");
+      // hintsRevealed の Update は走らない (= penalty が accrue しない)
+      expect(ddbSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("now < startsAt なら scoring_not_started を返し startsAt を含めるべき", async () => {
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({ Item: { status: "READY", startsAt: future } });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out).toEqual({ kind: "scoring_not_started", startsAt: future });
+    });
+
+    it("endsAt 設定 + now > endsAt なら scoring_ended を返すべき", async () => {
+      const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const before = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({
+        Item: { status: "READY", startsAt: before, endsAt: past },
+      });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out).toEqual({ kind: "scoring_ended", endsAt: past });
+    });
+
+    it("status=ENDED なら startsAt があっても scoring_ended を返すべき", async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({ Item: { status: "ENDED", startsAt: before } });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("scoring_ended");
+    });
+
+    it("scoringLocked=true は startsAt OK でも scoring_locked を返すべき", async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({
+        Item: { status: "READY", startsAt: before, scoringLocked: true },
+      });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("scoring_locked");
+    });
+
+    it("startsAt 過去 + endsAt 未来 + status=READY なら gate を通って ok で penalty を deduct すべき", async () => {
+      const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
+      ddbSend.mockResolvedValueOnce({
+        Item: { status: "READY", startsAt: before, endsAt: future },
+      });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: -10 } });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("ok");
+      if (out.kind !== "ok") return;
+      expect(out.penaltyApplied).toBe(10);
+    });
+
+    it("eventId が item に無い legacy row は gate check を skip して旧挙動で reveal すべき", async () => {
+      // = team の row に eventId が無いケース (= non-event-scoped、 historical)
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100 })] }); // no eventId
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 90 } });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("ok");
+      // EventMeta の Get は呼ばない (= 2 calls: query + update のみ)
+      expect(ddbSend).toHaveBeenCalledTimes(2);
+    });
+  });
 });

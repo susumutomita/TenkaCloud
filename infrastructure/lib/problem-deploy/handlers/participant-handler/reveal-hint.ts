@@ -1,6 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
+import { evaluateGate, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -23,7 +24,15 @@ export type RevealHintOutcome =
   | { kind: "already_revealed"; content: string; penaltyApplied: number; totalScore: number }
   | { kind: "unauthorized" }
   | { kind: "not_flag_problem" }
-  | { kind: "unknown_hint" };
+  | { kind: "unknown_hint" }
+  /**
+   * Issue #1005: 競技開始前 / 終了後 / scoringLocked 状態でヒント開封を block する。
+   * submit-flag と同じ gate を共有 (event-gate.ts)。 旧来 reveal-hint は gate を見ず、
+   * 開始前に開けて -penalty が accrue する公平性破壊バグがあった。
+   */
+  | { kind: "scoring_not_started"; startsAt?: string }
+  | { kind: "scoring_ended"; endsAt?: string }
+  | { kind: "scoring_locked" };
 
 export async function revealHint(
   shared: ParticipantSharedResources,
@@ -37,6 +46,14 @@ export async function revealHint(
 
   const item = items.find((i) => i.problemId === problemId);
   if (!item?.PK || !item.problemId) return { kind: "unauthorized" };
+
+  // Issue #1005: ヒント開封も submit-flag と同じ scoring gate を通す。
+  // 開始前 / 終了後 / scoringLocked では penalty を accrue させない (= 公平性)。
+  if (typeof item.eventId === "string" && item.eventId.length > 0) {
+    const gate = await getEventGate(shared, item.eventId);
+    const blocked = evaluateGate(gate, Date.now());
+    if (blocked) return blocked;
+  }
 
   const scoring = scoringMap[item.problemId];
   // Phase 3 は flag kind 限定で hints をサポート (= Phase 5 で他 4 kind に拡張)。
