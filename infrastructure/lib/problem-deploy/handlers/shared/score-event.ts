@@ -29,16 +29,20 @@ export interface ScoreEventItem {
    * - `flag-wrong`: 競技者の flag 提出が不正解で wrongAnswerPenalty が減点された (Issue #817)
    * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
    *   Battle Portal の Attack Statistics / History で使う)
+   * - `hint`: 競技者がヒントを開封し penalty が deduct された (Issue #1038 P1 #8、 2026-05-18)。
+   *   旧来 hint reveal は score を直 ADD するだけで score event 履歴に出ず、 「-30 pt なのに
+   *   履歴 0 件」 表示の不整合になっていた。
    */
-  source: "uptime" | "flag" | "flag-wrong" | "attack-detected";
+  source: "uptime" | "flag" | "flag-wrong" | "attack-detected" | "hint";
   /**
    * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
-   * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)。
+   * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)、
+   * `hint` = -hint.penalty (= 減点、 負数)。
    */
   points: number;
   /**
    * 結果。
-   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解
+   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解 or `hint` 開封成功
    * - `wrong`: `flag-wrong` (= 不正解で減点、 Issue #817)
    * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた)
    *
