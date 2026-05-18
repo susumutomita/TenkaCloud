@@ -1,0 +1,118 @@
+import { App, Stack } from "aws-cdk-lib";
+import { Template } from "aws-cdk-lib/assertions";
+import { Topic } from "aws-cdk-lib/aws-sns";
+import { describe, expect, it } from "vitest";
+import { FreeTierAlarms } from "../../lib/observability/free-tier-alarms";
+
+/**
+ * Issue #952 cost guardrails: FreeTierAlarms construct の CFn synth を pin する。
+ *
+ * - Lambda 1 件あたり 1 個の Alarm
+ * - DDB Table 1 件あたり Read / Write 2 個の Alarm
+ * - 各 Alarm に SNS topic action が wire される
+ * - Lambda の threshold は default 26666 (= 800k/month / 30 days、 Free Tier 80%)
+ * - DDB の threshold は default 100000 (= 1 RCU * 86400 sec + 余裕)
+ */
+
+function buildStack() {
+  const app = new App();
+  const stack = new Stack(app, "TestStack");
+  const topic = new Topic(stack, "Topic");
+  return { app, stack, topic };
+}
+
+describe("FreeTierAlarms (#952 cost guardrails)", () => {
+  it("Lambda 2 個 + DDB 1 個なら計 4 個の Alarm を生成すべき", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: ["fn-a", "fn-b"],
+      dynamoDbTableNames: ["table-x"],
+    });
+    const tpl = Template.fromStack(stack);
+    // 2 Lambda alarms + 1 DDB (read+write) = 4
+    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 4);
+  });
+
+  it("Lambda alarm の threshold は default 26666、 metric namespace=AWS/Lambda", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: ["fn-a"],
+      dynamoDbTableNames: [],
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/Lambda",
+      MetricName: "Invocations",
+      Threshold: 26666,
+      Statistic: "Sum",
+    });
+  });
+
+  it("DDB Read Capacity Alarm の threshold default は 100000", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: [],
+      dynamoDbTableNames: ["table-x"],
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/DynamoDB",
+      MetricName: "ConsumedReadCapacityUnits",
+      Threshold: 100000,
+    });
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/DynamoDB",
+      MetricName: "ConsumedWriteCapacityUnits",
+      Threshold: 100000,
+    });
+  });
+
+  it("各 Alarm は SNS topic action を持つべき", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: ["fn-a"],
+      dynamoDbTableNames: [],
+    });
+    const tpl = Template.fromStack(stack);
+    const alarms = tpl.findResources("AWS::CloudWatch::Alarm");
+    const first = Object.values(alarms)[0];
+    expect(first?.Properties?.AlarmActions).toBeDefined();
+    expect(Array.isArray(first?.Properties?.AlarmActions)).toBe(true);
+  });
+
+  it("override threshold が反映されるべき", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: ["fn-a"],
+      dynamoDbTableNames: ["table-x"],
+      lambdaDailyInvocationThreshold: 5000,
+      dynamoDbDailyConsumedThreshold: 50000,
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/Lambda",
+      Threshold: 5000,
+    });
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/DynamoDB",
+      Threshold: 50000,
+    });
+  });
+
+  it("英数以外を含む resource 名 (= dot / hyphen) でも logical ID 衝突しないべき", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: ["fn-a.b", "fn-a-b"],
+      dynamoDbTableNames: [],
+    });
+    const tpl = Template.fromStack(stack);
+    // 2 Lambda alarms (= sanitize で衝突しない logical ID)
+    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 2);
+  });
+});
