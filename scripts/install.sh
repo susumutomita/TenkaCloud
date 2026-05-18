@@ -38,8 +38,9 @@ source "${SCRIPT_DIR}/prepare-source-bundle.sh"
 # eventTitle はオプション (default は "TenkaCloud Battle")。
 export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL="true"
 
-# TenkaCloud_ROOT は prepare-source-bundle.sh が cd する。 install.sh の後段は
-# infrastructure/ 配下で動作するため戻す。
+# TENKACLOUD_ROOT は prepare-source-bundle.sh が export する。 install.sh の後段は
+# infrastructure/ 配下で動作するため戻す。 source 経由で set -u が継承されるので、
+# 以降の cd でも変数名は **全大文字** に揃える (= typo は unbound variable で fail する)。
 cd "${TENKACLOUD_ROOT}/infrastructure"
 
 # JSII_DEPRECATED=quiet: SBT 内部の aws-cdk-lib deprecation warning を抑制 (CFT には影響なし)
@@ -88,7 +89,7 @@ echo "  Cognito Domain: ${COGNITO_DOMAIN}"
 
 # admin-console を host で build。URL は build に焼かない (runtime-config.json 経由で
 # CDK が CloudFront に配置する)。dev ローカル開発では .env.local が効くので触らない。
-cd "${TenkaCloud_ROOT}/apps/admin-console"
+cd "${TENKACLOUD_ROOT}/apps/admin-console"
 echo "  apps/admin-console: bun install + vite build (URL 非依存)"
 bun install
 bun run build
@@ -131,7 +132,7 @@ echo "  AdminInsight API URL: ${ADMIN_INSIGHT_API_URL}"
 
 # AdminConsoleHostingStack deploy: backend outputs を CDK_PARAM_* env に渡す
 # (stack が runtime-config.json に書いて S3 に配置する)
-cd "${TenkaCloud_ROOT}/infrastructure"
+cd "${TENKACLOUD_ROOT}/infrastructure"
 export CDK_PARAM_CONTROL_PLANE_API_URL="${API_URL}"
 export CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN="${COGNITO_DOMAIN}"
 export CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID="${CLIENT_ID}"
