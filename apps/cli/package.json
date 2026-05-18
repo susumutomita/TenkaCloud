@@ -1,0 +1,19 @@
+{
+  "name": "@TenkaCloud/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TenkaCloud CLI — Cognito OAuth (Authorization Code + PKCE + loopback) で sign-in し API を叩く",
+  "type": "module",
+  "bin": {
+    "tenkacloud": "./bin/tenkacloud.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.6"
+  }
+}
