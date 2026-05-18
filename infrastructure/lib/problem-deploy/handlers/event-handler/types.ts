@@ -249,6 +249,33 @@ export const EventDeploymentSummarySchema = z.object({
 });
 export type EventDeploymentSummary = z.infer<typeof EventDeploymentSummarySchema>;
 
+/**
+ * Issue #1038 P1 #7: operator が Event 詳細画面で全 team の score event 推移を一目で
+ * 把握できるよう、 EventDetail に optional な team-grouped score events を含める。
+ *
+ * 公開 source は 4 種 (= uptime / flag / flag-wrong / hint)。 marker 用 `attack-detected`
+ * (= result=down) は累計 score に影響しないので除外。 leaderboard 合計と chart 累積を一致
+ * させる目的で、 participant 側 chart endpoint (= `/portal/leaderboard/score-events`) と
+ * 同じ shape にする。
+ */
+export const TeamScoreEventViewSchema = z.object({
+  jobId: z.string(),
+  problemId: z.string(),
+  source: z.enum(["uptime", "flag", "flag-wrong", "hint"]),
+  points: z.number(),
+  result: z.enum(["ok", "wrong"]),
+  occurredAt: z.string(),
+});
+export type TeamScoreEventView = z.infer<typeof TeamScoreEventViewSchema>;
+
+export const TeamScoreEventsSchema = z.object({
+  teamId: z.string(),
+  teamName: z.string(),
+  /** occurredAt 昇順 (= chart の cumulative 計算に向く順序)。 */
+  events: z.array(TeamScoreEventViewSchema),
+});
+export type TeamScoreEvents = z.infer<typeof TeamScoreEventsSchema>;
+
 export const EventDetailSchema = EventSummarySchema.extend({
   problems: z.array(EventProblemTargetSchema),
   teams: z.array(TeamSummarySchema),
@@ -257,6 +284,12 @@ export const EventDetailSchema = EventSummarySchema.extend({
    * 旧 jobId-based deployment は eventId が無いので含まれない。
    */
   deploymentsByProblem: z.record(z.string(), z.array(EventDeploymentSummarySchema)),
+  /**
+   * Issue #1038 P1 #7: 全 team の累計 score event timeline。 `?withScoreEvents=true` 経由で
+   * のみ含まれる (= default は undefined で従来挙動を維持、 余分な DDB query を発生させない)。
+   * teams[] と同じ順序 (= teamId 昇順) で並べる。
+   */
+  scoreEventsByTeam: z.array(TeamScoreEventsSchema).optional(),
 });
 export type EventDetail = z.infer<typeof EventDetailSchema>;
 
