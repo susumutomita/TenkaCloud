@@ -23,127 +23,24 @@ if [[ -z "$CDK_PARAM_SYSTEM_ADMIN_EMAIL" ]]; then
   exit 1
 fi
 
-export REGION=$(aws configure get region)
-export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-# --- Source bucket 準備 (ref 準拠) ---
-export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
-echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
-export CDK_SOURCE_NAME="source.zip"
-
-if aws s3api head-bucket --bucket $CDK_PARAM_S3_BUCKET_NAME --expected-bucket-owner ${ACCOUNT_ID} 2>/dev/null; then
-    echo "Bucket $CDK_PARAM_S3_BUCKET_NAME already exists and owned by this account."
-else
-    echo "Bucket $CDK_PARAM_S3_BUCKET_NAME does not exist. Creating..."
-    if [ "$REGION" == "us-east-1" ]; then
-      aws s3api create-bucket --bucket $CDK_PARAM_S3_BUCKET_NAME
-    else
-      aws s3api create-bucket --bucket $CDK_PARAM_S3_BUCKET_NAME --region "$REGION" --create-bucket-configuration LocationConstraint="$REGION"
-    fi
-    aws s3api put-bucket-versioning --bucket $CDK_PARAM_S3_BUCKET_NAME --versioning-configuration Status=Enabled
-    aws s3api put-public-access-block --bucket $CDK_PARAM_S3_BUCKET_NAME --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-    echo "Bucket $CDK_PARAM_S3_BUCKET_NAME created."
-fi
-
-# ref の update-tenant.sh / provision-tenant.sh は zip 内に `cdk/` `src/` `scripts/` があることを想定する。
-# TenkaCloud のリポジトリ構造 (infrastructure/ / src/ / scripts/) をそのまま zip すると、
-# `cd cdk` が失敗して CodeBuild がコケる。ので一時 staging で ref 期待レイアウトに合わせる。
-STAGING=$(mktemp -d)
-trap "rm -rf '$STAGING'" EXIT
-
-cd ..  # TenkaCloud root へ
-TenkaCloud_ROOT="$(pwd)"
-
-# apps/application-admin-console を host build。dist/ は 2 経路で参照される:
-#   1. host 実行の phase 1 で pooled TenantTemplateStack を deploy する際の Source.asset
-#   2. CodeBuild 実行の provision-tenant.sh が PLATINUM tier で per-tenant
-#      TenantTemplateStack を deploy する際の Source.asset (source.zip 経由で持ち込む)
-# 両方とも infrastructure/lib/tenant-template/application-admin-console-hosting.ts が
-# path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist")
-# で参照する。
-echo "Building apps/application-admin-console (used by both pooled stack at host + silo stack in CodeBuild)..."
-(cd "${TenkaCloud_ROOT}/apps/application-admin-console" && bun install && bun run build)
-echo "  → dist/ generated"
-
-# apps/participant-portal を host build。ProblemDeployBackendStack の
-# ParticipantPortalHosting が `apps/participant-portal/dist/` を Source.asset で読む。
-# `CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true` のときだけ stack 側で生成される。
-echo "Building apps/participant-portal (used by ParticipantPortalHosting in ProblemDeployBackendStack)..."
-(cd "${TenkaCloud_ROOT}/apps/participant-portal" && bun install && bun run build)
-echo "  → dist/ generated"
+# --- Source bucket 準備 + source.zip upload (= prepare-source-bundle.sh に集約) ---
+#
+# 旧来この install.sh 自体で bucket 作成 + apps build + staging + zip + upload を inline で
+# 書いていたが (= 80 行 / 内容は tenkacloud-lite.ts cmdUp の Lite mode と完全に同じ)、 DRY
+# 違反になっていた。 prepare-source-bundle.sh に shared logic を切り出し、 install.sh / lite
+# 両方が同じ手順を踏むようにする。 source で呼ぶことで CDK_PARAM_S3_BUCKET_NAME /
+# CDK_PARAM_COMMIT_ID 等の export を caller に持ち越す。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./prepare-source-bundle.sh
+source "${SCRIPT_DIR}/prepare-source-bundle.sh"
 
 # Participant Portal を ProblemDeployBackendStack に含める (CDK 側で条件付き作成)。
 # eventTitle はオプション (default は "TenkaCloud Battle")。
 export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL="true"
 
-echo "Staging source.zip at ${STAGING}..."
-# infrastructure → cdk にリネーム、src と scripts はそのまま
-cp -R infrastructure "${STAGING}/cdk"
-cp -R scripts "${STAGING}/scripts"
-# MVP-1 (ADR-001 PR-2): problems/ を含めて source.zip に同梱する。CodeBuild の deploy-battles.sh
-# が `problems/<id>/template.yaml` を読むので、source.zip の root に problems/ を置く必要がある。
-cp -R problems "${STAGING}/problems"
-# `.nvmrc` を staging root に同梱 (= source of truth、CodeBuild 内 provision/update-tenant.sh が
-# `nvm install $(cat .nvmrc)` で参照する)。repo root から copy。
-cp "${TenkaCloud_ROOT}/.nvmrc" "${STAGING}/.nvmrc"
-# repo root `package.json` を staging root に同梱。 CodeBuild 内
-# `scripts/lib/install-node.sh:install_bun_from_package_manager` が CWD/`package.json` の
-# `packageManager: "bun@<version>"` field から Bun version を読む。 無いと ENOENT で
-# tenant provisioning / update CodeBuild job が fail する (= "package.json not found")。
-cp "${TenkaCloud_ROOT}/package.json" "${STAGING}/package.json"
-# Issue #916 (3 層目): repo root の workspaces 宣言は `["infrastructure", "apps/*", "packages/*"]`
-# だが、 staging では SBT ref-arch 互換のため `infrastructure/` を `cdk/` にリネームしている (= 上の
-# `cp -R infrastructure "${STAGING}/cdk"`)。 結果 root package.json の workspaces 宣言と staging の
-# 実ディレクトリ名が乖離し、 CodeBuild の `cd cdk && bun install` で bun が `cdk` を workspace
-# member と認識せず、 `@TenkaCloud/trust-bridge: workspace:*` を `./*` (= cdk 内 siblings) で探して
-# fail する (= "Workspace dependency '@TenkaCloud/trust-bridge' not found / Searched in './*'")。
-#
-# 対策: staging root の package.json の workspaces 配列で `infrastructure` を `cdk` に置換する。
-# 他に staging 名と repo 名が乖離している workspace は無いので 1 置換で十分。 sed の in-place 編集は
-# BSD/GNU 互換に注意 (macOS は `sed -i ''`)。
-python3 -c "
-import json, sys
-p = '${STAGING}/package.json'
-with open(p, 'r') as f:
-    pkg = json.load(f)
-pkg['workspaces'] = [w if w != 'infrastructure' else 'cdk' for w in pkg.get('workspaces', [])]
-with open(p, 'w') as f:
-    json.dump(pkg, f, indent=2)
-"
-# packages/ を staging root に同梱。 cdk/package.json は \`@TenkaCloud/trust-bridge: workspace:*\` で
-# sibling workspace を参照する。 CodeBuild の bun install (= update-tenant.sh / provision-tenant.sh で
-# npm install → bun install に切替済) が workspace を resolve できるよう同梱する。 無いと
-# \`EUNSUPPORTEDPROTOCOL: Unsupported URL Type "workspace:"\` で fail する (= 旧 npm install 経路、
-# #916 の 2 層目 regression)。
-cp -R packages "${STAGING}/packages"
-# 旧 ref-arch では src/ を staging に含めていたが、#76 で
-# infrastructure/lib/tenant-pipeline/handlers/ に移動済 (cdk/ 配下に同梱されるので不要)。
-
-# node_modules / cdk.out / bun.lock を完全に排除 (CodeBuild の npm install が EEXIST で失敗するため)
-find "${STAGING}" -type d \( -name node_modules -o -name cdk.out -o -name dist \) -prune -exec rm -rf {} +
-find "${STAGING}" -type f \( -name ".env" -o -name ".env.local" \) -delete
-find "${STAGING}" -name ".DS_Store" -delete
-
-# 上の find は dist を一括 prune するので、application-admin-console の dist は
-# その後で個別に置き直す。CodeBuild の provision-tenant.sh が `cd cdk` した後に
-# Source.asset で `../apps/application-admin-console/dist` を解決できる必要がある。
-mkdir -p "${STAGING}/apps/application-admin-console"
-cp -R "${TenkaCloud_ROOT}/apps/application-admin-console/dist" "${STAGING}/apps/application-admin-console/"
-
-# participant-portal も dist を staging に置く。現状 ProblemDeployBackendStack は
-# host 環境 (phase 1) でしか deploy されないので、host の `apps/participant-portal/dist`
-# 直参照で動く。が、将来 CodeBuild から再 deploy する経路を増やしたとき、source.zip 内に
-# dist が無いと Source.asset が解決できず失敗する。application-admin-console と同じ流儀
-# で予め staging に同梱して将来リスクを抑える (claude-review PR 475 の指摘)。
-mkdir -p "${STAGING}/apps/participant-portal"
-cp -R "${TenkaCloud_ROOT}/apps/participant-portal/dist" "${STAGING}/apps/participant-portal/"
-
-cd "${STAGING}"
-zip -rq "${CDK_SOURCE_NAME}" .
-export CDK_PARAM_COMMIT_ID=$(aws s3api put-object --bucket "${CDK_PARAM_S3_BUCKET_NAME}" --key "source.zip" --body "./${CDK_SOURCE_NAME}" --output text)
-echo "Source code uploaded to S3 (layout: cdk/, src/, scripts/, apps/application-admin-console/dist/)."
-
-cd "${TenkaCloud_ROOT}/infrastructure"
+# TenkaCloud_ROOT は prepare-source-bundle.sh が cd する。 install.sh の後段は
+# infrastructure/ 配下で動作するため戻す。
+cd "${TENKACLOUD_ROOT}/infrastructure"
 
 # JSII_DEPRECATED=quiet: SBT 内部の aws-cdk-lib deprecation warning を抑制 (CFT には影響なし)
 export JSII_DEPRECATED=quiet

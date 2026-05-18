@@ -74,7 +74,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(stdout.join("")).toContain("使い方:");
   });
 
-  it("up は cdk deploy を 1 回 inherit で呼び、 両 stack 名と --require-approval never を渡すべき", async () => {
+  it("up は prepare-source-bundle.sh と cdk deploy を順に inherit 呼びすべき", async () => {
     const { io, calls } = buildIO({
       inheritExitCode: 0,
       capture: () => ({ code: 0, stdout: "https://example.cloudfront.net", stderr: "" }),
@@ -82,8 +82,14 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     const code = await main(["up"], io);
     expect(code).toBe(0);
     const inheritCalls = calls.filter((c) => c.mode === "inherit");
-    expect(inheritCalls).toHaveLength(1);
-    const deployCall = inheritCalls[0];
+    // prepare-source-bundle.sh (= source.zip prep) → cdk deploy の 2 call
+    expect(inheritCalls).toHaveLength(2);
+
+    const prepCall = inheritCalls[0];
+    expect(prepCall.cmd).toBe("bash");
+    expect(prepCall.args).toContain("scripts/prepare-source-bundle.sh");
+
+    const deployCall = inheritCalls[1];
     expect(deployCall.cmd).toBe("bunx");
     expect(deployCall.args).toContain("cdk");
     expect(deployCall.args).toContain("deploy");
@@ -91,6 +97,30 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(deployCall.args).toContain(LITE_STACK_NAMES.problemDeploy);
     expect(deployCall.args).toContain("--require-approval");
     expect(deployCall.args).toContain("never");
+  });
+
+  it("up は prepare-source-bundle.sh が non-zero で落ちたら cdk deploy を呼ばずに早期 return すべき", async () => {
+    // 1st spawn (= prepare-source-bundle.sh) で失敗させ、 2nd (= cdk deploy) は呼ばれないことを確認
+    let firstCall = true;
+    const calls: Array<{ cmd: string; args: readonly string[] }> = [];
+    const io = {
+      stdout: () => undefined,
+      stderr: () => undefined,
+      spawnInherit: async (cmd: string, args: readonly string[]) => {
+        calls.push({ cmd, args });
+        if (firstCall) {
+          firstCall = false;
+          return 1; // prepare-source-bundle.sh fail
+        }
+        return 0;
+      },
+      spawnCapture: async () => ({ code: 0, stdout: "", stderr: "" }),
+    };
+    const code = await main(["up"], io);
+    expect(code).toBe(1);
+    // prepare 呼び出しだけで cdk deploy は呼ばない
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.cmd).toBe("bash");
   });
 
   it("up は cdk deploy が non-zero で落ちたら早期 return し AWS CLI を呼ばないべき", async () => {
