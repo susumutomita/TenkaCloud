@@ -228,14 +228,16 @@ export async function updateTeamName(
 }
 
 /**
- * Phase 3: 自チームの加点履歴 (時系列降順)。flag 提出と uptime probe 成功の両方を含む。
+ * Phase 3: 自チームのスコア変動履歴 (時系列降順)。
+ * Issue #1001: flag 提出 / uptime probe 成功に加え、 ヒント開封 / 不正解 flag の
+ * 減点行も含む。 source / points の符号で 「加点 / 減点」 を区別する。
  */
 export interface ScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
   readonly points: number;
-  readonly result: "ok";
+  readonly result: "ok" | "wrong";
   readonly occurredAt: string;
 }
 
