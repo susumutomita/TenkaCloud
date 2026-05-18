@@ -154,10 +154,14 @@ app.post("/portal/me/submit-flag", (c) =>
       if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
       if (outcome.kind === "no_outputs") return respondError(c, "no_outputs");
       if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
-      // Issue #13 / scoring gate: 競技開始前 / 終了後の提出は raw outcome を 409 で返し、
-      // UI で「競技開始までお待ちください」 / 「競技は終了しました」 の文言に分岐させる。
-      if (outcome.kind === "scoring_not_started") return respondError(c, "scoring_not_started");
-      if (outcome.kind === "scoring_ended") return respondError(c, "scoring_ended");
+      // Issue #13 / #1006: scoring gate failures に startsAt / endsAt を含めて返す。
+      // UI で 「競技開始まで N 分」 / 「競技は X 終了しました」 を出せるようにする。
+      if (outcome.kind === "scoring_not_started") {
+        return respondError(c, "scoring_not_started", { startsAt: outcome.startsAt });
+      }
+      if (outcome.kind === "scoring_ended") {
+        return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
+      }
       return c.json(outcome, HTTP_OK);
     },
     RATE_LIMITS.WRITE_VERY_LOW,
@@ -184,9 +188,13 @@ app.post("/portal/me/problems/:problemId/hints/:hintId/reveal", (c) =>
       if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
       if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
       if (outcome.kind === "unknown_hint") return respondError(c, "unknown_hint");
-      // Issue #1005: scoring gate failures are the same 409 family as submit-flag.
-      if (outcome.kind === "scoring_not_started") return respondError(c, "scoring_not_started");
-      if (outcome.kind === "scoring_ended") return respondError(c, "scoring_ended");
+      // Issue #1005 / #1006: scoring gate failures with startsAt / endsAt context.
+      if (outcome.kind === "scoring_not_started") {
+        return respondError(c, "scoring_not_started", { startsAt: outcome.startsAt });
+      }
+      if (outcome.kind === "scoring_ended") {
+        return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
+      }
       if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
       // ok / already_revealed どちらも 200 で content + score を返す (= idempotent UX)。
       return c.json(outcome, HTTP_OK);

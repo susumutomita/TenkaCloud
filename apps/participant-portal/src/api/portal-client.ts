@@ -136,6 +136,25 @@ export class PortalNetworkError extends Error {
   }
 }
 
+/**
+ * Issue #1006: scoring gate (= 競技開始前 / 終了後) で 409 が返った時に、 startsAt / endsAt を
+ * 取り出して UI が 「競技開始まで N 分」 「競技は X 終了しました」 を出せるようにする。
+ *
+ * backend は { error: "scoring_not_started"|"scoring_ended", startsAt?, endsAt? } を返す。
+ * 旧来 frontend は PortalNetworkError として string で受け取り、 ユーザーに JSON が見える
+ * 不親切 UX だった。
+ */
+export class PortalScoringGateError extends Error {
+  constructor(
+    public readonly kind: "scoring_not_started" | "scoring_ended" | "scoring_locked",
+    public readonly startsAt?: string,
+    public readonly endsAt?: string,
+  ) {
+    super(`Portal scoring gate: ${kind}`);
+    this.name = "PortalScoringGateError";
+  }
+}
+
 function buildPortalUrl(apiBaseUrl: string, path: string): URL {
   const base = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
   return new URL(path, base);
@@ -185,7 +204,19 @@ async function portalFetch<T>(
     throw new PortalValidationError(body.error ?? "invalid_request");
   }
   if (res.status === StatusCodes.CONFLICT && options.throwOn409) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      startsAt?: string;
+      endsAt?: string;
+    };
+    // Issue #1006: scoring gate 系の 409 は startsAt / endsAt を持つ専用 error にする。
+    if (
+      body.error === "scoring_not_started" ||
+      body.error === "scoring_ended" ||
+      body.error === "scoring_locked"
+    ) {
+      throw new PortalScoringGateError(body.error, body.startsAt, body.endsAt);
+    }
     throw new PortalValidationError(body.error ?? "conflict");
   }
   if (!res.ok) {
@@ -423,6 +454,9 @@ export async function revealHint(
     {
       method: "POST",
       throwOn400: true,
+      // Issue #1006: 409 scoring_not_started / scoring_ended / scoring_locked を
+      // PortalScoringGateError として throw (= UI が startsAt 文言を出せる)。
+      throwOn409: true,
       signal,
     },
   )) as RevealHintResponse;
@@ -442,6 +476,9 @@ export async function submitFlag(
     method: "POST",
     body: { problemId, flag },
     throwOn400: true,
+    // Issue #1006: 409 scoring_not_started / scoring_ended / scoring_locked を
+    // PortalScoringGateError として throw (= UI が startsAt 文言を出せる)。
+    throwOn409: true,
     signal,
   })) as SubmitFlagOutcome;
 }

@@ -57,7 +57,17 @@ const ERROR_STATUS = {
 
 export type ErrorKind = keyof typeof ERROR_STATUS;
 
-export function respondError(c: Context, kind: ErrorKind) {
+export function respondError(
+  c: Context,
+  kind: ErrorKind,
+  extras?: Readonly<Record<string, unknown>>,
+) {
+  // Issue #1006: scoring_not_started / scoring_ended では startsAt / endsAt を body に含めて
+  // UI が 「競技開始まで N 分」 等の親切な文言を出せるようにする。 旧来は { error: kind } のみで
+  // ユーザーが 「いつ始まるのか」 分からず迷子になっていた。
+  if (extras && Object.keys(extras).length > 0) {
+    return c.json({ error: kind, ...extras }, ERROR_STATUS[kind]);
+  }
   return c.json({ error: kind }, ERROR_STATUS[kind]);
 }
 
