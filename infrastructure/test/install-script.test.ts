@@ -67,4 +67,14 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
     expect(source).not.toContain('cp -R packages "${STAGING}/packages"');
     expect(source).not.toContain('cp -R problems "${STAGING}/problems"');
   });
+
+  // prepare-source-bundle.sh は `set -euo pipefail` で `-u` を有効化しており、 install.sh が
+  // それを source した時点で unbound variable は実行時エラーになる。 過去に install.sh の
+  // 後段 `cd` で `${TenkaCloud_ROOT}` (PascalCase 表記) と書かれていて Phase 2 で
+  // 「TenkaCloud_ROOT: unbound variable」 で deploy が止まった。 typo regression を pin する。
+  it("install.sh の repo root 変数は **全大文字** TENKACLOUD_ROOT で統一すべき (= PascalCase 禁止)", () => {
+    expect(source).not.toMatch(/\$\{TenkaCloud_ROOT[}:]/);
+    expect(source).not.toMatch(/\$\{TenkaCloud_Root[}:]/);
+    expect(source).toMatch(/\$\{TENKACLOUD_ROOT[}:]/);
+  });
 });
