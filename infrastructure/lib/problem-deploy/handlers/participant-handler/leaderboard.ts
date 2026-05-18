@@ -1,6 +1,7 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -28,6 +29,19 @@ export interface LeaderboardEntry {
 export interface LeaderboardResponse {
   readonly eventId: string;
   readonly entries: readonly LeaderboardEntry[];
+  /**
+   * Issue #1038 P1 #9: scoreboard freeze (= 終了 30 分前から最終結果まで順位非公開)。
+   * true のとき frontend は entries を隠して「凍結中」 メッセージを表示。
+   *
+   * 判定:
+   *   - now < endsAt - 30 min      → false (= 通常表示)
+   *   - endsAt - 30 min ≤ now < endsAt → **true** (= 凍結中)
+   *   - now ≥ endsAt               → false (= 競技終了、 最終結果公開)
+   *   - endsAt 不在                → false (= freeze 無効)
+   */
+  readonly scoreboardFrozen?: boolean;
+  /** event の終了予定時刻 (= UI で「あと N 分で公開」 表示用)。 */
+  readonly endsAt?: string;
 }
 
 /**
@@ -90,10 +104,43 @@ export async function getLeaderboard(
   );
   const eventDeployments = (out.Items ?? []) as Partial<DeploymentItem>[];
 
+  // Issue #1038 P1 #9: scoreboard freeze 判定。 event gate を引いて endsAt を取得し、
+  // 終了 30 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。
+  const gate = await getEventGate(shared, eventId);
+  const endsAt = gate?.endsAt;
+  const scoreboardFrozen = isWithinFreezeWindow(endsAt, Date.now());
+
   return {
     kind: "ok",
-    response: { eventId, entries: buildLeaderboardEntries(eventDeployments, myTeamId) },
+    response: {
+      eventId,
+      entries: scoreboardFrozen
+        ? // 凍結中は entries を空配列で返す (= shape は維持、 frontend が「凍結中」 表示)。
+          []
+        : buildLeaderboardEntries(eventDeployments, myTeamId),
+      ...(scoreboardFrozen !== undefined ? { scoreboardFrozen } : {}),
+      ...(endsAt ? { endsAt } : {}),
+    },
   };
+}
+
+/**
+ * Issue #1038 P1 #9: scoreboard freeze window 判定。 終了 30 分前から終了時刻まで true。
+ *
+ *   - endsAt 不在            → false (= freeze 無効)
+ *   - now < endsAt - 30 min  → false (= 通常表示)
+ *   - endsAt - 30 min ≤ now < endsAt → **true** (= 凍結)
+ *   - now ≥ endsAt           → false (= 終了済、 最終結果公開)
+ */
+const FREEZE_WINDOW_MS = 30 * 60 * 1000;
+
+export function isWithinFreezeWindow(endsAt: string | undefined, nowMs: number): boolean {
+  if (!endsAt) return false;
+  const endsAtMs = Date.parse(endsAt);
+  if (!Number.isFinite(endsAtMs)) return false;
+  if (nowMs >= endsAtMs) return false; // 終了済
+  const freezeStartMs = endsAtMs - FREEZE_WINDOW_MS;
+  return nowMs >= freezeStartMs;
 }
 
 /**

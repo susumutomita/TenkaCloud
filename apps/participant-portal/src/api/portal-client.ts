@@ -311,6 +311,14 @@ export interface LeaderboardEntry {
 export interface LeaderboardResponse {
   readonly eventId: string;
   readonly entries: readonly LeaderboardEntry[];
+  /**
+   * Issue #1038 P1 #9: scoreboard freeze (= 終了 30 分前から最終結果まで順位非公開)。
+   * true なら frontend は entries を隠して「凍結中」 メッセージを表示する (= 終盤の
+   * 駆け込み防止 + 競技公平性)。
+   */
+  readonly scoreboardFrozen?: boolean;
+  /** event の終了予定時刻 (ISO 8601、 UI で「あと N 分で公開」 表示用)。 */
+  readonly endsAt?: string;
 }
 
 /**

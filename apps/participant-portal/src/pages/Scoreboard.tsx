@@ -52,7 +52,26 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
         </Box>
       )}
 
-      {leaderboard && (
+      {/* Issue #1038 P1 #9: scoreboard freeze (= 終了 30 分前から最終結果まで非公開)。
+       *   backend が scoreboardFrozen=true で entries 空配列を返してくる。 frontend は
+       *   通常 table の代わりに「凍結中」 alert を出す。 競技終了後 (= now >= endsAt) は
+       *   backend が scoreboardFrozen=false に戻すので、 最終結果は通常表示される。 */}
+      {leaderboard?.scoreboardFrozen && (
+        <Alert type="info" header="🔒 順位は終了 30 分前から凍結中">
+          <Box variant="p">
+            最後の駆け込みを防ぐため、 競技終了 30 分前から最終結果公開までは順位を非公開に
+            しています。 競技終了後に最終順位を表示します。
+            {leaderboard.endsAt && (
+              <>
+                <br />
+                終了予定: <code>{new Date(leaderboard.endsAt).toLocaleString()}</code>
+              </>
+            )}
+          </Box>
+        </Alert>
+      )}
+
+      {leaderboard && !leaderboard.scoreboardFrozen && (
         <Container
           header={<Header variant="h2">{`参加チーム (${leaderboard.entries.length})`}</Header>}
         >
