@@ -281,5 +281,24 @@ export async function getConsoleSigninUrl(
   });
   const loginUrl = `${FEDERATION_ENDPOINT}?Action=login&Issuer=${encodeURIComponent(TENKACLOUD_ISSUER)}&Destination=${encodeURIComponent(destination)}&SigninToken=${encodeURIComponent(tokenJson.SigninToken)}`;
 
+  // Issue #1003: AWS Console "400 Bad Request" を発見した時の診断補助。 loginUrl は
+  // typical 1800-2400 文字。 一部 proxy / ブラウザは長い URL を勝手に truncate するので、
+  // 上限を 4096 で警告 + 構成要素長を log に残す (= 「token が破損していたのか URL が長すぎたのか」 を
+  // CloudWatch Logs Insights で切り分け可能にする)。
+  const componentLengths = {
+    issuer: TENKACLOUD_ISSUER.length,
+    destination: destination.length,
+    signinTokenRaw: tokenJson.SigninToken.length,
+    encodedSigninToken: encodeURIComponent(tokenJson.SigninToken).length,
+    total: loginUrl.length,
+  };
+  if (loginUrl.length > 4096) {
+    console.warn("[sso] loginUrl exceeds 4096 chars (may be truncated by proxies)", {
+      jobId,
+      ...componentLengths,
+    });
+  }
+  logDeployTrace("portal.sso.ok", { jobId, problemId, ...componentLengths });
+
   return { kind: "ok", loginUrl };
 }
