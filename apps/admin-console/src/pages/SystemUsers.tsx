@@ -182,6 +182,17 @@ export function SystemUsersPage({ config }: { config: AppConfig }) {
         SystemAdmin user 管理
       </Header>
 
+      {/* Issue #995: email = Cognito Username なので 「email 変更」 は技術的に不可。
+       *   行き先がよく分からないユーザーに、 ここで明示する (= 「変更ボタンが無い」 を
+       *   操作的にカバー)。 */}
+      <Alert type="info" header="Email を変更したい場合">
+        SystemAdmin user の email は Cognito Username に紐付いているため変更できません (= AWS
+        Cognito の仕様)。 新しい email で SystemAdmin を 1 人 「招待」 してログイン確認した後、 旧
+        user の 「削除」 を実行してください (= 自分自身を削除する経路は server 側 409 で block
+        されるので、 別 SystemAdmin から削除依頼を出すか、 一時的に別 SystemAdmin を
+        立てて操作してください)。
+      </Alert>
+
       {successMessage && (
         <Alert type="success" dismissible onDismiss={() => setSuccessMessage(null)}>
           {successMessage}
