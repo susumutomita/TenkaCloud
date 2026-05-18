@@ -122,6 +122,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // Issue #814 Phase 2: SBT BashJobRunner の deprovisioning state machine ARN を渡し、
       // admin-insight Lambda が ListExecutions で履歴を引けるようにする。
       deprovisioningStateMachineArn: bootstrapTemplateStack.deprovisioningStateMachineArn,
+      // Issue #950 (ADR-020 Phase D): admin audit log table を cross-stack read で渡す
+      adminAuditLogTable: problemDeployBackendStack.adminAuditLogTable,
     },
   );
   adminConsoleInsightStack.addDependency(controlPlaneStack);

@@ -49,6 +49,12 @@ export interface DeployApiLambdaProps {
    * SSM SecureString path 構築用の env 名 (Phase 2.2、`/<environmentName>/tenants/...`)。
    */
   readonly environmentName: string;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin 操作 audit log を append-only 書き込む DDB Table。
+   * 指定時は Lambda env `ADMIN_AUDIT_LOG_TABLE_NAME` を注入 + IAM `dynamodb:PutItem` を付与する。
+   * 未指定なら writeAuditEvent は env 不在で no-op を選ぶ (= 旧 stack 互換、 audit 行 0 件)。
+   */
+  readonly adminAuditLogTable?: Table;
 }
 
 /**
@@ -86,6 +92,8 @@ export class DeployApiLambda extends Construct {
         // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
         BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
+        // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
+        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -103,6 +111,9 @@ export class DeployApiLambda extends Construct {
     props.deploymentsTable.grantReadWriteData(this.fn);
     props.competitorAccountsTable.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
+    // Issue #950 (ADR-020 Phase D): admin 操作 audit log を append-only 書き込む。
+    // Read は付与しない (= write-only から query を起こす経路を作らない)。
+    props.adminAuditLogTable?.grantWriteData(this.fn);
 
     // #534: deploy job 詳細ページから CFn StackEvents / StackResources を引く読み取り権限。
     // same-account 経路 (= dev / 旧 deployment 行) では本 Lambda Role が直接呼ぶため Describe*

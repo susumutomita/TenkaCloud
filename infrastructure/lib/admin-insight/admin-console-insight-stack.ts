@@ -45,6 +45,12 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * Deprovisioning Jobs タブで参加者運営に見せる。 未指定なら route は未配線 (= legacy 互換)。
    */
   readonly deprovisioningStateMachineArn?: string;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin 操作の audit log table。 ProblemDeployBackendStack で
+   * 作成された Table を cross-stack read で渡す。 未指定なら admin-insight の audit route は 503
+   * (= 旧 stack 互換)。
+   */
+  readonly adminAuditLogTable?: Table;
 }
 
 /**
@@ -87,6 +93,8 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       ...(props.deprovisioningStateMachineArn
         ? { deprovisioningStateMachineArn: props.deprovisioningStateMachineArn }
         : {}),
+      // Issue #950: admin audit log table の read-only access
+      ...(props.adminAuditLogTable ? { adminAuditLogTable: props.adminAuditLogTable } : {}),
     });
     this.lambdaFunctionName = lambda.fn.functionName;
 
@@ -196,6 +204,13 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     httpApi.addRoutes({
       path: "/admin/insight/system-users/{username}",
       methods: [HttpMethod.GET, HttpMethod.DELETE, HttpMethod.PATCH],
+      integration,
+    });
+
+    // Issue #950 (ADR-020 Phase D): admin audit log read route (= cross-tenant 監査)
+    httpApi.addRoutes({
+      path: "/admin/insight/audit",
+      methods: [HttpMethod.GET],
       integration,
     });
 

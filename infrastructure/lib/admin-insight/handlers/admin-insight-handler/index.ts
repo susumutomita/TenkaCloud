@@ -4,6 +4,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
+import { listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
 import {
   defaultCfnClient,
@@ -469,6 +470,52 @@ app.delete("/admin/insight/system-users/:username", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[admin-insight] delete system-user failed", { username, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// ====== Issue #950 (ADR-020 Phase D): admin audit log read route ======
+
+app.get("/admin/insight/audit", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/audit");
+  if (forbidden) return forbidden;
+  if (!shared.auditTableName || shared.auditTableName.length === 0) {
+    return c.json(
+      {
+        error: "audit_log_unconfigured",
+        message: "ADMIN_AUDIT_LOG_TABLE_NAME env が未設定です (= stack 配線漏れ)",
+      },
+      StatusCodes.SERVICE_UNAVAILABLE,
+    );
+  }
+  const rawScope = c.req.query("scope") ?? "tenant";
+  if (rawScope !== "tenant" && rawScope !== "system") {
+    return c.json({ error: "invalid_scope" }, StatusCodes.BAD_REQUEST);
+  }
+  const scope = rawScope as "tenant" | "system";
+  const tenantId = c.req.query("tenantId");
+  if (scope === "tenant") {
+    if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
+      return c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST);
+    }
+  }
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
+  try {
+    const result = await listAuditEntries(
+      { ddb: shared.ddb, auditTableName: shared.auditTableName },
+      {
+        scope,
+        ...(tenantId ? { tenantId } : {}),
+        ...(parsedLimit.limit !== undefined ? { limit: parsedLimit.limit } : {}),
+        ...(c.req.query("cursor") ? { cursor: c.req.query("cursor") as string } : {}),
+      },
+      shared.environmentName,
+    );
+    return c.json(result, StatusCodes.OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] listAuditEntries failed", { scope, tenantId, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });

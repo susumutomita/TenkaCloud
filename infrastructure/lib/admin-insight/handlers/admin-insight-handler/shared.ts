@@ -14,6 +14,13 @@ export interface AdminInsightSharedResources {
   readonly eventsTableName: string;
   readonly teamsTableName: string;
   readonly ddb: DynamoDBDocumentClient;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin audit log table 名。 未配線時は空文字、
+   * handler の audit route が 503 を返す。
+   */
+  readonly auditTableName: string;
+  /** Issue #950: 環境名 (= SYSTEM 操作の PK 構築に使う `SYSTEM#<env>`)。 */
+  readonly environmentName: string;
 }
 
 function requireEnv(name: string): string {
@@ -31,5 +38,8 @@ export function buildSharedResources(): AdminInsightSharedResources {
     eventsTableName: requireEnv("EVENTS_TABLE_NAME"),
     teamsTableName: requireEnv("TEAMS_TABLE_NAME"),
     ddb,
+    // Issue #950: 未配線時は空文字。 caller (audit route) が 503 を返す。
+    auditTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
+    environmentName: process.env.DEPLOY_ENVIRONMENT ?? "development",
   };
 }

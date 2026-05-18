@@ -46,6 +46,12 @@ export interface AdminInsightApiLambdaProps {
    * Resource scope は `userPool.userPoolArn` で固定 (= 他 tenant pool への越境を禁止)。
    */
   readonly controlPlaneUserPool?: IUserPool;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin audit log table。 指定時は SystemAdmin が
+   * /admin/insight/audit route で cross-tenant に audit を読めるようになる (= read-only)。
+   * 未指定なら route は 503 を返す (= 旧 stack 互換)。
+   */
+  readonly adminAuditLogTable?: Table;
 }
 
 /**
@@ -86,6 +92,8 @@ export class AdminInsightApiLambda extends Construct {
         // Issue #949 (ADR-020 Phase C): ControlPlane UserPool ID を env で渡す。 未指定なら空文字
         // (= /admin/insight/system-users route は 503 を返す)。 prod では必ず注入する想定。
         CONTROL_PLANE_USER_POOL_ID: props.controlPlaneUserPool?.userPoolId ?? "",
+        // Issue #950 (ADR-020 Phase D): admin audit log table 名 (= read-only 経由で表示)
+        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -102,6 +110,8 @@ export class AdminInsightApiLambda extends Construct {
     // を使う (= 個別 PolicyStatement で限定するより SBT 同型の grantRead で十分)。
     props.deploymentsTable.grantReadData(this.fn);
     props.eventsTable.grantReadData(this.fn);
+    // Issue #950 (ADR-020 Phase D): admin audit log の read-only access (GSI も含む)
+    props.adminAuditLogTable?.grantReadData(this.fn);
     props.teamsTable.grantReadData(this.fn);
 
     // Phase 1.B (#598) CFn Describe: deploy job 詳細ページの "Stack 進行状況" セクションが
