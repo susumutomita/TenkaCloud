@@ -9,7 +9,6 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import Tabs from "@cloudscape-design/components/tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
@@ -21,19 +20,15 @@ import {
   tierBadgeColor,
 } from "../api/tenants";
 import type { AppConfig } from "../config";
-import { TenantEventsPage } from "./TenantEvents";
 
 /**
- * Issue #994: Tenant 詳細 hub page。 旧来は Tenants 一覧から行クリックで TenantEvents page に
- * 直接遷移していて、 tenant の identity / 状態 / Application Console URL / Cognito 等が
- * まとめて見える場所が無かった (= drill-down が 1 軸だけ)。
+ * Tenant 詳細 page (= Control Plane の SystemAdmin 視点)。
  *
- * 本 page は header + Tabs (Overview / Events) の hub にして、 Overview tab で tenant の
- * 主要 metadata を一覧、 Events tab で既存の TenantEventsPage を sub-tab 化する。
- *
- * Tabs の URL anchor:
- *   - `#overview` (default)
- *   - `#events`
+ * 表示するのは **tenant のメタデータだけ** (= tenant ID / 名前 / tier / status / Cognito IDs /
+ * Application Console URL)。 tenant の中身 (= competition events / deployments / teams /
+ * scoring 等) は **App Plane data なので Control Plane では一切覗かない**
+ * ([[feedback-no-cross-plane-data-leak]])。 内部運用は tenant admin が application-admin-console
+ * (= App Plane UI) で行う。
  *
  * data fetch は listTenants() を 1 回呼んで該当 tenant を抽出する (= TenantList と同じ source)。
  * 別途 admin-insight に GET /tenants/:id を追加する選択肢もあるが、 Phase 1 は既存 RCU を
@@ -86,11 +81,6 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
 
   const parsedConfig = useMemo(() => parseTenantConfig(tenant?.tenantConfig), [tenant]);
 
-  // hash で tab を切り替える。 default は overview。
-  const initialTab =
-    typeof window !== "undefined" && window.location.hash === "#events" ? "events" : "overview";
-  const [activeTabId, setActiveTabId] = useState<string>(initialTab);
-
   if (!tenantId) {
     return <Alert type="error">Tenant ID が URL に指定されていません</Alert>;
   }
@@ -123,27 +113,7 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
-      <Tabs
-        activeTabId={activeTabId}
-        onChange={({ detail }) => {
-          setActiveTabId(detail.activeTabId);
-          if (typeof window !== "undefined") {
-            window.location.hash = detail.activeTabId === "overview" ? "" : detail.activeTabId;
-          }
-        }}
-        tabs={[
-          {
-            id: "overview",
-            label: "Overview",
-            content: tenant ? <OverviewTab tenant={tenant} parsedConfig={parsedConfig} /> : null,
-          },
-          {
-            id: "events",
-            label: "Events",
-            content: <TenantEventsPage config={config} />,
-          },
-        ]}
-      />
+      {tenant && <OverviewTab tenant={tenant} parsedConfig={parsedConfig} />}
     </SpaceBetween>
   );
 }
