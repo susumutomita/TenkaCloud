@@ -27,8 +27,10 @@ describe("tenant lifecycle scripts", () => {
     expect(readRepoFile("scripts/provision-tenant.sh")).toContain(
       'bunx cdk deploy "$STACK_NAME" --require-approval never',
     );
-    expect(readRepoFile("scripts/update-tenant.sh")).toContain(
-      'bunx cdk deploy "$STACK_NAME" --exclusively --require-approval never',
+    // update-tenant.sh は `${STACK_NAME}` (braces) で wait_for_stack_idle と一致させている。
+    // 形が違う provision-tenant / deprovision-tenant は他で test 済。
+    expect(readRepoFile("scripts/update-tenant.sh")).toMatch(
+      /bunx cdk deploy "\$\{?STACK_NAME\}?" --exclusively --require-approval never/,
     );
     expect(readRepoFile("scripts/deprovision-tenant.sh")).toContain(
       'bunx cdk destroy "$STACK_NAME" --force',
@@ -71,5 +73,22 @@ describe("tenant lifecycle scripts", () => {
 
     expect(miseToml).toContain(`node = "${nodeMajor}"`);
     expect(miseToml).toContain(`bun = "${bunVersion}"`);
+  });
+
+  // SBT の Step Functions provisioning は pooled stack へ並列 deploy を試みるため、
+  // cdk deploy 前に stack を idle まで poll しないと次の 2 種で fail する:
+  //   1. Cannot delete ChangeSet in status CREATE_IN_PROGRESS
+  //   2. Stack ... is in UPDATE_IN_PROGRESS state and can not be updated
+  // 実 deploy 環境 (2026-05-18 CodeBuild logs) で 3 連続 fail を観測したので regression
+  // pin する。
+  it("update-tenant.sh は cdk deploy 直前に wait_for_stack_idle で stack を poll すべき", () => {
+    const script = readRepoFile("scripts/update-tenant.sh");
+    expect(script).toContain("wait_for_stack_idle()");
+    expect(script).toContain('wait_for_stack_idle "${STACK_NAME}"');
+    // poll は cdk deploy より **前** に呼ばれていること (= race を防ぐ順序)
+    const waitIdx = script.indexOf('wait_for_stack_idle "${STACK_NAME}"');
+    const deployIdx = script.indexOf("bunx cdk deploy");
+    expect(waitIdx).toBeGreaterThan(0);
+    expect(deployIdx).toBeGreaterThan(waitIdx);
   });
 });
