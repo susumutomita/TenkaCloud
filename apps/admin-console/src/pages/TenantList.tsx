@@ -184,8 +184,10 @@ export function TenantListPage({ config }: { config: AppConfig }) {
               if (isDeprovisioned(row)) {
                 return <Box color="text-status-inactive">{row.tenantName}</Box>;
               }
-              // Issue #994: 行クリックは Tenant detail hub に。 Events への直リンクは
-              // /tenants/<id>/events で引き続き有効 (= 後方互換)。
+              // 行クリックは Tenant detail (= Control Plane metadata) に遷移する。
+              // tenant 内部の events / deployments への drill-down は plane 分離方針で除去
+              // ([[feedback-no-cross-plane-data-leak]])、 tenant admin が application-admin-console
+              // で見る。
               const href = `/tenants/${encodeURIComponent(row.tenantId)}`;
               return (
                 <Link

@@ -553,11 +553,6 @@ describe("ADR-020 Phase B.1 (#948): competitor-accounts-handler route role gates
       const res = await competitorApp.request("/admin/tenant-saml-config");
       await expectForbidden(res);
     });
-
-    it("GET /admin/users は 403 (= user 一覧は Admin)", async () => {
-      const res = await competitorApp.request("/admin/users");
-      await expectForbidden(res);
-    });
   });
 
   describe("TenantOperator", () => {
@@ -578,11 +573,6 @@ describe("ADR-020 Phase B.1 (#948): competitor-accounts-handler route role gates
       });
       await expectForbidden(res);
     });
-
-    it("DELETE /admin/users/:username は 403 (= user 削除は Admin)", async () => {
-      const res = await competitorApp.request("/admin/users/alice", { method: "DELETE" });
-      await expectForbidden(res);
-    });
   });
 
   describe("TenantAdmin (= everything OK)", () => {
@@ -594,20 +584,6 @@ describe("ADR-020 Phase B.1 (#948): competitor-accounts-handler route role gates
       const res = await competitorApp.request("/admin/competitor-accounts", {
         method: "POST",
         body: JSON.stringify({ awsAccountId: "123456789012", teamName: "T" }),
-        headers: { "Content-Type": "application/json" },
-      });
-      await expectNotForbidden(res);
-    });
-
-    it("GET /admin/users は pass", async () => {
-      const res = await competitorApp.request("/admin/users");
-      expect(res.status).toBe(200);
-    });
-
-    it("PATCH /admin/users/:username は pass", async () => {
-      const res = await competitorApp.request("/admin/users/alice", {
-        method: "PATCH",
-        body: JSON.stringify({ role: "TenantViewer" }),
         headers: { "Content-Type": "application/json" },
       });
       await expectNotForbidden(res);

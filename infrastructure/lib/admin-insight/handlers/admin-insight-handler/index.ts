@@ -6,38 +6,27 @@ import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
-import {
-  defaultCfnClient,
-  getDeploymentForTenant,
-  getStackProgressForTenant,
-} from "./deployments.js";
-import { getEventDetailForTenant, listEventsForTenant } from "./events.js";
 import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
 import { buildSharedResources } from "./shared.js";
 import { defaultSfnClient, listStateMachineExecutions } from "./state-machine-executions.js";
 import { summarizeTenants } from "./summary.js";
-import {
-  ChangeSystemUserRoleRequestSchema,
-  InviteSystemUserRequestSchema,
-  routeChangeSystemUserRole,
-  routeCreateSystemUser,
-  routeDeleteSystemUser,
-  routeGetSystemUser,
-  routeListSystemUsers,
-} from "./system-users-routes.js";
 
 /**
- * Admin Insight API Lambda の Hono app (ADR-011、issue #590 Phase 1.A + #598 Phase 1.B)。
+ * Admin Insight API Lambda の Hono app (Control Plane ops 用)。
  *
- * routes:
- *   Phase 1.A (issue #590, merged):
- *     GET /admin/insight/tenants/summary?tenantIds=t1,t2,t3
+ * 残っている routes (= Control Plane の SystemAdmin がオペレーションする上で必要なもの):
+ *   GET /admin/insight/healthz
+ *   GET /admin/insight/tenants/summary?tenantIds=t1,t2,t3   — tenant 一覧 + tier / status
+ *   GET /admin/insight/pipeline-executions                    — tenkacloud-saas-pipeline 実行履歴
+ *   GET /admin/insight/state-machine-executions               — SBT deprovisioning SFN 実行履歴
+ *   GET /admin/insight/audit                                  — admin 操作 audit log
  *
- *   Phase 1.B drill-down (issue #598):
- *     GET /admin/insight/tenants/:tenantId/events
- *     GET /admin/insight/tenants/:tenantId/events/:eventId
- *     GET /admin/insight/tenants/:tenantId/deployments/:jobId
- *     GET /admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress
+ * 廃止済 (= 2026-05-18 plane 分離方針、 [[feedback-no-cross-plane-data-leak]]):
+ *   - `/admin/insight/tenants/:tenantId/events*`                  — App Plane data 覗き込み
+ *   - `/admin/insight/tenants/:tenantId/deployments/:jobId*`      — App Plane data 覗き込み
+ *   - `/admin/insight/system-users*`                              — SystemAdmin user CRUD、
+ *     UI 経路は token security hole になりやすいため Cognito 直 (admin-create-user / Hosted UI)
+ *     に倒した
  *
  * Auth:
  *   - API Gateway HTTP API + JWT Authorizer (ControlPlane UserPool) で 1 段目を通す
@@ -46,19 +35,15 @@ import {
  *
  * Audit:
  *   - 各 read API で `console.log({ event: "admin.insight.read", admin: sub, path })` を出力
- *   - drill-down 詳細では tenantId / eventId / jobId も含めて log (= 誰がどの行を覗いたかが追える)
  *
  * 非機能:
  *   - polling 60s (frontend 側で setInterval) を前提に response は <500ms 目標
- *   - 詳細 endpoint は単 query / Get なので RCU 消費は更に小さい
  */
 
 // SDK clients / env は module scope で 1 度だけ build。warm invoke で connection pool 再利用。
 const shared = buildSharedResources();
 
 const TENANT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const EVENT_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
-const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const MAX_TENANT_IDS = 100;
 const LIST_LIMIT_MAX = 200;
 
@@ -162,146 +147,9 @@ app.get("/admin/insight/tenants/summary", async (c) => {
   }
 });
 
-// ====== Phase 1.B drill-down (#598) ======
-
-app.get("/admin/insight/tenants/:tenantId/events", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
-    return c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(c, "/admin/insight/tenants/:tenantId/events", { tenantId });
-  if (forbidden) return forbidden;
-
-  const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) {
-    return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
-  }
-
-  try {
-    const response = await listEventsForTenant(shared, {
-      tenantId,
-      limit: parsedLimit.limit,
-      cursor: c.req.query("cursor"),
-    });
-    return c.json(response, StatusCodes.OK);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] listEventsForTenant failed", { tenantId, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.get("/admin/insight/tenants/:tenantId/events/:eventId", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const eventId = c.req.param("eventId");
-  if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
-    return c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST);
-  }
-  if (!eventId || !EVENT_ID_RE.test(eventId)) {
-    return c.json({ error: "invalid_event_id" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(c, "/admin/insight/tenants/:tenantId/events/:eventId", {
-    tenantId,
-    eventId,
-  });
-  if (forbidden) return forbidden;
-
-  try {
-    const detail = await getEventDetailForTenant(shared, tenantId, eventId);
-    if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-    return c.json(detail, StatusCodes.OK);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] getEventDetailForTenant failed", {
-      tenantId,
-      eventId,
-      message,
-    });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.get("/admin/insight/tenants/:tenantId/deployments/:jobId", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const jobId = c.req.param("jobId");
-  if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
-    return c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST);
-  }
-  if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid_job_id" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(c, "/admin/insight/tenants/:tenantId/deployments/:jobId", {
-    tenantId,
-    jobId,
-  });
-  if (forbidden) return forbidden;
-
-  try {
-    const detail = await getDeploymentForTenant(shared, tenantId, jobId);
-    if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-    return c.json(detail, StatusCodes.OK);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] getDeploymentForTenant failed", { tenantId, jobId, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.get("/admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const jobId = c.req.param("jobId");
-  if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
-    return c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST);
-  }
-  if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid_job_id" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(
-    c,
-    "/admin/insight/tenants/:tenantId/deployments/:jobId/stack-progress",
-    { tenantId, jobId },
-  );
-  if (forbidden) return forbidden;
-
-  try {
-    const outcome = await getStackProgressForTenant(
-      shared,
-      { cfnClient: defaultCfnClient },
-      tenantId,
-      jobId,
-    );
-    if (outcome.kind === "not_found") {
-      return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-    }
-    if (outcome.kind === "stack_not_yet_created") {
-      // CFn stack 未割当 (= deploy 進行極初期) は 409 で返し、UI 側で「準備中」表示にする。
-      return c.json({ error: "stack_not_yet_created" }, StatusCodes.CONFLICT);
-    }
-    if (outcome.kind === "stack_not_found_in_cfn") {
-      return c.json(
-        {
-          jobId,
-          stackName: "",
-          region: "",
-          consoleUrl: outcome.consoleUrl,
-          events: [],
-          resources: [],
-          stackStatus: undefined,
-        },
-        StatusCodes.OK,
-      );
-    }
-    return c.json(outcome.progress, StatusCodes.OK);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] getStackProgressForTenant failed", {
-      tenantId,
-      jobId,
-      message,
-    });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
+// Phase 1.B drill-down (旧 #598) は plane 分離方針で廃止
+// ([[feedback-no-cross-plane-data-leak]])。 tenant 内の events / deployments は
+// application-admin-console (= App Plane UI) で見る。
 
 // ====== Issue #658: Provisioning Jobs (CodePipeline executions) ======
 
@@ -359,120 +207,12 @@ app.get("/admin/insight/state-machine-executions", async (c) => {
   }
 });
 
-// ====== Issue #949 (ADR-020 Phase C): SystemAdmin user 管理 routes ======
+// ====== SystemAdmin user 管理 routes (旧 Issue #949) は廃止 ======
 //
-// 認可は 2 段: API GW JWT Authorizer + handler 内 `isSystemAdmin` 検査。 mutate (POST / DELETE /
-// PATCH) は全部 SystemAdmin only にしている (= 一旦 SystemAdmin と SystemAuditor の中間 role を
-// 区別せず、 SystemAuditor は将来 GET だけ pass させる余地として残す)。
-
-const USERNAME_RE = /^[A-Za-z0-9_.@+-]{1,128}$/;
-
-app.get("/admin/insight/system-users", async (c) => {
-  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users");
-  if (forbidden) return forbidden;
-  try {
-    const result = await routeListSystemUsers(c);
-    return c.json(result.body as never, result.status as 200 | 503);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] list system-users failed", { message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.post("/admin/insight/system-users", async (c) => {
-  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users[POST]");
-  if (forbidden) return forbidden;
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
-  }
-  const parsed = InviteSystemUserRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
-  try {
-    const result = await routeCreateSystemUser(c, parsed.data);
-    return c.json(result.body as never, result.status as 201 | 409 | 503);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] create system-user failed", { message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.get("/admin/insight/system-users/:username", async (c) => {
-  const username = c.req.param("username");
-  if (!username || !USERNAME_RE.test(username)) {
-    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users/:username", { username });
-  if (forbidden) return forbidden;
-  try {
-    const result = await routeGetSystemUser(c, username);
-    return c.json(result.body as never, result.status as 200 | 404 | 503);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] get system-user failed", { username, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.patch("/admin/insight/system-users/:username", async (c) => {
-  const username = c.req.param("username");
-  if (!username || !USERNAME_RE.test(username)) {
-    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users/:username[PATCH]", {
-    username,
-  });
-  if (forbidden) return forbidden;
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
-  }
-  const parsed = ChangeSystemUserRoleRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
-  try {
-    const result = await routeChangeSystemUserRole(c, username, parsed.data);
-    return c.json(result.body as never, result.status as 200 | 404 | 409 | 503);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] change system-user role failed", { username, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.delete("/admin/insight/system-users/:username", async (c) => {
-  const username = c.req.param("username");
-  if (!username || !USERNAME_RE.test(username)) {
-    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
-  }
-  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users/:username[DELETE]", {
-    username,
-  });
-  if (forbidden) return forbidden;
-  try {
-    const result = await routeDeleteSystemUser(c, username);
-    return c.json(result.body as never, result.status as 200 | 404 | 409 | 503);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] delete system-user failed", { username, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
+// UI 経路で SystemAdmin token を扱うと exfil 経路が増える (= security hole)。 SystemAdmin の
+// 招待 / 削除 / role 変更は Cognito 直 (aws cognito-idp admin-create-user / admin-delete-user
+// / Hosted UI) に倒す ([[feedback-no-cross-plane-data-leak]] 2026-05-18)。 audit log は
+// 引き続き `/admin/insight/audit` で参照可能。
 
 // ====== Issue #950 (ADR-020 Phase D): admin audit log read route ======
 
