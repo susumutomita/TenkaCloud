@@ -76,6 +76,26 @@ describe("tenant lifecycle scripts", () => {
     expect(script).toMatch(/CompetitorBootstrapTemplateUrl/);
   });
 
+  // Issue #1038 P2 #13: SBT pipeline (CodeBuild) が pooled / silo stack を synth するとき
+  // `CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true` を持っていないと、 `enableParticipantPortal=false`
+  // に倒れて `problemDeployBackendStack.participantPortalUrl` が undefined になり、 pooled
+  // stack の runtime-config に `participantPortalUrl` が **silent に消える**。 install.sh と
+  // 同じ default を CodeBuild にも入れて regression を防ぐ。
+  it("update-tenant.sh は CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true を export すべき", () => {
+    const script = readRepoFile("scripts/update-tenant.sh");
+    expect(script).toMatch(/export\s+CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=["']true["']/);
+  });
+
+  it("provision-tenant.sh は CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true を export すべき", () => {
+    const script = readRepoFile("scripts/provision-tenant.sh");
+    expect(script).toMatch(/export\s+CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=["']true["']/);
+  });
+
+  it("install.sh も CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true を export すべき (= 3 script 同期)", () => {
+    const script = readRepoFile("scripts/install.sh");
+    expect(script).toMatch(/export\s+CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=["']true["']/);
+  });
+
   it("mise の Node/Bun runtime は repo の正本 version と一致すべき", () => {
     const packageJson = JSON.parse(readRepoFile("package.json")) as {
       packageManager?: string;

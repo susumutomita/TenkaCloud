@@ -36,6 +36,16 @@ VERSIONS=$(aws s3api list-object-versions --bucket "$CDK_PARAM_S3_BUCKET_NAME" -
 export CDK_PARAM_COMMIT_ID=$(echo "$VERSIONS" | awk 'NR==1{print $1}')
 echo "CDK_PARAM_COMMIT_ID: ${CDK_PARAM_COMMIT_ID}"
 
+# Issue #1038 P2 #13: install.sh は `CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true` で synth するため、
+# `problemDeployBackendStack` は `participantPortalUrl` を CfnOutput し、 pooled stack の
+# runtime-config に cross-stack ref として焼かれる。 一方 SBT pipeline (CodeBuild) はこの env を
+# 持たないため synth 時に `enableParticipantPortal=false` に倒れ、 pooled stack を update する
+# たびに runtime-config から `participantPortalUrl` が **silent に消える** (= user 観測
+# 「participantPortalUrl 未注入」)。 install.sh と同じ default を CodeBuild にも入れて、
+# tenant provisioning / update での regression を防ぐ。
+export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL="true"
+echo "CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: ${CDK_PARAM_ENABLE_PARTICIPANT_PORTAL}"
+
 aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAME" --version-id "$CDK_PARAM_COMMIT_ID" "$CDK_SOURCE_NAME" 2>&1
 # `-o`: 既存ファイルを silent overwrite (CodeBuild の workspace 再利用で残ったファイルに対し、
 # prompt が出ると stdin EOF で `[N]one` 扱い → 展開不完全 → 後段で silent fail するのを防ぐ)。

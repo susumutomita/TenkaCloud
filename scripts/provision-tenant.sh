@@ -69,6 +69,14 @@ export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe
   --output text 2>/dev/null || echo "")
 echo "CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL: ${CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
 
+# Issue #1038 P2 #13: install.sh と同じ default を入れて、 SBT pipeline (CodeBuild) が pooled /
+# silo stack を synth したときに `enableParticipantPortal=false` に regress するのを防ぐ。
+# これが無いと `problemDeployBackendStack.participantPortalUrl` が undefined になり、
+# pooled stack の runtime-config に `participantPortalUrl` が焼かれない (= user 観測
+# 「Application Console に Participant Portal URL 未注入」)。
+export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL="true"
+echo "CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: ${CDK_PARAM_ENABLE_PARTICIPANT_PORTAL}"
+
 # Define variables
 TENANT_ADMIN_USERNAME="tenant-admin-$CDK_PARAM_TENANT_ID"
 STACK_NAME="tenkacloud-tenant-template-pooled"
