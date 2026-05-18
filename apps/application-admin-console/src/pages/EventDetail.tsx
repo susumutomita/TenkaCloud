@@ -9,6 +9,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
+import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
@@ -441,6 +442,22 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
         0,
       )
     : 0;
+  // Issue #999: deploy 中 / 完了 / 失敗を一目で見える進捗 panel を出す。 EventCreate 直後に
+  // ユーザーが EventDetail に遷移してきた瞬間 「いま何が走っているか」 を即把握できるように、
+  // 全 problem × team の deployment 行を横断集計して header 直下に ProgressBar を表示する。
+  const inFlightCount = detail
+    ? Object.values(detail.deploymentsByProblem).reduce(
+        (acc, list) =>
+          acc + list.filter((d) => d.status === "PENDING" || d.status === "IN_PROGRESS").length,
+        0,
+      )
+    : 0;
+  const totalDeployCount = detail
+    ? Object.values(detail.deploymentsByProblem).reduce((acc, list) => acc + list.length, 0)
+    : 0;
+  const allDoneCount = completeCount + failedCount;
+  const deployProgressPercent =
+    totalDeployCount > 0 ? Math.round((allDoneCount / totalDeployCount) * 100) : 0;
   const endsAtValidation = validateEndsAtInput(
     endsAtDate,
     endsAtTime,
@@ -611,6 +628,41 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           受付: {bulkResult.enqueued} 件 / skipped: {bulkResult.skipped} 件 (実 deploy / delete は
           State Machine が非同期に進めます。数分後に再読み込みしてください)
         </Alert>
+      )}
+
+      {/* Issue #999: 全 deploy の集約進捗。 EventCreate 直後 / Deploy 押下後にユーザーが
+       *   迷子にならないように、 header 直下に常駐 (= 100% 完了 / 0 件はどちらも非表示)。 */}
+      {totalDeployCount > 0 && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              description={`${totalDeployCount} 件中 完了 ${completeCount} / 進行中 ${inFlightCount}${failedCount > 0 ? ` / 失敗 ${failedCount}` : ""}`}
+            >
+              Deploy 進捗
+            </Header>
+          }
+        >
+          <ProgressBar
+            value={deployProgressPercent}
+            label={
+              inFlightCount > 0
+                ? `Deploy 進行中… (${allDoneCount} / ${totalDeployCount})`
+                : failedCount > 0
+                  ? `完了 (失敗 ${failedCount} 件あり)`
+                  : "Deploy 完了"
+            }
+            description={
+              inFlightCount > 0
+                ? "deploy は State Machine が非同期に進めます。 数分かかります。"
+                : failedCount > 0
+                  ? "失敗 deployment は 「失敗分を再実行」 button で個別 retry できます。"
+                  : "全 deploy が完了しました。 競技開始の準備ができています。"
+            }
+            status={failedCount > 0 ? "error" : inFlightCount > 0 ? "in-progress" : "success"}
+            additionalInfo={inFlightCount > 0 ? "auto polling" : undefined}
+          />
+        </Container>
       )}
 
       {detail && (
