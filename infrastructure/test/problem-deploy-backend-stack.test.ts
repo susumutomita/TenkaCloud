@@ -504,10 +504,15 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
     );
   });
 
-  it("ParticipantPortal Lambda の IAM Role に Events table の dynamodb:Query を付与するべき", () => {
-    // ADR-006: GET /portal/me/notifications が Events table を Query する。
-    // 配線が無いと AccessDenied で 500 になる。Role 直貼りの inline policy なので
-    // `AWS::IAM::Role` の Policies 配列を見る。
+  it("ParticipantPortal Lambda の IAM Role に Events table の dynamodb:Query + GetItem を付与するべき", () => {
+    // ADR-006: GET /portal/me/notifications が Events table を Query する (= partition 単位)。
+    // Issue #1005: submit-flag / hint reveal が共有する event-gate.ts が PK=EVENT#<id> /
+    // SK=META を `dynamodb:GetItem` で 1 行引く (= scoring gate)。 grant が漏れていると
+    // AccessDenied で getEventGate が undefined を返し、 fail-closed で `scoring_not_started`
+    // に倒れ 「Event 採点中なのに flag 提出が reject される」 不整合になる (= 実 deploy で
+    // 観測した regression、 CloudWatch logs `[event-gate] getEventGate failed AccessDenied`)。
+    // 配線が無いと AccessDenied で 500 / 提出 reject になる。 Role 直貼りの inline policy
+    // なので `AWS::IAM::Role` の Policies 配列を見る。
     tpl.hasResourceProperties(
       "AWS::IAM::Role",
       Match.objectLike({
@@ -517,7 +522,7 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
             PolicyDocument: Match.objectLike({
               Statement: Match.arrayWith([
                 Match.objectLike({
-                  Action: "dynamodb:Query",
+                  Action: Match.arrayWith(["dynamodb:Query", "dynamodb:GetItem"]),
                   Effect: "Allow",
                 }),
               ]),
