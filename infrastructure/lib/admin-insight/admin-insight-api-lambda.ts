@@ -147,7 +147,10 @@ export class AdminInsightApiLambda extends Construct {
     //   - AdminDeleteUser  (= 削除)
     //   - AdminGetUser     (= detail / role 読み取り)
     //   - AdminUpdateUserAttributes (= role 変更)
-    //   - ListUsers        (= 一覧、 page 化)
+    //   - ListUsers        (= 全 user 一覧、 旧 phase 用に維持)
+    //   - ListUsersInGroup (= Issue #987: SystemAdmin / SystemAuditor 別の一覧、
+    //     handler は ListUsersInGroupCommand を使っているのに本 action が欠落していて 500 で
+    //     fail していた)
     //   - AdminAddUserToGroup / AdminRemoveUserFromGroup (= SystemAdmin / SystemAuditor group 操作)
     if (props.controlPlaneUserPool) {
       this.fn.addToRolePolicy(
@@ -159,6 +162,7 @@ export class AdminInsightApiLambda extends Construct {
             "cognito-idp:AdminGetUser",
             "cognito-idp:AdminUpdateUserAttributes",
             "cognito-idp:ListUsers",
+            "cognito-idp:ListUsersInGroup",
             "cognito-idp:AdminAddUserToGroup",
             "cognito-idp:AdminRemoveUserFromGroup",
             "cognito-idp:AdminListGroupsForUser",
