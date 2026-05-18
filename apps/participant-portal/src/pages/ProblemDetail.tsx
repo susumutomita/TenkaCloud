@@ -11,7 +11,6 @@ import { Navigate, useNavigate, useParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
-import { PhaseCountdown, type PhaseCountdownEntry } from "../components/PhaseCountdown";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import {
@@ -91,12 +90,13 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {problem && metadata && narrative && (
         <ProblemInfoSection metadata={metadata} narrative={narrative} />
       )}
-      {/* ADR-012 Phase 4 / Issue #607: phases / disruptions を予告 panel + countdown timeline で表示。
-       *   両方とも空なら skip。 deployedAt が API から取れたら live countdown、 取れなければ
-       *   static な「+N 分」 表示に degrade。 */}
-      {problem && metadata && (metadata.phases.length > 0 || metadata.disruptions.length > 0) && (
-        <TimelinePredictSection metadata={metadata} deployedAt={problem.createdAt} />
-      )}
+      {/* 2026-05-18 user feedback: 「攻撃時刻を相手に予告する Red Team は存在しない」
+       *   「種明かしをした おばけやしき はつまらない」
+       *   ADR-012 Phase 4 / Issue #607 の `TimelinePredictSection` (= 残時間 countdown +
+       *   phase / disruption の事前予告) は **競技公平性と体験の観点から competitor side で
+       *   表示しない**。 component 自体は operator 視点 (= application-admin-console の
+       *   Event 管理画面) で再利用する可能性があるため file は維持、 participant portal の
+       *   ProblemDetail からのみ撤去する。 */}
 
       {problem && (
         <ProblemPanel
@@ -191,62 +191,5 @@ function InfoCell({ label, children }: { label: string; children: React.ReactNod
       <Box variant="awsui-key-label">{label}</Box>
       <div>{children}</div>
     </div>
-  );
-}
-
-/**
- * ADR-012 Phase 4 + Issue #607: phases[] と disruptions[] を「いつ何が起きるか」 + live countdown
- * で表示。 deployedAt (= problem.createdAt) があれば 1 秒間隔の残時間表示、 無ければ
- * static「+N 分」 表示に degrade。 残時間 < 3 分は warn 強調 (= 事前告知)。
- */
-function TimelinePredictSection({
-  metadata,
-  deployedAt,
-}: {
-  metadata: ProblemCatalogEntry;
-  deployedAt?: string;
-}) {
-  const phases = metadata.phases;
-  const disruptions = metadata.disruptions;
-  const phaseEntries: PhaseCountdownEntry[] = phases.map((p) => ({
-    id: `phase-${p.name}`,
-    name: p.name,
-    afterMinutes: p.afterMinutes,
-    ...(p.description ? { description: p.description } : {}),
-    variant: "phase",
-  }));
-  const disruptionEntries: PhaseCountdownEntry[] = disruptions.map((d) => ({
-    id: `disruption-${d.id}`,
-    name: d.name,
-    afterMinutes: d.defaultAfterMinutes ?? 0,
-    ...(d.description ? { description: d.description } : {}),
-    variant: "disruption",
-  }));
-  return (
-    <Container
-      header={
-        <Header
-          variant="h2"
-          description="このあと自動で発火するフェーズ / 妨害イベント。 残 3 分以内のイベントは warn 強調で予告します。 各イベントの発火タイミングは metadata.json の宣言値で、 operator が deploy 時に上書きしている場合は実際の発火時刻と差が出ます。"
-        >
-          タイムライン (予告)
-        </Header>
-      }
-    >
-      <SpaceBetween size="m">
-        {phaseEntries.length > 0 && (
-          <div>
-            <Box variant="awsui-key-label">フェーズ</Box>
-            <PhaseCountdown entries={phaseEntries} {...(deployedAt ? { deployedAt } : {})} />
-          </div>
-        )}
-        {disruptionEntries.length > 0 && (
-          <div>
-            <Box variant="awsui-key-label">妨害イベント</Box>
-            <PhaseCountdown entries={disruptionEntries} {...(deployedAt ? { deployedAt } : {})} />
-          </div>
-        )}
-      </SpaceBetween>
-    </Container>
   );
 }
