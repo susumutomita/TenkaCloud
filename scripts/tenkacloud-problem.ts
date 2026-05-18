@@ -120,8 +120,12 @@ function parseArgs(argv: readonly string[]): CliArgs {
       i += 1;
     } else if (flag === "--pattern") {
       const v = argv[i + 1];
-      if (typeof v !== "string" || !/^[sf]+$/.test(v)) {
-        throw new Error("--pattern must be a non-empty string of 's' / 'f' (e.g. 'ssfsf')");
+      // pattern は kind 別に意味が違うため caller で validation (= runDryRun 内)。
+      // 文字種は s/f (uptime), e/l/c/a (phased-polling), 0-9 (attack-detection) を許容。
+      if (typeof v !== "string" || !/^[a-z0-9]+$/.test(v)) {
+        throw new Error(
+          "--pattern must be a non-empty string of [a-z0-9] (e.g. 'ssfsf' for uptime, 'eeeellll' for phased-polling, '12321' for attack-detection)",
+        );
       }
       result.pattern = v;
       i += 1;
@@ -633,11 +637,173 @@ export function runDryRun(args: {
     };
   }
 
-  // 他 kind は未対応 (= ok=true で「未対応」 を明示)
-  lines.push(`kind="${kind}" の dry-run は未対応です。 #951 sub #3 で順次実装予定:`);
-  lines.push(`  - uptime-multi: --cycles N --pattern <ss|sf|fs|ff> (slot 数 2 想定)`);
-  lines.push(`  - phased-polling: phases[].afterMinutes ごとの rule 切替を simulate`);
-  lines.push(`  - attack-detection: counter delta から得点`);
+  // Issue #951 sub #3: uptime-multi の dry-run。 全 slot probe で 全部 OK なら pointsAllOk
+  // 加点、 1 つでも fail なら failurePenalty 減算。
+  if (kind === "uptime-multi") {
+    const pointsAllOk = Number(scoring.pointsAllOk ?? 0);
+    const failurePenalty = Number(scoring.failurePenalty ?? 0);
+    const probedSlots = Array.isArray(scoring.probedSlots) ? scoring.probedSlots : [];
+    const slotCount = probedSlots.length;
+    if (slotCount === 0) {
+      return {
+        ok: false,
+        summary: "uptime-multi metadata has no scoring.probedSlots; cannot dry-run",
+        lines,
+      };
+    }
+    const cycles = args.cycles ?? 10;
+    const pattern = args.pattern ?? "s".repeat(cycles);
+    if (pattern.length !== cycles) {
+      lines.push(
+        `note: pattern length (${pattern.length}) !== cycles (${cycles})。 pattern を cycles に揃えてください。`,
+      );
+    }
+    let score = 0;
+    let allOkCycles = 0;
+    let failCycles = 0;
+    for (let i = 0; i < cycles; i += 1) {
+      const sym = pattern[i % pattern.length];
+      if (sym === "s") {
+        score += pointsAllOk;
+        allOkCycles += 1;
+      } else {
+        score -= failurePenalty;
+        failCycles += 1;
+      }
+    }
+    const hintsRevealed = args.revealHints ?? 0;
+    const hintsList = Array.isArray(scoring.hints) ? scoring.hints : [];
+    let hintPenalty = 0;
+    for (let i = 0; i < Math.min(hintsRevealed, hintsList.length); i += 1) {
+      const h = hintsList[i] as Record<string, unknown> | string;
+      hintPenalty += typeof h === "object" && h !== null ? Number(h.penalty ?? 0) : 0;
+    }
+    const earned = Math.max(0, score - hintPenalty);
+    lines.push(`kind:             uptime-multi`);
+    lines.push(`probedSlots:      ${slotCount} (= 全 slot OK で加点)`);
+    lines.push(`pointsAllOk:      ${pointsAllOk}`);
+    lines.push(`failurePenalty:   ${failurePenalty}`);
+    lines.push(`cycles:           ${cycles}`);
+    lines.push(`pattern:          ${pattern} (s=全 slot OK, f=any fail)`);
+    lines.push(`allOkCycles:      ${allOkCycles}`);
+    lines.push(`failCycles:       ${failCycles}`);
+    lines.push(`subtotal:         ${score} pt`);
+    lines.push(`hintsRevealed:    ${hintsRevealed} (penalty -${hintPenalty})`);
+    lines.push(`earned:           ${earned} pt`);
+    return {
+      ok: true,
+      summary: `uptime-multi dry-run: ${cycles} cycles → earned=${earned}`,
+      lines,
+    };
+  }
+
+  // Issue #951 sub #3: phased-polling の dry-run。 platformRules を simulate するため、
+  // `--pattern` には 「assumed platform per cycle」 を入れる (e.g. "eeeellll" = 4 cycles EC2 →
+  // 4 cycles Lambda)。 phases[].afterMinutes に達した phase は platform effect が適用される
+  // (= switchPlatformToDegraded で `degradedPoints` を使う等)。
+  //
+  // intervalMinutes=1 を仮定 (= 1 cycle = 1 minute)。 caller が intervalMinutes 不一致を必要なら
+  // 別途調整。
+  if (kind === "phased-polling") {
+    const intervalMinutes = Number(scoring.intervalMinutes ?? 1);
+    const platformRules = (scoring.platformRules ?? {}) as Record<string, Record<string, unknown>>;
+    const cycles = args.cycles ?? 10;
+    const pattern = args.pattern ?? "e".repeat(cycles); // default 全 cycle EC2 と仮定
+    const phases = Array.isArray(meta.phases) ? meta.phases : [];
+    if (pattern.length !== cycles) {
+      lines.push(
+        `note: pattern length (${pattern.length}) !== cycles (${cycles})。 1 char = 1 cycle に揃えてください。`,
+      );
+    }
+    const platformChar: Record<string, string> = {
+      e: "ec2",
+      l: "lambda",
+      c: "ecs",
+      a: "apprunner",
+    };
+    let score = 0;
+    const cycleLog: string[] = [];
+    for (let i = 0; i < cycles; i += 1) {
+      const sym = pattern[i % pattern.length] ?? "e";
+      const platform = platformChar[sym] ?? "ec2";
+      const minutesElapsed = (i + 1) * intervalMinutes;
+      const degradedPlatforms = new Set<string>();
+      for (const ph of phases as Array<Record<string, unknown>>) {
+        const after = Number(ph.afterMinutes ?? 0);
+        if (minutesElapsed >= after) {
+          const effect = ph.effect as Record<string, unknown> | undefined;
+          const list = effect?.switchPlatformToDegraded;
+          if (Array.isArray(list)) for (const p of list) degradedPlatforms.add(String(p));
+        }
+      }
+      const rule = platformRules[platform] ?? {};
+      const pointsFull = Number(rule.points ?? 0);
+      const pointsDegraded = Number(rule.degradedPoints ?? 0);
+      const earnedThis = degradedPlatforms.has(platform) ? pointsDegraded : pointsFull;
+      score += earnedThis;
+      cycleLog.push(
+        `  cycle ${i + 1}/${cycles} (minute ${minutesElapsed}) platform=${platform} ${
+          degradedPlatforms.has(platform) ? "(DEGRADED)" : ""
+        } → +${earnedThis}`,
+      );
+    }
+    lines.push(`kind:           phased-polling`);
+    lines.push(`intervalMin:    ${intervalMinutes}`);
+    lines.push(`platforms:      ${Object.keys(platformRules).join(", ")}`);
+    lines.push(`phases:         ${phases.length}`);
+    lines.push(`pattern:        ${pattern} (e=ec2, l=lambda, c=ecs, a=apprunner)`);
+    lines.push(...cycleLog);
+    lines.push(`earned:         ${score} pt`);
+    return {
+      ok: true,
+      summary: `phased-polling dry-run: ${cycles} cycles → earned=${score}`,
+      lines,
+    };
+  }
+
+  // Issue #951 sub #3: attack-detection の dry-run。 counter は cycle ごとに増加する想定で、
+  // pattern で 各 cycle の increment を 1 char で表現する (= 0-9)。
+  if (kind === "attack-detection") {
+    const pointsPerAttack = Number(scoring.pointsPerAttack ?? 0);
+    const cycles = args.cycles ?? 10;
+    const pattern = args.pattern ?? "1".repeat(cycles); // default 各 cycle で +1 attack
+    if (pattern.length !== cycles) {
+      lines.push(
+        `note: pattern length (${pattern.length}) !== cycles (${cycles})。 1 char (0-9) = その cycle で何件 +increment したかを表す。`,
+      );
+    }
+    let totalDelta = 0;
+    let score = 0;
+    const cycleLog: string[] = [];
+    for (let i = 0; i < cycles; i += 1) {
+      const ch = pattern[i % pattern.length] ?? "0";
+      const delta = Number.parseInt(ch, 10);
+      if (!Number.isFinite(delta) || delta < 0 || delta > 9) {
+        cycleLog.push(`  cycle ${i + 1}: invalid char "${ch}" → skip`);
+        continue;
+      }
+      totalDelta += delta;
+      const earnedThis = delta * pointsPerAttack;
+      score += earnedThis;
+      cycleLog.push(
+        `  cycle ${i + 1}: +${delta} detections (×${pointsPerAttack}) → +${earnedThis}`,
+      );
+    }
+    lines.push(`kind:           attack-detection`);
+    lines.push(`pointsPerAttack: ${pointsPerAttack}`);
+    lines.push(`pattern:        ${pattern} (1 char = increment per cycle, 0-9)`);
+    lines.push(...cycleLog);
+    lines.push(`totalDetections: ${totalDelta}`);
+    lines.push(`earned:         ${score} pt`);
+    return {
+      ok: true,
+      summary: `attack-detection dry-run: ${cycles} cycles, total ${totalDelta} detections → earned=${score}`,
+      lines,
+    };
+  }
+
+  // それでも未対応の kind (= 将来追加分)
+  lines.push(`kind="${kind}" の dry-run は未対応です (= 将来 kind 追加時に拡張)`);
   return { ok: true, summary: `kind=${kind} dry-run unsupported`, lines };
 }
 
