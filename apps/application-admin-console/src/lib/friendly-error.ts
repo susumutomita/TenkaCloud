@@ -86,6 +86,53 @@ const KNOWN_ERRORS: Readonly<Record<string, FriendlyError>> = {
     title: "AWS Federation token の response 形式が不正です",
     hint: "AWS 側 spec 変更の可能性 (= AWS support 確認推奨)",
   },
+  // Issue #948 (ADR-020 Phase B.1): route 単位 granular role gate で返す
+  forbidden_role: {
+    title: "この操作にはより高い tenant role が必要です",
+    hint: "あなたの role では実行できません。 TenantAdmin に依頼してください",
+    possibleCauses: [
+      "TenantViewer / TenantOperator として招待されている (= destructive 操作は TenantAdmin のみ)",
+      "招待後に role が変更されたが、 token が古いまま (= 再ログインで token を更新)",
+    ],
+  },
+  // Issue #17 / ADR-020 Phase B: 自分自身の role 変更を禁止 (= lock-out 防止)
+  cannot_change_own_role: {
+    title: "自分自身の role は変更できません",
+    hint: "lock-out 防止のため、 自分の role 変更は別の TenantAdmin に依頼してください",
+  },
+  // Issue #925 Phase 1: 自分自身の削除を禁止
+  cannot_delete_self: {
+    title: "自分自身は削除できません",
+    hint: "lock-out 防止のため、 自分自身は削除できません。 別の管理者に依頼してください",
+  },
+  // Issue #950 (ADR-020 Phase D): admin audit 監査ログ table 未配線
+  audit_log_unconfigured: {
+    title: "監査ログ Table が未配線です",
+    hint: "AdminInsight stack に AdminAuditLog Table が deploy されていません",
+    possibleCauses: [
+      "Phase 2 deploy が未完了 (= make deploy 実行が必要)",
+      "古い stack 世代から upgrade していない (= deploy chain の更新で解消)",
+    ],
+  },
+  // Issue #949 / ADR-020 Phase C: ControlPlane UserPool 未配線
+  control_plane_user_pool_unconfigured: {
+    title: "ControlPlane UserPool が未配線です",
+    hint: "AdminInsight stack に ControlPlane の UserPool ID が渡されていません",
+    possibleCauses: [
+      "Phase 2 deploy が未完了 (= make deploy 実行が必要)",
+      "古い stack 世代から upgrade していない",
+    ],
+  },
+  // 既存 + 新規 ともに duplicate
+  duplicate_user: {
+    title: "同 email の user が既に存在します",
+    hint: "別の email address を指定するか、 既存 user の role を変更してください",
+  },
+  // tenant_mismatch (server は 404 not_found に隠蔽するが log で識別)
+  missing_tenant_claim: {
+    title: "tenant 識別子が JWT にありません",
+    hint: "再ログインして token を更新してください (= tenant 招待 email を経由)",
+  },
 };
 
 /**
