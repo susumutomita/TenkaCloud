@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { isBaselined, loadBaseline } from "./baseline.ts";
+import { type BaselineFile, isBaselined, loadBaseline } from "./baseline.ts";
 import { adrMustBeHtml } from "./rules/adr-must-be-html.ts";
 import { adrSelfContained } from "./rules/adr-self-contained.ts";
+import { fileTooLarge } from "./rules/file-too-large.ts";
+import { handlerNoDirectSdkImport } from "./rules/handler-no-direct-sdk-import.ts";
 import { iamWildcardNeedsJustify } from "./rules/iam-wildcard-needs-justify.ts";
 import type { Finding, Rule, Severity } from "./types.ts";
 import { listAllTrackedFiles, listStagedFiles } from "./utils/staged-files.ts";
@@ -18,7 +20,14 @@ export interface RunResult {
   readonly exitCode: number;
 }
 
-const ALL_RULES: readonly Rule[] = [adrMustBeHtml, adrSelfContained, iamWildcardNeedsJustify];
+const ALL_RULES: readonly Rule[] = [
+  adrMustBeHtml,
+  adrSelfContained,
+  iamWildcardNeedsJustify,
+  // Issue #986 / SOLID 規律強制
+  fileTooLarge,
+  handlerNoDirectSdkImport,
+];
 
 const SEVERITY_RANK: Record<Severity, number> = {
   info: 0,
@@ -61,8 +70,17 @@ Options:
   -h, --help           Show this message.
 
 Rules:
-  adr-must-be-html     docs/architecture/adr-*.md must not exist (use handwritten .html).
-  adr-self-contained   ADR HTML files must not contain chat / phased-rollout traces.
+  adr-must-be-html              docs/architecture/adr-*.md must not exist (use handwritten .html).
+  adr-self-contained            ADR HTML files must not contain chat / phased-rollout traces.
+  iam-wildcard-needs-justify    Wildcard IAM policies need an inline justification comment.
+  file-too-large                Single .ts/.tsx files must not exceed 500 (warn) / 800 (error) lines.
+  handler-no-direct-sdk-import  handlers/<x>/index.ts must not import @aws-sdk/client-* directly.
+
+Baselines:
+  Each rule may have a baseline file at .claude/harness/baselines/<rule-id>.json.
+  Findings that match a baseline entry are suppressed (= legacy debt allowed,
+  new violations blocked). Regenerate via:
+    bun run .claude/harness/bin/regenerate-baselines.ts <rule-id>
 `;
 
 export function run(opts: RunOptions): RunResult {
@@ -75,13 +93,37 @@ export function run(opts: RunOptions): RunResult {
   for (const rule of ALL_RULES) {
     findings.push(...rule.check(ctx));
   }
-  const baseline = loadBaseline(
-    resolve(opts.cwd, ".claude/harness/baselines/adr-self-contained.json"),
-  );
+  const baseline = loadAllBaselines(resolve(opts.cwd, ".claude/harness/baselines"));
   const activeFindings = findings.filter((finding) => !isBaselined(finding, baseline));
   const failThreshold = SEVERITY_RANK[opts.failOn];
   const triggered = activeFindings.some((f) => SEVERITY_RANK[f.severity] >= failThreshold);
   return { findings: activeFindings, exitCode: triggered ? 2 : 0 };
+}
+
+/**
+ * Loads all *.json baseline files from `dir` and merges entries.
+ *
+ * Each rule is encouraged to keep its own baseline file (e.g.
+ * `adr-self-contained.json`, `file-too-large.json`,
+ * `handler-no-direct-sdk-import.json`) so PRs that ratchet one rule don't
+ * collide with PRs that ratchet another.
+ */
+export function loadAllBaselines(dir: string): BaselineFile {
+  let names: readonly string[];
+  try {
+    names = readdirSync(dir);
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === "ENOENT") return { entries: [] };
+    throw err;
+  }
+  const entries: BaselineFile["entries"][number][] = [];
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const file = loadBaseline(join(dir, name));
+    entries.push(...file.entries);
+  }
+  return { entries };
 }
 
 export function formatFindings(findings: readonly Finding[]): string {
