@@ -5,6 +5,7 @@ import { adrMustBeHtml } from "./rules/adr-must-be-html.ts";
 import { adrSelfContained } from "./rules/adr-self-contained.ts";
 import { fileTooLarge } from "./rules/file-too-large.ts";
 import { handlerNoDirectSdkImport } from "./rules/handler-no-direct-sdk-import.ts";
+import { handlerTenantIsolation } from "./rules/handler-tenant-isolation.ts";
 import { iamWildcardNeedsJustify } from "./rules/iam-wildcard-needs-justify.ts";
 import type { Finding, Rule, Severity } from "./types.ts";
 import { listAllTrackedFiles, listStagedFiles } from "./utils/staged-files.ts";
@@ -27,6 +28,8 @@ const ALL_RULES: readonly Rule[] = [
   // Issue #986 / SOLID 規律強制
   fileTooLarge,
   handlerNoDirectSdkImport,
+  // Issue #997 / tenant 分離 audit
+  handlerTenantIsolation,
 ];
 
 const SEVERITY_RANK: Record<Severity, number> = {

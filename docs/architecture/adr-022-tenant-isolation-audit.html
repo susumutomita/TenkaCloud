@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>ADR-022: pooled tier tenant 分離 audit (Issue #997)</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; max-width: 920px; margin: 2rem auto; line-height: 1.6; color: #222; padding: 0 1rem; }
+      h1 { border-bottom: 2px solid #1f6feb; padding-bottom: 0.4rem; }
+      h2 { color: #1f6feb; margin-top: 2rem; }
+      h3 { color: #444; margin-top: 1.5rem; }
+      table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+      th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+      th { background: #f6f8fa; }
+      code { background: #f6f8fa; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
+      .ok { color: #0a7c2f; font-weight: 700; }
+      .risk { color: #c0392b; font-weight: 700; }
+      .note { background: #fff8c5; border-left: 4px solid #d4a017; padding: 0.6rem 1rem; margin: 1rem 0; }
+      .summary { background: #eef6ff; border-left: 4px solid #1f6feb; padding: 0.6rem 1rem; margin: 1rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>ADR-022: pooled tier の tenant 分離 audit</h1>
+    <p>
+      <strong>Status</strong>: Accepted (Phase 1 = audit + harness rule)<br />
+      <strong>Date</strong>: 2026-05-18<br />
+      <strong>Issue</strong>: #997
+    </p>
+
+    <h2>Context</h2>
+    <p>
+      BASIC / STANDARD / PREMIUM の pooled tier では <code>application-admin-console</code> が
+      <strong>同じ React bundle + 同じ API endpoint</strong> を全 tenant が共有する。 1 つでも tenant
+      境界 (= <code>tenantId</code> filter) が欠落した handler があれば 「Tenant A の admin が
+      Tenant B の user / 問題 / deploy を見る」 という公平性破壊バグになる。 PLATINUM tier は
+      silo stack で CFn レベルで分離されているため対象外。
+    </p>
+
+    <h2>Decision</h2>
+
+    <h3>Phase 1: 現状監査 (本 ADR + 機械検査)</h3>
+    <p>本 ADR 時点 (= 2026-05-18) の現状 audit:</p>
+
+    <table>
+      <tr>
+        <th>Handler</th>
+        <th>Scope</th>
+        <th>tenantId 注入方式</th>
+        <th>状況</th>
+      </tr>
+      <tr>
+        <td><code>event-handler/</code></td>
+        <td>tenant</td>
+        <td>
+          <code>resolveTenantId(c)</code> = JWT <code>custom:tenantId</code> claim 由来。
+          全 DDB write が <code>ConditionExpression: "tenantId = :tenantId"</code> を持つ。
+          read は <code>GSI1PK = "TENANT#&lt;tenantId&gt;"</code> で query partition を tenant 単位に固定。
+        </td>
+        <td class="ok">OK</td>
+      </tr>
+      <tr>
+        <td><code>competitor-accounts-handler/</code></td>
+        <td>tenant</td>
+        <td>
+          <code>resolveTenantId(c)</code> 必須、 body の <code>tenantId</code> 信頼禁止
+          (comment 明示)。 DDB Put / Update に <code>tenantId</code> を毎回 attach。
+          missing claim は 「unknown」 で audit log だけ書いて操作拒否。
+        </td>
+        <td class="ok">OK</td>
+      </tr>
+      <tr>
+        <td><code>deploy-handler/</code></td>
+        <td>tenant</td>
+        <td>
+          BulkDeploy worker。 tenantId を deployment item の PK 構造に埋め込み、 cross-tenant の
+          read/write 経路なし。
+        </td>
+        <td class="ok">OK</td>
+      </tr>
+      <tr>
+        <td><code>disruption-fire-handler/</code></td>
+        <td>tenant</td>
+        <td>
+          Event 由来の tenantId で DDB を query / update。 ConditionExpression で
+          tenantId 一致を強制。
+        </td>
+        <td class="ok">OK</td>
+      </tr>
+      <tr>
+        <td><code>describe-stack-handler/</code> / <code>external-id-audit-handler/</code></td>
+        <td>tenant</td>
+        <td>
+          tenantId で SSM Parameter Store の path を scope (= <code>/tenkacloud/&lt;tenantId&gt;/...</code>)、
+          AssumeRole の ExternalId に tenant ExternalId を渡す。 cross-tenant assume の物理経路なし。
+        </td>
+        <td class="ok">OK</td>
+      </tr>
+      <tr>
+        <td><code>participant-handler/</code></td>
+        <td>team (teamLoginKey)</td>
+        <td>
+          tenantId を直接持たず、 <code>teamLoginKey</code> で deployment 行を引く (= GSI2)。
+          deployment 行は tenantId を持つが、 query 経路は team 単位なので transitively safe。
+        </td>
+        <td class="ok">OK (異 scope)</td>
+      </tr>
+      <tr>
+        <td><code>admin-insight-handler/</code></td>
+        <td>SystemAdmin (cross-tenant)</td>
+        <td>
+          SystemAdmin claim を要求し、 cross-tenant 集計を提供する design。 tenantId が path
+          param に来る場合 (= drill-down) は authorize layer で SystemAdmin group を要求し、
+          path tenantId を query に注入する。
+        </td>
+        <td class="ok">OK (cross-tenant by design)</td>
+      </tr>
+      <tr>
+        <td><code>generic-scoring-handler/</code></td>
+        <td>system (採点 worker)</td>
+        <td>
+          EventBridge 経由で起動。 全 tenant の deployment を順に処理する worker。
+          item 単位で tenantId を持つので response から漏れる経路なし。
+        </td>
+        <td class="ok">OK (system scope)</td>
+      </tr>
+    </table>
+
+    <div class="summary">
+      <strong>結論</strong>: 2026-05-18 時点で <strong>全 tenant-scoped handler が tenantId を
+      DDB read/write に正しく注入している</strong>。 cross-tenant 集計が許される handler
+      (admin-insight / generic-scoring) は SystemAdmin group / EventBridge 経由のみ起動可能で、
+      参加者経路では起動できない。 pooled tier で実害のある cross-tenant leak は **発見されず**。
+    </div>
+
+    <h3>Phase 2: 機械検査 (= ratchet)</h3>
+    <p>
+      手動 audit は将来の regression を防げないので、 harness に rule を追加する:
+    </p>
+    <ul>
+      <li>
+        <strong><code>handler-tenant-isolation</code></strong> rule
+        (<code>.claude/harness/src/rules/handler-tenant-isolation.ts</code>):
+        対象 path (= event-handler / competitor-accounts-handler / deploy-handler / disruption-fire-handler /
+        describe-stack-handler / external-id-audit-handler 配下の <code>{index,*}.ts</code>) で
+        DDB Command (QueryCommand / ScanCommand / UpdateCommand / DeleteCommand / PutCommand /
+        TransactWriteCommand / BatchWriteCommand) を呼び出しているのに <strong>「tenantId」
+        識別子に 1 度も触れていない file</strong> を warning で報告。
+      </li>
+      <li>
+        除外: participant-handler (teamLoginKey scope) / admin-insight-handler (cross-tenant by
+        design) / shared.ts (entry 層ではない)。
+      </li>
+      <li>
+        本 audit 時点で違反 0 件 (= harness no findings)。 新規 handler を追加する PR で
+        tenantId を見落とすと自動 warning。
+      </li>
+    </ul>
+
+    <h2>Consequences</h2>
+
+    <h3>Positive</h3>
+    <ul>
+      <li>
+        現状の tenant 分離が <strong>確実に守られている</strong> ことを 1 箇所に集約。
+        regression test を補完する design-level ガード。
+      </li>
+      <li>
+        新規 handler 追加で tenantId を見落とす PR は harness が自動 warning。
+        baseline で吸収しないと block されるので、 ratchet 構造 (= 既存違反を許しつつ
+        新規違反を block)。
+      </li>
+    </ul>
+
+    <h3>Negative / Limitations</h3>
+    <ul>
+      <li>
+        本 rule は文字列 grep ベース (= AST 解析ではない)。 tenantId 変数が定義されているだけで
+        ConditionExpression に使われていない false negative がありうる。 Phase 3 で AST ベースの
+        deep check (= 全 UpdateCommand が ConditionExpression に tenantId を含むか) を別 rule
+        として追加する選択肢を残す。
+      </li>
+      <li>
+        cross-tenant の正当な経路 (= admin-insight) との切り分けは path prefix で行うため、
+        将来の handler 配置変更時は本 rule の include/exclude list も更新する必要がある。
+      </li>
+    </ul>
+
+    <h3>Phase 3 候補 (= Future Work)</h3>
+    <ul>
+      <li>
+        AST ベース check: <code>UpdateCommand</code> / <code>DeleteCommand</code> の
+        <code>ConditionExpression</code> field に <code>tenantId</code> を含むか実コードで検査。
+      </li>
+      <li>
+        Integration test: 2 tenant の test data を持つ env で TenantA JWT を使い TenantB
+        endpoint を叩いて 404 / 403 が返ることを test (= negative path の確証)。
+      </li>
+      <li>
+        Frontend defense-in-depth: <code>config.tenantId</code> と backend response の
+        <code>tenantId</code> 不一致を assert (= mismatch でログイン破棄 / alert)。
+      </li>
+    </ul>
+
+    <div class="note">
+      <strong>Caveat</strong>: 本 ADR は 2026-05-18 時点のスナップショット。 handler 追加時は
+      <code>handler-tenant-isolation</code> rule が automatically catch する設計だが、
+      新 IAM policy / 新 DDB scope を導入する PR では本 ADR を更新するべき。
+    </div>
+  </body>
+</html>
