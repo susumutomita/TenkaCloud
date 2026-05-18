@@ -93,6 +93,20 @@ export interface ParticipantProblemView {
  * 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API には
  * 出さない。Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」。
  */
+/**
+ * Issue #1038 P0 #2: 競技開始前 / 終了 / 一時停止 の gate 状態を backend が
+ * 計算して返す (= participant-handler `/portal/me`)。
+ *
+ * frontend は `kind: "scoring_not_started"` のとき ProblemDetail page を lock screen
+ * (= 「競技開始前です」 表示) に切り替える。 backend 側で fail-closed を担保するので
+ * eventId 不在 / gate 取得失敗時も "scoring_not_started" が返り、 不正アクセスを防ぐ。
+ */
+export type ParticipantEventGate =
+  | { readonly kind: "ok" }
+  | { readonly kind: "scoring_not_started"; readonly startsAt?: string }
+  | { readonly kind: "scoring_ended"; readonly endsAt?: string }
+  | { readonly kind: "scoring_locked" };
+
 export interface ParticipantTeamView {
   readonly team: {
     readonly teamName: string;
@@ -101,6 +115,8 @@ export interface ParticipantTeamView {
     readonly teamId?: string;
   };
   readonly problems: readonly ParticipantProblemView[];
+  /** Issue #1038 P0 #2: event gate (= 競技開始前 / 終了 / lock 中) status。 */
+  readonly eventGate?: ParticipantEventGate;
 }
 
 export type SubmitFlagOutcome =

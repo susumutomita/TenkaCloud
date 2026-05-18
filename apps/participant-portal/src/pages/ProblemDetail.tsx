@@ -85,11 +85,35 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       )}
       {!problem && !view && !error && <Box>状態を取得中…</Box>}
 
-      {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
-       *   metadata 不在 (= 旧 problem 等) は section ごと skip。 */}
-      {problem && metadata && narrative && (
-        <ProblemInfoSection metadata={metadata} narrative={narrative} />
+      {/* Issue #1038 P0 #2: 競技開始前は問題詳細 / hints へのアクセスを **完全に lock**。
+       *   backend (= participant-handler) から eventGate が scoring_not_started で返ってきた
+       *   とき、 problem detail の代わりに lock screen を表示する。 backend 側で fail-closed
+       *   が担保されているため、 eventId 不在 / gate 取得失敗時も同じく lock 表示になる。
+       *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
+      {problem && view?.eventGate?.kind === "scoring_not_started" && (
+        <Alert type="info" header="競技開始前です">
+          <Box variant="p">
+            この問題は <strong>競技開始時刻まで lock</strong> されています。 開始までは問題詳細
+            ・ヒント・flag 提出経路にアクセスできません。 運営の開始合図をお待ちください。
+            {view.eventGate.startsAt && (
+              <>
+                <br />
+                開始予定: <code>{new Date(view.eventGate.startsAt).toLocaleString()}</code>
+              </>
+            )}
+          </Box>
+        </Alert>
       )}
+
+      {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
+       *   metadata 不在 (= 旧 problem 等) は section ごと skip。
+       *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
+      {problem &&
+        metadata &&
+        narrative &&
+        view?.eventGate?.kind !== "scoring_not_started" && (
+          <ProblemInfoSection metadata={metadata} narrative={narrative} />
+        )}
       {/* 2026-05-18 user feedback: 「攻撃時刻を相手に予告する Red Team は存在しない」
        *   「種明かしをした おばけやしき はつまらない」
        *   ADR-012 Phase 4 / Issue #607 の `TimelinePredictSection` (= 残時間 countdown +
@@ -98,7 +122,8 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   Event 管理画面) で再利用する可能性があるため file は維持、 participant portal の
        *   ProblemDetail からのみ撤去する。 */}
 
-      {problem && (
+      {/* Issue #1038 P0 #2: ProblemPanel (= flag 提出 / hint reveal の UI 本体) も lock。 */}
+      {problem && view?.eventGate?.kind !== "scoring_not_started" && (
         <ProblemPanel
           problem={problem}
           apiBaseUrl={config.apiBaseUrl}
@@ -108,8 +133,12 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       )}
 
       {/* Issue #607 ADR-012 Phase 3.A UI: endpoints[] が宣言された Battle 問題で override 登録
-       *   form を表示。 endpoints 空 / 不在の問題 (= flag-only Challenge 等) は内部で skip。 */}
-      {problem && metadata && metadata.endpoints.length > 0 && (
+       *   form を表示。 endpoints 空 / 不在の問題 (= flag-only Challenge 等) は内部で skip。
+       *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
+      {problem &&
+        metadata &&
+        metadata.endpoints.length > 0 &&
+        view?.eventGate?.kind !== "scoring_not_started" && (
         <EndpointOverrideForm
           apiBaseUrl={config.apiBaseUrl}
           teamLoginKey={sessionToken ?? ""}
