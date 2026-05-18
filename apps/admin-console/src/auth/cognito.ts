@@ -145,13 +145,24 @@ export async function beginLogout(config: AppConfig): Promise<void> {
   }
   // (2) local 側 token を確実に破棄
   clearTokens();
-  // (3) Hosted UI cookie を破棄するため `/logout` に redirect。 logout_uri は
+  // (3) Hosted UI cookie を破棄するため `/logout` に redirect。 sign-out URL は
   //     UserPoolClient の `Allowed sign-out URLs` に含まれている origin に揃える。
+  //
+  // `logout_uri` (= legacy) と `redirect_uri` (= OIDC-conformant 新仕様) の **両方を付ける**。
+  // Cognito UserPool が OIDC-conformant mode に switch されている環境では
+  // `logout_uri` のみだと「Required String parameter 'redirect_uri' is not present」
+  // で reject されるため、 互換性のために双方を送る (= AWS Cognito の logout endpoint は
+  // 不要 parameter を ignore するので legacy 環境でも問題なし)。
   const logoutUrl = new URL(`${config.cognitoDomain}/logout`);
   logoutUrl.searchParams.set("client_id", config.cognitoClientId);
   // redirectUri の origin + "/login" を logout 後の戻り先にする (= 既存 PKCE callback
   // と同 origin、 UserPoolClient の sign-out URL 設定と整合)。
   const callbackOrigin = new URL(config.redirectUri).origin;
-  logoutUrl.searchParams.set("logout_uri", `${callbackOrigin}/login`);
+  const postLogoutUri = `${callbackOrigin}/login`;
+  logoutUrl.searchParams.set("logout_uri", postLogoutUri);
+  logoutUrl.searchParams.set("redirect_uri", postLogoutUri);
+  // response_type=code は OIDC-conformant logout で必要 (= post-logout redirect 後に
+  // 何の認証 flow に戻るか Cognito に伝える)。 legacy logout endpoint は本 param を ignore。
+  logoutUrl.searchParams.set("response_type", "code");
   window.location.assign(logoutUrl.toString());
 }

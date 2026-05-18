@@ -11,8 +11,7 @@
     "tenants": "Tenants",
     "tenants_new": "Crear tenant",
     "jobs": "Trabajos de aprovisionamiento",
-    "audit_log": "Registro de auditoría",
-    "api_docs": "Referencia de API ↗"
+    "audit_log": "Registro de auditoría"
   },
   "auth": {
     "sign_out": "Cerrar sesión"
