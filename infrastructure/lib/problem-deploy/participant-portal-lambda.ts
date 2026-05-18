@@ -105,12 +105,17 @@ export class ParticipantPortalLambda extends Construct {
             }),
           ],
         }),
-        // ADR-006 Notifications: Events table の partition Query 権限のみ。
+        // ADR-006 Notifications: Events table の partition Query 権限 + 単一行 GetItem。
+        // GetItem は Issue #1005 で導入された event-gate.ts (= submit-flag / hint reveal
+        // が共有する scoring gate) が PK=EVENT#<id> / SK=META 1 行を `dynamodb:GetItem` で
+        // 引くために必要。 grant が漏れていると AccessDenied で getEventGate が undefined を
+        // 返し、 fail-closed で `scoring_not_started` に倒れて Event は採点中なのに flag 提出
+        // が「競技はまだ開始していません」 で reject されていた。
         // 書き込みは event-handler / health-check 側に閉じる (= participant は read-only)。
         EventsRead: new PolicyDocument({
           statements: [
             new PolicyStatement({
-              actions: ["dynamodb:Query"],
+              actions: ["dynamodb:Query", "dynamodb:GetItem"],
               resources: [props.eventsTable.tableArn],
             }),
           ],
