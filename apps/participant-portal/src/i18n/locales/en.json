@@ -84,6 +84,11 @@
     "status_filter_all": "All",
     "status_filter_unsolved": "Unsolved",
     "status_filter_cleared": "Cleared",
+    "section_unsolved": "Unsolved",
+    "section_cleared": "Cleared",
+    "empty_unsolved": "No unsolved problems",
+    "empty_unsolved_hint": "Solved ones are in the section below.",
+    "empty_cleared": "No solved problems yet",
     "status_label": {
       "PENDING": "Preparing",
       "IN_PROGRESS": "Starting…",

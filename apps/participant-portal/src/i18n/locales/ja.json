@@ -84,6 +84,11 @@
     "status_filter_all": "すべて",
     "status_filter_unsolved": "未解答",
     "status_filter_cleared": "クリア済",
+    "section_unsolved": "未解決",
+    "section_cleared": "解決済み",
+    "empty_unsolved": "未解決の問題はありません",
+    "empty_unsolved_hint": "解決済みは下の section で確認できます。",
+    "empty_cleared": "クリアした問題はまだありません",
     "status_label": {
       "PENDING": "起動準備中",
       "IN_PROGRESS": "起動中…",
