@@ -1,0 +1,231 @@
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import type { ScoreEventItem } from "../shared/score-event.js";
+import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+
+/**
+ * Issue #1038 P1 #6: 全チームの累計スコア推移を 1 endpoint で返す (= participant-portal の
+ * ScoreTimelineChart を multi-series に拡張するための data source)。
+ *
+ * 旧来 `/portal/me/score-events` は自チームのみ。 競技中に rival の伸び方が見えないと
+ * 「勝負感」 が薄れるため (= user feedback「自チームだけじゃなくてライバルチームのスコアが
+ * みえないと面白くないでしょう」)、 同 event の全 team の event timeline を一括返却する。
+ *
+ * 公開する field:
+ *   - teamId (= ULID、 推測困難)
+ *   - teamName (= displayTeamName ?? operator slug)
+ *   - isMyTeam (= UI ハイライト用)
+ *   - events[] (= occurredAt 昇順、 1 team 最大 200 件)
+ *
+ * 出さない field:
+ *   - teamLoginKey / tenantId / awsAccountId / expiresAt / 内部 PK/SK
+ *   (= 公開 shape に存在しないので構造的に漏洩しない)
+ */
+export interface TeamScoreEventView {
+  readonly jobId: string;
+  readonly problemId: string;
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
+  readonly points: number;
+  readonly result: "ok" | "wrong";
+  readonly occurredAt: string;
+}
+
+export interface TeamScoreEvents {
+  readonly teamId: string;
+  readonly teamName: string;
+  readonly isMyTeam: boolean;
+  /** occurredAt 昇順 (= chart の cumulative 算出に向く順序)。 */
+  readonly events: readonly TeamScoreEventView[];
+}
+
+export interface LeaderboardScoreEventsResponse {
+  readonly eventId: string;
+  readonly teams: readonly TeamScoreEvents[];
+}
+
+export type LeaderboardScoreEventsOutcome =
+  | { kind: "ok"; response: LeaderboardScoreEventsResponse }
+  | { kind: "unauthorized" }
+  | { kind: "no_event" };
+
+/** 各 team 最大 event 数。 chart に十分 + 1 request の DDB 読み出し量を bound。 */
+const PER_TEAM_LIMIT = 200;
+/** 1 deployment あたりの page 上限 (= attack-detected が詰まっても scoring 行を回収)。 */
+const MAX_PAGES_PER_DEPLOYMENT = 3;
+
+/**
+ * teamLoginKey で requester の event を特定し、 同 event 内の全 team の score event timeline を返す。
+ *
+ * 流れ:
+ *   1. GSI2 (TEAMKEY#) で requester 行 → tenantId / eventId / 自 teamId
+ *   2. GSI1 (TENANT#) + eventId filter で 同 event の全 deployment を回収
+ *   3. teamId 単位に group + teamName / deployment PK 集合を構築
+ *   4. 各 (team, deployment) を Promise.all で並列 query (PK + begins_with EVENT#)
+ *   5. team 単位で events を occurredAt 昇順 sort + cap、 累計 score 降順で team 並べ替え
+ *
+ * 計算量: N teams × M deployments per team × 1〜3 page Query。 MVP 規模 (= teams ~10、
+ * deployments per team ~5) で 1 request 約 50〜150 query。 polling 周期 30s 想定で許容範囲。
+ */
+export async function getLeaderboardScoreEvents(
+  shared: ParticipantSharedResources,
+  teamLoginKey: string,
+): Promise<LeaderboardScoreEventsOutcome> {
+  const myItems = await queryTeamItems(shared, teamLoginKey);
+  if (myItems.length === 0) return { kind: "unauthorized" };
+
+  const sample = myItems.find((i) => {
+    const status = (i.status ?? "PENDING") as DeploymentStatus;
+    return !DELETED_LIKE_STATUSES.has(status);
+  });
+  if (!sample) return { kind: "unauthorized" };
+
+  const tenantId = typeof sample.tenantId === "string" ? sample.tenantId : undefined;
+  const eventId = typeof sample.eventId === "string" ? sample.eventId : undefined;
+  const myTeamId = typeof sample.teamId === "string" ? sample.teamId : undefined;
+  if (!tenantId || !eventId || !myTeamId) {
+    // Phase 1 以前の旧 jobId-based deployment は eventId/teamId を持たないため event scope
+    // で chart を組めない。 leaderboard.ts と同じ shape で 404 化する。
+    return { kind: "no_event" };
+  }
+
+  const out = await shared.ddb.send(
+    new QueryCommand({
+      TableName: shared.tableName,
+      IndexName: "GSI1",
+      KeyConditionExpression: "GSI1PK = :pk",
+      FilterExpression: "eventId = :ev",
+      ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}`, ":ev": eventId },
+    }),
+  );
+  const eventDeployments = (out.Items ?? []) as Partial<DeploymentItem>[];
+
+  const teamMeta = groupDeploymentsByTeam(eventDeployments);
+
+  const teamsResult: TeamScoreEvents[] = await Promise.all(
+    [...teamMeta.entries()].map(async ([teamId, meta]) => {
+      const collected = await collectTeamEvents(shared, meta.deploymentPKs);
+      collected.sort((a, b) =>
+        a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : 0,
+      );
+      return {
+        teamId,
+        teamName: meta.teamName,
+        isMyTeam: teamId === myTeamId,
+        events: collected.slice(0, PER_TEAM_LIMIT),
+      };
+    }),
+  );
+
+  // 累計 score 降順 (= leaderboard と同じ並び)。 同点は teamName 昇順で安定 sort。
+  teamsResult.sort((a, b) => {
+    const aSum = a.events.reduce((s, e) => s + e.points, 0);
+    const bSum = b.events.reduce((s, e) => s + e.points, 0);
+    if (bSum !== aSum) return bSum - aSum;
+    return a.teamName.localeCompare(b.teamName);
+  });
+
+  return { kind: "ok", response: { eventId, teams: teamsResult } };
+}
+
+interface TeamMetaEntry {
+  teamName: string;
+  deploymentPKs: string[];
+}
+
+/** Deployments を teamId 単位に group。 displayTeamName / slug の優先順位は leaderboard と同じ。 */
+function groupDeploymentsByTeam(
+  items: readonly Partial<DeploymentItem>[],
+): Map<string, TeamMetaEntry> {
+  const teamMeta = new Map<string, TeamMetaEntry>();
+  for (const item of items) {
+    addItemToTeamMeta(teamMeta, item);
+  }
+  return teamMeta;
+}
+
+/** 1 deployment 行を team bucket に取り込む (= groupDeploymentsByTeam の per-item helper)。 */
+function addItemToTeamMeta(teamMeta: Map<string, TeamMetaEntry>, item: Partial<DeploymentItem>) {
+  if (typeof item.teamId !== "string") return;
+  if (typeof item.PK !== "string") return;
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  if (DELETED_LIKE_STATUSES.has(status)) return;
+  const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
+  const slug = typeof item.teamName === "string" ? item.teamName : "";
+  const teamName = display ?? slug;
+  let m = teamMeta.get(item.teamId);
+  if (!m) {
+    m = { teamName, deploymentPKs: [] };
+    teamMeta.set(item.teamId, m);
+  } else if (display && m.teamName !== display) {
+    m.teamName = display;
+  }
+  m.deploymentPKs.push(item.PK);
+}
+
+/** 1 team の全 deployment PK について EVENT# rows を回収。 page 上限まで読む。 */
+async function collectTeamEvents(
+  shared: ParticipantSharedResources,
+  deploymentPKs: readonly string[],
+): Promise<TeamScoreEventView[]> {
+  const collected: TeamScoreEventView[] = [];
+  await Promise.all(
+    deploymentPKs.map(async (pk) => {
+      let exclusiveStart: Record<string, unknown> | undefined;
+      let pages = 0;
+      while (pages < MAX_PAGES_PER_DEPLOYMENT && collected.length < PER_TEAM_LIMIT) {
+        const evOut = await shared.ddb.send(
+          new QueryCommand({
+            TableName: shared.tableName,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
+            ExpressionAttributeValues: { ":pk": pk, ":evpfx": "EVENT#" },
+            ScanIndexForward: false,
+            Limit: PER_TEAM_LIMIT,
+            ExclusiveStartKey: exclusiveStart,
+          }),
+        );
+        for (const it of (evOut.Items ?? []) as Partial<ScoreEventItem>[]) {
+          const v = toView(it);
+          if (v) collected.push(v);
+        }
+        exclusiveStart = evOut.LastEvaluatedKey as Record<string, unknown> | undefined;
+        pages++;
+        if (!exclusiveStart) break;
+      }
+    }),
+  );
+  return collected;
+}
+
+/**
+ * ScoreEventItem (DDB row) → TeamScoreEventView (公開 shape)。
+ *
+ * leaderboard 合計と chart 累積を一致させるため、 scoring に影響する 4 source
+ * (uptime / flag / flag-wrong / hint) を通す。 marker 用 `attack-detected` (= result=down) は
+ * 累計 score に影響しないので除外 (= chart に並べない)。
+ */
+const ALLOWED_SOURCES = new Set<TeamScoreEventView["source"]>([
+  "uptime",
+  "flag",
+  "flag-wrong",
+  "hint",
+]);
+const ALLOWED_RESULTS = new Set<TeamScoreEventView["result"]>(["ok", "wrong"]);
+
+function toView(item: Partial<ScoreEventItem>): TeamScoreEventView | undefined {
+  if (typeof item.jobId !== "string") return undefined;
+  if (typeof item.problemId !== "string") return undefined;
+  if (typeof item.source !== "string") return undefined;
+  if (!ALLOWED_SOURCES.has(item.source as TeamScoreEventView["source"])) return undefined;
+  if (typeof item.result !== "string") return undefined;
+  if (!ALLOWED_RESULTS.has(item.result as TeamScoreEventView["result"])) return undefined;
+  if (typeof item.occurredAt !== "string") return undefined;
+  return {
+    jobId: item.jobId,
+    problemId: item.problemId,
+    source: item.source as TeamScoreEventView["source"],
+    points: Number(item.points ?? 0),
+    result: item.result as TeamScoreEventView["result"],
+    occurredAt: item.occurredAt,
+  };
+}
