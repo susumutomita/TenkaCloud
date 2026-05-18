@@ -140,6 +140,76 @@ describe("listScoreEvents", () => {
     }
   });
 
+  // Issue #1038 P1 #8 follow-up: 旧 toView は uptime/flag のみ通したため、 PR-1043 で書き
+  // 込まれる hint 行と Issue #817 で書き込まれる flag-wrong 行が participant の Score events
+  // 履歴に表示されなかった。 4 source 全て (= uptime / flag / flag-wrong / hint) を含める。
+  it("hint reveal の減点行 (source=hint, result=ok, points=-30) を履歴に含めるべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [meta()] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        event({
+          source: "hint",
+          points: -30,
+          result: "ok",
+          occurredAt: "2026-05-18T10:00:00.000Z",
+        }),
+      ],
+    });
+    const out = await listScoreEvents(shared, "KEY1");
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.response.entries).toHaveLength(1);
+      expect(out.response.entries[0]).toMatchObject({
+        source: "hint",
+        points: -30,
+        result: "ok",
+      });
+    }
+  });
+
+  it("不正解 flag の減点行 (source=flag-wrong, result=wrong, points=-10) を履歴に含めるべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [meta()] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        event({
+          source: "flag-wrong",
+          points: -10,
+          result: "wrong",
+          occurredAt: "2026-05-18T11:00:00.000Z",
+        }),
+      ],
+    });
+    const out = await listScoreEvents(shared, "KEY1");
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.response.entries).toHaveLength(1);
+      expect(out.response.entries[0]).toMatchObject({
+        source: "flag-wrong",
+        points: -10,
+        result: "wrong",
+      });
+    }
+  });
+
+  it("attack-detected (marker 用、 result=down) は participant 履歴に出さないべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [meta()] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        event({ source: "attack-detected", points: 0, result: "down" }),
+        event({ source: "uptime", points: 5, result: "ok" }),
+      ],
+    });
+    const out = await listScoreEvents(shared, "KEY1");
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.response.entries).toHaveLength(1);
+      expect(out.response.entries[0]?.source).toBe("uptime");
+    }
+  });
+
   it("attack-detected が 1 page 目を埋め尽くしても次 page を読んで scoring 行を回収する", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
