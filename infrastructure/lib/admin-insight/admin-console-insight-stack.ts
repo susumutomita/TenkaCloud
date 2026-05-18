@@ -80,6 +80,10 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       deploymentsTable: props.deploymentsTable,
       eventsTable: props.eventsTable,
       teamsTable: props.teamsTable,
+      // Issue #949: SystemAdmin user CRUD のため ControlPlane UserPool を渡す。
+      // Lambda は env CONTROL_PLANE_USER_POOL_ID + IAM Allow を取得し、
+      // /admin/insight/system-users route 群を実装する。
+      controlPlaneUserPool: props.cognitoUserPool,
       ...(props.deprovisioningStateMachineArn
         ? { deprovisioningStateMachineArn: props.deprovisioningStateMachineArn }
         : {}),
@@ -118,7 +122,15 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       corsPreflight: {
         allowOrigins,
         allowHeaders: ["Authorization", "Content-Type"],
-        allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.OPTIONS],
+        // Issue #949: SystemAdmin user CRUD で POST / DELETE / PATCH が要るため CORS allow を拡張。
+        // 既存 read-only routes は GET のみで動くので影響なし (= preflight allowMethods は superset)。
+        allowMethods: [
+          CorsHttpMethod.GET,
+          CorsHttpMethod.POST,
+          CorsHttpMethod.DELETE,
+          CorsHttpMethod.PATCH,
+          CorsHttpMethod.OPTIONS,
+        ],
         maxAge: cdk.Duration.minutes(10),
       },
     });
@@ -169,6 +181,21 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     httpApi.addRoutes({
       path: "/admin/insight/state-machine-executions",
       methods: [HttpMethod.GET],
+      integration,
+    });
+
+    // Issue #949 (ADR-020 Phase C): SystemAdmin user の CRUD route 群。
+    // 全 route で JWT Authorizer + handler 内の `cognito:groups ⊇ {SystemAdmin}` の 2 段 check で
+    // 認可する。 list / detail は SystemAuditor も pass、 mutate (POST / DELETE / PATCH) は
+    // SystemAdmin only にする予定 (= handler 内 granular gate)。
+    httpApi.addRoutes({
+      path: "/admin/insight/system-users",
+      methods: [HttpMethod.GET, HttpMethod.POST],
+      integration,
+    });
+    httpApi.addRoutes({
+      path: "/admin/insight/system-users/{username}",
+      methods: [HttpMethod.GET, HttpMethod.DELETE, HttpMethod.PATCH],
       integration,
     });
 

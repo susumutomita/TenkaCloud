@@ -15,6 +15,15 @@ import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-execut
 import { buildSharedResources } from "./shared.js";
 import { defaultSfnClient, listStateMachineExecutions } from "./state-machine-executions.js";
 import { summarizeTenants } from "./summary.js";
+import {
+  ChangeSystemUserRoleRequestSchema,
+  InviteSystemUserRequestSchema,
+  routeChangeSystemUserRole,
+  routeCreateSystemUser,
+  routeDeleteSystemUser,
+  routeGetSystemUser,
+  routeListSystemUsers,
+} from "./system-users-routes.js";
 
 /**
  * Admin Insight API Lambda の Hono app (ADR-011、issue #590 Phase 1.A + #598 Phase 1.B)。
@@ -345,6 +354,121 @@ app.get("/admin/insight/state-machine-executions", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[admin-insight] listStateMachineExecutions failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// ====== Issue #949 (ADR-020 Phase C): SystemAdmin user 管理 routes ======
+//
+// 認可は 2 段: API GW JWT Authorizer + handler 内 `isSystemAdmin` 検査。 mutate (POST / DELETE /
+// PATCH) は全部 SystemAdmin only にしている (= 一旦 SystemAdmin と SystemAuditor の中間 role を
+// 区別せず、 SystemAuditor は将来 GET だけ pass させる余地として残す)。
+
+const USERNAME_RE = /^[A-Za-z0-9_.@+-]{1,128}$/;
+
+app.get("/admin/insight/system-users", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users");
+  if (forbidden) return forbidden;
+  try {
+    const result = await routeListSystemUsers(c);
+    return c.json(result.body as never, result.status as 200 | 503);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] list system-users failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.post("/admin/insight/system-users", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users[POST]");
+  if (forbidden) return forbidden;
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
+  }
+  const parsed = InviteSystemUserRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation_failed", issues: parsed.error.issues },
+      StatusCodes.BAD_REQUEST,
+    );
+  }
+  try {
+    const result = await routeCreateSystemUser(c, parsed.data);
+    return c.json(result.body as never, result.status as 201 | 409 | 503);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] create system-user failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.get("/admin/insight/system-users/:username", async (c) => {
+  const username = c.req.param("username");
+  if (!username || !USERNAME_RE.test(username)) {
+    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
+  }
+  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users/:username", { username });
+  if (forbidden) return forbidden;
+  try {
+    const result = await routeGetSystemUser(c, username);
+    return c.json(result.body as never, result.status as 200 | 404 | 503);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] get system-user failed", { username, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.patch("/admin/insight/system-users/:username", async (c) => {
+  const username = c.req.param("username");
+  if (!username || !USERNAME_RE.test(username)) {
+    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
+  }
+  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users/:username[PATCH]", {
+    username,
+  });
+  if (forbidden) return forbidden;
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
+  }
+  const parsed = ChangeSystemUserRoleRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation_failed", issues: parsed.error.issues },
+      StatusCodes.BAD_REQUEST,
+    );
+  }
+  try {
+    const result = await routeChangeSystemUserRole(c, username, parsed.data);
+    return c.json(result.body as never, result.status as 200 | 404 | 409 | 503);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] change system-user role failed", { username, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.delete("/admin/insight/system-users/:username", async (c) => {
+  const username = c.req.param("username");
+  if (!username || !USERNAME_RE.test(username)) {
+    return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
+  }
+  const forbidden = auditAndAuthorize(c, "/admin/insight/system-users/:username[DELETE]", {
+    username,
+  });
+  if (forbidden) return forbidden;
+  try {
+    const result = await routeDeleteSystemUser(c, username);
+    return c.json(result.body as never, result.status as 200 | 404 | 409 | 503);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] delete system-user failed", { username, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
