@@ -104,4 +104,36 @@ describe("tenant lifecycle scripts", () => {
     expect(waitIdx).toBeGreaterThan(0);
     expect(deployIdx).toBeGreaterThan(waitIdx);
   });
+
+  // Issue #1029 follow-up: tier は admin-console から大文字 / 小文字どちらでも渡ってくる
+  // 可能性がある。 provision-tenant.sh が `[[ $TIER == "PLATINUM" ]]` で大文字比較する前に
+  // 必ず uppercase 正規化する。 忘れると小文字 "platinum" が silo 分岐に入らず pooled に
+  // 倒れて UI で「Open ↗ (pooled)」 表示になる (= 2026-05-18 testsilo regression)。
+  it("provision-tenant.sh は TIER を大文字に正規化してから PLATINUM 判定すべき", () => {
+    const script = readRepoFile("scripts/provision-tenant.sh");
+    // TIER 環境変数が tr で大文字化されてから export されること
+    expect(script).toMatch(/export TIER=\$\(echo "\$tier" \| tr '\[:lower:\]' '\[:upper:\]'\)/);
+    // 比較は大文字 PLATINUM (= 正規化後の形)
+    expect(script).toContain('[[ $TIER == "PLATINUM" ]]');
+    // 正規化 (= tr) は **silo 分岐の `if [[ $TIER == "PLATINUM" ]]; then` を含む block** より
+    // 前に来ること。 docblock 内の参照と区別するため、 `if [[` を伴う block 開始行で比較する。
+    const normalizeIdx = script.indexOf("tr '[:lower:]' '[:upper:]'");
+    const branchIdx = script.indexOf('if [[ $TIER == "PLATINUM" ]]; then');
+    expect(normalizeIdx).toBeGreaterThan(0);
+    expect(branchIdx).toBeGreaterThan(normalizeIdx);
+  });
+
+  // Issue #1029 follow-up: 初回 provisioning でも admin-console-hosting の
+  // CompetitorBootstrapTemplateUrl を CFn output から読んで cdk deploy 時に env に流す。
+  // 忘れると pooled tenant の runtime-config に bootstrap URL が空のまま焼かれ、
+  // 競技者 Launch Stack で CFn が「TemplateURL must be a supported URL」 で reject する
+  // (= raw.githubusercontent.com fallback では deploy 不可、 2026-05-18 観測)。
+  it("provision-tenant.sh は admin-console-hosting の CompetitorBootstrapTemplateUrl を CFn output から export すべき", () => {
+    const script = readRepoFile("scripts/provision-tenant.sh");
+    expect(script).toMatch(
+      /CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=\$\(aws cloudformation describe-stacks/,
+    );
+    expect(script).toContain('--stack-name "tenkacloud-admin-console-hosting"');
+    expect(script).toMatch(/CompetitorBootstrapTemplateUrl/);
+  });
 });
