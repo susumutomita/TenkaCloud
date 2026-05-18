@@ -50,7 +50,7 @@ const KIND_TO_DEFAULT_CATEGORY: Record<Kind, "Battle" | "Challenge"> = {
 };
 
 interface CliArgs {
-  command: "create" | "validate" | "list-kinds" | "dry-run" | "help" | "interactive";
+  command: "create" | "validate" | "list-kinds" | "dry-run" | "inspect" | "help" | "interactive";
   problemId?: string;
   kind?: Kind;
   category?: "Battle" | "Challenge";
@@ -73,9 +73,14 @@ function parseArgs(argv: readonly string[]): CliArgs {
   // Issue #954: interactive mode は引数なしで起動する `tenkacloud problem interactive` か、
   // `tenkacloud problem create` (= problemId / kind 省略時) のどちらでも入れる。
   if (command === "interactive") return { command };
-  if (command !== "create" && command !== "validate" && command !== "dry-run") {
+  if (
+    command !== "create" &&
+    command !== "validate" &&
+    command !== "dry-run" &&
+    command !== "inspect"
+  ) {
     throw new Error(
-      `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run', 'interactive'.`,
+      `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run', 'inspect', 'interactive'.`,
     );
   }
   const problemId = argv[1];
@@ -146,6 +151,7 @@ Usage:
   bun run scripts/tenkacloud-problem.ts validate <id>
   bun run scripts/tenkacloud-problem.ts dry-run <id> [--submitted <flag>] [--reveal-hints N]
                                                     [--cycles N] [--pattern <s|f sequence>]
+  bun run scripts/tenkacloud-problem.ts inspect <id>  # metadata + template の全体 dump (= author debug)
   bun run scripts/tenkacloud-problem.ts list-kinds
 
 Available kinds:  ${KINDS.join(", ")}
@@ -157,6 +163,7 @@ Examples:
   bun run scripts/tenkacloud-problem.ts validate microservice-migration-battle
   bun run scripts/tenkacloud-problem.ts dry-run hello-world --submitted "actual-flag-value"
   bun run scripts/tenkacloud-problem.ts dry-run hello-world-battle --cycles 60 --pattern "ssssffssssss"
+  bun run scripts/tenkacloud-problem.ts inspect hello-world
 
 See also:
   docs/problems/AUTHORING.html  — 30 分 onboarding guide
@@ -812,6 +819,244 @@ export function runDryRun(args: {
  * `Value: "TC{...}"` / `Value: !GetAtt X.Value` の前者だけハンドルする。
  * 後者は実 deploy しないと値が解決しないため null を返す。
  */
+/**
+ * Issue #951 sub #5: problem author 向け debug inspector。
+ *
+ * 旧状態: 問題作成者が 「scoring engine が自分の問題をどう読んでいるか」 を確認するには
+ * metadata.json / template.yaml / portal/ を別々に grep する必要があった。 採点が想定通り動かない
+ * とき、 どこで詰まっているか切り分けるのに時間が掛かる (= 「scoring kind は flag だが flagOutputKey
+ * が typo で template Outputs に無い」 のような bug を deploy 前に発見する経路が無い)。
+ *
+ * 本 inspect subcommand は metadata + template + portal slot を resolve し、 1 引きで dump する:
+ *
+ *   - metadata.json から id / kind / scoring / endpoints / phases / disruptions / dashboard.slots
+ *   - template.yaml から Resources / Parameters / Outputs の一覧 + 必須 ParticipantViewerRole 検査
+ *   - scoring engine が読む key (= flagOutputKey / statsOutputKey / endpoints[].default.key) と
+ *     Outputs の cross-ref を一覧表示
+ *   - portal/ ディレクトリの slot file (= dashboard.slots で declared された tsx) の存在確認
+ *
+ * `make validate-problems` と違って 「正しいか」 ではなく 「何が見えているか」 を吐く。 author の
+ * mental model 確認用。
+ */
+export interface InspectResult {
+  readonly ok: boolean;
+  readonly summary: string;
+  readonly lines: readonly string[];
+}
+
+export function runInspect(args: { problemId: string }): InspectResult {
+  const dir = findProblemDir(args.problemId);
+  if (!dir) {
+    return { ok: false, summary: `Problem dir not found for id="${args.problemId}"`, lines: [] };
+  }
+  const metaPath = join(dir, "metadata.json");
+  if (!existsSync(metaPath)) {
+    return { ok: false, summary: "metadata.json not found", lines: [] };
+  }
+  const meta = JSON.parse(readFileSync(metaPath, "utf8")) as Record<string, unknown>;
+  const lines: string[] = [];
+
+  lines.push(`=== Problem ${args.problemId} ===`);
+  lines.push(`directory:        ${dir.replace(REPO_ROOT, "")}`);
+  lines.push(`name:             ${String(meta.name ?? "(none)")}`);
+  lines.push(`category:         ${String(meta.category ?? "(none)")}`);
+  lines.push(`status:           ${String(meta.status ?? "(none)")}`);
+  lines.push(`visibility:       ${String(meta.visibility ?? "public")}`);
+  lines.push(`difficulty:       ${String(meta.difficulty ?? "(none)")}`);
+  lines.push(`estimatedDuration: ${String(meta.estimatedDuration ?? "(none)")}`);
+  lines.push("");
+
+  // scoring
+  const scoring = (meta.scoring ?? {}) as Record<string, unknown>;
+  const kind = String(scoring.kind ?? "");
+  lines.push(`--- Scoring engine view ---`);
+  lines.push(`kind:             ${kind || "(none)"}`);
+  if (kind === "flag") {
+    lines.push(`flagOutputKey:    ${String(scoring.flagOutputKey ?? "(missing)")}`);
+    lines.push(`points:           ${String(scoring.points ?? "(missing)")}`);
+    if (scoring.wrongAnswerPenalty)
+      lines.push(`wrongAnswerPenalty: ${String(scoring.wrongAnswerPenalty)}`);
+  } else if (kind === "uptime-flat" || kind === "uptime") {
+    const eps = Array.isArray(scoring.endpoints) ? scoring.endpoints : [];
+    lines.push(`endpoints:        ${eps.length}`);
+    for (const ep of eps as Array<Record<string, unknown>>) {
+      lines.push(
+        `                  - slot=${String(ep.slot ?? "?")} path=${String(ep.path ?? "?")} expect=${JSON.stringify(ep.expectStatus ?? [])}`,
+      );
+    }
+    lines.push(`pointsPerSuccess: ${String(scoring.pointsPerSuccess ?? "(missing)")}`);
+    if (scoring.failurePenalty !== undefined)
+      lines.push(`failurePenalty:   ${String(scoring.failurePenalty)}`);
+  } else if (kind === "uptime-multi") {
+    const slots = Array.isArray(scoring.probedSlots) ? scoring.probedSlots : [];
+    lines.push(`probedSlots:      ${slots.length} (= 全部 OK で加点)`);
+    for (const s of slots as Array<Record<string, unknown>>) {
+      lines.push(
+        `                  - slot=${String(s.slot ?? "?")} path=${String(s.path ?? "?")} expect=${JSON.stringify(s.expectStatus ?? [])}`,
+      );
+    }
+    lines.push(`pointsAllOk:      ${String(scoring.pointsAllOk ?? "(missing)")}`);
+    lines.push(`failurePenalty:   ${String(scoring.failurePenalty ?? "0")}`);
+  } else if (kind === "phased-polling") {
+    lines.push(`intervalMinutes:  ${String(scoring.intervalMinutes ?? "(missing)")}`);
+    const platforms = scoring.platformRules as Record<string, unknown> | undefined;
+    lines.push(`platformRules:    ${platforms ? Object.keys(platforms).join(", ") : "(missing)"}`);
+    const probe = scoring.probe as Record<string, unknown> | undefined;
+    lines.push(
+      `probe paths:      meta=${String(probe?.metaPath ?? "?")} score=${String(probe?.scorePath ?? "?")}`,
+    );
+  } else if (kind === "attack-detection") {
+    lines.push(`statsOutputKey:   ${String(scoring.statsOutputKey ?? "(missing)")}`);
+    lines.push(`pointsPerAttack:  ${String(scoring.pointsPerAttack ?? "(missing)")}`);
+  }
+  // hints (= 全 kind)
+  const hints = Array.isArray(scoring.hints) ? scoring.hints : [];
+  if (hints.length > 0) {
+    lines.push(`hints:            ${hints.length} 件`);
+    hints.forEach((h, i) => {
+      if (typeof h === "string") {
+        lines.push(`                  [${i + 1}] (legacy v1, penalty=0) ${h.slice(0, 60)}…`);
+      } else if (h && typeof h === "object") {
+        const ho = h as Record<string, unknown>;
+        lines.push(
+          `                  [${i + 1}] id=${String(ho.id)} penalty=${String(ho.penalty)} content="${String(ho.content).slice(0, 50)}…"`,
+        );
+      }
+    });
+  }
+  lines.push("");
+
+  // endpoints (= metadata.endpoints、 scoring.endpoints とは別軸の registry)
+  const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
+  if (endpoints.length > 0) {
+    lines.push(`--- Endpoint registry (= metadata.endpoints) ---`);
+    for (const ep of endpoints as Array<Record<string, unknown>>) {
+      const def = ep.default as Record<string, unknown> | undefined;
+      lines.push(
+        `  slot=${String(ep.slot)} default-from=${String(def?.from ?? "?")} default-key=${String(def?.key ?? "?")} overridable=${String(ep.overridable ?? false)}`,
+      );
+    }
+    lines.push("");
+  }
+
+  // phases
+  const phases = Array.isArray(meta.phases) ? meta.phases : [];
+  if (phases.length > 0) {
+    lines.push(`--- Phases ---`);
+    for (const ph of phases as Array<Record<string, unknown>>) {
+      lines.push(
+        `  name=${String(ph.name)} afterMinutes=${String(ph.afterMinutes ?? "?")} effect=${JSON.stringify(ph.effect ?? {})}`,
+      );
+    }
+    lines.push("");
+  }
+
+  // disruptions
+  const disruptions = Array.isArray(meta.disruptions) ? meta.disruptions : [];
+  if (disruptions.length > 0) {
+    lines.push(`--- Disruptions ---`);
+    for (const d of disruptions as Array<Record<string, unknown>>) {
+      lines.push(
+        `  id=${String(d.id)} name=${String(d.name)} default=${String(d.defaultAfterMinutes ?? "?")}min`,
+      );
+    }
+    lines.push("");
+  }
+
+  // dashboard.slots
+  const dashboard = meta.dashboard as Record<string, unknown> | undefined;
+  const slots = dashboard?.slots as Record<string, unknown> | undefined;
+  if (slots) {
+    lines.push(`--- Portal slots ---`);
+    for (const [slot, file] of Object.entries(slots)) {
+      const physical = join(dir, String(file));
+      const exists = existsSync(physical);
+      lines.push(`  ${slot}: ${String(file)} ${exists ? "(OK)" : "(MISSING!)"}`);
+    }
+    lines.push("");
+  }
+
+  // template.yaml の inspection (= check-template-cfn-refs と同 line-by-line parser)
+  const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
+  const templatePath = join(dir, cfnTemplate);
+  if (existsSync(templatePath)) {
+    const yaml = readFileSync(templatePath, "utf8");
+    lines.push(`--- Template (${cfnTemplate}) ---`);
+    const yamlLines = yaml.split(/\r?\n/);
+    const resourceNames: string[] = [];
+    const outputNames: string[] = [];
+    const parameterNames: string[] = [];
+    let section: "resources" | "parameters" | "outputs" | null = null;
+    for (const line of yamlLines) {
+      if (/^Resources:\s*$/.test(line)) {
+        section = "resources";
+        continue;
+      }
+      if (/^Parameters:\s*$/.test(line)) {
+        section = "parameters";
+        continue;
+      }
+      if (/^Outputs:\s*$/.test(line)) {
+        section = "outputs";
+        continue;
+      }
+      if (/^[A-Za-z]/.test(line) && line.endsWith(":")) {
+        section = null;
+        continue;
+      }
+      if (!section) continue;
+      const m = line.match(/^ {2}([A-Za-z][A-Za-z0-9]*):\s*$/);
+      if (!m?.[1]) continue;
+      if (section === "resources") resourceNames.push(m[1]);
+      else if (section === "outputs") outputNames.push(m[1]);
+      else if (section === "parameters") parameterNames.push(m[1]);
+    }
+    lines.push(`  Parameters: ${parameterNames.join(", ") || "(none)"}`);
+    lines.push(`  Resources:  ${resourceNames.join(", ") || "(none)"}`);
+    lines.push(`  Outputs:    ${outputNames.join(", ") || "(none)"}`);
+
+    // Cross-ref check (= 各 key が Outputs に存在するか + 必須 ParticipantViewerRole 等)
+    const crossRefIssues: string[] = [];
+    if (kind === "flag") {
+      const k = String(scoring.flagOutputKey ?? "");
+      if (k && !outputNames.includes(k)) crossRefIssues.push(`flagOutputKey="${k}" not in Outputs`);
+    }
+    if (kind === "attack-detection") {
+      const k = String(scoring.statsOutputKey ?? "");
+      if (k && !outputNames.includes(k))
+        crossRefIssues.push(`statsOutputKey="${k}" not in Outputs`);
+    }
+    for (const ep of endpoints as Array<Record<string, unknown>>) {
+      const def = ep.default as Record<string, unknown> | undefined;
+      if (
+        def?.from === "cfn-output" &&
+        typeof def.key === "string" &&
+        !outputNames.includes(def.key)
+      ) {
+        crossRefIssues.push(
+          `endpoints[slot=${String(ep.slot)}].default.key="${def.key}" not in Outputs`,
+        );
+      }
+    }
+    if (!resourceNames.includes("ParticipantViewerRole")) {
+      crossRefIssues.push("ParticipantViewerRole resource not declared (= ADR-002 Phase 2.1)");
+    }
+    if (!outputNames.includes("ParticipantViewerRoleArn")) {
+      crossRefIssues.push("ParticipantViewerRoleArn output not declared (= sso.ts が読む)");
+    }
+    if (crossRefIssues.length > 0) {
+      lines.push(`  Cross-ref issues:`);
+      for (const issue of crossRefIssues) lines.push(`    ✗ ${issue}`);
+    } else {
+      lines.push(`  Cross-ref:  OK (= all scoring / endpoint keys resolve to Outputs)`);
+    }
+  } else {
+    lines.push(`  Template "${cfnTemplate}" NOT FOUND`);
+  }
+
+  return { ok: true, summary: `inspect ${args.problemId} (kind=${kind})`, lines };
+}
+
 function extractFlagFromTemplate(yaml: string, key: string): string | null {
   const re = new RegExp(`${key}:[\\s\\S]*?Value:\\s*("[^"\\n]+"|'[^'\\n]+'|[^\\n!]+)\\n`, "m");
   const m = yaml.match(re);
@@ -882,6 +1127,15 @@ async function main(): Promise<void> {
       }
       for (const line of r.lines) console.log(line);
       console.log(`\nsummary: ${r.summary}`);
+      return;
+    }
+    case "inspect": {
+      const r = runInspect({ problemId: args.problemId ?? "" });
+      if (!r.ok) {
+        console.error(`NG ${r.summary}`);
+        process.exit(1);
+      }
+      for (const line of r.lines) console.log(line);
       return;
     }
     default: {
