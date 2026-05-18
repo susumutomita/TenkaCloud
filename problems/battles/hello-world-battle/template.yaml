@@ -146,24 +146,28 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: DescribeOwnEc2
+              # Issue #1038 P2 #10: see microservice-migration-battle for full rationale.
+              # ec2:Describe* doesn't accept resource ARNs; scope by tag instead.
+              - Sid: ConsoleEc2Describe
                 Effect: Allow
                 Action:
-                  - ec2:DescribeInstances
-                  - ec2:DescribeInstanceStatus
-                  - ec2:DescribeTags
-                  - ec2:DescribeSecurityGroups
-                  - ec2:DescribeSubnets
-                  - ec2:DescribeVpcs
-                  - ec2:DescribeRouteTables
-                  - ec2:DescribeInternetGateways
-                Resource:
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${Sg}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicSubnet}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${Vpc}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/${Rt}"
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/${Igw}"
+                  - ec2:Describe*
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/TenkaCloud:NamePrefix: !Ref NamePrefix
+              - Sid: ConsoleEc2Metadata
+                Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
               - Sid: StartSessionToOwnInstance
                 Effect: Allow
                 Action:
