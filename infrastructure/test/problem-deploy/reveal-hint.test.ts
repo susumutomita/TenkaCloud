@@ -264,10 +264,12 @@ describe("revealHint (#742 Phase 3)", () => {
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100 })] }); // no eventId
       ddbSend.mockResolvedValueOnce({ Attributes: { score: 90 } });
+      // Issue #1038 P1 #8: hint reveal の score event 履歴書き込み (= 3 つ目の DDB call)。
+      ddbSend.mockResolvedValueOnce({});
       const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
       expect(out.kind).toBe("ok");
-      // EventMeta の Get は呼ばない (= 2 calls: query + update のみ)
-      expect(ddbSend).toHaveBeenCalledTimes(2);
+      // EventMeta の Get は呼ばない、 score event の Put は呼ぶ (= 3 calls: query + update + score-event Put)
+      expect(ddbSend).toHaveBeenCalledTimes(3);
     });
   });
 });
