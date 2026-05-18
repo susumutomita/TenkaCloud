@@ -11,8 +11,7 @@
     "tenants": "租户列表",
     "tenants_new": "创建租户",
     "jobs": "配置作业",
-    "audit_log": "审计日志",
-    "api_docs": "API 参考 ↗"
+    "audit_log": "审计日志"
   },
   "auth": {
     "sign_out": "退出登录"

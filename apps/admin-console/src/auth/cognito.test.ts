@@ -78,7 +78,7 @@ describe("beginLogout (Issue #833)", () => {
     expect(assignSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("/logout に client_id と logout_uri を付けて redirect すべき", async () => {
+  it("/logout に client_id + logout_uri + redirect_uri を付けて redirect すべき (OIDC-conformant 互換)", async () => {
     storeTokens("refresh.jwt");
 
     await beginLogout(CONFIG);
@@ -89,6 +89,11 @@ describe("beginLogout (Issue #833)", () => {
     expect(redirectedTo.searchParams.get("client_id")).toBe(CONFIG.cognitoClientId);
     // UserPoolClient の sign-out URLs に揃える: redirectUri の origin + "/login"
     expect(redirectedTo.searchParams.get("logout_uri")).toBe("https://admin.example.com/login");
+    // OIDC-conformant mode に switch された UserPool では `redirect_uri` が必須。 legacy 環境は
+    // 余分な param を ignore するので両方付けておく (= 「Required String parameter 'redirect_uri'
+    // is not present」 regression 防止)。
+    expect(redirectedTo.searchParams.get("redirect_uri")).toBe("https://admin.example.com/login");
+    expect(redirectedTo.searchParams.get("response_type")).toBe("code");
   });
 
   it("/oauth2/revoke が失敗しても redirect は実行されるべき (= revoke failure で sign-out が止まらない)", async () => {

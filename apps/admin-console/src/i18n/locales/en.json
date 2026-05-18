@@ -11,8 +11,7 @@
     "tenants": "Tenants",
     "tenants_new": "Create tenant",
     "jobs": "Provisioning Jobs",
-    "audit_log": "Audit log",
-    "api_docs": "API Reference ↗"
+    "audit_log": "Audit log"
   },
   "auth": {
     "sign_out": "Sign out"
