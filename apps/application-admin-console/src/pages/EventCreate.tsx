@@ -434,6 +434,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                             invalid={
                               t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)
                             }
+                            // Issue #998: option (alias + region + role) が table cell 幅を
+                            // 超えると text が見切れる。 expandToViewport で portal に逃がして
+                            // 横幅自由・全文表示にする。
+                            expandToViewport
+                            filteringType="auto"
                           />
                           {selectedAccount && (
                             <Box variant="small" color="text-status-inactive">
@@ -493,6 +498,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                               defaultRegion: detail.selectedOption?.value ?? r.defaultRegion,
                             })
                           }
+                          // Issue #998: region 名 (= 「アジアパシフィック (東京)」 等) が table cell
+                          // の幅を超えるので portal に逃がす。
+                          expandToViewport
                         />
                       ),
                     },
