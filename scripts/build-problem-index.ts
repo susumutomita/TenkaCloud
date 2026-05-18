@@ -118,7 +118,7 @@ function buildIndex(): ProblemIndex {
  */
 function serialize(index: ProblemIndex): string {
   const raw = `${JSON.stringify(index, null, 2)}\n`;
-  const result = spawnSync("bunx", ["biome", "format", "--stdin-file-path=problems/index.json"], {
+  const result = spawnSync("bun", ["biome", "format", "--stdin-file-path=problems/index.json"], {
     input: raw,
     encoding: "utf8",
     cwd: REPO_ROOT,

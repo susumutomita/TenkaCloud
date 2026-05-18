@@ -37,7 +37,7 @@ export const LITE_STACK_NAMES = {
 // cdk.json と同じ tsx loader を使う。 ts-node は `./foo.js` → `./foo.ts` の
 // extension rewrite を CommonJS 文脈で解決できず、 `endpoints-metadata.ts` 等の
 // ESM-style import (`./env-encoding.js`) で MODULE_NOT_FOUND になる。
-const CDK_OPTS = ["--app", "bunx tsx infrastructure/bin/tenkacloud-lite.ts"];
+const CDK_OPTS = ["--app", "bun tsx infrastructure/bin/tenkacloud-lite.ts"];
 
 export interface SpawnCaptureResult {
   readonly code: number;
@@ -144,7 +144,7 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   }
 
   io.stdout("[lite] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n");
-  const code = await io.spawnInherit("bunx", [
+  const code = await io.spawnInherit("bun", [
     "cdk",
     ...CDK_OPTS,
     "deploy",
@@ -266,7 +266,7 @@ async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> 
 async function cmdDown(_args: readonly string[], io: CliIO): Promise<number> {
   io.stdout("[lite] destroying 2 stacks...\n");
   // app stack を先に destroy (= cross-stack 参照 (DeployApi Lambda 等) の依存方向に合わせる)。
-  const code1 = await io.spawnInherit("bunx", [
+  const code1 = await io.spawnInherit("bun", [
     "cdk",
     ...CDK_OPTS,
     "destroy",
@@ -274,7 +274,7 @@ async function cmdDown(_args: readonly string[], io: CliIO): Promise<number> {
     "--force",
   ]);
   if (code1 !== 0) return code1;
-  return io.spawnInherit("bunx", [
+  return io.spawnInherit("bun", [
     "cdk",
     ...CDK_OPTS,
     "destroy",

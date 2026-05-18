@@ -90,7 +90,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(prepCall.args).toContain("scripts/prepare-source-bundle.sh");
 
     const deployCall = inheritCalls[1];
-    expect(deployCall.cmd).toBe("bunx");
+    expect(deployCall.cmd).toBe("bun");
     expect(deployCall.args).toContain("cdk");
     expect(deployCall.args).toContain("deploy");
     expect(deployCall.args).toContain(LITE_STACK_NAMES.app);

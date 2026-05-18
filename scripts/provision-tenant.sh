@@ -70,7 +70,7 @@ if [[ $TIER == "PLATINUM" ]]; then
   export CDK_PARAM_DEPROVISIONING_DETAIL_TYPE=$CDK_PARAM_OFFBOARDING_DETAIL_TYPE
   export CDK_PARAM_PROVISIONING_EVENT_SOURCE="sbt-application-plane-api"
   export CDK_PARAM_APPLICATION_NAME_PLANE_SOURCE="sbt-application-plane-api"
-  bunx cdk deploy "$STACK_NAME" --require-approval never
+  bun cdk deploy "$STACK_NAME" --require-approval never
 fi
 
 # Read tenant details from the cloudformation stack output parameters

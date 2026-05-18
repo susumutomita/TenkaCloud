@@ -47,7 +47,7 @@ cd "${TENKACLOUD_ROOT}/infrastructure"
 export JSII_DEPRECATED=quiet
 
 bun install
-bunx cdk bootstrap
+bun cdk bootstrap
 
 # ============================================================================
 # Phase 1: backend stacks — admin-console URL はまだ無いので CORS/callback は
@@ -57,12 +57,20 @@ echo ""
 echo "=============================================="
 echo "Phase 1: Deploy backend stacks"
 echo "=============================================="
-bunx cdk deploy \
+# Issue #1029 / PR-1028 follow-up: `tenkacloud-tenant-template-pooled` (= pooled tenants が
+# 共有する App Plane stack) は install.sh からは deploy しない。 理由:
+#   - install.sh が直 deploy すると stack が UPDATE_IN_PROGRESS の間 SBT Step Functions が
+#     「Can we update Stack?」 = NO で Skip Deployment 分岐に倒れ、 CodeBuild が起動しない
+#     → tenant update path が機能しない silent failure になる
+#   - 役割分担を明確化: pooled stack の lifecycle (create / update) は SBT pipeline
+#     (CodeBuild 経由) に一本化。 install.sh は Control Plane 系 stack + saas-pipeline まで
+# 初回 install: pooled stack は未作成 (= 後で初 tenant 作成 trigger で SBT が初 create)
+# 二度目以降: pooled stack は SBT pipeline が tenant event で update
+bun cdk deploy \
   tenkacloud-control-plane \
   tenkacloud-bootstrap \
   tenkacloud-problem-deploy \
   tenkacloud-admin-console-insight \
-  tenkacloud-tenant-template-pooled \
   tenkacloud-saas-pipeline \
   --require-approval never --concurrency 4
 
@@ -98,12 +106,21 @@ echo "  → dist/ generated"
 # pooled stack の application-admin-console URL も runtime-config に流す
 # (admin-console から basic / standard / advanced tier の tenant 行で「開く」リンクを
 # 出すため。silo platinum tenant は provision-tenant.sh が tenantConfig に書く)。
-# pooled stack は phase 1 で既に立っているので CFn output から取れる。
+#
+# Issue #1029 / PR-1028 follow-up: pooled stack は SBT pipeline (CodeBuild) で create / update
+# される設計なので、 初回 install (= 第 1 tenant 未作成) の時点では存在しない。 stack 不在は
+# 空文字 fallback (= runtime-config に空 URL が入る、 admin-console は「pooled tenants 未配信」
+# 扱いで UI 上 link を出さない / 空表示する)。 第 1 tenant 作成後に再 install.sh を走らせれば
+# URL が伝播する。
 POOLED_APP_CONSOLE_URL=$(aws cloudformation describe-stacks \
   --stack-name "tenkacloud-tenant-template-pooled" \
   --query "Stacks[0].Outputs[?OutputKey=='ApplicationAdminConsoleUrl'].OutputValue" \
-  --output text)
-echo "  Pooled App URL: ${POOLED_APP_CONSOLE_URL}"
+  --output text 2>/dev/null || echo "")
+if [ -z "${POOLED_APP_CONSOLE_URL}" ]; then
+  echo "  Pooled App URL: (未作成、 第 1 tenant 作成後に SBT pipeline が pooled stack を初 create する)"
+else
+  echo "  Pooled App URL: ${POOLED_APP_CONSOLE_URL}"
+fi
 
 # 同 stack の CodeBuild プロジェクト名を AdminConsoleHostingStack に渡す
 # (provisioning ログ deep link 構築で使う)。SBT BashJobRunner が立てる project の
@@ -141,7 +158,7 @@ export CDK_PARAM_PROVISIONING_CODEBUILD_PROJECT="${PROVISIONING_CODEBUILD_PROJEC
 export CDK_PARAM_AWS_REGION="${REGION}"
 export CDK_PARAM_AWS_ACCOUNT_ID="${ACCOUNT_ID}"
 export CDK_PARAM_ADMIN_INSIGHT_API_URL="${ADMIN_INSIGHT_API_URL}"
-bunx cdk deploy tenkacloud-admin-console-hosting --require-approval never
+bun cdk deploy tenkacloud-admin-console-hosting --require-approval never
 
 # ============================================================================
 # Phase 3: ControlPlaneStack + admin-console-insight 再 deploy
@@ -165,7 +182,11 @@ echo "  CloudFront URL: ${ADMIN_CONSOLE_URL}"
 COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'CompetitorBootstrapTemplateUrl')].OutputValue" --output text)
 export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL="${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
 echo "  Competitor bootstrap template URL: ${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
-bunx cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight tenkacloud-tenant-template-pooled --require-approval never
+# Issue #1029 / PR-1028 follow-up: pooled stack は SBT pipeline (CodeBuild) で update する
+# 設計なので install.sh では deploy しない。 CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL が
+# pooled stack に伝播するのは、 次の tenant event で CodeBuild が走ったとき
+# (update-tenant.sh が同 CFn output を読んで env に流す、 別 commit で対応)。
+bun cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight --require-approval never
 
 # ============================================================================
 # 完了
