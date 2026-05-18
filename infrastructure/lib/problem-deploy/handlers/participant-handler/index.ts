@@ -12,6 +12,7 @@ import { HTTP_OK } from "../shared/http-status.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { getLeaderboard } from "./leaderboard.js";
+import { getLeaderboardScoreEvents } from "./leaderboard-score-events.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
 import { listNotifications, NOTIFICATIONS_DEFAULT_LIMIT } from "./notifications.js";
 import { revealHint } from "./reveal-hint.js";
@@ -109,6 +110,16 @@ app.get("/portal/me/battle-attacks", (c) =>
 app.get("/portal/leaderboard", (c) =>
   withBearerAuth(c, "leaderboard", async (token) => {
     const outcome = await getLeaderboard(shared, token);
+    if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+    return respondError(c, outcome.kind);
+  }),
+);
+
+// Issue #1038 P1 #6: 全チームの累計スコア推移 (= ScoreTimelineChart multi-series 用)。
+// `/portal/leaderboard` と同じ scope (= 同 event 内の全 team) で event timeline を返す。
+app.get("/portal/leaderboard/score-events", (c) =>
+  withBearerAuth(c, "leaderboard-score-events", async (token) => {
+    const outcome = await getLeaderboardScoreEvents(shared, token);
     if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
     return respondError(c, outcome.kind);
   }),

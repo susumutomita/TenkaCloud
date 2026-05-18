@@ -36,6 +36,7 @@ import {
   unlockEventScoring,
 } from "../api/events-client";
 import { SendNotificationModal } from "../components/SendNotificationModal";
+import { TeamScoreEventsPanel } from "../components/TeamScoreEventsPanel";
 import type { AppConfig } from "../config";
 import { computeEventWizardState, WIZARD_STEPS } from "../lib/event-wizard";
 
@@ -189,7 +190,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const refresh = useCallback(async () => {
     if (!apiClient || !eventIdValid || !eventId) return;
     try {
-      const d = await getEvent(apiClient, eventId);
+      // Issue #1038 P1 #7: operator が「どのチームがいつ加点 / 減点したか」 を一目で
+      // 把握できるよう、 Event 詳細取得で全 team の score event timeline も同時に fetch する。
+      const d = await getEvent(apiClient, eventId, { withScoreEvents: true });
       setDetail(d);
       setError(null);
     } catch (err) {
@@ -855,6 +858,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           />
         </Container>
       )}
+
+      {detail?.scoreEventsByTeam && <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} />}
 
       {detail && (
         <Container header={<Header variant="h2">参加者向け配布</Header>}>

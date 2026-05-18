@@ -193,8 +193,11 @@ app.get("/events/:eventId", async (c) => {
   if (!eventId || !EVENT_ID_RE.test(eventId)) {
     return c.json({ error: "invalid_event_id" }, HTTP_BAD_REQUEST);
   }
+  // Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を返す。
+  // default (= "true" 以外) は scoreEventsByTeam を省き、 既存 caller を素通り。
+  const withScoreEvents = c.req.query("withScoreEvents") === "true";
   try {
-    const detail = await getEventDetail(shared, resolveTenantId(c), eventId);
+    const detail = await getEventDetail(shared, resolveTenantId(c), eventId, { withScoreEvents });
     if (!detail) return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
     return c.json(detail, HTTP_OK);
   } catch (err) {

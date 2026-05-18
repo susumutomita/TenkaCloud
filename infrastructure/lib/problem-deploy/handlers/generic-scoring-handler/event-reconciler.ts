@@ -17,10 +17,13 @@ import { QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
  *
  * - `DEPLOYING`: 子 deployment が **全て terminal** (`COMPLETE` / `FAILED`) → `READY`。
  *   1 件でも進行中 (`PENDING` / `IN_PROGRESS`) があれば `undefined` (= 触らない)。
+ * - `READY`: `endsAt` が現在時刻を過ぎていたら → `ENDED` (Issue #1038 P0 #3、 2026-05-18)。
+ *   user 観測「終了時刻を過ぎたのにイベントが終わらない」 を解消するため、 endsAt 経過後の
+ *   1 分以内に自動 ENDED 遷移する。 endsAt 不在の event は無期限なので `undefined`。
  * - `TEARDOWN`: 子 deployment が **全て終端** (`DELETED` / `FAILED`) → `ARCHIVED`。
  *   `DELETING` が残っていれば `undefined`。
  * - 子 deployment 0 件: `undefined` (= bulk-deploy/bulk-delete 前の race state、触らない)。
- * - その他 status (`DRAFT` / `READY` / `ENDED` / `ARCHIVED`): caller でフィルタ済前提だが
+ * - その他 status (`DRAFT` / `ENDED` / `ARCHIVED`): caller でフィルタ済前提だが
  *   defense-in-depth で `undefined`。
  *
  * `FAILED` を terminal に含む理由: deploy が失敗した行も「これ以上進行しない」状態なので
@@ -30,7 +33,18 @@ import { QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
 export function resolveEventStatusTransition(
   eventStatus: string,
   deploymentStatuses: readonly string[],
-): "READY" | "ARCHIVED" | undefined {
+  context?: { readonly endsAt?: string; readonly nowMs?: number },
+): "READY" | "ENDED" | "ARCHIVED" | undefined {
+  if (eventStatus === "READY") {
+    // Issue #1038 P0 #3: endsAt 経過で自動 ENDED 遷移。 deployment status は不要 (= 採点 gate は
+    // event-gate.ts が endsAt から既に judge している)。
+    const endsAt = context?.endsAt;
+    const nowMs = context?.nowMs;
+    if (!endsAt || nowMs === undefined) return undefined;
+    const endsAtMs = Date.parse(endsAt);
+    if (!Number.isFinite(endsAtMs)) return undefined;
+    return nowMs >= endsAtMs ? "ENDED" : undefined;
+  }
   if (deploymentStatuses.length === 0) return undefined;
   if (eventStatus === "DEPLOYING") {
     const allTerminal = deploymentStatuses.every((s) => s === "COMPLETE" || s === "FAILED");
@@ -195,8 +209,11 @@ export async function rescueStuckDeletingDeployments(
 }
 
 /**
- * Events table を scan して `DEPLOYING` / `TEARDOWN` 状態の Event について、
- * 子 deployment 集約 status を見て `READY` / `ARCHIVED` に遷移させる (#557 #539)。
+ * Events table を scan して `DEPLOYING` / `READY` / `TEARDOWN` 状態の Event について
+ * 自動遷移を判定 (#557 #539 / Issue #1038 P0 #3):
+ *   - `DEPLOYING`: 子 deployment 全 terminal → `READY`
+ *   - `READY` + `endsAt` 経過 → `ENDED`
+ *   - `TEARDOWN`: 子 deployment 全 終端 → `ARCHIVED`
  *
  * 各 Event の判定は **並列**: 1 件遅い tenant が他を block しない。Update が CCF
  * (= operator 手動遷移などの race) で失敗した行は silent skip (= 次の tick で再評価)。
@@ -213,11 +230,12 @@ export async function reconcileEventStatuses(
     const out = await ctx.ddb.send(
       new ScanCommand({
         TableName: ctx.eventsTableName,
-        ProjectionExpression: "PK, tenantId, eventId, #status",
+        ProjectionExpression: "PK, tenantId, eventId, #status, endsAt",
         ExpressionAttributeNames: { "#status": "status" },
-        FilterExpression: "#status = :deploying OR #status = :teardown",
+        FilterExpression: "#status = :deploying OR #status = :ready OR #status = :teardown",
         ExpressionAttributeValues: {
           ":deploying": "DEPLOYING",
+          ":ready": "READY",
           ":teardown": "TEARDOWN",
         },
         Limit: 100,
@@ -229,67 +247,115 @@ export async function reconcileEventStatuses(
       tenantId?: string;
       eventId?: string;
       status?: string;
+      endsAt?: string;
     }>;
 
     const nowMs = Date.parse(nowIso);
-    await Promise.all(
-      items.map(async (event) => {
-        if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
-        // narrow optional から required へ (= 以降 closure 内では string 確定)
-        const eventStatus: string = event.status;
-        // 子 deployments を GSI1 (TENANT#) で query → eventId filter 後の全 page を集約。
-        const depRows = await queryDeploymentRowsForEvent(ctx, {
-          tenantId: event.tenantId,
-          eventId: event.eventId,
-        });
-        // Issue #828: TEARDOWN で `DELETING` 行が `STUCK_DELETING_THRESHOLD_MS` 以上停滞していれば
-        // FAILED に倒す (= bulk-delete publish chunk 失敗 / State Machine 未起動 / 競技者の手動 stack
-        // 削除で silent path に倒れた orphan 行を救済し、 ARCHIVED 自動遷移を解錠する)。
-        // DDB Update は side-effect で発火、 同 tick の transition 判定には rescue 後の値を
-        // 想定した `adjustedStatuses` を使う (= 次 tick を待たずに同 tick で ARCHIVED 化可能)。
-        if (eventStatus === "TEARDOWN" && Number.isFinite(nowMs)) {
-          await rescueStuckDeletingDeployments(ctx, depRows, nowMs);
-        }
-        const adjustedStatuses = depRows.map((r) =>
-          isStuckDeletingForTeardown(eventStatus, r, nowMs) ? "FAILED" : r.status,
-        );
-        const next = resolveEventStatusTransition(eventStatus, adjustedStatuses);
-        if (!next) return;
-
-        try {
-          await ctx.ddb.send(
-            new UpdateCommand({
-              TableName: ctx.eventsTableName,
-              Key: { PK: event.PK, SK: "META" },
-              UpdateExpression: "SET #status = :next, updatedAt = :now",
-              // race 防止: 期待 current status と一致しているときのみ更新 (= operator が
-              // 手動 archive / 再 deploy で先に動かしてたら CCF で skip)。
-              ConditionExpression: "tenantId = :tenant AND #status = :current",
-              ExpressionAttributeNames: { "#status": "status" },
-              ExpressionAttributeValues: {
-                ":tenant": event.tenantId,
-                ":current": eventStatus,
-                ":next": next,
-                ":now": nowIso,
-              },
-            }),
-          );
-          console.log("[generic-scoring] Event status auto-transition", {
-            eventId: event.eventId,
-            from: eventStatus,
-            to: next,
-          });
-        } catch (err) {
-          const code = (err as { name?: string })?.name ?? "";
-          if (code === "ConditionalCheckFailedException") return;
-          console.warn("[generic-scoring] Event status update failed", {
-            eventId: event.eventId,
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }),
-    );
+    await Promise.all(items.map((event) => reconcileSingleEvent(ctx, event, nowIso, nowMs)));
 
     exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (exclusiveStartKey);
+}
+
+async function reconcileSingleEvent(
+  ctx: ReconcileEventStatusesContext,
+  event: {
+    readonly PK?: string;
+    readonly tenantId?: string;
+    readonly eventId?: string;
+    readonly status?: string;
+    readonly endsAt?: string;
+  },
+  nowIso: string,
+  nowMs: number,
+): Promise<void> {
+  if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
+  const eventStatus: string = event.status;
+
+  // Issue #1038 P0 #3: READY → ENDED は deployment row を見る必要が無い (= endsAt のみで判定)。
+  // 子 deployment を query しないことで RCU / Lambda 時間を節約。
+  if (eventStatus === "READY") {
+    const next = resolveEventStatusTransition(eventStatus, [], { endsAt: event.endsAt, nowMs });
+    if (!next) return;
+    await applyEventStatusTransition(ctx, {
+      PK: event.PK,
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      from: eventStatus,
+      to: next,
+      nowIso,
+    });
+    return;
+  }
+
+  // 子 deployments を GSI1 (TENANT#) で query → eventId filter 後の全 page を集約。
+  const depRows = await queryDeploymentRowsForEvent(ctx, {
+    tenantId: event.tenantId,
+    eventId: event.eventId,
+  });
+  // Issue #828: TEARDOWN で `DELETING` 行が `STUCK_DELETING_THRESHOLD_MS` 以上停滞していれば
+  // FAILED に倒す (= bulk-delete publish chunk 失敗 / State Machine 未起動 / 競技者の手動 stack
+  // 削除で silent path に倒れた orphan 行を救済し、 ARCHIVED 自動遷移を解錠する)。
+  // DDB Update は side-effect で発火、 同 tick の transition 判定には rescue 後の値を
+  // 想定した `adjustedStatuses` を使う (= 次 tick を待たずに同 tick で ARCHIVED 化可能)。
+  if (eventStatus === "TEARDOWN" && Number.isFinite(nowMs)) {
+    await rescueStuckDeletingDeployments(ctx, depRows, nowMs);
+  }
+  const adjustedStatuses = depRows.map((r) =>
+    isStuckDeletingForTeardown(eventStatus, r, nowMs) ? "FAILED" : r.status,
+  );
+  const next = resolveEventStatusTransition(eventStatus, adjustedStatuses);
+  if (!next) return;
+  await applyEventStatusTransition(ctx, {
+    PK: event.PK,
+    tenantId: event.tenantId,
+    eventId: event.eventId,
+    from: eventStatus,
+    to: next,
+    nowIso,
+  });
+}
+
+async function applyEventStatusTransition(
+  ctx: ReconcileEventStatusesContext,
+  args: {
+    readonly PK: string;
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly from: string;
+    readonly to: "READY" | "ENDED" | "ARCHIVED";
+    readonly nowIso: string;
+  },
+): Promise<void> {
+  try {
+    await ctx.ddb.send(
+      new UpdateCommand({
+        TableName: ctx.eventsTableName,
+        Key: { PK: args.PK, SK: "META" },
+        UpdateExpression: "SET #status = :next, updatedAt = :now",
+        // race 防止: 期待 current status と一致しているときのみ更新 (= operator が
+        // 手動 archive / 再 deploy で先に動かしてたら CCF で skip)。
+        ConditionExpression: "tenantId = :tenant AND #status = :current",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":tenant": args.tenantId,
+          ":current": args.from,
+          ":next": args.to,
+          ":now": args.nowIso,
+        },
+      }),
+    );
+    console.log("[generic-scoring] Event status auto-transition", {
+      eventId: args.eventId,
+      from: args.from,
+      to: args.to,
+    });
+  } catch (err) {
+    const code = (err as { name?: string })?.name ?? "";
+    if (code === "ConditionalCheckFailedException") return;
+    console.warn("[generic-scoring] Event status update failed", {
+      eventId: args.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 }

@@ -4,13 +4,22 @@ import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
-/** participant 向けに公開する score event 1 行 (内部 PK/SK 等は出さない)。 */
+/**
+ * participant 向けに公開する score event 1 行 (内部 PK/SK 等は出さない)。
+ *
+ * Issue #1038 P1 #8 follow-up: hint reveal (= PR-1043) / 不正解 flag (Issue #817 で書き込み済)
+ * は score を確かに動かすが、 旧 toView が `"uptime"` / `"flag"` のみ通過させていたため履歴に
+ * 出てこなかった (= user 観測「ヒントひらいたときのスコアが score events 履歴に出ない」)。
+ * `score-event.ts` の writer 側 union は既に `"uptime" | "flag" | "flag-wrong" | "hint" |
+ * "attack-detected"` を持つ。 そのうち competitor の累計 score に影響する 4 種を公開する
+ * (= `attack-detected` は marker 用、 frontend にスコア行として並べない)。
+ */
 export interface ScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
   readonly points: number;
-  readonly result: "ok";
+  readonly result: "ok" | "wrong";
   readonly occurredAt: string;
 }
 
@@ -94,19 +103,30 @@ export async function listScoreEvents(
   return { kind: "ok", response: { entries } };
 }
 
-/** ScoreEventItem (DDB row) → ScoreEventView (公開 shape)。不正な行は undefined。 */
+/**
+ * ScoreEventItem (DDB row) → ScoreEventView (公開 shape)。不正な行は undefined。
+ *
+ * Issue #1038 P1 #8 follow-up: 加点系 (`uptime` / `flag`) に加え減点系 (`flag-wrong` /
+ * `hint`) も公開する。 `attack-detected` (= marker 用 result=down 行) は participant の
+ * 累計 score に影響しないので score event 履歴には載せない (= 別 endpoint `battle-attacks`)。
+ */
+const ALLOWED_SOURCES = new Set<ScoreEventView["source"]>(["uptime", "flag", "flag-wrong", "hint"]);
+const ALLOWED_RESULTS = new Set<ScoreEventView["result"]>(["ok", "wrong"]);
+
 function toView(item: Partial<ScoreEventItem>): ScoreEventView | undefined {
   if (typeof item.jobId !== "string") return undefined;
   if (typeof item.problemId !== "string") return undefined;
-  if (item.source !== "uptime" && item.source !== "flag") return undefined;
-  if (item.result !== "ok") return undefined;
+  if (typeof item.source !== "string") return undefined;
+  if (!ALLOWED_SOURCES.has(item.source as ScoreEventView["source"])) return undefined;
+  if (typeof item.result !== "string") return undefined;
+  if (!ALLOWED_RESULTS.has(item.result as ScoreEventView["result"])) return undefined;
   if (typeof item.occurredAt !== "string") return undefined;
   return {
     jobId: item.jobId,
     problemId: item.problemId,
-    source: item.source,
+    source: item.source as ScoreEventView["source"],
     points: Number(item.points ?? 0),
-    result: item.result,
+    result: item.result as ScoreEventView["result"],
     occurredAt: item.occurredAt,
   };
 }

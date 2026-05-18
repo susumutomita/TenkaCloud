@@ -1,5 +1,6 @@
 import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventSharedResources } from "./shared.js";
+import { collectTeamScoreEvents, type DeploymentRefForScoreEvents } from "./team-score-events.js";
 import type {
   EventDeploymentSummary,
   EventDetail,
@@ -108,11 +109,16 @@ export async function listEvents(
  *
  * teams[].teamLoginKey は **詳細経路でのみ露出** (operator が hand-off に使うため)。
  * 一覧経路 (`listEvents`) では teams 自体を返さない。
+ *
+ * Issue #1038 P1 #7: `opts.withScoreEvents=true` のとき全 team の累計 score event timeline を
+ * `scoreEventsByTeam` に含める。 default (= false) は従来挙動を維持 (= 余分な DDB query を
+ * 発生させない、 既存 caller への影響なし)。
  */
 export async function getEventDetail(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
+  opts: { readonly withScoreEvents?: boolean } = {},
 ): Promise<EventDetail | undefined> {
   // Event Get と Teams Query は依存関係なし → 並列発火でラウンドトリップを 1 回分節約。
   // Event / Teams / Deployments を並列発火。Deployments は競技者が PATCH /portal/me で
@@ -144,7 +150,9 @@ export async function getEventDetail(
         ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
         // problemId / jobId / status は per-problem deploy 状況を組み立てるのに必要。
         // displayTeamName は既存の teams[].displayName 上書き用。
-        ProjectionExpression: "teamId, eventId, displayTeamName, problemId, jobId, #s",
+        // PK / teamName は Issue #1038 P1 #7 で per-team score events を引くために追加 projection。
+        ProjectionExpression:
+          "PK, teamId, eventId, displayTeamName, teamName, problemId, jobId, #s",
         ExpressionAttributeNames: { "#s": "status" },
       }),
     ),
@@ -154,41 +162,8 @@ export async function getEventDetail(
   if (event.tenantId !== tenantId) return undefined;
 
   const teamItems = (teamsOut.Items ?? []) as Partial<TeamItem>[];
-
-  // teamId → displayTeamName の最新値 map を作る。同じ team の N 行のうち、operator
-  // 起動時には全て同じ値で埋まる (update.ts が Promise.all で全行を更新するため)。
-  // 念のため最後に拾った非空文字列を採用 (=「設定済」優先)。
-  const displayNameByTeamId = new Map<string, string>();
-  // problemId → deployment summary[]。本 event の deployment のみ集める。
-  const deploymentsByProblem: Record<string, EventDeploymentSummary[]> = {};
-  for (const d of deploymentsOut.Items ?? []) {
-    const row = d as {
-      teamId?: unknown;
-      eventId?: unknown;
-      displayTeamName?: unknown;
-      problemId?: unknown;
-      jobId?: unknown;
-      status?: unknown;
-    };
-    if (row.eventId !== eventId) continue;
-    if (typeof row.teamId === "string" && typeof row.displayTeamName === "string") {
-      if (row.displayTeamName.length > 0) {
-        displayNameByTeamId.set(row.teamId, row.displayTeamName);
-      }
-    }
-    if (
-      typeof row.problemId !== "string" ||
-      typeof row.jobId !== "string" ||
-      typeof row.teamId !== "string"
-    ) {
-      continue;
-    }
-    const status = parseDeploymentStatus(row.status);
-    if (!status) continue;
-    const list = deploymentsByProblem[row.problemId] ?? [];
-    list.push({ jobId: row.jobId, teamId: row.teamId, status });
-    deploymentsByProblem[row.problemId] = list;
-  }
+  const { displayNameByTeamId, deploymentsByProblem, deploymentRefs } =
+    aggregateDeploymentsForEvent(deploymentsOut.Items ?? [], eventId);
 
   const teams: TeamSummary[] = teamItems.map((t) => {
     const teamId = String(t.teamId ?? "");
@@ -205,11 +180,78 @@ export async function getEventDetail(
     };
   });
 
+  const scoreEventsByTeam = opts.withScoreEvents
+    ? await collectTeamScoreEvents(shared, {
+        deployments: deploymentRefs,
+        displayNameByTeamId,
+      })
+    : undefined;
+
   const summary = toSummary(event);
   return {
     ...summary,
     problems: Array.isArray(event.problems) ? (event.problems as EventDetail["problems"]) : [],
     teams,
     deploymentsByProblem,
+    ...(scoreEventsByTeam !== undefined ? { scoreEventsByTeam } : {}),
   };
+}
+
+/**
+ * Deployment rows を 3 つの view (= displayName / deploymentsByProblem / deploymentRefs) に
+ * 同時集約する pure helper。 `getEventDetail` の cognitive complexity を抑えるために
+ * 切り出した。 同一 row を 3 view に流すので 1 pass で済む。
+ */
+function aggregateDeploymentsForEvent(
+  items: readonly Record<string, unknown>[],
+  eventId: string,
+): {
+  displayNameByTeamId: Map<string, string>;
+  deploymentsByProblem: Record<string, EventDeploymentSummary[]>;
+  deploymentRefs: DeploymentRefForScoreEvents[];
+} {
+  const displayNameByTeamId = new Map<string, string>();
+  const deploymentsByProblem: Record<string, EventDeploymentSummary[]> = {};
+  const deploymentRefs: DeploymentRefForScoreEvents[] = [];
+  for (const d of items) {
+    if (d.eventId !== eventId) continue;
+    captureDisplayName(d, displayNameByTeamId);
+    captureDeploymentRef(d, deploymentRefs);
+    captureDeploymentSummary(d, deploymentsByProblem);
+  }
+  return { displayNameByTeamId, deploymentsByProblem, deploymentRefs };
+}
+
+function captureDisplayName(d: Record<string, unknown>, byTeamId: Map<string, string>): void {
+  if (typeof d.teamId !== "string") return;
+  if (typeof d.displayTeamName !== "string") return;
+  if (d.displayTeamName.length === 0) return;
+  byTeamId.set(d.teamId, d.displayTeamName);
+}
+
+function captureDeploymentRef(
+  d: Record<string, unknown>,
+  refs: DeploymentRefForScoreEvents[],
+): void {
+  if (typeof d.PK !== "string") return;
+  if (typeof d.teamId !== "string") return;
+  refs.push({
+    PK: d.PK,
+    teamId: d.teamId,
+    teamName: typeof d.teamName === "string" ? d.teamName : undefined,
+  });
+}
+
+function captureDeploymentSummary(
+  d: Record<string, unknown>,
+  byProblem: Record<string, EventDeploymentSummary[]>,
+): void {
+  if (typeof d.problemId !== "string") return;
+  if (typeof d.jobId !== "string") return;
+  if (typeof d.teamId !== "string") return;
+  const status = parseDeploymentStatus(d.status);
+  if (!status) return;
+  const list = byProblem[d.problemId] ?? [];
+  list.push({ jobId: d.jobId, teamId: d.teamId, status });
+  byProblem[d.problemId] = list;
 }

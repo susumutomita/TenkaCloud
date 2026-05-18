@@ -345,6 +345,53 @@ export async function getLeaderboard(
 }
 
 /**
+ * Issue #1038 P1 #6: 全チームの累計スコア推移を返す endpoint の view shape。
+ *
+ * - `teamId` は ULID (= 推測困難)、 leaderboard と同じ
+ * - `teamName` は displayTeamName ?? slug
+ * - `events` は occurredAt 昇順 (= chart の cumulative 累積を 1 pass で組める)
+ * - source / result は `ScoreEventView` と同じ 4-source 包含
+ */
+export interface TeamScoreEventView {
+  readonly jobId: string;
+  readonly problemId: string;
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
+  readonly points: number;
+  readonly result: "ok" | "wrong";
+  readonly occurredAt: string;
+}
+
+export interface TeamScoreEvents {
+  readonly teamId: string;
+  readonly teamName: string;
+  readonly isMyTeam: boolean;
+  readonly events: readonly TeamScoreEventView[];
+}
+
+export interface LeaderboardScoreEventsResponse {
+  readonly eventId: string;
+  readonly teams: readonly TeamScoreEvents[];
+}
+
+/**
+ * `GET /portal/leaderboard/score-events` を `Authorization: Bearer <teamLoginKey>` で呼ぶ。
+ * 旧 jobId-based deployment (= eventId 無し) は 404 → undefined を返す (= ScoreTimelineChart
+ * 側で自チームのみ chart を出す path に fall back する想定)。
+ */
+export async function getLeaderboardScoreEvents(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  signal?: AbortSignal,
+): Promise<LeaderboardScoreEventsResponse | undefined> {
+  return await portalFetch<LeaderboardScoreEventsResponse>(
+    apiBaseUrl,
+    "portal/leaderboard/score-events",
+    teamLoginKey,
+    { returnUndefinedOn404: true, signal },
+  );
+}
+
+/**
  * SSO Credentials: AWS Console ワンクリック login URL を発行する API。
  * 競技者が click すると Lambda が STS AssumeRole + federation で SigninToken を
  * 発行し、URL を返す。frontend は window.open でその URL を開く (= 自前 AWS ログイン不要)。

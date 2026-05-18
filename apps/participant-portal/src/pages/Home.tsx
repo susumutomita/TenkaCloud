@@ -6,7 +6,7 @@ import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useNavigate } from "react-router";
-import type { ParticipantTeamView } from "../api/portal-client";
+import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { ScoreTimelineChart } from "../components/ScoreTimelineChart";
@@ -32,7 +32,7 @@ export function HomePage({ config }: { config: AppConfig }) {
   const t = useT();
   const navigate = useNavigate();
   // Polling は ShellLayout の TeamViewProvider で一括管理される (TopNav も同じデータを共有)。
-  const { view, error } = useTeamView();
+  const { view, error, leaderboard } = useTeamView();
 
   const teamNameRaw = view?.team.teamName ?? auth.session?.teamName ?? "(unknown)";
   const teamName = truncateTeamName(teamNameRaw);
@@ -54,7 +54,7 @@ export function HomePage({ config }: { config: AppConfig }) {
       )}
       {isBackend && !view && !error && <Box>{t("app.loading")}</Box>}
 
-      {view && <TeamScorePanel view={view} />}
+      {view && <TeamScorePanel view={view} leaderboard={leaderboard} />}
 
       {/* Audit table #12: 競技開始からのスコア推移を 折れ線グラフで可視化 (= dashboard 中段)。 */}
       {isBackend && sessionToken && view && view.problems.length > 0 && (
@@ -83,19 +83,42 @@ export function HomePage({ config }: { config: AppConfig }) {
   );
 }
 
-function TeamScorePanel({ view }: { view: ParticipantTeamView }) {
+function TeamScorePanel({
+  view,
+  leaderboard,
+}: {
+  view: ParticipantTeamView;
+  leaderboard: LeaderboardResponse | null;
+}) {
   const t = useT();
   const totalScore = view.problems.reduce((sum, p) => sum + p.score, 0);
+
+  // Issue #1038 P1 #5: 順位 (Rank) を表示。 leaderboard.entries から isMyTeam を引き、
+  // rank / 全 team 数を出す。 entries が空 (= 凍結中 / event 未配線 / 自 team が落ちた)
+  // のときは「—」 表示にして UI を壊さない。
+  const myEntry = leaderboard?.entries.find((e) => e.isMyTeam);
+  const rankValue = myEntry ? `${myEntry.rank} / ${leaderboard?.entries.length ?? "—"}` : "—";
+
   return (
     <Container header={<Header variant="h2">{t("home.team_score_header")}</Header>}>
       <KeyValuePairs
-        columns={3}
+        columns={4}
         items={[
           {
             label: t("home.score_total"),
             value: (
               <Box variant="awsui-value-large" color="text-status-success">
                 {totalScore} pt
+              </Box>
+            ),
+          },
+          {
+            // Issue #1038 P1 #5: 「ホームで順位が出てこないのは全く面白くない」 user feedback
+            // を受け、 leaderboard の自チーム順位を 1 等地に出す。
+            label: "順位",
+            value: (
+              <Box variant="awsui-value-large" color="text-status-info">
+                {rankValue}
               </Box>
             ),
           },

@@ -1,6 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
+import { writeScoreEvent } from "../shared/score-event.js";
 import { evaluateGate, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
@@ -110,6 +111,36 @@ export async function revealHint(
       }),
     );
     const totalScore = Number((updated.Attributes as { score?: unknown })?.score ?? -hint.penalty);
+
+    // Issue #1038 P1 #8: hint 開封の score event を履歴に書く (= 旧来 score だけ ADD して
+    // score event 行を作らず、 portal の Score events ページが「-30pt なのに履歴 0 件」 と
+    // 表示する不整合を起こしていた)。 best-effort で書き、 失敗時は log のみ (= 親 score
+    // の整合性は ADD で既に成立、 履歴の loss だけ受容、 既存 writeScoreEvent と同方針)。
+    if (hint.penalty !== 0) {
+      try {
+        await writeScoreEvent(
+          shared.ddb,
+          shared.tableName,
+          {
+            jobId: String(item.jobId ?? ""),
+            problemId: item.problemId,
+            ...(typeof item.teamId === "string" ? { teamId: item.teamId } : {}),
+            ...(typeof item.eventId === "string" ? { eventId: item.eventId } : {}),
+            expiresAt: Number(item.expiresAt ?? 0),
+          },
+          "hint",
+          -hint.penalty,
+          now,
+        );
+      } catch (err) {
+        console.warn("[reveal-hint] writeScoreEvent failed (best-effort)", {
+          jobId: item.jobId,
+          hintId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return {
       kind: "ok",
       content: hint.content,
