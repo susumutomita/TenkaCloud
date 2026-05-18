@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts*'"
   },
   "dependencies": {
     "@cloudscape-design/components": "^3.0.1297",

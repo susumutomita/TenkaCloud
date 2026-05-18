@@ -63,9 +63,13 @@ jobs:
         run: |
           make typecheck
 
-      - name: Run tests
+      # Issue #993: 旧 `make test` (= `bun run test --coverage`) は && chain の末尾 workspace
+      # にしか --coverage が渡らず、 codecov に上がる coverage が trust-bridge だけだった。
+      # `test-coverage` target は各 workspace の `test:coverage` script を順に叩き、
+      # 各 workspace 配下に `coverage/lcov.info` を生成する → codecov-action が拾う。
+      - name: Run tests with coverage
         run: |
-          make test
+          make test-coverage
 
       - name: Build
         run: |
@@ -79,3 +83,5 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           # Codecov 側 outage で CI 全体を落とさない。 coverage 計測は補助、 必須でない。
           fail_ci_if_error: false
+          # 各 workspace の coverage/lcov.info を明示的に拾う (= auto-discover に依存しない)。
+          files: ./infrastructure/coverage/lcov.info,./apps/admin-console/coverage/lcov.info,./apps/application-admin-console/coverage/lcov.info,./apps/participant-portal/coverage/lcov.info,./packages/trust-bridge/coverage/lcov.info

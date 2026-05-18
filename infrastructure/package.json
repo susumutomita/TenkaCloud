@@ -10,6 +10,7 @@
     "watch": "tsc -w",
     "synth": "cdk synth -c environment=${ENV:-development}",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='cdk.out/**' --coverage.exclude='**/*.test.ts' --coverage.exclude='test/**'",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",

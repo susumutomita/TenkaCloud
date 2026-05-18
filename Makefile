@@ -35,7 +35,8 @@ install:
 install_ci:    ; bun install --frozen-lockfile --ignore-scripts
 build:         ; bun run build
 typecheck:     ; bun run typecheck
-test:          ; bun run test --coverage
+test:          ; bun run test
+test-coverage: ; bun run test:coverage
 validate-problems: ; bun run validate:problems
 build-problems-index: ; bun run build:problems-index
 check-problems-index: ; bun run check:problems-index
