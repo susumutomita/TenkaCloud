@@ -11,7 +11,11 @@
   "description": "competitor account 内の counter (= 攻撃検知件数、 SQLi 阻止件数、 SOC alert 件数 等) を CFn Output で露出し、 platform が 1 分毎に diff を取って加点する。\\n\\n典型用途: WAF 防御 / SOC monitoring / IDS 設定の効果を数値で評価したい問題。 counter 値は問題側 Lambda / CloudWatch metrics → SSM Parameter Store 経由で CFn Output に書く方式が一般的。",
   "tags": ["sample", "security"],
   "exposedPorts": [{ "port": 80, "name": "monitored-service" }],
-  "learningGoals": ["__LEARNING_GOAL_1__"],
+  "learningGoals": [
+    "AWS WAF / SOC monitoring / IDS の検知ルールを書き、 攻撃 packet を確実に阻止する",
+    "CloudWatch Metric → SSM Parameter Store → CFn Output 経由で 「自分が検知した数」 を 1 分 1 度 publish する経路を実装する",
+    "false-positive を抑えつつ阻止件数を最大化する trade-off を観察する"
+  ],
   "cfnTemplate": "template.yaml",
   "endpoints": [
     {
