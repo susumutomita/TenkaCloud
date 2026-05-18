@@ -3,10 +3,11 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
+import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getScoreEvents,
   PortalAuthError,
@@ -20,21 +21,59 @@ import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
 const POLL_INTERVAL_MS = 30_000;
 
+/**
+ * Issue #1001: 加点 / 減点を区別するラベル + 色。
+ * - uptime / flag : 加点系 (green / blue)
+ * - flag-wrong / hint : 減点系 (red / grey)
+ */
 const SOURCE_LABEL: Record<ScoreEventView["source"], string> = {
   uptime: "Battle (uptime)",
   flag: "Challenge (flag)",
+  "flag-wrong": "不正解 flag",
+  hint: "ヒント開封",
 };
 
 const SOURCE_COLOR: Record<ScoreEventView["source"], "blue" | "green" | "grey" | "red"> = {
   uptime: "green",
   flag: "blue",
+  "flag-wrong": "red",
+  hint: "grey",
 };
 
 /**
- * 自チームの加点履歴 (sidebar 「Score events」)。新しい順 100 件まで表示。
+ * Issue #1002: 累計 score を時系列に並べる data point を作る。 entries は新しい順なので
+ * reverse して古い順にしてから累積加算する。
+ */
+interface ChartPoint {
+  readonly x: Date;
+  readonly y: number;
+}
+
+function buildCumulativeSeries(entries: readonly ScoreEventView[]): readonly ChartPoint[] {
+  if (entries.length === 0) return [];
+  const oldestFirst = [...entries].sort((a, b) =>
+    a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : 0,
+  );
+  const points: ChartPoint[] = [];
+  let cumulative = 0;
+  for (const e of oldestFirst) {
+    cumulative += e.points;
+    const ts = Date.parse(e.occurredAt);
+    if (!Number.isFinite(ts)) continue;
+    points.push({ x: new Date(ts), y: cumulative });
+  }
+  return points;
+}
+
+/**
+ * 自チームのスコア変動履歴 (sidebar 「Score events」)。新しい順 100 件まで表示。
  *
- * データ source は `getScoreEvents` を 5 秒間隔で polling。HealthCheck (uptime 成功) と
- * 競技者の flag 提出 (正解) の両方を merge 済。
+ * データ source は `getScoreEvents` を 30 秒間隔で polling。HealthCheck (uptime 成功) /
+ * 競技者の flag 提出 (正解) / ヒント開封による減点 / 不正解 flag による減点を merge 済。
+ *
+ * Issue #1002: 上部に累計 score の折れ線グラフを追加 (Cloudscape LineChart)。
+ * X 軸 = wall-clock 時刻、 Y 軸 = cumulative score。 hover で 1 point の詳細 (時刻 +
+ * cumulative score) を tooltip。
  */
 export function ScoreEventsPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
@@ -74,11 +113,13 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
     };
   }, [isBackend, sessionToken, tick]);
 
+  const series = useMemo(() => (data ? buildCumulativeSeries(data.entries) : []), [data]);
+
   return (
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={`自チームの加点履歴 (${POLL_INTERVAL_MS / 1000} 秒ごと自動更新、新しい順 100 件まで)`}
+        description={`自チームのスコア変動履歴 (${POLL_INTERVAL_MS / 1000} 秒ごと自動更新、新しい順 100 件まで)`}
       >
         Score events
       </Header>
@@ -98,6 +139,43 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
         <Box textAlign="center" padding="l">
           <Spinner /> 状態を取得中…
         </Box>
+      )}
+
+      {data && series.length > 0 && (
+        <Container header={<Header variant="h2">累計 score 推移</Header>}>
+          <LineChart
+            series={[
+              {
+                title: "累計 score",
+                type: "line",
+                data: series.map((p) => ({ x: p.x, y: p.y })),
+              },
+            ]}
+            xDomain={
+              series.length > 0
+                ? [series[0]?.x ?? new Date(), series[series.length - 1]?.x ?? new Date()]
+                : undefined
+            }
+            xScaleType="time"
+            xTitle="時刻"
+            yTitle="累計 score"
+            height={240}
+            i18nStrings={{
+              xTickFormatter: (d) =>
+                new Date(d).toLocaleTimeString("ja-JP", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                }),
+            }}
+            empty={
+              <Box textAlign="center" padding="m" color="text-status-inactive">
+                データなし
+              </Box>
+            }
+            ariaLabel="累計 score の時系列"
+          />
+        </Container>
       )}
 
       {data && (
@@ -132,21 +210,27 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
               },
               {
                 id: "points",
-                header: "加点",
-                cell: (e) => (
-                  <Box variant="strong" color="text-status-success">
-                    +{e.points} pt
-                  </Box>
-                ),
+                header: "変動",
+                // Issue #1001: 負の数は赤、 正の数は緑で 「±N pt」 を表示。
+                cell: (e) =>
+                  e.points >= 0 ? (
+                    <Box variant="strong" color="text-status-success">
+                      +{e.points} pt
+                    </Box>
+                  ) : (
+                    <Box variant="strong" color="text-status-error">
+                      {e.points} pt
+                    </Box>
+                  ),
                 width: 100,
               },
             ]}
             empty={
               <Box textAlign="center" padding="l">
-                <Box variant="strong">まだ加点履歴がありません</Box>
+                <Box variant="strong">まだスコア変動履歴がありません</Box>
                 <Box variant="small" color="text-status-inactive" padding={{ top: "s" }}>
-                  競技開始後、HealthCheck の uptime 成功や flag
-                  提出で加点されると履歴がここに並びます。
+                  競技開始後、HealthCheck の uptime 成功 / flag 提出 /
+                  ヒント開封などでスコアが動くと履歴がここに並びます。
                 </Box>
               </Box>
             }
