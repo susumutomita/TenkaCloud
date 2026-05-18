@@ -13,7 +13,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        check-http-status check-template-ascii check-template-security \
+        check-http-status check-template-ascii check-template-security check-template-cfn-refs \
         env-check env-check-lite synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-battles destroy-battles \
@@ -46,9 +46,11 @@ check-http-status: ; bun run scripts/check-http-magic-numbers.ts
 check-template-ascii: ; bun run scripts/check-template-ascii.ts
 # Issue #869: 問題 template.yaml の pre-deploy security scan (= IAM wildcard / SG open / S3 public / KMS rotation)
 check-template-security: ; bun run scripts/check-template-security.ts
+# Issue #951 sub-2: 問題 template.yaml の構造的整合性 (= !Ref / !GetAtt が declared resource を指す)
+check-template-cfn-refs: ; bun run scripts/check-template-cfn-refs.ts
 audit-deps:    ; bun run audit:dependencies
-check:         install lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii check-template-security audit-deps check-synth
-before-commit: lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii check-template-security audit-deps check-synth
+check:         install lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
+before-commit: lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。

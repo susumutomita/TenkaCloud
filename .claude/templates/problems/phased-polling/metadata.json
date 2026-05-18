@@ -11,7 +11,11 @@
   "description": "競技時間中に複数 phase が自動進行する Battle 型。 phases[].afterMinutes で発火 offset を持ち、 phase ごとに `effect` で scoring engine の挙動を切り替える (= platform 加点分類 / scorePath override 等)。\\n\\n典型用途: マイクロサービス分割レース、 段階的負荷試験、 時系列的に変わる game rule。 phased-polling は probe 1 回ごとに platform 自己申告 (`/meta`) を読み platform 分類 (ec2/lambda/ecs/apprunner) で加点する。",
   "tags": ["sample", "battle"],
   "exposedPorts": [{ "port": 80, "name": "service" }],
-  "learningGoals": ["__LEARNING_GOAL_1__"],
+  "learningGoals": [
+    "EC2 / Lambda / ECS / App Runner の 4 platform に同一 service を移行し、 各 platform の特性を体験する",
+    "phase 切替時に意図した加点 effect が乗るよう /meta を更新する自己申告 endpoint を実装する",
+    "段階的進行で運用優先度 (= まず動かす / 次に最適化) を切り替える判断練習"
+  ],
   "cfnTemplate": "template.yaml",
   "endpoints": [
     {
