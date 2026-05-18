@@ -13,7 +13,7 @@
     "typecheck": "bun run --filter @TenkaCloud/infrastructure typecheck && bun run --filter @TenkaCloud/admin-console typecheck && bun run --filter @TenkaCloud/application-admin-console typecheck && bun run --filter @TenkaCloud/participant-portal typecheck && bun run --filter @TenkaCloud/trust-bridge typecheck && bun run --filter @TenkaCloud/cli typecheck",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
     "test": "bun run --filter @TenkaCloud/infrastructure test && bun run --filter @TenkaCloud/admin-console test && bun run --filter @TenkaCloud/application-admin-console test && bun run --filter @TenkaCloud/participant-portal test && bun run --filter @TenkaCloud/trust-bridge test && bun run --filter @TenkaCloud/cli test",
-    "test:coverage": "bun run --filter @TenkaCloud/infrastructure test:coverage && bun run --filter @TenkaCloud/admin-console test:coverage && bun run --filter @TenkaCloud/application-admin-console test:coverage && bun run --filter @TenkaCloud/participant-portal test:coverage && bun run --filter @TenkaCloud/trust-bridge test:coverage",
+    "test:coverage": "bun run --filter @TenkaCloud/infrastructure test:coverage && bun run --filter @TenkaCloud/admin-console test:coverage && bun run --filter @TenkaCloud/application-admin-console test:coverage && bun run --filter @TenkaCloud/participant-portal test:coverage && bun run --filter @TenkaCloud/trust-bridge test:coverage && bun run scripts/fix-coverage-paths.ts",
     "validate:problems": "bun run scripts/validate-problems.ts",
     "build:problems-index": "bun run scripts/build-problem-index.ts",
     "check:problems-index": "bun run scripts/build-problem-index.ts --check",
