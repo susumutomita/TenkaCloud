@@ -118,12 +118,12 @@ tenant_stacks=$(aws cloudformation list-stacks \
 for stack_name in $tenant_stacks; do
   tenant_id="${stack_name#tenkacloud-tenant-template-}"
   log "  destroying ${stack_name} (tenant_id=${tenant_id})"
-  CDK_PARAM_TENANT_ID="$tenant_id" bunx cdk destroy "$stack_name" --force \
+  CDK_PARAM_TENANT_ID="$tenant_id" bun cdk destroy "$stack_name" --force \
     || log "    skip (already gone or conflict)"
 done
 
 log "cdk destroy --all (backend stacks)..."
-bunx cdk destroy --all --force || log "  (some stacks not destroyed; review AWS console)"
+bun cdk destroy --all --force || log "  (some stacks not destroyed; review AWS console)"
 
 # install.sh が作る source bucket は CDK 管理外なので手動で空 → delete-bucket。
 log "removing source bucket ${SOURCE_BUCKET}..."

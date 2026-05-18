@@ -23,17 +23,17 @@ describe("tenant lifecycle scripts", () => {
     }
   });
 
-  it("tenant lifecycle scripts は CDK を bunx で実行すべき", () => {
+  it("tenant lifecycle scripts は CDK を bun で実行すべき", () => {
     expect(readRepoFile("scripts/provision-tenant.sh")).toContain(
-      'bunx cdk deploy "$STACK_NAME" --require-approval never',
+      'bun cdk deploy "$STACK_NAME" --require-approval never',
     );
     // update-tenant.sh は `${STACK_NAME}` (braces) で wait_for_stack_idle と一致させている。
     // 形が違う provision-tenant / deprovision-tenant は他で test 済。
     expect(readRepoFile("scripts/update-tenant.sh")).toMatch(
-      /bunx cdk deploy "\$\{?STACK_NAME\}?" --exclusively --require-approval never/,
+      /bun cdk deploy "\$\{?STACK_NAME\}?" --exclusively --require-approval never/,
     );
     expect(readRepoFile("scripts/deprovision-tenant.sh")).toContain(
-      'bunx cdk destroy "$STACK_NAME" --force',
+      'bun cdk destroy "$STACK_NAME" --force',
     );
   });
 
@@ -63,6 +63,19 @@ describe("tenant lifecycle scripts", () => {
     expect(nodeMajor).toBeGreaterThanOrEqual(22);
   });
 
+  // Issue #1029 / PR-1028 follow-up: install.sh が pooled stack を deploy しなくなったため、
+  // CodeBuild 側で competitorBootstrapTemplateUrl を CFn output から読み直す必要がある。
+  // 忘れると pooled tenant の application-admin-console runtime-config に bootstrap URL が
+  // 空のまま焼かれ、 競技者の Launch Stack deeplink が動かなくなる。 regression pin。
+  it("update-tenant.sh は admin-console-hosting の CompetitorBootstrapTemplateUrl を CFn output から export すべき", () => {
+    const script = readRepoFile("scripts/update-tenant.sh");
+    expect(script).toMatch(
+      /CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=\$\(aws cloudformation describe-stacks/,
+    );
+    expect(script).toContain('--stack-name "tenkacloud-admin-console-hosting"');
+    expect(script).toMatch(/CompetitorBootstrapTemplateUrl/);
+  });
+
   it("mise の Node/Bun runtime は repo の正本 version と一致すべき", () => {
     const packageJson = JSON.parse(readRepoFile("package.json")) as {
       packageManager?: string;
@@ -87,7 +100,7 @@ describe("tenant lifecycle scripts", () => {
     expect(script).toContain('wait_for_stack_idle "${STACK_NAME}"');
     // poll は cdk deploy より **前** に呼ばれていること (= race を防ぐ順序)
     const waitIdx = script.indexOf('wait_for_stack_idle "${STACK_NAME}"');
-    const deployIdx = script.indexOf("bunx cdk deploy");
+    const deployIdx = script.indexOf("bun cdk deploy");
     expect(waitIdx).toBeGreaterThan(0);
     expect(deployIdx).toBeGreaterThan(waitIdx);
   });

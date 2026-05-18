@@ -3,7 +3,7 @@
 # セットアップ helper。
 #
 # `.nvmrc` を読んで NodeSource (deb / rpm) repo から Node を install し、root package.json の
-# `packageManager` から Bun version を読んで `bunx` を使える状態にする。
+# `packageManager` から Bun version を読んで `bun` を使える状態にする。
 #
 # Why NodeSource: image 非依存で動く (AL2 / AL2023 / Ubuntu standard:5.0 / 7.0)。CodeBuild image
 # に nvm が無いケースで silent fail した旧 nvm 経路 (#560) の置換。

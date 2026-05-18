@@ -20,7 +20,7 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
 
   it("Phase 3 の cdk deploy で control-plane と admin-console-insight の両方を指定すべき", () => {
     const phase3Match = source.match(
-      /bunx cdk deploy[^\n]*tenkacloud-control-plane[^\n]*tenkacloud-admin-console-insight[^\n]*--require-approval never/,
+      /bun cdk deploy[^\n]*tenkacloud-control-plane[^\n]*tenkacloud-admin-console-insight[^\n]*--require-approval never/,
     );
     expect(phase3Match).not.toBeNull();
   });
@@ -30,7 +30,7 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
       `export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="\${ADMIN_CONSOLE_URL}"`,
     );
     const deployIdx = source.indexOf(
-      "bunx cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight",
+      "bun cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight",
     );
     expect(exportIdx).toBeGreaterThan(0);
     expect(deployIdx).toBeGreaterThan(exportIdx);
@@ -66,6 +66,24 @@ describe("scripts/install.sh Phase 3 (#716)", () => {
     expect(source).toContain('source "${SCRIPT_DIR}/prepare-source-bundle.sh"');
     expect(source).not.toContain('cp -R packages "${STAGING}/packages"');
     expect(source).not.toContain('cp -R problems "${STAGING}/problems"');
+  });
+
+  // Issue #1029 / PR-1028 follow-up: pooled stack の lifecycle は SBT pipeline (= CodeBuild)
+  // に一本化する。 install.sh が直 deploy すると SBT Step Functions の「Can we update Stack?」
+  // が Skip Deployment 分岐に倒れ tenant update path が機能しない silent failure になる。
+  // regression pin: install.sh の `bun cdk deploy` 引数に pooled stack が含まれないこと。
+  it("install.sh は tenkacloud-tenant-template-pooled を cdk deploy しないべき (= SBT pipeline 一本化)", () => {
+    // `bun cdk deploy` で始まる block (= 単独 stack 名指定の cdk deploy、 bash の \ 継続あり /
+    // なし両方) に pooled stack 名が出てこないこと。 CFn output 読み込み
+    // (= `aws cloudformation describe-stacks --stack-name "tenkacloud-tenant-template-pooled"`)
+    // は別経路なので除外。
+    //
+    // 正規表現: `bun cdk deploy` + 0 個以上の継続行 (`<chars>\<newline>`) + 最終行 (`<chars>`)。
+    const deployBlocks = source.match(/bun cdk deploy(?:[^\n]*\\\n)*[^\n]*/g) ?? [];
+    expect(deployBlocks.length).toBeGreaterThan(0);
+    for (const block of deployBlocks) {
+      expect(block).not.toContain("tenkacloud-tenant-template-pooled");
+    }
   });
 
   // prepare-source-bundle.sh は `set -euo pipefail` で `-u` を有効化しており、 install.sh が

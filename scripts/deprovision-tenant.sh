@@ -124,7 +124,7 @@ if [[ $TIER == "PLATINUM" ]]; then
   export CDK_PARAM_DEPROVISIONING_DETAIL_TYPE="NA"
 
   echo "undeploying tenant template $STACK_NAME"
-  bunx cdk destroy "$STACK_NAME" --force
+  bun cdk destroy "$STACK_NAME" --force
 
 else
   # Read tenant details from the cloudformation stack output parameters

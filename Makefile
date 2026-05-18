@@ -79,7 +79,7 @@ format_check: lint-format
 # ===== Harness =====
 HARNESS := bun run .claude/harness/bin
 harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
-harness-test: ; cd .claude/harness && bunx vitest run
+harness-test: ; cd .claude/harness && bun vitest run
 tech-debt:    ; $(HARNESS)/tech-debt.ts
 
 # ===== CDK =====
