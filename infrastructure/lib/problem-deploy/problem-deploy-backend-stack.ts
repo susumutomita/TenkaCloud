@@ -5,6 +5,7 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import { AdminAuditLogTable } from "./admin-audit-log-table";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine";
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda";
 import { CompetitorAccountsTable } from "./competitor-accounts-table";
@@ -186,6 +187,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly competitorAccountsTable: Table;
   /** ProblemEndpoints table name is surfaced to ObservabilityStack metrics. */
   public readonly problemEndpointsTable: Table;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin audit log table。 AdminConsoleInsightStack が
+   * cross-stack read で audit UI に出すため公開する (= read-only)。
+   */
+  public readonly adminAuditLogTable: Table;
   /** DeployCreate Step Functions State Machine ARN for CloudWatch metrics. */
   public readonly deployCreateStateMachineArn: string;
   /** DeployDelete Step Functions State Machine ARN for CloudWatch metrics. */
@@ -225,6 +231,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.problemEndpointsTable = endpoints.table;
     // Issue #888: Red Team Disruption Injection の audit log + idempotency
     const disruptions = new DisruptionsTable(this, "Disruptions");
+    // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 3 handler Lambda +
+    // admin-insight Lambda が PutItem する。 TTL 90 日で自動 GC。
+    const adminAuditLog = new AdminAuditLogTable(this, "AdminAuditLog");
+    this.adminAuditLogTable = adminAuditLog.table;
     // Issue #778 ADR-016 Phase 2: eventBusArn が渡されていれば既存の SBT bus を import、
     // 渡されていなければ Lite mode と判定して local EventBus を新規に作る。 後者では Step
     // Functions Rule も local bus にぶら下がるため、 cross-stack 依存が増えない。
@@ -248,6 +258,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         ? { challengePayloadBucketName: props.challengePayloadBucketName }
         : {}),
       environmentName: props.environmentName,
+      // Issue #950 (ADR-020 Phase D): admin audit log を write
+      adminAuditLogTable: adminAuditLog.table,
     });
     this.deployApiLambda = deployApi.fn;
 
@@ -290,6 +302,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // Issue #910 Phase 2.C.2.b: bulk batch payload bucket + feature flag。
       bulkDeployPayloadBucket: bulkPayloadBucket,
       useBulkDistributedMap: props.useBulkDistributedMap ?? false,
+      // Issue #950
+      adminAuditLogTable: adminAuditLog.table,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -298,6 +312,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const competitorAccountsApi = new CompetitorAccountsApiLambda(this, "CompetitorAccountsApi", {
       competitorAccountsTable: competitorAccounts.table,
       environmentName: props.environmentName,
+      // Issue #950
+      adminAuditLogTable: adminAuditLog.table,
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 

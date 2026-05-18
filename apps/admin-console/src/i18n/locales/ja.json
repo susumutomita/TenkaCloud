@@ -12,6 +12,7 @@
     "tenants_new": "テナント作成",
     "jobs": "プロビジョニング Jobs",
     "system_users": "SystemAdmin user 管理",
+    "audit_log": "監査ログ",
     "api_docs": "API リファレンス ↗"
   },
   "auth": {

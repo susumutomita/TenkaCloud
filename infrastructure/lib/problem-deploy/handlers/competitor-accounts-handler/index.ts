@@ -12,6 +12,7 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
+import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
 import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
@@ -88,6 +89,29 @@ app.onError((err, c) => {
       actualRole: err.actualRole,
       requiredRoles: err.requiredRoles,
     });
+    // Issue #950 (ADR-020 Phase D): forbidden_role を audit に残す (= 「誰が何を試みたか」 が
+    // 1 query で引ける)。 tenantId 不明 (= claim 不在 / 越境) の場合は "unknown" を入れる。
+    const auditCtx = extractAuditContext(c);
+    let tenantId = "unknown";
+    try {
+      tenantId = resolveTenantId(c);
+    } catch {
+      // tenantId 不明でも audit は試みる
+    }
+    void writeAuditEvent({
+      tenantId,
+      actor: auditCtx.actor,
+      actorUsername: auditCtx.actorUsername,
+      action: `${c.req.method} ${c.req.path}`,
+      outcome: "forbidden",
+      ipAddress: auditCtx.ipAddress,
+      userAgent: auditCtx.userAgent,
+      occurredAtMs: Date.now(),
+      extra: {
+        actualRole: err.actualRole ?? "(none)",
+        requiredRoles: err.requiredRoles.join(","),
+      },
+    });
     return c.json(
       {
         error: "forbidden_role",
@@ -161,19 +185,44 @@ app.post("/admin/competitor-accounts", async (c) => {
       StatusCodes.BAD_REQUEST,
     );
   }
+  const tenantIdForCreate = resolveTenantId(c);
+  const auditCreate = extractAuditContext(c);
   try {
     const response = await createCompetitorAccount(
       shared,
       {
-        tenantId: resolveTenantId(c),
+        tenantId: tenantIdForCreate,
         nowMs: Date.now(),
         createdBy: resolveCognitoSub(c),
       },
       parsed.data,
     );
+    // Issue #950: success audit (= 「誰が tenant にどの competitor account を追加したか」)
+    void writeAuditEvent({
+      tenantId: tenantIdForCreate,
+      actor: auditCreate.actor,
+      actorUsername: auditCreate.actorUsername,
+      action: "create_competitor_account",
+      outcome: "success",
+      target: parsed.data.awsAccountId,
+      ipAddress: auditCreate.ipAddress,
+      userAgent: auditCreate.userAgent,
+      occurredAtMs: Date.now(),
+    });
     return c.json(response, StatusCodes.CREATED);
   } catch (err) {
     if (err instanceof DuplicateCompetitorAccountError) {
+      void writeAuditEvent({
+        tenantId: tenantIdForCreate,
+        actor: auditCreate.actor,
+        actorUsername: auditCreate.actorUsername,
+        action: "create_competitor_account",
+        outcome: "conflict",
+        target: err.awsAccountId,
+        ipAddress: auditCreate.ipAddress,
+        userAgent: auditCreate.userAgent,
+        occurredAtMs: Date.now(),
+      });
       return c.json(
         { error: "duplicate_account", awsAccountId: err.awsAccountId },
         StatusCodes.CONFLICT,
@@ -290,8 +339,22 @@ app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
   if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
     return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
   }
+  const tenantIdForDelete = resolveTenantId(c);
+  const auditDelete = extractAuditContext(c);
   try {
-    await deleteCompetitorAccount(shared, resolveTenantId(c), awsAccountId);
+    await deleteCompetitorAccount(shared, tenantIdForDelete, awsAccountId);
+    // Issue #950: success audit (= competitor account 削除は IAM 越境表面に影響)
+    void writeAuditEvent({
+      tenantId: tenantIdForDelete,
+      actor: auditDelete.actor,
+      actorUsername: auditDelete.actorUsername,
+      action: "delete_competitor_account",
+      outcome: "success",
+      target: awsAccountId,
+      ipAddress: auditDelete.ipAddress,
+      userAgent: auditDelete.userAgent,
+      occurredAtMs: Date.now(),
+    });
     return c.json({ deleted: true }, StatusCodes.OK);
   } catch (err) {
     if (err instanceof CompetitorAccountNotFoundError) {
@@ -329,11 +392,35 @@ app.post("/admin/users", async (c) => {
     );
   }
   const tenantId = resolveTenantId(c);
+  const auditCtx = extractAuditContext(c);
   try {
     const result = await routeCreateUser({ shared }, c, tenantId, parsed.data);
+    void writeAuditEvent({
+      tenantId,
+      actor: auditCtx.actor,
+      actorUsername: auditCtx.actorUsername,
+      action: "invite_user",
+      outcome: "success",
+      target: parsed.data.email,
+      ipAddress: auditCtx.ipAddress,
+      userAgent: auditCtx.userAgent,
+      occurredAtMs: Date.now(),
+      extra: { userRole: parsed.data.userRole },
+    });
     return c.json(result.body as never, result.status as 201 | 401);
   } catch (err) {
     if (err instanceof DuplicateUserError) {
+      void writeAuditEvent({
+        tenantId,
+        actor: auditCtx.actor,
+        actorUsername: auditCtx.actorUsername,
+        action: "invite_user",
+        outcome: "conflict",
+        target: err.email,
+        ipAddress: auditCtx.ipAddress,
+        userAgent: auditCtx.userAgent,
+        occurredAtMs: Date.now(),
+      });
       return c.json({ error: "duplicate_user", email: err.email }, StatusCodes.CONFLICT);
     }
     const message = err instanceof Error ? err.message : "unknown error";
@@ -349,8 +436,20 @@ app.delete("/admin/users/:username", async (c) => {
     return c.json({ error: "invalid_username" }, StatusCodes.BAD_REQUEST);
   }
   const tenantId = resolveTenantId(c);
+  const auditCtx = extractAuditContext(c);
   try {
     const result = await routeDeleteUser({ shared }, c, tenantId, username);
+    void writeAuditEvent({
+      tenantId,
+      actor: auditCtx.actor,
+      actorUsername: auditCtx.actorUsername,
+      action: "delete_user",
+      outcome: "success",
+      target: username,
+      ipAddress: auditCtx.ipAddress,
+      userAgent: auditCtx.userAgent,
+      occurredAtMs: Date.now(),
+    });
     return c.json(result.body as never, result.status as 200 | 401 | 409);
   } catch (err) {
     if (err instanceof UserNotFoundError) {
@@ -362,6 +461,19 @@ app.delete("/admin/users/:username", async (c) => {
         username,
         expected: err.expectedTenantId,
         actual: err.actualTenantId,
+      });
+      // Issue #950: 越境試行は audit に記録 (= attacker behavior detection)
+      void writeAuditEvent({
+        tenantId,
+        actor: auditCtx.actor,
+        actorUsername: auditCtx.actorUsername,
+        action: "delete_user",
+        outcome: "forbidden",
+        target: username,
+        ipAddress: auditCtx.ipAddress,
+        userAgent: auditCtx.userAgent,
+        occurredAtMs: Date.now(),
+        extra: { reason: "tenant_mismatch" },
       });
       return c.json({ error: "not_found", username }, StatusCodes.NOT_FOUND);
     }
@@ -392,8 +504,21 @@ app.patch("/admin/users/:username", async (c) => {
     );
   }
   const tenantId = resolveTenantId(c);
+  const auditCtx = extractAuditContext(c);
   try {
     const result = await routeChangeUserRole({ shared }, c, tenantId, username, parsed.data);
+    void writeAuditEvent({
+      tenantId,
+      actor: auditCtx.actor,
+      actorUsername: auditCtx.actorUsername,
+      action: "patch_user_role",
+      outcome: "success",
+      target: username,
+      ipAddress: auditCtx.ipAddress,
+      userAgent: auditCtx.userAgent,
+      occurredAtMs: Date.now(),
+      extra: { newRole: parsed.data.userRole },
+    });
     return c.json(result.body as never, result.status as 200 | 401 | 409);
   } catch (err) {
     if (err instanceof UserNotFoundError) {
@@ -404,6 +529,18 @@ app.patch("/admin/users/:username", async (c) => {
         username,
         expected: err.expectedTenantId,
         actual: err.actualTenantId,
+      });
+      void writeAuditEvent({
+        tenantId,
+        actor: auditCtx.actor,
+        actorUsername: auditCtx.actorUsername,
+        action: "patch_user_role",
+        outcome: "forbidden",
+        target: username,
+        ipAddress: auditCtx.ipAddress,
+        userAgent: auditCtx.userAgent,
+        occurredAtMs: Date.now(),
+        extra: { reason: "tenant_mismatch" },
       });
       return c.json({ error: "not_found", username }, StatusCodes.NOT_FOUND);
     }

@@ -5,6 +5,7 @@ import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { AdminDeploymentDetailPage } from "./pages/AdminDeploymentDetail";
 import { AdminEventDetailPage } from "./pages/AdminEventDetail";
+import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
 import { JobsPage } from "./pages/Jobs";
 import { LoginPage } from "./pages/Login";
@@ -94,6 +95,17 @@ export function App({ config }: { config: AppConfig }) {
             <RequireAuth>
               <ShellLayout>
                 <SystemUsersPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        {/* Issue #950 (ADR-020 Phase D): admin audit log */}
+        <Route
+          path="/audit-log"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <AuditLogPage config={config} />
               </ShellLayout>
             </RequireAuth>
           }

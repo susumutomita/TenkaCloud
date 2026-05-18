@@ -12,6 +12,7 @@
     "tenants_new": "创建租户",
     "jobs": "配置作业",
     "system_users": "SystemAdmin 用户管理",
+    "audit_log": "审计日志",
     "api_docs": "API 参考 ↗"
   },
   "auth": {

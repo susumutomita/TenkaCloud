@@ -66,6 +66,10 @@ export interface EventApiLambdaProps {
    * + 1 event publish に切替。 未設定 / "false" は旧 fan-out 維持 (= rollback safety)。
    */
   readonly useBulkDistributedMap?: boolean;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
+   */
+  readonly adminAuditLogTable?: Table;
 }
 
 /**
@@ -113,6 +117,8 @@ export class EventApiLambda extends Construct {
         // bucket 未配線時は空文字、 flag は default false (= 旧 fan-out 維持)。
         BULK_DEPLOY_PAYLOAD_BUCKET: props.bulkDeployPayloadBucket?.bucketName ?? "",
         BULK_DEPLOY_VIA_DISTRIBUTED_MAP: props.useBulkDistributedMap ? "true" : "false",
+        // Issue #950: audit log table 名 (未配線なら空文字)
+        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -136,6 +142,8 @@ export class EventApiLambda extends Construct {
     // Issue #888: disruption audit + idempotency 用に RW、 EventBus PutEvents は既存付与で十分
     // (= disruption fire でも同 bus に publish するため)。
     props.disruptionsTable.grantReadWriteData(this.fn);
+    // Issue #950 (ADR-020 Phase D): admin 操作 audit log は write-only で十分。
+    props.adminAuditLogTable?.grantWriteData(this.fn);
     // Issue #910 (#895 Phase 2.C.2.b): bulk payload bucket への PutObject 権限。 bucket が
     // 渡されたときのみ grant (= 未配線時の余分な IAM を避ける)。 useBulkDistributedMap が
     // false でも grant を入れておくと、 flag を flip するだけで切替できる (= 段階移行)。

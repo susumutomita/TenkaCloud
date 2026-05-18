@@ -12,6 +12,7 @@
     "tenants_new": "Create tenant",
     "jobs": "Provisioning Jobs",
     "system_users": "SystemAdmin users",
+    "audit_log": "Audit log",
     "api_docs": "API Reference ↗"
   },
   "auth": {

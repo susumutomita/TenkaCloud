@@ -16,6 +16,10 @@ export interface CompetitorAccountsApiLambdaProps {
   readonly competitorAccountsTable: Table;
   /** SSM SecureString path 構築用 (`/<env>/tenants/<tenantId>/external-id`)。 */
   readonly environmentName: string;
+  /**
+   * Issue #950 (ADR-020 Phase D): admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
+   */
+  readonly adminAuditLogTable?: Table;
 }
 
 /**
@@ -58,6 +62,8 @@ export class CompetitorAccountsApiLambda extends Construct {
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
         TENKACLOUD_ACCOUNT_ID: stack.account,
+        // Issue #950: audit log table 名 (未配線なら空文字)
+        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -70,6 +76,8 @@ export class CompetitorAccountsApiLambda extends Construct {
 
     // 1. DDB CompetitorAccounts: PutItem / Query / GetItem / UpdateItem / DeleteItem
     props.competitorAccountsTable.grantReadWriteData(this.fn);
+    // Issue #950 (ADR-020 Phase D): admin audit log は write-only。
+    props.adminAuditLogTable?.grantWriteData(this.fn);
 
     // 2. SSM Parameter Store SecureString — tenant の path prefix で絞り込み。
     //    `/{env}/tenants/*/external-id` (= tenantId は wildcard、env は固定)。
