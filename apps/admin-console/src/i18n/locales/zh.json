@@ -11,6 +11,7 @@
     "tenants": "租户列表",
     "tenants_new": "创建租户",
     "jobs": "配置作业",
+    "system_users": "SystemAdmin 用户管理",
     "api_docs": "API 参考 ↗"
   },
   "auth": {

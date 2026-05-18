@@ -11,6 +11,7 @@
     "tenants": "Tenants",
     "tenants_new": "Crear tenant",
     "jobs": "Trabajos de aprovisionamiento",
+    "system_users": "Usuarios SystemAdmin",
     "api_docs": "Referencia de API ↗"
   },
   "auth": {

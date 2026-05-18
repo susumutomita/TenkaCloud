@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
+import type { IUserPool } from "aws-cdk-lib/aws-cognito";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
@@ -36,6 +37,15 @@ export interface AdminInsightApiLambdaProps {
    * 503 を返す or placeholder)。
    */
   readonly deprovisioningStateMachineArn?: string;
+  /**
+   * Issue #949 (ADR-020 Phase C): SBT ControlPlane の UserPool (= SystemAdmin が登録される pool)。
+   * 指定時は Lambda に `cognito-idp:AdminCreateUser` / `AdminDeleteUser` / `AdminGetUser` /
+   * `AdminUpdateUserAttributes` / `ListUsers` / `AdminAddUserToGroup` / `AdminRemoveUserFromGroup`
+   * 権限を付与し、 `/admin/insight/system-users` route が SystemAdmin user の CRUD を実装する。
+   *
+   * Resource scope は `userPool.userPoolArn` で固定 (= 他 tenant pool への越境を禁止)。
+   */
+  readonly controlPlaneUserPool?: IUserPool;
 }
 
 /**
@@ -73,6 +83,9 @@ export class AdminInsightApiLambda extends Construct {
         // Issue #814 Phase 2: deprovisioning Step Functions ARN を env に渡す (= 未指定なら空)。
         // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
         DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
+        // Issue #949 (ADR-020 Phase C): ControlPlane UserPool ID を env で渡す。 未指定なら空文字
+        // (= /admin/insight/system-users route は 503 を返す)。 prod では必ず注入する想定。
+        CONTROL_PLANE_USER_POOL_ID: props.controlPlaneUserPool?.userPoolId ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -116,6 +129,34 @@ export class AdminInsightApiLambda extends Construct {
         resources: ["*"],
       }),
     );
+
+    // Issue #949 (ADR-020 Phase C): ControlPlane UserPool への SystemAdmin user CRUD 権限。
+    // 指定 UserPool ARN に scope して付与する (= 越境攻撃の防御)。 未指定なら付与しない (= 旧 stack 互換)。
+    // 含む actions:
+    //   - AdminCreateUser  (= 招待 + temp password)
+    //   - AdminDeleteUser  (= 削除)
+    //   - AdminGetUser     (= detail / role 読み取り)
+    //   - AdminUpdateUserAttributes (= role 変更)
+    //   - ListUsers        (= 一覧、 page 化)
+    //   - AdminAddUserToGroup / AdminRemoveUserFromGroup (= SystemAdmin / SystemAuditor group 操作)
+    if (props.controlPlaneUserPool) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            "cognito-idp:AdminCreateUser",
+            "cognito-idp:AdminDeleteUser",
+            "cognito-idp:AdminGetUser",
+            "cognito-idp:AdminUpdateUserAttributes",
+            "cognito-idp:ListUsers",
+            "cognito-idp:AdminAddUserToGroup",
+            "cognito-idp:AdminRemoveUserFromGroup",
+            "cognito-idp:AdminListGroupsForUser",
+          ],
+          resources: [props.controlPlaneUserPool.userPoolArn],
+        }),
+      );
+    }
 
     // Issue #814 Phase 2: Deprovisioning Jobs route の Step Functions ListExecutions 権限。
     // 指定された SBT BashJobRunner の state machine ARN に scope する。 未指定なら付与しない
