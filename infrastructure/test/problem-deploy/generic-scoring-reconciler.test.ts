@@ -52,11 +52,46 @@ describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
     expect(resolveEventStatusTransition("TEARDOWN", [])).toBeUndefined();
   });
 
-  it("対象外 status (DRAFT / READY / ENDED / ARCHIVED) は defense-in-depth で undefined を返すべき", () => {
+  it("対象外 status (DRAFT / ENDED / ARCHIVED) は defense-in-depth で undefined を返すべき", () => {
     expect(resolveEventStatusTransition("DRAFT", ["COMPLETE"])).toBeUndefined();
-    expect(resolveEventStatusTransition("READY", ["COMPLETE"])).toBeUndefined();
     expect(resolveEventStatusTransition("ENDED", ["DELETED"])).toBeUndefined();
     expect(resolveEventStatusTransition("ARCHIVED", ["DELETED"])).toBeUndefined();
+  });
+
+  // Issue #1038 P0 #3: READY + endsAt 経過の自動 ENDED 遷移
+  it("READY + endsAt が現在時刻を過ぎていたら ENDED に遷移すべき", () => {
+    const endsAt = "2026-05-15T00:00:00.000Z";
+    const nowMs = Date.parse("2026-05-15T00:00:01.000Z");
+    expect(resolveEventStatusTransition("READY", [], { endsAt, nowMs })).toBe("ENDED");
+  });
+
+  it("READY + endsAt がちょうど現在時刻なら ENDED に遷移すべき (= 境界包含)", () => {
+    const endsAt = "2026-05-15T00:00:00.000Z";
+    const nowMs = Date.parse(endsAt);
+    expect(resolveEventStatusTransition("READY", [], { endsAt, nowMs })).toBe("ENDED");
+  });
+
+  it("READY + endsAt がまだ未来なら undefined を返すべき (= 触らない)", () => {
+    const endsAt = "2026-05-15T01:00:00.000Z";
+    const nowMs = Date.parse("2026-05-15T00:00:00.000Z");
+    expect(resolveEventStatusTransition("READY", [], { endsAt, nowMs })).toBeUndefined();
+  });
+
+  it("READY + endsAt 不在なら undefined を返すべき (= 無期限 event は触らない)", () => {
+    const nowMs = Date.parse("2026-05-15T00:00:00.000Z");
+    expect(resolveEventStatusTransition("READY", [], { nowMs })).toBeUndefined();
+  });
+
+  it("READY + 不正な endsAt (parse 不能) なら undefined を返すべき", () => {
+    const nowMs = Date.parse("2026-05-15T00:00:00.000Z");
+    expect(
+      resolveEventStatusTransition("READY", [], { endsAt: "not-a-date", nowMs }),
+    ).toBeUndefined();
+  });
+
+  it("READY + context 未指定なら undefined を返すべき (= 旧 caller の互換)", () => {
+    expect(resolveEventStatusTransition("READY", [])).toBeUndefined();
+    expect(resolveEventStatusTransition("READY", ["COMPLETE"])).toBeUndefined();
   });
 });
 
@@ -384,17 +419,91 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     ).resolves.toBe(0);
   });
 
-  it("Event filter は DEPLOYING または TEARDOWN のみであるべき (= READY / ENDED は触らない)", async () => {
+  it("Event filter は DEPLOYING / READY / TEARDOWN 対象であるべき (= ENDED / ARCHIVED は触らない)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
     await reconcileEventStatuses(ctx, NOW_ISO);
     const scanCmd = ddbSend.mock.calls[0]?.[0] as {
       input: {
+        ProjectionExpression: string;
         FilterExpression: string;
         ExpressionAttributeValues: Record<string, string>;
       };
     };
-    expect(scanCmd.input.FilterExpression).toBe("#status = :deploying OR #status = :teardown");
+    expect(scanCmd.input.FilterExpression).toBe(
+      "#status = :deploying OR #status = :ready OR #status = :teardown",
+    );
     expect(scanCmd.input.ExpressionAttributeValues[":deploying"]).toBe("DEPLOYING");
+    expect(scanCmd.input.ExpressionAttributeValues[":ready"]).toBe("READY");
     expect(scanCmd.input.ExpressionAttributeValues[":teardown"]).toBe("TEARDOWN");
+    // Issue #1038 P0 #3: READY → ENDED 判定に endsAt が要るので projection に含める
+    expect(scanCmd.input.ProjectionExpression).toContain("endsAt");
+  });
+
+  // Issue #1038 P0 #3: READY + endsAt 経過で自動 ENDED 遷移
+  it("READY で endsAt が現在時刻を過ぎていたら Update で ENDED に遷移すべき (= deployment 行は query しない)", async () => {
+    const now = "2026-05-15T01:00:00.000Z";
+    const pastEnd = "2026-05-15T00:30:00.000Z";
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EV-DUE",
+          tenantId: "tenant-acme",
+          eventId: "EV-DUE",
+          status: "READY",
+          endsAt: pastEnd,
+        },
+      ],
+    });
+    // READY 経路は deployment Query を skip し、 直接 Update に進む。
+    ddbSend.mockResolvedValueOnce({});
+
+    await reconcileEventStatuses(ctx, now);
+
+    expect(ddbSend).toHaveBeenCalledTimes(2);
+    const updateCmd = ddbSend.mock.calls[1]?.[0] as {
+      input: {
+        UpdateExpression: string;
+        ConditionExpression: string;
+        ExpressionAttributeValues: Record<string, string>;
+      };
+    };
+    expect(updateCmd.input.ExpressionAttributeValues[":next"]).toBe("ENDED");
+    expect(updateCmd.input.ExpressionAttributeValues[":current"]).toBe("READY");
+    expect(updateCmd.input.ConditionExpression).toContain("#status = :current");
+  });
+
+  it("READY で endsAt がまだ未来なら Update を発行しないべき", async () => {
+    const now = "2026-05-15T00:00:00.000Z";
+    const future = "2026-05-15T01:00:00.000Z";
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EV-LIVE",
+          tenantId: "tenant-acme",
+          eventId: "EV-LIVE",
+          status: "READY",
+          endsAt: future,
+        },
+      ],
+    });
+
+    await reconcileEventStatuses(ctx, now);
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("READY で endsAt 不在 (= 無期限 event) なら Update も Query も発行しないべき", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EV-OPEN",
+          tenantId: "tenant-acme",
+          eventId: "EV-OPEN",
+          status: "READY",
+        },
+      ],
+    });
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+    expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 });
