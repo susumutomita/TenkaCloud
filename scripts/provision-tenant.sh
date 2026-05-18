@@ -49,8 +49,25 @@ export CDK_PARAM_TENANT_ID=$tenantId
 # admin-console から POST /tenants 時に渡された tenantName。runtime-config.json
 # 経由で application-admin-console の画面表示に使う (#48)。
 export CDK_PARAM_TENANT_NAME=$tenantName
-export TIER=$tier
+# Issue #1029 follow-up: tier は admin-console から大文字 (PLATINUM) で渡ってくる場合と
+# 小文字 (platinum) で渡ってくる場合の両方を扱うため、 比較する前に大文字に正規化する。
+# 小文字のまま `[[ $TIER == "PLATINUM" ]]` を通すと silo 分岐に入らず pooled に倒れ、
+# admin-console UI の Application Console column が「Open ↗ (pooled)」 と表示される
+# bug が観測された (2026-05-18 testsilo tenant)。
+export TIER=$(echo "$tier" | tr '[:lower:]' '[:upper:]')
 export TENANT_ADMIN_EMAIL=$email
+
+# Issue #1029 follow-up: admin-console-hosting stack の CompetitorBootstrapTemplateUrl
+# output (= public S3 URL) を CodeBuild 側で読み直して cdk deploy の synth に流す。
+# pooled stack の runtime-config.json に bootstrap URL が空のまま焼かれると、
+# 競技者の Launch Stack deeplink で CFn が「TemplateURL must be a supported URL」 で
+# reject する (= raw.githubusercontent.com fallback では deploy 不可)。 stack 不在は
+# 空文字 fallback (= 初回 install と同じく frontend が GitHub raw fallback に倒れる)。
+export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe-stacks \
+  --stack-name "tenkacloud-admin-console-hosting" \
+  --query "Stacks[0].Outputs[?starts_with(OutputKey,'CompetitorBootstrapTemplateUrl')].OutputValue" \
+  --output text 2>/dev/null || echo "")
+echo "CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL: ${CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
 
 # Define variables
 TENANT_ADMIN_USERNAME="tenant-admin-$CDK_PARAM_TENANT_ID"
