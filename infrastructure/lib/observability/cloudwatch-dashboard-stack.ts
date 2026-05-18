@@ -77,6 +77,12 @@ export class ObservabilityStack extends cdk.Stack {
     dashboard.addWidgets(this.ddbCapacityWidget(props), this.ddbThrottleWidget(props));
     dashboard.addWidgets(this.lambdaCriticalWidget(props), this.lambdaHelperWidget(props));
     dashboard.addWidgets(this.apiGatewayTrafficWidget(props), this.apiGatewayLatencyWidget(props));
+
+    // Issue #952 cost guardrails: Free Tier breach 検知 CloudWatch Alarms は wire.ts 側で
+    // CostBudget の SNS topic を共有しつつ FreeTierAlarms construct を 直接 attach する。
+    // ObservabilityStack 内で完結させない理由: CostBudget も同じ topic に publish する必要が
+    // あり、 topic を 1 つだけ作る owner として CostBudget が適切 (= wire.ts で CostBudget →
+    // FreeTierAlarms の順に作って参照させる)。
   }
 
   private dashboardName(environment?: string): string {

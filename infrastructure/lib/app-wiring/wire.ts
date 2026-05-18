@@ -10,6 +10,7 @@ import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-wi
 import { ControlPlaneStack } from "../control-plane-stack";
 import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack";
 import { CostBudget } from "../observability/cost-budget";
+import { FreeTierAlarms } from "../observability/free-tier-alarms";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
 import { ProblemDeployBackendStack } from "../problem-deploy/problem-deploy-backend-stack";
 import { ServerlessSaaSPipeline } from "../tenant-pipeline/serverless-saas-pipeline";
@@ -238,13 +239,37 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     const extraEmails = config.budgetAlarmEmails ?? [];
     // adminEmail と extraEmails の重複を排して同一宛先への重複 subscription を防ぐ。
     const allEmails = Array.from(new Set(adminEmail ? [adminEmail, ...extraEmails] : extraEmails));
-    new CostBudget(observabilityStack, "CostBudget", {
+    const budget = new CostBudget(observabilityStack, "CostBudget", {
       budgetNamePrefix: `tenkacloud-${config.environment}`,
       monthlyLimitUsd: config.monthlyCostLimitUsd,
       notificationEmails: allEmails,
       // App scope の cdk.Tags.of(app).add("Project", "TenkaCloud") と整合させ、
       // TenkaCloud で deploy したリソース分だけを集計対象にする。
       costAllocationTags: { Project: ["TenkaCloud"] },
+    });
+    // Issue #952 cost guardrails: Free Tier breach 検知 alarm を CostBudget と同じ SNS topic に
+    // wire する。 budget alarm (= 24-48h 遅延) を補完する resource-usage 即時 alarm。
+    new FreeTierAlarms(observabilityStack, "FreeTierAlarms", {
+      notificationTopic: budget.topic,
+      lambdaFunctionNames: [
+        problemDeployBackendStack.deployApiLambda.functionName,
+        problemDeployBackendStack.eventApiLambda.functionName,
+        adminConsoleInsightStack.lambdaFunctionName,
+        problemDeployBackendStack.competitorAccountsApiLambda.functionName,
+        problemDeployBackendStack.externalIdAuditLambda.functionName,
+        problemDeployBackendStack.genericScoringLambda.functionName,
+        ...(problemDeployBackendStack.participantPortalLambda
+          ? [problemDeployBackendStack.participantPortalLambda.functionName]
+          : []),
+      ],
+      dynamoDbTableNames: [
+        problemDeployBackendStack.deploymentsTable.tableName,
+        problemDeployBackendStack.eventsTable.tableName,
+        problemDeployBackendStack.teamsTable.tableName,
+        problemDeployBackendStack.competitorAccountsTable.tableName,
+        problemDeployBackendStack.problemEndpointsTable.tableName,
+        bootstrapTemplateStack.tenantMappingTable.tableName,
+      ],
     });
   }
 
