@@ -14,7 +14,8 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "_synth-app": "tsx bin/infrastructure.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudformation": "^3.1048.0",

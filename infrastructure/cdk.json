@@ -1,5 +1,5 @@
 {
-  "app": "bun tsx bin/infrastructure.ts",
+  "app": "bun run _synth-app",
   "watch": {
     "include": ["**"],
     "exclude": [
