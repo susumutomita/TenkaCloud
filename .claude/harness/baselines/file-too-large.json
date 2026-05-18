@@ -1,0 +1,70 @@
+{
+  "entries": [
+    {
+      "ruleId": "file-too-large",
+      "filePath": "apps/admin-console/src/pages/AdminDeploymentDetail.tsx",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "apps/application-admin-console/src/pages/CompetitorAccounts.tsx",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "apps/application-admin-console/src/pages/DeploymentDetail.tsx",
+      "line": 1,
+      "match": "ge-800-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "apps/application-admin-console/src/pages/EventCreate.tsx",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "apps/application-admin-console/src/pages/EventDetail.tsx",
+      "line": 1,
+      "match": "ge-800-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "apps/participant-portal/src/api/portal-client.ts",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "infrastructure/lib/admin-insight/handlers/admin-insight-handler/index.ts",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "infrastructure/lib/problem-deploy/handlers/competitor-accounts-handler/index.ts",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "infrastructure/lib/problem-deploy/handlers/event-handler/bulk-deploy.ts",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "infrastructure/lib/problem-deploy/handlers/event-handler/index.ts",
+      "line": 1,
+      "match": "ge-500-lines"
+    },
+    {
+      "ruleId": "file-too-large",
+      "filePath": "scripts/tenkacloud-problem.ts",
+      "line": 1,
+      "match": "ge-800-lines"
+    }
+  ]
+}
