@@ -17,6 +17,7 @@ import {
   type DeploymentStatus,
   type ParticipantHintView,
   type ParticipantProblemView,
+  PortalScoringGateError,
   PortalValidationError,
   revealHint,
   type SubmitFlagOutcome,
@@ -45,6 +46,36 @@ const SCORING_KIND_LABEL: Record<string, string> = {
 };
 
 const FALLBACK_KIND_LABEL = "(未設定)";
+
+/**
+ * Issue #1006: scoring gate (= 競技開始前 / 終了後 / 一時停止) のエラーを 「いつ開始 / 終了か」
+ * を添えた人間可読 message に変換する。 backend が startsAt / endsAt を返すようになったので、
+ * UI 側で 「あと N 分」 を計算して表示する。
+ */
+function describeScoringGate(err: PortalScoringGateError, now: Date = new Date()): string {
+  if (err.kind === "scoring_not_started") {
+    if (!err.startsAt) {
+      return "競技はまだ開始していません。 運営の開始合図をお待ちください。";
+    }
+    const startsAt = new Date(err.startsAt);
+    if (Number.isNaN(startsAt.getTime())) {
+      return "競技はまだ開始していません。";
+    }
+    const diffMs = startsAt.getTime() - now.getTime();
+    if (diffMs <= 0) {
+      return `競技開始時刻は ${startsAt.toLocaleString()} です (= 既に経過)。 反映に時差がある場合があります。`;
+    }
+    const minutes = Math.ceil(diffMs / 60_000);
+    return `競技開始まで約 ${minutes} 分です (開始予定: ${startsAt.toLocaleString()})。 開始までお待ちください。`;
+  }
+  if (err.kind === "scoring_ended") {
+    if (!err.endsAt) return "競技は終了しました。 採点 gate は閉じています。";
+    const endsAt = new Date(err.endsAt);
+    if (Number.isNaN(endsAt.getTime())) return "競技は終了しました。";
+    return `競技は終了しました (終了: ${endsAt.toLocaleString()})。 採点 gate は閉じています。`;
+  }
+  return "採点が一時停止されています。 運営にお問い合わせください。";
+}
 
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
@@ -195,23 +226,12 @@ function FlagSubmissionPanel({
         await onScored();
       }
     } catch (err) {
-      if (err instanceof PortalValidationError) {
-        // Issue #13 / scoring gate: 競技開始前 / 終了後 / lock の error code を
-        // 人間可読 message に変換 (= 「バリデーションエラー: scoring_not_started」 では何が
-        // 起きているか参加者に伝わらない)。
-        const friendly = (() => {
-          switch (err.errorCode) {
-            case "scoring_not_started":
-              return "競技はまだ開始していません。 運営の開始合図をお待ちください。";
-            case "scoring_ended":
-              return "競技は終了しました。 採点 gate は閉じています。";
-            case "scoring_locked":
-              return "採点が一時停止されています。 運営にお問い合わせください。";
-            default:
-              return `エラー: ${err.errorCode}`;
-          }
-        })();
-        setSubmitError(friendly);
+      // Issue #1006: scoring gate は startsAt / endsAt を含む専用 error。 「あと N 分」 を表示。
+      if (err instanceof PortalScoringGateError) {
+        setSubmitError(describeScoringGate(err));
+      } else if (err instanceof PortalValidationError) {
+        // 旧 path (= backend 古い / 別 error code) の fallback。
+        setSubmitError(`エラー: ${err.errorCode}`);
       } else {
         setSubmitError(err instanceof Error ? err.message : String(err));
       }
@@ -330,7 +350,10 @@ function HintsPanel({
       await revealHint(apiBaseUrl, sessionToken, problemId, hintId);
       await onRevealed();
     } catch (err) {
-      if (err instanceof PortalValidationError) {
+      // Issue #1006: hint reveal も scoring gate (= 競技開始前は開けない) の友好的 message を出す。
+      if (err instanceof PortalScoringGateError) {
+        setRevealError(describeScoringGate(err));
+      } else if (err instanceof PortalValidationError) {
         setRevealError(`バリデーションエラー: ${err.errorCode}`);
       } else {
         setRevealError(err instanceof Error ? err.message : String(err));
