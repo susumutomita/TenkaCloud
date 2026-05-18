@@ -131,6 +131,18 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     );
   }
 
+  // ProblemDeployBackendStack 内の DeployCodeBuildProject が `<bucket>/source.zip` を参照
+  // するため、 cdk deploy 前に source bundle を upload する。 SaaS install.sh と同じ shared
+  // shell (prepare-source-bundle.sh) を呼ぶ (= bash 1 source of truth、 SBT 制約下で host /
+  // CodeBuild 双方が読める形を維持)。 OO refactor (= TypeScript SourceBundle class 化) は
+  // 別 follow-up issue で扱う。
+  io.stdout("[lite] preparing source bundle (= bucket + source.zip)...\n");
+  const prepCode = await io.spawnInherit("bash", ["scripts/prepare-source-bundle.sh"]);
+  if (prepCode !== 0) {
+    io.stderr(`[lite] prepare-source-bundle.sh failed with exit code ${prepCode}\n`);
+    return prepCode;
+  }
+
   io.stdout("[lite] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n");
   const code = await io.spawnInherit("bunx", [
     "cdk",
