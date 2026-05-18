@@ -60,7 +60,8 @@
     "deprovision_modal_header": "テナントを deprovision しますか？",
     "deprovision_modal_cancel": "キャンセル",
     "deprovision_modal_confirm": "実行",
-    "deprovision_modal_body": "{tenantName} ({tenantId}) を deprovision します。関連する CloudFormation スタックと DynamoDB レコードが削除されます。"
+    "deprovision_modal_body": "{tenantName} ({tenantId}) を deprovision します。関連する CloudFormation スタックと DynamoDB レコードが削除されます。",
+    "show_deprovisioned_toggle": "削除済を表示 ({count} 件)"
   },
   "tenant_create": {
     "header": "テナント作成",
