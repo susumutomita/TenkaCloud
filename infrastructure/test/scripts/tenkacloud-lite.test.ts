@@ -90,8 +90,10 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(prepCall.args).toContain("scripts/prepare-source-bundle.sh");
 
     const deployCall = inheritCalls[1];
-    expect(deployCall.cmd).toBe("bun");
-    expect(deployCall.args).toContain("cdk");
+    // 2026-05-18 user feedback「bunx 禁止」 + 「Script not found 'cdk'」 regression
+    // (= PR-#1030 で bunx → bun に置換した結果、 repo root に "cdk" script が無く Bun
+    // が fail) 対策: cdk binary を infrastructure/node_modules/.bin から直接 spawn する。
+    expect(deployCall.cmd).toBe("./infrastructure/node_modules/.bin/cdk");
     expect(deployCall.args).toContain("deploy");
     expect(deployCall.args).toContain(LITE_STACK_NAMES.app);
     expect(deployCall.args).toContain(LITE_STACK_NAMES.problemDeploy);

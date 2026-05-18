@@ -34,10 +34,16 @@ export const LITE_STACK_NAMES = {
   problemDeploy: "tenkacloud-lite-problem-deploy",
 } as const;
 
-// cdk.json と同じ tsx loader を使う。 ts-node は `./foo.js` → `./foo.ts` の
-// extension rewrite を CommonJS 文脈で解決できず、 `endpoints-metadata.ts` 等の
-// ESM-style import (`./env-encoding.js`) で MODULE_NOT_FOUND になる。
-const CDK_OPTS = ["--app", "bun tsx infrastructure/bin/tenkacloud-lite.ts"];
+// cdk + tsx を repo root から呼ぶため、 infrastructure/node_modules/.bin の binary を
+// 絶対 path で指定する (= workspace の hoist 場所によらず確実)。
+//
+// `bun cdk ...` は Bun の script lookup が package.json scripts に "cdk" が無いと
+// `Script not found "cdk"` で fail する (= 2026-05-18 user 観測、 `make destroy` で再現)。
+// `bunx cdk` は user 方針「bunx 禁止」 で使えない。 binary を直 spawn することで Bun
+// の script lookup を経由せず、 PATH / cwd 依存も無い。
+const CDK_BIN = "./infrastructure/node_modules/.bin/cdk";
+const TSX_BIN = "./infrastructure/node_modules/.bin/tsx";
+const CDK_OPTS = ["--app", `${TSX_BIN} infrastructure/bin/tenkacloud-lite.ts`];
 
 export interface SpawnCaptureResult {
   readonly code: number;
@@ -144,8 +150,7 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   }
 
   io.stdout("[lite] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n");
-  const code = await io.spawnInherit("bun", [
-    "cdk",
+  const code = await io.spawnInherit(CDK_BIN, [
     ...CDK_OPTS,
     "deploy",
     LITE_STACK_NAMES.problemDeploy,
@@ -266,16 +271,14 @@ async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> 
 async function cmdDown(_args: readonly string[], io: CliIO): Promise<number> {
   io.stdout("[lite] destroying 2 stacks...\n");
   // app stack を先に destroy (= cross-stack 参照 (DeployApi Lambda 等) の依存方向に合わせる)。
-  const code1 = await io.spawnInherit("bun", [
-    "cdk",
+  const code1 = await io.spawnInherit(CDK_BIN, [
     ...CDK_OPTS,
     "destroy",
     LITE_STACK_NAMES.app,
     "--force",
   ]);
   if (code1 !== 0) return code1;
-  return io.spawnInherit("bun", [
-    "cdk",
+  return io.spawnInherit(CDK_BIN, [
     ...CDK_OPTS,
     "destroy",
     LITE_STACK_NAMES.problemDeploy,
