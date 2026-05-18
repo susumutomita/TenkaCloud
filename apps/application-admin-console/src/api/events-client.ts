@@ -61,6 +61,26 @@ export interface EventDeploymentSummary {
   status: EventDeploymentStatus;
 }
 
+/**
+ * Issue #1038 P1 #7: operator 側 Event 詳細画面で全 team の score event 推移を可視化する。
+ * `?withScoreEvents=true` を付けた `getEvent` でのみ含まれる (default は undefined)。
+ */
+export interface TeamScoreEventView {
+  jobId: string;
+  problemId: string;
+  source: "uptime" | "flag" | "flag-wrong" | "hint";
+  points: number;
+  result: "ok" | "wrong";
+  occurredAt: string;
+}
+
+export interface TeamScoreEvents {
+  teamId: string;
+  teamName: string;
+  /** occurredAt 昇順 (= chart の cumulative 計算に向く)。 */
+  events: readonly TeamScoreEventView[];
+}
+
 export interface EventDetail extends EventSummary {
   teams: readonly TeamSummary[];
   problems: readonly EventProblemTarget[];
@@ -69,6 +89,8 @@ export interface EventDetail extends EventSummary {
    * 旧 jobId-based deployment は eventId が無いので含まれない。
    */
   deploymentsByProblem: Readonly<Record<string, readonly EventDeploymentSummary[]>>;
+  /** Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を含む。 */
+  scoreEventsByTeam?: readonly TeamScoreEvents[];
 }
 
 export interface CreateEventTeamInput {
@@ -113,8 +135,15 @@ export async function listEvents(
   return api.get<EventListResponse>(qs ? `events?${qs}` : "events");
 }
 
-export async function getEvent(api: ApiClient, eventId: string): Promise<EventDetail> {
-  return api.get<EventDetail>(`events/${encodeURIComponent(eventId)}`);
+export async function getEvent(
+  api: ApiClient,
+  eventId: string,
+  options: { readonly withScoreEvents?: boolean } = {},
+): Promise<EventDetail> {
+  const path = `events/${encodeURIComponent(eventId)}${
+    options.withScoreEvents ? "?withScoreEvents=true" : ""
+  }`;
+  return api.get<EventDetail>(path);
 }
 
 export async function createEvent(
