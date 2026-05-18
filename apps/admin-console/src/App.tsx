@@ -11,6 +11,7 @@ import { JobsPage } from "./pages/Jobs";
 import { LoginPage } from "./pages/Login";
 import { SystemUsersPage } from "./pages/SystemUsers";
 import { TenantCreatePage } from "./pages/TenantCreate";
+import { TenantDetailPage } from "./pages/TenantDetail";
 import { TenantEventsPage } from "./pages/TenantEvents";
 import { TenantListPage } from "./pages/TenantList";
 
@@ -47,7 +48,18 @@ export function App({ config }: { config: AppConfig }) {
             </RequireAuth>
           }
         />
-        {/* Phase 1.B drill-down (ADR-011 / #598) */}
+        {/* Issue #994: Tenant detail hub (= Tabs で Overview / Events を集約) */}
+        <Route
+          path="/tenants/:tenantId"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <TenantDetailPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        {/* Phase 1.B drill-down (ADR-011 / #598): 旧 events 専用 page (= 後方互換、 直リンク維持) */}
         <Route
           path="/tenants/:tenantId/events"
           element={
