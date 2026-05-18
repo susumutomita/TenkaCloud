@@ -92,8 +92,10 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     const deployCall = inheritCalls[1];
     // 2026-05-18 user feedback「bunx 禁止」 + 「Script not found 'cdk'」 regression
     // (= PR-#1030 で bunx → bun に置換した結果、 repo root に "cdk" script が無く Bun
-    // が fail) 対策: cdk binary を infrastructure/node_modules/.bin から直接 spawn する。
-    expect(deployCall.cmd).toBe("./infrastructure/node_modules/.bin/cdk");
+    // が fail) 対策: cdk binary を repo root の hoist 先から直接 spawn する。
+    // `./infrastructure/node_modules/.bin/cdk` は workspace の hoist で broken symlink
+    // になっており exit 127 で fail する (= user 観測)。
+    expect(deployCall.cmd).toBe("./node_modules/aws-cdk/bin/cdk");
     expect(deployCall.args).toContain("deploy");
     expect(deployCall.args).toContain(LITE_STACK_NAMES.app);
     expect(deployCall.args).toContain(LITE_STACK_NAMES.problemDeploy);

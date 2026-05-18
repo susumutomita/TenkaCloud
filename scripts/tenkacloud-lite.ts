@@ -34,15 +34,18 @@ export const LITE_STACK_NAMES = {
   problemDeploy: "tenkacloud-lite-problem-deploy",
 } as const;
 
-// cdk + tsx を repo root から呼ぶため、 infrastructure/node_modules/.bin の binary を
-// 絶対 path で指定する (= workspace の hoist 場所によらず確実)。
+// cdk + tsx を repo root から呼ぶ。 monorepo workspace で aws-cdk / tsx は **repo root**
+// の node_modules に hoist されるため、 `infrastructure/node_modules/.bin/cdk` は broken
+// symlink (= 2026-05-18 user 観測、 exit 127)。 実 binary path:
+//   - aws-cdk: `./node_modules/aws-cdk/bin/cdk`  (= shebang `#!/usr/bin/env node`、 直接実行可能)
+//   - tsx:     `./node_modules/.bin/tsx`         (= root .bin に symlink あり)
 //
-// `bun cdk ...` は Bun の script lookup が package.json scripts に "cdk" が無いと
-// `Script not found "cdk"` で fail する (= 2026-05-18 user 観測、 `make destroy` で再現)。
-// `bunx cdk` は user 方針「bunx 禁止」 で使えない。 binary を直 spawn することで Bun
-// の script lookup を経由せず、 PATH / cwd 依存も無い。
-const CDK_BIN = "./infrastructure/node_modules/.bin/cdk";
-const TSX_BIN = "./infrastructure/node_modules/.bin/tsx";
+// `bun cdk ...` は Bun の script lookup が repo root package.json に "cdk" が無いと
+// `Script not found "cdk"` で fail (= PR-#1030 で bunx → bun 置換した regression)。
+// `bunx cdk` は user 方針「bunx 禁止」 で使えない。 binary を直 spawn することで Bun の
+// script lookup を経由せず、 PATH / cwd 依存も無い。
+const CDK_BIN = "./node_modules/aws-cdk/bin/cdk";
+const TSX_BIN = "./node_modules/.bin/tsx";
 const CDK_OPTS = ["--app", `${TSX_BIN} infrastructure/bin/tenkacloud-lite.ts`];
 
 export interface SpawnCaptureResult {
