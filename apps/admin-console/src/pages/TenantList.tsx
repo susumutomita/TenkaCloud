@@ -184,7 +184,9 @@ export function TenantListPage({ config }: { config: AppConfig }) {
               if (isDeprovisioned(row)) {
                 return <Box color="text-status-inactive">{row.tenantName}</Box>;
               }
-              const href = `/tenants/${encodeURIComponent(row.tenantId)}/events`;
+              // Issue #994: 行クリックは Tenant detail hub に。 Events への直リンクは
+              // /tenants/<id>/events で引き続き有効 (= 後方互換)。
+              const href = `/tenants/${encodeURIComponent(row.tenantId)}`;
               return (
                 <Link
                   fontSize="body-m"
