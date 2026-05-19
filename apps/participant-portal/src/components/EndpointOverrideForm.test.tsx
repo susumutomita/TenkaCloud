@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import type * as React from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../i18n";
 
 /**
  * Issue #607 / ADR-012 Phase 3.A UI: EndpointOverrideForm の振る舞い pin。
@@ -32,11 +34,19 @@ const mockList = listProblemEndpoints as ReturnType<typeof vi.fn>;
 const mockPut = putProblemEndpointOverride as ReturnType<typeof vi.fn>;
 const mockDelete = deleteProblemEndpointOverride as ReturnType<typeof vi.fn>;
 
+beforeEach(() => {
+  window.localStorage.setItem("tenkacloud.portal.locale", "ja");
+});
+
 afterEach(() => {
   mockList.mockReset();
   mockPut.mockReset();
   mockDelete.mockReset();
 });
+
+function withI18n(node: React.ReactNode) {
+  return <I18nProvider>{node}</I18nProvider>;
+}
 
 const baseProps = {
   apiBaseUrl: "https://api.x",
@@ -58,7 +68,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
         },
       ],
     });
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(screen.getByText("Users service")).toBeInTheDocument());
     expect(screen.getByText("https://ec2/users")).toBeInTheDocument();
     expect(mockList).toHaveBeenCalledWith("https://api.x", "k", "p1");
@@ -76,7 +86,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
         },
       ],
     });
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(screen.getByText(/この slot は override 不可/)).toBeInTheDocument());
     // overridable=false なら 「登録」 button は出ない
     expect(screen.queryByRole("button", { name: "登録" })).not.toBeInTheDocument();
@@ -84,7 +94,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
 
   it("endpoints が空配列なら section ごと render しないべき", async () => {
     mockList.mockResolvedValue({ teamId: "t1", endpoints: [] });
-    const { container } = render(<EndpointOverrideForm {...baseProps} />);
+    const { container } = render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(mockList).toHaveBeenCalled());
     // 「Endpoint 登録」 header が出ていない (= null render)
     expect(container.textContent).not.toContain("Endpoint 登録");
@@ -103,7 +113,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
         },
       ],
     });
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(screen.getByText("Users service")).toBeInTheDocument());
     // raw em-dash は表示しない
     expect(screen.queryByText("—")).not.toBeInTheDocument();
@@ -137,7 +147,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
         },
       ],
     });
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(screen.getByRole("button", { name: "登録" })).toBeInTheDocument());
 
     const input = screen.getByPlaceholderText("https://example.com/api");
@@ -164,7 +174,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
       endpoints: [{ slot: "users", overridable: true }],
     });
     mockPut.mockRejectedValue(new PortalValidationError("invalid_url"));
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(screen.getByRole("button", { name: "登録" })).toBeInTheDocument());
 
     const input = screen.getByPlaceholderText("https://example.com/api");
@@ -199,7 +209,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
         },
       ],
     });
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "override 解除" })).toBeInTheDocument(),
     );
@@ -215,7 +225,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
       teamId: "t1",
       endpoints: [{ slot: "users", overridable: true }],
     });
-    render(<EndpointOverrideForm {...baseProps} />);
+    render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(screen.getByRole("button", { name: "登録" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "登録" }));
     await waitFor(() => expect(screen.getByText("URL を入力してください")).toBeInTheDocument());
