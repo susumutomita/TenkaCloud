@@ -20,6 +20,9 @@ import {
   tierBadgeColor,
 } from "../api/tenants";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
+
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 /**
  * Tenant 詳細 page (= Control Plane の SystemAdmin 視点)。
@@ -47,6 +50,7 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
   const { tenantId } = useParams<{ tenantId: string }>();
   const navigate = useNavigate();
   const api = useApiClient(config);
+  const t = useT();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -56,9 +60,9 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
     setLoading(true);
     try {
       const all = await listTenants(api);
-      const found = all.find((t) => t.tenantId === tenantId);
+      const found = all.find((tt) => tt.tenantId === tenantId);
       if (!found) {
-        setError(`Tenant ${tenantId} が見つかりませんでした。 削除済みの可能性があります。`);
+        setError(t("tenant_detail.not_found", { tenantId }));
         setTenant(null);
       } else {
         setTenant(found);
@@ -69,7 +73,7 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
     } finally {
       setLoading(false);
     }
-  }, [api, tenantId]);
+  }, [api, tenantId, t]);
 
   useEffect(() => {
     void refresh();
@@ -82,13 +86,13 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
   const parsedConfig = useMemo(() => parseTenantConfig(tenant?.tenantConfig), [tenant]);
 
   if (!tenantId) {
-    return <Alert type="error">Tenant ID が URL に指定されていません</Alert>;
+    return <Alert type="error">{t("tenant_detail.missing_id")}</Alert>;
   }
 
   if (loading && !tenant && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> Tenant 情報を取得中…
+        <Spinner /> {t("tenant_detail.loading")}
       </Box>
     );
   }
@@ -100,7 +104,7 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
         description={`Tenant ID: ${tenantId}`}
         actions={
           <Button variant="normal" onClick={() => navigate("/tenants")}>
-            一覧へ戻る
+            {t("tenant_detail.back_to_list")}
           </Button>
         }
       >
@@ -108,12 +112,17 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
       </Header>
 
       {error && (
-        <Alert type="error" header="Tenant 取得に失敗" dismissible onDismiss={() => setError(null)}>
+        <Alert
+          type="error"
+          header={t("tenant_detail.fetch_failed_header")}
+          dismissible
+          onDismiss={() => setError(null)}
+        >
           {error}
         </Alert>
       )}
 
-      {tenant && <OverviewTab tenant={tenant} parsedConfig={parsedConfig} />}
+      {tenant && <OverviewTab tenant={tenant} parsedConfig={parsedConfig} t={t} />}
     </SpaceBetween>
   );
 }
@@ -121,24 +130,26 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
 function OverviewTab({
   tenant,
   parsedConfig,
+  t,
 }: {
   tenant: Tenant;
   parsedConfig: ReturnType<typeof parseTenantConfig>;
+  t: TFn;
 }) {
   return (
-    <Container header={<Header variant="h2">Tenant 概要</Header>}>
+    <Container header={<Header variant="h2">{t("tenant_detail.section_overview")}</Header>}>
       <KeyValuePairs
         columns={2}
         items={[
           {
-            label: "Tenant ID",
+            label: t("tenant_detail.label_tenant_id"),
             value: (
               <SpaceBetween direction="horizontal" size="xs">
                 <code>{tenant.tenantId}</code>
                 <CopyToClipboard
-                  copyButtonText="Copy"
-                  copyErrorText="コピー失敗"
-                  copySuccessText="コピーしました"
+                  copyButtonText={t("tenant_detail.copy")}
+                  copyErrorText={t("tenant_detail.copy_error")}
+                  copySuccessText={t("tenant_detail.copy_success")}
                   textToCopy={tenant.tenantId}
                   variant="icon"
                 />
@@ -146,15 +157,15 @@ function OverviewTab({
             ),
           },
           {
-            label: "Tenant 名",
+            label: t("tenant_detail.label_tenant_name"),
             value: tenant.tenantName,
           },
           {
-            label: "Admin email",
+            label: t("tenant_detail.label_admin_email"),
             value: tenant.email,
           },
           {
-            label: "Tier",
+            label: t("tenant_detail.label_tier"),
             value: (
               <Badge color={tierBadgeColor(tenant.tier)}>
                 {TIER_LABEL[tenant.tier] ?? tenant.tier}
@@ -162,7 +173,7 @@ function OverviewTab({
             ),
           },
           {
-            label: "Status",
+            label: t("tenant_detail.label_status"),
             value: (
               <Badge color={tenantStatusBadgeColor(tenant.tenantStatus)}>
                 {tenant.tenantStatus}
@@ -170,15 +181,18 @@ function OverviewTab({
             ),
           },
           {
-            label: "Active",
-            value: tenant.isActive === false ? "no" : "yes",
+            label: t("tenant_detail.label_active"),
+            value:
+              tenant.isActive === false
+                ? t("tenant_detail.active_no")
+                : t("tenant_detail.active_yes"),
           },
           {
-            label: "作成日時",
+            label: t("tenant_detail.label_created_at"),
             value: tenant.createdAt ?? "-",
           },
           {
-            label: "Application Console URL",
+            label: t("tenant_detail.label_app_console_url"),
             value: parsedConfig.applicationAdminConsoleUrl ? (
               <SpaceBetween direction="horizontal" size="xs">
                 <Link
@@ -190,21 +204,21 @@ function OverviewTab({
                   Open
                 </Link>
                 <CopyToClipboard
-                  copyButtonText="Copy URL"
-                  copyErrorText="コピー失敗"
-                  copySuccessText="コピーしました"
+                  copyButtonText={t("tenant_detail.copy_url")}
+                  copyErrorText={t("tenant_detail.copy_error")}
+                  copySuccessText={t("tenant_detail.copy_success")}
                   textToCopy={parsedConfig.applicationAdminConsoleUrl}
                   variant="icon"
                 />
               </SpaceBetween>
             ) : (
               <Box variant="small" color="text-status-inactive">
-                未配信 (= deploy 完了待ち)
+                {t("tenant_detail.app_console_url_pending")}
               </Box>
             ),
           },
           {
-            label: "Cognito UserPool ID",
+            label: t("tenant_detail.label_user_pool_id"),
             value: parsedConfig.userPoolId ?? (
               <Box variant="small" color="text-status-inactive">
                 -
@@ -212,7 +226,7 @@ function OverviewTab({
             ),
           },
           {
-            label: "Cognito Client ID",
+            label: t("tenant_detail.label_app_client_id"),
             value: parsedConfig.appClientId ?? (
               <Box variant="small" color="text-status-inactive">
                 -
@@ -220,7 +234,7 @@ function OverviewTab({
             ),
           },
           {
-            label: "API Gateway URL",
+            label: t("tenant_detail.label_api_gateway_url"),
             value: parsedConfig.apiGatewayUrl ?? (
               <Box variant="small" color="text-status-inactive">
                 -

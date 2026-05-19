@@ -86,7 +86,7 @@ function resolveKey(dict: Record<string, unknown>, key: string): string | undefi
 interface I18nContextValue {
   readonly locale: LocaleCode;
   readonly setLocale: (code: LocaleCode) => void;
-  readonly t: (key: string) => string;
+  readonly t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
@@ -108,12 +108,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: string): string => {
+    (key: string, params?: Readonly<Record<string, string | number>>): string => {
       // 1) 指定 locale で lookup → 2) en で fallback → 3) raw key
       const v = resolveKey(LOCALE_DICTIONARIES[locale], key);
-      if (v !== undefined) return v;
-      const fallback = resolveKey(LOCALE_DICTIONARIES.en, key);
-      return fallback ?? key;
+      const template = v ?? resolveKey(LOCALE_DICTIONARIES.en, key) ?? key;
+      if (!params) return template;
+      const stringified: Record<string, string> = {};
+      for (const k of Object.keys(params)) stringified[k] = String(params[k]);
+      return interpolate(template, stringified);
     },
     [locale],
   );
@@ -130,7 +132,10 @@ export function useI18n(): I18nContextValue {
 }
 
 /** 翻訳関数だけが必要な hot path 用 shortcut。 */
-export function useT(): (key: string) => string {
+export function useT(): (
+  key: string,
+  params?: Readonly<Record<string, string | number>>,
+) => string {
   return useI18n().t;
 }
 
