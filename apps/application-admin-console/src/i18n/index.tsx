@@ -23,18 +23,14 @@ import {
   useState,
 } from "react";
 import en from "./locales/en.json";
-import es from "./locales/es.json";
 import ja from "./locales/ja.json";
-import zh from "./locales/zh.json";
 
-export const SUPPORTED_LOCALES = ["ja", "en", "es", "zh"] as const;
+export const SUPPORTED_LOCALES = ["ja", "en"] as const;
 export type LocaleCode = (typeof SUPPORTED_LOCALES)[number];
 
 const LOCALE_DICTIONARIES: Record<LocaleCode, Record<string, unknown>> = {
   ja,
   en,
-  es,
-  zh,
 };
 
 const LOCAL_STORAGE_KEY = "tenkacloud.application-admin.locale";
