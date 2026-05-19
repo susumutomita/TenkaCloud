@@ -57,14 +57,17 @@ const baseDetail: EventDetail = {
 };
 
 const { EventDetailPage } = await import("../../src/pages/EventDetail");
+const { I18nProvider } = await import("../../src/i18n");
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[`/events/${EVENT_ID}`]}>
-      <Routes>
-        <Route path="/events/:eventId" element={<EventDetailPage config={config} />} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={[`/events/${EVENT_ID}`]}>
+        <Routes>
+          <Route path="/events/:eventId" element={<EventDetailPage config={config} />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
@@ -74,6 +77,7 @@ beforeEach(() => {
   mocks.useApiClient.mockReturnValue({});
   mocks.getEvent.mockResolvedValue(baseDetail);
   mocks.setEventSchedule.mockResolvedValue({ endsAt: NOW_ISO });
+  window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
 });
 
 afterEach(() => vi.restoreAllMocks());
