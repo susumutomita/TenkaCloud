@@ -32,6 +32,11 @@ fi
 export CDK_PARAM_S3_BUCKET_NAME="${CDK_PARAM_S3_BUCKET_NAME:-tenkacloud-source-${ACCOUNT_ID}-${REGION}}"
 export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
 
+# repo root を決定 (= 本 script は repo の scripts/ 配下)。 bucket lifecycle JSON を参照するため、
+# bucket 作成 block より前に解決しておく。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TENKACLOUD_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 echo "[prepare-source-bundle] bucket=${CDK_PARAM_S3_BUCKET_NAME} key=${CDK_SOURCE_NAME}"
 
 # bucket を作成 (= 既存なら skip、 idempotent)
@@ -51,9 +56,14 @@ else
     --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 fi
 
-# repo root を決定 (= 本 script は repo の scripts/ 配下)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TENKACLOUD_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Issue #1056: lifecycle policy で Noncurrent version を最新 5 世代まで保持し、 それ以上古い旧
+# version を翌日削除する。 毎回 idempotent に PUT して 「過去に作った bucket で lifecycle が未
+# 設定」 の状態も是正する (= put-bucket-lifecycle-configuration は同 ID の rule を REPLACE する)。
+echo "[prepare-source-bundle] applying lifecycle policy (keep 5 noncurrent versions)..."
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
+  --lifecycle-configuration "file://${SCRIPT_DIR}/source-bundle-lifecycle.json"
+
 cd "${TENKACLOUD_ROOT}"
 
 # apps build (= source.zip 内 dist 同梱のため必須)
@@ -62,9 +72,15 @@ echo "[prepare-source-bundle] building apps/application-admin-console..."
 echo "[prepare-source-bundle] building apps/participant-portal..."
 (cd apps/participant-portal && bun install --ignore-scripts && bun run build) >/dev/null
 
-# staging
-STAGING=$(mktemp -d)
-trap "rm -rf '${STAGING}'" EXIT
+# Issue #1056: staging は fixed path (= <repo>/.cache/source-bundle/) に置く。 旧実装の
+# `mktemp -d` (= /var/folders/.../T/tmp.* random 名) は Ctrl+C / 異常終了 / set -e 前段失敗で
+# orphan 化し、 macOS の periodic GC を待たねば消えないため PC ディスクを圧迫していた。
+# fixed path にして 開始時に必ず clean + EXIT/INT/TERM 全 signal で trap して確実に剥がす。
+# `.cache/` は repo の .gitignore で除外済。
+STAGING="${TENKACLOUD_ROOT}/.cache/source-bundle"
+rm -rf "${STAGING}"
+mkdir -p "${STAGING}"
+trap "rm -rf '${STAGING}'" EXIT INT TERM
 echo "[prepare-source-bundle] staging at ${STAGING}..."
 
 # SBT ref-arch 互換: infrastructure → cdk リネーム

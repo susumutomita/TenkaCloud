@@ -1,0 +1,13 @@
+{
+  "Rules": [
+    {
+      "ID": "keep-5-noncurrent-source-zip",
+      "Status": "Enabled",
+      "Filter": {},
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1,
+        "NewerNoncurrentVersions": 5
+      }
+    }
+  ]
+}
