@@ -19,6 +19,7 @@ import {
 } from "../api/audit-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
 /**
  * Issue #950 (ADR-020 Phase D): SystemAdmin Console 側の admin 操作監査ログ view。
@@ -30,6 +31,7 @@ import type { AppConfig } from "../config";
  */
 export function AuditLogPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const t = useT();
   const client: AuditClient | null = useMemo(
     () => (auth.tokens ? createAuditClient(config, auth.tokens.idToken) : null),
     [auth.tokens, config],
@@ -45,7 +47,7 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
     async (cursor: string | undefined) => {
       if (!client) return;
       if (scope === "tenant" && tenantId.trim().length === 0) {
-        setError("tenantId を入力してください (scope=tenant の場合)");
+        setError(t("audit_log.tenant_id_required"));
         return;
       }
       setLoading(true);
@@ -70,13 +72,13 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError("読み込みに失敗しました");
+          setError(t("audit_log.fetch_failed"));
         }
       } finally {
         setLoading(false);
       }
     },
-    [client, scope, tenantId],
+    [client, scope, tenantId, t],
   );
 
   useEffect(() => {
@@ -86,10 +88,9 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
 
   if (!client) {
     return (
-      <Container header={<Header>Admin Audit Log</Header>}>
-        <Alert type="warning" header="AdminInsight stack が未配線">
-          \`config.adminInsightApiUrl\` が空のため audit log は読み込めません。 Phase 2 deploy
-          を完了して runtime-config.json に <code>adminInsightApiUrl</code> を注入してください。
+      <Container header={<Header>{t("audit_log.page_title")}</Header>}>
+        <Alert type="warning" header={t("audit_log.not_wired_header")}>
+          {t("audit_log.not_wired_body")}
         </Alert>
       </Container>
     );
@@ -103,6 +104,11 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
     if (outcome === "error") return <StatusIndicator type="error">error</StatusIndicator>;
     return <span>{outcome}</span>;
   }
+
+  const scopeOptions = [
+    { value: "system", label: t("audit_log.scope_system") },
+    { value: "tenant", label: t("audit_log.scope_tenant_action") },
+  ];
 
   return (
     <SpaceBetween size="l">
@@ -118,11 +124,11 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
             loading={loading}
             disabled={loading}
           >
-            読み込み
+            {t("audit_log.load_button")}
           </Button>
         }
       >
-        Admin Audit Log
+        {t("audit_log.page_title")}
       </Header>
 
       <Container>
@@ -130,19 +136,19 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           <Select
             selectedOption={{
               value: scope,
-              label: scope === "system" ? "SystemAdmin 操作" : "Tenant 操作",
+              label:
+                scope === "system"
+                  ? t("audit_log.scope_system")
+                  : t("audit_log.scope_tenant_action"),
             }}
-            options={[
-              { value: "system", label: "SystemAdmin 操作" },
-              { value: "tenant", label: "Tenant 操作" },
-            ]}
+            options={scopeOptions}
             onChange={(e) => setScope(e.detail.selectedOption.value as AuditScope)}
           />
           {scope === "tenant" && (
             <Input
               value={tenantId}
               onChange={(e) => setTenantId(e.detail.value)}
-              placeholder="tenantId (例: t-01HX...)"
+              placeholder={t("audit_log.tenant_id_placeholder")}
             />
           )}
         </SpaceBetween>
@@ -156,50 +162,50 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
 
       <Table
         loading={loading}
-        loadingText="読み込み中…"
+        loadingText={t("audit_log.loading_text")}
         items={items}
         columnDefinitions={[
           {
             id: "occurredAt",
-            header: "発生時刻",
+            header: t("audit_log.col_occurred_at"),
             cell: (i) => i.occurredAt,
           },
           {
             id: "actor",
-            header: "操作者",
+            header: t("audit_log.col_actor"),
             cell: (i) => i.actorUsername ?? i.actor,
           },
           {
             id: "action",
-            header: "操作",
+            header: t("audit_log.col_action"),
             cell: (i) => i.action,
           },
           {
             id: "outcome",
-            header: "結果",
+            header: t("audit_log.col_result"),
             cell: (i) => outcomeIndicator(i.outcome),
           },
           {
             id: "target",
-            header: "対象",
+            header: t("audit_log.col_target"),
             cell: (i) => i.target ?? "-",
           },
           {
             id: "tenantId",
-            header: "Tenant",
+            header: t("audit_log.col_tenant"),
             cell: (i) => i.tenantId,
           },
           {
             id: "ipAddress",
-            header: "IP",
+            header: t("audit_log.col_ip"),
             cell: (i) => i.ipAddress ?? "-",
           },
         ]}
         empty={
           <Box textAlign="center" padding="m">
             <SpaceBetween size="s">
-              <b>監査ログがありません</b>
-              <span>scope / tenantId を確認してください。</span>
+              <b>{t("audit_log.empty_header")}</b>
+              <span>{t("audit_log.empty_hint_filter")}</span>
             </SpaceBetween>
           </Box>
         }
@@ -212,7 +218,7 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           loading={loading}
           disabled={loading}
         >
-          続きを読み込む
+          {t("audit_log.load_more")}
         </Button>
       )}
     </SpaceBetween>
