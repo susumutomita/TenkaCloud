@@ -17,13 +17,10 @@ import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
   CompetitorAccountNotFoundError,
-  CompetitorAccountNotVerifiedError,
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
-  ExternalIdMissingForRotationError,
   listCompetitorAccounts,
-  rotateExternalIdForAccount,
 } from "./store.js";
 import { CreateCompetitorAccountRequestSchema } from "./types.js";
 import {
@@ -39,8 +36,10 @@ import {
  *   POST   /admin/competitor-accounts                                    — register (= SSM Put + DDB Put)
  *   GET    /admin/competitor-accounts                                    — list (verified / unverified 両方)
  *   POST   /admin/competitor-accounts/{awsAccountId}/verify              — STS AssumeRole sanity check
- *   POST   /admin/competitor-accounts/{awsAccountId}/rotate-external-id  — ExternalId rotation (Phase 3.1)
  *   DELETE /admin/competitor-accounts/{awsAccountId}                     — remove (last row なら SSM 鍵も削除)
+ *
+ * Issue #1089: 旧 \`POST .../rotate-external-id\` は廃止。 ExternalId を更新したい
+ * 場合は account を DELETE → POST (create) で新規払い出す経路に統一する。
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId(c)` で抽出する。**request body の tenantId は信頼しない** (= IAM 越境攻撃の防止)。
@@ -272,57 +271,8 @@ app.post("/admin/competitor-accounts/:awsAccountId/verify", async (c) => {
   }
 });
 
-app.post("/admin/competitor-accounts/:awsAccountId/rotate-external-id", async (c) => {
-  requireRole(c, [TENANT_ADMIN_ROLE]);
-  const awsAccountId = c.req.param("awsAccountId");
-  if (!awsAccountId || !AWS_ACCOUNT_ID_RE.test(awsAccountId)) {
-    return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
-  }
-  const tenantId = resolveTenantId(c);
-  const rotatedBy = resolveCognitoSub(c);
-  try {
-    const response = await rotateExternalIdForAccount(shared, {
-      tenantId,
-      awsAccountId,
-      nowMs: Date.now(),
-    });
-    // Phase 3.2 / Issue #603: rotation 監査ログ (structured 1-line)。
-    //
-    // CloudWatch Logs Insights で `event = "competitor-accounts.rotate"` を grep し、
-    // 「いつ・どの operator (Cognito sub) が・どの (tenant, account) を rotate したか」を
-    // 後追いできる。DDB の専用 audit table を作らない代わりに log を正本にする
-    // (= ZERO 新 infra、operator 監査は infrequent なので Logs Insights で十分)。
-    //
-    // Issue #864: timing 分析で attack window を絞られないように `rotatedAt` を分単位に
-    // 粗化する (= ISO8601 の秒以下を 00 に切り詰め)。 audit 用途では分単位で十分。
-    const rotatedAtCoarse = response.rotatedAt.replace(/:\d{2}\.\d+Z$/, ":00.000Z");
-    console.log(
-      JSON.stringify({
-        event: "competitor-accounts.rotate",
-        tenantId,
-        awsAccountId,
-        rotatedBy,
-        rotatedAt: rotatedAtCoarse,
-      }),
-    );
-    return c.json(response, StatusCodes.OK);
-  } catch (err) {
-    if (err instanceof CompetitorAccountNotFoundError) {
-      return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-    }
-    // Issue #868: verified=false な row への rotate は 409 + 明示メッセージで operator に
-    // 「先に verify を成功させて」 と返す。 attacker spoof 経路に鍵を回さない。
-    if (err instanceof CompetitorAccountNotVerifiedError) {
-      return c.json({ error: "not_verified" }, StatusCodes.CONFLICT);
-    }
-    if (err instanceof ExternalIdMissingForRotationError) {
-      return c.json({ error: "external_id_missing" }, StatusCodes.CONFLICT);
-    }
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[competitor-accounts] rotate failed", { awsAccountId, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
+// #1089: Rotate ExternalId endpoint は廃止 (= 仕様簡素化)。 ExternalId を更新したい
+// 場合は account を delete → create の 2 step で新規 ExternalId を払い出す。
 
 app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
