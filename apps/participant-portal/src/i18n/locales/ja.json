@@ -58,6 +58,18 @@
     "field_description": "問題 deploy 時に運営が発行する短命キー",
     "field_placeholder": "チームに配布されたキー"
   },
+  "team_setup": {
+    "title": "チーム名を決めよう",
+    "description": "このイベント中にあなたのチームを呼ぶ名前を入力してください",
+    "field_label": "チーム名",
+    "field_description": "プロフィールやスコアボードに表示される名前。 後から変更できます。",
+    "field_placeholder": "例: わたしたちのチーム",
+    "field_constraint": "1〜40 文字、 英数字 / 半角スペース / _ / - / 日本語",
+    "field_invalid_format": "形式が無効です",
+    "submit_button": "この名前で始める",
+    "submit_failed_header": "チーム名を保存できませんでした",
+    "validation_failed": "チーム名の形式が無効です。 1〜40 文字、 英数字 / 半角スペース / _ / - / 日本語のみ。"
+  },
   "quests": {
     "header": "問題一覧 (Quests)",
     "header_description": "自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。",
