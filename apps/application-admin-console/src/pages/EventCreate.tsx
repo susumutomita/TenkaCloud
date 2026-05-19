@@ -24,6 +24,7 @@ import { bulkDeployEvent, createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
+import { useT } from "../i18n";
 import {
   filterVerifiedAccounts,
   formatCompetitorAccountsLoadError,
@@ -93,6 +94,7 @@ interface TeamRow {
 export function EventCreatePage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
+  const t = useT();
 
   const allProblems = useMemo(() => listProblemSummaries(), []);
   const problemOptions: MultiselectProps.Option[] = useMemo(
@@ -296,27 +298,28 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
   return (
     <SpaceBetween size="l">
-      <Header
-        variant="h1"
-        description="チーム数と問題セットを指定して Event を作成します。teamLoginKey は EventDetail でいつでも確認できます。"
-      >
-        新規 Event 作成
+      <Header variant="h1" description={t("event_create.description")}>
+        {t("event_create.title")}
       </Header>
 
       <Form>
         <SpaceBetween size="l">
           {error && (
-            <Alert type="error" header="作成に失敗しました">
+            <Alert type="error" header={t("event_create.error_header")}>
               {error}
             </Alert>
           )}
 
-          <Container header={<Header variant="h2">基本情報</Header>}>
+          <Container header={<Header variant="h2">{t("event_create.basic_info_header")}</Header>}>
             <ColumnLayout columns={2}>
               <FormField
-                label="Event 名"
-                description="例: JAWS-UG 春の陣 2026"
-                errorText={nameInvalid && name.length > 0 ? `1〜${NAME_MAX} 文字` : undefined}
+                label={t("event_create.name_label")}
+                description={t("event_create.name_placeholder_example")}
+                errorText={
+                  nameInvalid && name.length > 0
+                    ? t("event_create.name_invalid", { max: NAME_MAX })
+                    : undefined
+                }
               >
                 <Input
                   value={name}
@@ -325,9 +328,16 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                 />
               </FormField>
               <FormField
-                label="チーム数"
-                description={`${TEAMS_MIN}〜${TEAMS_MAX} (= TransactWrite 上限から event 1 行を引いた値)`}
-                errorText={teamCountInvalid ? `${TEAMS_MIN}〜${TEAMS_MAX} の整数` : undefined}
+                label={t("event_create.team_count_label")}
+                description={t("event_create.team_count_description", {
+                  min: TEAMS_MIN,
+                  max: TEAMS_MAX,
+                })}
+                errorText={
+                  teamCountInvalid
+                    ? t("event_create.team_count_invalid", { min: TEAMS_MIN, max: TEAMS_MAX })
+                    : undefined
+                }
               >
                 <Input
                   type="number"
@@ -355,14 +365,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           {accountsLoadError && (
             <Alert
               type="error"
-              header="Competitor Accounts の取得に失敗しました"
+              header={t("event_create.accounts_load_error_header")}
               action={
                 <Button
                   iconName="refresh"
                   onClick={() => void fetchAccounts()}
                   loading={accountsLoading}
                 >
-                  再読込
+                  {t("event_create.accounts_reload")}
                 </Button>
               }
             >
@@ -370,14 +380,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             </Alert>
           )}
           {competitorAccounts === null && accountsLoading && !accountsLoadError && (
-            <Alert type="info" header="Competitor Accounts を読み込み中…">
-              dropdown に選択肢が出るまで数秒お待ちください。
+            <Alert type="info" header={t("event_create.accounts_loading_header")}>
+              {t("event_create.accounts_loading_body")}
             </Alert>
           )}
           {showNoVerifiedAccountsHint && (
             <Alert
               type="warning"
-              header="verified=true な Competitor Account がありません"
+              header={t("event_create.no_verified_header")}
               action={
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button
@@ -385,7 +395,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                     onClick={() => void fetchAccounts()}
                     loading={accountsLoading}
                   >
-                    再読込
+                    {t("event_create.accounts_reload")}
                   </Button>
                   <Link
                     href="/competitor-accounts"
@@ -395,29 +405,24 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                       navigate("/competitor-accounts");
                     }}
                   >
-                    Competitor Accounts へ移動
+                    {t("event_create.go_to_competitor_accounts")}
                   </Link>
                 </SpaceBetween>
               }
             >
-              Event 作成前に Competitor Accounts ページで AWS Account を追加 → STS Verify を実行
-              してください。verified=true でない account には deploy できません。 別タブで Verify
-              した直後は「再読込」 で反映されます。
+              {t("event_create.no_verified_body")}
             </Alert>
           )}
           <Container
             header={
-              <Header
-                variant="h2"
-                description="各 team の deploy 先 AWS Account を選択します (verified=true 行のみ)。internalSlug は CFn StackName 由来になり deploy 後 immutable。"
-              >
-                Teams ({teamRows.length})
+              <Header variant="h2" description={t("event_create.teams_description")}>
+                {t("event_create.teams_header", { count: teamRows.length })}
               </Header>
             }
           >
             {teamRows.length === 0 ? (
               <Box variant="small" color="text-status-inactive">
-                チーム数を 1 以上に設定してください。
+                {t("event_create.teams_empty")}
               </Box>
             ) : (
               <Table
@@ -426,25 +431,25 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                 columnDefinitions={[
                   {
                     id: "slug",
-                    header: "internalSlug",
-                    cell: (t) => (
+                    header: t("event_create.col_internal_slug"),
+                    cell: (tr) => (
                       <Input
-                        value={t.internalSlug}
+                        value={tr.internalSlug}
                         placeholder="team-1"
-                        invalid={!SLUG_RE.test(t.internalSlug)}
+                        invalid={!SLUG_RE.test(tr.internalSlug)}
                         onChange={({ detail }) =>
-                          updateTeamRow(t.idx, { internalSlug: detail.value })
+                          updateTeamRow(tr.idx, { internalSlug: detail.value })
                         }
                       />
                     ),
                   },
                   {
                     id: "account",
-                    header: "AWS Account ID (verified)",
-                    cell: (t) => {
+                    header: t("event_create.col_aws_account"),
+                    cell: (tr) => {
                       const selected =
-                        accountOptions.find((o) => o.value === t.awsAccountId) ?? null;
-                      const selectedAccount = accountById.get(t.awsAccountId);
+                        accountOptions.find((o) => o.value === tr.awsAccountId) ?? null;
+                      const selectedAccount = accountById.get(tr.awsAccountId);
                       return (
                         <SpaceBetween size="xxs">
                           <Select
@@ -452,22 +457,19 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                             options={accountOptions}
                             placeholder={
                               noVerifiedAccounts
-                                ? NO_VERIFIED_ACCOUNTS_HELPER
-                                : "verified account を選択"
+                                ? t("event_create.no_verified_helper")
+                                : t("event_create.select_verified_placeholder")
                             }
                             disabled={accountOptions.length === 0}
-                            empty="verified=true な競技者 account がありません"
+                            empty={t("event_create.select_empty_message")}
                             onChange={({ detail }) =>
-                              updateTeamRow(t.idx, {
+                              updateTeamRow(tr.idx, {
                                 awsAccountId: detail.selectedOption?.value ?? "",
                               })
                             }
                             invalid={
-                              t.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(t.awsAccountId)
+                              tr.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(tr.awsAccountId)
                             }
-                            // Issue #998: option (alias + region + role) が table cell 幅を
-                            // 超えると text が見切れる。 expandToViewport で portal に逃がして
-                            // 横幅自由・全文表示にする。
                             expandToViewport
                             filteringType="auto"
                           />
@@ -480,7 +482,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                           )}
                           {noVerifiedAccounts && (
                             <Box variant="small" color="text-status-inactive">
-                              {NO_VERIFIED_ACCOUNTS_HELPER}
+                              {t("event_create.no_verified_helper")}
                             </Box>
                           )}
                         </SpaceBetween>
@@ -492,18 +494,21 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             )}
             {teamValidation.hasDuplicateSlug && (
               <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
-                重複する internalSlug があります。各 team で固有の slug を指定してください。
+                {t("event_create.duplicate_slug_error")}
               </Box>
             )}
           </Container>
 
-          <Container header={<Header variant="h2">問題セット</Header>}>
+          <Container header={<Header variant="h2">{t("event_create.problemset_header")}</Header>}>
             <SpaceBetween size="m">
-              <FormField label="使用する問題" description="複数選択可。順序は問わない。">
+              <FormField
+                label={t("event_create.use_problems_label")}
+                description={t("event_create.use_problems_description")}
+              >
                 <Multiselect
                   selectedOptions={selectedProblems}
                   options={problemOptions}
-                  placeholder="問題を選んでください"
+                  placeholder={t("event_create.problemset_placeholder")}
                   onChange={({ detail }) => onProblemsChange(detail.selectedOptions)}
                 />
               </FormField>
@@ -513,10 +518,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                   variant="embedded"
                   items={problemRows}
                   columnDefinitions={[
-                    { id: "name", header: "問題", cell: (r) => r.problemName },
+                    {
+                      id: "name",
+                      header: t("event_create.col_problem"),
+                      cell: (r) => r.problemName,
+                    },
                     {
                       id: "region",
-                      header: "Region",
+                      header: t("event_create.col_region"),
                       cell: (r) => (
                         <Select
                           selectedOption={
@@ -529,8 +538,6 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                               defaultRegion: detail.selectedOption?.value ?? r.defaultRegion,
                             })
                           }
-                          // Issue #998: region 名 (= 「アジアパシフィック (東京)」 等) が table cell
-                          // の幅を超えるので portal に逃がす。
                           expandToViewport
                         />
                       ),
@@ -543,14 +550,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => navigate("/events")}>キャンセル</Button>
+              <Button onClick={() => navigate("/events")}>{t("event_create.cancel")}</Button>
               <Button
                 variant="primary"
                 loading={submitting}
                 disabled={!canSubmit}
                 onClick={handleSubmit}
               >
-                Event を作成
+                {t("event_create.submit")}
               </Button>
             </SpaceBetween>
           </Box>
@@ -563,12 +570,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       <Modal
         visible={deployPromptTarget !== null}
         onDismiss={() => (deployStarting ? undefined : handleDeployLater())}
-        header="Event を作成しました"
+        header={t("event_create.deploy_modal_header")}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button onClick={handleDeployLater} disabled={deployStarting}>
-                あとで
+                {t("event_create.deploy_modal_later")}
               </Button>
               <Button
                 variant="primary"
@@ -576,17 +583,15 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                 onClick={() => void handleDeployNow()}
                 data-testid="deploy-prompt-now"
               >
-                今すぐ Deploy
+                {t("event_create.deploy_modal_now")}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="m">
-          <Alert type="info" header="次は問題の Deploy です">
-            チーム毎の問題 deploy を実行するまで、 participant は問題にアクセスできません。 「今すぐ
-            Deploy」 で全 team × 全問題を一括 deploy します。 「あとで」 を選んだ場合は、
-            EventDetail 画面の Deploy button から後で実行できます。
+          <Alert type="info" header={t("event_create.deploy_modal_alert_header")}>
+            {t("event_create.deploy_modal_alert_body")}
           </Alert>
         </SpaceBetween>
       </Modal>

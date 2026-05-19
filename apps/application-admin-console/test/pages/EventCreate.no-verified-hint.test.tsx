@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../../src/i18n";
 
 const mocks = vi.hoisted(() => ({
   useApiClient: vi.fn(),
@@ -39,18 +40,22 @@ const { EventCreatePage } = await import("../../src/pages/EventCreate");
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/events/new"]}>
-      <Routes>
-        <Route path="/events/new" element={<EventCreatePage config={config} />} />
-        <Route path="/competitor-accounts" element={<div>Competitor Accounts page</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={["/events/new"]}>
+        <Routes>
+          <Route path="/events/new" element={<EventCreatePage config={config} />} />
+          <Route path="/competitor-accounts" element={<div>Competitor Accounts page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.useApiClient.mockReturnValue({});
+  // #1090: i18n test 配下では ja を default にして既存の ja string assertion を維持する。
+  window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
 });
 
 afterEach(() => vi.restoreAllMocks());
