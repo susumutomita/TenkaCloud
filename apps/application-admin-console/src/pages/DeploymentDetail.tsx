@@ -31,6 +31,7 @@ import {
   TERMINAL_STATUSES,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 import {
   buildTerminalLog,
   type DeployPhase,
@@ -40,6 +41,8 @@ import {
   type LogLine,
   type PhaseStatus,
 } from "../lib/deploy-phases";
+
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒 polling は 12 req/min/user で過多)。
 // deploy phase の進行は CloudFormation 側で数十秒〜数分単位なので、 30 秒粒度で十分。
@@ -65,6 +68,7 @@ const PHASE_STATUS_LABEL: Record<PhaseStatus, string> = {
 export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const { jobId } = useParams<{ jobId: string }>();
   const apiClient = useApiClient(config);
+  const t = useT();
   const [item, setItem] = useState<DeploymentSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -162,20 +166,20 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   }, []);
 
   if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return <Alert type="error">不正な Job ID です。</Alert>;
+    return <Alert type="error">{t("deployment_detail.invalid_job_id")}</Alert>;
   }
 
   if (!item && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> 状態を取得中...
+        <Spinner /> {t("deployment_detail.loading_status")}
       </Box>
     );
   }
 
   if (error && !item) {
     return (
-      <Alert type="error" header="ジョブの取得に失敗しました">
+      <Alert type="error" header={t("deployment_detail.fetch_failed_header")}>
         {error}
       </Alert>
     );
@@ -198,7 +202,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         description={`${item.problemId} · ${item.displayTeamName ?? item.teamName} · Job ${item.jobId}`}
         actions={
           <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
-            再読み込み
+            {t("deployment_detail.reload")}
           </Button>
         }
       >
@@ -206,7 +210,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       </Header>
 
       {item.status === "FAILED" && item.failureReason && (
-        <Alert type="error" header="失敗理由">
+        <Alert type="error" header={t("deployment_detail.failure_reason_header")}>
           {item.failureReason}
         </Alert>
       )}
@@ -222,13 +226,13 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
                   <Button
                     variant="icon"
                     iconName="angle-up"
-                    ariaLabel="ログの先頭にスクロール"
+                    ariaLabel={t("deployment_detail.log_scroll_top")}
                     onClick={() => scrollDeployLog("top")}
                   />
                   <Button
                     variant="icon"
                     iconName="angle-down"
-                    ariaLabel="ログの末尾にスクロール"
+                    ariaLabel={t("deployment_detail.log_scroll_bottom")}
                     onClick={() => scrollDeployLog("bottom")}
                   />
                   <Button
@@ -236,17 +240,19 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
                     onClick={() => setLogModalOpen(true)}
                     data-testid="maximize-log"
                   >
-                    Maximize log
+                    {t("deployment_detail.log_maximize")}
                   </Button>
                 </SpaceBetween>
               }
               description={
                 !TERMINAL_STATUSES.has(item.status)
-                  ? `${POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。`
+                  ? t("deployment_detail.log_auto_refresh", {
+                      seconds: POLL_INTERVAL_MS / 1000,
+                    })
                   : undefined
               }
             >
-              Deploy log
+              {t("deployment_detail.deploy_log_header")}
             </Header>
           }
         >
@@ -259,35 +265,52 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
                 stackProgress={stackProgress}
                 stackProgressError={stackProgressError}
                 stackProgressPending={stackProgressPending}
+                t={t}
               />
             ))}
           </SpaceBetween>
         </Container>
       </div>
 
-      <Container header={<Header variant="h2">基本情報</Header>}>
+      <Container header={<Header variant="h2">{t("deployment_detail.basic_info_header")}</Header>}>
         <ColumnLayout columns={2} variant="text-grid">
           <KeyValuePairs
             items={[
-              { label: "Problem ID", value: <code>{item.problemId}</code> },
               {
-                label: "表示名 (競技者選択)",
-                value: item.displayTeamName ?? "(未設定)",
+                label: t("deployment_detail.label_problem_id"),
+                value: <code>{item.problemId}</code>,
               },
-              { label: "内部 slug (operator 入力)", value: <code>{item.teamName}</code> },
-              { label: "AWS Account", value: <code>{item.awsAccountId}</code> },
-              { label: "Region", value: item.region },
+              {
+                label: t("deployment_detail.label_display_name"),
+                value: item.displayTeamName ?? t("deployment_detail.value_unset"),
+              },
+              {
+                label: t("deployment_detail.label_internal_slug"),
+                value: <code>{item.teamName}</code>,
+              },
+              {
+                label: t("deployment_detail.label_aws_account"),
+                value: <code>{item.awsAccountId}</code>,
+              },
+              { label: t("deployment_detail.label_region"), value: item.region },
             ]}
           />
           <KeyValuePairs
             items={[
-              { label: "Stack 名 prefix", value: <code>{item.namePrefix}</code> },
               {
-                label: "Stack ID",
-                value: item.stackId ? <code>{item.stackId}</code> : "(未割当)",
+                label: t("deployment_detail.label_stack_prefix"),
+                value: <code>{item.namePrefix}</code>,
               },
-              { label: "作成", value: item.createdAt },
-              { label: "更新", value: item.updatedAt },
+              {
+                label: t("deployment_detail.label_stack_id"),
+                value: item.stackId ? (
+                  <code>{item.stackId}</code>
+                ) : (
+                  t("deployment_detail.value_unassigned")
+                ),
+              },
+              { label: t("deployment_detail.label_created_at"), value: item.createdAt },
+              { label: t("deployment_detail.label_updated_at"), value: item.updatedAt },
             ]}
           />
         </ColumnLayout>
@@ -296,27 +319,24 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       {teamLoginKey && (
         <Container
           header={
-            <Header
-              variant="h2"
-              description="競技者にこのキーを渡してください。Participant Portal にログインするとこのチーム用の問題環境にアクセスできます。"
-            >
-              競技者 hand-off
+            <Header variant="h2" description={t("deployment_detail.handoff_description")}>
+              {t("deployment_detail.handoff_header")}
             </Header>
           }
         >
           <KeyValuePairs
             items={[
               {
-                label: "チーム共有ログインキー",
+                label: t("deployment_detail.label_team_login_key"),
                 value: (
                   <SpaceBetween direction="horizontal" size="xs">
                     <Box variant="code">{teamLoginKey}</Box>
                     <Button
                       iconName="copy"
-                      ariaLabel="ログインキーをコピー"
+                      ariaLabel={t("deployment_detail.copy_login_key_aria")}
                       onClick={() => void navigator.clipboard?.writeText(teamLoginKey)}
                     >
-                      コピー
+                      {t("deployment_detail.copy")}
                     </Button>
                   </SpaceBetween>
                 ),
@@ -327,7 +347,9 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       )}
 
       {Object.keys(outputs).length > 0 && (
-        <Container header={<Header variant="h2">CloudFormation Outputs</Header>}>
+        <Container
+          header={<Header variant="h2">{t("deployment_detail.cfn_outputs_header")}</Header>}
+        >
           <KeyValuePairs
             items={Object.entries(outputs).map(([label, value]) => ({
               label,
@@ -341,7 +363,7 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       <Modal
         visible={logModalOpen}
         onDismiss={() => setLogModalOpen(false)}
-        header="Deploy log"
+        header={t("deployment_detail.deploy_log_header")}
         size="max"
         data-testid="deploy-log-modal"
       >
@@ -363,8 +385,9 @@ function PhaseRow(props: {
   readonly stackProgress: StackProgress | null;
   readonly stackProgressError: { message: string; notYetCreated: boolean } | null;
   readonly stackProgressPending: boolean;
+  readonly t: TFn;
 }) {
-  const { phase, deployment, stackProgress, stackProgressError, stackProgressPending } = props;
+  const { phase, deployment, stackProgress, stackProgressError, stackProgressPending, t } = props;
 
   return (
     <ExpandableSection
@@ -386,6 +409,7 @@ function PhaseRow(props: {
         stackProgress={stackProgress}
         stackProgressError={stackProgressError}
         stackProgressPending={stackProgressPending}
+        t={t}
       />
     </ExpandableSection>
   );
@@ -397,19 +421,26 @@ function PhaseBody(props: {
   readonly stackProgress: StackProgress | null;
   readonly stackProgressError: { message: string; notYetCreated: boolean } | null;
   readonly stackProgressPending: boolean;
+  readonly t: TFn;
 }) {
-  const { phase, deployment, stackProgress, stackProgressError, stackProgressPending } = props;
+  const { phase, deployment, stackProgress, stackProgressError, stackProgressPending, t } = props;
 
   switch (phase.id) {
     case "enqueued":
       return (
         <KeyValuePairs
           items={[
-            { label: "Enqueued at", value: deployment.createdAt },
-            { label: "Tenant ID", value: <code>{deployment.tenantId}</code> },
-            { label: "Problem ID", value: <code>{deployment.problemId}</code> },
+            { label: t("deployment_detail.label_enqueued_at"), value: deployment.createdAt },
             {
-              label: "Team",
+              label: t("deployment_detail.label_tenant_id"),
+              value: <code>{deployment.tenantId}</code>,
+            },
+            {
+              label: t("deployment_detail.label_problem_id"),
+              value: <code>{deployment.problemId}</code>,
+            },
+            {
+              label: t("deployment_detail.label_team"),
               value: deployment.displayTeamName ?? deployment.teamName,
             },
           ]}
@@ -418,16 +449,14 @@ function PhaseBody(props: {
     case "building":
       return (
         <SpaceBetween size="s">
-          <Box variant="p">
-            CodeBuild が問題テンプレートを競技者アカウントへ deploy するための CFn を組み立てます。
-          </Box>
+          <Box variant="p">{t("deployment_detail.phase_building_description")}</Box>
           {stackProgress?.consoleUrl ? (
             <Link href={stackProgress.consoleUrl} external>
-              Open CodeBuild / CloudFormation logs in AWS Console
+              {t("deployment_detail.phase_building_link")}
             </Link>
           ) : (
             <Box variant="small" color="text-status-info">
-              CodeBuild console URL is not yet available.
+              {t("deployment_detail.phase_building_url_unavailable")}
             </Box>
           )}
         </SpaceBetween>
@@ -438,22 +467,31 @@ function PhaseBody(props: {
           progress={stackProgress}
           error={stackProgressError}
           pending={stackProgressPending}
+          t={t}
         />
       );
     case "health-check":
       return (
         <Box variant="p" color="text-status-info">
-          {phase.note ?? "Skipped"}
+          {phase.note ?? t("deployment_detail.phase_health_skipped")}
         </Box>
       );
     case "complete":
       return (
         <KeyValuePairs
           items={[
-            { label: "Final status", value: <code>{deployment.status}</code> },
-            { label: "Last updated", value: deployment.updatedAt },
+            {
+              label: t("deployment_detail.label_final_status"),
+              value: <code>{deployment.status}</code>,
+            },
+            { label: t("deployment_detail.label_last_updated"), value: deployment.updatedAt },
             ...(deployment.failureReason
-              ? [{ label: "Failure reason", value: deployment.failureReason }]
+              ? [
+                  {
+                    label: t("deployment_detail.label_failure_reason"),
+                    value: deployment.failureReason,
+                  },
+                ]
               : []),
           ]}
         />
@@ -469,27 +507,23 @@ function StackProgressBody(props: {
   readonly progress: StackProgress | null;
   readonly error: { message: string; notYetCreated: boolean } | null;
   readonly pending: boolean;
+  readonly t: TFn;
 }) {
-  const { progress, error, pending } = props;
+  const { progress, error, pending, t } = props;
 
-  // 初回ローディング: error も progress も無く、fetch in-flight。
   if (!progress && !error && pending) {
     return (
       <Box textAlign="center" padding="m">
-        <Spinner /> CFn から取得中...
+        <Spinner /> {t("deployment_detail.stack_loading")}
       </Box>
     );
   }
 
-  // Error 表示。stack 未割当 (= API 側の `stack_not_yet_created` 409) は別 message に分ける。
   if (error && !progress) {
     return error.notYetCreated ? (
-      <Box color="text-status-info">
-        CFn Stack はまだ作成されていません。deploy worker (CodeBuild) が起動し次第、 ここに
-        StackEvents / Resources が表示されます。
-      </Box>
+      <Box color="text-status-info">{t("deployment_detail.stack_not_yet_created")}</Box>
     ) : (
-      <Alert type="warning" header="CFn の進行状況を取得できませんでした">
+      <Alert type="warning" header={t("deployment_detail.stack_fetch_failed_header")}>
         {error.message}
       </Alert>
     );
@@ -497,27 +531,33 @@ function StackProgressBody(props: {
 
   if (!progress) return null;
 
-  // 失敗 event を抽出 (= CREATE_FAILED / UPDATE_FAILED 等)。
   const firstFailure = progress.events.find((e) => e.resourceStatus.endsWith("_FAILED"));
 
   return (
     <SpaceBetween size="m">
       <Box>
         <Link href={progress.consoleUrl} external>
-          Open CloudFormation console
+          {t("deployment_detail.open_cfn_console")}
         </Link>
         {progress.stackStatus && (
           <Box variant="small" margin={{ top: "xxs" }}>
-            現在の CFn Stack 状態: <code>{progress.stackStatus}</code>
+            {t("deployment_detail.stack_status_label")}: <code>{progress.stackStatus}</code>
           </Box>
         )}
       </Box>
 
       {firstFailure && (
-        <Alert type="error" header={`失敗: ${firstFailure.logicalResourceId}`}>
+        <Alert
+          type="error"
+          header={t("deployment_detail.failure_alert_header", {
+            logicalId: firstFailure.logicalResourceId,
+          })}
+        >
           <Box>
-            <code>{firstFailure.resourceType}</code> が <code>{firstFailure.resourceStatus}</code>{" "}
-            になりました。
+            {t("deployment_detail.failure_body", {
+              resourceType: firstFailure.resourceType,
+              status: firstFailure.resourceStatus,
+            })}
           </Box>
           {firstFailure.resourceStatusReason && (
             <Box variant="small">{firstFailure.resourceStatusReason}</Box>
@@ -526,14 +566,15 @@ function StackProgressBody(props: {
       )}
 
       {progress.stuck?.isStuck && (
-        <Alert type="warning" header="CFn Stack が stuck の可能性があります">
+        <Alert type="warning" header={t("deployment_detail.stuck_header")}>
           <SpaceBetween size="xs">
             <Box>
-              最新の CFn event から {progress.stuck.elapsedMinutes} 分経過しています。
+              {t("deployment_detail.stuck_elapsed", { minutes: progress.stuck.elapsedMinutes })}
               {progress.stuck.resourceLogicalId && (
                 <>
                   {" "}
-                  対象: <code>{progress.stuck.resourceLogicalId}</code>
+                  {t("deployment_detail.stuck_target")}:{" "}
+                  <code>{progress.stuck.resourceLogicalId}</code>
                   {progress.stuck.resourceStatus ? (
                     <>
                       {" "}
@@ -551,35 +592,39 @@ function StackProgressBody(props: {
 
       <Table<StackProgressEvent>
         variant="embedded"
-        header={<Header variant="h3">StackEvents (最新 {progress.events.length} 件)</Header>}
+        header={
+          <Header variant="h3">
+            {t("deployment_detail.events_header", { count: progress.events.length })}
+          </Header>
+        }
         items={[...progress.events]}
         empty={
           <Box textAlign="center" color="inherit" padding="l">
-            StackEvents はまだありません。
+            {t("deployment_detail.events_empty")}
           </Box>
         }
         columnDefinitions={[
           {
             id: "timestamp",
-            header: "時刻",
+            header: t("deployment_detail.col_timestamp"),
             cell: (e) => e.timestamp,
             width: 200,
           },
           {
             id: "logicalResourceId",
-            header: "LogicalId",
+            header: t("deployment_detail.col_logical_id"),
             cell: (e) => <code>{e.logicalResourceId}</code>,
             width: 220,
           },
           {
             id: "resourceType",
-            header: "Type",
+            header: t("deployment_detail.col_resource_type"),
             cell: (e) => <code>{e.resourceType}</code>,
             width: 220,
           },
           {
             id: "status",
-            header: "Status",
+            header: t("deployment_detail.col_status"),
             cell: (e) => (
               <StatusIndicator type={statusToIndicator(e.resourceStatus)}>
                 {e.resourceStatus}
@@ -589,7 +634,7 @@ function StackProgressBody(props: {
           },
           {
             id: "reason",
-            header: "Reason",
+            header: t("deployment_detail.col_reason"),
             cell: (e) => e.resourceStatusReason ?? "",
           },
         ]}
@@ -597,29 +642,33 @@ function StackProgressBody(props: {
 
       <Table<StackProgressResource>
         variant="embedded"
-        header={<Header variant="h3">Resources ({progress.resources.length} 件)</Header>}
+        header={
+          <Header variant="h3">
+            {t("deployment_detail.resources_header", { count: progress.resources.length })}
+          </Header>
+        }
         items={[...progress.resources]}
         empty={
           <Box textAlign="center" color="inherit" padding="l">
-            Resources はまだ作成されていません。
+            {t("deployment_detail.resources_empty")}
           </Box>
         }
         columnDefinitions={[
           {
             id: "logicalResourceId",
-            header: "LogicalId",
+            header: t("deployment_detail.col_logical_id"),
             cell: (r) => <code>{r.logicalResourceId}</code>,
             width: 220,
           },
           {
             id: "resourceType",
-            header: "Type",
+            header: t("deployment_detail.col_resource_type"),
             cell: (r) => <code>{r.resourceType}</code>,
             width: 220,
           },
           {
             id: "status",
-            header: "Status",
+            header: t("deployment_detail.col_status"),
             cell: (r) => (
               <StatusIndicator type={statusToIndicator(r.resourceStatus)}>
                 {r.resourceStatus}
@@ -629,7 +678,7 @@ function StackProgressBody(props: {
           },
           {
             id: "physicalResourceId",
-            header: "PhysicalId",
+            header: t("deployment_detail.col_physical_id"),
             cell: (r) => (r.physicalResourceId ? <code>{r.physicalResourceId}</code> : ""),
           },
         ]}
