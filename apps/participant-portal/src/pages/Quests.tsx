@@ -17,7 +17,7 @@ import { useNavigate } from "react-router";
 import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
-import { findProblemMetadata, type ProblemCatalogEntry } from "../data/problems";
+import { findProblemMetadata } from "../data/problems";
 import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 
@@ -25,20 +25,27 @@ import { categoryOf } from "../lib/category";
  * 競技者向けの 「解答状態」 (= 解けた / 解けてない)。 #821 / #822 で導入、 issue #34 で
  * 一覧カードの右上 icon に圧縮 (= ラベル無し、 視線を奪わない)。
  */
-function renderSubmissionState(problem: ParticipantProblemView): {
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+
+function renderSubmissionState(
+  problem: ParticipantProblemView,
+  t: TFn,
+): {
   readonly type: StatusIndicatorProps.Type;
   readonly label: string;
 } {
-  if (problem.status === "FAILED") return { type: "error", label: "デプロイ失敗" };
-  if (problem.status === "DELETED") return { type: "stopped", label: "終了" };
+  if (problem.status === "FAILED") return { type: "error", label: t("quests.submission_failed") };
+  if (problem.status === "DELETED")
+    return { type: "stopped", label: t("quests.submission_finished") };
   if (problem.status === "PENDING" || problem.status === "IN_PROGRESS") {
-    return { type: "in-progress", label: "準備中" };
+    return { type: "in-progress", label: t("quests.submission_preparing") };
   }
   if (problem.scoring?.kind === "flag") {
-    if (problem.scoring.flagSubmitted) return { type: "success", label: "クリア" };
-    return { type: "pending", label: "未解答" };
+    if (problem.scoring.flagSubmitted)
+      return { type: "success", label: t("quests.submission_cleared") };
+    return { type: "pending", label: t("quests.submission_unsolved") };
   }
-  return { type: "info", label: "挑戦中" };
+  return { type: "info", label: t("quests.submission_in_progress") };
 }
 
 type CategoryFilter = "all" | "battle" | "challenge";
@@ -56,18 +63,14 @@ function categoryBadge(scoring: ParticipantScoringInfo | undefined, uncategorize
  * 詳細画面に集約。 大会の戦略決定はカードを並べて 「どれをやるか」 を決める用途なので、 過剰な
  * 詳細を出すと逆に「どれを見ればよいかわからない」 を生む (= image #35 の指摘)。
  */
-const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
-  1: "入門",
-  2: "初級",
-  3: "中級",
-  4: "上級",
-  5: "エキスパート",
-};
-
-function difficultyBadge(problemId: string): React.ReactElement | null {
+function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
   const meta = findProblemMetadata(problemId);
   if (!meta) return null;
-  return <Badge color="grey">難易度: {DIFFICULTY_LABEL[meta.difficulty]}</Badge>;
+  return (
+    <Badge color="grey">
+      {t("quests.difficulty_label", { label: t(`quests.difficulty_${meta.difficulty}`) })}
+    </Badge>
+  );
 }
 
 /**
@@ -124,7 +127,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
   const renderCard = useMemo(
     () => ({
       header: (problem: ParticipantProblemView) => {
-        const s = renderSubmissionState(problem);
+        const s = renderSubmissionState(problem, t);
         return (
           <SpaceBetween size="xs" direction="horizontal" alignItems="center">
             <Link
@@ -138,7 +141,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
               <code>{problem.problemId}</code>
             </Link>
             {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
-            {difficultyBadge(problem.problemId)}
+            {difficultyBadge(problem.problemId, t)}
             <StatusIndicator type={s.type}>{s.label}</StatusIndicator>
           </SpaceBetween>
         );
