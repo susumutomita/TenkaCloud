@@ -12,6 +12,11 @@ import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 import type { SamlIdpConfig } from "./config/config-interface";
 import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message";
+import {
+  SYSTEM_ADMIN_ENABLED_MFAS,
+  SYSTEM_ADMIN_MFA_CONFIGURATION,
+  SYSTEM_ADMIN_PASSWORD_POLICY,
+} from "./control-plane/mfa-policy";
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;
@@ -118,6 +123,16 @@ export class ControlPlaneStack extends cdk.Stack {
       "AdminCreateUserConfig.InviteMessageTemplate.EmailMessage",
       buildInviteEmailBody(adminConsoleOrigin),
     );
+
+    // Issue #1035: SystemAdmin は SaaS 全 tenant 横断の権限を持つので MFA 必須化 + 強 password。
+    // SBT 0.3.9 が UserPool を内部生成するため escape hatch で CFn property を上書きする。
+    // TenantAdmin 側 (= tenant-template/identity-provider.ts) は ADR-020 Phase E で同 baseline 適用済み。
+    // TOTP only (= SMS は SNS コスト + 国際到達率不安定で避ける)。
+    cfnUserPool.addPropertyOverride("MfaConfiguration", SYSTEM_ADMIN_MFA_CONFIGURATION);
+    cfnUserPool.addPropertyOverride("EnabledMfas", [...SYSTEM_ADMIN_ENABLED_MFAS]);
+    cfnUserPool.addPropertyOverride("Policies.PasswordPolicy", {
+      ...SYSTEM_ADMIN_PASSWORD_POLICY,
+    });
 
     const eventBus = EventBus.fromEventBusArn(this, "eventBus", controlPlane.eventManager.busArn);
 
