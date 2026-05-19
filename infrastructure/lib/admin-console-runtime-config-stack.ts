@@ -40,6 +40,12 @@ export interface AdminConsoleRuntimeConfigStackProps extends cdk.StackProps {
   readonly adminInsightApiUrl: string;
   /** Issue #1053: 競技者向け bootstrap template の public S3 URL。 */
   readonly competitorBootstrapTemplateUrl: string;
+  /**
+   * Issue #1080: ObservabilityStack の CloudWatch Dashboard 名。 SPA 側で
+   * `https://<region>.console.aws.amazon.com/cloudwatch/home?region=<region>#dashboards:name=<name>`
+   * 形式の URL を組み立てる。
+   */
+  readonly cloudWatchDashboardName: string;
 }
 
 export class AdminConsoleRuntimeConfigStack extends cdk.Stack {
@@ -56,6 +62,7 @@ export class AdminConsoleRuntimeConfigStack extends cdk.Stack {
       awsAccountId: props.awsAccountId,
       adminInsightApiUrl: props.adminInsightApiUrl.replace(/\/$/, ""),
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
+      cloudWatchDashboardName: props.cloudWatchDashboardName,
     };
 
     new BucketDeployment(this, "RuntimeConfigDeployment", {

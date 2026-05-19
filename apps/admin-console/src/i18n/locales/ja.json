@@ -11,7 +11,25 @@
     "tenants": "テナント一覧",
     "tenants_new": "テナント作成",
     "jobs": "プロビジョニング Jobs",
-    "audit_log": "監査ログ"
+    "audit_log": "監査ログ",
+    "operations": "運用ダッシュボード"
+  },
+  "operations": {
+    "title": "運用ダッシュボード",
+    "description": "AWS 上の CloudWatch / Budgets / Alarms へのリンク集です。 deploy 後の運用観測点をここから開きます。",
+    "no_dashboard_dev_alert": "CloudWatch Dashboard 名が runtime-config に書き込まれていません。 dev 環境または未 deploy です。",
+    "dashboard_header": "CloudWatch Dashboard",
+    "dashboard_body": "ObservabilityStack が立てた CloudWatch Dashboard です。 deploy chain / DDB / Lambda / API Gateway の主要 metric を 1 枚で確認できます。",
+    "dashboard_name_label": "Dashboard 名",
+    "region_label": "Region",
+    "open_dashboard_button": "Dashboard を開く",
+    "budget_header": "コスト監視",
+    "budget_body": "AWS Budgets の月次しきい値超過通知と、 Cost Explorer での詳細分析。 80% / 100% で SystemAdmin へ email 通知が飛びます。",
+    "open_budgets_button": "Budgets",
+    "open_cost_explorer_button": "Cost Explorer",
+    "alarms_header": "リソース監視 Alarms",
+    "alarms_body": "CloudWatch Alarms (= Lambda invocations / Errors / DDB throttling / API Gateway 5XX)。 Free Tier 超過とバックエンド障害を即時検知します。",
+    "open_alarms_button": "Alarms"
   },
   "auth": {
     "sign_out": "サインアウト"

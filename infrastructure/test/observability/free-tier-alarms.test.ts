@@ -22,7 +22,7 @@ function buildStack() {
 }
 
 describe("FreeTierAlarms (#952 cost guardrails)", () => {
-  it("Lambda 2 個 + DDB 1 個なら計 4 個の Alarm を生成すべき", () => {
+  it("Lambda 2 個 + DDB 1 個なら計 6 個の Alarm を生成すべき (Lambda invocations + Lambda errors + DDB read/write)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
@@ -30,8 +30,8 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
       dynamoDbTableNames: ["table-x"],
     });
     const tpl = Template.fromStack(stack);
-    // 2 Lambda alarms + 1 DDB (read+write) = 4
-    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 4);
+    // Lambda: 2 fn × (invocations + errors) = 4 / DDB: 1 table × (read + write) = 2
+    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 6);
   });
 
   it("Lambda alarm の threshold は default 26666、 metric namespace=AWS/Lambda", () => {
@@ -112,7 +112,47 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
       dynamoDbTableNames: [],
     });
     const tpl = Template.fromStack(stack);
-    // 2 Lambda alarms (= sanitize で衝突しない logical ID)
-    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 2);
+    // 2 Lambda fn × (invocations + errors) = 4 (= sanitize で衝突しない logical ID)
+    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 4);
+  });
+
+  it("#1080: Lambda errors alarm を立てるべき (metric=Errors / threshold=default 50)", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: ["fn-a"],
+      dynamoDbTableNames: [],
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/Lambda",
+      MetricName: "Errors",
+      Threshold: 50,
+      Statistic: "Sum",
+    });
+  });
+
+  it("#1080: API Gateway 5XX alarm を HTTP / REST 両方に立てるべき", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: [],
+      dynamoDbTableNames: [],
+      apiGateways: [
+        { kind: "http", label: "control-plane", apiId: "abc123", stage: "$default" },
+        { kind: "rest", label: "tenant", apiName: "tenant-api", stage: "prod" },
+      ],
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/ApiGateway",
+      MetricName: "5xx",
+      Threshold: 50,
+    });
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/ApiGateway",
+      MetricName: "5XXError",
+      Threshold: 50,
+    });
   });
 });

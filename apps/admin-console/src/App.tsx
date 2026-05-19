@@ -7,6 +7,7 @@ import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
 import { JobsPage } from "./pages/Jobs";
 import { LoginPage } from "./pages/Login";
+import { OperationsPage } from "./pages/Operations";
 import { TenantCreatePage } from "./pages/TenantCreate";
 import { TenantDetailPage } from "./pages/TenantDetail";
 import { TenantListPage } from "./pages/TenantList";
@@ -77,6 +78,17 @@ export function App({ config }: { config: AppConfig }) {
             <RequireAuth>
               <ShellLayout>
                 <AuditLogPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        {/* Issue #1080: 運用ダッシュボード (CloudWatch / Budgets / Alarms へのリンク集) */}
+        <Route
+          path="/operations"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <OperationsPage config={config} />
               </ShellLayout>
             </RequireAuth>
           }

@@ -17,6 +17,7 @@ const baseConfig: AppConfig = {
   awsRegion: "",
   awsAccountId: "",
   adminInsightApiUrl: "https://insight.example.com",
+  cloudWatchDashboardName: "",
 };
 
 describe("fetchTenantsInsightSummary", () => {

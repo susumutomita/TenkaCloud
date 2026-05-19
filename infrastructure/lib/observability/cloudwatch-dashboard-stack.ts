@@ -65,11 +65,20 @@ export type ApiGatewayMetricTarget =
  * custom metrics, or IAM resources in this phase.
  */
 export class ObservabilityStack extends cdk.Stack {
+  /**
+   * Issue #1080: admin-console UI が runtime-config 経由で参照する CloudWatch Dashboard 名。
+   * AWS Console URL は `https://<region>.console.aws.amazon.com/cloudwatch/home?region=<region>#dashboards:name=<dashboardName>`
+   * で組み立てる (= URL builder は SPA 側、 stack は name + region のみ expose)。
+   */
+  public readonly dashboardName: string;
+
   constructor(scope: Construct, id: string, props: ObservabilityStackProps) {
     super(scope, id, props);
 
+    const dashboardName = this.buildDashboardName(props.environment);
+    this.dashboardName = dashboardName;
     const dashboard = new cloudwatch.Dashboard(this, "Dashboard", {
-      dashboardName: this.dashboardName(props.environment),
+      dashboardName,
       defaultInterval: cdk.Duration.hours(6),
     });
 
@@ -78,6 +87,11 @@ export class ObservabilityStack extends cdk.Stack {
     dashboard.addWidgets(this.lambdaCriticalWidget(props), this.lambdaHelperWidget(props));
     dashboard.addWidgets(this.apiGatewayTrafficWidget(props), this.apiGatewayLatencyWidget(props));
 
+    new cdk.CfnOutput(this, "DashboardNameOutput", {
+      value: dashboardName,
+      description: "CloudWatch Dashboard name (admin-console から AWS Console URL 組み立てに使う)",
+    });
+
     // Issue #952 cost guardrails: Free Tier breach 検知 CloudWatch Alarms は wire.ts 側で
     // CostBudget の SNS topic を共有しつつ FreeTierAlarms construct を 直接 attach する。
     // ObservabilityStack 内で完結させない理由: CostBudget も同じ topic に publish する必要が
@@ -85,7 +99,7 @@ export class ObservabilityStack extends cdk.Stack {
     // FreeTierAlarms の順に作って参照させる)。
   }
 
-  private dashboardName(environment?: string): string {
+  private buildDashboardName(environment?: string): string {
     if (!environment) return "tenkacloud-observability";
     const safeEnvironment = environment.replace(/[^A-Za-z0-9_-]/g, "-");
     return `tenkacloud-observability-${safeEnvironment}`;

@@ -32,6 +32,7 @@ const config: AppConfig = {
   awsRegion: "",
   awsAccountId: "",
   adminInsightApiUrl: "",
+  cloudWatchDashboardName: "",
 };
 
 function TokensDisplay() {

@@ -318,6 +318,28 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         problemDeployBackendStack.problemEndpointsTable.tableName,
         bootstrapTemplateStack.tenantMappingTable.tableName,
       ],
+      // #1080: API Gateway 5XX rate alarm を 4 API (control-plane / tenant / problem-deploy /
+      // admin-insight) に対して立てる。 backend 障害 / Lambda timeout の早期検知が目的。
+      apiGateways: [
+        {
+          kind: "http",
+          label: "control-plane",
+          apiId: apiIdFromExecuteApiUrl(controlPlaneStack.regApiGatewayUrl),
+          stage: "$default",
+        },
+        {
+          kind: "rest",
+          label: "tenant",
+          apiName: tenantTemplateStack.tenantApiName,
+          stage: tenantTemplateStack.tenantApiStageName,
+        },
+        {
+          kind: "http",
+          label: "admin-insight",
+          apiId: adminConsoleInsightStack.apiId,
+          stage: "$default",
+        },
+      ],
     });
   }
 
@@ -340,8 +362,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       awsAccountId: config.awsAccountId,
       adminInsightApiUrl: adminConsoleInsightStack.apiUrl,
       competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
+      cloudWatchDashboardName: observabilityStack.dashboardName,
     },
   );
+  adminConsoleRuntimeConfigStack.addDependency(observabilityStack);
   adminConsoleRuntimeConfigStack.addDependency(adminConsoleHostingStack);
   adminConsoleRuntimeConfigStack.addDependency(controlPlaneStack);
   adminConsoleRuntimeConfigStack.addDependency(adminConsoleInsightStack);
