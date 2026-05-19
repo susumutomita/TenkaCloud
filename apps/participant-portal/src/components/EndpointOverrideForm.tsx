@@ -30,6 +30,7 @@ import {
   PortalValidationError,
   putProblemEndpointOverride,
 } from "../api/portal-client";
+import { useT } from "../i18n";
 
 interface EndpointOverrideFormProps {
   readonly apiBaseUrl: string;
@@ -51,19 +52,21 @@ const EMPTY_SLOT_STATE: SlotEditState = { value: "", busy: false };
  * portal API の error code (= "invalid_url" / "slot_not_overridable" / "no_endpoints" 等) を
  * 競技者向け日本語に変換。 未知の code は raw code を表示 (= ops が grep しやすい)。
  */
-function formatValidationError(err: unknown): string {
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+
+function formatValidationError(err: unknown, t: TFn): string {
   if (err instanceof PortalValidationError) {
     switch (err.errorCode) {
       case "invalid_url":
-        return "URL の形式が不正です (http:// または https:// で始まる絶対 URL を指定)。";
+        return t("problem_detail.endpoint_error_invalid_url");
       case "slot_not_overridable":
-        return "この slot は override 不可です。";
+        return t("problem_detail.endpoint_error_slot_not_overridable");
       case "unknown_slot":
-        return "この slot は metadata に存在しません。";
+        return t("problem_detail.endpoint_error_unknown_slot");
       case "no_endpoints":
-        return "この問題には endpoint が宣言されていません。";
+        return t("problem_detail.endpoint_error_no_endpoints");
       default:
-        return `エラー: ${err.errorCode}`;
+        return t("problem_detail.endpoint_error_generic", { errorCode: err.errorCode });
     }
   }
   return err instanceof Error ? err.message : String(err);
@@ -74,6 +77,7 @@ export function EndpointOverrideForm({
   teamLoginKey,
   problemId,
 }: EndpointOverrideFormProps) {
+  const t = useT();
   const [endpoints, setEndpoints] = useState<readonly ParticipantEndpointView[] | undefined>(
     undefined,
   );
@@ -110,7 +114,7 @@ export function EndpointOverrideForm({
     const current = editState[slot] ?? EMPTY_SLOT_STATE;
     const trimmed = current.value.trim();
     if (trimmed.length === 0) {
-      patchEditState(slot, { error: "URL を入力してください" });
+      patchEditState(slot, { error: t("problem_detail.endpoint_override_url_empty") });
       return;
     }
     patchEditState(slot, { busy: true, error: undefined });
@@ -125,7 +129,7 @@ export function EndpointOverrideForm({
       setEndpoints(res.endpoints);
       patchEditState(slot, { value: "", busy: false, error: undefined });
     } catch (err) {
-      patchEditState(slot, { busy: false, error: formatValidationError(err) });
+      patchEditState(slot, { busy: false, error: formatValidationError(err, t) });
     }
   }
 
@@ -136,7 +140,7 @@ export function EndpointOverrideForm({
       setEndpoints(res.endpoints);
       patchEditState(slot, EMPTY_SLOT_STATE);
     } catch (err) {
-      patchEditState(slot, { busy: false, error: formatValidationError(err) });
+      patchEditState(slot, { busy: false, error: formatValidationError(err, t) });
     }
   }
 
@@ -147,20 +151,17 @@ export function EndpointOverrideForm({
   return (
     <Container
       header={
-        <Header
-          variant="h2"
-          description="自チームの service URL を Lambda / ECS / App Runner 等の再ホスト先に切り替えるとスコア engine がその URL を probe します。 URL は https:// または http:// の絶対 URL で。"
-        >
-          Endpoint 登録
+        <Header variant="h2" description={t("problem_detail.endpoint_description")}>
+          {t("problem_detail.endpoint_header")}
         </Header>
       }
     >
       {listError !== undefined && listError !== "no_endpoints" && (
-        <Alert type="error" header="Endpoint 一覧の取得に失敗しました">
+        <Alert type="error" header={t("problem_detail.endpoint_list_failed_header")}>
           {listError}
         </Alert>
       )}
-      {!endpoints && listError === undefined && <Box>読み込み中…</Box>}
+      {!endpoints && listError === undefined && <Box>{t("problem_detail.endpoint_loading")}</Box>}
       {endpoints && endpoints.length > 0 && (
         <SpaceBetween size="m">
           {endpoints.map((ep) => {
@@ -175,27 +176,26 @@ export function EndpointOverrideForm({
                 }
               >
                 <SpaceBetween size="s">
-                  <Box variant="awsui-key-label">Effective URL</Box>
+                  <Box variant="awsui-key-label">
+                    {t("problem_detail.endpoint_effective_label")}
+                  </Box>
                   {ep.effectiveUrl ? (
                     <Box variant="code">{ep.effectiveUrl}</Box>
                   ) : (
-                    // #703: raw `—` を出すと competitor が「何が probe されているか」を判断できない。
-                    // deploy 未完 / template Output 未宣言で defaultUrl が引けない状態であることと、
-                    // どの CFn Output key を待っているかを併記する (= operator 切り分けも兼ねる)。
                     <Box variant="small" color="text-status-info">
-                      まだ取得できていません — deploy 完了後に CFn Outputs.
-                      <code>{ep.defaultKey}</code> から自動取得します。 今すぐ自前の URL
-                      を登録するなら 下の「新しい URL を登録」 から override してください。
+                      {t("problem_detail.endpoint_not_yet_pre")} <code>{ep.defaultKey}</code>{" "}
+                      {t("problem_detail.endpoint_not_yet_post")}
                     </Box>
                   )}
                   {ep.overrideUrl && (
                     <Box variant="small" color="text-status-info">
-                      override 中 (default: <code>{ep.defaultUrl ?? "—"}</code>)
+                      {t("problem_detail.endpoint_override_active_label")}{" "}
+                      <code>{ep.defaultUrl ?? "—"}</code>)
                     </Box>
                   )}
                   {ep.overridable ? (
                     <FormField
-                      label="新しい URL を登録"
+                      label={t("problem_detail.endpoint_override_input_label")}
                       {...(state.error ? { errorText: state.error } : {})}
                     >
                       <SpaceBetween direction="horizontal" size="xs">
@@ -210,7 +210,7 @@ export function EndpointOverrideForm({
                           onClick={() => handleSave(ep.slot)}
                           loading={state.busy}
                         >
-                          登録
+                          {t("problem_detail.endpoint_override_submit")}
                         </Button>
                         {ep.overrideUrl && (
                           <Button
@@ -218,14 +218,14 @@ export function EndpointOverrideForm({
                             onClick={() => handleDelete(ep.slot)}
                             disabled={state.busy}
                           >
-                            override 解除
+                            {t("problem_detail.endpoint_override_clear")}
                           </Button>
                         )}
                       </SpaceBetween>
                     </FormField>
                   ) : (
                     <Box variant="small" color="text-status-inactive">
-                      この slot は override 不可 (固定 default URL)
+                      {t("problem_detail.endpoint_not_overridable")}
                     </Box>
                   )}
                 </SpaceBetween>
