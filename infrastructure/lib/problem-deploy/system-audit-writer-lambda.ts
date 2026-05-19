@@ -37,6 +37,12 @@ export interface SystemAuditWriterLambdaProps {
 export class SystemAuditWriterLambda extends Construct {
   public readonly fn: NodejsFunction;
   public readonly rule: Rule;
+  /**
+   * Issue #1029: CodeBuild Build State Change event (= aws.codebuild source) を listen する
+   * 別 rule。 default event bus にぶら下がるため `rule` (SBT bus) とは分離した EventBridge
+   * Rule 構築になる。
+   */
+  public readonly codeBuildFailureRule: Rule;
 
   constructor(scope: Construct, id: string, props: SystemAuditWriterLambdaProps) {
     super(scope, id);
@@ -78,6 +84,25 @@ export class SystemAuditWriterLambda extends Construct {
           "offboardingSuccess",
           "offboardingFailure",
         ],
+      },
+      targets: [new LambdaFunction(this.fn)],
+    });
+
+    // Issue #1029: CodeBuild Build State Change event は AWS service event なので **default
+    // event bus** に流れる (= SBT bus とは別 bus)。 SBT pipeline の Step Functions が CodeBuild
+    // FAILED を SUCCEEDED と取り違える silent failure に対する observability fix として、 build-status
+    // が SUCCEEDED 以外 (= FAILED / FAULT / STOPPED / TIMED_OUT 等) の event を audit に書く。
+    // project-name filter は意図的に外して account 全域を catch (= SBT が自動採番する project
+    // 名 prefix が version で変わるリスク回避、 不要 noise は handler 側 outcome=error で識別可)。
+    this.codeBuildFailureRule = new Rule(this, "CodeBuildFailureRule", {
+      description:
+        "Route CodeBuild FAILED / FAULT / STOPPED / TIMED_OUT events to SystemAuditWriter Lambda (Issue #1029)",
+      eventPattern: {
+        source: ["aws.codebuild"],
+        detailType: ["CodeBuild Build State Change"],
+        detail: {
+          "build-status": ["FAILED", "FAULT", "STOPPED", "TIMED_OUT"],
+        },
       },
       targets: [new LambdaFunction(this.fn)],
     });

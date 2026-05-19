@@ -86,6 +86,63 @@ describe("system-audit-writer (Issue #1034)", () => {
     });
   });
 
+  describe("CodeBuild Build State Change (Issue #1029)", () => {
+    function buildCodeBuildEvent(
+      buildStatus: string,
+      projectName = "tenkacloud-development-deploy-codebuild",
+    ) {
+      return {
+        version: "0",
+        id: "evt-cb-1",
+        "detail-type": "CodeBuild Build State Change",
+        source: "aws.codebuild",
+        account: "123456789012",
+        time: "2026-05-19T10:00:00.000Z",
+        region: "ap-northeast-1",
+        resources: [],
+        detail: {
+          "build-status": buildStatus,
+          "project-name": projectName,
+          "build-id": `arn:aws:codebuild:ap-northeast-1:123456789012:build/${projectName}:abc`,
+          region: "ap-northeast-1",
+        },
+      } as const;
+    }
+
+    it("FAILED build は codebuild_failed + outcome=error として SYSTEM scope に書くべき", () => {
+      const row = mapEventToAudit(buildCodeBuildEvent("FAILED"));
+      expect(row).not.toBeNull();
+      expect(row?.tenantId).toBe("SYSTEM");
+      expect(row?.action).toBe("codebuild_failed");
+      expect(row?.outcome).toBe("error");
+      expect(row?.target).toBe("tenkacloud-development-deploy-codebuild");
+      expect(row?.actor).toBe("codebuild");
+      expect(row?.extra.buildStatus).toBe("FAILED");
+    });
+
+    it("FAULT / STOPPED / TIMED_OUT も audit に書くべき (= silent failure 網羅)", () => {
+      for (const status of ["FAULT", "STOPPED", "TIMED_OUT"]) {
+        const row = mapEventToAudit(buildCodeBuildEvent(status));
+        expect(row).not.toBeNull();
+        expect(row?.outcome).toBe("error");
+        expect(row?.extra.buildStatus).toBe(status);
+      }
+    });
+
+    it("SUCCEEDED build は audit に書かないべき (= noise 抑制、 silent failure の対象外)", () => {
+      expect(mapEventToAudit(buildCodeBuildEvent("SUCCEEDED"))).toBeNull();
+    });
+
+    it("IN_PROGRESS build も audit に書かないべき (= mid-flight 状態)", () => {
+      expect(mapEventToAudit(buildCodeBuildEvent("IN_PROGRESS"))).toBeNull();
+    });
+
+    it("build-id があれば extra.buildId に保存すべき (= CloudWatch Logs deep link 用)", () => {
+      const row = mapEventToAudit(buildCodeBuildEvent("FAILED"));
+      expect(row?.extra.buildId).toMatch(/build\//);
+    });
+  });
+
   describe("resolveActor", () => {
     it("detail.sub があれば優先すべき (= Cognito 安定識別子)", () => {
       expect(resolveActor({ sub: "cog-sub-1", cognitoUsername: "alice@example" })).toEqual({

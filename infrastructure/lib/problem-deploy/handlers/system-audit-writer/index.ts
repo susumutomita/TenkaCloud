@@ -45,6 +45,14 @@ export type SbtTenantEventDetailType = keyof typeof SBT_DETAIL_TYPE_TO_ACTION;
 
 const FALLBACK_ACTOR = "sbt-control-plane";
 
+/**
+ * Issue #1029: CodeBuild の Build State Change event (= AWS default bus 経由) を別 actor で
+ * 区別する。 SBT pipeline の Step Functions が CodeBuild FAILED を SUCCEEDED で報告する
+ * silent failure に対する観測性 fix として、 FAILED build を audit log に記録する。
+ */
+const CODEBUILD_DETAIL_TYPE = "CodeBuild Build State Change";
+const CODEBUILD_ACTOR = "codebuild";
+
 export function resolveActor(detail: SbtTenantEventDetail): {
   actor: string;
   actorUsername?: string;
@@ -54,28 +62,44 @@ export function resolveActor(detail: SbtTenantEventDetail): {
   return actorUsername ? { actor, actorUsername } : { actor };
 }
 
-export function mapEventToAudit(event: EventBridgeEvent<string, SbtTenantEventDetail>): {
-  tenantId: string;
-  action: string;
-  outcome: "success" | "error";
-  target: string | undefined;
-  actor: string;
-  actorUsername: string | undefined;
-  occurredAtMs: number;
-  extra: Record<string, string>;
-} | null {
+interface CodeBuildStateChangeDetail {
+  readonly "build-status"?: string;
+  readonly "project-name"?: string;
+  readonly "build-id"?: string;
+  readonly region?: string;
+}
+
+export interface MappedAuditRow {
+  readonly tenantId: string;
+  readonly action: string;
+  readonly outcome: "success" | "error";
+  readonly target: string | undefined;
+  readonly actor: string;
+  readonly actorUsername: string | undefined;
+  readonly occurredAtMs: number;
+  readonly extra: Record<string, string>;
+}
+
+export function mapEventToAudit(
+  event: EventBridgeEvent<string, SbtTenantEventDetail | CodeBuildStateChangeDetail>,
+): MappedAuditRow | null {
+  // Issue #1029: CodeBuild Build State Change で build-status=FAILED のものを audit に記録する。
+  if (event["detail-type"] === CODEBUILD_DETAIL_TYPE) {
+    return mapCodeBuildEvent(event as EventBridgeEvent<string, CodeBuildStateChangeDetail>);
+  }
+  const tenantDetail = event.detail as SbtTenantEventDetail;
   const mapping = SBT_DETAIL_TYPE_TO_ACTION[event["detail-type"]];
   if (!mapping) return null;
-  const { actor, actorUsername } = resolveActor(event.detail);
+  const { actor, actorUsername } = resolveActor(tenantDetail);
   const occurredAtMs = event.time ? new Date(event.time).getTime() : Date.now();
   const extra: Record<string, string> = {};
-  if (event.detail.tier) extra.tier = event.detail.tier;
-  if (event.detail.tenantName) extra.tenantName = event.detail.tenantName;
+  if (tenantDetail.tier) extra.tier = tenantDetail.tier;
+  if (tenantDetail.tenantName) extra.tenantName = tenantDetail.tenantName;
   return {
     tenantId: "SYSTEM",
     action: mapping.action,
     outcome: mapping.outcome === "error" ? "error" : "success",
-    target: event.detail.tenantId,
+    target: tenantDetail.tenantId,
     actor,
     actorUsername,
     occurredAtMs,
@@ -83,12 +107,41 @@ export function mapEventToAudit(event: EventBridgeEvent<string, SbtTenantEventDe
   };
 }
 
+/**
+ * Issue #1029: CodeBuild Build State Change event の FAILED / FAULT / STOPPED / TIMED_OUT を
+ * audit に書く。 SUCCEEDED は noise が多いので skip (= 1 deploy で 1 件出ても観測価値が薄い)。
+ * SBT pipeline + 本 stack の DeployCodeBuild の両 project が catch される (= 副次的に問題 deploy
+ * の失敗も audit に上がる、 silent failure の網羅性が上がる)。
+ */
+function mapCodeBuildEvent(
+  event: EventBridgeEvent<string, CodeBuildStateChangeDetail>,
+): MappedAuditRow | null {
+  const buildStatus = event.detail["build-status"];
+  if (!buildStatus || buildStatus === "SUCCEEDED" || buildStatus === "IN_PROGRESS") {
+    return null;
+  }
+  const occurredAtMs = event.time ? new Date(event.time).getTime() : Date.now();
+  const extra: Record<string, string> = { buildStatus };
+  if (event.detail["build-id"]) extra.buildId = event.detail["build-id"];
+  if (event.detail.region) extra.region = event.detail.region;
+  return {
+    tenantId: "SYSTEM",
+    action: "codebuild_failed",
+    outcome: "error",
+    target: event.detail["project-name"],
+    actor: CODEBUILD_ACTOR,
+    actorUsername: undefined,
+    occurredAtMs,
+    extra,
+  };
+}
+
 export async function handler(
-  event: EventBridgeEvent<string, SbtTenantEventDetail>,
+  event: EventBridgeEvent<string, SbtTenantEventDetail | CodeBuildStateChangeDetail>,
 ): Promise<void> {
   const row = mapEventToAudit(event);
   if (!row) {
-    console.warn("[system-audit-writer] unknown detail-type, skipping", {
+    console.warn("[system-audit-writer] unknown / non-audit-worthy event, skipping", {
       detailType: event["detail-type"],
     });
     return;
