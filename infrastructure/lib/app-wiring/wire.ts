@@ -172,7 +172,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       eventApiLambda: problemDeployBackendStack.eventApiLambda,
       competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
       participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
-      competitorBootstrapTemplateUrl: config.competitorBootstrapTemplateUrlEnv,
+      // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 cross-stack ref で
+      // URL を受ける。 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` env-var dance は廃止。
+      competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
       samlConfig: config.tenantSamlConfig,
     },
   );
@@ -319,8 +321,12 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         awsRegion: config.awsRegion,
         awsAccountId: config.awsAccountId,
         adminInsightApiUrl: config.adminConsoleHostingInputs.adminInsightApiUrl,
+        // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 cross-stack ref で
+        // URL を受ける。 Phase 1 から runtime-config.json に正しい S3 URL が焼かれる。
+        competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
       },
     );
+    adminConsoleHosting.addDependency(problemDeployBackendStack);
     cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());
   }
 

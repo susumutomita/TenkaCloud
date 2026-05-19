@@ -36,6 +36,12 @@ export interface TenkaCloudLiteStackProps extends StackProps {
   /** Participant Portal の CloudFront URL (= application-admin-console の runtime-config に注入)。 */
   readonly participantPortalUrl?: string;
   /**
+   * Issue #1053: 競技者向け CFn bootstrap template (`competitor-bootstrap.yaml`) の S3 URL。
+   * `ProblemDeployBackendStack.competitorBootstrapTemplateUrl` を cross-stack ref で受け取り、
+   * `buildAppPlaneCore` 経由で `ApplicationAdminConsoleHosting` の runtime-config に焼く。
+   */
+  readonly competitorBootstrapTemplateUrl: string;
+  /**
    * Issue #839 follow-up: Lite mode 1 tenant 用 SAML IdP 連携。 未設定なら従来通り
    * Cognito username/password。 wire.ts が `Config.tenantSamlConfig` をそのまま渡す。
    */
@@ -80,6 +86,7 @@ export class TenkaCloudLiteStack extends Stack {
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
       participantPortalUrl: props.participantPortalUrl,
+      competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
       apiKeyConfig: {
         ssmParameterNames: {
           basic: { keyId: `${liteApiKeyPlaceholder}-basic-id`, value: liteApiKeyPlaceholder },

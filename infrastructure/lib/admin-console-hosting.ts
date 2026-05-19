@@ -12,6 +12,9 @@ import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3"
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers";
+// Issue #1053: 旧来本 stack 内に同居していた competitor-bootstrap.yaml の S3 hosting は
+// ProblemDeployBackendStack 配下の CompetitorBootstrapHosting に移管した。 本 stack は
+// その出力 URL を props で受け取って runtime-config.json に焼き込むだけ。
 
 export interface AdminConsoleHostingStackProps extends cdk.StackProps {
   /** Control Plane API Gateway URL (末尾スラッシュ無し) */
@@ -48,6 +51,13 @@ export interface AdminConsoleHostingStackProps extends cdk.StackProps {
    * (= phase 2 初回 deploy の race 状態でも UI が壊れない安全装置)。
    */
   readonly adminInsightApiUrl: string;
+  /**
+   * Issue #1053: 競技者向け CFn bootstrap template (`competitor-bootstrap.yaml`) の S3 URL。
+   * `ProblemDeployBackendStack.competitorBootstrapTemplateUrl` を cross-stack ref で受け取る。
+   * runtime-config.json に焼き込まれ、 admin-console の Competitor Accounts 画面が CFn Quick
+   * Create / Update Stack deeplink の TemplateURL に埋める。
+   */
+  readonly competitorBootstrapTemplateUrl: string;
 }
 
 /**
@@ -67,13 +77,6 @@ export interface AdminConsoleHostingStackProps extends cdk.StackProps {
  */
 export class AdminConsoleHostingStack extends cdk.Stack {
   public readonly distributionDomainName: string;
-  /**
-   * #718: CFn `TemplateURL` は S3 / SSM の URL しか受け付けない (raw.githubusercontent.com は
-   * reject)。 競技者の Quick-create / Update Stack 経路で fetch される
-   * `competitor-bootstrap.yaml` の S3 public URL。 admin-console の runtime-config.json に
-   * 注入され、 frontend の `buildLaunchStackUrl` / `buildUpdateStackUrl` が consumer。
-   */
-  public readonly competitorBootstrapTemplateUrl: string;
 
   constructor(scope: Construct, id: string, props: AdminConsoleHostingStackProps) {
     super(scope, id, props);
@@ -121,46 +124,6 @@ export class AdminConsoleHostingStack extends cdk.Stack {
 
     this.distributionDomainName = distribution.distributionDomainName;
 
-    // #718: 競技者向け CFn template の public S3 host。 CFn `TemplateURL` は S3 URL のみ
-    // 許容するため、 GitHub raw URL の代わりに本 bucket の virtual-hosted style URL を返す。
-    // template 自体は既に public repo に置いてあり secret は含まないので、 public-read ACL
-    // は OK (= content は GitHub と冗長な複製)。 admin-console の runtime-config 経由で
-    // frontend に渡し、 Quick-create / Update Stack deeplink の templateURL に埋める。
-    const templateBucket = new Bucket(this, "CompetitorBootstrapTemplateBucket", {
-      encryption: BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      // public-read を明示的に許可するため BlockPublicAccess を全 OFF にする。 BucketPolicy
-      // / ACL を後段で `publicReadAccess: true` で付与する。 同 stack 内の SiteBucket は
-      // BLOCK_ALL のまま (= 別 bucket 分離 + 1 bucket = 1 用途で混在を避ける)。
-      blockPublicAccess: new BlockPublicAccess({
-        blockPublicAcls: false,
-        blockPublicPolicy: false,
-        ignorePublicAcls: false,
-        restrictPublicBuckets: false,
-      }),
-      publicReadAccess: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    // CompetitorAccounts modal の Launch Stack / Update Stack で参照される yaml を S3 へ sync。
-    // ローカル checkout の最新 yaml を deploy 時に upload するため、 GitHub raw と異なり
-    // PR 後の merge → 再 deploy で competitor 側にも反映される。
-    new BucketDeployment(this, "CompetitorBootstrapTemplateDeployment", {
-      sources: [
-        Source.asset(path.join(__dirname, "..", "templates"), {
-          // テンプレ単一 file のみ upload (= templates/ ディレクトリ内の README 等は不要)
-          exclude: ["*", "!competitor-bootstrap.yaml"],
-        }),
-      ],
-      destinationBucket: templateBucket,
-      prune: false,
-    });
-
-    // virtual-hosted style S3 URL (= CFn TemplateURL が要求する形式)。 region は明示的に
-    // path に含める。 同 stack 配下の bucketName は CFn deploy 時に動的解決される。
-    this.competitorBootstrapTemplateUrl = `https://${templateBucket.bucketName}.s3.${cdk.Stack.of(this).region}.amazonaws.com/competitor-bootstrap.yaml`;
-
     // 1) dist/ をアップロード (URL 非依存の静的ファイル)
     const distDir = path.join(__dirname, "..", "..", "apps", "admin-console", "dist");
     new BucketDeployment(this, "SiteDeployment", {
@@ -182,8 +145,10 @@ export class AdminConsoleHostingStack extends cdk.Stack {
       awsAccountId: props.awsAccountId,
       // ADR-011 #590 Phase 1.A
       adminInsightApiUrl: props.adminInsightApiUrl.replace(/\/$/, ""),
-      // #718: 競技者向け bootstrap template の public S3 URL (CFn TemplateURL 経由 fetch 用)
-      competitorBootstrapTemplateUrl: this.competitorBootstrapTemplateUrl,
+      // Issue #1053: 競技者向け bootstrap template の public S3 URL (= ProblemDeployBackendStack
+      // 配下 CompetitorBootstrapHosting の cross-stack ref)。 CFn TemplateURL は S3 URL のみ受け
+      // 付けるため、 frontend は本値を Quick-create / Update Stack deeplink に埋める。
+      competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
     };
     // Issue #867: runtime-config.json は **絶対にキャッシュさせない** (= CloudFront edge で
     // tenant 間混線するリスク + deploy 後 1 時間反映されない問題を避けるため)。
@@ -200,12 +165,6 @@ export class AdminConsoleHostingStack extends cdk.Stack {
       value: `https://${distribution.distributionDomainName}`,
       description:
         "admin-console の CloudFront URL。ControlPlaneStack の CDK_PARAM_ADMIN_CONSOLE_ORIGIN に設定して再 deploy することで Cognito callback + CORS に追加される",
-    });
-
-    new cdk.CfnOutput(this, "CompetitorBootstrapTemplateUrl", {
-      value: this.competitorBootstrapTemplateUrl,
-      description:
-        "Competitor 用 bootstrap CFn テンプレート (= competitor-bootstrap.yaml) の S3 public URL。Quick-create / Update Stack deeplink の TemplateURL に渡す。",
     });
   }
 }

@@ -186,7 +186,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   }
 
   const adminConsoleOriginForCors = env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN;
-  const competitorBootstrapTemplateUrlEnv = env.CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL;
+  // Issue #1053: 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` env-var dance は廃止。
+  // hosting を ProblemDeployBackendStack に移管し、 consumer は cross-stack ref で URL を受ける。
 
   const adminConsoleHostingInputs = buildHostingInputs(env);
 
@@ -247,7 +248,6 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     challengePayloadBucketName,
     deployConcurrentBuildLimit,
     adminConsoleOriginForCors,
-    competitorBootstrapTemplateUrlEnv,
     adminConsoleHostingInputs,
     tenantSamlConfig,
     controlPlaneSamlConfig,

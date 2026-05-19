@@ -82,8 +82,9 @@ export interface AppConfig {
   /** AdminConsoleInsight の CORS allow-list 用 origin。 phase 2 deploy 時に install.sh が export する。 */
   readonly adminConsoleOriginForCors: string | undefined;
 
-  /** 競技者向け bootstrap template の S3 URL (phase 3 で install.sh が export して inject)。 */
-  readonly competitorBootstrapTemplateUrlEnv: string | undefined;
+  // Issue #1053: 旧 `competitorBootstrapTemplateUrlEnv` (= `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL`)
+  // は廃止。 ProblemDeployBackendStack に hosting を移管したため、 consumer は cross-stack ref で
+  // URL を受ける (= Phase 3 env-var dance が不要になる)。
 
   /** Phase 2 hosting stack を立てるための 3 つの env (全部揃ったときだけ deploy する)。 */
   readonly adminConsoleHostingInputs: AdminConsoleHostingInputs | undefined;

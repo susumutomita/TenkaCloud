@@ -63,17 +63,12 @@ describe("tenant lifecycle scripts", () => {
     expect(nodeMajor).toBeGreaterThanOrEqual(22);
   });
 
-  // Issue #1029 / PR-1028 follow-up: install.sh が pooled stack を deploy しなくなったため、
-  // CodeBuild 側で competitorBootstrapTemplateUrl を CFn output から読み直す必要がある。
-  // 忘れると pooled tenant の application-admin-console runtime-config に bootstrap URL が
-  // 空のまま焼かれ、 競技者の Launch Stack deeplink が動かなくなる。 regression pin。
-  it("update-tenant.sh は admin-console-hosting の CompetitorBootstrapTemplateUrl を CFn output から export すべき", () => {
+  // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 update-tenant.sh / provision-tenant.sh
+  // は `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` を env で渡さない (= cross-stack ref に置換)。
+  // 旧 env-var 経路が誤って復活しないよう regression pin する。
+  it("update-tenant.sh は CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL を env-var inject しないべき (#1053)", () => {
     const script = readRepoFile("scripts/update-tenant.sh");
-    expect(script).toMatch(
-      /CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=\$\(aws cloudformation describe-stacks/,
-    );
-    expect(script).toContain('--stack-name "tenkacloud-admin-console-hosting"');
-    expect(script).toMatch(/CompetitorBootstrapTemplateUrl/);
+    expect(script).not.toMatch(/export\s+CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=/);
   });
 
   // Issue #1038 P2 #13: SBT pipeline (CodeBuild) が pooled / silo stack を synth するとき
@@ -143,17 +138,10 @@ describe("tenant lifecycle scripts", () => {
     expect(branchIdx).toBeGreaterThan(normalizeIdx);
   });
 
-  // Issue #1029 follow-up: 初回 provisioning でも admin-console-hosting の
-  // CompetitorBootstrapTemplateUrl を CFn output から読んで cdk deploy 時に env に流す。
-  // 忘れると pooled tenant の runtime-config に bootstrap URL が空のまま焼かれ、
-  // 競技者 Launch Stack で CFn が「TemplateURL must be a supported URL」 で reject する
-  // (= raw.githubusercontent.com fallback では deploy 不可、 2026-05-18 観測)。
-  it("provision-tenant.sh は admin-console-hosting の CompetitorBootstrapTemplateUrl を CFn output から export すべき", () => {
+  // Issue #1053: 初回 provisioning でも env-var inject は不要 (= ProblemDeployBackendStack
+  // から cross-stack ref で URL が引かれる)。 旧経路が誤って復活しないよう regression pin。
+  it("provision-tenant.sh は CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL を env-var inject しないべき (#1053)", () => {
     const script = readRepoFile("scripts/provision-tenant.sh");
-    expect(script).toMatch(
-      /CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=\$\(aws cloudformation describe-stacks/,
-    );
-    expect(script).toContain('--stack-name "tenkacloud-admin-console-hosting"');
-    expect(script).toMatch(/CompetitorBootstrapTemplateUrl/);
+    expect(script).not.toMatch(/export\s+CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=/);
   });
 });

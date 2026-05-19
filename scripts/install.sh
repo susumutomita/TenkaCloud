@@ -175,17 +175,9 @@ echo "=============================================="
 ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'AdminConsoleUrl')].OutputValue" --output text)
 export CDK_PARAM_ADMIN_CONSOLE_ORIGIN="${ADMIN_CONSOLE_URL}"
 echo "  CloudFront URL: ${ADMIN_CONSOLE_URL}"
-# #718: AdminConsoleHostingStack の CompetitorBootstrapTemplateUrl output を取得し、
-# tenant-template-pooled に env 経由で再 inject する。 これにより application-admin-console の
-# runtime-config.json に S3 URL が埋まり、 Launch Stack / Update Stack の CFn TemplateURL が
-# S3 URL になる (= 旧 GitHub raw は CFn が reject していた)。
-COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting --query "Stacks[0].Outputs[?starts_with(OutputKey,'CompetitorBootstrapTemplateUrl')].OutputValue" --output text)
-export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL="${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
-echo "  Competitor bootstrap template URL: ${COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
-# Issue #1029 / PR-1028 follow-up: pooled stack は SBT pipeline (CodeBuild) で update する
-# 設計なので install.sh では deploy しない。 CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL が
-# pooled stack に伝播するのは、 次の tenant event で CodeBuild が走ったとき
-# (update-tenant.sh が同 CFn output を読んで env に流す、 別 commit で対応)。
+# Issue #1053: 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` の env-var inject は廃止。
+# hosting を ProblemDeployBackendStack に移管したので、 Phase 1 完了時点で cross-stack ref
+# 経由で runtime-config.json に正しい S3 URL が焼かれる (= Phase 3 の dance が不要)。
 bun cdk deploy tenkacloud-control-plane tenkacloud-admin-console-insight --require-approval never
 
 # ============================================================================
