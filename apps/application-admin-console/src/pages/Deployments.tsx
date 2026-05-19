@@ -16,6 +16,7 @@ import {
   listAllDeployments,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -25,11 +26,12 @@ import {
 
 function buildColumnDefinitions(
   navigate: NavigateFunction,
+  t: (key: string) => string,
 ): TableProps.ColumnDefinition<DeploymentSummary>[] {
   return [
     {
       id: "team",
-      header: "チーム",
+      header: t("deployments.col_team"),
       cell: (item) => (
         <Link
           fontSize="body-m"
@@ -45,12 +47,12 @@ function buildColumnDefinitions(
     },
     {
       id: "problemId",
-      header: "問題",
+      header: t("deployments.col_problem"),
       cell: (item) => <code>{item.problemId}</code>,
     },
     {
       id: "status",
-      header: "ステータス",
+      header: t("deployments.col_status"),
       cell: (item) => (
         <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
           {item.status}
@@ -59,12 +61,12 @@ function buildColumnDefinitions(
     },
     {
       id: "namePrefix",
-      header: "Stack 名",
+      header: t("deployments.col_stack_name"),
       cell: (item) => <code>{item.namePrefix}</code>,
     },
     {
       id: "createdAt",
-      header: "作成",
+      header: t("deployments.col_created_at"),
       cell: (item) => item.createdAt,
     },
   ];
@@ -73,11 +75,12 @@ function buildColumnDefinitions(
 export function DeploymentsPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
+  const t = useT();
   const [items, setItems] = useState<readonly DeploymentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
-  const columnDefinitions = useMemo(() => buildColumnDefinitions(navigate), [navigate]);
+  const columnDefinitions = useMemo(() => buildColumnDefinitions(navigate, t), [navigate, t]);
 
   const fetchOnce = useCallback(
     async ({ showSpinner }: { showSpinner: boolean } = { showSpinner: false }) => {
@@ -113,14 +116,14 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
   if (!items && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> 一覧を取得中...
+        <Spinner /> {t("deployments.loading")}
       </Box>
     );
   }
 
   if (error && !items) {
     return (
-      <Alert type="error" header="一覧の取得に失敗しました">
+      <Alert type="error" header={t("deployments.list_failed_header")}>
         {error}
       </Alert>
     );
@@ -130,14 +133,14 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="自テナントで起動した問題の deploy ジョブ一覧。各行を選ぶと詳細が見られます。"
+        description={t("deployments.description")}
         actions={
           <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
-            再読み込み
+            {t("deployments.reload")}
           </Button>
         }
       >
-        デプロイ履歴
+        {t("deployments.header")}
       </Header>
 
       <Table
@@ -145,7 +148,7 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
         columnDefinitions={columnDefinitions}
         empty={
           <Box textAlign="center" color="inherit" padding="xxl">
-            まだ deploy ジョブはありません。
+            {t("deployments.empty")}
           </Box>
         }
       />

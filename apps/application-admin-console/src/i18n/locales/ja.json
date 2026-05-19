@@ -8,10 +8,12 @@
   },
   "nav": {
     "menu": "メニュー",
-    "events": "イベント",
+    "home": "ホーム",
+    "events": "Events",
     "teams": "チーム",
-    "problems": "問題",
-    "deployments": "デプロイ"
+    "problems": "Problems",
+    "deployments": "Deployments",
+    "competitor_accounts": "Competitor Accounts"
   },
   "auth": {
     "sign_out": "サインアウト"
@@ -30,7 +32,22 @@
     "welcome": "ようこそ、{displayName} さん",
     "welcome_fallback_name": "テナント",
     "tenant_name_missing_header": "テナント名が JWT に含まれていません",
-    "tenant_name_missing_body": "一度サインアウトして再ログインしてください。 解消しない場合は System Admin に連絡し、 テナント名を Cognito user の custom:tenantName 属性に設定してもらってください。"
+    "tenant_name_missing_body": "一度サインアウトして再ログインしてください。 解消しない場合は System Admin に連絡し、 テナント名を Cognito user の custom:tenantName 属性に設定してもらってください。",
+    "catalog_header": "問題カタログ",
+    "stat_total": "登録数",
+    "stat_ready": "公開中 (ready)",
+    "stat_draft": "下書き (draft)",
+    "stat_battle": "Battle",
+    "next_action_header": "次のアクション",
+    "next_action_view_all": "すべての問題を見る",
+    "next_action_close_aria": "次のアクション section を閉じる",
+    "next_action_body": "競技アカウントへ問題をデプロイすると、 参加者向けの URL (frontend / api) と、 チーム単位のログインキー が払い出されます。 参加者個別のアカウントは作成せず、 各チームに 1 つ配布する短命なキーでアクセス制御するため、 運営側で個人情報の管理義務を抱え込みません。 まずは 問題カタログ から問題を 1 つ選んでください。",
+    "tenant_info_header": "テナント情報",
+    "tenant_info_name": "テナント名",
+    "tenant_info_id": "テナント ID",
+    "tenant_info_tier": "プラン",
+    "value_unset": "(未設定)",
+    "value_unknown": "(unknown)"
   },
   "event_list": {
     "header": "Event 一覧",
@@ -127,5 +144,18 @@
     "deploy_modal_now": "今すぐ Deploy",
     "deploy_modal_alert_header": "次は問題の Deploy です",
     "deploy_modal_alert_body": "チーム毎の問題 deploy を実行するまで、 participant は問題にアクセスできません。 「今すぐ Deploy」 で全 team × 全問題を一括 deploy します。 「あとで」 を選んだ場合は、 EventDetail 画面の Deploy button から後で実行できます。"
+  },
+  "deployments": {
+    "header": "デプロイ履歴",
+    "description": "自テナントで起動した問題の deploy ジョブ一覧。 各行を選ぶと詳細が見られます。",
+    "reload": "再読み込み",
+    "loading": "一覧を取得中...",
+    "list_failed_header": "一覧の取得に失敗しました",
+    "empty": "まだ deploy ジョブはありません。",
+    "col_team": "チーム",
+    "col_problem": "問題",
+    "col_status": "ステータス",
+    "col_stack_name": "Stack 名",
+    "col_created_at": "作成"
   }
 }

@@ -92,17 +92,15 @@ export function HomePage() {
         </Alert>
       )}
 
-      <Container header={<Header variant="h2">問題カタログ</Header>}>
+      <Container header={<Header variant="h2">{t("home.catalog_header")}</Header>}>
         <ColumnLayout columns={4} variant="text-grid">
-          <Stat label="登録数" value={String(totalCount)} />
-          <Stat label="公開中 (ready)" value={String(readyCount)} />
-          <Stat label="下書き (draft)" value={String(draftCount)} />
-          <Stat label="Battle" value={String(battleCount)} />
+          <Stat label={t("home.stat_total")} value={String(totalCount)} />
+          <Stat label={t("home.stat_ready")} value={String(readyCount)} />
+          <Stat label={t("home.stat_draft")} value={String(draftCount)} />
+          <Stat label={t("home.stat_battle")} value={String(battleCount)} />
         </ColumnLayout>
       </Container>
 
-      {/* #542: 初回 onboarding section。閉じると localStorage に dismissed=true が記録され
-       *   以降の visit で出ない。テナント情報の上に置いて初見 operator の導線にする。*/}
       {!onboardingDismissed && (
         <Container
           header={
@@ -110,11 +108,13 @@ export function HomePage() {
               variant="h2"
               actions={
                 <SpaceBetween direction="horizontal" size="xs">
-                  <Button onClick={() => navigate("/problems")}>すべての問題を見る</Button>
+                  <Button onClick={() => navigate("/problems")}>
+                    {t("home.next_action_view_all")}
+                  </Button>
                   <Button
                     iconName="close"
                     variant="icon"
-                    ariaLabel="次のアクション section を閉じる"
+                    ariaLabel={t("home.next_action_close_aria")}
                     onClick={() => {
                       writeOnboardingDismissed(true);
                       setOnboardingDismissed(true);
@@ -123,29 +123,27 @@ export function HomePage() {
                 </SpaceBetween>
               }
             >
-              次のアクション
+              {t("home.next_action_header")}
             </Header>
           }
         >
-          <Box variant="p">
-            競技アカウントへ問題をデプロイすると、参加者向けの URL (frontend / api) と、
-            <strong>チーム単位のログインキー</strong>{" "}
-            が払い出されます。参加者個別のアカウントは作成せず、各チームに 1
-            つ配布する短命なキーでアクセス制御するため、運営側で個人情報の管理義務を抱え込みません。
-            まずは <strong>問題カタログ</strong> から問題を 1 つ選んでください。
-          </Box>
+          <Box variant="p">{t("home.next_action_body")}</Box>
         </Container>
       )}
 
-      <Container header={<Header variant="h2">テナント情報</Header>}>
+      <Container header={<Header variant="h2">{t("home.tenant_info_header")}</Header>}>
         <ColumnLayout columns={2} variant="text-grid">
-          <KeyValue label="テナント名" value={tenantName ?? "(未設定)"} />
-          <KeyValue label="テナント ID" value={tenantId ?? "(unknown)"} />
           <KeyValue
-            label="プラン"
-            valueNode={tenantTier ? <Badge>{tenantTier}</Badge> : <span>(unknown)</span>}
+            label={t("home.tenant_info_name")}
+            value={tenantName ?? t("home.value_unset")}
           />
-          {/* Issue #831: \"サインインユーザー\" は TopNav 右上の user-menu に移動した */}
+          <KeyValue label={t("home.tenant_info_id")} value={tenantId ?? t("home.value_unknown")} />
+          <KeyValue
+            label={t("home.tenant_info_tier")}
+            valueNode={
+              tenantTier ? <Badge>{tenantTier}</Badge> : <span>{t("home.value_unknown")}</span>
+            }
+          />
         </ColumnLayout>
       </Container>
     </SpaceBetween>
