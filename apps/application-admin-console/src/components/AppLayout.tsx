@@ -14,8 +14,6 @@ import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 const LOCALE_NAME: Record<LocaleCode, string> = {
   ja: "日本語",
   en: "English",
-  es: "Español",
-  zh: "中文",
 };
 
 /**
