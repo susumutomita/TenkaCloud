@@ -29,6 +29,7 @@ vi.mock("../../src/api/deploy-client", async (importOriginal) => {
 
 import type { DeploymentSummary, StackProgress } from "../../src/api/deploy-client";
 import type { AppConfig } from "../../src/config";
+import { I18nProvider } from "../../src/i18n";
 
 const config: AppConfig = {
   cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
@@ -70,17 +71,20 @@ const { DeploymentDetailPage } = await import("../../src/pages/DeploymentDetail"
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[`/deployments/${JOB_ID}`]}>
-      <Routes>
-        <Route path="/deployments/:jobId" element={<DeploymentDetailPage config={config} />} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={[`/deployments/${JOB_ID}`]}>
+        <Routes>
+          <Route path="/deployments/:jobId" element={<DeploymentDetailPage config={config} />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.useApiClient.mockReturnValue({});
+  window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
 });
 
 afterEach(() => vi.restoreAllMocks());

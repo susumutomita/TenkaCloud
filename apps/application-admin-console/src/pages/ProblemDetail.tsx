@@ -19,6 +19,7 @@ import {
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
+import { useT } from "../i18n";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -26,33 +27,21 @@ import {
   EMPTY_DEPLOYMENT_ITEMS,
 } from "../utils/deployments";
 
-const DIFFICULTY_LABEL = {
-  1: "入門",
-  2: "初級",
-  3: "中級",
-  4: "上級",
-  5: "エキスパート",
-} as const;
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
-/**
- * 問題詳細ページ。manifest 由来のメタデータを read-only で表示する。
- *
- * 旧: 「競技アカウントへデプロイ」CTA で単発 deploy できたが、Event 紐付き無しの
- * orphan deployment になり scoreboard / 集計に出ない問題があったため flow を廃止。
- * 全 deploy は Event の Bulk Deploy 経由のみ。
- */
 export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
+  const t = useT();
 
   if (!problemId) return <Navigate to="/problems" replace />;
   const problem = findProblem(problemId);
   if (!problem) {
     return (
       <SpaceBetween size="l">
-        <Header variant="h1">問題が見つかりません</Header>
-        <Alert type="error">指定された問題 ID ({problemId}) はカタログに存在しません。</Alert>
-        <Button onClick={() => navigate("/problems")}>問題一覧へ戻る</Button>
+        <Header variant="h1">{t("problem_detail.not_found_header")}</Header>
+        <Alert type="error">{t("problem_detail.not_found_body", { problemId })}</Alert>
+        <Button onClick={() => navigate("/problems")}>{t("problem_detail.back_to_list")}</Button>
       </SpaceBetween>
     );
   }
@@ -62,31 +51,39 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       <Header
         variant="h1"
         description={problem.shortDescription}
-        actions={<Button onClick={() => navigate("/problems")}>一覧へ戻る</Button>}
+        actions={
+          <Button onClick={() => navigate("/problems")}>{t("problem_detail.back_short")}</Button>
+        }
       >
         {problem.name}
       </Header>
 
-      <Container header={<Header variant="h2">概要</Header>}>
+      <Container header={<Header variant="h2">{t("problem_detail.section_overview")}</Header>}>
         <ColumnLayout columns={4} variant="text-grid">
-          <Meta label="カテゴリ">
+          <Meta label={t("problem_detail.label_category")}>
             <Badge color={problem.category === "Battle" ? "red" : "blue"}>{problem.category}</Badge>
           </Meta>
-          <Meta label="難易度">{DIFFICULTY_LABEL[problem.difficulty]}</Meta>
-          <Meta label="想定プレイ時間">{problem.estimatedDuration}</Meta>
-          <Meta label="ステータス">
+          <Meta label={t("problem_detail.label_difficulty")}>
+            {t(`problem_detail.difficulty_${problem.difficulty}`)}
+          </Meta>
+          <Meta label={t("problem_detail.label_estimated_duration")}>
+            {problem.estimatedDuration}
+          </Meta>
+          <Meta label={t("problem_detail.label_status")}>
             <Badge color={problem.status === "ready" ? "green" : "blue"}>{problem.status}</Badge>
           </Meta>
         </ColumnLayout>
       </Container>
 
-      <Container header={<Header variant="h2">問題説明</Header>}>
+      <Container header={<Header variant="h2">{t("problem_detail.section_description")}</Header>}>
         <Box variant="p">
           <span style={{ whiteSpace: "pre-wrap" }}>{problem.description}</span>
         </Box>
       </Container>
 
-      <Container header={<Header variant="h2">学習目的</Header>}>
+      <Container
+        header={<Header variant="h2">{t("problem_detail.section_learning_goals")}</Header>}
+      >
         <ul>
           {problem.learningGoals.map((g) => (
             <li key={g}>{g}</li>
@@ -94,12 +91,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         </ul>
       </Container>
 
-      <Container header={<Header variant="h2">参加者に払い出されるエンドポイント</Header>}>
+      <Container header={<Header variant="h2">{t("problem_detail.section_endpoints")}</Header>}>
         <SpaceBetween size="s">
-          <Box variant="p">
-            デプロイ完了時、競技アカウント上で立ち上がった以下のポートが、参加者に共有可能な URL
-            として表示されます。
-          </Box>
+          <Box variant="p">{t("problem_detail.endpoints_intro")}</Box>
           <ul>
             {problem.exposedPorts.map((p) => (
               <li key={`${p.name}-${p.port}`}>
@@ -107,37 +101,35 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
               </li>
             ))}
           </ul>
-          <Alert type="info" header="アクセス制御は per-team ログインキー">
-            各エンドポイントは <strong>チーム単位で発行されるログインキー</strong> で gating
-            されます。参加者ごとのユーザーアカウントは作成されないため、運営側で個別アカウントの管理義務
-            (招待 / リセット / 削除) を負わない構成です。
+          <Alert type="info" header={t("problem_detail.endpoints_access_header")}>
+            {t("problem_detail.endpoints_access_body_pre")}{" "}
+            <strong>{t("problem_detail.endpoints_access_strong")}</strong>{" "}
+            {t("problem_detail.endpoints_access_body_post")}
           </Alert>
         </SpaceBetween>
       </Container>
 
-      <Container header={<Header variant="h2">タグ</Header>}>
+      <Container header={<Header variant="h2">{t("problem_detail.section_tags")}</Header>}>
         <SpaceBetween direction="horizontal" size="xs">
-          {problem.tags.map((t) => (
-            <Badge key={t}>{t}</Badge>
+          {problem.tags.map((tag) => (
+            <Badge key={tag}>{tag}</Badge>
           ))}
         </SpaceBetween>
       </Container>
 
-      <ProblemDeploymentsSection config={config} problemId={problem.id} />
+      <ProblemDeploymentsSection config={config} problemId={problem.id} t={t} />
     </SpaceBetween>
   );
 }
 
 function buildColumns(
   navigate: NavigateFunction,
+  t: TFn,
 ): TableProps.ColumnDefinition<DeploymentSummary>[] {
-  // #541: 単発「削除」 button は撤去。削除は EventDetail の「Delete」 (= 旧 Bulk Teardown)
-  // に集約。orphan single delete を残すと「片付け済の hidden 行が見えないまま課金される」
-  // 危険性があり、operator 視点で削除フローが 1 箇所に集まっている方が事故が少ない。
   return [
     {
       id: "team",
-      header: "チーム",
+      header: t("problem_detail.col_team"),
       cell: (item) => (
         <Link
           fontSize="body-m"
@@ -153,7 +145,7 @@ function buildColumns(
     },
     {
       id: "status",
-      header: "ステータス",
+      header: t("problem_detail.col_status_header"),
       cell: (item) => (
         <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
           {item.status}
@@ -162,27 +154,25 @@ function buildColumns(
     },
     {
       id: "namePrefix",
-      header: "Stack 名",
+      header: t("problem_detail.col_stack_name"),
       cell: (item) => <code>{item.namePrefix}</code>,
     },
     {
       id: "createdAt",
-      header: "作成",
+      header: t("problem_detail.col_created_at"),
       cell: (item) => item.createdAt,
     },
   ];
 }
 
-/**
- * ProblemDetail に埋め込むこの問題の deploy 一覧。tenant scope の `listDeployments(problemId)`
- * を 10 秒 polling し、status / 削除操作を operator が直接管理できるようにする。
- */
 function ProblemDeploymentsSection({
   config,
   problemId,
+  t,
 }: {
   config: AppConfig;
   problemId: string;
+  t: TFn;
 }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
@@ -216,19 +206,19 @@ function ProblemDeploymentsSection({
     };
   }, [fetchOnce]);
 
-  const columns = useMemo(() => buildColumns(navigate), [navigate]);
+  const columns = useMemo(() => buildColumns(navigate, t), [navigate, t]);
 
   return (
     <Container
       header={
-        <Header variant="h2" description={`この問題の進行中 / 過去のデプロイジョブ一覧。`}>
-          デプロイ状況
+        <Header variant="h2" description={t("problem_detail.deployments_description")}>
+          {t("problem_detail.deployments_header")}
         </Header>
       }
     >
       <SpaceBetween size="m">
         {error && (
-          <Alert type="error" header="一覧の取得に失敗しました">
+          <Alert type="error" header={t("problem_detail.deployments_fetch_failed_header")}>
             {error}
           </Alert>
         )}
@@ -236,10 +226,10 @@ function ProblemDeploymentsSection({
           items={items ?? EMPTY_DEPLOYMENT_ITEMS}
           columnDefinitions={columns}
           loading={items === null && !error}
-          loadingText="読み込み中"
+          loadingText={t("problem_detail.deployments_loading_text")}
           empty={
             <Box textAlign="center" color="inherit" padding="xxl">
-              この問題のデプロイ履歴はまだありません。
+              {t("problem_detail.deployments_empty")}
             </Box>
           }
         />
