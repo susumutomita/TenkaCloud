@@ -4,6 +4,7 @@ import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
+import { evaluateGate, type GateBlock, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -117,6 +118,21 @@ export interface ParticipantTeamView {
     readonly teamId?: string;
   };
   readonly problems: readonly ParticipantProblemView[];
+  /**
+   * Issue #1038 P0 #2: 競技開始前 / 終了 / 一時停止 の gate 状態。 frontend が
+   * ProblemDetail page にロック画面を出すために使う (= competitor が競技開始前に問題詳細
+   * や hints を覗き見るのを防ぐ)。
+   *
+   * - `{ kind: "ok" }` = gate 通過、 通常表示
+   * - `{ kind: "scoring_not_started", startsAt? }` = 競技開始前、 ProblemDetail を隠す
+   * - `{ kind: "scoring_ended", endsAt? }` = 競技終了後、 ProblemDetail は閲覧可能だが
+   *   提出 / hint reveal は backend gate で reject される (= 既存挙動と同等)
+   * - `{ kind: "scoring_locked" }` = 一時 lock、 提出 / hint reveal は同様に reject
+   *
+   * eventId 不在 / gate 取得失敗時は **fail-closed** で scoring_not_started 扱い
+   * (= 安全側に倒す)。
+   */
+  readonly eventGate?: GateBlock | { readonly kind: "ok" };
 }
 
 /**
@@ -268,13 +284,28 @@ function toApplicationStatus(item: Partial<DeploymentItem>): ApplicationStatus {
  *
  * GSI2 は eventually consistent。直近に rotate / 削除された teamLoginKey は最大
  * 数百ms 程度認証が通る可能性があるが、TTL ベースの teardown と整合する許容範囲。
+ *
+ * Issue #1038 P0 #2: team view に **eventGate** (= 競技開始前 / 終了 / 一時停止 の judge)
+ * を含める。 frontend が ProblemDetail page にロック画面を出すために使う (= competitor が
+ * 競技開始前に問題詳細 / hints を覗き見るのを防ぐ)。 gate 取得 fail (= eventId 不在 /
+ * IAM 失敗) は fail-closed で `kind: "scoring_not_started"` 扱い (= 安全側に倒す)。
  */
 export async function lookupTeamByLoginKey(
   shared: ParticipantSharedResources,
   teamLoginKey: string,
 ): Promise<ParticipantTeamView | undefined> {
   const items = await queryTeamItems(shared, teamLoginKey);
-  return buildTeamView(items, shared.problemsScoring);
+  const view = buildTeamView(items, shared.problemsScoring);
+  if (!view) return undefined;
+
+  // eventGate を取得して team view に注入。 eventId 不在は gate 不明 → fail-closed。
+  const eventId = view.team.eventId;
+  if (eventId) {
+    const gate = await getEventGate(shared, eventId);
+    const block = evaluateGate(gate, Date.now());
+    return { ...view, eventGate: block ?? { kind: "ok" } };
+  }
+  return { ...view, eventGate: { kind: "scoring_not_started" } };
 }
 
 /**
