@@ -32,6 +32,11 @@ fi
 export CDK_PARAM_S3_BUCKET_NAME="${CDK_PARAM_S3_BUCKET_NAME:-tenkacloud-source-${ACCOUNT_ID}-${REGION}}"
 export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
 
+# repo root を決定 (= 本 script は repo の scripts/ 配下)。 bucket lifecycle JSON を参照するため、
+# bucket 作成 block より前に解決しておく。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TENKACLOUD_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 echo "[prepare-source-bundle] bucket=${CDK_PARAM_S3_BUCKET_NAME} key=${CDK_SOURCE_NAME}"
 
 # bucket を作成 (= 既存なら skip、 idempotent)
@@ -51,9 +56,16 @@ else
     --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 fi
 
-# repo root を決定 (= 本 script は repo の scripts/ 配下)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TENKACLOUD_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# Issue #1056: lifecycle policy を idempotent に PUT する (= 過去 bucket で未設定でも是正)。
+# 設定値は `infrastructure/environments/<env>/config.json` の `sourceBundleConfig` を
+# source of truth とし、 emit script が AWS API shape の JSON を stdout に出力する
+# (= config の二重持ちを避け、 `${VAR:-default}` placeholder で env override 可)。
+echo "[prepare-source-bundle] applying lifecycle policy..."
+LIFECYCLE_JSON=$(bun run "${SCRIPT_DIR}/print-source-bundle-lifecycle.ts" "${ENV:-development}")
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
+  --lifecycle-configuration "${LIFECYCLE_JSON}"
+
 cd "${TENKACLOUD_ROOT}"
 
 # apps build (= source.zip 内 dist 同梱のため必須)
@@ -62,9 +74,15 @@ echo "[prepare-source-bundle] building apps/application-admin-console..."
 echo "[prepare-source-bundle] building apps/participant-portal..."
 (cd apps/participant-portal && bun install --ignore-scripts && bun run build) >/dev/null
 
-# staging
-STAGING=$(mktemp -d)
-trap "rm -rf '${STAGING}'" EXIT
+# Issue #1056: staging は fixed path (= <repo>/.cache/source-bundle/) に置く。 旧実装の
+# `mktemp -d` (= /var/folders/.../T/tmp.* random 名) は Ctrl+C / 異常終了 / set -e 前段失敗で
+# orphan 化し、 macOS の periodic GC を待たねば消えないため PC ディスクを圧迫していた。
+# fixed path にして 開始時に必ず clean + EXIT/INT/TERM 全 signal で trap して確実に剥がす。
+# `.cache/` は repo の .gitignore で除外済。
+STAGING="${TENKACLOUD_ROOT}/.cache/source-bundle"
+rm -rf "${STAGING}"
+mkdir -p "${STAGING}"
+trap "rm -rf '${STAGING}'" EXIT INT TERM
 echo "[prepare-source-bundle] staging at ${STAGING}..."
 
 # SBT ref-arch 互換: infrastructure → cdk リネーム
