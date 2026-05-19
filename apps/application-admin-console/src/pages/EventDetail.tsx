@@ -41,6 +41,7 @@ import { SendNotificationModal } from "../components/SendNotificationModal";
 import { TeamRankingPanel } from "../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../components/TeamScoreEventsPanel";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 import { computeEventWizardState, WIZARD_STEPS } from "../lib/event-wizard";
 
 const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "grey" | "red"> = {
@@ -160,6 +161,7 @@ function validateEndsAtInput(
 export function EventDetailPage({ config }: { config: AppConfig }) {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const t = useT();
   const apiClient = useApiClient(config);
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -522,7 +524,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
         description={`Event ID: ${eventId}`}
         actions={
           <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={() => navigate("/events")}>一覧へ戻る</Button>
+            <Button onClick={() => navigate("/events")}>{t("event_detail.back_to_list")}</Button>
             <Button
               variant={wizard?.primary === "deploy" ? "primary" : "normal"}
               loading={bulkInFlight === "deploy"}
@@ -536,7 +538,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               }
               onClick={() => handleBulkDeploy()}
             >
-              Deploy
+              {t("event_detail.deploy_button")}
             </Button>
             {/* #555: FAILED の deployment がある場合のみ「失敗分を再実行」 button を出す
              *   (= 要件 FR-3「N 件失敗」の retry path)。同じ POST /deploy 経路を retryFailedOnly:
@@ -554,7 +556,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 iconName="refresh"
                 onClick={() => handleBulkDeploy({ retryFailedOnly: true })}
               >
-                失敗分を再実行 ({failedCount} 件)
+                {t("event_detail.retry_failed", { count: failedCount })}
               </Button>
             )}
             {completeCount > 0 && (
@@ -570,7 +572,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 iconName="refresh"
                 onClick={() => handleBulkDeploy({ forceRedeploy: true })}
               >
-                再デプロイ ({completeCount} 件)
+                {t("event_detail.redeploy", { count: completeCount })}
               </Button>
             )}
             <Button
@@ -578,7 +580,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               disabled={!detail || detail.status !== "READY"}
               onClick={() => setConfirmEnd(true)}
             >
-              Event を終了
+              {t("event_detail.end_event")}
             </Button>
             {/* #558: 採点 lock/unlock — READY / ENDED の event でのみ表示 (= 表彰フェーズ
              *   用途)。現在 locked / unlocked で button label と loading 状態を分ける。 */}
@@ -588,7 +590,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 disabled={!apiClient}
                 onClick={detail.scoringLocked === true ? handleUnlockScoring : handleLockScoring}
               >
-                {detail.scoringLocked === true ? "採点 lock を解除" : "採点を lock"}
+                {detail.scoringLocked === true
+                  ? t("event_detail.scoring_unlock")
+                  : t("event_detail.scoring_lock")}
               </Button>
             )}
             <Button
@@ -597,12 +601,12 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               disabled={!detail}
               onClick={() => setConfirmTeardown(true)}
             >
-              Delete
+              {t("event_detail.delete_button")}
             </Button>
           </SpaceBetween>
         }
       >
-        {detail?.name ?? "(loading)"}
+        {detail?.name ?? t("event_detail.loading_title")}
       </Header>
 
       {/* #531: Wizard StepIndicator + CTA banner — 初見 operator が「次に何を押すか」を
@@ -630,7 +634,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                 </Fragment>
               ))}
             </SpaceBetween>
-            <Alert type={wizard.alertType} header="次のアクション">
+            <Alert type={wizard.alertType} header={t("event_detail.next_action")}>
               {wizard.cta}
             </Alert>
             {detail?.status === "TEARDOWN" && (
@@ -638,24 +642,18 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               // すると TEARDOWN のまま ARCHIVED に遷移しない問題への operator rescue。
               <Alert
                 type="info"
-                header="削除が進まない場合 (operator rescue)"
+                header={t("event_detail.rescue_header")}
                 action={
                   <Button
                     loading={forceArchiveInFlight}
                     onClick={() => setConfirmForceArchive(true)}
                     data-testid="force-archive-button"
                   >
-                    Force ARCHIVED に倒す
+                    {t("event_detail.rescue_force_archive")}
                   </Button>
                 }
               >
-                競技者 account 側で stack が <code>ROLLBACK_COMPLETE</code> 等の状態のまま
-                残っていると DeleteStack が no-op 扱いで進行せず、 Event が TEARDOWN のまま固まる
-                ことがあります。 5 分以上動かない場合は競技者に
-                <strong>CFn console で該当 stack の手動 Delete</strong> を依頼するか、 operator
-                判断で本 Event を <strong>Force ARCHIVED</strong> に倒してください (= 該当
-                deployment 行は DELETED に遷移済 / FAILED として扱われ、 Event view から 外れます)。
-                物理 stack は別途競技者の手動削除が必要なので注意。
+                {t("event_detail.rescue_body")}
               </Alert>
             )}
           </SpaceBetween>
@@ -663,7 +661,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       )}
 
       {error && (
-        <Alert type="error" header="エラー">
+        <Alert type="error" header={t("event_detail.error_header")}>
           {error}
         </Alert>
       )}
@@ -672,10 +670,12 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           type="success"
           dismissible
           onDismiss={() => setBulkResult(null)}
-          header="Deploy / Delete 受付"
+          header={t("event_detail.bulk_result_header")}
         >
-          受付: {bulkResult.enqueued} 件 / skipped: {bulkResult.skipped} 件 (実 deploy / delete は
-          State Machine が非同期に進めます。数分後に再読み込みしてください)
+          {t("event_detail.bulk_result_body", {
+            enqueued: bulkResult.enqueued,
+            skipped: bulkResult.skipped,
+          })}
         </Alert>
       )}
 
@@ -686,21 +686,33 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           header={
             <Header
               variant="h2"
-              description={`${totalDeployCount} 件中 完了 ${completeCount} / 進行中 ${inFlightCount}${failedCount > 0 ? ` / 失敗 ${failedCount}` : ""}`}
+              description={
+                failedCount > 0
+                  ? t("event_detail.deploy_progress_description_with_failed", {
+                      total: totalDeployCount,
+                      complete: completeCount,
+                      inFlight: inFlightCount,
+                      failed: failedCount,
+                    })
+                  : t("event_detail.deploy_progress_description", {
+                      total: totalDeployCount,
+                      complete: completeCount,
+                      inFlight: inFlightCount,
+                    })
+              }
               actions={
-                // Issue #1068: 自動 polling が止まった時の fallback として手動 reload を提供。
                 <Button
                   iconName="refresh"
                   loading={manualRefreshInFlight}
                   onClick={() => void manualRefresh()}
-                  ariaLabel="Deploy status を再読み込み"
+                  ariaLabel={t("event_detail.deploy_progress_reload_aria")}
                   data-testid="deploy-status-reload"
                 >
-                  再読み込み
+                  {t("event_detail.deploy_progress_reload")}
                 </Button>
               }
             >
-              Deploy 進捗
+              {t("event_detail.deploy_progress_header")}
             </Header>
           }
         >
@@ -708,17 +720,20 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             value={deployProgressPercent}
             label={
               inFlightCount > 0
-                ? `Deploy 進行中… (${allDoneCount} / ${totalDeployCount})`
+                ? t("event_detail.deploy_progress_in_flight", {
+                    done: allDoneCount,
+                    total: totalDeployCount,
+                  })
                 : failedCount > 0
-                  ? `完了 (失敗 ${failedCount} 件あり)`
-                  : "Deploy 完了"
+                  ? t("event_detail.deploy_progress_complete_with_failed", { failed: failedCount })
+                  : t("event_detail.deploy_progress_complete")
             }
             description={
               inFlightCount > 0
-                ? "deploy は State Machine が非同期に進めます。 数分かかります。"
+                ? t("event_detail.deploy_progress_in_flight_description")
                 : failedCount > 0
-                  ? "失敗 deployment は 「失敗分を再実行」 button で個別 retry できます。"
-                  : "全 deploy が完了しました。 競技開始の準備ができています。"
+                  ? t("event_detail.deploy_progress_failed_description")
+                  : t("event_detail.deploy_progress_complete_description")
             }
             status={failedCount > 0 ? "error" : inFlightCount > 0 ? "in-progress" : "success"}
             additionalInfo={inFlightCount > 0 ? "auto polling" : undefined}
@@ -727,32 +742,31 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       )}
 
       {detail && (
-        <Container header={<Header variant="h2">Event 概要</Header>}>
+        <Container header={<Header variant="h2">{t("event_detail.event_summary_header")}</Header>}>
           <SpaceBetween size="m">
-            {/* #558: 採点 lock 中の警告 banner (= 全体に視覚的に強く出す)。表彰フェーズの
-             *   競技者 / operator 双方への明示的通知。unlock するまで lock 中であることが
-             *   一目で分かるよう dismissible は付けない。 */}
             {detail.scoringLocked === true && (
               <Alert
                 type="warning"
                 statusIconAriaLabel="scoring locked"
-                header="採点 lock 中 (表彰フェーズ)"
+                header={t("event_detail.scoring_locked_header")}
               >
-                加点経路 (flag 提出 / HealthCheck uptime) は全停止しています。leaderboard / score
-                events の閲覧は可能です。
-                {detail.scoringLockedAt && ` Locked at: ${detail.scoringLockedAt}`}
+                {t("event_detail.scoring_locked_body")}
+                {detail.scoringLockedAt &&
+                  ` ${t("event_detail.scoring_locked_locked_at", { at: detail.scoringLockedAt })}`}
               </Alert>
             )}
             <ColumnLayout columns={4} variant="text-grid">
-              <Field label="ステータス">
+              <Field label={t("event_detail.field_status")}>
                 <SpaceBetween direction="horizontal" size="xxs">
                   <Badge color={STATUS_COLOR[detail.status]}>{detail.status}</Badge>
-                  {detail.scoringLocked === true && <Badge color="red">SCORING LOCKED</Badge>}
+                  {detail.scoringLocked === true && (
+                    <Badge color="red">{t("event_detail.scoring_locked_badge")}</Badge>
+                  )}
                 </SpaceBetween>
               </Field>
-              <Field label="チーム数">{detail.teamCount}</Field>
-              <Field label="問題数">{detail.problems.length}</Field>
-              <Field label="作成">{detail.createdAt}</Field>
+              <Field label={t("event_detail.field_team_count")}>{detail.teamCount}</Field>
+              <Field label={t("event_detail.field_problem_count")}>{detail.problems.length}</Field>
+              <Field label={t("event_detail.field_created_at")}>{detail.createdAt}</Field>
             </ColumnLayout>
           </SpaceBetween>
         </Container>
@@ -761,22 +775,19 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       {detail && (
         <Container
           header={
-            <Header
-              variant="h2"
-              description="開始時刻を指定すると HealthCheck が probe / 採点を開始、終了時刻を指定すると status は変えずに採点 gate を閉じます。"
-            >
-              競技スケジュール
+            <Header variant="h2" description={t("event_detail.schedule_description")}>
+              {t("event_detail.schedule_header")}
             </Header>
           }
         >
           <ColumnLayout columns={2} variant="text-grid">
-            <Field label="開始時刻 (UTC)">
+            <Field label={t("event_detail.starts_at_label")}>
               <SpaceBetween size="xs">
                 {detail.startsAt ? (
                   <code>{detail.startsAt}</code>
                 ) : (
                   <Box variant="small" color="text-status-inactive">
-                    未設定 (採点停止中)
+                    {t("event_detail.starts_at_unset")}
                   </Box>
                 )}
                 <SpaceBetween direction="horizontal" size="xs">
@@ -784,7 +795,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     onClick={() => setScheduleModalOpen(true)}
                     disabled={!apiClient || scheduleInFlight !== null}
                   >
-                    日時を指定して開始
+                    {t("event_detail.starts_at_pick")}
                   </Button>
                   <Button
                     variant={wizard?.primary === "start" ? "primary" : "normal"}
@@ -792,7 +803,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     disabled={!apiClient || scheduleInFlight === "scheduled"}
                     onClick={handleStartNow}
                   >
-                    即座に開始
+                    {t("event_detail.starts_at_now")}
                   </Button>
                 </SpaceBetween>
               </SpaceBetween>
@@ -800,13 +811,13 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             {/* #536: 終了時刻 column (= 予約終了)。「Event を終了」 button (= 即終了) は
              *   Header actions に既存、こちらは未来時刻を予約する経路。両方とも endsAt
              *   field を書き、HealthCheck が `now >= endsAt` で gate を閉じる。 */}
-            <Field label="終了時刻 (UTC)">
+            <Field label={t("event_detail.ends_at_label")}>
               <SpaceBetween size="xs">
                 {detail.endsAt ? (
                   <code>{detail.endsAt}</code>
                 ) : (
                   <Box variant="small" color="text-status-inactive">
-                    未設定 (= 手動「Event を終了」まで採点継続)
+                    {t("event_detail.ends_at_unset")}
                   </Box>
                 )}
                 <SpaceBetween direction="horizontal" size="xs">
@@ -814,36 +825,36 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                     onClick={() => setEndsAtModalOpen(true)}
                     disabled={!apiClient || endsAtInFlight}
                   >
-                    日時を指定して終了
+                    {t("event_detail.ends_at_pick")}
                   </Button>
                   <Button
                     loading={endsAtInFlight}
                     disabled={!apiClient}
                     onClick={handleEndNowSchedule}
                   >
-                    即座に終了
+                    {t("event_detail.ends_at_now")}
                   </Button>
                 </SpaceBetween>
               </SpaceBetween>
             </Field>
           </ColumnLayout>
           <Box margin={{ top: "m" }}>
-            <Field label="採点ステータス">{scoringBadge(detail)}</Field>
+            <Field label={t("event_detail.scoring_status_label")}>{scoringBadge(detail, t)}</Field>
           </Box>
-          {/* Issue #1038 P1 #9 follow-up: scoreboard freeze 分数 (= 終了 N 分前から順位非公開) */}
           <Box margin={{ top: "m" }}>
-            <Field label="Scoreboard freeze 分数 (= 終了 N 分前から順位を隠す、 0 で無効)">
+            <Field label={t("event_detail.freeze_label")}>
               <SpaceBetween direction="horizontal" size="xs" alignItems="center">
                 <Box variant="small" color="text-status-inactive">
-                  現在:{" "}
                   {detail.scoreboardFreezeMinutes !== undefined
-                    ? `${detail.scoreboardFreezeMinutes} 分`
-                    : "default 30 分"}
+                    ? t("event_detail.freeze_current_minutes", {
+                        minutes: detail.scoreboardFreezeMinutes,
+                      })
+                    : t("event_detail.freeze_current_default")}
                 </Box>
                 <Input
                   type="number"
                   inputMode="numeric"
-                  placeholder="0〜180"
+                  placeholder={t("event_detail.freeze_placeholder")}
                   value={freezeMinutesInput}
                   onChange={({ detail: d }) => setFreezeMinutesInput(d.value)}
                   disabled={freezeMinutesInFlight}
@@ -853,7 +864,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                   disabled={!apiClient || freezeMinutesInput.trim() === ""}
                   onClick={handleSaveFreezeMinutes}
                 >
-                  保存
+                  {t("event_detail.freeze_save")}
                 </Button>
               </SpaceBetween>
             </Field>
@@ -870,7 +881,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           header={
             <Header
               variant="h2"
-              description="競技中の全チームの Participant Portal にアナウンスを送ります。Portal の Notifications page に表示され、競技者は赤バッジで未読件数を確認できます。"
+              description={t("event_detail.notifications_description")}
               actions={
                 <Button
                   variant="primary"
@@ -882,29 +893,26 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
                   }
                   onClick={() => setNotifyModalOpen(true)}
                 >
-                  通知を送る
+                  {t("event_detail.notifications_send")}
                 </Button>
               }
             >
-              通知 (お知らせ)
+              {t("event_detail.notifications_header")}
             </Header>
           }
         >
           <SpaceBetween size="s">
             <Box variant="small" color="text-status-inactive">
-              送信タイミング例: 「競技開始 5 分前」「Battle で攻撃検知が増えた」「問題ファイルに
-              typo があった」など。 送信内容は競技者全員に同時配信されます (=
-              チーム選択は不可、ADR-006)。
+              {t("event_detail.notifications_hint")}
             </Box>
             {detail.status === "DRAFT" && (
-              <Alert type="info">
-                Event 作成直後 (DRAFT) は通知できません。Deploy 後に有効化されます。
-              </Alert>
+              <Alert type="info">{t("event_detail.notifications_draft_disabled")}</Alert>
             )}
             {(detail.status === "TEARDOWN" || detail.status === "ARCHIVED") && (
               <Alert type="info">
-                {detail.status === "TEARDOWN" ? "削除中" : "アーカイブ済"} の Event
-                には通知できません。
+                {detail.status === "TEARDOWN"
+                  ? t("event_detail.notifications_teardown_disabled_teardown")
+                  : t("event_detail.notifications_teardown_disabled_archived")}
               </Alert>
             )}
           </SpaceBetween>
@@ -1294,16 +1302,21 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
  *   5. startsAt 未到達 → 「開始予定」 (blue)
  *   6. それ以外 → 「採点中」 (green)
  */
-function scoringBadge(detail: Pick<EventDetail, "startsAt" | "status" | "scoringLocked">) {
-  if (detail.scoringLocked === true) return <Badge color="red">採点 lock 中</Badge>;
+function scoringBadge(
+  detail: Pick<EventDetail, "startsAt" | "status" | "scoringLocked">,
+  t: (key: string) => string,
+) {
+  if (detail.scoringLocked === true)
+    return <Badge color="red">{t("event_detail.scoring_badge_locked")}</Badge>;
   if (detail.status === "ENDED" || detail.status === "ARCHIVED" || detail.status === "TEARDOWN") {
-    return <Badge color="grey">終了</Badge>;
+    return <Badge color="grey">{t("event_detail.scoring_badge_ended")}</Badge>;
   }
-  if (!detail.startsAt) return <Badge color="grey">未開始</Badge>;
+  if (!detail.startsAt)
+    return <Badge color="grey">{t("event_detail.scoring_badge_not_started")}</Badge>;
   if (new Date(detail.startsAt).getTime() > Date.now()) {
-    return <Badge color="blue">開始予定</Badge>;
+    return <Badge color="blue">{t("event_detail.scoring_badge_scheduled")}</Badge>;
   }
-  return <Badge color="green">採点中</Badge>;
+  return <Badge color="green">{t("event_detail.scoring_badge_active")}</Badge>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
