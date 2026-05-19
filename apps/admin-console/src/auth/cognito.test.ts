@@ -20,6 +20,7 @@ const CONFIG: AppConfig = {
   awsRegion: "ap-northeast-1",
   awsAccountId: "000000000000",
   adminInsightApiUrl: "",
+  cloudWatchDashboardName: "",
 };
 
 function storeTokens(refreshToken: string | undefined) {

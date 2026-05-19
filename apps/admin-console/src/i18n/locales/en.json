@@ -11,7 +11,25 @@
     "tenants": "Tenants",
     "tenants_new": "Create tenant",
     "jobs": "Provisioning Jobs",
-    "audit_log": "Audit log"
+    "audit_log": "Audit log",
+    "operations": "Operations"
+  },
+  "operations": {
+    "title": "Operations dashboard",
+    "description": "Quick links to CloudWatch / Budgets / Alarms on AWS. Use these to monitor the platform after deployment.",
+    "no_dashboard_dev_alert": "CloudWatch Dashboard name is not configured in runtime-config. This is a dev or undeployed environment.",
+    "dashboard_header": "CloudWatch Dashboard",
+    "dashboard_body": "The CloudWatch Dashboard provisioned by ObservabilityStack. Shows deploy chain / DDB / Lambda / API Gateway metrics on one screen.",
+    "dashboard_name_label": "Dashboard name",
+    "region_label": "Region",
+    "open_dashboard_button": "Open dashboard",
+    "budget_header": "Cost monitoring",
+    "budget_body": "AWS Budgets monthly threshold alerts and Cost Explorer for detailed analysis. SystemAdmin receives email at 80% / 100%.",
+    "open_budgets_button": "Budgets",
+    "open_cost_explorer_button": "Cost Explorer",
+    "alarms_header": "Resource monitoring (Alarms)",
+    "alarms_body": "CloudWatch Alarms (Lambda invocations / Errors, DDB throttling, API Gateway 5XX). Detects Free Tier breach and backend incidents.",
+    "open_alarms_button": "Alarms"
   },
   "auth": {
     "sign_out": "Sign out"

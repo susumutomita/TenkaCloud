@@ -63,6 +63,7 @@ export function ShellLayout({ children }: { children: ReactNode }) {
               { type: "link", href: "/tenants/new", text: t("nav.tenants_new") },
               { type: "link", href: "/jobs", text: t("nav.jobs") },
               { type: "link", href: "/audit-log", text: t("nav.audit_log") },
+              { type: "link", href: "/operations", text: t("nav.operations") },
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {

@@ -13,6 +13,7 @@ const config: AppConfig = {
   awsRegion: "",
   awsAccountId: "",
   adminInsightApiUrl: "",
+  cloudWatchDashboardName: "",
 };
 
 describe("loadStoredTokens", () => {

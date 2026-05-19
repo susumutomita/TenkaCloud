@@ -26,6 +26,11 @@ export interface AppConfig {
    * 空文字なら admin-console は集計 fetch をスキップする (= phase 2 初回 deploy の race 対策)。
    */
   readonly adminInsightApiUrl: string;
+  /**
+   * Issue #1080: ObservabilityStack の CloudWatch Dashboard 名。 Operations page で
+   * AWS Console deep link を組み立てる。 空文字なら link を出さない (= dev fallback)。
+   */
+  readonly cloudWatchDashboardName: string;
 }
 
 /**
@@ -41,6 +46,7 @@ interface RuntimeConfig {
   readonly awsRegion?: string;
   readonly awsAccountId?: string;
   readonly adminInsightApiUrl?: string;
+  readonly cloudWatchDashboardName?: string;
 }
 
 /**
@@ -100,6 +106,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       awsRegion: data.awsRegion,
       awsAccountId: data.awsAccountId,
       adminInsightApiUrl: data.adminInsightApiUrl,
+      cloudWatchDashboardName: data.cloudWatchDashboardName,
     };
   } catch {
     return null;
@@ -137,6 +144,7 @@ export async function loadConfig(
       awsRegion: runtime.awsRegion ?? "",
       awsAccountId: runtime.awsAccountId ?? "",
       adminInsightApiUrl: runtime.adminInsightApiUrl ?? "",
+      cloudWatchDashboardName: runtime.cloudWatchDashboardName ?? "",
     };
   }
 
@@ -159,5 +167,7 @@ export async function loadConfig(
     awsAccountId: "",
     // ADR-011 #590: dev では admin-insight API も未配線 (= 集計 column を skip)
     adminInsightApiUrl: env.VITE_ADMIN_INSIGHT_API_URL ?? "",
+    // #1080: dev fallback では CloudWatch Dashboard リンクを出さない
+    cloudWatchDashboardName: "",
   };
 }
