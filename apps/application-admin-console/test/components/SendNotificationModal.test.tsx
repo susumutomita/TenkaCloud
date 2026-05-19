@@ -38,11 +38,16 @@ const config: AppConfig = {
 const EVENT_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
 
 const { SendNotificationModal } = await import("../../src/components/SendNotificationModal");
+const { I18nProvider } = await import("../../src/i18n");
+
+function withI18n(node: React.ReactNode) {
+  return <I18nProvider>{node}</I18nProvider>;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // useApiClient はテストごとに「認証済」 stub を返す。
   mocks.useApiClient.mockReturnValue({});
+  window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -50,13 +55,15 @@ afterEach(() => vi.restoreAllMocks());
 describe("SendNotificationModal", () => {
   it("初期状態: title / body 空で 送信 disabled", () => {
     render(
-      <SendNotificationModal
-        config={config}
-        visible={true}
-        eventId={EVENT_ID}
-        onDismiss={vi.fn()}
-        onSuccess={vi.fn()}
-      />,
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
     );
     const submit = screen.getByRole("button", { name: "送信" });
     expect(submit).toBeDisabled();
@@ -65,13 +72,15 @@ describe("SendNotificationModal", () => {
   it("title + body 入力後は 送信 enabled", async () => {
     const user = userEvent.setup();
     render(
-      <SendNotificationModal
-        config={config}
-        visible={true}
-        eventId={EVENT_ID}
-        onDismiss={vi.fn()}
-        onSuccess={vi.fn()}
-      />,
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
     );
     await user.type(screen.getByLabelText("タイトル"), "テスト");
     await user.type(screen.getByLabelText("本文"), "本文");
@@ -87,13 +96,15 @@ describe("SendNotificationModal", () => {
     });
 
     render(
-      <SendNotificationModal
-        config={config}
-        visible={true}
-        eventId={EVENT_ID}
-        onDismiss={vi.fn()}
-        onSuccess={onSuccess}
-      />,
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={onSuccess}
+        />,
+      ),
     );
     await user.type(screen.getByLabelText("タイトル"), "scoring 再開");
     await user.type(screen.getByLabelText("本文"), "メンテ完了");
@@ -113,13 +124,15 @@ describe("SendNotificationModal", () => {
     mocks.createNotification.mockRejectedValueOnce(new Error("ddb throttled"));
 
     render(
-      <SendNotificationModal
-        config={config}
-        visible={true}
-        eventId={EVENT_ID}
-        onDismiss={vi.fn()}
-        onSuccess={onSuccess}
-      />,
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={onSuccess}
+        />,
+      ),
     );
     await user.type(screen.getByLabelText("タイトル"), "T");
     await user.type(screen.getByLabelText("本文"), "B");
@@ -131,13 +144,15 @@ describe("SendNotificationModal", () => {
 
   it("title が 120 文字超なら errorText を出して 送信 disabled", () => {
     render(
-      <SendNotificationModal
-        config={config}
-        visible={true}
-        eventId={EVENT_ID}
-        onDismiss={vi.fn()}
-        onSuccess={vi.fn()}
-      />,
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
     );
     const titleInput = screen.getByLabelText("タイトル");
     fireEvent.change(titleInput, { target: { value: "a".repeat(121) } });

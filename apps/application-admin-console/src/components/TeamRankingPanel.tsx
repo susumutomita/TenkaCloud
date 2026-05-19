@@ -5,15 +5,13 @@ import Header from "@cloudscape-design/components/header";
 import Table from "@cloudscape-design/components/table";
 import { useMemo } from "react";
 import type { TeamScoreEvents } from "../api/events-client";
+import { useT } from "../i18n";
 
 /**
  * Issue #1071: EventDetail 用チームランキング table。
  *
- * `scoreEventsByTeam` の events[] を team 毎に合計し、 累計 score 降順で sort して順位を出す。
- * 同点は最終 update が早い方を上位 (= 早く到達した方が有利、 一般的な競技 tie-break)。
- *
- * 既存 \`TeamScoreEventsPanel\` (= 時系列 chart) と同 data source。 backend 追加なし。
- * polling で自動更新される。
+ * `scoreEventsByTeam` の events[] を team 毎に合計し、累計 score 降順で sort して順位を出す。
+ * 同点は最終 update が早い方を上位 (= 早く到達した方が有利、一般的な競技 tie-break)。
  */
 
 interface RankingRow {
@@ -40,12 +38,10 @@ export function computeRanking(teams: readonly TeamScoreEvents[]): readonly Rank
   });
   const sorted = [...aggregated].sort((a, b) => {
     if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-    // 同点は 最終 update が早い (= 小さい ms) を上位。 update 無しは最下位扱い。
     const aLast = a.lastUpdateMs ?? Number.POSITIVE_INFINITY;
     const bLast = b.lastUpdateMs ?? Number.POSITIVE_INFINITY;
     return aLast - bLast;
   });
-  // 同点は同順位 (= 標準的な競技 ranking)。
   let prevScore: number | null = null;
   let prevRank = 0;
   return sorted.map((row, idx) => {
@@ -63,6 +59,7 @@ function formatLastUpdate(ms: number | undefined): string {
 }
 
 export function TeamRankingPanel({ teams }: { teams: readonly TeamScoreEvents[] }) {
+  const t = useT();
   const rows = useMemo(() => computeRanking(teams), [teams]);
   if (rows.length === 0) {
     return null;
@@ -70,11 +67,8 @@ export function TeamRankingPanel({ teams }: { teams: readonly TeamScoreEvents[] 
   return (
     <Container
       header={
-        <Header
-          variant="h2"
-          description="累計 score 降順で sort。 同点は最終 update が早い方を上位 (= 標準 tie-break)"
-        >
-          現在の順位 ({rows.length} チーム)
+        <Header variant="h2" description={t("team_ranking_panel.description")}>
+          {t("team_ranking_panel.header", { count: rows.length })}
         </Header>
       }
     >
@@ -84,7 +78,7 @@ export function TeamRankingPanel({ teams }: { teams: readonly TeamScoreEvents[] 
         columnDefinitions={[
           {
             id: "rank",
-            header: "順位",
+            header: t("team_ranking_panel.col_rank"),
             cell: (r) =>
               r.rank === 1 ? (
                 <Badge color="green">1</Badge>
@@ -94,15 +88,19 @@ export function TeamRankingPanel({ teams }: { teams: readonly TeamScoreEvents[] 
                 <Box variant="strong">{r.rank}</Box>
               ),
           },
-          { id: "name", header: "チーム名", cell: (r) => <code>{r.teamName}</code> },
+          {
+            id: "name",
+            header: t("team_ranking_panel.col_team_name"),
+            cell: (r) => <code>{r.teamName}</code>,
+          },
           {
             id: "score",
-            header: "累計 score",
+            header: t("team_ranking_panel.col_score"),
             cell: (r) => <Box variant="strong">{r.totalScore} pt</Box>,
           },
           {
             id: "lastUpdate",
-            header: "最終 update",
+            header: t("team_ranking_panel.col_last_update"),
             cell: (r) => (
               <Box variant="small" color="text-status-inactive">
                 {formatLastUpdate(r.lastUpdateMs)}
