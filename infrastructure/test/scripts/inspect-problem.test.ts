@@ -16,7 +16,7 @@ describe("runInspect (#951 sub #5)", () => {
     expect(text).toContain("flagOutputKey:    ParameterValue");
     expect(text).toContain("Resources:  ParticipantViewerRole, HelloParameter");
     expect(text).toContain(
-      "Outputs:    ParameterName, ParameterValue, NamePrefix, ParticipantViewerRoleArn",
+      "Outputs:    ParameterName, ParameterValue, ParameterConsoleUrl, NamePrefix, ParticipantViewerRoleArn",
     );
     expect(text).toContain("Cross-ref:  OK");
   });

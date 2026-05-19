@@ -88,6 +88,15 @@ Outputs:
   ParameterValue:
     Description: SSM Parameter value (echoed in Outputs for smoke test verification).
     Value: !Sub "Hello from ${NamePrefix}"
+  # Issue #1094: AWS Console deep link to the specific parameter detail page.
+  # competitors click this from the Participant Portal and land directly on
+  # the parameter view (= ssm:GetParameter, no DescribeParameters required).
+  # The top-level Parameter Store list view requires ssm:DescribeParameters
+  # which the participant-viewer Role intentionally lacks (ADR-021, no cross-
+  # tenant leak), so the deep link is the supported solve path.
+  ParameterConsoleUrl:
+    Description: AWS Console deep link to the Parameter Store entry (no DescribeParameters needed).
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/%2F${NamePrefix}%2Fhello/description?region=${AWS::Region}"
   NamePrefix:
     Description: Common resource prefix that this stack used.
     Value: !Ref NamePrefix
