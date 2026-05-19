@@ -99,11 +99,11 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
             activeHref={location.pathname}
             header={{ href: "/", text: t("nav.menu") }}
             items={[
-              { type: "link", href: "/", text: "ホーム" },
+              { type: "link", href: "/", text: t("nav.home") },
               { type: "link", href: "/events", text: t("nav.events") },
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
-              { type: "link", href: "/competitor-accounts", text: "Competitor Accounts" },
+              { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
               // Issue #1066: SAML SSO 設定は廃止 (= MFA 強制 #1035 で代替済、 spec 簡素化)。
               // App Plane の tenant user 管理は plane 分離方針で廃止
               // ([[feedback-no-cross-plane-data-leak]])。

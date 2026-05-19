@@ -8,10 +8,12 @@
   },
   "nav": {
     "menu": "Menu",
+    "home": "Home",
     "events": "Events",
     "teams": "Teams",
     "problems": "Problems",
-    "deployments": "Deployments"
+    "deployments": "Deployments",
+    "competitor_accounts": "Competitor Accounts"
   },
   "auth": {
     "sign_out": "Sign out"
@@ -30,7 +32,22 @@
     "welcome": "Welcome, {displayName}",
     "welcome_fallback_name": "Tenant",
     "tenant_name_missing_header": "Tenant name is missing from your JWT",
-    "tenant_name_missing_body": "Sign out and sign back in. If the issue persists, ask the System Admin to set the custom:tenantName attribute on your Cognito user."
+    "tenant_name_missing_body": "Sign out and sign back in. If the issue persists, ask the System Admin to set the custom:tenantName attribute on your Cognito user.",
+    "catalog_header": "Problem catalog",
+    "stat_total": "Total",
+    "stat_ready": "Published (ready)",
+    "stat_draft": "Draft",
+    "stat_battle": "Battle",
+    "next_action_header": "Next action",
+    "next_action_view_all": "See all problems",
+    "next_action_close_aria": "Close the Next action section",
+    "next_action_body": "When you deploy a problem to a competitor account, participant URLs (frontend / api) and a per-team login key are issued. No per-individual accounts are created, so operators do not take on personal-data obligations. Start by picking a problem from the catalog.",
+    "tenant_info_header": "Tenant info",
+    "tenant_info_name": "Tenant name",
+    "tenant_info_id": "Tenant ID",
+    "tenant_info_tier": "Plan",
+    "value_unset": "(not set)",
+    "value_unknown": "(unknown)"
   },
   "event_list": {
     "header": "Events",
@@ -127,5 +144,18 @@
     "deploy_modal_now": "Deploy now",
     "deploy_modal_alert_header": "Next: Deploy the problems",
     "deploy_modal_alert_body": "Until per-team problem deploy runs, participants cannot access the problems. \"Deploy now\" runs bulk deploy across all teams × problems. \"Later\" lets you trigger it from the EventDetail Deploy button."
+  },
+  "deployments": {
+    "header": "Deployments",
+    "description": "Deploy jobs launched by your tenant. Click a row for details.",
+    "reload": "Reload",
+    "loading": "Loading list…",
+    "list_failed_header": "Failed to load list",
+    "empty": "No deploy jobs yet.",
+    "col_team": "Team",
+    "col_problem": "Problem",
+    "col_status": "Status",
+    "col_stack_name": "Stack name",
+    "col_created_at": "Created"
   }
 }
