@@ -8,6 +8,7 @@ import Table from "@cloudscape-design/components/table";
 import type { LeaderboardEntry } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
 /**
  * Event scope の team ランキング。`TeamViewProvider` 経由の共有 leaderboard polling を
@@ -18,6 +19,7 @@ import type { AppConfig } from "../config";
  * dev-mock モードでは backend を叩かず placeholder を出す (Home と同じ慣習)。
  */
 export function ScoreboardPage({ config }: { config: AppConfig }) {
+  const t = useT();
   const isBackend = config.mode === "backend";
   const { leaderboard, leaderboardError, leaderboardNoEvent } = useTeamView();
 
@@ -25,30 +27,25 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={`${config.eventTitle} のリアルタイム順位 (5 秒ごと自動更新)`}
+        description={t("scoreboard.description", { eventTitle: config.eventTitle })}
       >
-        Scoreboard
+        {t("scoreboard.title")}
       </Header>
 
-      {!isBackend && (
-        <Alert type="info">
-          dev-mock モードで動作中です。実 backend と接続するには runtime-config の <code>mode</code>{" "}
-          を <code>backend</code> に設定してください。
-        </Alert>
-      )}
+      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {leaderboardError && (
-        <Alert type="error" header="状態の取得に失敗しました">
+        <Alert type="error" header={t("app.fetch_status_failed")}>
           {leaderboardError}
         </Alert>
       )}
       {leaderboardNoEvent && (
-        <Alert type="info" header="このチームには Event が紐づいていません">
-          旧式の deployment (Phase 1 以前) は event 単位の集計に対応していません。
+        <Alert type="info" header={t("scoreboard.no_event_header")}>
+          {t("scoreboard.no_event_body")}
         </Alert>
       )}
       {isBackend && !leaderboard && !leaderboardError && !leaderboardNoEvent && (
         <Box textAlign="center" padding="l">
-          <Spinner /> 状態を取得中…
+          <Spinner /> {t("app.loading")}
         </Box>
       )}
 
@@ -57,14 +54,14 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
        *   通常 table の代わりに「凍結中」 alert を出す。 競技終了後 (= now >= endsAt) は
        *   backend が scoreboardFrozen=false に戻すので、 最終結果は通常表示される。 */}
       {leaderboard?.scoreboardFrozen && (
-        <Alert type="info" header="🔒 順位は終了 30 分前から凍結中">
+        <Alert type="info" header={t("scoreboard.frozen_header")}>
           <Box variant="p">
-            最後の駆け込みを防ぐため、 競技終了 30 分前から最終結果公開までは順位を非公開に
-            しています。 競技終了後に最終順位を表示します。
+            {t("scoreboard.frozen_body")}
             {leaderboard.endsAt && (
               <>
                 <br />
-                終了予定: <code>{new Date(leaderboard.endsAt).toLocaleString()}</code>
+                {t("scoreboard.frozen_ends_at_label")}:{" "}
+                <code>{new Date(leaderboard.endsAt).toLocaleString()}</code>
               </>
             )}
           </Box>
@@ -73,7 +70,11 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
 
       {leaderboard && !leaderboard.scoreboardFrozen && (
         <Container
-          header={<Header variant="h2">{`参加チーム (${leaderboard.entries.length})`}</Header>}
+          header={
+            <Header variant="h2">
+              {t("scoreboard.entries_header", { count: leaderboard.entries.length })}
+            </Header>
+          }
         >
           <Table<LeaderboardEntry>
             variant="embedded"
@@ -81,7 +82,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
             columnDefinitions={[
               {
                 id: "rank",
-                header: "順位",
+                header: t("scoreboard.col_rank"),
                 cell: (e) => (
                   <Box variant="strong" color={e.isMyTeam ? "text-status-success" : "inherit"}>
                     #{e.rank}
@@ -91,14 +92,14 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               },
               {
                 id: "team",
-                header: "チーム",
+                header: t("scoreboard.col_team"),
                 cell: (e) => (
                   <Box variant={e.isMyTeam ? "strong" : "p"}>
                     {e.teamName}
                     {e.isMyTeam && (
                       <Box display="inline" variant="small" color="text-status-info">
                         {" "}
-                        (あなた)
+                        {t("scoreboard.you_suffix")}
                       </Box>
                     )}
                   </Box>
@@ -106,7 +107,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               },
               {
                 id: "score",
-                header: "Score",
+                header: t("scoreboard.col_score"),
                 cell: (e) => (
                   <Box variant="strong" color="text-status-success">
                     {e.score} pt
@@ -115,12 +116,12 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               },
               {
                 id: "progress",
-                header: "完了 / 全体",
+                header: t("scoreboard.col_progress"),
                 cell: (e) => `${e.completedProblems} / ${e.totalProblems}`,
                 width: 120,
               },
             ]}
-            empty={<Box>参加チームがありません</Box>}
+            empty={<Box>{t("scoreboard.empty")}</Box>}
           />
         </Container>
       )}

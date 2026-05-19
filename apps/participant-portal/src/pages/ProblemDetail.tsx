@@ -18,16 +18,16 @@ import {
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
 } from "../data/problems";
-import { useI18n } from "../i18n";
+import { useI18n, useT } from "../i18n";
 import { renderMarkdownToSafeHtml } from "../lib/markdown";
 import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
-const DIFFICULTY_LABEL: Record<ProblemCatalogEntry["difficulty"], string> = {
-  1: "入門",
-  2: "初級",
-  3: "中級",
-  4: "上級",
-  5: "エキスパート",
+const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
+  1: "problem_detail.difficulty_1",
+  2: "problem_detail.difficulty_2",
+  3: "problem_detail.difficulty_3",
+  4: "problem_detail.difficulty_4",
+  5: "problem_detail.difficulty_5",
 };
 
 /**
@@ -41,6 +41,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const t = useT();
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error, refresh } = useTeamView();
   // Issue #583 Phase 5.B: locale に応じて metadata.i18n[locale] override を被せる。
@@ -64,26 +65,25 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       <Header
         variant="h1"
         description={narrative?.shortDescription}
-        actions={<Button onClick={() => navigate("/problems")}>問題一覧へ戻る</Button>}
+        actions={
+          <Button onClick={() => navigate("/problems")}>{t("problem_detail.back_button")}</Button>
+        }
       >
         {narrative?.name ?? problem?.problemId ?? jobId}
       </Header>
 
       {error && (
-        <Alert type="error" header="状態の取得に失敗しました">
+        <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
         </Alert>
       )}
 
       {!problem && view && (
-        <Alert type="warning" header="この問題は自チームに deploy されていません">
-          <Box variant="p">
-            jobId <code>{jobId}</code> は自チームの deploy リストに無いため、詳細を表示できません。
-            operator にお問い合わせください。
-          </Box>
+        <Alert type="warning" header={t("problem_detail.deploy_missing_header")}>
+          <Box variant="p">{t("problem_detail.deploy_missing_body", { jobId: jobId ?? "" })}</Box>
         </Alert>
       )}
-      {!problem && !view && !error && <Box>状態を取得中…</Box>}
+      {!problem && !view && !error && <Box>{t("app.loading")}</Box>}
 
       {/* Issue #1038 P0 #2: 競技開始前は問題詳細 / hints へのアクセスを **完全に lock**。
        *   backend (= participant-handler) から eventGate が scoring_not_started で返ってきた
@@ -91,14 +91,14 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   が担保されているため、 eventId 不在 / gate 取得失敗時も同じく lock 表示になる。
        *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
       {problem && view?.eventGate?.kind === "scoring_not_started" && (
-        <Alert type="info" header="競技開始前です">
+        <Alert type="info" header={t("problem_detail.scoring_not_started_header")}>
           <Box variant="p">
-            この問題は <strong>競技開始時刻まで lock</strong> されています。 開始までは問題詳細
-            ・ヒント・flag 提出経路にアクセスできません。 運営の開始合図をお待ちください。
+            {t("problem_detail.scoring_not_started_body")}
             {view.eventGate.startsAt && (
               <>
                 <br />
-                開始予定: <code>{new Date(view.eventGate.startsAt).toLocaleString()}</code>
+                {t("problem_detail.scoring_not_started_starts_at_label")}:{" "}
+                <code>{new Date(view.eventGate.startsAt).toLocaleString()}</code>
               </>
             )}
           </Box>
@@ -109,7 +109,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
       {problem && metadata && narrative && view?.eventGate?.kind !== "scoring_not_started" && (
-        <ProblemInfoSection metadata={metadata} narrative={narrative} />
+        <ProblemInfoSection metadata={metadata} narrative={narrative} t={t} />
       )}
       {/* 2026-05-18 user feedback: 「攻撃時刻を相手に予告する Red Team は存在しない」
        *   「種明かしをした おばけやしき はつまらない」
@@ -173,30 +173,36 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 function ProblemInfoSection({
   metadata,
   narrative,
+  t,
 }: {
   metadata: ProblemCatalogEntry;
   narrative: { readonly description: string };
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }) {
   // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
   // (= timing 漏洩 + 出題意図メタの暴露)。 残すのは カテゴリ + 難易度 + 問題説明 のみ。
   return (
-    <Container header={<Header variant="h2">問題情報</Header>}>
+    <Container header={<Header variant="h2">{t("problem_detail.info_header")}</Header>}>
       <SpaceBetween size="m">
         <ColumnLayout columns={2} variant="text-grid">
-          <InfoCell label="カテゴリ">
+          <InfoCell label={t("problem_detail.info_category")}>
             <SpaceBetween direction="horizontal" size="xxs">
               <Badge color={metadata.category === "Battle" ? "red" : "blue"}>
                 {metadata.category}
               </Badge>
               {/* ADR-008 Phase 1: private 問題には「答え非公開」 badge。 public は省略 (= ノイズ削減)。 */}
-              {metadata.visibility === "private" && <Badge color="severity-high">答え非公開</Badge>}
+              {metadata.visibility === "private" && (
+                <Badge color="severity-high">{t("problem_detail.info_private_badge")}</Badge>
+              )}
             </SpaceBetween>
           </InfoCell>
-          <InfoCell label="難易度">{DIFFICULTY_LABEL[metadata.difficulty]}</InfoCell>
+          <InfoCell label={t("problem_detail.info_difficulty")}>
+            {t(DIFFICULTY_KEY[metadata.difficulty])}
+          </InfoCell>
         </ColumnLayout>
 
         <div>
-          <Box variant="awsui-key-label">問題説明</Box>
+          <Box variant="awsui-key-label">{t("problem_detail.info_description_label")}</Box>
           {/* Issue #661: metadata.json の description は markdown source。 marked → DOMPurify
            *   で sanitize した HTML を render する。 ADR-008 で community contributor 経由の
            *   metadata 受け入れを想定して必ず XSS sanitize を通す。 */}

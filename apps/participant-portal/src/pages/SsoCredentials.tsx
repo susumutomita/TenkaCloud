@@ -10,6 +10,7 @@ import { getConsoleSigninUrl, PortalAuthError, PortalValidationError } from "../
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { useT } from "../i18n";
 
 /**
  * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
@@ -21,11 +22,12 @@ import type { AppConfig } from "../config";
  */
 export function SsoCredentialsPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const t = useT();
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error } = useTeamView();
   const isBackend = config.mode === "backend";
 
-  const [pending, setPending] = useState<string | null>(null); // jobId
+  const [pending, setPending] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
 
   const openConsole = async (jobId: string) => {
@@ -41,7 +43,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
         return;
       }
       if (err instanceof PortalValidationError) {
-        setOpenError(`バリデーションエラー: ${err.errorCode}`);
+        setOpenError(t("sso_credentials.validation_error", { errorCode: err.errorCode }));
         return;
       }
       setOpenError(err instanceof Error ? err.message : String(err));
@@ -52,28 +54,20 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
 
   return (
     <SpaceBetween size="l">
-      <Header
-        variant="h1"
-        description="AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。"
-      >
-        SSO Credentials
+      <Header variant="h1" description={t("sso_credentials.description")}>
+        {t("sso_credentials.title")}
       </Header>
 
-      {!isBackend && (
-        <Alert type="info">
-          dev-mock モードで動作中です。実 backend と接続するには runtime-config の <code>mode</code>{" "}
-          を <code>backend</code> に設定してください。
-        </Alert>
-      )}
+      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {error && (
-        <Alert type="error" header="状態の取得に失敗しました">
+        <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
         </Alert>
       )}
       {openError && (
         <Alert
           type="error"
-          header="AWS Console を開けませんでした"
+          header={t("sso_credentials.open_failed_header")}
           dismissible
           onDismiss={() => setOpenError(null)}
         >
@@ -81,19 +75,16 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
-      <Alert type="info" header="使い方">
-        <Box variant="p">
-          下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面)
-          が自動でログイン状態で開きます。session の TTL は 1 時間です。
-        </Box>
+      <Alert type="info" header={t("sso_credentials.howto_header")}>
+        <Box variant="p">{t("sso_credentials.howto_body")}</Box>
       </Alert>
 
-      {isBackend && !view && !error && <Box>状態を取得中…</Box>}
+      {isBackend && !view && !error && <Box>{t("app.loading")}</Box>}
 
       {view && view.problems.length === 0 && (
         <Container>
           <Box textAlign="center" padding="l">
-            <Box variant="strong">問題がありません</Box>
+            <Box variant="strong">{t("sso_credentials.empty_problems")}</Box>
           </Box>
         </Container>
       )}
@@ -112,10 +103,12 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                     iconName="external"
                     loading={pending === problem.jobId}
                     disabled={pending !== null && pending !== problem.jobId}
-                    ariaLabel={`${problem.problemId} の AWS Console を開く`}
+                    ariaLabel={t("sso_credentials.open_console_aria", {
+                      problemId: problem.problemId,
+                    })}
                     onClick={() => void openConsole(problem.jobId)}
                   >
-                    AWS Console を開く
+                    {t("sso_credentials.open_console_button")}
                   </Button>
                 }
               >
@@ -123,24 +116,18 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               </Header>
             }
           >
-            {/* Issue #821: deploy status (= COMPLETE 等) は競技者には無関係なので
-                出さない。 AWS Account ID + Region で足りる。 */}
             <KeyValuePairs
               columns={2}
               items={[
-                { label: "AWS Account", value: <code>{problem.awsAccountId}</code> },
-                { label: "Region", value: problem.region },
+                {
+                  label: t("sso_credentials.label_aws_account"),
+                  value: <code>{problem.awsAccountId}</code>,
+                },
+                { label: t("sso_credentials.label_region"), value: problem.region },
               ]}
             />
           </Container>
         ))}
-
-      {/* Audit table #5: 「競技後の環境片付け」 セクションは participant portal の責務ではない (=
-       *   admin が event 終了通知メールで案内するべき、 競技中に常時表示すべきでない)。 旧 #840
-       *   が PostCompetitionCleanupPanel をここに置いていたが competition の persona と
-       *   合わないため削除。 cleanup 手順自体は infrastructure/templates/README.md に残るので、
-       *   admin が event 終了時に competitors にメール文面でリンクを渡す運用にする (= Phase 2)。
-       */}
     </SpaceBetween>
   );
 }
