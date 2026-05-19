@@ -37,7 +37,7 @@ async function exchangeKeyForSession(
 ): Promise<ParticipantSession> {
   const trimmed = teamLoginKey.trim();
   if (trimmed.length === 0) {
-    throw new Error("チームログインキーを入力してください");
+    throw new Error("EMPTY_TEAM_LOGIN_KEY");
   }
 
   if (config.mode === "backend") {
@@ -49,7 +49,7 @@ async function exchangeKeyForSession(
       view = await getPortalMe(config.apiBaseUrl, trimmed);
     } catch (err) {
       if (err instanceof PortalAuthError) throw err;
-      throw new Error(err instanceof Error ? err.message : "backend に接続できませんでした");
+      throw new Error(err instanceof Error ? err.message : "BACKEND_UNREACHABLE");
     }
     const now = Date.now();
     // Phase 2c: teamLoginKey で引いた view は team scope。teamId / eventId は team から、
