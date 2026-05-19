@@ -191,6 +191,10 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
 
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
 
+  // Issue #1068: deploy status の手動 reload button 用 in-flight flag。 自動 polling が
+  // 止まる (= tab background / network 一時切断 / backend hang) ケースの fallback 経路。
+  const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
+
   const refresh = useCallback(async () => {
     if (!apiClient || !eventIdValid || !eventId) return;
     try {
@@ -203,6 +207,16 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [apiClient, eventId, eventIdValid]);
+
+  const manualRefresh = useCallback(async () => {
+    if (manualRefreshInFlight) return;
+    setManualRefreshInFlight(true);
+    try {
+      await refresh();
+    } finally {
+      setManualRefreshInFlight(false);
+    }
+  }, [manualRefreshInFlight, refresh]);
 
   useEffect(() => {
     void refresh();
@@ -671,6 +685,18 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             <Header
               variant="h2"
               description={`${totalDeployCount} 件中 完了 ${completeCount} / 進行中 ${inFlightCount}${failedCount > 0 ? ` / 失敗 ${failedCount}` : ""}`}
+              actions={
+                // Issue #1068: 自動 polling が止まった時の fallback として手動 reload を提供。
+                <Button
+                  iconName="refresh"
+                  loading={manualRefreshInFlight}
+                  onClick={() => void manualRefresh()}
+                  ariaLabel="Deploy status を再読み込み"
+                  data-testid="deploy-status-reload"
+                >
+                  再読み込み
+                </Button>
+              }
             >
               Deploy 進捗
             </Header>
