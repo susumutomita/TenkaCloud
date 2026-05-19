@@ -26,6 +26,7 @@ import {
 import { CopyableField } from "../components/CopyableField";
 import { FriendlyErrorAlert } from "../components/FriendlyErrorAlert";
 import type { AppConfig } from "../config";
+import { evaluateRotateButtonGuard } from "../lib/competitor-account-actions";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
@@ -178,14 +179,28 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
             >
               {item.verified ? "再 Verify" : "Verify"}
             </Button>
-            <Button
-              variant="normal"
-              iconName="refresh"
-              onClick={() => setRotateTarget(item)}
-              data-testid={`rotate-${item.awsAccountId}`}
-            >
-              Rotate ExternalId
-            </Button>
+            {(() => {
+              // Issue #1054: backend (#868) は verified=false への rotate を 409 で reject する。
+              // UI 側で row 状態に応じて button を disable し、 native title で理由を hover hint
+              // として出す (= Cloudscape Popover は click trigger で disabled button に乗らない)。
+              const guard = evaluateRotateButtonGuard({
+                verified: item.verified,
+                verifyInFlight,
+              });
+              return (
+                <span title={guard.reason}>
+                  <Button
+                    variant="normal"
+                    iconName="refresh"
+                    disabled={guard.disabled}
+                    onClick={() => setRotateTarget(item)}
+                    data-testid={`rotate-${item.awsAccountId}`}
+                  >
+                    Rotate ExternalId
+                  </Button>
+                </span>
+              );
+            })()}
             <Button
               variant="normal"
               iconName="upload"
