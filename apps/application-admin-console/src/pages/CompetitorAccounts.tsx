@@ -30,8 +30,6 @@ import { evaluateRotateButtonGuard } from "../lib/competitor-account-actions";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
-  buildUpdatePayload,
-  buildUpdateStackUrl,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
   isBootstrapUrlMissing,
 } from "../lib/competitor-bootstrap";
@@ -60,11 +58,15 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
   const [rotateInFlight, setRotateInFlight] = useState(false);
+  // 旧 issue: rotate 後の Launch Stack click が `AlreadyExistsException` で fail していた
+  // (= bootstrap stack は initial create で既に存在、 rotate は Parameter 変更のみ)。 mode で
+  // 区別して rotate 時は Launch Stack を隠し、 「競技者に新 ExternalId を渡して Parameter
+  // を手動更新してもらう」 経路に倒す。 `BootstrapUpdateModal` 経路は廃止 (= 仕様簡素化)。
   const [showSecret, setShowSecret] = useState<
-    CreateCompetitorAccountResponse | RotateExternalIdResponse | null
+    | { mode: "create"; details: CreateCompetitorAccountResponse }
+    | { mode: "rotate"; details: RotateExternalIdResponse }
+    | null
   >(null);
-  // #706: 既存 bootstrap stack の update 案内 modal (= row の「Update bootstrap」 button から開く)。
-  const [updateTarget, setUpdateTarget] = useState<CompetitorAccountSummary | null>(null);
 
   const reload = useCallback(async () => {
     if (!apiClient) return;
@@ -117,7 +119,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
     try {
       const res = await rotateExternalId(apiClient, rotateTarget.awsAccountId);
       setRotateTarget(null);
-      setShowSecret(res);
+      setShowSecret({ mode: "rotate", details: res });
       await reload();
     } catch (err) {
       setError(toFriendlyError(err));
@@ -202,14 +204,6 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
                 </span>
               );
             })()}
-            <Button
-              variant="normal"
-              iconName="upload"
-              onClick={() => setUpdateTarget(item)}
-              data-testid={`update-bootstrap-${item.awsAccountId}`}
-            >
-              Update bootstrap
-            </Button>
             <Button variant="link" onClick={() => setDeleteTarget(item)}>
               削除
             </Button>
@@ -272,13 +266,13 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         onDismiss={() => setAddModalVisible(false)}
         onSuccess={(res) => {
           setAddModalVisible(false);
-          setShowSecret(res);
+          setShowSecret({ mode: "create", details: res });
           void reload();
         }}
       />
 
       <SecretRevealModal
-        details={showSecret}
+        secret={showSecret}
         onDismiss={() => setShowSecret(null)}
         templateUrl={config.competitorBootstrapTemplateUrl}
       />
@@ -308,12 +302,6 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
           鍵漏洩リスク削減)。
         </p>
       </Modal>
-
-      <BootstrapUpdateModal
-        target={updateTarget}
-        onDismiss={() => setUpdateTarget(null)}
-        templateUrl={config.competitorBootstrapTemplateUrl}
-      />
 
       <Modal
         visible={rotateTarget !== null}
@@ -497,21 +485,29 @@ function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountMo
 }
 
 interface SecretRevealModalProps {
-  details: CreateCompetitorAccountResponse | RotateExternalIdResponse | null;
+  secret:
+    | { mode: "create"; details: CreateCompetitorAccountResponse }
+    | { mode: "rotate"; details: RotateExternalIdResponse }
+    | null;
   onDismiss: () => void;
-  /** #718: runtime-config 由来の public S3 URL (= CFn TemplateURL に渡す)。未注入なら GitHub raw fallback。 */
+  /** runtime-config 由来の public S3 URL (= CFn TemplateURL に渡す)。 未注入なら fallback。 */
   templateUrl?: string;
 }
 
-function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModalProps) {
+/**
+ * 競技者と共有する ExternalId 等の secret を提示する modal。
+ *
+ * mode="create" (= initial bootstrap): Launch Stack (= Quick Create deeplink) で 1 click deploy 可能。
+ *   bootstrap stack 不在なので Quick Create が正常に通る。
+ * mode="rotate" (= ExternalId rotate): Launch Stack は出さない。 bootstrap stack は既に存在するため
+ *   Quick Create は AlreadyExistsException で fail する。 operator は新 ExternalId を競技者に共有し、
+ *   競技者側で CloudFormation console から `tenkacloud-competitor-bootstrap` stack の Parameter を手動
+ *   更新する経路を取る (= 仕様簡素化、 旧 BootstrapUpdateModal / Update Stack deeplink 経路は廃止)。
+ */
+function SecretRevealModal({ secret, onDismiss, templateUrl }: SecretRevealModalProps) {
   const [allCopied, setAllCopied] = useState(false);
-  if (!details) return null;
-  const launchStackUrl = buildLaunchStackUrl({
-    tenkaCloudAccountId: details.tenkaCloudAccountId,
-    externalId: details.externalId,
-    competitorRoleName: details.competitorRoleName,
-    templateUrl,
-  });
+  if (!secret) return null;
+  const { mode, details } = secret;
   const effectiveTemplateUrl =
     templateUrl && templateUrl.length > 0 ? templateUrl : COMPETITOR_BOOTSTRAP_TEMPLATE_URL;
   const payload = buildShareablePayload({
@@ -529,7 +525,7 @@ function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModa
     <Modal
       visible
       onDismiss={onDismiss}
-      header="競技者に共有する情報"
+      header={mode === "create" ? "競技者に共有する情報" : "新 ExternalId を共有"}
       footer={
         <Box float="right">
           <Button variant="primary" onClick={onDismiss}>
@@ -540,41 +536,61 @@ function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModa
     >
       <SpaceBetween size="m">
         <Alert type="warning" header="この画面でのみ ExternalId を確認できます">
-          ExternalId は SecureString として保存されており、閉じると再表示できません。
+          ExternalId は SecureString として保存されており、 閉じると再表示できません。
           競技者に渡すコピーは <strong>今</strong> 取ってください。
         </Alert>
+        {mode === "create" ? (
+          <SpaceBetween size="s">
+            <Header variant="h3">推奨: Launch Stack 1 click deploy</Header>
+            <Button
+              variant="primary"
+              href={buildLaunchStackUrl({
+                tenkaCloudAccountId: details.tenkaCloudAccountId,
+                externalId: details.externalId,
+                competitorRoleName: details.competitorRoleName,
+                templateUrl,
+              })}
+              target="_blank"
+              iconName="external"
+              iconAlign="right"
+            >
+              Launch Stack (Quick-create deeplink)
+            </Button>
+            <Box variant="small" color="text-status-inactive">
+              CFn create-stack 画面に直行し、 Parameter 3 値は pre-fill 済です。
+            </Box>
+          </SpaceBetween>
+        ) : (
+          <Alert type="info" header="競技者側で Parameter を手動更新します">
+            bootstrap stack は既に存在するため Quick Create は使えません (= AlreadyExistsException
+            になる)。 競技者の AWS console で <code>tenkacloud-competitor-bootstrap</code> stack
+            を開き、 「Update」 → 「Use current template」 → Parameter <code>ExternalId</code>{" "}
+            に下記の新値を入力 → 「Update stack」 してもらう経路で進めてください。
+          </Alert>
+        )}
         <SpaceBetween size="s">
-          <Header variant="h3">推奨: Launch Stack 1 click deploy</Header>
-          <Button
-            variant="primary"
-            href={launchStackUrl}
-            target="_blank"
-            iconName="external"
-            iconAlign="right"
-          >
-            Launch Stack (Quick-create deeplink)
-          </Button>
-          <Box variant="small" color="text-status-inactive">
-            CFn create-stack 画面に直行し、Parameter 3 値は pre-fill 済です。
-          </Box>
-        </SpaceBetween>
-        <SpaceBetween size="s">
-          <Header variant="h3">競技者に共有する情報</Header>
+          <Header variant="h3">{mode === "create" ? "競技者に共有する情報" : "コピー用"}</Header>
           <Button
             iconName={allCopied ? "status-positive" : "copy"}
             onClick={() => void onCopyAll()}
           >
-            {allCopied ? "コピーしました" : "すべて (3 値 + 手順 + Launch Stack URL) をコピー"}
+            {allCopied
+              ? "コピーしました"
+              : mode === "create"
+                ? "すべて (3 値 + 手順 + Launch Stack URL) をコピー"
+                : "新 ExternalId + 手順をコピー"}
           </Button>
         </SpaceBetween>
-        <div>
-          <Box variant="awsui-key-label">次のステップ — 競技者向け</Box>
-          <ol>
-            <li>Launch Stack を開いて bootstrap stack を作成する</li>
-            <li>deploy 完了後、 この画面の「Verify」 button で接続確認する</li>
-          </ol>
-        </div>
-        <ExpandableSection headerText="手動 deploy の詳細" variant="container">
+        {mode === "create" && (
+          <div>
+            <Box variant="awsui-key-label">次のステップ — 競技者向け</Box>
+            <ol>
+              <li>Launch Stack を開いて bootstrap stack を作成する</li>
+              <li>deploy 完了後、 この画面の「Verify」 button で接続確認する</li>
+            </ol>
+          </div>
+        )}
+        <ExpandableSection headerText="手動 deploy / update の詳細" variant="container">
           <SpaceBetween size="m">
             <ColumnLayout columns={1} variant="text-grid">
               <div>
@@ -606,88 +622,12 @@ function SecretRevealModal({ details, onDismiss, templateUrl }: SecretRevealModa
               </div>
             </ColumnLayout>
             <Box variant="small" color="text-status-inactive">
-              上記 3 値を Parameter として CloudFormation create-stack でも deploy できます。
+              {mode === "create"
+                ? "上記 3 値を Parameter として CloudFormation create-stack でも deploy できます。"
+                : "既存 stack の Parameter ExternalId だけを上記新値に更新してもらえば OK です (= 他の Parameter は変更不要)。"}
             </Box>
           </SpaceBetween>
         </ExpandableSection>
-      </SpaceBetween>
-    </Modal>
-  );
-}
-
-interface BootstrapUpdateModalProps {
-  target: CompetitorAccountSummary | null;
-  onDismiss: () => void;
-  /** #718: runtime-config 由来の public S3 URL (= CFn TemplateURL に渡す)。未注入なら GitHub raw fallback。 */
-  templateUrl?: string;
-}
-
-/**
- * #706: 既存 bootstrap stack の update 案内 modal。
- *
- * PR-694 (Lambda IAM 追加) のように deploy chain 側で IAM が増えると、 競技者の
- * `tenkacloud-competitor-bootstrap` stack を最新 template で update してもらわないと
- * 「lambda:GetFunction AccessDenied」 等で deploy が失敗する。
- *
- * 本 modal は秘密値 (ExternalId) を含まないので、 既存 row から呼べる (= row には
- * externalId が無い)。 競技者の CFn console で Parameter は default で existing value 再利用される。
- */
-function BootstrapUpdateModal({ target, onDismiss, templateUrl }: BootstrapUpdateModalProps) {
-  const [copied, setCopied] = useState(false);
-  if (!target) return null;
-  const updateUrl = buildUpdateStackUrl({ region: target.region, templateUrl });
-  const payload = buildUpdatePayload({ region: target.region, templateUrl });
-  const onCopy = async () => {
-    await navigator.clipboard.writeText(payload);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <Modal
-      visible
-      onDismiss={onDismiss}
-      header="bootstrap stack の update を依頼"
-      footer={
-        <Box float="right">
-          <Button variant="primary" onClick={onDismiss}>
-            閉じる
-          </Button>
-        </Box>
-      }
-    >
-      <SpaceBetween size="m">
-        <Alert type="info" header="新しい IAM 反映には bootstrap stack の update が必要です">
-          deploy chain 側で IAM (例: Lambda 操作権限) が追加された場合、 competitor 側で
-          <code>tenkacloud-competitor-bootstrap</code> stack を最新 template に update して
-          もらう必要があります。 ExternalId 等の秘密値は競技者の既存 stack で再利用されるため、
-          operator から再送する必要はありません。
-        </Alert>
-        <Box>
-          <Button
-            variant="primary"
-            iconName={copied ? "status-positive" : "copy"}
-            onClick={() => void onCopy()}
-            data-testid="copy-update-payload"
-          >
-            {copied ? "コピーしました" : "update 依頼テキストをコピー (Slack / メール用)"}
-          </Button>
-        </Box>
-        <div>
-          <Box variant="awsui-key-label">Update Stack URL (= 競技者がワンクリックで開く)</Box>
-          <CopyableField value={updateUrl} ariaLabel="Copy Update Stack URL" />
-        </div>
-        <div>
-          <Box variant="awsui-key-label">最新 template (= レビュー用 raw URL)</Box>
-          <CopyableField
-            value={COMPETITOR_BOOTSTRAP_TEMPLATE_URL}
-            ariaLabel="Copy bootstrap template URL"
-          />
-        </div>
-        <Box variant="small" color="text-status-inactive">
-          競技者は SSO ログイン後、 Replace current template 画面に直行します。 Parameter 値は 「Use
-          existing value」 (= default) のままで OK。 confirm 画面で IAM diff (例: lambda:GetFunction
-          追加) を確認して Update。
-        </Box>
       </SpaceBetween>
     </Modal>
   );

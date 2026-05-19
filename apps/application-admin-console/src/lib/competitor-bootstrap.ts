@@ -79,34 +79,12 @@ export function buildLaunchStackUrl(input: LaunchStackUrlInput): string {
 }
 
 /**
- * #706: 既存 `tenkacloud-competitor-bootstrap` stack を **同 template の最新版** で update する
- * deeplink を組み立てる。 PR-694 のような IAM 追加を反映するため operator が競技者に共有する用途。
- *
- * AWS CFn console の Update Stack 経路は `#/stacks/update/template` で、 `stackName` 指定 +
- * `templateURL` 指定で 「Replace current template」 で update する。 既存 Parameter 値は競技者の
- * CFn console 側で **Use existing value** が default になるため operator が externalId 等の
- * 秘密値を再送する必要は無い。 SSO ログイン後 → 確認画面で diff を見せた上で 1 click で update できる。
- *
- * `region` は operator がレコードから渡す (= 別 region に bootstrap が無い前提)。
- */
-export interface UpdateStackUrlInput {
-  readonly region?: string;
-  /** #718: CFn TemplateURL 用の S3 URL。 undefined / 空文字なら GitHub raw fallback。 */
-  readonly templateUrl?: string;
-}
-
-export function buildUpdateStackUrl(input: UpdateStackUrlInput = {}): string {
-  const region = input.region ?? DEFAULT_REGION;
-  const params = new URLSearchParams({
-    stackName: DEFAULT_STACK_NAME,
-    templateURL: resolveTemplateUrl(input.templateUrl),
-  });
-  return `https://${region}.console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/update/template?${params.toString()}`;
-}
-
-/**
  * 「すべてコピー」 button が clipboard に書き込む 1 つの整形済 string。
  * 競技者の作業手順 (= Slack / メールでそのまま送れる) を含む。
+ *
+ * 旧 `buildUpdateStackUrl` / `buildUpdatePayload` (= bootstrap stack の Update Stack deeplink 生成)
+ * は仕様簡素化のため廃止 (= ExternalId rotate は新値を operator が共有し、 競技者が CFn console
+ * で Parameter を手動更新する経路に統一)。
  */
 export function buildShareablePayload(input: LaunchStackUrlInput): string {
   return [
@@ -123,30 +101,5 @@ export function buildShareablePayload(input: LaunchStackUrlInput): string {
     `   ${buildLaunchStackUrl(input)}`,
     "",
     "完了後 operator にこの mail / msg を返信、 operator が「Verify」 で確認します。",
-  ].join("\n");
-}
-
-/**
- * #706: 既存 bootstrap stack を最新 template で update してもらう案内 payload。
- * PR-694 (Lambda IAM 追加) のような新 IAM を反映する用途。 競技者に Slack / メールで送る。
- *
- * 既存 stack の Parameter 値は CFn console 側で「Use existing value」 が default になるので、
- * 秘密値 (= ExternalId) を再送する必要は無い (= 公開 URL のみ含める)。
- */
-export function buildUpdatePayload(input: UpdateStackUrlInput = {}): string {
-  return [
-    "TenkaCloud Competitor Bootstrap — 既存 stack の update のお願い",
-    "",
-    "deploy chain に新しい IAM (例: Lambda Function 操作) が追加されたため、 既に deploy 済の",
-    "`tenkacloud-competitor-bootstrap` stack を最新 template に update してください。",
-    "",
-    "update 手順 (= 1 click):",
-    "1. 競技者 AWS account にログイン (= 既存と同じ)",
-    "2. 下記 Update Stack リンクを開く (= 既存 stack の Replace current template 画面に直行):",
-    `   ${buildUpdateStackUrl(input)}`,
-    "3. Parameter 画面は「Use existing value」 のまま (= 秘密値 ExternalId は既存のまま再利用)。",
-    "4. 確認画面で diff (= 追加 IAM Statement 等) を確認して Update。",
-    "",
-    "完了後 operator にこの mail / msg を返信、 operator が「Verify」 で再確認します。",
   ].join("\n");
 }
