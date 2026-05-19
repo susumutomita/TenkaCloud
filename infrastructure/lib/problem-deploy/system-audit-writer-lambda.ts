@@ -1,0 +1,85 @@
+import * as path from "node:path";
+import { Duration } from "aws-cdk-lib";
+import type { Table } from "aws-cdk-lib/aws-dynamodb";
+import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
+import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import { Architecture } from "aws-cdk-lib/aws-lambda";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { Construct } from "constructs";
+import {
+  LAMBDA_NODEJS_BUNDLING_TARGET,
+  LAMBDA_NODEJS_RUNTIME,
+  LAMBDA_SOURCE_MAP_ENABLED,
+} from "../utils/lambda-runtime";
+
+export interface SystemAuditWriterLambdaProps {
+  /** SBT ControlPlane が払い出す共通 EventBus。 */
+  readonly eventBus: IEventBus;
+  /** ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` で行を書く)。 */
+  readonly adminAuditLogTable: Table;
+  /** `SYSTEM#<env>` の env suffix (= writeAuditEvent が `DEPLOY_ENVIRONMENT` を読む)。 */
+  readonly environmentName: string;
+}
+
+/**
+ * Issue #1034: SBT Control Plane の tenant onboarding / offboarding イベントを listen し、
+ * `AdminAuditLog` table の SYSTEM 区画 (= `PK=SYSTEM#<env>`) に行を書き戻す Lambda + Rule。
+ *
+ * 旧状態: SystemAdmin の tenant CRUD は SBT 経由なので App Plane Lambda は走らず、 audit-log
+ * page の SystemAdmin scope は常に 0 件だった。 本 construct が SBT EventBridge bus を listen
+ * し、 onboardingRequest / onboardingSuccess / onboardingFailure / offboarding* の 6 detailType
+ * を SYSTEM scope audit に集約する (= 「誰がいつ tenant を作成 / 削除した」 が UI で読める)。
+ *
+ * fail-safe: Lambda が throw すると EventBridge は最大 24h 再 deliver を試みる。 audit 1 行
+ * 欠落 < retry storm のコストなので handler は catch して swallow する (= writeAuditEvent も
+ * 内部で fail-safe)。
+ */
+export class SystemAuditWriterLambda extends Construct {
+  public readonly fn: NodejsFunction;
+  public readonly rule: Rule;
+
+  constructor(scope: Construct, id: string, props: SystemAuditWriterLambdaProps) {
+    super(scope, id);
+
+    this.fn = new NodejsFunction(this, "Function", {
+      runtime: LAMBDA_NODEJS_RUNTIME,
+      architecture: Architecture.ARM_64,
+      entry: path.resolve(__dirname, "handlers/system-audit-writer/index.ts"),
+      handler: "handler",
+      timeout: Duration.seconds(10),
+      memorySize: 256,
+      environment: {
+        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable.tableName,
+        DEPLOY_ENVIRONMENT: props.environmentName,
+        NODE_OPTIONS: "--enable-source-maps",
+      },
+      bundling: {
+        minify: true,
+        target: LAMBDA_NODEJS_BUNDLING_TARGET,
+        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
+        externalModules: [],
+      },
+    });
+
+    props.adminAuditLogTable.grantWriteData(this.fn);
+
+    // SBT `DetailType` enum (= event-manager.d.ts) のうち audit に意味があるものを listen。
+    // user / api-key 系の SBT events は別 issue で扱う (本 issue は tenant CRUD に絞る)。
+    this.rule = new Rule(this, "Rule", {
+      eventBus: props.eventBus,
+      description:
+        "Route SBT tenant onboarding/offboarding events to SystemAuditWriter Lambda (Issue #1034)",
+      eventPattern: {
+        detailType: [
+          "onboardingRequest",
+          "onboardingSuccess",
+          "onboardingFailure",
+          "offboardingRequest",
+          "offboardingSuccess",
+          "offboardingFailure",
+        ],
+      },
+      targets: [new LambdaFunction(this.fn)],
+    });
+  }
+}
