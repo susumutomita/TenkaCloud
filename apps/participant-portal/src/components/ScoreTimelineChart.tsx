@@ -8,6 +8,7 @@ import {
   type LeaderboardScoreEventsResponse,
   type TeamScoreEvents,
 } from "../api/portal-client";
+import { useI18n, useT } from "../i18n";
 
 /**
  * audit table #12 + Issue #1038 P1 #6: 競技開始からの得点状況を折れ線グラフで可視化する。
@@ -60,6 +61,8 @@ export function ScoreTimelineChart({
   apiBaseUrl: string;
   sessionToken: string;
 }) {
+  const t = useT();
+  const { locale } = useI18n();
   const [data, setData] = useState<LeaderboardScoreEventsResponse | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +106,9 @@ export function ScoreTimelineChart({
         ? "#037f0c"
         : (RIVAL_COLORS[rivalIdx++ % RIVAL_COLORS.length] ?? "#5b6770");
       return {
-        title: team.isMyTeam ? `${team.teamName} (あなた)` : team.teamName,
+        title: team.isMyTeam
+          ? t("score_timeline.you_suffix", { teamName: team.teamName })
+          : team.teamName,
         type: "line" as const,
         data: points.map((p) => ({ x: p.x, y: p.y })),
         valueFormatter: (v: number) => `${v} pt`,
@@ -118,42 +123,45 @@ export function ScoreTimelineChart({
     const minY = allY.length > 0 ? Math.min(0, ...allY) : 0;
     const maxY = allY.length > 0 ? Math.max(10, ...allY) : 10;
     return { built, minX, maxX, minY, maxY };
-  }, [data]);
+  }, [data, t]);
 
   if (error) {
     return (
-      <Container header={<Header variant="h2">スコア推移</Header>}>
-        <Box color="text-status-error">取得失敗: {error}</Box>
+      <Container header={<Header variant="h2">{t("score_timeline.header")}</Header>}>
+        <Box color="text-status-error">{t("score_timeline.fetch_failed", { error })}</Box>
       </Container>
     );
   }
 
   if (!data) {
     return (
-      <Container header={<Header variant="h2">スコア推移</Header>}>
-        <Box color="text-status-inactive">読み込み中…</Box>
+      <Container header={<Header variant="h2">{t("score_timeline.header")}</Header>}>
+        <Box color="text-status-inactive">{t("score_timeline.loading")}</Box>
       </Container>
     );
   }
 
-  const totalEvents = data.teams.reduce((s, t) => s + t.events.length, 0);
+  const totalEvents = data.teams.reduce((s, te) => s + te.events.length, 0);
   if (totalEvents === 0) {
     return (
-      <Container header={<Header variant="h2">スコア推移</Header>}>
-        <Box color="text-status-inactive">
-          まだ得点履歴がありません。 flag 提出や Battle の uptime 加点で記録されます。
-        </Box>
+      <Container header={<Header variant="h2">{t("score_timeline.header")}</Header>}>
+        <Box color="text-status-inactive">{t("score_timeline.empty_body")}</Box>
       </Container>
     );
   }
 
   if (!seriesView) return null;
 
+  const localeTag = locale === "ja" ? "ja-JP" : "en-US";
+
   return (
     <Container
       header={
-        <Header variant="h2" description={`同 event 内の全 ${data.teams.length} チームを表示`}>
-          スコア推移
+        <Header
+          variant="h2"
+          description={t("score_timeline.header_description", { count: data.teams.length })}
+        >
+          {t("score_timeline.header")}
         </Header>
       }
     >
@@ -164,15 +172,15 @@ export function ScoreTimelineChart({
         xScaleType="time"
         i18nStrings={{
           xTickFormatter: (d: Date) =>
-            d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+            d.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" }),
           yTickFormatter: (n: number) => `${n}`,
         }}
         height={280}
-        xTitle="時刻"
-        yTitle="累計スコア (pt)"
-        ariaLabel="競技開始からの全チームスコア推移 (累積)"
-        empty={<Box color="text-status-inactive">データなし</Box>}
-        noMatch={<Box color="text-status-inactive">範囲内にデータなし</Box>}
+        xTitle={t("score_timeline.x_title")}
+        yTitle={t("score_timeline.y_title")}
+        ariaLabel={t("score_timeline.aria_label")}
+        empty={<Box color="text-status-inactive">{t("score_timeline.no_data")}</Box>}
+        noMatch={<Box color="text-status-inactive">{t("score_timeline.no_match")}</Box>}
       />
     </Container>
   );

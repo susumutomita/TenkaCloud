@@ -108,7 +108,19 @@
       "FAILED": "Failed to start",
       "DELETING": "Stopping",
       "DELETED": "Stopped"
-    }
+    },
+    "submission_failed": "Deploy failed",
+    "submission_finished": "Finished",
+    "submission_preparing": "Preparing",
+    "submission_cleared": "Cleared",
+    "submission_unsolved": "Unsolved",
+    "submission_in_progress": "In progress",
+    "difficulty_label": "Difficulty: {label}",
+    "difficulty_1": "Intro",
+    "difficulty_2": "Beginner",
+    "difficulty_3": "Intermediate",
+    "difficulty_4": "Advanced",
+    "difficulty_5": "Expert"
   },
   "notifications": {
     "header": "Notifications",
@@ -239,5 +251,18 @@
     "hint_confirm_penalty": "Revealing will cost {penalty} pt. This cannot be undone.",
     "hint_confirm_no_penalty": "No penalty for this hint. Revealing will display the content.",
     "hint_confirm_footer": "Hint text appears after reveal."
+  },
+  "score_timeline": {
+    "header": "Score timeline",
+    "header_description": "Showing all {count} teams in this event",
+    "fetch_failed": "Fetch failed: {error}",
+    "loading": "Loading…",
+    "empty_body": "No score history yet. Flag submissions and Battle uptime points appear here.",
+    "you_suffix": "({teamName} you)",
+    "x_title": "Time",
+    "y_title": "Cumulative score (pt)",
+    "aria_label": "Cumulative score timeline of all teams since competition start",
+    "no_data": "No data",
+    "no_match": "No data in range"
   }
 }

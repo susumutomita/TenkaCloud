@@ -108,7 +108,19 @@
       "FAILED": "起動失敗",
       "DELETING": "停止中",
       "DELETED": "停止済"
-    }
+    },
+    "submission_failed": "デプロイ失敗",
+    "submission_finished": "終了",
+    "submission_preparing": "準備中",
+    "submission_cleared": "クリア",
+    "submission_unsolved": "未解答",
+    "submission_in_progress": "挑戦中",
+    "difficulty_label": "難易度: {label}",
+    "difficulty_1": "入門",
+    "difficulty_2": "初級",
+    "difficulty_3": "中級",
+    "difficulty_4": "上級",
+    "difficulty_5": "エキスパート"
   },
   "notifications": {
     "header": "Notifications",
@@ -239,5 +251,18 @@
     "hint_confirm_penalty": "公開すると {penalty} pt 減点されます。 一度公開すると元に戻せません。",
     "hint_confirm_no_penalty": "このヒントには減点はありません。 公開するとヒントが表示されます。",
     "hint_confirm_footer": "ヒント本文は公開後に表示されます。"
+  },
+  "score_timeline": {
+    "header": "スコア推移",
+    "header_description": "同 event 内の全 {count} チームを表示",
+    "fetch_failed": "取得失敗: {error}",
+    "loading": "読み込み中…",
+    "empty_body": "まだ得点履歴がありません。 flag 提出や Battle の uptime 加点で記録されます。",
+    "you_suffix": "({teamName} あなた)",
+    "x_title": "時刻",
+    "y_title": "累計スコア (pt)",
+    "aria_label": "競技開始からの全チームスコア推移 (累積)",
+    "no_data": "データなし",
+    "no_match": "範囲内にデータなし"
   }
 }
