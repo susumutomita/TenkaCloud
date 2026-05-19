@@ -828,7 +828,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             </Field>
           </ColumnLayout>
           <Box margin={{ top: "m" }}>
-            <Field label="採点ステータス">{scoringBadge(detail.startsAt)}</Field>
+            <Field label="採点ステータス">{scoringBadge(detail)}</Field>
           </Box>
           {/* Issue #1038 P1 #9 follow-up: scoreboard freeze 分数 (= 終了 N 分前から順位非公開) */}
           <Box margin={{ top: "m" }}>
@@ -1286,12 +1286,23 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
 }
 
 /**
- * Event の採点状況バッジ。3 分岐: 未設定 / 開始予定 / 採点中。
- * 時刻判定は新しいレンダ時の `Date.now()` を使うので polling refresh で自然に更新される。
+ * Event の採点状況バッジ。 #1095: status / scoringLocked / 時刻の優先順位で分岐。
+ *   1. scoringLocked → 「採点 lock 中」 (red)
+ *   2. status === ENDED → 「終了」 (grey)
+ *   3. status === ARCHIVED / TEARDOWN → 「終了」 (grey)
+ *   4. !startsAt → 「未開始」 (grey)
+ *   5. startsAt 未到達 → 「開始予定」 (blue)
+ *   6. それ以外 → 「採点中」 (green)
  */
-function scoringBadge(startsAt: string | undefined) {
-  if (!startsAt) return <Badge color="grey">未開始</Badge>;
-  if (new Date(startsAt).getTime() > Date.now()) return <Badge color="blue">開始予定</Badge>;
+function scoringBadge(detail: Pick<EventDetail, "startsAt" | "status" | "scoringLocked">) {
+  if (detail.scoringLocked === true) return <Badge color="red">採点 lock 中</Badge>;
+  if (detail.status === "ENDED" || detail.status === "ARCHIVED" || detail.status === "TEARDOWN") {
+    return <Badge color="grey">終了</Badge>;
+  }
+  if (!detail.startsAt) return <Badge color="grey">未開始</Badge>;
+  if (new Date(detail.startsAt).getTime() > Date.now()) {
+    return <Badge color="blue">開始予定</Badge>;
+  }
   return <Badge color="green">採点中</Badge>;
 }
 

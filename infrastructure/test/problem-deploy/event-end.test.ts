@@ -66,6 +66,13 @@ describe("endEvent", () => {
     expect(eventUpd.input.ExpressionAttributeValues?.[":ready"]).toBe("READY");
     expect(eventUpd.input.ExpressionAttributeValues?.[":ended"]).toBe("ENDED");
     expect(eventUpd.input.ExpressionAttributeValues?.[":now"]).toBe(NOW_ISO);
+    // #1095: ENDED 遷移と同時に scoringLocked = true / scoringLockedAt = now /
+    //        scoringLockedBy = "system:end-event" が立つ
+    expect(eventUpd.input.ExpressionAttributeValues?.[":true"]).toBe(true);
+    expect(eventUpd.input.ExpressionAttributeValues?.[":system"]).toBe("system:end-event");
+    expect(eventUpd.input.UpdateExpression).toContain("scoringLocked = :true");
+    expect(eventUpd.input.UpdateExpression).toContain("scoringLockedAt = :now");
+    expect(eventUpd.input.UpdateExpression).toContain("scoringLockedBy = :system");
 
     // Deployments query は GSI1 = TENANT# + FilterExpression eventId 一致 (cross-event 漏洩防止)
     const queryCmd = ddbSend.mock.calls[1]?.[0] as QueryCommand;

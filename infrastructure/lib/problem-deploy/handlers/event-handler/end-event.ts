@@ -26,6 +26,12 @@ export type EndEventOutcome =
  *   - `DRAFT` / `DEPLOYING`: まだ動いていないので無意味
  *   - `TEARDOWN` / `ARCHIVED`: 既に teardown 済 → 終了は redundant
  *   - `ENDED`: 二重操作防止
+ *
+ * Issue #1095: ENDED 遷移と同時に `scoringLocked = true` も atomic に立てる。
+ * 旧設計では scoringLocked は status と orthogonal な軸として保持していたが、
+ * 「event 終了したのに 採点中 badge のまま」 という UX bug が出ていた。 ENDED は
+ * 採点を継続する意味が無いので auto-lock を default にする。 READY 中の表彰
+ * フェーズ用 manual lock (= lockEventScoring) は別経路で残るので柔軟性は保たれる。
  */
 export async function endEvent(
   shared: EventSharedResources,
@@ -41,7 +47,12 @@ export async function endEvent(
       new UpdateCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: "SET #s = :ended, endsAt = :now, updatedAt = :now",
+        // #1095: ENDED 遷移と同時に scoringLocked / scoringLockedAt / scoringLockedBy を
+        //        立てる (= 採点 gate 自動 lock)。 既に手動 lock 済 (scoringLocked=true) の
+        //        event を ENDED にする場合は ConditionExpression が ready のみ許可なので
+        //        通らず、 副作用なし。
+        UpdateExpression:
+          "SET #s = :ended, endsAt = :now, updatedAt = :now, scoringLocked = :true, scoringLockedAt = :now, scoringLockedBy = :system",
         // tenant 跨ぎ防止 + status=READY のみ許可
         ConditionExpression: "tenantId = :tenantId AND #s = :ready",
         ExpressionAttributeNames: { "#s": "status" },
@@ -50,6 +61,8 @@ export async function endEvent(
           ":ready": "READY",
           ":now": now,
           ":tenantId": tenantId,
+          ":true": true,
+          ":system": "system:end-event",
         },
         ReturnValues: "ALL_NEW",
       }),
