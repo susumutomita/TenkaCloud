@@ -24,7 +24,7 @@ function buildShared(): {
 }
 
 const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventRequest => ({
-  name: "JAWS-UG 春の陣 2026",
+  name: "Tenka Battle Cup 2026",
   // #528: 各 team は自社 AWS account を持つ。test data は別 account を割り当て、
   // 「team A が team B の account に deploy しない」を pin できるようにする。
   teams: [

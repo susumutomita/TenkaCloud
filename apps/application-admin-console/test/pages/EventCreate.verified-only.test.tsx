@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../../src/i18n";
 
 /**
  * Phase 2.2 (Issue #459) EventCreate verified-only drop-down 移行のテスト。
@@ -52,17 +53,21 @@ const { EventCreatePage, buildVerifiedAccountOption, formatVerifiedAccountSummar
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/events/new"]}>
-      <Routes>
-        <Route path="/events/new" element={<EventCreatePage config={config} />} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={["/events/new"]}>
+        <Routes>
+          <Route path="/events/new" element={<EventCreatePage config={config} />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.useApiClient.mockReturnValue({});
+  // #1090: i18n test 配下では ja を default にして既存の ja string assertion を維持する。
+  window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
 });
 
 afterEach(() => vi.restoreAllMocks());
