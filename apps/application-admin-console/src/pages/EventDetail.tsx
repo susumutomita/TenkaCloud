@@ -57,11 +57,14 @@ const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "gre
  * 1 problem 行の deploy 状況サマリ: `成功 N / 全 M` + 失敗があれば赤 Badge を併記。
  * Bulk Deploy 未実行 (deployments 無し) なら "未デプロイ" 表示。
  */
-function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[] | undefined) {
+function renderProblemDeployStatus(
+  deployments: readonly EventDeploymentSummary[] | undefined,
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string,
+) {
   if (!deployments || deployments.length === 0) {
     return (
       <Box variant="small" color="text-status-inactive">
-        未デプロイ
+        {t("event_detail.deploy_status_undeployed")}
       </Box>
     );
   }
@@ -76,8 +79,12 @@ function renderProblemDeployStatus(deployments: readonly EventDeploymentSummary[
       <Box variant="strong">
         {complete} / {total}
       </Box>
-      {failed > 0 && <Badge color="red">FAILED {failed}</Badge>}
-      {inFlight > 0 && <Badge color="blue">進行中 {inFlight}</Badge>}
+      {failed > 0 && (
+        <Badge color="red">{t("event_detail.deploy_status_failed_badge", { count: failed })}</Badge>
+      )}
+      {inFlight > 0 && (
+        <Badge color="blue">{t("event_detail.deploy_status_in_flight", { count: inFlight })}</Badge>
+      )}
     </SpaceBetween>
   );
 }
@@ -127,7 +134,8 @@ const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
 
 interface EndsAtValidation {
   readonly canSubmit: boolean;
-  readonly errorText?: string;
+  /** i18n key (= `event_detail.error_*`) returned for the caller to resolve via useT(). */
+  readonly errorKey?: string;
   readonly value?: Date;
 }
 
@@ -140,19 +148,15 @@ function validateEndsAtInput(
   if (!date || !time) return { canSubmit: false };
   const value = new Date(`${date}T${time}:00`);
   if (Number.isNaN(value.getTime())) {
-    return { canSubmit: false, errorText: "終了日時の形式が不正です" };
+    return { canSubmit: false, errorKey: "event_detail.error_endsat_format" };
   }
   if (value.getTime() < nowMs - 60_000) {
-    return {
-      canSubmit: false,
-      errorText:
-        "過去の日時は指定できません。今すぐ終了するには「Event を終了」 button を使ってください。",
-    };
+    return { canSubmit: false, errorKey: "event_detail.error_endsat_past" };
   }
   if (startsAt) {
     const startsAtMs = new Date(startsAt).getTime();
     if (Number.isFinite(startsAtMs) && value.getTime() <= startsAtMs) {
-      return { canSubmit: false, errorText: "終了時刻は開始時刻より後の時刻を指定してください。" };
+      return { canSubmit: false, errorKey: "event_detail.error_endsat_before_start" };
     }
   }
   return { canSubmit: true, value };
@@ -280,21 +284,17 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const handleScheduledStart = async () => {
     if (!apiClient || scheduleInFlight) return;
     if (!scheduleDate || !scheduleTime) {
-      setError("日付と時刻の両方を指定してください");
+      setError(t("event_detail.error_date_time_required"));
       return;
     }
     // DatePicker は YYYY-MM-DD、TimeInput は HH:mm。秒は :00 固定で組む (operator UX が分精度想定)。
     const local = new Date(`${scheduleDate}T${scheduleTime}:00`);
     if (Number.isNaN(local.getTime())) {
-      setError("日時の形式が不正です");
+      setError(t("event_detail.error_date_time_format"));
       return;
     }
-    // #537: 過去日時 reject (第一防衛線、frontend)。SLACK 60s で server 側と揃える。
-    // 過去にしたいなら「即座に開始」 button を使うべき。
     if (local.getTime() < Date.now() - 60_000) {
-      setError(
-        "過去の日時は指定できません。即座に開始するには「即座に開始」 button を使ってください。",
-      );
+      setError(t("event_detail.error_startsat_past"));
       return;
     }
     setScheduleInFlight("scheduled");
@@ -319,7 +319,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     if (!apiClient || endsAtInFlight) return;
     const validation = validateEndsAtInput(endsAtDate, endsAtTime, detail?.startsAt, Date.now());
     if (!validation.canSubmit || !validation.value) {
-      setError(validation.errorText ?? "終了の日付と時刻の両方を指定してください");
+      setError(
+        validation.errorKey ? t(validation.errorKey) : t("event_detail.error_endsat_required"),
+      );
       return;
     }
     setEndsAtInFlight(true);
@@ -357,12 +359,12 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     if (!apiClient || freezeMinutesInFlight) return;
     const trimmed = freezeMinutesInput.trim();
     if (trimmed === "") {
-      setError("freeze 分数を入力してください (0 で無効化、 1〜180 が有効範囲)");
+      setError(t("event_detail.error_freeze_required"));
       return;
     }
     const n = Number(trimmed);
     if (!Number.isInteger(n) || n < 0 || n > 180) {
-      setError("freeze 分数は 0〜180 の整数で指定してください");
+      setError(t("event_detail.error_freeze_range"));
       return;
     }
     setFreezeMinutesInFlight(true);
@@ -389,9 +391,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       await refresh();
     } catch (err) {
       if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
-        setError(
-          "Event は READY / ENDED 状態でのみ採点を lock できます。現在 status を確認してください。",
-        );
+        setError(t("event_detail.error_lock_status"));
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -409,7 +409,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       await refresh();
     } catch (err) {
       if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
-        setError("採点 lock の解除は READY / ENDED 状態でのみ可能です。");
+        setError(t("event_detail.error_unlock_status"));
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -455,8 +455,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
         const current = match?.[1];
         setError(
           current
-            ? `Event は READY 状態でのみ終了できます (現在: ${current})`
-            : "Event は READY 状態でのみ終了できます",
+            ? t("event_detail.error_end_status_with_current", { current })
+            : t("event_detail.error_end_status"),
         );
         return;
       }
@@ -469,7 +469,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   if (!detail && !error) {
     return (
       <Box textAlign="center" padding="l">
-        <Spinner /> 読み込み中…
+        <Spinner /> {t("event_detail.loading_spinner")}
       </Box>
     );
   }
@@ -515,7 +515,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     detail?.startsAt,
     Date.now(),
   );
-  const endsAtInvalid = endsAtValidation.errorText !== undefined;
+  const endsAtErrorText = endsAtValidation.errorKey ? t(endsAtValidation.errorKey) : undefined;
+  const endsAtInvalid = endsAtErrorText !== undefined;
 
   return (
     <SpaceBetween size="l">
@@ -922,11 +923,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       {detail && (
         <Container
           header={
-            <Header
-              variant="h2"
-              description="このイベントで使う問題と、各問題の deploy 先 (account / region)"
-            >
-              問題セット ({detail.problems.length} 問)
+            <Header variant="h2" description={t("event_detail.problemset_description")}>
+              {t("event_detail.problemset_header", { count: detail.problems.length })}
             </Header>
           }
         >
@@ -934,21 +932,33 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             variant="embedded"
             items={[...detail.problems]}
             columnDefinitions={[
-              { id: "id", header: "Problem ID", cell: (p) => <code>{p.problemId}</code> },
-              { id: "account", header: "Default AWS Account", cell: (p) => p.defaultAwsAccountId },
-              { id: "region", header: "Default Region", cell: (p) => p.defaultRegion },
+              {
+                id: "id",
+                header: t("event_detail.problemset_col_id"),
+                cell: (p) => <code>{p.problemId}</code>,
+              },
+              {
+                id: "account",
+                header: t("event_detail.problemset_col_account"),
+                cell: (p) => p.defaultAwsAccountId,
+              },
+              {
+                id: "region",
+                header: t("event_detail.problemset_col_region"),
+                cell: (p) => p.defaultRegion,
+              },
               {
                 id: "status",
-                header: "Deploy Status",
-                cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId]),
+                header: t("event_detail.problemset_col_status"),
+                cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
               },
               {
                 id: "jobs",
-                header: "Job Links",
+                header: t("event_detail.problemset_col_jobs"),
                 cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId]),
               },
             ]}
-            empty={<Box>未設定 — Event 編集 (Phase 2c+) で追加できる予定</Box>}
+            empty={<Box>{t("event_detail.problemset_empty")}</Box>}
           />
         </Container>
       )}
@@ -967,51 +977,44 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             // 必要に応じて open)。
             detail.status === "DRAFT" || detail.status === "DEPLOYING" || detail.status === "READY"
           }
-          headerText="参加者向け配布"
+          headerText={t("event_detail.participants_header")}
         >
           <SpaceBetween size="m">
             {config.participantPortalUrl ? (
               <ColumnLayout columns={2} variant="text-grid">
                 <Box>
-                  <Box variant="awsui-key-label">Participant Portal URL</Box>
+                  <Box variant="awsui-key-label">{t("event_detail.participants_portal_url")}</Box>
                   <SpaceBetween direction="horizontal" size="xs">
                     <a href={config.participantPortalUrl} target="_blank" rel="noreferrer noopener">
                       <code>{config.participantPortalUrl}</code>
                     </a>
                     <Button
                       iconName="copy"
-                      ariaLabel="Portal URL をコピー"
+                      ariaLabel={t("event_detail.participants_copy_aria")}
                       onClick={() =>
                         void navigator.clipboard?.writeText(config.participantPortalUrl ?? "")
                       }
                     >
-                      コピー
+                      {t("event_detail.participants_copy")}
                     </Button>
                   </SpaceBetween>
                 </Box>
                 <Box>
-                  <Box variant="awsui-key-label">配布手順</Box>
+                  <Box variant="awsui-key-label">{t("event_detail.participants_steps_header")}</Box>
                   <Box variant="small">
-                    1. 下のチーム表から各 team の <code>teamLoginKey</code> をコピー
+                    1. {t("event_detail.participants_step_1")}
                     <br />
-                    2. 上の Portal URL と一緒に各チームへ共有
+                    2. {t("event_detail.participants_step_2")}
                     <br />
-                    3. <strong>Deploy</strong> で全チームの問題環境を起動 (Status が READY
-                    になったら競技開始)
+                    3. {t("event_detail.participants_step_3")}
                     <br />
-                    4. 終了後は <strong>Delete</strong> で全環境を一括削除
+                    4. {t("event_detail.participants_step_4")}
                   </Box>
                 </Box>
               </ColumnLayout>
             ) : (
-              <Alert type="info" header="Participant Portal URL 未注入">
-                runtime-config.json に <code>participantPortalUrl</code> が無いため URL を表示
-                できません。ProblemDeployBackendStack の <code>ParticipantPortalUrl</code> Output を
-                application-admin-console hosting に注入する CDK 改修が必要です。 URL は{" "}
-                <code>
-                  aws cloudformation describe-stacks --stack-name tenkacloud-problem-deploy
-                </code>{" "}
-                で取得できます。
+              <Alert type="info" header={t("event_detail.participants_no_url_header")}>
+                {t("event_detail.participants_no_url_body")}
               </Alert>
             )}
           </SpaceBetween>
@@ -1026,148 +1029,144 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             // 競技中 / 終了後は operator が必要に応じて open する。
             detail.status === "DRAFT" || detail.status === "DEPLOYING" || detail.status === "READY"
           }
-          headerText={`チーム (${detail.teams.length})`}
-          headerDescription="teamLoginKey は競技者に配布する Bearer 認証キーです。漏洩した場合は該当チームの環境を再 deploy してキーを更新してください。"
+          headerText={t("event_detail.teams_header", { count: detail.teams.length })}
+          headerDescription={t("event_detail.teams_description")}
         >
           <Table
             variant="embedded"
             items={[...detail.teams]}
             columnDefinitions={[
-              { id: "slug", header: "Internal Slug", cell: (t) => <code>{t.internalSlug}</code> },
+              {
+                id: "slug",
+                header: t("event_detail.teams_col_slug"),
+                cell: (tr) => <code>{tr.internalSlug}</code>,
+              },
               {
                 id: "displayName",
-                header: "表示名 (競技者選択)",
-                cell: (t) =>
-                  t.displayName ?? (
+                header: t("event_detail.teams_col_display_name"),
+                cell: (tr) =>
+                  tr.displayName ?? (
                     <Box variant="small" color="text-status-inactive">
-                      (未設定)
+                      {t("event_detail.teams_col_display_name_unset")}
                     </Box>
                   ),
               },
               {
-                // #528: team 単位の deploy 先 AWS Account ID。旧 Event は undefined。
                 id: "account",
-                header: "AWS Account ID",
-                cell: (t) =>
-                  t.awsAccountId ? (
-                    <code>{t.awsAccountId}</code>
+                header: t("event_detail.teams_col_account"),
+                cell: (tr) =>
+                  tr.awsAccountId ? (
+                    <code>{tr.awsAccountId}</code>
                   ) : (
                     <Box variant="small" color="text-status-inactive">
-                      (旧 Event: problem 既定値を使用)
+                      {t("event_detail.teams_col_account_legacy")}
                     </Box>
                   ),
               },
               {
                 id: "key",
-                header: "teamLoginKey",
-                // #554: copy button を併設して text 選択 + Ctrl-C より早く配布できるように。
-                // Cloudscape Button の iconName="copy" + ariaLabel で a11y も担保。
-                cell: (t) =>
-                  t.teamLoginKey ? (
+                header: t("event_detail.teams_col_login_key"),
+                cell: (tr) =>
+                  tr.teamLoginKey ? (
                     <SpaceBetween direction="horizontal" size="xs" alignItems="center">
                       <Box variant="code" fontSize="body-s">
-                        {t.teamLoginKey}
+                        {tr.teamLoginKey}
                       </Box>
                       <Button
                         iconName="copy"
                         variant="inline-icon"
-                        ariaLabel={`${t.internalSlug} の teamLoginKey をコピー`}
-                        onClick={() => void navigator.clipboard?.writeText(t.teamLoginKey ?? "")}
+                        ariaLabel={t("event_detail.teams_col_login_key_aria", {
+                          slug: tr.internalSlug,
+                        })}
+                        onClick={() => void navigator.clipboard?.writeText(tr.teamLoginKey ?? "")}
                       />
                     </SpaceBetween>
                   ) : (
                     <Box variant="small" color="text-status-inactive">
-                      (詳細で再表示可)
+                      {t("event_detail.teams_col_login_key_legacy")}
                     </Box>
                   ),
               },
             ]}
-            empty={<Box>チームがありません</Box>}
+            empty={<Box>{t("event_detail.teams_empty")}</Box>}
           />
         </ExpandableSection>
       )}
 
       <Modal
         visible={confirmEnd}
-        header="Event を終了しますか?"
+        header={t("event_detail.modal_end_event_header")}
         onDismiss={() => setConfirmEnd(false)}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setConfirmEnd(false)}>キャンセル</Button>
+              <Button onClick={() => setConfirmEnd(false)}>{t("event_detail.modal_cancel")}</Button>
               <Button variant="primary" onClick={handleEndEvent}>
-                終了
+                {t("event_detail.modal_end_event_confirm")}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="s">
-          <Box>
-            Event を <code>ENDED</code> に遷移し、HealthCheck の採点を停止します (deployment
-            は残るので Bulk Teardown は別途必要)。
-          </Box>
+          <Box>{t("event_detail.modal_end_event_body")}</Box>
           <Box variant="small" color="text-status-warning">
-            ENDED 状態から READY に戻すことはできません。再開するには Event を作り直して下さい。
+            {t("event_detail.modal_end_event_extra")}
           </Box>
         </SpaceBetween>
       </Modal>
 
       <Modal
         visible={confirmForceArchive}
-        header="Event を Force ARCHIVED に倒しますか?"
+        header={t("event_detail.modal_force_archive_header")}
         onDismiss={() => setConfirmForceArchive(false)}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setConfirmForceArchive(false)}>キャンセル</Button>
+              <Button onClick={() => setConfirmForceArchive(false)}>
+                {t("event_detail.modal_cancel")}
+              </Button>
               <Button
                 variant="primary"
                 loading={forceArchiveInFlight}
                 onClick={handleForceArchive}
                 data-testid="force-archive-confirm"
               >
-                Force ARCHIVED 実行
+                {t("event_detail.modal_force_archive_confirm_label")}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="s">
-          <Box>
-            Event を <code>ARCHIVED</code> に遷移し、 一覧の default view から外します。
-          </Box>
-          <Alert type="warning" header="物理 stack は別途競技者の手動削除が必要">
-            本 button は <strong>DDB の Event row を ARCHIVED に倒すだけ</strong> です。 競技者
-            account に残った <code>ROLLBACK_COMPLETE</code> 等の CFn stack は競技者が CFn console
-            で手動 Delete する必要があります。 競技者へ事前に依頼してから実行してください。
+          <Box>{t("event_detail.modal_force_archive_body")}</Box>
+          <Alert type="warning" header={t("event_detail.modal_force_archive_alert_header")}>
+            {t("event_detail.modal_force_archive_alert_body")}
           </Alert>
         </SpaceBetween>
       </Modal>
 
       <Modal
         visible={confirmTeardown}
-        header="Event 全 deployment を削除しますか?"
+        header={t("event_detail.modal_teardown_header")}
         onDismiss={() => setConfirmTeardown(false)}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setConfirmTeardown(false)}>キャンセル</Button>
+              <Button onClick={() => setConfirmTeardown(false)}>
+                {t("event_detail.modal_cancel")}
+              </Button>
               <Button variant="primary" onClick={handleBulkTeardown}>
-                実行
+                {t("event_detail.modal_teardown_confirm")}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="s">
-          <Box>
-            このイベント配下の全 deployment を <code>DELETING</code> 状態に倒し、CFn DeleteStack
-            を非同期実行します。teams × problems の組み合わせ全てが対象です。
-          </Box>
+          <Box>{t("event_detail.modal_teardown_body")}</Box>
           <Box variant="small" color="text-status-warning">
-            既に DELETING / DELETED な行は idempotent で skip されます。Phase 3+ で
-            「失敗した行のみ再試行」を追加予定です。
+            {t("event_detail.modal_teardown_extra")}
           </Box>
         </SpaceBetween>
       </Modal>
@@ -1175,36 +1174,35 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       <Modal
         visible={scheduleModalOpen}
         onDismiss={() => setScheduleModalOpen(false)}
-        header="競技開始日時を指定"
+        header={t("event_detail.modal_schedule_header")}
         size="medium"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setScheduleModalOpen(false)}>キャンセル</Button>
+              <Button onClick={() => setScheduleModalOpen(false)}>
+                {t("event_detail.modal_cancel")}
+              </Button>
               <Button
                 variant="primary"
                 loading={scheduleInFlight === "scheduled"}
                 onClick={handleScheduledStart}
               >
-                設定
+                {t("event_detail.modal_schedule_confirm_label")}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="s">
-          <Box>
-            指定時刻を超えると HealthCheck が採点を開始します。ブラウザのローカル時刻で入力した値を
-            UTC に変換して保存します (分精度)。
-          </Box>
-          <FormField label="日付 (YYYY-MM-DD)">
+          <Box>{t("event_detail.modal_schedule_body")}</Box>
+          <FormField label={t("event_detail.modal_date_label")}>
             <DatePicker
               value={scheduleDate}
               onChange={(e) => setScheduleDate(e.detail.value)}
               placeholder="YYYY/MM/DD"
             />
           </FormField>
-          <FormField label="時刻 (HH:mm)">
+          <FormField label={t("event_detail.modal_time_label")}>
             <TimeInput
               value={scheduleTime}
               format="hh:mm"
@@ -1215,41 +1213,37 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
         </SpaceBetween>
       </Modal>
 
-      {/* #536: 競技終了予約 modal。開始 modal とは独立 (= 単一目的の方が初見でも分かる)。
-       *   未来時刻のみ受理、past_ends_at / ends_before_starts は backend で第二防衛線。 */}
       <Modal
         visible={endsAtModalOpen}
         onDismiss={() => setEndsAtModalOpen(false)}
-        header="競技終了日時を指定 (予約)"
+        header={t("event_detail.modal_endsat_header")}
         size="medium"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setEndsAtModalOpen(false)}>キャンセル</Button>
+              <Button onClick={() => setEndsAtModalOpen(false)}>
+                {t("event_detail.modal_cancel")}
+              </Button>
               <Button
                 variant="primary"
                 loading={endsAtInFlight}
                 disabled={!endsAtValidation.canSubmit || endsAtInFlight}
                 onClick={handleScheduleEnd}
               >
-                設定
+                {t("event_detail.modal_schedule_confirm_label")}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="s">
-          <Box>
-            指定時刻を超えると HealthCheck が採点を停止します。「Event を終了」 button (= 即時)
-            と違い、status は READY のまま (= operator は手動で「Event を終了」
-            を押す必要なし)。ブラウザのローカル時刻で入力した値を UTC に変換します (分精度)。
-          </Box>
+          <Box>{t("event_detail.modal_endsat_body")}</Box>
           {detail?.startsAt && (
             <Box variant="small" color="text-status-inactive">
-              開始時刻: <code>{detail.startsAt}</code>
+              {t("event_detail.modal_endsat_starts_at_hint")}: <code>{detail.startsAt}</code>
             </Box>
           )}
-          <FormField label="日付 (YYYY-MM-DD)" errorText={endsAtValidation.errorText}>
+          <FormField label={t("event_detail.modal_date_label")} errorText={endsAtErrorText}>
             <DatePicker
               value={endsAtDate}
               onChange={(e) => setEndsAtDate(e.detail.value)}
@@ -1257,7 +1251,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               invalid={endsAtInvalid}
             />
           </FormField>
-          <FormField label="時刻 (HH:mm)" errorText={endsAtValidation.errorText}>
+          <FormField label={t("event_detail.modal_time_label")} errorText={endsAtErrorText}>
             <TimeInput
               value={endsAtTime}
               format="hh:mm"
@@ -1284,9 +1278,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           type="success"
           dismissible
           onDismiss={() => setNotifyJustSent(false)}
-          header="通知を送信しました"
+          header={t("event_detail.notification_sent_header")}
         >
-          競技者の Participant Portal /notifications で 60 秒以内に表示されます。
+          {t("event_detail.notification_sent_body")}
         </Alert>
       )}
     </SpaceBetween>
