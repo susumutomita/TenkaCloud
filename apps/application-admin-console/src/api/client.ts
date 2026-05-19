@@ -21,14 +21,28 @@ export function createApiClient(baseUrl: string, idToken: string): ApiClient {
 
   const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const url = new URL(path.replace(/^\//, ""), base);
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        authorization: `Bearer ${idToken}`,
-        "content-type": "application/json",
-        ...init.headers,
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        ...init,
+        headers: {
+          authorization: `Bearer ${idToken}`,
+          "content-type": "application/json",
+          ...init.headers,
+        },
+      });
+    } catch (err) {
+      // Issue #1096: 「Failed to fetch」 (= fetch が TypeError を throw する CORS
+      // preflight 失敗 / network unreachable / API 不在 等) を ApiError に正規化し、
+      // 上位 UI で 「ネットワーク経路エラー」 として region / API URL / 推奨手順を
+      // 含む operator-friendly message に変換できるようにする。 status=0 を sentinel
+      // にして上位 friendly-error mapping から判別する。
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new ApiError(
+        0,
+        `Network error: ${detail} (URL: ${url.toString()}, method: ${init.method ?? "GET"})`,
+      );
+    }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       throw new ApiError(res.status, detail || res.statusText);
