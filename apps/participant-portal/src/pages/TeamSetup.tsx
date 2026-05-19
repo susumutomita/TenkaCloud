@@ -7,17 +7,31 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
+import TopNavigation, {
+  type TopNavigationProps,
+} from "@cloudscape-design/components/top-navigation";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { PortalAuthError, PortalValidationError, updateTeamName } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { type LocaleCode, SUPPORTED_LOCALES, useI18n, useT } from "../i18n";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
 
+/** #1092: AppLayout の locale name と同期 (= 別 component に export せず literal で抑える)。 */
+const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
+  ja: "日本語",
+  en: "English",
+};
+
 /**
- * 競技者がログイン直後に通る team name 入力ページ。`PATCH /portal/me` でサーバ側
- * `displayTeamName` を設定し、AuthProvider のセッションを更新して `/` に戻る。
+ * 競技者がログイン直後に通る team name 入力ページ。 `PATCH /portal/me` でサーバ側
+ * `displayTeamName` を設定し、 AuthProvider のセッションを更新して `/` に戻る。
+ *
+ * Issue #1092: チーム未確定状態でも TopNavigation を描画する。 言語切替 picker を
+ * この段階でも使えるようにし、 全文字列を i18n 経由に置き換える。 sidebar は team
+ * 未確定では意味がないので出さない (= TopNavigation のみの light shell)。
  *
  * dev-mock モードはこのページに到達しない (AuthProvider が初期 session に
  * `teamNameSetByCompetitor=true` を入れる)。
@@ -25,6 +39,8 @@ const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
 export function TeamSetupPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const navigate = useNavigate();
+  const t = useT();
+  const { locale, setLocale } = useI18n();
   const [teamName, setTeamName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,9 +67,7 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
         return;
       }
       if (err instanceof PortalValidationError) {
-        setError(
-          "チーム名の形式が無効です。1〜40 文字、英数字 / 半角スペース / _ / - / 日本語のみ。",
-        );
+        setError(t("team_setup.validation_failed"));
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -62,50 +76,72 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
     }
   };
 
-  return (
-    <Box padding="l" textAlign="center">
-      <Container
-        header={
-          <Header
-            variant="h1"
-            description="このイベント中にあなたのチームを呼ぶ名前を入力してください"
-          >
-            チーム名を決めよう
-          </Header>
+  const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
+    const localeUtility: TopNavigationProps.Utility = {
+      type: "menu-dropdown",
+      iconName: "globe",
+      ariaLabel: t("switcher.aria_label"),
+      text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
+      items: SUPPORTED_LOCALES.map((code) => ({
+        id: code,
+        text: LOCALE_DICTIONARIES_NAME[code] ?? code,
+      })),
+      onItemClick: ({ detail }) => {
+        if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
+          setLocale(detail.id as LocaleCode);
         }
-      >
-        <Form>
-          <SpaceBetween size="l">
-            {error && (
-              <Alert type="error" header="チーム名を保存できませんでした">
-                {error}
-              </Alert>
-            )}
-            <FormField
-              label="チーム名"
-              description="プロフィールやスコアボードに表示される名前。後から変更できます。"
-              constraintText="1〜40 文字、英数字 / 半角スペース / _ / - / 日本語"
-              errorText={invalid ? "形式が無効です" : undefined}
-            >
-              <Input
-                value={teamName}
-                placeholder="例: わたしたちのチーム"
-                disabled={submitting}
-                onChange={({ detail }) => setTeamName(detail.value)}
-                invalid={invalid}
-              />
-            </FormField>
-            <Button
-              variant="primary"
-              loading={submitting}
-              disabled={!canSubmit}
-              onClick={handleSubmit}
-            >
-              この名前で始める
-            </Button>
-          </SpaceBetween>
-        </Form>
-      </Container>
-    </Box>
+      },
+    };
+    return [localeUtility];
+  }, [locale, setLocale, t]);
+
+  return (
+    <>
+      <TopNavigation
+        identity={{ href: "/", title: `TenkaCloud — ${config.eventTitle}` }}
+        utilities={utilities}
+      />
+      <Box padding="l" textAlign="center">
+        <Container
+          header={
+            <Header variant="h1" description={t("team_setup.description")}>
+              {t("team_setup.title")}
+            </Header>
+          }
+        >
+          <Form>
+            <SpaceBetween size="l">
+              {error && (
+                <Alert type="error" header={t("team_setup.submit_failed_header")}>
+                  {error}
+                </Alert>
+              )}
+              <FormField
+                label={t("team_setup.field_label")}
+                description={t("team_setup.field_description")}
+                constraintText={t("team_setup.field_constraint")}
+                errorText={invalid ? t("team_setup.field_invalid_format") : undefined}
+              >
+                <Input
+                  value={teamName}
+                  placeholder={t("team_setup.field_placeholder")}
+                  disabled={submitting}
+                  onChange={({ detail }) => setTeamName(detail.value)}
+                  invalid={invalid}
+                />
+              </FormField>
+              <Button
+                variant="primary"
+                loading={submitting}
+                disabled={!canSubmit}
+                onClick={handleSubmit}
+              >
+                {t("team_setup.submit_button")}
+              </Button>
+            </SpaceBetween>
+          </Form>
+        </Container>
+      </Box>
+    </>
   );
 }

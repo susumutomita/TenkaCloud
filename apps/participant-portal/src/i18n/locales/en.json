@@ -58,6 +58,18 @@
     "field_description": "Short-lived key issued by the operator at problem deploy time",
     "field_placeholder": "Key distributed to your team"
   },
+  "team_setup": {
+    "title": "Choose your team name",
+    "description": "Enter the name to call your team during this event",
+    "field_label": "Team name",
+    "field_description": "Shown on your profile and the scoreboard. You can change it later.",
+    "field_placeholder": "e.g. Our team",
+    "field_constraint": "1–40 chars, alphanumeric / space / _ / - / Japanese",
+    "field_invalid_format": "Invalid format",
+    "submit_button": "Start with this name",
+    "submit_failed_header": "Failed to save team name",
+    "validation_failed": "Invalid team name format. Use 1–40 chars: alphanumeric, space, _, -, or Japanese characters only."
+  },
   "quests": {
     "header": "Problems (Quests)",
     "header_description": "Catalog of problems deployed to your team. Each card links directly to its access URL.",
