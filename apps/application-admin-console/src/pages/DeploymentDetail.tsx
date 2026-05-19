@@ -20,7 +20,6 @@ import { useParams } from "react-router";
 import { ApiError, useApiClient } from "../api/client";
 import {
   type DeploymentSummary,
-  deleteDeployment,
   getDeployment,
   getStackProgress,
   JOB_ID_RE,
@@ -69,9 +68,6 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   const [item, setItem] = useState<DeploymentSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshing, setManualRefreshing] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const stopPollingRef = useRef(false);
   const deployLogRef = useRef<HTMLDivElement | null>(null);
@@ -150,24 +146,6 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
     };
   }, [fetchOnce, fetchStackProgress]);
 
-  const handleDelete = useCallback(async () => {
-    if (!apiClient || !jobId) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteDeployment(apiClient, jobId);
-      setDeleteModalOpen(false);
-      // DELETING / DELETE_COMPLETE 遷移は StatusUpdater (1 min) が反映する。
-      // 既存の polling が拾うので追加フェッチ不要、stop flag も解除して継続。
-      stopPollingRef.current = false;
-      await fetchOnce({ showSpinner: false });
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setDeleting(false);
-    }
-  }, [apiClient, jobId, fetchOnce]);
-
   const phases = useMemo(
     () => (item ? derivePhases(item, stackProgress) : []),
     [item, stackProgress],
@@ -206,48 +184,26 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   if (!item) return null;
 
   const outputs = parseStackOutputs(item.stackOutputs);
-  const canDelete = item.status !== "DELETING" && item.status !== "DELETED";
   const teamLoginKey = item.teamLoginKey;
   const summaryTitle = deploySummaryTitle(item);
 
   return (
     <SpaceBetween size="l">
-      {/* Top summary card (Netlify 風)。Cloudscape Container を dark background で
-          stylize する。Job ID + 主要メタを 1 枚で見せる。 */}
-      <Container disableContentPaddings>
-        <div className="tc-deploy-summary">
-          <SpaceBetween size="xs">
-            <Box variant="h1" color="inherit">
-              {summaryTitle}
-            </Box>
-            <Box variant="p" color="inherit">
-              {item.problemId} · {item.displayTeamName ?? item.teamName}
-            </Box>
-            <Box variant="small" color="inherit">
-              {formatLogTimestamp(item.createdAt)} · Job <code>{item.jobId}</code> · Tenant{" "}
-              <code>{item.tenantId}</code>
-            </Box>
-            <div className="tc-deploy-summary-actions">
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
-                  再読み込み
-                </Button>
-                <Button
-                  variant="normal"
-                  iconName="delete-marker"
-                  disabled={!canDelete}
-                  onClick={() => {
-                    setDeleteError(null);
-                    setDeleteModalOpen(true);
-                  }}
-                >
-                  削除
-                </Button>
-              </SpaceBetween>
-            </div>
-          </SpaceBetween>
-        </div>
-      </Container>
+      {/* #1091: 黒い Netlify 風 banner を撤去し Cloudscape の標準 Header に揃える。
+       *   個別 deployment の削除は ここから行わず、 Event 全体の teardown
+       *   (= EventDetail の bulk teardown modal) に一本化する。
+       */}
+      <Header
+        variant="h1"
+        description={`${item.problemId} · ${item.displayTeamName ?? item.teamName} · Job ${item.jobId}`}
+        actions={
+          <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
+            再読み込み
+          </Button>
+        }
+      >
+        {summaryTitle}
+      </Header>
 
       {item.status === "FAILED" && item.failureReason && (
         <Alert type="error" header="失敗理由">
@@ -380,37 +336,6 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
           />
         </Container>
       )}
-
-      <Modal
-        visible={deleteModalOpen}
-        onDismiss={() => setDeleteModalOpen(false)}
-        header={`「${item.teamName}」のデプロイを削除`}
-        size="medium"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setDeleteModalOpen(false)} disabled={deleting}>
-                キャンセル
-              </Button>
-              <Button variant="primary" loading={deleting} onClick={handleDelete}>
-                削除する
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>
-            競技アカウント (<code>{item.awsAccountId}</code> / {item.region}) で起動中の
-            CloudFormation Stack <code>{item.namePrefix}</code> を削除します。
-          </Box>
-          <Box variant="small" color="text-status-warning">
-            この操作は取り消せません。実際の削除は次の StatusUpdater 周期 (最大 1 分)
-            で実行されます。
-          </Box>
-          {deleteError && <Alert type="error">{deleteError}</Alert>}
-        </SpaceBetween>
-      </Modal>
 
       {/* Maximize log: terminal-style 全 phase の log。Cloudscape の Modal size="max"。 */}
       <Modal
@@ -755,26 +680,13 @@ function TerminalLogView({ lines }: { lines: readonly LogLine[] }) {
 }
 
 /**
- * Component-scoped CSS。Cloudscape primitive で表現しきれない:
- *   - dark background の summary card
- *   - terminal-style log の三列 grid
- * をここで閉じる。global stylesheet を汚さない。
+ * Component-scoped CSS。Cloudscape primitive で表現しきれない terminal-style
+ * log の grid と code styling だけをここで閉じる。 旧 dark-background summary
+ * card 用 CSS は #1091 で Cloudscape Header に揃えたため撤去済。
  */
 function DeploySummaryStyles() {
   return (
     <style>{`
-.tc-deploy-summary {
-  background: #0f1419;
-  color: #e8eaed;
-  padding: 24px 32px;
-  border-radius: 12px;
-}
-.tc-deploy-summary code {
-  color: #9ad3ff;
-}
-.tc-deploy-summary-actions {
-  margin-top: 12px;
-}
 .tc-phase-header {
   display: inline-flex;
   align-items: center;
