@@ -51,6 +51,12 @@ export interface EventItem {
   scoringLockedAt?: string;
   /** scoringLocked を変更した operator の Cognito sub (= audit 用)。 */
   scoringLockedBy?: string;
+  /**
+   * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
+   * 0 で freeze 無効化、 1〜180 が想定範囲。 未設定なら participant-handler 側 default=30 が
+   * 効く ([[participant-handler/leaderboard.ts:DEFAULT_FREEZE_MINUTES]])。
+   */
+  scoreboardFreezeMinutes?: number;
 }
 
 export const EventStatusSchema = z.enum([
@@ -183,6 +189,11 @@ export const EventSummarySchema = z.object({
   scoringLocked: z.boolean().optional(),
   /** scoringLocked を true にした時刻 (#558)。 */
   scoringLockedAt: z.string().optional(),
+  /**
+   * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数。 operator が PATCH /schedule で
+   * 設定。 0=freeze 無効、 1〜180=N 分前から freeze、 未設定=default 30 分。
+   */
+  scoreboardFreezeMinutes: z.number().int().min(0).max(180).optional(),
 });
 export type EventSummary = z.infer<typeof EventSummarySchema>;
 
@@ -217,10 +228,22 @@ export const ScheduleEventRequestSchema = z
       .datetime({ offset: true })
       .transform((s) => new Date(s).toISOString())
       .optional(),
+    /**
+     * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
+     * 0 で freeze 無効化、 1〜180 分の範囲を受け付ける。 未指定なら既存値を保持。
+     */
+    scoreboardFreezeMinutes: z.number().int().min(0).max(180).optional(),
   })
-  .refine((v) => v.startsAt !== undefined || v.startNow === true || v.endsAt !== undefined, {
-    message: "startsAt / startNow / endsAt のいずれかは必須",
-  })
+  .refine(
+    (v) =>
+      v.startsAt !== undefined ||
+      v.startNow === true ||
+      v.endsAt !== undefined ||
+      v.scoreboardFreezeMinutes !== undefined,
+    {
+      message: "startsAt / startNow / endsAt / scoreboardFreezeMinutes のいずれかは必須",
+    },
+  )
   .refine((v) => !(v.startsAt !== undefined && v.startNow === true), {
     message: "startsAt と startNow は同時指定不可",
   });

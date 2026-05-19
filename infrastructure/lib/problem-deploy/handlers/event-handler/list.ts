@@ -72,6 +72,8 @@ function toSummary(item: Partial<EventItem>): EventSummary {
     endsAt: typeof item.endsAt === "string" ? item.endsAt : undefined,
     scoringLocked: item.scoringLocked === true ? true : undefined,
     scoringLockedAt: typeof item.scoringLockedAt === "string" ? item.scoringLockedAt : undefined,
+    scoreboardFreezeMinutes:
+      typeof item.scoreboardFreezeMinutes === "number" ? item.scoreboardFreezeMinutes : undefined,
   };
 }
 

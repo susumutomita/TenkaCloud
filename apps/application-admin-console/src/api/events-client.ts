@@ -30,6 +30,11 @@ export interface EventSummary {
   scoringLocked?: boolean;
   /** #558: scoringLocked=true にした時刻 (ISO 8601, UTC)。 */
   scoringLockedAt?: string;
+  /**
+   * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数。 0=freeze 無効、 1〜180=N 分前から
+   * 順位非公開、 未設定=default 30 分。 PATCH /events/:eventId/schedule で更新可能。
+   */
+  scoreboardFreezeMinutes?: number;
 }
 
 export interface EventListResponse {
@@ -199,6 +204,8 @@ export interface SetEventScheduleBody {
   startsAt?: string;
   startNow?: true;
   endsAt?: string;
+  /** Issue #1038 P1 #9 follow-up: 0=freeze 無効 / 1〜180=N 分前から freeze */
+  scoreboardFreezeMinutes?: number;
 }
 export async function setEventSchedule(
   api: ApiClient,

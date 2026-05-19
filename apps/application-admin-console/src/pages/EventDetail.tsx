@@ -7,6 +7,7 @@ import Container from "@cloudscape-design/components/container";
 import DatePicker from "@cloudscape-design/components/date-picker";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
 import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
@@ -177,6 +178,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const [endsAtInFlight, setEndsAtInFlight] = useState(false);
   const [endInFlight, setEndInFlight] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  // Issue #1038 P1 #9 follow-up: scoreboard freeze 分数の operator 編集 state
+  const [freezeMinutesInput, setFreezeMinutesInput] = useState<string>("");
+  const [freezeMinutesInFlight, setFreezeMinutesInFlight] = useState(false);
   // #708: TEARDOWN が ROLLBACK_COMPLETE な stack で stuck したときの operator rescue。
   const [confirmForceArchive, setConfirmForceArchive] = useState(false);
   const [forceArchiveInFlight, setForceArchiveInFlight] = useState(false);
@@ -326,6 +330,32 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setEndsAtInFlight(false);
+    }
+  };
+
+  // Issue #1038 P1 #9 follow-up: scoreboard freeze window (= 終了 N 分前から順位非公開) の
+  // 分数を operator が変更する handler。 0=freeze 無効、 1〜180 が有効範囲。
+  const handleSaveFreezeMinutes = async () => {
+    if (!apiClient || freezeMinutesInFlight) return;
+    const trimmed = freezeMinutesInput.trim();
+    if (trimmed === "") {
+      setError("freeze 分数を入力してください (0 で無効化、 1〜180 が有効範囲)");
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isInteger(n) || n < 0 || n > 180) {
+      setError("freeze 分数は 0〜180 の整数で指定してください");
+      return;
+    }
+    setFreezeMinutesInFlight(true);
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { scoreboardFreezeMinutes: n });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFreezeMinutesInFlight(false);
     }
   };
 
@@ -771,6 +801,34 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
           </ColumnLayout>
           <Box margin={{ top: "m" }}>
             <Field label="採点ステータス">{scoringBadge(detail.startsAt)}</Field>
+          </Box>
+          {/* Issue #1038 P1 #9 follow-up: scoreboard freeze 分数 (= 終了 N 分前から順位非公開) */}
+          <Box margin={{ top: "m" }}>
+            <Field label="Scoreboard freeze 分数 (= 終了 N 分前から順位を隠す、 0 で無効)">
+              <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+                <Box variant="small" color="text-status-inactive">
+                  現在:{" "}
+                  {detail.scoreboardFreezeMinutes !== undefined
+                    ? `${detail.scoreboardFreezeMinutes} 分`
+                    : "default 30 分"}
+                </Box>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="0〜180"
+                  value={freezeMinutesInput}
+                  onChange={({ detail: d }) => setFreezeMinutesInput(d.value)}
+                  disabled={freezeMinutesInFlight}
+                />
+                <Button
+                  loading={freezeMinutesInFlight}
+                  disabled={!apiClient || freezeMinutesInput.trim() === ""}
+                  onClick={handleSaveFreezeMinutes}
+                >
+                  保存
+                </Button>
+              </SpaceBetween>
+            </Field>
           </Box>
         </Container>
       )}
