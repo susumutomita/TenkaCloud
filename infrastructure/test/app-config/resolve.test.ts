@@ -206,41 +206,23 @@ describe("resolveAppConfig", () => {
     expect(cfg.participantPortal).toBeUndefined();
   });
 
-  it("adminConsoleHostingInputs は 3 つの env (apiUrl / cognitoDomain / userClientId) が揃ったときだけ object を返すべき (phase 2 gate)", () => {
-    const noinputs = resolveAppConfig({
-      env: baseEnv(),
-      binDir: BIN_DIR,
-      fs: fsAlwaysMissing,
-      dotenvConfig: noopDotenv,
-      discoverProblems: stubProblems,
-    });
-    expect(noinputs.adminConsoleHostingInputs).toBeUndefined();
-
-    const partial = resolveAppConfig({
-      env: baseEnv({ CDK_PARAM_CONTROL_PLANE_API_URL: "https://api" }),
-      binDir: BIN_DIR,
-      fs: fsAlwaysMissing,
-      dotenvConfig: noopDotenv,
-      discoverProblems: stubProblems,
-    });
-    expect(partial.adminConsoleHostingInputs).toBeUndefined();
-
-    const all = resolveAppConfig({
+  it("Issue #1031: adminConsoleHostingInputs / adminConsoleOriginForCors field は AppConfig から除去されているべき", () => {
+    // admin-console-hosting は backend URL の cross-stack ref で立つようになり、 env-var 経由の
+    // gate は廃止された。 AppConfig 出力に該当 field が含まれないことで env-var 経路 regression を防ぐ。
+    const cfg = resolveAppConfig({
       env: baseEnv({
         CDK_PARAM_CONTROL_PLANE_API_URL: "https://api",
         CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN: "https://cog",
         CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID: "abc",
+        CDK_PARAM_ADMIN_CONSOLE_ORIGIN: "https://admin.example.com",
       }),
       binDir: BIN_DIR,
       fs: fsAlwaysMissing,
       dotenvConfig: noopDotenv,
       discoverProblems: stubProblems,
     });
-    expect(all.adminConsoleHostingInputs).toMatchObject({
-      apiUrl: "https://api",
-      cognitoDomain: "https://cog",
-      userClientId: "abc",
-    });
+    expect((cfg as Record<string, unknown>).adminConsoleHostingInputs).toBeUndefined();
+    expect((cfg as Record<string, unknown>).adminConsoleOriginForCors).toBeUndefined();
   });
 
   it("CDK_PARAM_IDP_NAME / SYSTEM_ADMIN_ROLE_NAME のデフォルトを process.env に注入すべき (SBT ref-arch 互換)", () => {
