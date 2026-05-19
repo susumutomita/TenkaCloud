@@ -24,6 +24,7 @@ import {
   submitFlag,
   TERMINAL_STATUSES,
 } from "../api/portal-client";
+import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 
@@ -36,45 +37,48 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
 };
 
-const SCORING_KIND_LABEL: Record<string, string> = {
-  flag: "Challenge (flag 提出)",
-  uptime: "Battle (uptime 加点)",
-  "uptime-flat": "Battle (uptime 加点)",
-  "uptime-multi": "Battle (uptime 加点)",
-  "phased-polling": "Battle (時間経過で加点ルール変動)",
-  "attack-detection": "Battle (攻撃 detection)",
+const SCORING_KIND_KEY: Record<string, string> = {
+  flag: "problem_panel.kind_flag",
+  uptime: "problem_panel.kind_uptime",
+  "uptime-flat": "problem_panel.kind_uptime",
+  "uptime-multi": "problem_panel.kind_uptime",
+  "phased-polling": "problem_panel.kind_phased",
+  "attack-detection": "problem_panel.kind_attack",
 };
 
-const FALLBACK_KIND_LABEL = "(未設定)";
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 /**
  * Issue #1006: scoring gate (= 競技開始前 / 終了後 / 一時停止) のエラーを 「いつ開始 / 終了か」
  * を添えた人間可読 message に変換する。 backend が startsAt / endsAt を返すようになったので、
- * UI 側で 「あと N 分」 を計算して表示する。
+ * UI 側で 「あと N 分」 を計算して表示する。 #1093: i18n 化。
  */
-function describeScoringGate(err: PortalScoringGateError, now: Date = new Date()): string {
+function describeScoringGate(t: TFn, err: PortalScoringGateError, now: Date = new Date()): string {
   if (err.kind === "scoring_not_started") {
-    if (!err.startsAt) {
-      return "競技はまだ開始していません。 運営の開始合図をお待ちください。";
-    }
+    if (!err.startsAt) return t("problem_panel.scoring_gate_not_started_no_eta");
     const startsAt = new Date(err.startsAt);
     if (Number.isNaN(startsAt.getTime())) {
-      return "競技はまだ開始していません。";
+      return t("problem_panel.scoring_gate_not_started_unknown");
     }
     const diffMs = startsAt.getTime() - now.getTime();
     if (diffMs <= 0) {
-      return `競技開始時刻は ${startsAt.toLocaleString()} です (= 既に経過)。 反映に時差がある場合があります。`;
+      return t("problem_panel.scoring_gate_not_started_passed", {
+        startsAt: startsAt.toLocaleString(),
+      });
     }
     const minutes = Math.ceil(diffMs / 60_000);
-    return `競技開始まで約 ${minutes} 分です (開始予定: ${startsAt.toLocaleString()})。 開始までお待ちください。`;
+    return t("problem_panel.scoring_gate_not_started_remaining", {
+      minutes,
+      startsAt: startsAt.toLocaleString(),
+    });
   }
   if (err.kind === "scoring_ended") {
-    if (!err.endsAt) return "競技は終了しました。 採点 gate は閉じています。";
+    if (!err.endsAt) return t("problem_panel.scoring_gate_ended_no_eta");
     const endsAt = new Date(err.endsAt);
-    if (Number.isNaN(endsAt.getTime())) return "競技は終了しました。";
-    return `競技は終了しました (終了: ${endsAt.toLocaleString()})。 採点 gate は閉じています。`;
+    if (Number.isNaN(endsAt.getTime())) return t("problem_panel.scoring_gate_ended_unknown");
+    return t("problem_panel.scoring_gate_ended_at", { endsAt: endsAt.toLocaleString() });
   }
-  return "採点が一時停止されています。 運営にお問い合わせください。";
+  return t("problem_panel.scoring_gate_paused");
 }
 
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
@@ -98,13 +102,14 @@ export function ProblemPanel({
   sessionToken: string;
   onScored: () => Promise<void>;
 }) {
+  const t = useT();
   const kindLabel = problem.scoring
-    ? (SCORING_KIND_LABEL[problem.scoring.kind] ?? FALLBACK_KIND_LABEL)
-    : FALLBACK_KIND_LABEL;
+    ? t(SCORING_KIND_KEY[problem.scoring.kind] ?? "problem_panel.kind_unknown")
+    : t("problem_panel.kind_unknown");
   const now = Date.now();
   const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
   // #688: phased-polling / uptime-flat / uptime-multi / attack-detection も Battle 軸
-  // (= uptime と同じ \"古い lastScoredAt = stale\" UX を適用)。 flag だけ非 Battle。
+  // (= uptime と同じ "古い lastScoredAt = stale" UX を適用)。 flag だけ非 Battle。
   const isUptime = problem.scoring ? problem.scoring.kind !== "flag" : false;
   const isStale =
     isUptime &&
@@ -128,27 +133,29 @@ export function ProblemPanel({
     >
       <SpaceBetween size="m">
         {problem.status === "FAILED" && problem.failureReason && (
-          <Alert type="error" header="失敗理由">
+          <Alert type="error" header={t("problem_panel.failure_reason_header")}>
             {problem.failureReason}
           </Alert>
         )}
         {isStale && (
-          <Alert type="warning" header="スコアが伸びていません">
-            直近の採点から {describeAgo(problem.lastScoredAt, now)} 経過。サービスのどこかが
-            期待通り応答していない可能性があります。
+          <Alert type="warning" header={t("problem_panel.stale_header")}>
+            {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now) })}
           </Alert>
         )}
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は AWS 多リージョン
             の場合のみ意味があるが、 1 リージョン運用の現状では noise。 残すのは現在の score + 最終加点 */}
         <KeyValuePairs
           items={[
-            { label: "現在の score", value: `${problem.score} pt` },
-            { label: "最終加点", value: describeAgo(problem.lastScoredAt, now) },
+            { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
+            {
+              label: t("problem_panel.last_scored_label"),
+              value: describeAgo(problem.lastScoredAt, now),
+            },
           ]}
         />
 
         {Object.keys(problem.stackOutputs).length > 0 && (
-          <Container header={<Header variant="h3">アクセス先 URL</Header>}>
+          <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
             <KeyValuePairs
               items={Object.entries(problem.stackOutputs).map(([label, value]) => ({
                 label,
@@ -181,7 +188,7 @@ export function ProblemPanel({
         )}
         {!TERMINAL_STATUSES.has(problem.status) && (
           <Box variant="small" color="text-status-info">
-            {POLL_INTERVAL_MS / 1000} 秒ごとに自動更新します。
+            {t("problem_panel.auto_refresh_note", { seconds: POLL_INTERVAL_MS / 1000 })}
           </Box>
         )}
       </SpaceBetween>
@@ -206,6 +213,7 @@ function FlagSubmissionPanel({
   hints: readonly ParticipantHintView[];
   onScored: () => Promise<void>;
 }) {
+  const t = useT();
   const [flag, setFlag] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
@@ -214,8 +222,8 @@ function FlagSubmissionPanel({
   if (flagSubmitted) {
     // audit #6: 既出提出 (= reload した後の表示)。 「事務的 提出済み」 ではなく祝祭的 message。
     return (
-      <Alert type="success" header={`🏆 クリア済み +${points} pt`}>
-        この問題は正解済みです。 引き続き他の問題に挑戦してください！
+      <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
+        {t("problem_panel.celebrate_body")}
       </Alert>
     );
   }
@@ -233,12 +241,10 @@ function FlagSubmissionPanel({
         await onScored();
       }
     } catch (err) {
-      // Issue #1006: scoring gate は startsAt / endsAt を含む専用 error。 「あと N 分」 を表示。
       if (err instanceof PortalScoringGateError) {
-        setSubmitError(describeScoringGate(err));
+        setSubmitError(describeScoringGate(t, err));
       } else if (err instanceof PortalValidationError) {
-        // 旧 path (= backend 古い / 別 error code) の fallback。
-        setSubmitError(`エラー: ${err.errorCode}`);
+        setSubmitError(t("problem_panel.submit_error_prefix", { errorCode: err.errorCode }));
       } else {
         setSubmitError(err instanceof Error ? err.message : String(err));
       }
@@ -262,27 +268,27 @@ function FlagSubmissionPanel({
         <Form
           actions={
             <Button variant="primary" loading={submitting} formAction="submit">
-              Flag 提出 (+{points} pt)
+              {t("problem_panel.submit_button", { points })}
             </Button>
           }
         >
-          <FormField label="Flag (Stack Output 値)">
+          <FormField label={t("problem_panel.flag_field_label")}>
             <Input
               value={flag}
               onChange={(e) => setFlag(e.detail.value)}
-              placeholder="例: Hello from tc-hello-world-..."
+              placeholder={t("problem_panel.flag_placeholder")}
               disabled={submitting}
             />
           </FormField>
         </Form>
       </form>
-      {/* audit #6: 正解時の祝祭演出。 alert は大きめの emoji + ハイライト、 同時に画面全体に
-          confetti animation を 3 秒被せる。 旧 「正解 (+100 pt) 合計スコア: 100 pt」 の事務的
-          message から、 達成感を伴う UX に差し替え。 */}
       <CelebrationOverlay visible={outcome?.kind === "ok"} />
       {outcome?.kind === "ok" && (
-        <Alert type="success" header={`🎉 正解！  +${outcome.scoreDelta} pt`}>
-          おめでとうございます。 合計スコアは <strong>{outcome.totalScore} pt</strong> です。
+        <Alert
+          type="success"
+          header={t("problem_panel.ok_alert_header", { delta: outcome.scoreDelta })}
+        >
+          {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
         </Alert>
       )}
       {outcome?.kind === "wrong" && (
@@ -290,28 +296,28 @@ function FlagSubmissionPanel({
           type="warning"
           header={
             outcome.scoreDelta < 0
-              ? `不正解 (${outcome.scoreDelta} pt) — 累計 ${outcome.totalScore} pt`
-              : "不正解"
+              ? t("problem_panel.wrong_with_penalty_header", {
+                  delta: outcome.scoreDelta,
+                  total: outcome.totalScore,
+                })
+              : t("problem_panel.wrong_header")
           }
         >
-          {outcome.scoreDelta < 0 ? (
-            <>
-              これまで {outcome.wrongCount} 回 不正解です。 値を確認して再度提出してください。
-              ペナルティは不正解 1 回あたり {-outcome.scoreDelta} pt で、 累計スコアは 0 pt
-              未満になりません。
-            </>
-          ) : (
-            <>値を確認して再度提出してください。</>
-          )}
+          {outcome.scoreDelta < 0
+            ? t("problem_panel.wrong_with_penalty_body", {
+                count: outcome.wrongCount,
+                penalty: -outcome.scoreDelta,
+              })
+            : t("problem_panel.wrong_body")}
         </Alert>
       )}
       {outcome?.kind === "already_scored" && (
-        <Alert type="info" header="提出済み">
-          既に正解済みです (合計 {outcome.totalScore} pt)。
+        <Alert type="info" header={t("problem_panel.already_scored_header")}>
+          {t("problem_panel.already_scored_body", { total: outcome.totalScore })}
         </Alert>
       )}
       {submitError && (
-        <Alert type="error" header="提出に失敗しました">
+        <Alert type="error" header={t("problem_panel.submit_failed_header")}>
           {submitError}
         </Alert>
       )}
@@ -342,10 +348,9 @@ function HintsPanel({
   hints: readonly ParticipantHintView[];
   onRevealed: () => Promise<void>;
 }) {
+  const t = useT();
   const [revealing, setRevealing] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
-  // Issue #819: 誤クリック防止のため confirmation Modal を出す。 `pendingReveal` は
-  // 「Modal を開いている対象 hint」 (= 確定するまで API call しない)。
   const [pendingReveal, setPendingReveal] = useState<ParticipantHintView | null>(null);
   const [pendingIndex, setPendingIndex] = useState<number>(0);
 
@@ -357,11 +362,10 @@ function HintsPanel({
       await revealHint(apiBaseUrl, sessionToken, problemId, hintId);
       await onRevealed();
     } catch (err) {
-      // Issue #1006: hint reveal も scoring gate (= 競技開始前は開けない) の友好的 message を出す。
       if (err instanceof PortalScoringGateError) {
-        setRevealError(describeScoringGate(err));
+        setRevealError(describeScoringGate(t, err));
       } else if (err instanceof PortalValidationError) {
-        setRevealError(`バリデーションエラー: ${err.errorCode}`);
+        setRevealError(t("problem_panel.validation_error", { errorCode: err.errorCode }));
       } else {
         setRevealError(err instanceof Error ? err.message : String(err));
       }
@@ -371,33 +375,34 @@ function HintsPanel({
     }
   };
 
+  const revealedCount = hints.filter((h) => h.revealed).length;
   return (
     <>
       <Alert
         type="info"
-        header={`ヒント (${hints.filter((h) => h.revealed).length} / ${hints.length} 公開済)`}
+        header={t("problem_panel.hint_header", { revealed: revealedCount, total: hints.length })}
       >
         <SpaceBetween size="xs">
           {hints.map((h, i) => (
             <Box key={h.id}>
               {h.revealed ? (
                 <Box>
-                  <strong>ヒント {i + 1}:</strong> {h.content}
+                  <strong>{t("problem_panel.hint_label_colon", { index: i + 1 })}</strong>{" "}
+                  {h.content}
                   {h.revealedAt && (
                     <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
-                      公開済 ({describeAgo(h.revealedAt, Date.now())})
+                      {t("problem_panel.hint_revealed_ago", {
+                        ago: describeAgo(h.revealedAt, Date.now()),
+                      })}
                     </Box>
                   )}
                 </Box>
               ) : (
                 <Box>
-                  <strong>ヒント {i + 1}</strong>{" "}
+                  <strong>{t("problem_panel.hint_label", { index: i + 1 })}</strong>{" "}
                   <span style={{ color: h.penalty > 0 ? "#b54708" : "#475467" }}>
-                    (公開すると -{h.penalty} pt)
+                    {t("problem_panel.hint_penalty_note", { penalty: h.penalty })}
                   </span>{" "}
-                  {/* Issue #819: variant="normal" + iconName で明示的に button 化
-                     (= 旧 "inline-link" だと地味で click 可能か視認しづらかった)。
-                     onClick は Modal を開いて confirm を待つ (= 誤クリック防御)。 */}
                   <Button
                     variant="normal"
                     iconName="lock-private"
@@ -408,7 +413,7 @@ function HintsPanel({
                       setPendingIndex(i);
                     }}
                   >
-                    ヒントを公開する
+                    {t("problem_panel.hint_reveal_button")}
                   </Button>
                 </Box>
               )}
@@ -422,12 +427,10 @@ function HintsPanel({
         </SpaceBetween>
       </Alert>
 
-      {/* Issue #819: 誤クリック防御の confirmation Modal。 penalty=0 でも出す
-         (= 「ヒントを見る」 という行為自体に明示的同意が要る、 UX 上の合意形成)。 */}
       <Modal
         visible={pendingReveal !== null}
         onDismiss={() => setPendingReveal(null)}
-        header={`ヒント ${pendingIndex + 1} を公開しますか?`}
+        header={t("problem_panel.hint_confirm_header", { index: pendingIndex + 1 })}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -436,7 +439,7 @@ function HintsPanel({
                 onClick={() => setPendingReveal(null)}
                 disabled={revealing !== null}
               >
-                キャンセル
+                {t("problem_panel.hint_confirm_cancel")}
               </Button>
               <Button
                 variant="primary"
@@ -445,7 +448,7 @@ function HintsPanel({
                   if (pendingReveal) void handleReveal(pendingReveal.id);
                 }}
               >
-                公開する
+                {t("problem_panel.hint_confirm_submit")}
               </Button>
             </SpaceBetween>
           </Box>
@@ -454,18 +457,12 @@ function HintsPanel({
         {pendingReveal && (
           <SpaceBetween size="xs">
             <Box>
-              {pendingReveal.penalty > 0 ? (
-                <>
-                  公開すると{" "}
-                  <strong style={{ color: "#b54708" }}>-{pendingReveal.penalty} pt</strong>{" "}
-                  減点されます。 一度公開すると元に戻せません。
-                </>
-              ) : (
-                <>このヒントには減点はありません。 公開するとヒントが表示されます。</>
-              )}
+              {pendingReveal.penalty > 0
+                ? t("problem_panel.hint_confirm_penalty", { penalty: pendingReveal.penalty })
+                : t("problem_panel.hint_confirm_no_penalty")}
             </Box>
             <Box variant="small" color="text-status-inactive">
-              ヒント本文は公開後に表示されます。
+              {t("problem_panel.hint_confirm_footer")}
             </Box>
           </SpaceBetween>
         )}
