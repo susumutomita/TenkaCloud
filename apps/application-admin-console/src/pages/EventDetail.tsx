@@ -5,6 +5,7 @@ import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import DatePicker from "@cloudscape-design/components/date-picker";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
@@ -950,7 +951,16 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       {detail?.scoreEventsByTeam && <TeamRankingPanel teams={detail.scoreEventsByTeam} />}
 
       {detail && (
-        <Container header={<Header variant="h2">参加者向け配布</Header>}>
+        <ExpandableSection
+          variant="container"
+          defaultExpanded={
+            // Issue #1072: 競技中以降は配布情報は基本不要。 DRAFT / DEPLOYING / READY (= 開始前)
+            // のみ default expanded。 ENDED / TEARDOWN / ARCHIVED は collapsed (= operator が
+            // 必要に応じて open)。
+            detail.status === "DRAFT" || detail.status === "DEPLOYING" || detail.status === "READY"
+          }
+          headerText="参加者向け配布"
+        >
           <SpaceBetween size="m">
             {config.participantPortalUrl ? (
               <ColumnLayout columns={2} variant="text-grid">
@@ -997,19 +1007,19 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
               </Alert>
             )}
           </SpaceBetween>
-        </Container>
+        </ExpandableSection>
       )}
 
       {detail && (
-        <Container
-          header={
-            <Header
-              variant="h2"
-              description="teamLoginKey は競技者に配布する Bearer 認証キーです。漏洩した場合は該当チームの環境を再 deploy してキーを更新してください。"
-            >
-              チーム ({detail.teams.length})
-            </Header>
+        <ExpandableSection
+          variant="container"
+          defaultExpanded={
+            // Issue #1072: チーム一覧 (= teamLoginKey 配布用) は競技開始前のみ default expanded。
+            // 競技中 / 終了後は operator が必要に応じて open する。
+            detail.status === "DRAFT" || detail.status === "DEPLOYING" || detail.status === "READY"
           }
+          headerText={`チーム (${detail.teams.length})`}
+          headerDescription="teamLoginKey は競技者に配布する Bearer 認証キーです。漏洩した場合は該当チームの環境を再 deploy してキーを更新してください。"
         >
           <Table
             variant="embedded"
@@ -1066,7 +1076,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
             ]}
             empty={<Box>チームがありません</Box>}
           />
-        </Container>
+        </ExpandableSection>
       )}
 
       <Modal
