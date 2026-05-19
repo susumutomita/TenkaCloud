@@ -1,10 +1,18 @@
 # @TenkaCloud/application-admin-console
 
-TenkaCloud の TenantAdmin 向け管理コンソール (Application Plane)。Battle / Challenge の問題を競技アカウントへデプロイし、参加者に提供するための per-tenant コンソール。
+TenkaCloud の Tenant Admin (= 主催者) が使う Application Plane の管理コンソール。 Battle / Challenge 問題を競技者 AWS account に deploy + Event 管理 + 競技中の運営支援を担う。 Lite mode (= `make deploy` のデフォルト) でも SaaS mode (= `make deploy-saas`) でも同じ SPA が動く。
+
+## 機能
+
+- **Event 管理** — 作成 (#1067 で deploy promote modal)、 一覧、 詳細 (#1072 stage-aware collapse、 #1071 team ranking)
+- **Problem catalog** — 問題一覧 / 詳細 / event への割り当て
+- **Deploy 進捗** — Step Functions + CodeBuild の進行可視化 (#1068 手動 reload button)
+- **Competitor accounts** — 競技者 AWS account の登録 / ExternalId rotate (#1065 で update 系廃止、 仕様簡素化)
+- **チーム / SSO credential** — Event ごとの team 単位 login key 発行
+
+i18n は ja + en (#1078 で zh / es を廃止)。 i18n 化済みページ: Events / Problems / Deployments / CompetitorAccounts / Home。 EventDetail は #1084 で進行中。
 
 ## ローカル開発
-
-このディレクトリで以下を実行する。
 
 ```sh
 make install
@@ -12,7 +20,7 @@ make dev
 # → http://localhost:5174
 ```
 
-`make help` で利用可能なターゲット一覧を表示。
+runtime-config.json は dev 環境では fetch せず `import.meta.env.VITE_*` から読む (production は CloudFront 配下の `/runtime-config.json` が正本)。
 
 ## コマンド
 
@@ -33,9 +41,7 @@ bun run --filter @TenkaCloud/application-admin-console test
 
 ## 関連
 
-- [`docs/architecture/00-system-context.md`](../../docs/architecture/00-system-context.md) Layer 2B
-- 親 Issue: [#39](https://github.com/maishu-kobo/TenkaCloud/issues/39) Layer 2B 全体
-- [#45](https://github.com/maishu-kobo/TenkaCloud/issues/45) (#39-a) 本スキャフォルド
-- [#46](https://github.com/maishu-kobo/TenkaCloud/issues/46) (#39-b) silo モード配備
-- [#47](https://github.com/maishu-kobo/TenkaCloud/issues/47) (#39-c) Cognito 認証ゲート
-- [#48](https://github.com/maishu-kobo/TenkaCloud/issues/48) (#39-d) tenantId inject
+- [`docs/architecture/adr-012-problem-plugin-architecture.html`](../../docs/architecture/adr-012-problem-plugin-architecture.html) — 問題 = plugin、 platform = host
+- [`docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html`](../../docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — Lite mode で AppPlaneCore を抽出
+- [`docs/operations/deploy-trace.html`](../../docs/operations/deploy-trace.html) — Deploy 進捗 trace
+- [`docs/operations/notifications.html`](../../docs/operations/notifications.html) — 運営 → 競技者通知の運用手引

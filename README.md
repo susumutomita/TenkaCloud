@@ -107,10 +107,10 @@ make destroy-saas   # teardown
 | 🧩 **Challenge problems** | Self-paced, always-on training (hello-world, AWS service deep-dives) |
 | 🔌 **Plugin architecture** | Each problem ships its own `metadata.json` + `template.yaml` (+ optional `portal/*.tsx`) — no platform changes needed to add problems |
 | 📊 **5 scoring kinds** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` — declared per problem |
-| 🌐 **i18n** | Default JA, with EN / ES / ZH locale overrides on each problem's metadata |
+| 🌐 **i18n** | Default JA + EN. Problem metadata supports per-locale narrative overrides. (#1078: zh/es 廃止して 2 言語に絞った) |
 | 🛡 **Security** | Required ExternalId on AssumeRole; SSM SecureString for secrets; Cognito JWT auth everywhere; per-team rate limiting |
 | 📡 **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol for cross-cloud authority transfer (AWS + GCP + Azure adapters, see [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)) |
-| 🔭 **Observability** | CloudWatch Dashboard with deploy chain / DDB / Lambda / API GW in one screen; structured trace logs with `correlationId` |
+| 🔭 **Observability** | CloudWatch Dashboard with deploy chain / DDB / Lambda / API GW in one screen; AWS Budgets + CloudWatch Alarms (Lambda Errors, DDB throttling, API GW 5XX) wired to a shared SNS topic; admin-console Operations page links straight to AWS Console (#1080) |
 
 ## How problems work
 
@@ -155,6 +155,11 @@ ADRs are written in HTML for layout expressiveness (decision tables, threat-mode
 - [ADR-015](./docs/architecture/adr-015-adr-convention-as-harness.html) — ADR convention enforced as harness
 - [ADR-016](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — TenkaCloud Lite mode + AppPlaneCore extraction
 - [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) — Cloud Action Intent / Trust Bridge for cross-cloud authority transfer
+- [ADR-018](./docs/architecture/adr-018-pooled-userpool-saml-isolation.html) — Pooled UserPool / SAML isolation (Superseded by #1066: SAML 廃止)
+- [ADR-019](./docs/architecture/adr-019-cross-account-stack-catalog.html) — Cross-account stack catalog
+- [ADR-020](./docs/architecture/adr-020-authorization-model.html) — Authorization model
+- [ADR-021](./docs/architecture/adr-021-dependency-major-bump-decisions.html) — Dependency major bump decisions
+- [ADR-022](./docs/architecture/adr-022-tenant-isolation-audit.html) — Tenant isolation audit
 - [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html) — Wire format reference (RFC 7515 JWS compact serialization, 13-section threat model)
 
 ## Roadmap

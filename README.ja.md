@@ -107,12 +107,12 @@ make destroy-saas   # teardown
 | 🧩 **Challenge 問題** | 個別演習・常設チャレンジ (hello-world、 AWS サービス深堀り) |
 | 🔌 **Plugin アーキテクチャ** | 1 問題 = `metadata.json` + `template.yaml` (+ 任意の `portal/*.tsx`)。 platform に手を入れずに問題を追加可能 |
 | 📊 **5 種類の scoring kind** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` を 1 問題ごとに宣言 |
-| 🌐 **i18n** | 日本語をデフォルト、 EN / ES / ZH の locale override を問題 metadata に書ける |
+| 🌐 **i18n** | デフォルト ja + en の 2 言語。 問題 metadata は locale 別に narrative を上書き可能 (#1078 で zh / es を廃止) |
 | 🛡 **セキュリティ** | AssumeRole に必須 ExternalId、 secrets は SSM SecureString、 全 API に Cognito JWT、 per-team rate limiting |
 <!-- textlint-disable spellcheck-tech-word -->
 | 📡 **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol でクラウド横断の権限委譲 (AWS + GCP + Azure adapter、 [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) を参照) |
 <!-- textlint-enable spellcheck-tech-word -->
-| 🔭 **Observability** | CloudWatch Dashboard で deploy chain / DDB / Lambda / API GW を 1 画面、 `correlationId` 入り structured trace log |
+| 🔭 **Observability** | CloudWatch Dashboard で deploy chain / DDB / Lambda / API GW を 1 画面、 AWS Budgets + CloudWatch Alarms (Lambda Errors / DDB throttling / API GW 5XX) を共有 SNS topic に集約、 admin-console の Operations page から AWS Console に直リンク (#1080) |
 
 ## 問題の構成
 
@@ -159,6 +159,11 @@ ADR は表現力 (decision table / threat-model grid / 色分け badge) のた�
 <!-- textlint-disable spellcheck-tech-word -->
 - [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) — Cloud Action Intent / Trust Bridge (クラウド横断権限委譲)
 <!-- textlint-enable spellcheck-tech-word -->
+- [ADR-018](./docs/architecture/adr-018-pooled-userpool-saml-isolation.html) — Pooled UserPool / SAML 分離 (#1066 で SAML 廃止により Superseded)
+- [ADR-019](./docs/architecture/adr-019-cross-account-stack-catalog.html) — Cross-account stack catalog
+- [ADR-020](./docs/architecture/adr-020-authorization-model.html) — Authorization model
+- [ADR-021](./docs/architecture/adr-021-dependency-major-bump-decisions.html) — Dependency major bump decisions
+- [ADR-022](./docs/architecture/adr-022-tenant-isolation-audit.html) — Tenant isolation audit
 - [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html) — wire format reference (RFC 7515 JWS、 13 セクション)
 
 ## ロードマップ

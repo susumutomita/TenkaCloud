@@ -1,33 +1,36 @@
 # @TenkaCloud/admin-console
 
-TenkaCloud の Control Plane（sbt-aws の ControlPlane Stack）をシステム管理者が操作する SPA。Vite + React + Cloudscape Design System、認証は Cognito Hosted UI への OAuth Code + PKCE。
+TenkaCloud の SaaS mode で System Admin が Control Plane (`@cdklabs/sbt-aws` 0.3.9 の ControlPlane Stack) を操作する SPA。 Vite + React + Cloudscape Design System、 認証は Cognito Hosted UI への OAuth Code + PKCE。
 
-## Phase 1 スコープ
+> Lite mode (= `make deploy`) では本 SPA は使わない (= SaaS mode 専用)。 主催者 1 人 1 大会の最短経路は `make deploy` で `apps/application-admin-console` を直接使う。
 
-- サインイン（Cognito Hosted UI へリダイレクト）
-- テナント一覧
-- テナント作成
-- テナント deprovision
+## 機能
 
-後続フェーズで追加予定はユーザー管理、設定、App 管理、監視ビュー。
+- サインイン (Cognito Hosted UI 経由、 MFA 必須 #1035)
+- テナント一覧 / 作成 / deprovision
+- プロビジョニング Jobs (CodePipeline 実行履歴)
+- 監査ログ (ADR-020)
+- 運用ダッシュボード (#1080: CloudWatch Dashboard / AWS Budgets / Alarms への deep link)
+
+i18n は ja + en の 2 言語 (#1078 で zh / es を廃止)。
 
 ## ローカル開発
 
 `.env.local` を配置してから起動する。
 
-```
-VITE_COGNITO_DOMAIN=https://TenkaCloud-xxxx.auth.ap-northeast-1.amazoncognito.com
+```env
+VITE_COGNITO_DOMAIN=https://tenkacloud-xxxx.auth.ap-northeast-1.amazoncognito.com
 VITE_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
 VITE_API_BASE_URL=https://xxxxx.execute-api.ap-northeast-1.amazonaws.com/prod
-VITE_REDIRECT_URI=http://localhost:5173/callback
 ```
 
 ```sh
 make install
 make dev
+# → http://localhost:5173
 ```
 
-Cognito User Pool の App Client 側で `http://localhost:5173/callback` を許可コールバック URL に追加する。
+Cognito UserPoolClient 側で `http://localhost:5173/callback` を許可コールバック URL に追加する (`make deploy-saas` 後は CDK が自動で追加済)。 production deploy では runtime-config.json 経由で URL が注入されるため `.env.local` 不要。
 
 ## コマンド
 

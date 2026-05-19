@@ -53,9 +53,13 @@
 <h1>ADR-018: pooled tenant の UserPool 分離問題 — SAML SSO は PLATINUM 限定で短期 mitigation、 long-term は per-tenant UserPool 化を保留</h1>
 
 <div class="meta">
-  <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-05-17</div>
+  <div><b>Status:</b><span class="badge accept">Superseded</span> 2026-05-19 (#1066 で SAML SSO 機能を全廃)</div>
   <div><b>Supersedes:</b> (なし)</div>
-  <div><b>Superseded-by:</b> (なし)</div>
+  <div><b>Superseded-by:</b> Issue #1066 — SAML SSO は MFA 必須化 (#1035) で代替したため、 機能ごと廃止。 本 ADR の "PLATINUM 限定で hide" 判断は moot になった (= 機能自体が無いので cross-tenant 副作用も無い)。</div>
+</div>
+
+<div class="meta" style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; margin: 12px 0;">
+  <b>2026-05-19 Note:</b> 本 ADR の D1 (= SAML SSO を PLATINUM 限定にする) は、 後続の議論で SAML 機能そのものを廃止する方向に倒れた (#1066)。 理由は (1) Cognito MFA 必須化で SaaS としての認証強度は満たせる (2) per-tenant SAML 設定 UI は SaaS 仕様の複雑化を招く (3) pooled UserPool での cross-tenant 副作用を恒久的に塞ぐ唯一の方法は機能除去だった、 の 3 点。 旧文中で参照されている <code>SamlSso.tsx</code> / <code>tenant-saml-client.ts</code> / <code>buildControlPlaneSamlIdp</code> / <code>tenantSamlConfig</code> は repo から削除済。 本 ADR は履歴記録としてのみ残す。
 </div>
 
 <h2>1. Context</h2>
