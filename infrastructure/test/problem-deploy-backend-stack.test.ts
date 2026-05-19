@@ -248,14 +248,14 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(deleteStateMachine).toContain("MarkFailed");
     });
 
-    it("EventBridge Rule を Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule / SystemAuditWriter (Issue #1034) で 6 つ持つべき", () => {
+    it("EventBridge Rule を Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule / SystemAuditWriter (Issue #1034) / CodeBuildFailure (Issue #1029) で 7 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
       //   + BulkCreate (Issue #910 Phase 2.C: BulkDeployCreateRequested → Distributed Map)
       //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
       //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
       // = 5。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
-      // 旧 5 + Issue #1034 SystemAuditWriter rule (= SBT onboarding/offboarding listener)
-      tpl.resourceCountIs("AWS::Events::Rule", 6);
+      // 旧 5 + Issue #1034 SystemAuditWriter (SBT bus) + Issue #1029 CodeBuildFailure (default bus)
+      tpl.resourceCountIs("AWS::Events::Rule", 7);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -385,6 +385,21 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
             Variables: Match.objectLike({
               ADMIN_AUDIT_LOG_TABLE_NAME: Match.anyValue(),
               DEPLOY_ENVIRONMENT: "development",
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("Issue #1029: CodeBuild FAILED / FAULT / STOPPED / TIMED_OUT event を catch する Rule を持つべき", () => {
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          EventPattern: Match.objectLike({
+            source: ["aws.codebuild"],
+            "detail-type": ["CodeBuild Build State Change"],
+            detail: Match.objectLike({
+              "build-status": Match.arrayWith(["FAILED", "FAULT", "STOPPED", "TIMED_OUT"]),
             }),
           }),
         }),
