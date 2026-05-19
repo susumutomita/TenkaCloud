@@ -86,6 +86,8 @@ const liteStack = new TenkaCloudLiteStack(app, stackId("tenkacloud-lite"), {
   deployApiLambda: problemDeployBackend.deployApiLambda,
   eventApiLambda: problemDeployBackend.eventApiLambda,
   competitorAccountsApiLambda: problemDeployBackend.competitorAccountsApiLambda,
+  // Issue #1053: ProblemDeployBackendStack に移管した hosting の URL を cross-stack ref で渡す。
+  competitorBootstrapTemplateUrl: problemDeployBackend.competitorBootstrapTemplateUrl,
   ...(problemDeployBackend.participantPortalUrl
     ? { participantPortalUrl: problemDeployBackend.participantPortalUrl }
     : {}),

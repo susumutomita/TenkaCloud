@@ -57,17 +57,9 @@ export CDK_PARAM_TENANT_NAME=$tenantName
 export TIER=$(echo "$tier" | tr '[:lower:]' '[:upper:]')
 export TENANT_ADMIN_EMAIL=$email
 
-# Issue #1029 follow-up: admin-console-hosting stack の CompetitorBootstrapTemplateUrl
-# output (= public S3 URL) を CodeBuild 側で読み直して cdk deploy の synth に流す。
-# pooled stack の runtime-config.json に bootstrap URL が空のまま焼かれると、
-# 競技者の Launch Stack deeplink で CFn が「TemplateURL must be a supported URL」 で
-# reject する (= raw.githubusercontent.com fallback では deploy 不可)。 stack 不在は
-# 空文字 fallback (= 初回 install と同じく frontend が GitHub raw fallback に倒れる)。
-export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe-stacks \
-  --stack-name "tenkacloud-admin-console-hosting" \
-  --query "Stacks[0].Outputs[?starts_with(OutputKey,'CompetitorBootstrapTemplateUrl')].OutputValue" \
-  --output text 2>/dev/null || echo "")
-echo "CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL: ${CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
+# Issue #1053: hosting を ProblemDeployBackendStack に移管したので、 env-var で
+# CompetitorBootstrapTemplateUrl を inject する経路は不要。 pooled / silo stack は cross-stack
+# ref で `tenkacloud-problem-deploy` から URL を import する (= synth が CFn 上で解決)。
 
 # Issue #1038 P2 #13: install.sh と同じ default を入れて、 SBT pipeline (CodeBuild) が pooled /
 # silo stack を synth したときに `enableParticipantPortal=false` に regress するのを防ぐ。

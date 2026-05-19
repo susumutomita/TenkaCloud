@@ -9,6 +9,7 @@ import { AdminAuditLogTable } from "./admin-audit-log-table";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine";
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda";
 import { CompetitorAccountsTable } from "./competitor-accounts-table";
+import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting";
 import { DeployApiLambda } from "./deploy-api-lambda";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine";
@@ -192,6 +193,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * cross-stack read で audit UI に出すため公開する (= read-only)。
    */
   public readonly adminAuditLogTable: Table;
+  /**
+   * Issue #1053: 競技者向け CFn bootstrap template (`competitor-bootstrap.yaml`) の S3 public
+   * URL。 旧実装は `AdminConsoleHostingStack` に同居していたが、 Lite mode で deploy されない
+   * 構造的問題があったため、 両モードが無条件で deploy する本 stack へ移管した。 consumer は
+   * `AdminConsoleHostingStack` (SaaS) と `TenantTemplateStack` / `TenkaCloudLiteStack` 経由の
+   * `ApplicationAdminConsoleHosting` で、 cross-stack ref で受け取る。
+   */
+  public readonly competitorBootstrapTemplateUrl: string;
   /** DeployCreate Step Functions State Machine ARN for CloudWatch metrics. */
   public readonly deployCreateStateMachineArn: string;
   /** DeployDelete Step Functions State Machine ARN for CloudWatch metrics. */
@@ -235,6 +244,19 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // admin-insight Lambda が PutItem する。 TTL 90 日で自動 GC。
     const adminAuditLog = new AdminAuditLogTable(this, "AdminAuditLog");
     this.adminAuditLogTable = adminAuditLog.table;
+
+    // Issue #1053: 競技者向け CFn bootstrap template の S3 hosting を本 stack に持つ。
+    // 旧 AdminConsoleHostingStack から移管 (= Lite / SaaS 両モード対応 + 3-phase env-var dance 解消)。
+    const competitorBootstrapHosting = new CompetitorBootstrapHosting(
+      this,
+      "CompetitorBootstrapHosting",
+    );
+    this.competitorBootstrapTemplateUrl = competitorBootstrapHosting.templateUrl;
+    new CfnOutput(this, "CompetitorBootstrapTemplateUrl", {
+      value: this.competitorBootstrapTemplateUrl,
+      description:
+        "Competitor 用 bootstrap CFn テンプレート (= competitor-bootstrap.yaml) の S3 public URL。Quick-create / Update Stack deeplink の TemplateURL に渡す。",
+    });
     // Issue #778 ADR-016 Phase 2: eventBusArn が渡されていれば既存の SBT bus を import、
     // 渡されていなければ Lite mode と判定して local EventBus を新規に作る。 後者では Step
     // Functions Rule も local bus にぶら下がるため、 cross-stack 依存が増えない。

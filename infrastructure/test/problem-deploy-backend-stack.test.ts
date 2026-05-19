@@ -324,6 +324,34 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       const outputs = tpl.findOutputs("*");
       expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["ProblemEndpointsTableName"]));
     });
+
+    it("Issue #1053: CompetitorBootstrapTemplateUrl を Output として持つべき", () => {
+      // hosting を AdminConsoleHostingStack から移管したため、 本 stack が出力 owner。
+      // SaaS の AdminConsoleHosting と Lite / SaaS の ApplicationAdminConsoleHosting が
+      // cross-stack ref で受け取る。
+      const outputs = tpl.findOutputs("*");
+      expect(Object.keys(outputs)).toEqual(
+        expect.arrayContaining(["CompetitorBootstrapTemplateUrl"]),
+      );
+    });
+  });
+
+  describe("Issue #1053: CompetitorBootstrapHosting (公開 S3 hosting)", () => {
+    it("public-read な S3 bucket を 1 つ追加で作るべき (= 旧 AdminConsoleHostingStack から移管)", () => {
+      // ParticipantPortal 等で別 bucket もあるため count assert は避け、 public-read 設定の
+      // ある bucket が存在することで pin。
+      tpl.hasResourceProperties(
+        "AWS::S3::Bucket",
+        Match.objectLike({
+          PublicAccessBlockConfiguration: Match.objectLike({
+            BlockPublicAcls: false,
+            BlockPublicPolicy: false,
+            IgnorePublicAcls: false,
+            RestrictPublicBuckets: false,
+          }),
+        }),
+      );
+    });
   });
 
   describe("legacy 経路の廃止", () => {

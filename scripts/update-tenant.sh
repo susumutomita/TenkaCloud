@@ -21,16 +21,9 @@ export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 
-# Issue #1029 / PR-1028 follow-up: install.sh が pooled stack を deploy しなくなったため
-# (= SBT pipeline 一本化)、 admin-console-hosting stack の CompetitorBootstrapTemplateUrl
-# output を CodeBuild 側で読み直して、 cdk deploy 時の synth に流す。 これを忘れると
-# pooled stack の application-admin-console runtime-config に bootstrap URL が空のまま
-# 焼かれ、 競技者の Launch Stack deeplink が動かなくなる。 stack 不在は空文字 fallback。
-export CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=$(aws cloudformation describe-stacks \
-  --stack-name "tenkacloud-admin-console-hosting" \
-  --query "Stacks[0].Outputs[?starts_with(OutputKey,'CompetitorBootstrapTemplateUrl')].OutputValue" \
-  --output text 2>/dev/null || echo "")
-echo "CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL: ${CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL}"
+# Issue #1053: hosting を ProblemDeployBackendStack に移管したので、 env-var で
+# CompetitorBootstrapTemplateUrl を inject する経路は不要。 pooled stack は cross-stack ref で
+# `tenkacloud-problem-deploy` から URL を import する (= synth が CFn 上で解決)。
 
 VERSIONS=$(aws s3api list-object-versions --bucket "$CDK_PARAM_S3_BUCKET_NAME" --prefix "$CDK_SOURCE_NAME" --query 'Versions[?IsLatest==`true`].{VersionId:VersionId}' --output text 2>&1)
 export CDK_PARAM_COMMIT_ID=$(echo "$VERSIONS" | awk 'NR==1{print $1}')

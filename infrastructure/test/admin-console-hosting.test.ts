@@ -35,6 +35,8 @@ function synth(): Template {
     awsRegion: "ap-northeast-1",
     awsAccountId: "123456789012",
     adminInsightApiUrl: "https://insight.example.com",
+    competitorBootstrapTemplateUrl:
+      "https://tenkacloud-source.s3.ap-northeast-1.amazonaws.com/competitor-bootstrap.yaml",
   });
   return Template.fromStack(stack);
 }
