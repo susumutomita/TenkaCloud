@@ -2,7 +2,7 @@
 
 TenkaCloud の competitor (= 競技者) 向け Web ポータル。 チーム単位で発行される短命ログインキーで認証し、 自チームに deploy された問題への click-through を提供する。 主要 view は scoreboard / score events / 運営 notification。
 
-参加者は AWS Console で問題を解くので、 本ポータルは hosting cost を最小化する方針で **S3 + CloudFront 静的ホスティング** + **Lambda backend** を採用 (= `ProblemDeployBackendStack` 配下、 ADR-016)。
+参加者は AWS Console で問題を解くので、 本ポータルは hosting cost を最小化する方針で **S3 + CloudFront 静的ホスティング** + **Lambda backend** を採用する。
 
 ## 機能 / ページ構成
 
@@ -10,12 +10,12 @@ TenkaCloud の competitor (= 競技者) 向け Web ポータル。 チーム単�
 - `/` Home (Welcome + Event 情報 + 累計スコア + 問題 quick link)
 - `/problems` 問題一覧 (Quests) — Battle / Challenge カテゴリ filter、 解答状況 filter
 - `/problems/:jobId` 問題詳細 (= `metadata.json` の narrative + flag 提出 + endpoint override + portal plugin slot)
-- `/scoreboard` Scoreboard — リアルタイム順位 (5 秒 polling)、 終了 30 分前から freeze (#1038)
+- `/scoreboard` Scoreboard — リアルタイム順位 (5 秒 polling)、 終了 30 分前から freeze
 - `/score-events` Score events — 自チームのスコア変動履歴 + 累計 score 折れ線
 - `/notifications` 運営からの通知 (info / warning)
-- `/sso` SSO Credentials — AWS Console への federated 1-click サインイン (= ConsoleViewerRole)
+- `/sso` SSO Credentials — AWS Console への federated 1-click サインイン
 
-i18n は ja + en (#1078 で zh / es を廃止、 #1079 で 4 ページの言語切替対応を追加)。
+i18n は ja + en。
 
 ## 認証
 

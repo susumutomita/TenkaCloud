@@ -12,11 +12,6 @@ Battle (real-time) and Challenge (self-paced) problems deployed straight to each
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
 [![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
-![GitHub last commit (by committer)](https://img.shields.io/github/last-commit/susumutomita/TenkaCloud)
-![GitHub top language](https://img.shields.io/github/languages/top/susumutomita/TenkaCloud)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/susumutomita/TenkaCloud)
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/susumutomita/TenkaCloud)
-![GitHub repo size](https://img.shields.io/github/repo-size/susumutomita/TenkaCloud)
 
 🌐 [English](./README.md) · [日本語](./README.ja.md)
 
@@ -28,15 +23,15 @@ Battle (real-time) and Challenge (self-paced) problems deployed straight to each
 
 Cloud competitions usually need three things that don't ship together: a multi-tenant SaaS control plane, a deploy pipeline into the *competitor's* AWS account, and a portal where each team sees their own scoreboard. TenkaCloud bundles all three into a single CDK app.
 
-- **🏗 Real AWS deploys** — Problems are CloudFormation templates that land in the competitor's account via AssumeRole + ExternalId. No simulated sandbox.
-- **🔐 Multi-tenant by design** — SBT (Serverless SaaS Builder Toolkit) for the control plane; per-tenant Cognito, DynamoDB, and API Gateway for the application plane. Pooled tiers (BASIC/STANDARD/PREMIUM) and silo tier (PLATINUM) supported out of the box.
-- **💸 Free Tier friendly** — Every DynamoDB table is forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect, so the whole platform fits under the AWS Free Tier when not under load.
+- **Real AWS deploys** — Problems are CloudFormation templates that land in the competitor's account via AssumeRole + ExternalId. No simulated sandbox.
+- **Multi-tenant by design** — SBT (Serverless SaaS Builder Toolkit) for the control plane; per-tenant Cognito, DynamoDB, and API Gateway for the application plane. Pooled and silo tiers are supported out of the box.
+- **Free Tier friendly** — Every DynamoDB table is forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect, so the whole platform fits under the AWS Free Tier when not under load.
 
 ## Quick start
 
-### Default: Lite mode (5 minutes, single tenant) — `make deploy`
+### Default: Lite mode — `make deploy`
 
-Most operators run **one competition at a time**, not a multi-tenant SaaS. `make deploy` defaults to Lite mode (Issue #955), so you get the Application Admin Console and Participant Portal without the SBT control plane:
+Most operators run one competition at a time, not a multi-tenant SaaS. `make deploy` defaults to Lite mode, deploying the Application Admin Console and Participant Portal without the SBT control plane:
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -46,75 +41,49 @@ cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
 # edit AWS_ACCOUNT_ID (+ AWS_REGION if not ap-northeast-1)
 
-make deploy   # = make lite-up — cdk deploy 2 stacks (~10 min on first run)
+make deploy
 ```
 
-What you get:
+You get:
 
 - **Application Admin Console** — Tenant Admin UI (CloudFront)
 - **Participant Portal** — Competitor UI (CloudFront)
 - **Problem Deploy Backend** — DynamoDB + Lambda + Step Functions + CodeBuild
-- **Local EventBridge** — no shared bus, no control plane required
-- A pre-seeded `hello-world` problem you can deploy to your *own* AWS account
+- A pre-seeded `hello-world` problem you can deploy to your own AWS account
 
 Teardown:
 
 ```bash
-make destroy   # = make lite-down
+make destroy
 ```
 
-### Opt-in: SaaS mode (multi-tenant) — `make deploy-saas`
+### Opt-in: SaaS mode — `make deploy-saas`
 
-For running real SaaS deployments with multiple tenants, pooled tiers (BASIC/STANDARD/PREMIUM) and silo tier (PLATINUM), and System Admin onboarding:
+For multiple tenants, pooled tiers (BASIC / STANDARD / PREMIUM) and silo tier (PLATINUM), and System Admin onboarding:
 
 ```bash
-make deploy-saas    # 3-phase install.sh: backend → admin console → callback CORS
-make destroy-saas   # teardown
+make deploy-saas
+make destroy-saas
 ```
 
-`scripts/install.sh` handles the SBT 3-phase deploy (control plane → admin console hosting → callback CORS update). Requires `SYSTEM_ADMIN_EMAIL` in the env file.
-
-## Architecture at a glance
-
-```
-┌────────────────────┐   ┌──────────────────────────┐   ┌────────────────────────┐
-│  Admin Console     │   │ Application Admin Console│   │  Participant Portal    │
-│  (System Admin)    │   │  (Tenant Admin)          │   │  (Competitors)         │
-│  S3 + CloudFront   │   │  per-tenant CloudFront   │   │  S3 + CloudFront       │
-└─────────┬──────────┘   └─────────────┬────────────┘   └────────────┬───────────┘
-          │                            │                             │
-          ▼                            ▼                             ▼
-┌────────────────────┐   ┌──────────────────────────┐   ┌────────────────────────┐
-│ ControlPlaneStack  │   │ TenantTemplateStack      │   │ ProblemDeployBackend   │
-│  (SBT)             │   │  per-tenant runtime      │   │  Step Functions +      │
-│  Cognito + EvBridge│──▶│  Cognito + DDB + API GW  │   │  CodeBuild + Lambda    │
-└─────────┬──────────┘   └──────────────────────────┘   └────────────┬───────────┘
-          │                                                          │
-          │  onboardingRequest             DeployRequested            │
-          ▼                                                          ▼
-┌────────────────────┐                                  ┌────────────────────────┐
-│ ServerlessSaaS     │                                  │ Competitor AWS Account │
-│   Pipeline         │                                  │  (AssumeRole + ExtId)  │
-│  (CodePipeline)    │                                  └────────────────────────┘
-└────────────────────┘
-```
+SaaS mode requires `SYSTEM_ADMIN_EMAIL` in the env file. See [`scripts/install.sh`](./scripts/install.sh) for the orchestration.
 
 ## Features
 
 | | |
 |---|---|
-| 🎮 **Battle problems** | Real-time PvP-style competitions (security battle royale, microservice migration battle, etc.) |
-| 🧩 **Challenge problems** | Self-paced, always-on training (hello-world, AWS service deep-dives) |
-| 🔌 **Plugin architecture** | Each problem ships its own `metadata.json` + `template.yaml` (+ optional `portal/*.tsx`) — no platform changes needed to add problems |
-| 📊 **5 scoring kinds** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` — declared per problem |
-| 🌐 **i18n** | Default JA + EN. Problem metadata supports per-locale narrative overrides. (#1078: zh/es 廃止して 2 言語に絞った) |
-| 🛡 **Security** | Required ExternalId on AssumeRole; SSM SecureString for secrets; Cognito JWT auth everywhere; per-team rate limiting |
-| 📡 **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol for cross-cloud authority transfer (AWS + GCP + Azure adapters, see [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)) |
-| 🔭 **Observability** | CloudWatch Dashboard with deploy chain / DDB / Lambda / API GW in one screen; AWS Budgets + CloudWatch Alarms (Lambda Errors, DDB throttling, API GW 5XX) wired to a shared SNS topic; admin-console Operations page links straight to AWS Console (#1080) |
+| **Battle problems** | Real-time PvP-style competitions |
+| **Challenge problems** | Self-paced, always-on training |
+| **Plugin architecture** | Each problem ships its own `metadata.json` + `template.yaml` (+ optional `portal/*.tsx`) — no platform changes needed to add problems |
+| **5 scoring kinds** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` — declared per problem |
+| **i18n** | Japanese and English. Problem metadata supports per-locale narrative overrides |
+| **Security** | Required ExternalId on AssumeRole; SSM SecureString for secrets; Cognito JWT + MFA; per-team rate limiting |
+| **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol for cross-cloud authority transfer (AWS + GCP + Azure adapters) |
+| **Observability** | CloudWatch Dashboard, AWS Budgets, and CloudWatch Alarms (Lambda Errors / DDB throttling / API Gateway 5XX) wired to a shared SNS topic. Admin console links straight to AWS Console |
 
 ## How problems work
 
-A problem is a self-contained directory of three artifacts (see [ADR-012](./docs/architecture/adr-012-problem-plugin-architecture.html)):
+A problem is a self-contained directory of three artifacts:
 
 ```
 problems/<category>/<id>/
@@ -130,45 +99,33 @@ bun run scripts/tenkacloud-problem.ts create <id> --kind <flag|uptime-flat|...>
 bun run scripts/tenkacloud-problem.ts validate <id>
 ```
 
-Schema reference: [`problems/SCHEMA.json`](./problems/SCHEMA.json) · Authoring guide: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html)
+Schema: [`problems/SCHEMA.json`](./problems/SCHEMA.json) · Authoring guide: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html)
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Vite 7, React 19, react-router 7, [Cloudscape Design System](https://cloudscape.design/) |
-| Backend | AWS Lambda (Node.js 22 + Hono), API Gateway HTTP API |
-| IaC | AWS CDK 2 + [`@cdklabs/sbt-aws`](https://github.com/awslabs/sbt-aws) 0.3.9, cdk-nag |
-| Auth | AWS Cognito (Hosted UI + OAuth Code + PKCE) |
+| Frontend | Vite, React, react-router, [Cloudscape Design System](https://cloudscape.design/) |
+| Backend | AWS Lambda (Node.js + Hono), API Gateway HTTP API |
+| IaC | AWS CDK 2 + [`@cdklabs/sbt-aws`](https://github.com/awslabs/sbt-aws), cdk-nag |
+| Auth | AWS Cognito (Hosted UI + OAuth Code + PKCE), TOTP MFA |
 | Data | DynamoDB (PROVISIONED 1/1, Free Tier friendly) |
-| Events | EventBridge (cross-plane: tenant creation / DeployRequested / DeployCompleted) |
-| Tests | Vitest (1000+ tests, Japanese `〜すべき` test titles) |
-| Package | Bun 1.3.11 (workspaces: `infrastructure` + `apps/*` + `packages/*`) |
+| Events | EventBridge for cross-plane signalling |
+| Tests | Vitest |
+| Package | Bun (workspaces: `infrastructure` + `apps/*` + `packages/*`) |
 
-## Architecture Decision Records (ADRs)
+## Architecture
 
-ADRs are written in HTML for layout expressiveness (decision tables, threat-model grids, color-coded badges). Browse at [`docs/architecture/`](./docs/architecture/):
+Architecture is documented as a set of HTML ADRs in [`docs/architecture/`](./docs/architecture/). They use HTML for layout expressiveness (decision tables, threat-model grids, color-coded badges).
 
-- [ADR-012](./docs/architecture/adr-012-problem-plugin-architecture.html) — Problem plugin architecture (5 scoring kinds, thick metadata DSL)
-- [ADR-013](./docs/architecture/adr-013-disruption-phase2-condition-triggered.html) — Condition-triggered disruptions
-- [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html) — EventBridge-driven state reconciliation
-- [ADR-015](./docs/architecture/adr-015-adr-convention-as-harness.html) — ADR convention enforced as harness
-- [ADR-016](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — TenkaCloud Lite mode + AppPlaneCore extraction
-- [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) — Cloud Action Intent / Trust Bridge for cross-cloud authority transfer
-- [ADR-018](./docs/architecture/adr-018-pooled-userpool-saml-isolation.html) — Pooled UserPool / SAML isolation (Superseded by #1066: SAML 廃止)
-- [ADR-019](./docs/architecture/adr-019-cross-account-stack-catalog.html) — Cross-account stack catalog
-- [ADR-020](./docs/architecture/adr-020-authorization-model.html) — Authorization model
-- [ADR-021](./docs/architecture/adr-021-dependency-major-bump-decisions.html) — Dependency major bump decisions
-- [ADR-022](./docs/architecture/adr-022-tenant-isolation-audit.html) — Tenant isolation audit
-- [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html) — Wire format reference (RFC 7515 JWS compact serialization, 13-section threat model)
+Start here:
 
-## Roadmap
+- [ADR-012 — Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
+- [ADR-016 — TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
+- [ADR-017 — Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
+- [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html)
 
-- ✅ Lite mode (single-tenant, OSS-friendly) — Issue [#778](https://github.com/susumutomita/TenkaCloud/issues/778)
-- ✅ Trust Bridge library (AWS adapter + GCP / Azure prototypes) — Issue [#795](https://github.com/susumutomita/TenkaCloud/issues/795)
-- 🔄 Cross-cloud problem support (GCP / Azure / Cloudflare targets)
-- 🔄 Problem marketplace (`TenkaCloudChallenges` private repo for paid / private problems)
-- 📋 Tournament mode (multi-event scheduling, leaderboard aggregation)
+Full ADR index lives under [`docs/architecture/`](./docs/architecture/).
 
 ## Comparison
 
@@ -177,36 +134,22 @@ ADRs are written in HTML for layout expressiveness (decision tables, threat-mode
 | Deploys to participant's own AWS | ✅ | ✅ | ❌ | ❌ |
 | OSS / self-hostable | ✅ | ❌ | ✅ | ❌ |
 | Multi-tenant SaaS layer | ✅ | N/A | ❌ | ❌ |
-| Real-time PvP (Battle) | ✅ | ✅ | ❌ (CTF only) | Partial |
+| Real-time PvP (Battle) | ✅ | ✅ | ❌ | Partial |
 | Free Tier compatible | ✅ | ❌ | ✅ | N/A |
 | Plugin-style problems | ✅ | ❌ | ✅ | ❌ |
 | Trust Bridge (cross-cloud authority) | ✅ | ❌ | ❌ | ❌ |
 
 ## Contributing
 
-We welcome contributions. Start with [CONTRIBUTING.md](./CONTRIBUTING.md), then:
+See [CONTRIBUTING.md](./CONTRIBUTING.md). In short:
 
 - Pick an issue labeled [`good first issue`](https://github.com/susumutomita/TenkaCloud/labels/good%20first%20issue)
-- Tests are required (Vitest, `〜すべき` style for Japanese / `should` for English)
+- Tests are required (Vitest)
 - Run `make before-commit` before opening a PR
 - Architecture invariants are enforced by `make harness` (see [`docs/architecture/harness.md`](./docs/architecture/harness.md))
 
 AI agent guidelines: [`AGENTS.md`](./AGENTS.md) · [`CLAUDE.md`](./CLAUDE.md)
 
-## Star history
-
-If TenkaCloud helps you run a cloud competition, please consider starring the repo — it helps us understand the OSS community's appetite for this kind of platform.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=susumutomita/TenkaCloud&type=Date)](https://star-history.com/#susumutomita/TenkaCloud&Date)
-
 ## License
 
 [Apache License 2.0](./LICENSE) — Use commercially, modify, distribute. Just keep the notice.
-
----
-
-<div align="center">
-
-Built with care by [Susumu Tomita](https://susumutomita.netlify.app/) and contributors.
-
-</div>

@@ -4,13 +4,13 @@ TenkaCloud の Tenant Admin (= 主催者) が使う Application Plane の管理�
 
 ## 機能
 
-- **Event 管理** — 作成 (#1067 で deploy promote modal)、 一覧、 詳細 (#1072 stage-aware collapse、 #1071 team ranking)
+- **Event 管理** — 作成 / 一覧 / 詳細 (deploy 進捗、 team ranking)
 - **Problem catalog** — 問題一覧 / 詳細 / event への割り当て
-- **Deploy 進捗** — Step Functions + CodeBuild の進行可視化 (#1068 手動 reload button)
-- **Competitor accounts** — 競技者 AWS account の登録 / ExternalId rotate (#1065 で update 系廃止、 仕様簡素化)
+- **Deploy 進捗** — Step Functions + CodeBuild の進行可視化
+- **Competitor accounts** — 競技者 AWS account の登録 / ExternalId rotate
 - **チーム / SSO credential** — Event ごとの team 単位 login key 発行
 
-i18n は ja + en (#1078 で zh / es を廃止)。 i18n 化済みページ: Events / Problems / Deployments / CompetitorAccounts / Home。 EventDetail は #1084 で進行中。
+i18n は ja + en。
 
 ## ローカル開発
 
