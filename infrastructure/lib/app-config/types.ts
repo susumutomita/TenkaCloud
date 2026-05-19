@@ -79,15 +79,10 @@ export interface AppConfig {
   /** Bulk Deploy の CodeBuild 並列度 (未設定なら AWS account-level quota に任せる)。 */
   readonly deployConcurrentBuildLimit: number | undefined;
 
-  /** AdminConsoleInsight の CORS allow-list 用 origin。 phase 2 deploy 時に install.sh が export する。 */
-  readonly adminConsoleOriginForCors: string | undefined;
-
-  // Issue #1053: 旧 `competitorBootstrapTemplateUrlEnv` (= `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL`)
-  // は廃止。 ProblemDeployBackendStack に hosting を移管したため、 consumer は cross-stack ref で
-  // URL を受ける (= Phase 3 env-var dance が不要になる)。
-
-  /** Phase 2 hosting stack を立てるための 3 つの env (全部揃ったときだけ deploy する)。 */
-  readonly adminConsoleHostingInputs: AdminConsoleHostingInputs | undefined;
+  // Issue #1031: 旧 `adminConsoleOriginForCors` (= `CDK_PARAM_ADMIN_CONSOLE_ORIGIN`) は廃止。
+  // admin-console-hosting が先に立ち、 cross-stack ref で control-plane / admin-console-insight
+  // に流れる (= Phase 3 env-var dance が不要になる)。
+  // Issue #1053: 旧 `competitorBootstrapTemplateUrlEnv` も同じく cross-stack ref へ移行。
 
   /**
    * Issue #839 follow-up: 全 tenant 共有の SAML IdP 連携。 config.json の `tenantSamlConfig`
@@ -118,13 +113,4 @@ export interface ProblemsCatalogBundle {
   readonly visibility: unknown;
   /** Issue #888: per-problem `disruptions[]` 宣言。 未宣言の問題はキー無し。 */
   readonly disruptions: unknown;
-}
-
-export interface AdminConsoleHostingInputs {
-  readonly apiUrl: string;
-  readonly cognitoDomain: string;
-  readonly userClientId: string;
-  readonly pooledApplicationAdminConsoleUrl: string;
-  readonly provisioningCodeBuildProject: string;
-  readonly adminInsightApiUrl: string;
 }

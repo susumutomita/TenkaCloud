@@ -6,6 +6,7 @@ import {
   CfnUserPoolIdentityProvider,
   type IUserPool,
   type UserPoolClient,
+  type UserPoolDomain,
 } from "aws-cdk-lib/aws-cognito";
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
@@ -20,6 +21,12 @@ import {
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;
+  /**
+   * Issue #1031: admin-console の CloudFront URL (= `AdminConsoleHostingStack.distributionDomainName`)。
+   * 旧 `process.env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みを撤廃し、 prop で受ける形に揃えた。
+   * 未指定 (= optional) は test や hosting stack 不在ケースで許容。
+   */
+  adminConsoleOrigin?: string;
   /**
    * Issue #839 follow-up: System Admin (= TenkaCloud operator 会社) 用 SAML IdP 連携。
    * SBT が wrap した Cognito UserPool に `CfnUserPoolIdentityProvider` (= SAML) を escape hatch で
@@ -62,6 +69,13 @@ export class ControlPlaneStack extends cdk.Stack {
    * AdminInsight HTTP API の JWT Authorizer も同 client を audience とみなす。
    */
   public readonly cognitoUserClientId: string;
+  /**
+   * Issue #1031: SBT 内蔵 UserPoolDomain の base URL (= `https://<prefix>.auth.<region>.amazoncognito.com`)。
+   * `AdminConsoleRuntimeConfigStack` が runtime-config.json に焼き込む値を cross-stack ref で受ける。
+   * SBT は cognitoDomain を public field として expose しないため、 内部 child `UserPoolDomain` を
+   * findChild で取り出して `.baseUrl()` を呼ぶ。
+   */
+  public readonly cognitoDomain: string;
 
   constructor(scope: Construct, id: string, props: ControlPlaneStackProps) {
     super(scope, id, props);
@@ -70,9 +84,8 @@ export class ControlPlaneStack extends cdk.Stack {
       setAPIGWScopes: false, // done for testing purposes. Scopes should be used for added security in production!
     });
 
-    // admin-console の CloudFront URL (install.sh phase 3 で env 経由で注入される)。
-    // 最初の deploy 時は未設定、AdminConsoleHostingStack deploy 後に再 deploy で設定される。
-    const adminConsoleOrigin = process.env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN;
+    // Issue #1031: admin-console の CloudFront URL は cross-stack ref で props 経由。 旧 env 直読みは廃止。
+    const adminConsoleOrigin = props.adminConsoleOrigin;
     const extraCorsOrigins = adminConsoleOrigin ? [adminConsoleOrigin] : [];
     const extraCallbackUrls = adminConsoleOrigin ? [`${adminConsoleOrigin}/callback`] : [];
     const extraLogoutUrls = adminConsoleOrigin ? [`${adminConsoleOrigin}/`] : [];
@@ -182,6 +195,11 @@ export class ControlPlaneStack extends cdk.Stack {
     // (AdminConsoleInsightStack) の JWT Authorizer 用に export する。
     this.cognitoUserPool = cognitoAuth.userPool;
     this.cognitoUserClientId = cognitoAuth.userClientId;
+    // Issue #1031: SBT 内蔵 UserPoolDomain (= cognito-auth.js:104 で `new UserPoolDomain` される
+    // 子 construct) を findChild で取り出して baseUrl を expose。 `AdminConsoleRuntimeConfigStack`
+    // が runtime-config.json の `cognitoDomain` field に焼き込む。
+    const userPoolDomain = cognitoAuth.node.findChild("UserPoolDomain") as UserPoolDomain;
+    this.cognitoDomain = userPoolDomain.baseUrl();
   }
 }
 

@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { AdminConsoleHostingStack } from "../admin-console-hosting";
+import { AdminConsoleRuntimeConfigStack } from "../admin-console-runtime-config-stack";
 import { AdminConsoleInsightStack } from "../admin-insight/admin-console-insight-stack";
 import type { AppConfig } from "../app-config/types";
 import { BootstrapTemplateStack } from "../bootstrap-template/bootstrap-template-stack";
@@ -59,15 +60,31 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // KMS Key を AWS-managed alias `alias/aws/s3` (無料) に置き換える Aspect (cost cleanup)。
   cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
 
+  // Issue #1031: admin-console-hosting を最初に立てる (= 依存なし、 wildcard CSP)。
+  // 後続 control-plane / admin-console-insight が `distributionDomainName` を cross-stack ref で
+  // 受け取る (= adminConsoleOrigin)。 これで install.sh の Phase 1/2/3 の env-var dance を
+  // 撤廃でき、 `bun cdk deploy --all` 1 発で全 stack が立つ。
+  const adminConsoleHostingStack = new AdminConsoleHostingStack(
+    app,
+    stackId("tenkacloud-admin-console-hosting", config.environment),
+    {
+      ...config.stackEnv,
+    },
+  );
+  cdk.Aspects.of(adminConsoleHostingStack).add(new DestroyPolicySetter());
+  const adminConsoleOrigin = `https://${adminConsoleHostingStack.distributionDomainName}`;
+
   const controlPlaneStack = new ControlPlaneStack(
     app,
     stackId("tenkacloud-control-plane", config.environment),
     {
       ...config.stackEnv,
       systemAdminEmail: config.systemAdminEmail,
+      adminConsoleOrigin,
       samlIdp: config.controlPlaneSamlConfig,
     },
   );
+  controlPlaneStack.addDependency(adminConsoleHostingStack);
 
   // SBT が ControlPlane 内部で作る TenantDetails table は default 5/5 (CDK Table の
   // 既定値) なので Free Tier 枠 (25 RCU/WCU) を圧迫する。Aspect で全 CfnTable を
@@ -141,7 +158,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       deploymentsTable: problemDeployBackendStack.deploymentsTable,
       eventsTable: problemDeployBackendStack.eventsTable,
       teamsTable: problemDeployBackendStack.teamsTable,
-      adminConsoleOrigin: config.adminConsoleOriginForCors,
+      // Issue #1031: cross-stack ref で adminConsoleOrigin を受ける (= 旧 env-var dance 撤廃)。
+      adminConsoleOrigin,
       // Issue #814 Phase 2: SBT BashJobRunner の deprovisioning state machine ARN を渡し、
       // admin-insight Lambda が ListExecutions で履歴を引けるようにする。
       deprovisioningStateMachineArn: bootstrapTemplateStack.deprovisioningStateMachineArn,
@@ -305,30 +323,34 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     });
   }
 
-  let adminConsoleHosting: AdminConsoleHostingStack | undefined;
-  if (config.adminConsoleHostingInputs) {
-    adminConsoleHosting = new AdminConsoleHostingStack(
-      app,
-      stackId("tenkacloud-admin-console-hosting", config.environment),
-      {
-        ...config.stackEnv,
-        apiUrl: config.adminConsoleHostingInputs.apiUrl,
-        cognitoDomain: config.adminConsoleHostingInputs.cognitoDomain,
-        userClientId: config.adminConsoleHostingInputs.userClientId,
-        pooledApplicationAdminConsoleUrl:
-          config.adminConsoleHostingInputs.pooledApplicationAdminConsoleUrl,
-        provisioningCodeBuildProject: config.adminConsoleHostingInputs.provisioningCodeBuildProject,
-        awsRegion: config.awsRegion,
-        awsAccountId: config.awsAccountId,
-        adminInsightApiUrl: config.adminConsoleHostingInputs.adminInsightApiUrl,
-        // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 cross-stack ref で
-        // URL を受ける。 Phase 1 から runtime-config.json に正しい S3 URL が焼かれる。
-        competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
-      },
-    );
-    adminConsoleHosting.addDependency(problemDeployBackendStack);
-    cdk.Aspects.of(adminConsoleHosting).add(new DestroyPolicySetter());
-  }
+  // Issue #1031: runtime-config.json を SiteBucket に配置する専用 stack。 全 backend stack の
+  // cross-stack ref を集めて 1 ヶ所で runtime-config を組み立てる (= 旧 install.sh phase 2 で
+  // env-var 経由していた値を CFn ref に置換)。
+  const adminConsoleRuntimeConfigStack = new AdminConsoleRuntimeConfigStack(
+    app,
+    stackId("tenkacloud-admin-console-runtime-config", config.environment),
+    {
+      ...config.stackEnv,
+      siteBucket: adminConsoleHostingStack.siteBucket,
+      distribution: adminConsoleHostingStack.distribution,
+      apiUrl: controlPlaneStack.regApiGatewayUrl,
+      cognitoDomain: controlPlaneStack.cognitoDomain,
+      userClientId: controlPlaneStack.cognitoUserClientId,
+      pooledApplicationAdminConsoleUrl: tenantTemplateStack.applicationAdminConsoleUrl,
+      provisioningCodeBuildProject: serverlessSaaSPipeline.provisioningCodeBuildProjectName,
+      awsRegion: config.awsRegion,
+      awsAccountId: config.awsAccountId,
+      adminInsightApiUrl: adminConsoleInsightStack.apiUrl,
+      competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
+    },
+  );
+  adminConsoleRuntimeConfigStack.addDependency(adminConsoleHostingStack);
+  adminConsoleRuntimeConfigStack.addDependency(controlPlaneStack);
+  adminConsoleRuntimeConfigStack.addDependency(adminConsoleInsightStack);
+  adminConsoleRuntimeConfigStack.addDependency(tenantTemplateStack);
+  adminConsoleRuntimeConfigStack.addDependency(serverlessSaaSPipeline);
+  adminConsoleRuntimeConfigStack.addDependency(problemDeployBackendStack);
+  cdk.Aspects.of(adminConsoleRuntimeConfigStack).add(new DestroyPolicySetter());
 
   return {
     controlPlaneStack,
@@ -338,7 +360,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     tenantTemplateStack,
     serverlessSaaSPipeline,
     observabilityStack,
-    adminConsoleHosting,
+    adminConsoleHosting: adminConsoleHostingStack,
+    adminConsoleRuntimeConfigStack,
   };
 }
 
@@ -350,7 +373,9 @@ export interface TenkaCloudAppHandles {
   readonly tenantTemplateStack: TenantTemplateStack;
   readonly serverlessSaaSPipeline: ServerlessSaaSPipeline;
   readonly observabilityStack: ObservabilityStack;
-  readonly adminConsoleHosting: AdminConsoleHostingStack | undefined;
+  readonly adminConsoleHosting: AdminConsoleHostingStack;
+  /** Issue #1031: runtime-config.json を SiteBucket に配置する専用 stack (= 旧 install.sh phase 2 を置換)。 */
+  readonly adminConsoleRuntimeConfigStack: AdminConsoleRuntimeConfigStack;
 }
 
 const apiIdFromExecuteApiUrl = (apiUrl: string): string =>

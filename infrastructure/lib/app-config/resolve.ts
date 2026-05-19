@@ -13,12 +13,7 @@ import {
   discoverProblemsScoring,
   discoverProblemsVisibility,
 } from "../utils/discover-problems-catalog";
-import type {
-  AdminConsoleHostingInputs,
-  ApiKeySSMParameterNames,
-  AppConfig,
-  ProblemsCatalogBundle,
-} from "./types";
+import type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types";
 
 /**
  * Issue #766: bin/infrastructure.ts に散在していた env / config 解決を 1 つの pure function
@@ -185,11 +180,9 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     );
   }
 
-  const adminConsoleOriginForCors = env.CDK_PARAM_ADMIN_CONSOLE_ORIGIN;
-  // Issue #1053: 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` env-var dance は廃止。
-  // hosting を ProblemDeployBackendStack に移管し、 consumer は cross-stack ref で URL を受ける。
-
-  const adminConsoleHostingInputs = buildHostingInputs(env);
+  // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
+  // が先に立ち、 cross-stack ref で control-plane / admin-console-insight に流れる。
+  // Issue #1053: 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` も同じく cross-stack ref へ。
 
   // Issue #839 follow-up: SAML IdP 設定を config.json から取り出す (= 未設定なら undefined)。
   // tenant-stack 側 (= application-admin-console / pooled tenant + per-tenant silo + Lite) と
@@ -247,8 +240,6 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     problems,
     challengePayloadBucketName,
     deployConcurrentBuildLimit,
-    adminConsoleOriginForCors,
-    adminConsoleHostingInputs,
     tenantSamlConfig,
     controlPlaneSamlConfig,
     monthlyCostLimitUsd,
@@ -281,21 +272,6 @@ export function resolveApiKeyValue(args: ResolveApiKeyValueArgs): string {
     );
   }
   return `${args.appNameLower}-${args.environment}-${args.tier}-tier-key-default-do-not-share`.toLowerCase();
-}
-
-function buildHostingInputs(env: NodeJS.ProcessEnv): AdminConsoleHostingInputs | undefined {
-  const apiUrl = env.CDK_PARAM_CONTROL_PLANE_API_URL;
-  const cognitoDomain = env.CDK_PARAM_CONTROL_PLANE_COGNITO_DOMAIN;
-  const userClientId = env.CDK_PARAM_CONTROL_PLANE_USER_CLIENT_ID;
-  if (!apiUrl || !cognitoDomain || !userClientId) return undefined;
-  return {
-    apiUrl,
-    cognitoDomain,
-    userClientId,
-    pooledApplicationAdminConsoleUrl: env.CDK_PARAM_POOLED_APP_CONSOLE_URL ?? "",
-    provisioningCodeBuildProject: env.CDK_PARAM_PROVISIONING_CODEBUILD_PROJECT ?? "unknown",
-    adminInsightApiUrl: env.CDK_PARAM_ADMIN_INSIGHT_API_URL ?? "",
-  };
 }
 
 /**

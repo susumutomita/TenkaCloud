@@ -80,6 +80,13 @@ export class TenantTemplateStack extends Stack {
   public readonly tenantApiName: string;
   /** Tenant REST API deployment stage name for CloudWatch metrics. */
   public readonly tenantApiStageName: string;
+  /**
+   * Issue #1031: pooled tenant が共有する application-admin-console の CloudFront URL。
+   * `AdminConsoleRuntimeConfigStack` が runtime-config.json の `pooledApplicationAdminConsoleUrl`
+   * field に焼き込む cross-stack ref として使う。 silo (PLATINUM) instance も同 field を持つが、
+   * admin-console は pooled URL のみを runtime-config 経由で表示する。
+   */
+  public readonly applicationAdminConsoleUrl: string;
 
   constructor(scope: Construct, id: string, props: TenantTemplateStackProps) {
     super(scope, id, props);
@@ -121,6 +128,7 @@ export class TenantTemplateStack extends Stack {
     this.tenantApiId = apiGateway.restApi.restApiId;
     this.tenantApiName = apiGateway.restApi.restApiName;
     this.tenantApiStageName = apiGateway.restApi.deploymentStage.stageName;
+    this.applicationAdminConsoleUrl = applicationAdminConsoleHosting.distributionUrl;
 
     new AwsCustomResource(this, "CreateTenantMapping", {
       installLatestAwsSdk: true,
