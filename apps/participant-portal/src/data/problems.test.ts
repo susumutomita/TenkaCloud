@@ -129,13 +129,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
     });
 
-    it("locale='zh' の override が宣言されていれば中文を返すべき (hello-world)", () => {
-      const m = requireProblemMetadata("hello-world");
-      const r = resolveLocalizedNarrative(m, "zh");
-      expect(r.name).toContain("示例");
-    });
-
-    it("全 4 既存問題が en / es / zh の翻訳を持つべき (Phase 5.A + 5.C 完了)", () => {
+    it("全 4 既存問題が en の翻訳を持つべき (#1108 で ja+en のみサポート)", () => {
       for (const id of [
         "hello-world",
         "hello-world-battle",
@@ -144,8 +138,6 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       ]) {
         const m = findProblemMetadata(id);
         expect(m?.i18n?.en?.name).toBeTruthy();
-        expect(m?.i18n?.es?.name).toBeTruthy();
-        expect(m?.i18n?.zh?.name).toBeTruthy();
         expect(m?.i18n?.en?.learningGoals?.length ?? 0).toBeGreaterThan(0);
       }
     });
@@ -154,12 +146,6 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       const m = requireProblemMetadata("security-battle-royale");
       const r = resolveLocalizedNarrative(m, "en");
       expect(r.shortDescription).toMatch(/Attack\/defend/);
-    });
-
-    it("locale='es' で security-battle-royale もスペイン語翻訳を返すべき", () => {
-      const m = requireProblemMetadata("security-battle-royale");
-      const r = resolveLocalizedNarrative(m, "es");
-      expect(r.shortDescription).toMatch(/Ataca\/defiende/);
     });
   });
 });
