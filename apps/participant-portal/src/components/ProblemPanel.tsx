@@ -152,10 +152,17 @@ export function ProblemPanel({
             <KeyValuePairs
               items={Object.entries(problem.stackOutputs).map(([label, value]) => ({
                 label,
-                value: (
+                // #1094: URL (= http(s)://) のときだけ click 可能リンクにする。 ARN / SSM
+                //   parameter name / NamePrefix 等の非 URL output を a href で wrap すると
+                //   broken link になるので plain code 表示に倒す。 「ParameterConsoleUrl」
+                //   のような deep link を問題 author が emit すれば click で AWS Console
+                //   直接遷移 (ssm:DescribeParameters 不要、 ADR-021 と整合)。
+                value: /^https?:\/\//i.test(value) ? (
                   <a href={value} target="_blank" rel="noreferrer noopener">
                     <code>{value}</code>
                   </a>
+                ) : (
+                  <code>{value}</code>
                 ),
               }))}
             />
