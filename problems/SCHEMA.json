@@ -144,29 +144,9 @@
     "i18n": {
       "type": "object",
       "additionalProperties": false,
-      "description": "[Issue #583 Phase 5] 競技者向け field の英語 / スペイン語 / 中国語訳。 default 言語 (= 日本語) の文字列は top-level の `name` / `shortDescription` / `description` / `learningGoals` 等にそのまま入れる。 本 field に locale 別の override を入れると portal の locale switcher で動的切替される (= locale fallback chain: 指定言語 → ja → top-level)。 ja 自体は本 field に **含めない** (= top-level が正本、 重複を防ぐ)。",
+      "description": "[Issue #583 Phase 5 / #1108] 競技者向け field の英語訳。 default 言語 (= 日本語) の文字列は top-level の `name` / `shortDescription` / `description` / `learningGoals` 等にそのまま入れる。 本 field に locale 別の override を入れると portal の locale switcher で動的切替される (= locale fallback chain: en → ja → top-level)。 ja 自体は本 field に **含めない** (= top-level が正本、 重複を防ぐ)。 サポート対象 locale は ja + en のみ (= #1108 で es / zh は廃止)。",
       "properties": {
         "en": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": { "type": "string" },
-            "shortDescription": { "type": "string" },
-            "description": { "type": "string" },
-            "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } }
-          }
-        },
-        "es": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": { "type": "string" },
-            "shortDescription": { "type": "string" },
-            "description": { "type": "string" },
-            "learningGoals": { "type": "array", "items": { "type": "string", "minLength": 1 } }
-          }
-        },
-        "zh": {
           "type": "object",
           "additionalProperties": false,
           "properties": {

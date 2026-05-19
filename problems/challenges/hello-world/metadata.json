@@ -10,7 +10,12 @@
   "shortDescription": "新人 SRE のあなた、 まずは加藤さんが残した SSM Parameter の挨拶を読んで Portal に貼り付けて。 100 点。",
   "description": "天下クラウド株式会社へようこそ。 あなたは今日が入社初日。 前任 SRE の加藤さんが先週 突然 退職し、 production には謎の SSM Parameter が 1 つ残されている。\n\n佐々木 CTO 曰く、 「動作確認のために残したと思う、 たぶん」。 詳細は不明。 Slack の DM 履歴を遡っても何も出てこない。 Notion の引継ぎ書には 「SSM の hello 見といて」 とだけ書いてある。\n\nあなたのミッション: AWS Console または CLI で SSM Parameter Store にアクセスし、 `/{NamePrefix}/hello` の値を読んで Participant Portal の入力欄に貼り付ける。 一致すれば +100 pt。\n\n背景: この問題は scoring engine + deploy chain の sanity-check 用 (= 加藤さんが本当にそう言ったかは別として、 そういう設計になっている)。 SSM Standard tier の Parameter 1 つだけなので AWS コストはゼロ。\n\n世界観: [`docs/lore/world.html`](../../../docs/lore/world.html) — TenkaCloud / 加藤さん / 佐々木 CTO の物語設定。",
   "tags": ["sample", "challenge", "flag", "ssm"],
-  "exposedPorts": [{ "port": 1, "name": "(no public endpoint — SSM Parameter only, port unused)" }],
+  "exposedPorts": [
+    {
+      "port": 1,
+      "name": "(no public endpoint — SSM Parameter only, port unused)"
+    }
+  ],
   "learningGoals": [
     "AWS Console / CLI で SSM Parameter Store の値を読み出す経路を体験する",
     "TenkaCloud の deploy → flag 提出 → 加点 経路が end-to-end で動くことを確認する"
@@ -25,24 +30,6 @@
       "learningGoals": [
         "Experience reading a value from SSM Parameter Store via AWS Console / CLI",
         "Verify that TenkaCloud's deploy → flag-submission → score pipeline works end-to-end"
-      ]
-    },
-    "es": {
-      "name": "Hello World (Muestra)",
-      "shortDescription": "Muestra mínima de Challenge con envío de flag. Lee un valor del SSM Parameter Store y envíalo para obtener 100 puntos.",
-      "description": "Muestra mínima del formato Challenge con envío de flag.\n\nAl desplegar se crea un único SSM Parameter `/{NamePrefix}/hello` en la cuenta AWS del competidor. El valor sigue el formato `Hello from {NamePrefix}`. Los competidores leen el parámetro desde AWS Console / CLI, pegan el valor en el campo de envío del Participant Portal y ganan +100 puntos si coincide.\n\nCoste cero (SSM Standard tier, sin EC2 / VPC / endpoint público). Útil para verificar el flujo de autoría de problemas + motor de puntuación.",
-      "learningGoals": [
-        "Experimentar la lectura de un valor desde SSM Parameter Store vía AWS Console / CLI",
-        "Verificar que la cadena de despliegue → envío de flag → puntuación de TenkaCloud funciona end-to-end"
-      ]
-    },
-    "zh": {
-      "name": "Hello World (示例)",
-      "shortDescription": "Challenge / flag 提交格式的最小示例。读取 SSM Parameter Store 中写入的值并提交即可获得 100 分。",
-      "description": "Challenge / flag 提交格式的最小示例。\n\n部署后会在参赛者的 AWS 账户中创建一个 SSM Parameter `/{NamePrefix}/hello`。其值的格式为 `Hello from {NamePrefix}`。参赛者通过 AWS Console / CLI 读取该参数,将值粘贴到 Participant Portal 的输入框中提交,若匹配则获得 +100 分。\n\n成本为零 (SSM 标准层,无 EC2 / VPC / 公开端点)。用于验证问题创作 + 评分引擎的可用性。",
-      "learningGoals": [
-        "体验通过 AWS Console / CLI 从 SSM Parameter Store 读取值的路径",
-        "验证 TenkaCloud 的 deploy → flag 提交 → 加分 路径 end-to-end 工作正常"
       ]
     }
   },

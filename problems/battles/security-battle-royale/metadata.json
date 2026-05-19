@@ -11,8 +11,14 @@
   "description": "ECサイト風の Web アプリ「Unicorn.Rentals」を題材に、SQL injection / リモートコード実行 / SSRF / IMDS 露出を含む複数の脆弱性が仕込まれた状態でデプロイされる。\n\n競技参加者は次のいずれかのロールでプレイする。\n  - **攻撃側**: 他チームの公開エンドポイントを巡回し、得点リソースを奪取する。\n  - **防御側**: 自チームのアプリを継続稼働させたまま、脆弱性を順次塞いでいく。\n\nデプロイ単位は EC2 1 台 + Docker 構成 (mysql / Flask api / nginx frontend)。デプロイ完了後、参加者には Frontend URL と API URL が払い出される。",
   "tags": ["security", "web", "sql-injection", "rce", "ssrf"],
   "exposedPorts": [
-    { "port": 80, "name": "frontend (nginx)" },
-    { "port": 8080, "name": "api (Flask)" }
+    {
+      "port": 80,
+      "name": "frontend (nginx)"
+    },
+    {
+      "port": 8080,
+      "name": "api (Flask)"
+    }
   ],
   "learningGoals": [
     "意図的な SQL injection / RCE / SSRF を発見・修正する一連の手順を体験する",
@@ -33,39 +39,25 @@
         "Understand the EC2 IMDS / IAM Role exposure path and best practices to close it",
         "Experience the attacker / defender tradeoff (keep availability while hardening)"
       ]
-    },
-    "es": {
-      "name": "Security Battle Royale",
-      "shortDescription": "Ataca/defiende una app web deliberadamente vulnerable en la cuenta del competidor. Gana el último equipo en pie.",
-      "description": "Una web app estilo e-commerce, 'Unicorn.Rentals', se despliega con vulnerabilidades intencionales: SQL injection, RCE, SSRF y exposición de IMDS.\n\nLos competidores juegan uno de estos roles:\n  - **Atacantes**: Recorren los endpoints públicos de otros equipos para capturar recursos de puntuación.\n  - **Defensores**: Mantienen su propia app funcionando mientras parchean progresivamente las vulnerabilidades.\n\nUnidad de despliegue: 1 EC2 + Docker (mysql / Flask api / nginx frontend). Tras el despliegue, los participantes reciben Frontend URL y API URL.",
-      "learningGoals": [
-        "Recorrer el flujo de descubrir y parchear SQL injection / RCE / SSRF intencionales",
-        "Entender la ruta de exposición de EC2 IMDS / IAM Role y las mejores prácticas para cerrarla",
-        "Experimentar el tradeoff atacante / defensor (mantener disponibilidad mientras se endurece)"
-      ]
-    },
-    "zh": {
-      "name": "Security Battle Royale (安全大逃杀)",
-      "shortDescription": "在参赛账户上攻击 / 防御故意植入漏洞的 Web 应用,最后存活的团队获胜。",
-      "description": "一个电商风格的 Web 应用 'Unicorn.Rentals' 部署时故意植入 SQL 注入、远程代码执行、SSRF、IMDS 暴露等多个漏洞。\n\n参赛者扮演以下角色之一:\n  - **攻击方**: 巡视其他团队的公开 endpoint,夺取得分资源。\n  - **防御方**: 在保持自己应用持续运行的同时,逐步堵住漏洞。\n\n部署单元: EC2 1 台 + Docker (mysql / Flask api / nginx frontend)。部署完成后,参与者会获得 Frontend URL 和 API URL。",
-      "learningGoals": [
-        "体验发现并修复故意植入的 SQL 注入 / RCE / SSRF 的完整流程",
-        "理解 EC2 IMDS / IAM Role 的暴露路径,以及关闭它的最佳实践",
-        "体验竞赛中同居的攻击者与防御者的权衡 (保持可用性的同时进行加固)"
-      ]
     }
   },
   "endpoints": [
     {
       "slot": "frontend",
-      "default": { "from": "cfn-output", "key": "FrontendUrl" },
+      "default": {
+        "from": "cfn-output",
+        "key": "FrontendUrl"
+      },
       "overridable": true,
       "label": "Frontend (nginx)",
       "description": "競技者が公開する商品ページ。 防御側は WAF / CDN を被せて override 可能。"
     },
     {
       "slot": "api",
-      "default": { "from": "cfn-output", "key": "ApiUrl" },
+      "default": {
+        "from": "cfn-output",
+        "key": "ApiUrl"
+      },
       "overridable": true,
       "label": "API (Flask)",
       "description": "JSON API endpoint。 SQL injection 等の標的。"
@@ -74,8 +66,16 @@
   "scoring": {
     "kind": "uptime-multi",
     "probedSlots": [
-      { "slot": "frontend", "path": "/", "expectStatus": [200] },
-      { "slot": "api", "path": "/healthz", "expectStatus": [200] }
+      {
+        "slot": "frontend",
+        "path": "/",
+        "expectStatus": [200]
+      },
+      {
+        "slot": "api",
+        "path": "/healthz",
+        "expectStatus": [200]
+      }
     ],
     "pointsAllOk": 100,
     "failurePenalty": 0

@@ -10,7 +10,12 @@
   "shortDescription": "EC2 1 台に同居する 3 サービス (users / orders / catalog) を Lambda + API Gateway / ECS Fargate / App Runner の 3 種ホスティングに分割するレース。",
   "description": "EC2 1 台に同居する 3 サービス (users / orders / catalog) のモノリスを、競技時間内に Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner の 3 種類の異なるホスティングへマイクロサービスとして分割していく Battle。\n\nDeploy 完了後、各チームには EC2 上で動くモノリスのベース URL が払い出される。3 つのスコア対象エンドポイント (`/users/score` / `/orders/score` / `/catalog/score`) を運営側スコアエンジンが 1 分毎に polling し、レスポンスに応じてポイントを加減算する。\n\n## 学習目的\n\n- モノリスからマイクロサービスへの段階的移行 (strangler fig パターン) を実体験する\n- Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate) の 3 段階を比較する\n- どのサービスから分離すべきかをスコア最大化の観点で判断する\n- コード内に意図的に仕込まれた「遅延コードパス」を読み解いて取り除く\n\n## アーキテクチャ (Phase 1 = この PR の deploy 範囲)\n\n```\n┌─────────────── EC2 (t3.small) ───────────────┐\n│  nginx :80  →  /users/* → users:3001           │\n│              →  /orders/* → orders:3002        │\n│              →  /catalog/* → catalog:3003      │\n│         docker compose で 3 サービス + nginx │\n└──────────────────────────────────────────────┘\n         ↑ Score Engine が 1 分毎 polling\n```\n\n各サービスは Node.js 20 + Hono の最小 HTTP サーバーで、`GET /meta` (= platform 自己申告) と `GET /score` を公開する。Dockerfile は Lambda / App Runner / ECS Fargate のいずれにもそのまま乗せ替え可能。\n\n## 採点ルール (Phase 2 で score engine を実装)\n\n| 状態                                       | 1 check あたり |\n| ------------------------------------------ | -------------- |\n| 未登録 / 200 以外 / timeout                | -100           |\n| EC2 上のレスポンス (劣化前)                | +100           |\n| EC2 上のレスポンス (劣化後 = 開始 60 分後) | +10            |\n| Lambda + API GW にホスティング済           | +1,000         |\n| ECS Fargate にホスティング済               | +1,000         |\n| App Runner にホスティング済                | +1,000         |\n| 3 サービス全て分離完了                     | +5,000 (1 回)  |\n\n## フェーズタイムライン\n\n- 0 分: deploy 完了 → 競技開始\n- 60 分: EC2 劣化 (`tc qdisc` 注入予定 / Phase 2)\n- 90 分: スコアエンジンが `/score` → `/score?legacy=true` へ切替 → 各サービスコードに仕込まれた遅延コードパスを取り除いて再デプロイする必要あり\n\n## 制約 / 既知の制限\n\n- 遅延コードパス (`?legacy=true` で 2 秒 sleep) は本リポジトリ内で公開されているため、ADR-008 (= 問題実装の private repo 化) が ship するまで仕掛けは事前に読まれる可能性がある。Phase 2 ship までに ADR-008 を解決する。\n- Phase 1 では score engine / endpoint 登録 UI / EC2 劣化 cron / フェーズ進行 logic は未実装 (= Phase 2 / Phase 3 で追加)。",
   "tags": ["microservices", "migration", "lambda", "ecs", "apprunner", "ec2", "docker"],
-  "exposedPorts": [{ "port": 80, "name": "nginx reverse proxy (users / orders / catalog)" }],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "nginx reverse proxy (users / orders / catalog)"
+    }
+  ],
   "learningGoals": [
     "モノリスから 3 ホスティング (Lambda / ECS Fargate / App Runner) へのマイクロサービス分割を体験する",
     "サーバレス / マネージドコンテナ / オーケストレーションのトレードオフを実機で比較する",
@@ -30,48 +35,38 @@
         "Judge migration priority under EC2 degradation and legacy-codepath constraints",
         "Find and remove the intentionally-planted slow code paths"
       ]
-    },
-    "es": {
-      "name": "Microservice Migration Battle",
-      "shortDescription": "Carrera para dividir un monolito de 3 servicios (users / orders / catalog) en EC2 a hospedajes Lambda + API Gateway / ECS Fargate / App Runner.",
-      "description": "Battle donde los equipos dividen un monolito de 3 servicios (users / orders / catalog) en un solo EC2 a 3 plataformas de hospedaje diferentes — Lambda + API Gateway, Amazon ECS (Fargate), y AWS App Runner — dentro del tiempo de competición.\n\nTras el despliegue, cada equipo recibe la URL base del monolito en EC2. El motor de puntuación del operador hace polling de los 3 endpoints de puntuación (`/users/score` / `/orders/score` / `/catalog/score`) cada minuto y suma / resta puntos según las respuestas.\n\n## Objetivos de aprendizaje\n\n- Experimentar la migración progresiva monolito → microservicios (patrón strangler fig)\n- Comparar Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate)\n- Decidir qué servicio dividir primero para maximizar puntuación\n- Encontrar y eliminar el slow code path intencionalmente plantado",
-      "learningGoals": [
-        "Experimentar la división de un monolito en 3 hospedajes (Lambda / ECS Fargate / App Runner)",
-        "Comparar tradeoffs de serverless / contenedores gestionados / orquestación en infraestructura real",
-        "Juzgar la prioridad de migración bajo restricciones de degradación de EC2 y legacy-codepath",
-        "Encontrar y eliminar slow code paths plantados intencionalmente"
-      ]
-    },
-    "zh": {
-      "name": "Microservice Migration Battle (微服务迁移大战)",
-      "shortDescription": "在 EC2 上共存的 3 个服务 (users / orders / catalog) 拆分到 Lambda + API Gateway / ECS Fargate / App Runner 的 3 种托管的竞赛。",
-      "description": "在竞赛时间内,将 EC2 上共存的 3 个服务 (users / orders / catalog) 单体拆分到 Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner 三种不同托管的 Battle 题目。\n\n部署完成后,每个团队会获得 EC2 上运行的单体的基础 URL。运营方评分引擎每分钟 polling 3 个评分端点 (`/users/score` / `/orders/score` / `/catalog/score`),根据响应加减分。\n\n## 学习目标\n\n- 实践单体到微服务的逐步迁移 (strangler fig 模式)\n- 对比 Lambda function / managed container (App Runner) / orchestrated container (ECS Fargate)\n- 从评分最大化的角度判断应优先拆分哪个服务\n- 解读并移除代码中故意植入的「慢速代码路径」",
-      "learningGoals": [
-        "体验单体到 3 种托管 (Lambda / ECS Fargate / App Runner) 的微服务拆分",
-        "在真实基础设施上比较 serverless / 托管容器 / orchestration 的权衡",
-        "在 EC2 劣化和 legacy code path 约束下判断迁移优先级",
-        "解读并移除故意植入的慢速代码路径"
-      ]
     }
   },
   "endpoints": [
     {
       "slot": "users",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/users" },
+      "default": {
+        "from": "cfn-output",
+        "key": "BaseUrl",
+        "appendPath": "/users"
+      },
       "overridable": true,
       "label": "Users service",
       "description": "初期は EC2 上の nginx reverse proxy 経由。 Lambda / ECS / App Runner に切り出したら override で登録する。"
     },
     {
       "slot": "orders",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/orders" },
+      "default": {
+        "from": "cfn-output",
+        "key": "BaseUrl",
+        "appendPath": "/orders"
+      },
       "overridable": true,
       "label": "Orders service",
       "description": "初期は EC2 上の nginx reverse proxy 経由。 移行先の新 endpoint を override で登録。"
     },
     {
       "slot": "catalog",
-      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/catalog" },
+      "default": {
+        "from": "cfn-output",
+        "key": "BaseUrl",
+        "appendPath": "/catalog"
+      },
       "overridable": true,
       "label": "Catalog service",
       "description": "初期は EC2 上の nginx reverse proxy 経由。 移行先の新 endpoint を override で登録。"
@@ -80,15 +75,32 @@
   "scoring": {
     "kind": "phased-polling",
     "intervalMinutes": 1,
-    "probe": { "metaPath": "/meta", "scorePath": "/score" },
+    "probe": {
+      "metaPath": "/meta",
+      "scorePath": "/score"
+    },
     "platformRules": {
-      "ec2": { "points": 100, "degradedPoints": 10 },
-      "lambda": { "points": 1000 },
-      "ecs": { "points": 1000 },
-      "apprunner": { "points": 1000 }
+      "ec2": {
+        "points": 100,
+        "degradedPoints": 10
+      },
+      "lambda": {
+        "points": 1000
+      },
+      "ecs": {
+        "points": 1000
+      },
+      "apprunner": {
+        "points": 1000
+      }
     },
     "failurePenalty": -100,
-    "responsePenalties": [{ "if": "responseTimeMs > 1500", "points": -10 }],
+    "responsePenalties": [
+      {
+        "if": "responseTimeMs > 1500",
+        "points": -10
+      }
+    ],
     "bonuses": [
       {
         "kind": "all-slots-on-platforms",
@@ -102,13 +114,17 @@
     {
       "name": "degraded",
       "afterMinutes": 60,
-      "effect": { "switchPlatformToDegraded": ["ec2"] },
+      "effect": {
+        "switchPlatformToDegraded": ["ec2"]
+      },
       "description": "EC2 上の劣化フェーズ。 EC2 hosting platform の加点が degradedPoints (= 10) に切り替わる。"
     },
     {
       "name": "legacy",
       "afterMinutes": 90,
-      "effect": { "scorePathOverride": "/score?legacy=true" },
+      "effect": {
+        "scorePathOverride": "/score?legacy=true"
+      },
       "description": "Legacy code path フェーズ。 各サービスに仕込まれた遅延 code path を取り除く必要が出る。"
     }
   ],
@@ -119,7 +135,10 @@
       "eventDetailType": "DegradedDisruptionFired",
       "defaultAfterMinutes": 60,
       "operatorEditable": ["afterMinutes"],
-      "parameters": { "delayMs": 200, "device": "eth0" },
+      "parameters": {
+        "delayMs": 200,
+        "device": "eth0"
+      },
       "description": "deploy 後 60 分 (default) の self-triggered Scheduler が EC2 の eth0 に `tc qdisc add ... netem delay 200ms` を注入する。 phases[0]=degraded と同時刻で発火し、 score engine 側の degradedPoints 切替と組み合わさって accumulated latency による減点が始まる。 operator は deploy 時に afterMinutes を上書き可能 (CFn parameter `DegradedAfterMinutes`)。"
     }
   ],

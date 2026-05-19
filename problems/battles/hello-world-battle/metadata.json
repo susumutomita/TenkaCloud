@@ -11,8 +11,14 @@
   "description": "Battle uptime scoring の動作確認用 sample。\n\nDeploy すると競技者の AWS アカウントに次が作られる:\n  - 専用 VPC (10.99.0.0/16) + 公開 subnet + IGW\n  - EC2 t3.micro (Amazon Linux 2023, Public IP)\n    - nginx (port 80) で frontend ページを serve\n    - python3 http.server (port 8080) で `/healthz` API を serve\n\nHealth Check Lambda が 1 分ごとに FrontendUrl + ApiUrl を probe し、両方が 200 を返せば +100 pt 加算。どちらかが落ちている / 改ざんされていれば lastResult=fail として加算停止。\n\n## 攻撃 / 防御 (Battle 形式の体験)\n\n- **攻撃側** が同じ EC2 / Security Group を弄って frontend や API を停止すると、防御側のスコアが止まる\n- **防御側** は SSM Session Manager で SSH 不要で接続し、サービスを復旧する\n- いずれの操作も 1 EC2 内で完結するので、cross-tenant 影響なし (= 自テナント内の競技として安全)\n\n## コスト\n\n- EC2 t3.micro: AWS Free Tier 750 hr/月 (12 ヶ月) 内\n- VPC / IGW / SG: 無料\n- 競技 1 回 (~30 分) のコストは Free Tier 範囲ならゼロ",
   "tags": ["sample", "battle", "uptime", "ec2", "nginx"],
   "exposedPorts": [
-    { "port": 80, "name": "frontend (nginx)" },
-    { "port": 8080, "name": "api (python http.server)" }
+    {
+      "port": 80,
+      "name": "frontend (nginx)"
+    },
+    {
+      "port": 8080,
+      "name": "api (python http.server)"
+    }
   ],
   "learningGoals": [
     "TenkaCloud の Battle uptime scoring engine が実 endpoint で動くことを確認する",
@@ -31,39 +37,25 @@
         "Experience a minimal web stack (EC2 + nginx + Python) receiving health-check probes",
         "Practice connecting via SSM Session Manager without SSH to start/stop the service"
       ]
-    },
-    "es": {
-      "name": "Hello World Battle (Muestra)",
-      "shortDescription": "Muestra mínima de Battle con scoring de uptime. Ejecuta nginx (frontend) + Python (API) en EC2 y, mientras ambos devuelven 200, suma +100 cada minuto.",
-      "description": "Muestra mínima para verificar el scoring de uptime en formato Battle.\n\nAl desplegar se crea en la cuenta AWS del competidor:\n  - VPC dedicada (10.99.0.0/16) + subnet pública + IGW\n  - EC2 t3.micro (Amazon Linux 2023, IP pública)\n    - nginx (puerto 80) sirviendo la página frontend\n    - python3 http.server (puerto 8080) sirviendo la API `/healthz`\n\nHealth Check Lambda hace probes a FrontendUrl + ApiUrl cada minuto y otorga +100 pt cuando ambos devuelven 200. Si alguno falla o es manipulado, lastResult=fail y la puntuación se detiene.\n\n## Ataque / defensa (experiencia Battle)\n\n- **Atacantes** pueden manipular el EC2 / Security Group compartido para tumbar frontend o API, congelando la puntuación del defensor.\n- **Defensores** se conectan vía SSM Session Manager (sin SSH) para restaurar el servicio.\n- Todas las operaciones quedan dentro de una EC2, sin impacto cross-tenant (= seguro dentro del scoring self-tenant).\n\n## Coste\n\n- EC2 t3.micro: dentro del AWS Free Tier 750 hr/mes (12 meses)\n- VPC / IGW / SG: gratis\n- Coste por sesión de 30 min: cero dentro del Free Tier",
-      "learningGoals": [
-        "Verificar que el motor de scoring de uptime Battle de TenkaCloud funciona contra endpoints reales",
-        "Experimentar un stack web mínimo (EC2 + nginx + Python) recibiendo probes de health-check",
-        "Practicar la conexión vía SSM Session Manager sin SSH para iniciar/detener el servicio"
-      ]
-    },
-    "zh": {
-      "name": "Hello World Battle (示例)",
-      "shortDescription": "Battle uptime 评分的最小示例。在 EC2 上启动 nginx (frontend) + Python (API),只要两者都返回 200,每分钟 +100 分。",
-      "description": "Battle uptime 评分的最小示例。\n\n部署后在参赛者的 AWS 账户中创建:\n  - 专用 VPC (10.99.0.0/16) + 公共子网 + IGW\n  - EC2 t3.micro (Amazon Linux 2023, 公网 IP)\n    - nginx (端口 80) 提供 frontend 页面\n    - python3 http.server (端口 8080) 提供 `/healthz` API\n\nHealth Check Lambda 每分钟 probe FrontendUrl + ApiUrl,两者都返回 200 时加 +100 分。任何一方宕机或被篡改,lastResult=fail 且评分停止。\n\n## 攻击 / 防御 (Battle 体验)\n\n- **攻击方** 可篡改共享 EC2 / Security Group,使 frontend 或 API 宕机,冻结防御方评分。\n- **防御方** 通过 SSM Session Manager (无需 SSH) 连接以恢复服务。\n- 所有操作在 1 EC2 内完成,无 cross-tenant 影响 (= 在自租户内安全评分)。\n\n## 成本\n\n- EC2 t3.micro: 在 AWS Free Tier 750 小时/月 (12 个月) 范围内\n- VPC / IGW / SG: 免费\n- 单次 30 分钟会话成本: 在 Free Tier 范围内为零",
-      "learningGoals": [
-        "验证 TenkaCloud 的 Battle uptime 评分引擎能针对真实 endpoint 工作",
-        "体验最小 web 栈 (EC2 + nginx + Python) 接收健康检查 probe 的流程",
-        "练习通过 SSM Session Manager 无需 SSH 连接以启动 / 停止服务"
-      ]
     }
   },
   "endpoints": [
     {
       "slot": "frontend",
-      "default": { "from": "cfn-output", "key": "FrontendUrl" },
+      "default": {
+        "from": "cfn-output",
+        "key": "FrontendUrl"
+      },
       "overridable": false,
       "label": "Frontend (nginx)",
       "description": "EC2 上の nginx (port 80)。 防御側が落とすとスコア停止。"
     },
     {
       "slot": "api",
-      "default": { "from": "cfn-output", "key": "ApiUrl" },
+      "default": {
+        "from": "cfn-output",
+        "key": "ApiUrl"
+      },
       "overridable": false,
       "label": "API (python http.server)",
       "description": "EC2 上の python http.server (port 8080)。 `/healthz` で 200 を返す。"
@@ -72,8 +64,16 @@
   "scoring": {
     "kind": "uptime",
     "endpoints": [
-      { "outputKey": "FrontendUrl", "path": "/", "expectStatus": [200] },
-      { "outputKey": "ApiUrl", "path": "/healthz", "expectStatus": [200] }
+      {
+        "outputKey": "FrontendUrl",
+        "path": "/",
+        "expectStatus": [200]
+      },
+      {
+        "outputKey": "ApiUrl",
+        "path": "/healthz",
+        "expectStatus": [200]
+      }
     ],
     "pointsPerSuccess": 100
   }

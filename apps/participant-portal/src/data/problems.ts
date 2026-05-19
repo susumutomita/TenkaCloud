@@ -138,17 +138,15 @@ interface ProblemMetadata {
   dashboard?: {
     slots?: Record<string, string>;
   };
-  /** ADR Issue #583 Phase 5: 競技者向け field の locale override。 ja 自体は top-level が正本。 */
+  /** ADR Issue #583 Phase 5 / #1108: 競技者向け field の locale override。 ja 自体は top-level が正本。 サポート対象は en のみ。 */
   i18n?: {
     en?: ProblemI18nOverride;
-    es?: ProblemI18nOverride;
-    zh?: ProblemI18nOverride;
   };
 }
 
 /**
  * Issue #583 Phase 5: 1 locale 分の override。 各 field 省略時は ja (= top-level の値) に fallback。
- * portal の locale switcher (= "ja" / "en" / "es" / "zh") と対応。
+ * portal の locale switcher (= "ja" / "en") と対応。
  */
 export interface ProblemI18nOverride {
   readonly name?: string;
@@ -246,16 +244,17 @@ export function findProblemMetadata(problemId: string): ProblemCatalogEntry | un
 }
 
 /**
- * Issue #583 Phase 5: locale を適用した narrative view を返す。 fallback chain:
- *   1. 指定 locale (= en/es/zh) の override
+ * Issue #583 Phase 5 / #1108: locale を適用した narrative view を返す。 fallback chain:
+ *   1. 指定 locale (= en) の override
  *   2. top-level (= ja の正本)
  *
  * locale="ja" / metadata.i18n 不在 / 該当 field 不在は静かに ja を返す。 caller (= ProblemDetail
  * の useI18n から locale を取って呼ぶ) は常に non-undefined string を受け取る。
+ * 注: SUPPORTED_LOCALES は ja+en のみ (#1108 で es / zh は廃止)。
  */
 export function resolveLocalizedNarrative(
   entry: ProblemCatalogEntry,
-  locale: "ja" | "en" | "es" | "zh",
+  locale: "ja" | "en",
 ): {
   readonly name: string;
   readonly shortDescription: string;
