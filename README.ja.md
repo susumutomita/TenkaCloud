@@ -12,11 +12,6 @@ Battle (リアルタイム対戦) と Challenge (個別演習) の問題を、 �
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
 [![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
-![GitHub last commit (by committer)](https://img.shields.io/github/last-commit/susumutomita/TenkaCloud)
-![GitHub top language](https://img.shields.io/github/languages/top/susumutomita/TenkaCloud)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/susumutomita/TenkaCloud)
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/susumutomita/TenkaCloud)
-![GitHub repo size](https://img.shields.io/github/repo-size/susumutomita/TenkaCloud)
 
 🌐 [English](./README.md) · [日本語](./README.ja.md)
 
@@ -26,17 +21,17 @@ Battle (リアルタイム対戦) と Challenge (個別演習) の問題を、 �
 
 ## なぜ TenkaCloud か
 
-クラウドコンペティションには通常 3 つの要素が必要だが、 既存ツールはそのどれかが欠けている: マルチテナント SaaS の Control Plane、 競技者の AWS アカウントに deploy する pipeline、 各チームが自分のスコアを見る portal。 TenkaCloud は 3 つすべてを 1 つの CDK app にまとめた。
+クラウドコンペティションには通常 3 つの要素が必要だが、 既存ツールはそのどれかが欠けている。 マルチテナント SaaS の Control Plane、 競技者の AWS アカウントに deploy する pipeline、 各チームが自分のスコアを見る portal。 TenkaCloud は 3 つすべてを 1 つの CDK app にまとめた。
 
-- **🏗 実 AWS deploy** — 問題は CloudFormation template で、 AssumeRole + ExternalId 経由で競技者のアカウントに deploy される。 sandbox エミュレーションではない
-- **🔐 マルチテナント設計** — SBT (Serverless SaaS Builder Toolkit) を Control Plane に採用。 per-tenant Cognito / DynamoDB / API Gateway を持つ Application Plane。 pooled (BASIC / STANDARD / PREMIUM) と silo (PLATINUM) tier を標準サポート
-- **💸 Free Tier 親和性** — 全 DynamoDB テーブルは CDK Aspect で PROVISIONED 1 RCU / 1 WCU に強制。 平常運用なら AWS Free Tier 内に収まる
+- **実 AWS deploy** — 問題は CloudFormation template として、 AssumeRole + ExternalId 経由で競技者のアカウントに deploy される。 sandbox エミュレーションではない
+- **マルチテナント設計** — SBT (Serverless SaaS Builder Toolkit) を Control Plane に採用。 per-tenant Cognito / DynamoDB / API Gateway を持つ Application Plane。 pooled と silo の tier を標準サポート
+- **Free Tier 親和性** — 全 DynamoDB テーブルは CDK Aspect で PROVISIONED 1 RCU / 1 WCU に強制。 平常運用なら AWS Free Tier 内に収まる
 
 ## クイックスタート
 
-### デフォルト: Lite mode (5 分、 1 tenant) — `make deploy`
+### デフォルト: Lite mode — `make deploy`
 
-ほとんどの運営者は 1 大会 1 主催で multi-tenant SaaS の抽象 (= ControlPlane / tenant pipeline / tenant mapping) を必要としない。 Issue #955 で `make deploy` のデフォルトを Lite に切替えたため、 SBT Control Plane なしで Application Admin Console + Participant Portal が立ち上がる。
+ほとんどの運営者は 1 大会 1 主催で multi-tenant SaaS の抽象を必要としない。 `make deploy` のデフォルトは Lite mode で、 SBT Control Plane なしに Application Admin Console + Participant Portal が立ち上がる。
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -44,9 +39,9 @@ cd TenkaCloud
 make install
 cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
-# AWS_ACCOUNT_ID (+ ap-northeast-1 以外を使うなら AWS_REGION) を編集
+# AWS_ACCOUNT_ID (ap-northeast-1 以外を使うなら AWS_REGION も) を編集
 
-make deploy   # = make lite-up — cdk deploy 2 stack (初回 ~10 分)
+make deploy
 ```
 
 得られるものは次の通り。
@@ -54,69 +49,43 @@ make deploy   # = make lite-up — cdk deploy 2 stack (初回 ~10 分)
 - **Application Admin Console** — Tenant Admin UI (CloudFront)
 - **Participant Portal** — 競技者 UI (CloudFront)
 - **Problem Deploy Backend** — DynamoDB + Lambda + Step Functions + CodeBuild
-- **Local EventBridge** — Control Plane 不要、 stack 内自己完結
 - **`hello-world` 問題が同梱** — 自分の AWS account に deploy 可能
 
 撤収は次のコマンドで実施する。
 
 ```bash
-make destroy   # = make lite-down
+make destroy
 ```
 
-### Opt-in: SaaS mode (マルチテナント) — `make deploy-saas`
+### Opt-in: SaaS mode — `make deploy-saas`
 
-複数 tenant / pooled tier / System Admin 招待を含む本格運用の起動コマンド。
+複数 tenant / pooled tier (BASIC / STANDARD / PREMIUM) / silo tier (PLATINUM) / System Admin 招待を含む本格運用の起動コマンド。
 
 ```bash
-make deploy-saas    # 3-phase install.sh: backend → admin console → callback CORS
-make destroy-saas   # teardown
+make deploy-saas
+make destroy-saas
 ```
 
-`scripts/install.sh` が SBT の 3-phase deploy を担当 (Control Plane → admin console hosting → callback CORS 更新)。 env file に `SYSTEM_ADMIN_EMAIL` が必須。
-
-## アーキテクチャ
-
-```
-┌────────────────────┐   ┌──────────────────────────┐   ┌────────────────────────┐
-│  Admin Console     │   │ Application Admin Console│   │  Participant Portal    │
-│  (System Admin)    │   │  (Tenant Admin)          │   │  (競技者)              │
-│  S3 + CloudFront   │   │  per-tenant CloudFront   │   │  S3 + CloudFront       │
-└─────────┬──────────┘   └─────────────┬────────────┘   └────────────┬───────────┘
-          │                            │                             │
-          ▼                            ▼                             ▼
-┌────────────────────┐   ┌──────────────────────────┐   ┌────────────────────────┐
-│ ControlPlaneStack  │   │ TenantTemplateStack      │   │ ProblemDeployBackend   │
-│  (SBT)             │   │  per-tenant runtime      │   │  Step Functions +      │
-│  Cognito + EvBridge│──▶│  Cognito + DDB + API GW  │   │  CodeBuild + Lambda    │
-└─────────┬──────────┘   └──────────────────────────┘   └────────────┬───────────┘
-          │                                                          │
-          │  onboardingRequest             DeployRequested            │
-          ▼                                                          ▼
-┌────────────────────┐                                  ┌────────────────────────┐
-│ ServerlessSaaS     │                                  │ 競技者 AWS Account     │
-│   Pipeline         │                                  │  (AssumeRole + ExtId)  │
-│  (CodePipeline)    │                                  └────────────────────────┘
-└────────────────────┘
-```
+SaaS mode は env file に `SYSTEM_ADMIN_EMAIL` が必須。 orchestration は [`scripts/install.sh`](./scripts/install.sh) を参照する。
 
 ## 機能
 
 | | |
 |---|---|
-| 🎮 **Battle 問題** | リアルタイム対戦型 (security battle royale、 microservice migration battle 等) |
-| 🧩 **Challenge 問題** | 個別演習・常設チャレンジ (hello-world、 AWS サービス深堀り) |
-| 🔌 **Plugin アーキテクチャ** | 1 問題 = `metadata.json` + `template.yaml` (+ 任意の `portal/*.tsx`)。 platform に手を入れずに問題を追加可能 |
-| 📊 **5 種類の scoring kind** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` を 1 問題ごとに宣言 |
-| 🌐 **i18n** | デフォルト ja + en の 2 言語。 問題 metadata は locale 別に narrative を上書き可能 (#1078 で zh / es を廃止) |
-| 🛡 **セキュリティ** | AssumeRole に必須 ExternalId、 secrets は SSM SecureString、 全 API に Cognito JWT、 per-team rate limiting |
+| **Battle 問題** | リアルタイム対戦型 |
+| **Challenge 問題** | 個別演習・常設チャレンジ |
+| **Plugin アーキテクチャ** | 1 問題 = `metadata.json` + `template.yaml` (+ 任意の `portal/*.tsx`)。 platform に手を入れずに問題を追加可能 |
+| **5 種類の scoring kind** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` を 1 問題ごとに宣言 |
+| **i18n** | 日本語 + 英語の 2 言語。 問題 metadata は locale 別に narrative を上書き可能 |
+| **セキュリティ** | AssumeRole に必須 ExternalId、 secrets は SSM SecureString、 Cognito JWT + MFA、 per-team rate limiting |
 <!-- textlint-disable spellcheck-tech-word -->
-| 📡 **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol でクラウド横断の権限委譲 (AWS + GCP + Azure adapter、 [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) を参照) |
+| **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol でクラウド横断の権限委譲 (AWS + GCP + Azure adapter) |
 <!-- textlint-enable spellcheck-tech-word -->
-| 🔭 **Observability** | CloudWatch Dashboard で deploy chain / DDB / Lambda / API GW を 1 画面、 AWS Budgets + CloudWatch Alarms (Lambda Errors / DDB throttling / API GW 5XX) を共有 SNS topic に集約、 admin-console の Operations page から AWS Console に直リンク (#1080) |
+| **Observability** | CloudWatch Dashboard、 AWS Budgets、 CloudWatch Alarms (Lambda Errors / DDB throttling / API Gateway 5XX) を共有 SNS topic に集約。 admin console から AWS Console に直リンク |
 
 ## 問題の構成
 
-1 問題 = 3 つの artifact を含むディレクトリ ([ADR-012](./docs/architecture/adr-012-problem-plugin-architecture.html) 参照) で構成する。
+1 問題 = 3 つの artifact を含むディレクトリで構成する。
 
 ```
 problems/<category>/<id>/
@@ -132,47 +101,35 @@ bun run scripts/tenkacloud-problem.ts create <id> --kind <flag|uptime-flat|...>
 bun run scripts/tenkacloud-problem.ts validate <id>
 ```
 
-Schema reference: [`problems/SCHEMA.json`](./problems/SCHEMA.json) · 30 分 onboarding: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html)
+Schema: [`problems/SCHEMA.json`](./problems/SCHEMA.json) · onboarding guide: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html)
 
 ## 技術スタック
 
 | レイヤー | 技術 |
 |---|---|
-| フロントエンド | Vite 7、 React 19、 react-router 7、 [Cloudscape Design System](https://cloudscape.design/) |
-| バックエンド | AWS Lambda (Node.js 22 + Hono)、 API Gateway HTTP API |
-| IaC | AWS CDK 2 + [`@cdklabs/sbt-aws`](https://github.com/awslabs/sbt-aws) 0.3.9、 cdk-nag |
-| 認証 | AWS Cognito (Hosted UI + OAuth Code + PKCE) |
+| フロントエンド | Vite、 React、 react-router、 [Cloudscape Design System](https://cloudscape.design/) |
+| バックエンド | AWS Lambda (Node.js + Hono)、 API Gateway HTTP API |
+| IaC | AWS CDK 2 + [`@cdklabs/sbt-aws`](https://github.com/awslabs/sbt-aws)、 cdk-nag |
+| 認証 | AWS Cognito (Hosted UI + OAuth Code + PKCE)、 TOTP MFA |
 | データ | DynamoDB (PROVISIONED 1/1、 Free Tier 親和) |
-| イベント | EventBridge (cross-plane: tenant 作成 / DeployRequested / DeployCompleted) |
-| テスト | Vitest (1000+ tests、 日本語「〜すべき」 形式) |
-| Package 管理 | Bun 1.3.11 (workspaces: `infrastructure` + `apps/*` + `packages/*`) |
+| イベント | EventBridge を cross-plane 通信に使用 |
+| テスト | Vitest |
+| Package 管理 | Bun (workspaces: `infrastructure` + `apps/*` + `packages/*`) |
 
-## アーキテクチャ決定記録 (ADR)
+## アーキテクチャ
 
-ADR は表現力 (decision table / threat-model grid / 色分け badge) のため HTML で書いている。 詳細は [`docs/architecture/`](./docs/architecture/) を参照する。
+アーキテクチャは [`docs/architecture/`](./docs/architecture/) 配下の HTML ADR にまとまっている。 ADR は表現力 (decision table / threat-model grid / 色分け badge) のため HTML で書いている。
 
-- [ADR-012](./docs/architecture/adr-012-problem-plugin-architecture.html) — Problem plugin architecture
-- [ADR-013](./docs/architecture/adr-013-disruption-phase2-condition-triggered.html) — Condition-triggered disruptions
-- [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html) — EventBridge-driven state reconciliation
-- [ADR-015](./docs/architecture/adr-015-adr-convention-as-harness.html) — ADR convention を harness で機械強制
-- [ADR-016](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — TenkaCloud Lite mode + AppPlaneCore 抽出
+主な入口は次の通り。
+
+- [ADR-012 — Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
+- [ADR-016 — TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
 <!-- textlint-disable spellcheck-tech-word -->
-- [ADR-017](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html) — Cloud Action Intent / Trust Bridge (クラウド横断権限委譲)
+- [ADR-017 — Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
 <!-- textlint-enable spellcheck-tech-word -->
-- [ADR-018](./docs/architecture/adr-018-pooled-userpool-saml-isolation.html) — Pooled UserPool / SAML 分離 (#1066 で SAML 廃止により Superseded)
-- [ADR-019](./docs/architecture/adr-019-cross-account-stack-catalog.html) — Cross-account stack catalog
-- [ADR-020](./docs/architecture/adr-020-authorization-model.html) — Authorization model
-- [ADR-021](./docs/architecture/adr-021-dependency-major-bump-decisions.html) — Dependency major bump decisions
-- [ADR-022](./docs/architecture/adr-022-tenant-isolation-audit.html) — Tenant isolation audit
-- [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html) — wire format reference (RFC 7515 JWS、 13 セクション)
+- [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html)
 
-## ロードマップ
-
-- ✅ Lite mode (1 tenant、 OSS 親和) — Issue [#778](https://github.com/susumutomita/TenkaCloud/issues/778)
-- ✅ Trust Bridge library (AWS adapter + GCP / Azure prototype) — Issue [#795](https://github.com/susumutomita/TenkaCloud/issues/795)
-- 🔄 クロスクラウド問題対応 (GCP / Azure / Cloudflare ターゲット)
-- 🔄 問題マーケットプレイス (`TenkaCloudChallenges` private repo で有償 / 非公開問題)
-- 📋 トーナメントモード (multi-event スケジューリング、 リーダーボード集計)
+ADR 全索引は [`docs/architecture/`](./docs/architecture/) に置く。
 
 ## 他プラットフォームとの比較
 
@@ -181,36 +138,22 @@ ADR は表現力 (decision table / threat-model grid / 色分け badge) のた�
 | 競技者の AWS account に deploy | ✅ | ✅ | ❌ | ❌ |
 | OSS / セルフホスト可 | ✅ | ❌ | ✅ | ❌ |
 | マルチテナント SaaS 層 | ✅ | N/A | ❌ | ❌ |
-| リアルタイム PvP (Battle) | ✅ | ✅ | ❌ (CTF のみ) | 部分的 |
+| リアルタイム PvP (Battle) | ✅ | ✅ | ❌ | 部分的 |
 | Free Tier 親和 | ✅ | ❌ | ✅ | N/A |
 | Plugin 型問題 | ✅ | ❌ | ✅ | ❌ |
 | Trust Bridge (クラウド横断権限) | ✅ | ❌ | ❌ | ❌ |
 
 ## コントリビューション
 
-歓迎します。 まず [CONTRIBUTING.md](./CONTRIBUTING.md) を確認したうえで次のいずれかから始めてください。
+[CONTRIBUTING.md](./CONTRIBUTING.md) を参照。 概要は次の通り。
 
 - [`good first issue`](https://github.com/susumutomita/TenkaCloud/labels/good%20first%20issue) ラベルの issue を選ぶ
-- テストは必須 (Vitest、 日本語「〜すべき」形式 / English の場合 `should` 形式)
+- テストは必須 (Vitest)
 - PR 前に `make before-commit` を必ず実行する
-- Architecture invariant は `make harness` で機械強制 ([`docs/architecture/harness.md`](./docs/architecture/harness.md) 参照)
+- Architecture invariant は `make harness` で機械強制する ([`docs/architecture/harness.md`](./docs/architecture/harness.md) 参照)
 
 AI エージェント向けガイド: [`AGENTS.md`](./AGENTS.md) · [`CLAUDE.md`](./CLAUDE.md)
 
-## Star History
-
-TenkaCloud が役に立ったら star を付けてもらえると OSS コミュニティの関心を測る指標になり、 開発の優先度を判断するヒントになる。
-
-[![Star History Chart](https://api.star-history.com/svg?repos=susumutomita/TenkaCloud&type=Date)](https://star-history.com/#susumutomita/TenkaCloud&Date)
-
 ## ライセンス
 
-[Apache License 2.0](./LICENSE) — 商用利用 / 改変 / 配布すべて自由。 ライセンス表記のみ保持してほしい。
-
----
-
-<div align="center">
-
-Built with care by [Susumu Tomita](https://susumutomita.netlify.app/) and contributors.
-
-</div>
+[Apache License 2.0](./LICENSE) — 商用利用 / 改変 / 配布すべて自由。 ライセンス表記のみ保持する。

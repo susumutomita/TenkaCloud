@@ -6,13 +6,13 @@ TenkaCloud の SaaS mode で System Admin が Control Plane (`@cdklabs/sbt-aws` 
 
 ## 機能
 
-- サインイン (Cognito Hosted UI 経由、 MFA 必須 #1035)
+- サインイン (Cognito Hosted UI 経由、 TOTP MFA 必須)
 - テナント一覧 / 作成 / deprovision
 - プロビジョニング Jobs (CodePipeline 実行履歴)
-- 監査ログ (ADR-020)
-- 運用ダッシュボード (#1080: CloudWatch Dashboard / AWS Budgets / Alarms への deep link)
+- 監査ログ
+- 運用ダッシュボード (CloudWatch Dashboard / AWS Budgets / Alarms への deep link)
 
-i18n は ja + en の 2 言語 (#1078 で zh / es を廃止)。
+i18n は ja + en の 2 言語。
 
 ## ローカル開発
 
