@@ -81,7 +81,6 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       ...config.stackEnv,
       systemAdminEmail: config.systemAdminEmail,
       adminConsoleOrigin,
-      samlIdp: config.controlPlaneSamlConfig,
     },
   );
   controlPlaneStack.addDependency(adminConsoleHostingStack);
@@ -193,7 +192,6 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 cross-stack ref で
       // URL を受ける。 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` env-var dance は廃止。
       competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
-      samlConfig: config.tenantSamlConfig,
     },
   );
   tenantTemplateStack.addDependency(problemDeployBackendStack);

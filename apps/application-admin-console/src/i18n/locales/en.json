@@ -11,8 +11,7 @@
     "events": "Events",
     "teams": "Teams",
     "problems": "Problems",
-    "deployments": "Deployments",
-    "saml_sso": "SAML SSO"
+    "deployments": "Deployments"
   },
   "auth": {
     "sign_out": "Sign out"
@@ -57,43 +56,6 @@
     "archive_modal_confirm": "Archive",
     "archive_conflict_known": "Event \"{name}\" cannot be archived (current: {current}, allowed: DRAFT / ENDED / TEARDOWN)",
     "archive_conflict_unknown": "Event \"{name}\" cannot be archived"
-  },
-  "saml_sso": {
-    "header": "SAML SSO Configuration",
-    "description": "Federate your company's IdP (Entra ID / Okta / Google Workspace, etc.) with this tenant's Cognito UserPool via SAML 2.0. After saving, sign-in flows through your corporate SSO.",
-    "pooled_warning_header": "Shared UserPool warning",
-    "pooled_warning_body": "If this tenant is in pooled mode (= multiple tenants share a UserPool), changes here affect sign-in for all pooled tenants. silo (PLATINUM) tenants have an isolated UserPool.",
-    "platinum_only_header": "Available on PLATINUM tier",
-    "platinum_only_body": "SAML SSO is available only on PLATINUM tenants (= dedicated UserPool). Pooled tiers (BASIC / ADVANCED) share a UserPool, so SAML changes would affect other tenants. Upgrade to PLATINUM to enable SAML SSO.",
-    "platinum_only_description": "SAML SSO configuration is available on PLATINUM tier.",
-    "current_header": "Current configuration",
-    "setup_header": "Configure SAML",
-    "update_header": "Update SAML configuration",
-    "field_metadata_url": "Metadata URL",
-    "field_metadata_url_desc": "HTTPS URL that serves your IdP's federation metadata XML. Cert rotation is followed automatically.",
-    "field_provider_name": "Provider name",
-    "field_provider_name_desc": "Label shown on the Cognito Hosted UI sign-in button (alphanumeric + - _ , 3-32 chars).",
-    "field_enforce": "Allow SAML sign-in only",
-    "field_enforce_desc": "Turning this on disables username/password. A confirmation modal is shown before the flip.",
-    "field_updated_at": "Last updated",
-    "enforce_on": "ON (SAML only)",
-    "enforce_off": "OFF (parallel)",
-    "save_button": "Save",
-    "update_button": "Update",
-    "disable_button": "Disable SAML",
-    "save_success_header": "Saved",
-    "save_success": "SAML IdP applied to the Cognito UserPool. New sign-ins from now on use the SAML flow. Users already signed in are not affected.",
-    "save_error_header": "Failed to save",
-    "load_error_header": "Failed to load current configuration",
-    "delete_success": "SAML disabled. Username/password path is restored, SAML button disappears from Hosted UI.",
-    "modal_cancel": "Cancel",
-    "enforce_modal_header": "Allow SAML sign-in only?",
-    "enforce_modal_body": "Disables username/password and SRP, allowing sign-in only via SAML. Verify SAML sign-in in staging before flipping production.",
-    "enforce_modal_warning": "If SAML is broken or the IdP cert rotation fails, nobody can sign in. As recovery, manually add COGNITO back to the UserPoolClient SupportedIdentityProviders in AWS Console.",
-    "enforce_modal_confirm": "Switch to SAML only",
-    "delete_modal_header": "Disable SAML configuration?",
-    "delete_modal_body": "Removes the SAML IdP and reverts the UserPoolClient to username/password. SAML sign-in stops working. Re-enable later by entering a Metadata URL.",
-    "delete_modal_confirm": "Disable"
   },
   "problems": {
     "header": "Problem catalog",

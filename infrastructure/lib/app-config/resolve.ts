@@ -187,8 +187,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // Issue #839 follow-up: SAML IdP 設定を config.json から取り出す (= 未設定なら undefined)。
   // tenant-stack 側 (= application-admin-console / pooled tenant + per-tenant silo + Lite) と
   // control-plane 側 (= admin-console / SBT ControlPlane) で独立して enable できる。
-  const tenantSamlConfig = config?.tenantSamlConfig;
-  const controlPlaneSamlConfig = config?.controlPlaneConfig?.samlIdp;
+  // Issue #1066: SAML IdP 関連 (tenantSamlConfig / controlPlaneConfig.samlIdp) は廃止済。
 
   // Issue #952 epic / cost guardrails
   // schema (config-schema.json) は integer / 数値文字列 ("50") の双方を許容するため、
@@ -240,8 +239,6 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     problems,
     challengePayloadBucketName,
     deployConcurrentBuildLimit,
-    tenantSamlConfig,
-    controlPlaneSamlConfig,
     monthlyCostLimitUsd,
     budgetAlarmEmails,
   };

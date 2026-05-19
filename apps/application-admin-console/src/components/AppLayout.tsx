@@ -106,14 +106,9 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
               { type: "link", href: "/competitor-accounts", text: "Competitor Accounts" },
+              // Issue #1066: SAML SSO 設定は廃止 (= MFA 強制 #1035 で代替済、 spec 簡素化)。
               // App Plane の tenant user 管理は plane 分離方針で廃止
-              // ([[feedback-no-cross-plane-data-leak]])。 token 流出 security hole を避けるため
-              // backend `/admin/users` route + tenant-users-client もまとめて除去 (2026-05-18)。
-              // Issue #897: SAML SSO 設定は silo (PLATINUM) tenant のみ。 pooled tenant の
-              // UserPool は共有で、 1 tenant の SAML 設定が他 tenant に副作用するため。
-              ...(config.isolation === "silo"
-                ? [{ type: "link" as const, href: "/settings/sso", text: t("nav.saml_sso") }]
-                : []),
+              // ([[feedback-no-cross-plane-data-leak]])。
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {
