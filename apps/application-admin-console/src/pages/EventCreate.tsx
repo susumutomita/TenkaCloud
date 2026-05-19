@@ -8,6 +8,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Link from "@cloudscape-design/components/link";
+import Modal from "@cloudscape-design/components/modal";
 import Multiselect, { type MultiselectProps } from "@cloudscape-design/components/multiselect";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -19,7 +20,7 @@ import {
   type CompetitorAccountSummary,
   listCompetitorAccounts,
 } from "../api/competitor-accounts-client";
-import { createEvent } from "../api/events-client";
+import { bulkDeployEvent, createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { AWS_REGIONS, DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
@@ -238,6 +239,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     teamValidation.allAccountsValid &&
     !teamValidation.hasDuplicateSlug;
 
+  // Issue #1067: 作成成功後、 EventDetail へ自動遷移する前に 「Deploy する? あとで?」 modal を出す。
+  // 旧挙動は即遷移だったが、 「Deploy が必要」 と operator が気付かないまま放置されるケースが
+  // 多発していた (= participant 側で問題が見えない silent failure)。 modal で明示促す。
+  const [deployPromptTarget, setDeployPromptTarget] = useState<{ eventId: string } | null>(null);
+  const [deployStarting, setDeployStarting] = useState(false);
+
   const handleSubmit = async () => {
     if (!canSubmit || !apiClient) return;
     setSubmitting(true);
@@ -254,13 +261,37 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           defaultRegion: r.defaultRegion,
         })),
       });
-      // teamLoginKey は EventDetail で常時表示するので作成直後に遷移 (#530)。
-      navigate(`/events/${res.eventId}`);
+      // Issue #1067: 即 navigate せず deploy 促し modal を出す。
+      setDeployPromptTarget({ eventId: res.eventId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleDeployNow = async () => {
+    if (!deployPromptTarget || !apiClient) return;
+    setDeployStarting(true);
+    try {
+      // 全 team × 全 problem を bulk deploy (= 既存 Issue #910 経路)。
+      await bulkDeployEvent(apiClient, deployPromptTarget.eventId);
+      navigate(`/events/${deployPromptTarget.eventId}`);
+    } catch (err) {
+      // bulk deploy 失敗時も Event 自体は作成済なので EventDetail に navigate して
+      // operator が手動 deploy できる経路を残す。 error 表示は EventDetail 側 polling で拾われる。
+      setError(err instanceof Error ? err.message : String(err));
+      navigate(`/events/${deployPromptTarget.eventId}`);
+    } finally {
+      setDeployStarting(false);
+      setDeployPromptTarget(null);
+    }
+  };
+
+  const handleDeployLater = () => {
+    if (!deployPromptTarget) return;
+    navigate(`/events/${deployPromptTarget.eventId}`);
+    setDeployPromptTarget(null);
   };
 
   return (
@@ -525,6 +556,40 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           </Box>
         </SpaceBetween>
       </Form>
+
+      {/* Issue #1067: Event 作成後の deploy 必要性を operator に明示する modal。
+          旧挙動 (= 即 navigate) では operator が deploy 必要に気付かず participant 側
+          で問題が見えない silent failure が頻発していた。 */}
+      <Modal
+        visible={deployPromptTarget !== null}
+        onDismiss={() => (deployStarting ? undefined : handleDeployLater())}
+        header="Event を作成しました"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={handleDeployLater} disabled={deployStarting}>
+                あとで
+              </Button>
+              <Button
+                variant="primary"
+                loading={deployStarting}
+                onClick={() => void handleDeployNow()}
+                data-testid="deploy-prompt-now"
+              >
+                今すぐ Deploy
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Alert type="info" header="次は問題の Deploy です">
+            チーム毎の問題 deploy を実行するまで、 participant は問題にアクセスできません。 「今すぐ
+            Deploy」 で全 team × 全問題を一括 deploy します。 「あとで」 を選んだ場合は、
+            EventDetail 画面の Deploy button から後で実行できます。
+          </Alert>
+        </SpaceBetween>
+      </Modal>
     </SpaceBetween>
   );
 }
