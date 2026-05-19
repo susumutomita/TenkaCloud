@@ -11,8 +11,7 @@
     "events": "活动",
     "teams": "团队",
     "problems": "题目",
-    "deployments": "部署",
-    "saml_sso": "SAML SSO"
+    "deployments": "部署"
   },
   "auth": {
     "sign_out": "退出登录"
@@ -57,43 +56,6 @@
     "archive_modal_confirm": "归档",
     "archive_conflict_known": "Event \"{name}\" 无法归档 (当前: {current},允许: DRAFT / ENDED / TEARDOWN)",
     "archive_conflict_unknown": "Event \"{name}\" 无法归档"
-  },
-  "saml_sso": {
-    "header": "SAML SSO 设置",
-    "description": "通过 SAML 2.0 将公司的 IdP (Entra ID / Okta / Google Workspace 等) 与本租户的 Cognito UserPool 联合。 保存后,登录将通过公司 SSO 进行。",
-    "pooled_warning_header": "共享 UserPool 警告",
-    "pooled_warning_body": "如果本租户处于 pooled 模式 (= 多个租户共享 UserPool),此处的更改将影响所有 pooled 租户的登录。 silo (PLATINUM) 租户拥有独立的 UserPool,影响范围仅限本租户。",
-    "platinum_only_header": "PLATINUM 级别专属功能",
-    "platinum_only_body": "SAML SSO 设置仅对 PLATINUM 租户 (= 独立 UserPool) 开放。 pooled 级别 (BASIC / ADVANCED) 共享 UserPool,SAML 更改会影响其他租户。 请升级到 PLATINUM 以启用 SAML SSO。",
-    "platinum_only_description": "SAML SSO 设置在 PLATINUM 级别可用。",
-    "current_header": "当前配置",
-    "setup_header": "配置 SAML",
-    "update_header": "更新 SAML 配置",
-    "field_metadata_url": "Metadata URL",
-    "field_metadata_url_desc": "提供 IdP federation metadata XML 的 HTTPS URL。 IdP 端证书轮换会自动跟随。",
-    "field_provider_name": "Provider 名称",
-    "field_provider_name_desc": "Cognito Hosted UI 登录按钮上显示的标签 (字母数字 + - _ , 3-32 字符)。",
-    "field_enforce": "仅允许 SAML 登录",
-    "field_enforce_desc": "开启后将禁用 username/password 路径。 切换前会显示确认对话框。",
-    "field_updated_at": "最后更新",
-    "enforce_on": "ON (仅 SAML)",
-    "enforce_off": "OFF (并行)",
-    "save_button": "保存",
-    "update_button": "更新",
-    "disable_button": "禁用 SAML",
-    "save_success_header": "已保存",
-    "save_success": "SAML IdP 已应用到 Cognito UserPool。 此后的新登录将使用 SAML 流程。 已登录的用户不受影响。",
-    "save_error_header": "保存失败",
-    "load_error_header": "无法加载当前配置",
-    "delete_success": "SAML 配置已禁用。 username/password 路径已恢复,Hosted UI 上的 SAML 按钮已消失。",
-    "modal_cancel": "取消",
-    "enforce_modal_header": "仅允许 SAML 登录?",
-    "enforce_modal_body": "禁用 username/password 和 SRP,仅允许通过 SAML 登录。 为避免锁定,建议在 staging 环境验证 SAML 登录后再应用到生产。",
-    "enforce_modal_warning": "如果 SAML 配置损坏或 IdP 端证书轮换失败,所有人都无法登录。 作为恢复手段,可在 AWS Console 中手动将 COGNITO 重新添加到 UserPoolClient 的 SupportedIdentityProviders。",
-    "enforce_modal_confirm": "切换为仅 SAML",
-    "delete_modal_header": "禁用 SAML 配置?",
-    "delete_modal_body": "从 Cognito UserPool 删除 SAML IdP,将 UserPoolClient 恢复为 username/password。 SAML 登录将不再可用。 之后可通过输入 Metadata URL 并保存来重新启用。",
-    "delete_modal_confirm": "禁用"
   },
   "problems": {
     "header": "问题目录",

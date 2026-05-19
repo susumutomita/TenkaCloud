@@ -1,6 +1,5 @@
 import type { Stack } from "aws-cdk-lib";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import type { SamlIdpConfig } from "../config/config-interface";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
 import { ApiGateway } from "../tenant-template/api-gateway";
 import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting";
@@ -57,11 +56,7 @@ export interface AppPlaneCoreProps {
    * 配線をスキップする (= 後続 phase で ApiGateway 側にも optional 化を入れる予定)。
    */
   readonly apiKeyConfig: AppPlaneCoreApiKeyConfig;
-  /**
-   * Issue #839 follow-up: 全 tenant 共有の SAML IdP 連携設定 (= operator 会社 SSO)。
-   * 未設定なら従来通り Cognito username/password。 詳細は `SamlIdpConfig` 参照。
-   */
-  readonly samlConfig?: SamlIdpConfig;
+  // Issue #1066: SAML IdP 機能を廃止 (= MFA 必須化 #1035 で代替)。
 }
 
 export interface AppPlaneCoreHandles {
@@ -97,7 +92,6 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     tenantId: props.tenantId,
     environment: props.environment,
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
-    samlConfig: props.samlConfig,
   });
 
   const apiGateway = new ApiGateway(scope, "ApiGateway", {

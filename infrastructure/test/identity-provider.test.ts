@@ -1,10 +1,8 @@
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
-import type { SamlIdpConfig } from "../lib/config/config-interface";
 import {
   buildAllowedRedirectUrls,
-  buildSupportedIdentityProviders,
   IdentityProvider,
 } from "../lib/tenant-template/identity-provider";
 
@@ -12,7 +10,6 @@ function synth(
   tenantId: string,
   applicationAdminConsoleUrl: string,
   environment = "development",
-  samlConfig?: SamlIdpConfig,
 ): { template: Template; provider: IdentityProvider } {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "TestStack", {
@@ -22,7 +19,6 @@ function synth(
     tenantId,
     environment,
     applicationAdminConsoleUrl,
-    samlConfig,
   });
   return { template: Template.fromStack(stack), provider };
 }
@@ -235,15 +231,14 @@ describe("IdentityProvider", () => {
     });
   });
 
-  describe("Issue #839 follow-up: SAML IdP 連携", () => {
-    const sample: SamlIdpConfig = {
-      metadataUrl: "https://idp.example.com/metadata.xml",
-      providerName: "AcmeSAML",
-    };
-
-    it("samlConfig 未指定なら UserPoolIdentityProvider (SAML) を作らず、 SupportedIdentityProviders は COGNITO のみ", () => {
+  describe("Issue #1066: SAML IdP 連携は廃止 (= MFA 必須化 #1035 で代替)", () => {
+    it("UserPoolIdentityProvider (SAML) は作られないべき", () => {
       const { template } = synth("tenant-1", "https://app.example.com");
       template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
+    });
+
+    it("UserPoolClient の SupportedIdentityProviders は COGNITO のみであるべき", () => {
+      const { template } = synth("tenant-1", "https://app.example.com");
       template.hasResourceProperties(
         "AWS::Cognito::UserPoolClient",
         Match.objectLike({
@@ -251,106 +246,6 @@ describe("IdentityProvider", () => {
         }),
       );
     });
-
-    it("samlConfig 指定で UserPoolIdentityProvider (SAML) を 1 個作り、 MetadataURL を埋めるべき", () => {
-      const { template } = synth("tenant-1", "https://app.example.com", "development", sample);
-      template.hasResourceProperties("AWS::Cognito::UserPoolIdentityProvider", {
-        ProviderType: "SAML",
-        ProviderName: "AcmeSAML",
-        ProviderDetails: Match.objectLike({ MetadataURL: "https://idp.example.com/metadata.xml" }),
-      });
-    });
-
-    it("並列 (= enforceSamlOnly=false default) では UserPoolClient.SupportedIdentityProviders に COGNITO + SAML 両方が乗るべき", () => {
-      // CDK L2 の UserPoolClientIdentityProvider.custom は CFn Ref で IdP リソースを参照する
-      // (= 文字列リテラルではなく Ref オブジェクトとして埋まる)。 実 deploy では Ref が
-      // ProviderName 文字列に解決されるが、 test では Ref shape で assertion する必要がある。
-      const { template } = synth("tenant-1", "https://app.example.com", "development", sample);
-      const clients = template.findResources("AWS::Cognito::UserPoolClient");
-      const idps = (Object.values(clients)[0]?.Properties?.SupportedIdentityProviders ??
-        []) as unknown[];
-      expect(idps).toContain("COGNITO");
-      // SAML 側は { Ref: "...SamlIdp..." } の shape で入る
-      const samlEntry = idps.find((e) => typeof e === "object" && e !== null && "Ref" in e) as
-        | { Ref?: string }
-        | undefined;
-      expect(samlEntry?.Ref).toMatch(/SamlIdp/);
-    });
-
-    it("enforceSamlOnly=true なら SupportedIdentityProviders は SAML 単独 + ExplicitAuthFlows から password / SRP が消えるべき", () => {
-      const { template } = synth("tenant-1", "https://app.example.com", "development", {
-        ...sample,
-        enforceSamlOnly: true,
-      });
-      const clients = template.findResources("AWS::Cognito::UserPoolClient");
-      const props = Object.values(clients)[0]?.Properties ?? {};
-      const idps = (props.SupportedIdentityProviders ?? []) as unknown[];
-      // COGNITO が完全に消え、 SAML provider (Ref) だけが残る
-      expect(idps).not.toContain("COGNITO");
-      expect(idps).toHaveLength(1);
-      const samlEntry = idps[0] as { Ref?: string };
-      expect(samlEntry?.Ref).toMatch(/SamlIdp/);
-      // ExplicitAuthFlows から password / SRP が消える
-      const flows = (props.ExplicitAuthFlows ?? []) as string[];
-      expect(flows).not.toContain("ALLOW_USER_PASSWORD_AUTH");
-      expect(flows).not.toContain("ALLOW_USER_SRP_AUTH");
-    });
-
-    it("attributeMapping は default で SAML emailaddress claim を email にマップする", () => {
-      const { template } = synth("tenant-1", "https://app.example.com", "development", sample);
-      template.hasResourceProperties("AWS::Cognito::UserPoolIdentityProvider", {
-        AttributeMapping: Match.objectLike({
-          email: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
-        }),
-      });
-    });
-
-    it("attributeMapping を override すれば caller の値が優先されるべき (= Entra ID 等の非標準 claim 対応)", () => {
-      const { template } = synth("tenant-1", "https://app.example.com", "development", {
-        ...sample,
-        attributeMapping: { email: "urn:custom:user/email" },
-      });
-      template.hasResourceProperties("AWS::Cognito::UserPoolIdentityProvider", {
-        AttributeMapping: Match.objectLike({ email: "urn:custom:user/email" }),
-      });
-    });
-
-    it("providerName 未指定なら default `CompanySAML` を使うべき", () => {
-      const { template } = synth("tenant-1", "https://app.example.com", "development", {
-        metadataUrl: "https://idp.example.com/metadata.xml",
-      });
-      template.hasResourceProperties("AWS::Cognito::UserPoolIdentityProvider", {
-        ProviderName: "CompanySAML",
-      });
-    });
-  });
-});
-
-describe("buildSupportedIdentityProviders (pure helper)", () => {
-  it("cognito=true / saml 無し → COGNITO 1 個", () => {
-    const r = buildSupportedIdentityProviders({ cognito: true });
-    expect(r.map((p) => p.name)).toEqual(["COGNITO"]);
-  });
-
-  it("cognito=true / saml 有り → COGNITO + 指定 SAML provider name", () => {
-    const r = buildSupportedIdentityProviders({
-      cognito: true,
-      saml: { providerName: "AcmeSAML" },
-    });
-    expect(r.map((p) => p.name)).toEqual(["COGNITO", "AcmeSAML"]);
-  });
-
-  it("cognito=false / saml 有り → SAML 単独 (= SAML-only enforcement)", () => {
-    const r = buildSupportedIdentityProviders({
-      cognito: false,
-      saml: { providerName: "AcmeSAML" },
-    });
-    expect(r.map((p) => p.name)).toEqual(["AcmeSAML"]);
-  });
-
-  it("cognito=false / saml 無し (= 想定外 input) は COGNITO fallback (= safe default)", () => {
-    const r = buildSupportedIdentityProviders({ cognito: false });
-    expect(r.map((p) => p.name)).toEqual(["COGNITO"]);
   });
 });
 

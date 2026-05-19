@@ -1,5 +1,4 @@
 import type { BillingMode } from "aws-cdk-lib/aws-dynamodb";
-import type { SamlIdpConfig } from "../config/config-interface";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
 
@@ -84,17 +83,7 @@ export interface AppConfig {
   // に流れる (= Phase 3 env-var dance が不要になる)。
   // Issue #1053: 旧 `competitorBootstrapTemplateUrlEnv` も同じく cross-stack ref へ移行。
 
-  /**
-   * Issue #839 follow-up: 全 tenant 共有の SAML IdP 連携。 config.json の `tenantSamlConfig`
-   * からそのまま渡す。 未設定なら従来通り Cognito username/password。
-   */
-  readonly tenantSamlConfig: SamlIdpConfig | undefined;
-  /**
-   * Issue #839 follow-up: System Admin (= Control Plane) 用 SAML IdP 連携。 config.json の
-   * `controlPlaneConfig.samlIdp` からそのまま渡す。 ControlPlaneStack が SBT UserPool に escape
-   * hatch で IdP を付ける。
-   */
-  readonly controlPlaneSamlConfig: SamlIdpConfig | undefined;
+  // Issue #1066: SAML IdP 連携は廃止 (= MFA #1035 で代替)。
 
   /**
    * Issue #952 epic / cost guardrails: AWS Budgets monthly limit (USD)。 未指定 / 0 なら
