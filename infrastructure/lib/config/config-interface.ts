@@ -13,6 +13,13 @@ export interface Config {
   readonly dynamoDbConfig?: DynamoDbConfig;
   readonly kmsConfig?: KmsConfig;
   /**
+   * Issue #1056: deploy artifact bucket (= `tenkacloud-source-<account>-<region>`) の
+   * lifecycle policy。 同 key に PUT し続ける versioning=Enabled bucket で旧 version が
+   * 無限蓄積するのを防ぐため、 `scripts/prepare-source-bundle.sh` が deploy 毎に idempotent
+   * に PUT する。 未指定時は default 値 (= 5 世代 / 1 日) が builder で使われる。
+   */
+  readonly sourceBundleConfig?: SourceBundleConfig;
+  /**
    * Issue #839 follow-up: 全 tenant が共有する SAML IdP の設定 (= operator 会社の SSO で
    * 全 Tenant Admin が sign-in する pattern)。 未設定なら従来通り Cognito username/password
    * + Hosted UI fallback。 per-tenant の独立 IdP は Phase 2 で onboarding 経由で扱う。
@@ -135,4 +142,19 @@ export interface BootstrapConfig {
    * tenant stack の CloudFormation 名 prefix。`${prefix}-${tenantId}` で生成・削除する。
    */
   readonly tenantCfnStackPrefix: string;
+}
+
+/**
+ * deploy artifact (= `source.zip`) を置く S3 bucket の lifecycle 制御値。
+ *
+ * versioning=Enabled の同 key PUT で Noncurrent version が無限蓄積するのを防ぐため、
+ * `keepNoncurrentVersions` 世代までを保持し、 それ以上古い旧 version は `expireAfterDays`
+ * 日経過で expire させる。 数値は config.json の `${VAR:-default}` placeholder 経由で
+ * env override 可能 (= string で来る場合あり、 builder 側で `Number()` 正規化する)。
+ */
+export interface SourceBundleConfig {
+  /** 旧 version の保持世代数 (= AWS `NewerNoncurrentVersions`)。 推奨 5。 */
+  readonly keepNoncurrentVersions: number | string;
+  /** Noncurrent 化してから expire までの日数 (= AWS `NoncurrentDays`)。 推奨 1。 */
+  readonly expireAfterDays: number | string;
 }

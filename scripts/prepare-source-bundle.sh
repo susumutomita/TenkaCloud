@@ -56,13 +56,15 @@ else
     --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 fi
 
-# Issue #1056: lifecycle policy で Noncurrent version を最新 5 世代まで保持し、 それ以上古い旧
-# version を翌日削除する。 毎回 idempotent に PUT して 「過去に作った bucket で lifecycle が未
-# 設定」 の状態も是正する (= put-bucket-lifecycle-configuration は同 ID の rule を REPLACE する)。
-echo "[prepare-source-bundle] applying lifecycle policy (keep 5 noncurrent versions)..."
+# Issue #1056: lifecycle policy を idempotent に PUT する (= 過去 bucket で未設定でも是正)。
+# 設定値は `infrastructure/environments/<env>/config.json` の `sourceBundleConfig` を
+# source of truth とし、 emit script が AWS API shape の JSON を stdout に出力する
+# (= config の二重持ちを避け、 `${VAR:-default}` placeholder で env override 可)。
+echo "[prepare-source-bundle] applying lifecycle policy..."
+LIFECYCLE_JSON=$(bun run "${SCRIPT_DIR}/print-source-bundle-lifecycle.ts" "${ENV:-development}")
 aws s3api put-bucket-lifecycle-configuration \
   --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
-  --lifecycle-configuration "file://${SCRIPT_DIR}/source-bundle-lifecycle.json"
+  --lifecycle-configuration "${LIFECYCLE_JSON}"
 
 cd "${TENKACLOUD_ROOT}"
 
