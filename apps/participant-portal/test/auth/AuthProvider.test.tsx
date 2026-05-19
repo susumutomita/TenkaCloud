@@ -49,7 +49,7 @@ describe("AuthProvider", () => {
     await act(async () => {
       // Issue #873: regex regression を回避。
       await expect(result.current.login("   ")).rejects.toMatchObject({
-        message: expect.stringContaining("チームログインキー"),
+        message: expect.stringContaining("EMPTY_TEAM_LOGIN_KEY"),
       });
     });
     expect(result.current.session).toBeNull();

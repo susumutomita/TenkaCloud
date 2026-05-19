@@ -76,7 +76,7 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
       render(<PortalPluginSlots {...baseProps} />);
       await waitFor(() => {
         // Alert header text (Cloudscape Alert は header を visible に出す)
-        expect(screen.getByText(/Plugin "StatusPanel" の表示に失敗しました/)).toBeInTheDocument();
+        expect(screen.getByText(/Plugin "StatusPanel" failed to render/)).toBeInTheDocument();
       });
       // ErrorBoundary の componentDidCatch で warn を発火することを確認
       expect(warnSpy).toHaveBeenCalledWith(

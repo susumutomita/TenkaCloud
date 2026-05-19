@@ -132,8 +132,8 @@ class PluginErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <Alert type="warning" header={`Plugin "${this.props.slotName}" の表示に失敗しました`}>
-          {this.state.message ?? "不明なエラー"}
+        <Alert type="warning" header={`Plugin "${this.props.slotName}" failed to render`}>
+          {this.state.message ?? "Unknown error"}
         </Alert>
       );
     }

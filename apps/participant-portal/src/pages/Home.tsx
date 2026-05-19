@@ -113,9 +113,7 @@ function TeamScorePanel({
             ),
           },
           {
-            // Issue #1038 P1 #5: 「ホームで順位が出てこないのは全く面白くない」 user feedback
-            // を受け、 leaderboard の自チーム順位を 1 等地に出す。
-            label: "順位",
+            label: t("home.rank_label"),
             value: (
               <Box variant="awsui-value-large" color="text-status-info">
                 {rankValue}

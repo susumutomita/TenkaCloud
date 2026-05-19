@@ -43,8 +43,14 @@ export function LoginPage({ config }: { config: AppConfig }) {
       await auth.login(teamLoginKey);
       navigate("/");
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("login.failed_generic");
-      setError(message);
+      const raw = err instanceof Error ? err.message : t("login.failed_generic");
+      const translated =
+        raw === "EMPTY_TEAM_LOGIN_KEY"
+          ? t("home.auth_error_empty_key")
+          : raw === "BACKEND_UNREACHABLE"
+            ? t("home.auth_error_backend")
+            : raw;
+      setError(translated);
     } finally {
       setSubmitting(false);
     }

@@ -39,7 +39,7 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
         type: "menu-dropdown",
         iconName: "user-profile",
         text: userEmail,
-        ariaLabel: `${userEmail} のメニュー`,
+        ariaLabel: t("nav.user_menu_aria", { userEmail }),
         items: [
           {
             id: "signout",
@@ -59,7 +59,7 @@ export function ShellLayout({ config, children }: { config: AppConfig; children:
   const localeUtility: TopNavigationProps.Utility = {
     type: "menu-dropdown",
     iconName: "globe",
-    ariaLabel: "言語切替 / Language",
+    ariaLabel: t("nav.locale_switcher_aria"),
     text: LOCALE_NAME[locale] ?? locale,
     items: SUPPORTED_LOCALES.map((code) => ({ id: code, text: LOCALE_NAME[code] ?? code })),
     onItemClick: ({ detail }) => {
