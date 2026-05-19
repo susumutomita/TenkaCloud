@@ -33,6 +33,7 @@ import {
 } from "./participant-portal-hosting";
 import { ParticipantPortalLambda } from "./participant-portal-lambda";
 import { ProblemEndpointsTable } from "./problem-endpoints-table";
+import { SystemAuditWriterLambda } from "./system-audit-writer-lambda";
 import { TeamsTable } from "./teams-table";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
@@ -265,6 +266,17 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       : new EventBus(this, "LocalEventBus", {
           eventBusName: `tenkacloud-problem-deploy-local-${cdk.Stack.of(this).stackName}`,
         });
+
+    // Issue #1034: SBT Control Plane が発する onboarding* / offboarding* event を audit に集約。
+    // SystemAdmin の tenant CRUD は SBT 経由なので App Plane Lambda が走らず、 audit-log page の
+    // SystemAdmin scope が常に空になっていた。 本 listener が SBT bus 上の 6 detailType を catch して
+    // `PK=SYSTEM#<env>` 行を書く。 Lite mode (= ControlPlane 不在) では local bus にぶら下がるが、
+    // SBT events も流れて来ない (= 副作用なし) ため idle で安全。
+    new SystemAuditWriterLambda(this, "SystemAuditWriter", {
+      eventBus,
+      adminAuditLogTable: adminAuditLog.table,
+      environmentName: props.environmentName,
+    });
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。

@@ -248,13 +248,14 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       expect(deleteStateMachine).toContain("MarkFailed");
     });
 
-    it("EventBridge Rule を Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule で 5 つ持つべき (Issue #910 Phase 2.C.2.a)", () => {
+    it("EventBridge Rule を Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule / SystemAuditWriter (Issue #1034) で 6 つ持つべき", () => {
       // 旧 2 (Create / Delete state-machine event rules)
       //   + BulkCreate (Issue #910 Phase 2.C: BulkDeployCreateRequested → Distributed Map)
       //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
       //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
       // = 5。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
-      tpl.resourceCountIs("AWS::Events::Rule", 5);
+      // 旧 5 + Issue #1034 SystemAuditWriter rule (= SBT onboarding/offboarding listener)
+      tpl.resourceCountIs("AWS::Events::Rule", 6);
       tpl.hasResourceProperties(
         "AWS::Events::Rule",
         Match.objectLike({
@@ -348,6 +349,43 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
             BlockPublicPolicy: false,
             IgnorePublicAcls: false,
             RestrictPublicBuckets: false,
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("Issue #1034: SystemAuditWriter Lambda + EventBridge Rule", () => {
+    it("SBT onboarding/offboarding の 6 detailType を listen する EventBridge Rule を持つべき", () => {
+      tpl.hasResourceProperties(
+        "AWS::Events::Rule",
+        Match.objectLike({
+          EventPattern: Match.objectLike({
+            "detail-type": Match.arrayWith([
+              "onboardingRequest",
+              "onboardingSuccess",
+              "onboardingFailure",
+              "offboardingRequest",
+              "offboardingSuccess",
+              "offboardingFailure",
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it("SystemAuditWriter Lambda は DEPLOY_ENVIRONMENT + ADMIN_AUDIT_LOG_TABLE_NAME env を持つべき", () => {
+      // env が無いと writeAuditEvent が no-op になり、 audit が書かれない silent failure に戻る。
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Runtime: "nodejs22.x",
+          Architectures: ["arm64"],
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              ADMIN_AUDIT_LOG_TABLE_NAME: Match.anyValue(),
+              DEPLOY_ENVIRONMENT: "development",
+            }),
           }),
         }),
       );
