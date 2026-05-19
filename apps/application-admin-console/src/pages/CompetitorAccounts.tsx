@@ -33,6 +33,7 @@ import {
   buildUpdatePayload,
   buildUpdateStackUrl,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
+  isBootstrapUrlMissing,
 } from "../lib/competitor-bootstrap";
 import { type FriendlyError, toFriendlyError } from "../lib/friendly-error";
 import { computeRotationAge, ROTATION_AGE_WARNING_DAYS } from "../lib/rotation-age";
@@ -240,6 +241,18 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       >
         Competitor Accounts
       </Header>
+
+      {/* Issue #1055: runtime-config に competitorBootstrapTemplateUrl が注入されていないと
+          Launch / Update Stack リンクが GitHub raw URL fallback を返し、 AWS CFn console で
+          「TemplateURL must be a supported URL」 で reject される。 操作前に operator へ事前告知。
+          根治は #1053 で hosting を ProblemDeployBackendStack に移管したのち本 banner は撤去予定。 */}
+      {isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
+        <Alert type="warning" header="Bootstrap template URL が未注入です">
+          runtime-config の <code>competitorBootstrapTemplateUrl</code> が空のため、 Launch / Update
+          Stack リンクは AWS CloudFormation 側で reject されます。 deploy 経路の
+          設定を管理者にご確認ください (= 参考: #1053)。
+        </Alert>
+      )}
 
       {error && <FriendlyErrorAlert error={error} />}
 

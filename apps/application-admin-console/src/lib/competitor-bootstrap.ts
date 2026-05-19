@@ -36,6 +36,20 @@ function resolveTemplateUrl(templateUrl: string | undefined): string {
     : COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK;
 }
 
+/**
+ * Issue #1055: runtime-config に `competitorBootstrapTemplateUrl` が注入されているか判定する。
+ * 空 / undefined のとき、 CompetitorAccounts 画面の Launch / Update Stack リンクは GitHub raw
+ * fallback を返し、 AWS CFn console が「TemplateURL must be a supported URL」 で reject する。
+ * UI 側は本 helper で検出して事前警告 banner を表示する (= operator が壊れたリンクを送る前に
+ * 気付く)。
+ *
+ * #1053 の CDK refactor (= ProblemDeployBackendStack に hosting 移管) 完了で常に注入される
+ * ようになれば、 本 helper + 警告 banner は dead code として撤去できる。
+ */
+export function isBootstrapUrlMissing(templateUrl: string | undefined): boolean {
+  return !templateUrl || templateUrl.length === 0;
+}
+
 export interface LaunchStackUrlInput {
   readonly tenkaCloudAccountId: string;
   readonly externalId: string;
