@@ -37,6 +37,7 @@ import {
   unlockEventScoring,
 } from "../api/events-client";
 import { SendNotificationModal } from "../components/SendNotificationModal";
+import { TeamRankingPanel } from "../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../components/TeamScoreEventsPanel";
 import type { AppConfig } from "../config";
 import { computeEventWizardState, WIZARD_STEPS } from "../lib/event-wizard";
@@ -918,6 +919,9 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       )}
 
       {detail?.scoreEventsByTeam && <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} />}
+
+      {/* Issue #1071: 現在の順位 table。 score 推移 chart と同 data source、 backend 不要。 */}
+      {detail?.scoreEventsByTeam && <TeamRankingPanel teams={detail.scoreEventsByTeam} />}
 
       {detail && (
         <Container header={<Header variant="h2">参加者向け配布</Header>}>
