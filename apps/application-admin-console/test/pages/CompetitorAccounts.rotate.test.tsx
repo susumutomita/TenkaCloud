@@ -114,37 +114,26 @@ describe("CompetitorAccountsPage rotate flow (Issue #596 / Phase 3.1)", () => {
     await waitFor(() => expect(mocks.listCompetitorAccounts).toHaveBeenCalledTimes(2));
   });
 
-  it("Reveal modal は Launch Stack を primary action として先頭に表示すべき", async () => {
+  it("Reveal modal (rotate mode) は Launch Stack を表示しないべき (= bootstrap stack 既存で AlreadyExistsException 防止)", async () => {
     await rotateAndRevealExternalId();
 
-    const launchStackText = await screen.findByText("Launch Stack (Quick-create deeplink)");
-    const launchStackLink = launchStackText.closest("a");
-    expect(launchStackLink).toBeInTheDocument();
+    // rotate mode では Launch Stack button は出さない (bootstrap stack は既に存在するため)。
+    expect(screen.queryByText("Launch Stack (Quick-create deeplink)")).not.toBeInTheDocument();
 
-    const launchHref = launchStackLink?.getAttribute("href") ?? "";
-    expect(launchHref).toContain(
-      "https://ap-northeast-1.console.aws.amazon.com/cloudformation/home",
-    );
-    expect(launchHref).toContain("#/stacks/quickcreate");
-    expect(decodeURIComponent(launchHref)).toContain("param_TenkaCloudAccountId=111111111111");
-    expect(decodeURIComponent(launchHref)).toContain("param_ExternalId=new-rotated-secret-value");
-    expect(decodeURIComponent(launchHref)).toContain(
-      "param_RoleName=TenkaCloud-CompetitorDeploy-Role",
-    );
+    // 代わりに 「競技者側で Parameter を手動更新」 の Alert を表示する
+    expect(screen.getByText(/競技者側で Parameter を手動更新します/)).toBeInTheDocument();
 
-    const copyAllButton = screen.getByRole("button", {
-      name: /すべて \(3 値 \+ 手順 \+ Launch Stack URL\) をコピー/,
+    const copyButton = screen.getByRole("button", {
+      name: /新 ExternalId \+ 手順をコピー/,
     });
-    expect(
-      launchStackText.compareDocumentPosition(copyAllButton) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(copyButton).toBeInTheDocument();
   });
 
-  it("Reveal modal は手動 deploy の 3 値を折りたたみ section に表示すべき", async () => {
+  it("Reveal modal は手動 deploy / update の 3 値を折りたたみ section に表示すべき", async () => {
     await rotateAndRevealExternalId();
 
     const manualDeployToggle = await screen.findByRole("button", {
-      name: /手動 deploy の詳細/,
+      name: /手動 deploy \/ update の詳細/,
     });
     expect(manualDeployToggle).toHaveAttribute("aria-expanded", "false");
 
