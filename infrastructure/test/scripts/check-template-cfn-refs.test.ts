@@ -15,20 +15,20 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  * test 戦略:
  *   - 一時ディレクトリに problems/<category>/<id>/template.yaml を仕込んで script を回す
  *   - script は `problems/` 直下を絶対 path で見るため、 PROBLEMS_DIR を env で上書き...は本実装には
- *     無いので、 「 既存 problem template (= main repo の 4 個) を抜けるかどうか」 だけ smoke test
+ *     無いので、 「 既存 problem template (= main repo の 5 個) を抜けるかどうか」 だけ smoke test
  */
 
 const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
 
 describe("check-template-cfn-refs script (#951 sub-2)", () => {
-  it("既存 4 問題 template は全 pass するべき (= smoke test)", () => {
+  it("既存 5 問題 template は全 pass するべき (= smoke test)", () => {
     const result = spawnSync("bun", ["run", "scripts/check-template-cfn-refs.ts"], {
       cwd: REPO_ROOT,
       encoding: "utf-8",
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("OK:");
-    expect(result.stdout).toContain("4 template(s)");
+    expect(result.stdout).toContain("5 template(s)");
   });
 });
 
