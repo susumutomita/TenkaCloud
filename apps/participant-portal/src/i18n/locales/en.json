@@ -237,6 +237,7 @@
     "stale_body": "{ago} since last scoring. Something in your service may not be responding as expected.",
     "current_score_label": "Current score",
     "last_scored_label": "Last scored",
+    "deploy_log_header": "Deployment terminal",
     "outputs_header": "Access URLs",
     "auto_refresh_note": "Auto-refreshing every {seconds} s.",
     "celebrate_header": "🏆 Cleared +{points} pt",

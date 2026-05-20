@@ -237,6 +237,7 @@
     "stale_body": "直近の採点から {ago} 経過。 サービスのどこかが期待通り応答していない可能性があります。",
     "current_score_label": "現在の score",
     "last_scored_label": "最終加点",
+    "deploy_log_header": "デプロイ terminal",
     "outputs_header": "アクセス先 URL",
     "auto_refresh_note": "{seconds} 秒ごとに自動更新します。",
     "celebrate_header": "🏆 クリア済み +{points} pt",

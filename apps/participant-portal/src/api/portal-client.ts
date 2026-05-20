@@ -62,6 +62,19 @@ export interface ApplicationStatus {
   readonly checkedAt?: string;
 }
 
+export interface DeploymentLogEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly source: "deployment";
+  readonly level: "info" | "success" | "warning" | "error";
+  readonly message: string;
+}
+
+export interface DeploymentLogView {
+  readonly cursor: string;
+  readonly entries: readonly DeploymentLogEntry[];
+}
+
 /**
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
@@ -79,6 +92,7 @@ export interface ParticipantProblemView {
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  readonly deployLog: DeploymentLogView;
   /** Issue #607: deploy 開始時刻 (DDB.createdAt の echo)。 portal の phase countdown が
    *  metadata.phases / disruptions の afterMinutes との差で残時間を計算する。 deploy 中の
    *  PENDING / IN_PROGRESS でも present。 */

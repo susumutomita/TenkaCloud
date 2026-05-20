@@ -99,6 +99,53 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.createdAt).toBe("2026-05-04T15:00:00.000Z");
   });
 
+  it("deployLog は DDB の進捗から競技者向け terminal 行を返すべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          status: "IN_PROGRESS",
+          buildId: "DeployCodeBuild:abc123",
+          stackId:
+            "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-secret-team/stack-id",
+          updatedAt: "2026-05-04T15:02:00.000Z",
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    const log = view?.problems[0]?.deployLog;
+    expect(log?.cursor).toBe("2026-05-04T15:02:00.000Z");
+    expect(log?.entries.map((entry) => entry.message)).toEqual([
+      "Deployment job was queued.",
+      "Build runner started.",
+      "CloudFormation stack creation is in progress.",
+      "Deployment is still running.",
+    ]);
+    expect(JSON.stringify(log)).not.toContain("DeployCodeBuild:abc123");
+    expect(JSON.stringify(log)).not.toContain("tc-secret-team");
+  });
+
+  it("deployLog は失敗理由を terminal 行に含めるべき", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          status: "FAILED",
+          failureReason: "CREATE_FAILED: VPC limit",
+          updatedAt: "2026-05-04T15:03:00.000Z",
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.deployLog.entries.at(-1)).toMatchObject({
+      level: "error",
+      message: "Deployment failed: CREATE_FAILED: VPC limit",
+      source: "deployment",
+    });
+  });
+
   it("Phase 2a 経由の eventId / teamId 列が team に伝播するべき", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
