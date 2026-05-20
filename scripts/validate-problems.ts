@@ -19,6 +19,8 @@ import addFormats from "ajv-formats";
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const PROBLEMS_DIR = join(REPO_ROOT, "problems");
 const SCHEMA_PATH = join(PROBLEMS_DIR, "SCHEMA.json");
+type Metadata = Record<string, unknown>;
+type ValidationError = string;
 
 function findMetadataFiles(dir: string): string[] {
   const found: string[] = [];
@@ -49,22 +51,31 @@ function findMetadataFiles(dir: string): string[] {
  * 実 deploy で CFn が CREATE_COMPLETE しても、 これらの参照が解決できないと
  * scoring engine / portal が壊れるので、 ここで先に止める。
  */
-function checkCrossRefs(metaPath: string, meta: Record<string, unknown>): string[] {
-  const errors: string[] = [];
+function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
   const dir = dirname(metaPath);
   const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
   const templatePath = join(dir, cfnTemplate);
 
   if (!existsSync(templatePath)) {
-    errors.push(`cfnTemplate file "${cfnTemplate}" not found`);
-    return errors;
+    return [`cfnTemplate file "${cfnTemplate}" not found`];
   }
   const yaml = readFileSync(templatePath, "utf8");
+  return [
+    ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
+    ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
+    ...checkDashboardSlotFiles(meta, dir),
+  ];
+}
 
+function checkScoringOutputRefs(
+  meta: Metadata,
+  yaml: string,
+  cfnTemplate: string,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
   const scoring = meta.scoring as Record<string, unknown> | undefined;
   const kind = scoring?.kind;
 
-  // flag kind: flagOutputKey が Outputs に存在するか
   if (kind === "flag") {
     const flagKey = scoring?.flagOutputKey;
     if (typeof flagKey === "string" && !yaml.includes(`${flagKey}:`)) {
@@ -74,15 +85,21 @@ function checkCrossRefs(metaPath: string, meta: Record<string, unknown>): string
     }
   }
 
-  // attack-detection: statsOutputKey が Outputs に存在するか
   if (kind === "attack-detection") {
     const statsKey = scoring?.statsOutputKey;
     if (typeof statsKey === "string" && !yaml.includes(`${statsKey}:`)) {
       errors.push(`scoring.statsOutputKey="${statsKey}" not found in ${cfnTemplate} Outputs`);
     }
   }
+  return errors;
+}
 
-  // endpoints[].default.key (= cfn-output binding) が Outputs に存在するか
+function checkEndpointOutputRefs(
+  meta: Metadata,
+  yaml: string,
+  cfnTemplate: string,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
   const endpoints = Array.isArray(meta.endpoints) ? meta.endpoints : [];
   for (const ep of endpoints as Array<Record<string, unknown>>) {
     const def = ep.default as Record<string, unknown> | undefined;
@@ -94,17 +111,19 @@ function checkCrossRefs(metaPath: string, meta: Record<string, unknown>): string
       );
     }
   }
+  return errors;
+}
 
-  // dashboard.slots["<slot>"] の portal/<file>.tsx が物理 file として存在するか
+function checkDashboardSlotFiles(meta: Metadata, dir: string): ValidationError[] {
+  const errors: ValidationError[] = [];
   const dashboard = meta.dashboard as Record<string, unknown> | undefined;
   const slots = dashboard?.slots as Record<string, unknown> | undefined;
-  if (slots) {
-    for (const [slotName, slotPath] of Object.entries(slots)) {
-      if (typeof slotPath === "string") {
-        const physical = join(dir, slotPath);
-        if (!existsSync(physical)) {
-          errors.push(`dashboard.slots["${slotName}"]="${slotPath}" file not found`);
-        }
+  if (!slots) return errors;
+  for (const [slotName, slotPath] of Object.entries(slots)) {
+    if (typeof slotPath === "string") {
+      const physical = join(dir, slotPath);
+      if (!existsSync(physical)) {
+        errors.push(`dashboard.slots["${slotName}"]="${slotPath}" file not found`);
       }
     }
   }
@@ -113,59 +132,82 @@ function checkCrossRefs(metaPath: string, meta: Record<string, unknown>): string
 }
 
 function main(): void {
+  const validate = createSchemaValidator();
+  const metadataFiles = findMetadataFiles(PROBLEMS_DIR);
+  assertMetadataFilesExist(metadataFiles);
+  const failed = validateMetadataFiles(metadataFiles, validate);
+  reportResult(failed, metadataFiles.length);
+}
+
+function createSchemaValidator() {
   const schema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8"));
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
-  const validate = ajv.compile(schema);
+  return ajv.compile(schema);
+}
 
-  const metadataFiles = findMetadataFiles(PROBLEMS_DIR);
+function assertMetadataFilesExist(metadataFiles: string[]): void {
   if (metadataFiles.length === 0) {
     console.error("No metadata.json found under problems/. At least one problem is expected.");
     process.exit(1);
   }
+}
 
+function validateMetadataFiles(
+  metadataFiles: string[],
+  validate: ReturnType<Ajv2020["compile"]>,
+): number {
   let failed = 0;
   for (const file of metadataFiles) {
-    const rel = relative(REPO_ROOT, file);
     const data = JSON.parse(readFileSync(file, "utf8"));
-
-    let schemaOk = validate(data);
-    if (!schemaOk) {
+    if (!validate(data)) {
       failed += 1;
-      console.error(`NG  ${rel}`);
-      for (const err of validate.errors ?? []) {
-        console.error(`     ${err.instancePath || "(root)"} ${err.message ?? ""}`);
-      }
-      // id とディレクトリ名の一致もチェック (schema では強制できないので別途)
-      const expectedId = file.split("/").slice(-2, -1)[0];
-      if (data.id && data.id !== expectedId) {
-        console.error(`     id (${data.id}) はディレクトリ名 (${expectedId}) と一致させてください`);
-      }
+      printSchemaErrors(file, data, validate.errors ?? []);
       continue;
     }
 
-    // SCHEMA OK でも cross-ref が壊れていれば NG にする
     const crossRefErrors = checkCrossRefs(file, data);
     if (crossRefErrors.length > 0) {
-      schemaOk = false;
       failed += 1;
-      console.error(`NG  ${rel} (cross-ref)`);
-      for (const e of crossRefErrors) {
-        console.error(`     ${e}`);
-      }
+      printCrossRefErrors(file, crossRefErrors);
       continue;
     }
 
-    console.log(`OK  ${rel}`);
+    console.log(`OK  ${relative(REPO_ROOT, file)}`);
   }
+  return failed;
+}
 
+function printSchemaErrors(
+  file: string,
+  data: Metadata,
+  errors: NonNullable<ReturnType<Ajv2020["compile"]>["errors"]>,
+): void {
+  console.error(`NG  ${relative(REPO_ROOT, file)}`);
+  for (const err of errors) {
+    console.error(`     ${err.instancePath || "(root)"} ${err.message ?? ""}`);
+  }
+  const expectedId = file.split("/").slice(-2, -1)[0];
+  if (data.id && data.id !== expectedId) {
+    console.error(`     id (${data.id}) はディレクトリ名 (${expectedId}) と一致させてください`);
+  }
+}
+
+function printCrossRefErrors(file: string, errors: ValidationError[]): void {
+  console.error(`NG  ${relative(REPO_ROOT, file)} (cross-ref)`);
+  for (const e of errors) {
+    console.error(`     ${e}`);
+  }
+}
+
+function reportResult(failed: number, total: number): void {
   if (failed > 0) {
     console.error(
-      `\n${failed} / ${metadataFiles.length} 件の metadata.json が schema / cross-ref に違反しています`,
+      `\n${failed} / ${total} 件の metadata.json が schema / cross-ref に違反しています`,
     );
     process.exit(1);
   }
-  console.log(`\n${metadataFiles.length} 件の metadata.json はすべて有効です`);
+  console.log(`\n${total} 件の metadata.json はすべて有効です`);
 }
 
 main();
