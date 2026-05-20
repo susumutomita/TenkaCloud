@@ -16,6 +16,26 @@ import { useT } from "../i18n";
 const TITLE_MAX = 120;
 const BODY_MAX = 2000;
 
+interface NotificationDraft {
+  readonly title: string;
+  readonly body: string;
+}
+
+export function isNotificationDraftValid(draft: NotificationDraft): boolean {
+  return (
+    draft.title.length > 0 &&
+    draft.title.length <= TITLE_MAX &&
+    draft.body.length > 0 &&
+    draft.body.length <= BODY_MAX
+  );
+}
+
+export function formatNotificationSubmitError(err: unknown): string {
+  if (err instanceof ApiError) return `${err.status}: ${err.message}`;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 /**
  * Operator → competitor notification modal (ADR-006 D6).
  */
@@ -63,9 +83,7 @@ export function SendNotificationModal({
   };
 
   const handleSubmit = async () => {
-    if (!apiClient) return;
-    if (title.length === 0 || title.length > TITLE_MAX) return;
-    if (body.length === 0 || body.length > BODY_MAX) return;
+    if (!apiClient || !isNotificationDraftValid({ title, body })) return;
     setInFlight(true);
     setError(null);
     try {
@@ -73,13 +91,7 @@ export function SendNotificationModal({
       reset();
       onSuccess();
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? `${err.status}: ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      setError(message);
+      setError(formatNotificationSubmitError(err));
     } finally {
       setInFlight(false);
     }
@@ -87,13 +99,7 @@ export function SendNotificationModal({
 
   const titleInvalid = title.length > TITLE_MAX;
   const bodyInvalid = body.length > BODY_MAX;
-  const submitDisabled =
-    !apiClient ||
-    inFlight ||
-    title.length === 0 ||
-    body.length === 0 ||
-    titleInvalid ||
-    bodyInvalid;
+  const submitDisabled = !apiClient || inFlight || !isNotificationDraftValid({ title, body });
 
   return (
     <Modal
