@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Competition Gallery</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Competition Gallery</h1>
+<p>This gallery helps new authors answer one question quickly: &quot;What should I
+create next?&quot;</p>
+<p>Each entry is a reusable competition concept. Some are already implemented as
+problem directories; others are deliberately scoped as starter ideas.</p>
+<h2>Available Now</h2>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Difficulty</th>
+<th>Category</th>
+<th>Scoring model</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="../problems/challenges/hello-world/">Hello World</a></td>
+<td>1</td>
+<td>Challenge</td>
+<td><code>flag</code></td>
+<td>First deploy, scoring sanity check, author onboarding</td>
+</tr>
+<tr>
+<td><a href="../problems/battles/hello-world-battle/">Hello World Battle</a></td>
+<td>1</td>
+<td>Battle</td>
+<td>uptime</td>
+<td>First uptime battle, AWS Systems Manager practice</td>
+</tr>
+<tr>
+<td><a href="../problems/battles/security-battle-royale/">Security Battle Royale</a></td>
+<td>3</td>
+<td>Battle</td>
+<td><code>uptime-multi</code></td>
+<td>Web security hardening and attacker/defender exercises</td>
+</tr>
+<tr>
+<td><a href="../problems/battles/microservice-migration-battle/">Microservice Migration Battle</a></td>
+<td>4</td>
+<td>Battle</td>
+<td><code>phased-polling</code></td>
+<td>Platform modernization and migration planning</td>
+</tr>
+<tr>
+<td><a href="../problems/battles/stackstack/">StackStack</a></td>
+<td>4</td>
+<td>Battle</td>
+<td><code>phased-polling</code></td>
+<td>Platform-team operations for AI-generated internal apps</td>
+</tr>
+</tbody></table>
+<h2>Curated Examples</h2>
+<h3>Hello World</h3>
+<ul>
+<li><strong>Concept</strong>: read a value from SSM Parameter Store and submit it as a flag.</li>
+<li><strong>Difficulty</strong>: 1 / 5.</li>
+<li><strong>Category</strong>: Challenge.</li>
+<li><strong>Learning goals</strong>: AWS Console basics, SSM Parameter Store, deploy-to-score
+flow.</li>
+<li><strong>Scoring model</strong>: <code>flag</code>.</li>
+<li><strong>Visual cue</strong>: one input form in the Participant Portal and one CloudFormation
+output.</li>
+</ul>
+<h3>Hello World Battle</h3>
+<ul>
+<li><strong>Concept</strong>: keep nginx and a Python API alive while health checks award
+points every minute.</li>
+<li><strong>Difficulty</strong>: 1 / 5.</li>
+<li><strong>Category</strong>: Battle.</li>
+<li><strong>Learning goals</strong>: uptime scoring, EC2 process recovery, AWS Systems Manager.</li>
+<li><strong>Scoring model</strong>: uptime checks against frontend and API endpoints.</li>
+<li><strong>Visual cue</strong>: two endpoint cards, a health timeline, and score increments.</li>
+</ul>
+<h3>Security Battle Royale</h3>
+<ul>
+<li><strong>Concept</strong>: attack and defend a deliberately vulnerable web application.</li>
+<li><strong>Difficulty</strong>: 3 / 5.</li>
+<li><strong>Category</strong>: Battle.</li>
+<li><strong>Learning goals</strong>: SQL injection, remote code execution, SSRF, IMDS exposure,
+and safe remediation.</li>
+<li><strong>Scoring model</strong>: <code>uptime-multi</code> across frontend and API slots.</li>
+<li><strong>Visual cue</strong>: frontend/API endpoint cards with hardening notes and health
+status.</li>
+</ul>
+<h3>Microservice Migration Battle</h3>
+<ul>
+<li><strong>Concept</strong>: split a three-service monolith into Lambda, ECS Fargate, and App
+Runner under scoring pressure.</li>
+<li><strong>Difficulty</strong>: 4 / 5.</li>
+<li><strong>Category</strong>: Battle.</li>
+<li><strong>Learning goals</strong>: strangler migration, managed-runtime tradeoffs, endpoint
+override registration.</li>
+<li><strong>Scoring model</strong>: <code>phased-polling</code> with platform self-reporting.</li>
+<li><strong>Visual cue</strong>: users/orders/catalog slots moving from EC2 to managed
+platforms.</li>
+</ul>
+<h3>StackStack</h3>
+<ul>
+<li><strong>Concept</strong>: act as a platform team shipping fragile AI-generated apps to
+production.</li>
+<li><strong>Difficulty</strong>: 4 / 5.</li>
+<li><strong>Category</strong>: Battle.</li>
+<li><strong>Learning goals</strong>: auth, network controls, rate limiting, auditability, and
+user-facing availability.</li>
+<li><strong>Scoring model</strong>: <code>phased-polling</code> across five control axes, with disruption
+events.</li>
+<li><strong>Visual cue</strong>: five-axis score panel and incident timeline.</li>
+</ul>
+<h2>Build Next</h2>
+<p>These examples are intentionally small enough for external contributors to turn
+into first PRs.</p>
+<h3>IAM Disaster Recovery</h3>
+<ul>
+<li><strong>Concept</strong>: a team receives a broken IAM boundary and must restore least
+privilege without losing application access.</li>
+<li><strong>Difficulty</strong>: 2 / 5.</li>
+<li><strong>Category</strong>: Challenge.</li>
+<li><strong>Learning goals</strong>: IAM policy reading, CloudTrail triage, least-privilege
+repair.</li>
+<li><strong>Scoring model</strong>: <code>flag</code>, with the flag emitted after the expected IAM repair.</li>
+<li><strong>Starter scope</strong>: create <code>metadata.json</code>, a minimal <code>template.yaml</code>, and a
+README explaining the repair path.</li>
+</ul>
+<h3>AI Agent Stampede</h3>
+<ul>
+<li><strong>Concept</strong>: many internal AI agents call the same service, and teams must
+add rate limits and audit trails before the service degrades.</li>
+<li><strong>Difficulty</strong>: 3 / 5.</li>
+<li><strong>Category</strong>: Battle.</li>
+<li><strong>Learning goals</strong>: throttling, concurrency limits, audit logging, and graceful
+degradation.</li>
+<li><strong>Scoring model</strong>: <code>phased-polling</code> or <code>uptime-multi</code>.</li>
+<li><strong>Starter scope</strong>: prototype a single API endpoint and document the expected
+portal slots.</li>
+</ul>
+<h2>Choosing A Scoring Model</h2>
+<table>
+<thead>
+<tr>
+<th>If the player must...</th>
+<th>Start with</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Find one value and submit it</td>
+<td><code>flag</code></td>
+</tr>
+<tr>
+<td>Keep one public service healthy</td>
+<td><code>uptime-flat</code></td>
+</tr>
+<tr>
+<td>Keep multiple slots healthy together</td>
+<td><code>uptime-multi</code></td>
+</tr>
+<tr>
+<td>Progress through time-based phases</td>
+<td><code>phased-polling</code></td>
+</tr>
+<tr>
+<td>Detect or count adversarial activity</td>
+<td><code>attack-detection</code></td>
+</tr>
+</tbody></table>
+<p>Problem authoring guide: <a href="./problems/AUTHORING.html">docs/problems/AUTHORING.html</a></p>
+
+<div class="doc-source">Source: <code>docs/gallery.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/gallery.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

@@ -13,11 +13,19 @@ make start
 
 ## Development flow
 
-1. Pick an issue (`good first issue` / `help wanted`)
+1. Pick an issue (`good first issue` / `help wanted`) or a starter task from
+   [ROADMAP.md](./ROADMAP.md#good-first-issue-candidates)
 2. Create a branch: `git checkout -b feat/your-feature`
 3. Write tests first (TDD). Test titles use the Japanese pattern `〜すべき` — match this style for consistency with the existing suite.
 4. Run `make before-commit` (lint / format / typecheck / tests / build)
 5. Open a PR (title under 70 characters, Conventional Commits)
+
+## Roadmap and starter tasks
+
+- [ROADMAP.md](./ROADMAP.md) shows the current product direction.
+- [Competition Gallery](./docs/gallery.md) lists available examples and new
+  problem ideas.
+- Starter tasks should stay small enough for one focused PR.
 
 ## Commit messages
 
