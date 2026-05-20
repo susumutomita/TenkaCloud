@@ -73,7 +73,7 @@ describe("App", () => {
       expect(
         await screen.findByRole("heading", { level: 1, name: /ようこそ/ }),
       ).toBeInTheDocument();
-      expect(screen.getByText("Mock cloud mode")).toBeInTheDocument();
+      expect(screen.getByText(/実 AWS リソースは作成されません/)).toBeInTheDocument();
     });
   });
 

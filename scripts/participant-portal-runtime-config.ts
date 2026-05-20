@@ -138,8 +138,10 @@ function defaultPortalMode(cloudMode: CloudMode): AppMode {
 
 function buildRuntimeConfig(options: Options): RuntimeConfig {
   const mode = options.portalMode ?? defaultPortalMode(options.cloudMode);
-  const apiBaseUrl =
-    options.apiBaseUrl ?? (mode === "backend" ? "" : "http://localhost:3199/dev-mock");
+  if (mode === "backend" && (!options.apiBaseUrl || options.apiBaseUrl.trim().length === 0)) {
+    throw new Error("--api-base-url is required when participant portal runs in backend mode");
+  }
+  const apiBaseUrl = options.apiBaseUrl ?? "http://localhost:3199/dev-mock";
   return {
     apiBaseUrl,
     eventTitle: options.eventTitle,
