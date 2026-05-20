@@ -38,11 +38,16 @@ interface SeriesPoint {
   readonly y: number;
 }
 
+type ScoreTimelineLoadResult =
+  | { readonly kind: "ok"; readonly data: LeaderboardScoreEventsResponse }
+  | { readonly kind: "skip" }
+  | { readonly kind: "error"; readonly message: string };
+
 /**
  * 1 team の event 列 (= occurredAt 昇順前提) を 累計スコア の data point 列に変換する。
  * 競技開始からの累積遷移を見たいので 0 origin から積み上げる。
  */
-function buildCumulativePoints(team: TeamScoreEvents): readonly SeriesPoint[] {
+export function buildCumulativePoints(team: TeamScoreEvents): readonly SeriesPoint[] {
   const points: SeriesPoint[] = [];
   let cum = 0;
   for (const e of team.events) {
@@ -52,6 +57,26 @@ function buildCumulativePoints(team: TeamScoreEvents): readonly SeriesPoint[] {
     points.push({ x: new Date(ts), y: cum });
   }
   return points;
+}
+
+export function toScoreTimelineLoadError(err: unknown): ScoreTimelineLoadResult {
+  if (err instanceof Error && err.name === "AbortError") return { kind: "skip" };
+  return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+}
+
+async function fetchScoreTimelineData(
+  apiBaseUrl: string,
+  sessionToken: string,
+  signal: AbortSignal,
+): Promise<ScoreTimelineLoadResult> {
+  if (!sessionToken) return { kind: "skip" };
+  try {
+    const data = await getLeaderboardScoreEvents(apiBaseUrl, sessionToken, signal);
+    if (!data) return { kind: "skip" };
+    return { kind: "ok", data };
+  } catch (err) {
+    return toScoreTimelineLoadError(err);
+  }
 }
 
 export function ScoreTimelineChart({
@@ -70,18 +95,14 @@ export function ScoreTimelineChart({
     let mounted = true;
     const controller = new AbortController();
     const fetchOnce = async () => {
-      if (!sessionToken) return;
-      try {
-        const res = await getLeaderboardScoreEvents(apiBaseUrl, sessionToken, controller.signal);
-        if (mounted) {
-          setData(res);
-          setError(null);
-        }
-      } catch (err) {
-        if (!mounted) return;
-        if (err instanceof Error && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : String(err));
+      const result = await fetchScoreTimelineData(apiBaseUrl, sessionToken, controller.signal);
+      if (!mounted || result.kind === "skip") return;
+      if (result.kind === "error") {
+        setError(result.message);
+        return;
       }
+      setData(result.data);
+      setError(null);
     };
     void fetchOnce();
     const interval = setInterval(fetchOnce, POLL_INTERVAL_MS);
