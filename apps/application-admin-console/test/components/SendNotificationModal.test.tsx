@@ -37,8 +37,10 @@ const config: AppConfig = {
 
 const EVENT_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
 
-const { SendNotificationModal } = await import("../../src/components/SendNotificationModal");
+const { formatNotificationSubmitError, isNotificationDraftValid, SendNotificationModal } =
+  await import("../../src/components/SendNotificationModal");
 const { I18nProvider } = await import("../../src/i18n");
+const { ApiError } = await import("../../src/api/client");
 
 function withI18n(node: React.ReactNode) {
   return <I18nProvider>{node}</I18nProvider>;
@@ -159,5 +161,28 @@ describe("SendNotificationModal", () => {
     fireEvent.change(screen.getByLabelText("本文"), { target: { value: "b" } });
     expect(screen.getByText(/120 文字以内/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "送信" })).toBeDisabled();
+  });
+});
+
+describe("SendNotificationModal helpers", () => {
+  it("title / body が制限内で非空なら submit 可能にすべき", () => {
+    expect(isNotificationDraftValid({ title: "T", body: "B" })).toBe(true);
+  });
+
+  it("title / body が空または上限超過なら submit 不可にすべき", () => {
+    expect(isNotificationDraftValid({ title: "", body: "B" })).toBe(false);
+    expect(isNotificationDraftValid({ title: "T", body: "" })).toBe(false);
+    expect(isNotificationDraftValid({ title: "a".repeat(121), body: "B" })).toBe(false);
+    expect(isNotificationDraftValid({ title: "T", body: "b".repeat(2001) })).toBe(false);
+  });
+
+  it("ApiError は status 付き message に整形すべき", () => {
+    expect(formatNotificationSubmitError(new ApiError(403, "forbidden"))).toBe(
+      "403: API 403: forbidden",
+    );
+  });
+
+  it("Error 以外も string 化すべき", () => {
+    expect(formatNotificationSubmitError("failed")).toBe("failed");
   });
 });
