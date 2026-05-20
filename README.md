@@ -127,18 +127,6 @@ Start here:
 
 Full ADR index lives under [`docs/architecture/`](./docs/architecture/).
 
-## Comparison
-
-| | TenkaCloud | AWS GameDay | CTFd | Hack The Box |
-|---|---|---|---|---|
-| Deploys to participant's own AWS | ✅ | ✅ | ❌ | ❌ |
-| OSS / self-hostable | ✅ | ❌ | ✅ | ❌ |
-| Multi-tenant SaaS layer | ✅ | N/A | ❌ | ❌ |
-| Real-time PvP (Battle) | ✅ | ✅ | ❌ | Partial |
-| Free Tier compatible | ✅ | ❌ | ✅ | N/A |
-| Plugin-style problems | ✅ | ❌ | ✅ | ❌ |
-| Trust Bridge (cross-cloud authority) | ✅ | ❌ | ❌ | ❌ |
-
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). In short:

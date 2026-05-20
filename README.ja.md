@@ -131,18 +131,6 @@ Schema: [`problems/SCHEMA.json`](./problems/SCHEMA.json) · onboarding guide: [`
 
 ADR 全索引は [`docs/architecture/`](./docs/architecture/) に置く。
 
-## 他プラットフォームとの比較
-
-| | TenkaCloud | AWS GameDay | CTFd | Hack The Box |
-|---|---|---|---|---|
-| 競技者の AWS account に deploy | ✅ | ✅ | ❌ | ❌ |
-| OSS / セルフホスト可 | ✅ | ❌ | ✅ | ❌ |
-| マルチテナント SaaS 層 | ✅ | N/A | ❌ | ❌ |
-| リアルタイム PvP (Battle) | ✅ | ✅ | ❌ | 部分的 |
-| Free Tier 親和 | ✅ | ❌ | ✅ | N/A |
-| Plugin 型問題 | ✅ | ❌ | ✅ | ❌ |
-| Trust Bridge (クラウド横断権限) | ✅ | ❌ | ❌ | ❌ |
-
 ## コントリビューション
 
 [CONTRIBUTING.md](./CONTRIBUTING.md) を参照。 概要は次の通り。
