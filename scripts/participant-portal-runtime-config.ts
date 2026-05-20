@@ -136,12 +136,46 @@ function defaultPortalMode(cloudMode: CloudMode): AppMode {
   return cloudMode === "real" ? "backend" : "dev-mock";
 }
 
+function normalizeLocalstackEndpoint(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (err) {
+    throw new Error(`Invalid LocalStack endpoint URL: ${value}`, { cause: err });
+  }
+  const allowedHost =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  const allowedProtocol = url.protocol === "http:" || url.protocol === "https:";
+  if (!allowedHost || !allowedProtocol) {
+    throw new Error(
+      `LocalStack endpoint must be http(s) localhost/127.0.0.1/[::1], got ${url.origin}`,
+    );
+  }
+  return url.toString().replace(/\/$/, "");
+}
+
+function normalizeApiBaseUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (err) {
+    throw new Error(`Invalid --api-base-url: ${value}`, { cause: err });
+  }
+  if (url.protocol !== "https:") {
+    throw new Error("--api-base-url must be HTTPS when participant portal runs in backend mode");
+  }
+  return url.toString().replace(/\/$/, "");
+}
+
 function buildRuntimeConfig(options: Options): RuntimeConfig {
   const mode = options.portalMode ?? defaultPortalMode(options.cloudMode);
   if (mode === "backend" && (!options.apiBaseUrl || options.apiBaseUrl.trim().length === 0)) {
     throw new Error("--api-base-url is required when participant portal runs in backend mode");
   }
-  const apiBaseUrl = options.apiBaseUrl ?? "http://localhost:3199/dev-mock";
+  const apiBaseUrl =
+    mode === "backend"
+      ? normalizeApiBaseUrl(options.apiBaseUrl ?? "")
+      : (options.apiBaseUrl ?? "http://localhost:3199/dev-mock");
   return {
     apiBaseUrl,
     eventTitle: options.eventTitle,
@@ -149,7 +183,11 @@ function buildRuntimeConfig(options: Options): RuntimeConfig {
     mode,
     cloudMode: options.cloudMode,
     ...(options.cloudMode === "localstack"
-      ? { localstackEndpoint: options.localstackEndpoint ?? "http://localhost:4566" }
+      ? {
+          localstackEndpoint: normalizeLocalstackEndpoint(
+            options.localstackEndpoint ?? "http://localhost:4566",
+          ),
+        }
       : {}),
   };
 }
