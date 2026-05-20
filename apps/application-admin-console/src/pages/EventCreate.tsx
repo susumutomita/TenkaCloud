@@ -77,6 +77,53 @@ interface TeamRow {
   awsAccountId: string;
 }
 
+interface TeamValidation {
+  readonly allSlugsValid: boolean;
+  readonly allAccountsValid: boolean;
+  readonly hasDuplicateSlug: boolean;
+}
+
+export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
+  if (next === prev.length) return prev;
+  if (next < prev.length) return prev.slice(0, Math.max(next, 0));
+  const additions = Array.from({ length: next - prev.length }, (_, i) => ({
+    internalSlug: `team-${prev.length + i + 1}`,
+    awsAccountId: "",
+  }));
+  return [...prev, ...additions];
+}
+
+export function validateTeamRows(teamRows: readonly TeamRow[]): TeamValidation {
+  let allSlugsValid = true;
+  let allAccountsValid = true;
+  const slugs = new Set<string>();
+  let hasDuplicateSlug = false;
+  for (const t of teamRows) {
+    if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
+    if (!ACCOUNT_ID_RE.test(t.awsAccountId)) allAccountsValid = false;
+    if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;
+    else slugs.add(t.internalSlug);
+  }
+  return { allSlugsValid, allAccountsValid, hasDuplicateSlug };
+}
+
+export function parseTeamCountInput(value: string): number | undefined {
+  const next = Number.parseInt(value.replace(/\D/g, "").slice(0, TEAM_COUNT_INPUT_MAX_LEN), 10);
+  return Number.isFinite(next) ? Math.max(0, Math.min(TEAMS_MAX, next)) : undefined;
+}
+
+function getNameErrorText(t: ReturnType<typeof useT>, name: string, nameInvalid: boolean) {
+  return nameInvalid && name.length > 0
+    ? t("event_create.name_invalid", { max: NAME_MAX })
+    : undefined;
+}
+
+function getTeamCountErrorText(t: ReturnType<typeof useT>, teamCountInvalid: boolean) {
+  return teamCountInvalid
+    ? t("event_create.team_count_invalid", { min: TEAMS_MIN, max: TEAMS_MAX })
+    : undefined;
+}
+
 /**
  * Event 作成 form。
  *
@@ -170,15 +217,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   /** チーム数の Input 変更で teamRows を伸縮。同数なら same-reference を返して
    *  無駄な再 render を防ぐ。減るとき末尾捨て、増えるとき新 row 追加。 */
   const handleTeamCountChange = (next: number) => {
-    setTeamRows((prev) => {
-      if (next === prev.length) return prev;
-      if (next < prev.length) return prev.slice(0, Math.max(next, 0));
-      const additions = Array.from({ length: next - prev.length }, (_, i) => ({
-        internalSlug: `team-${prev.length + i + 1}`,
-        awsAccountId: "",
-      }));
-      return [...prev, ...additions];
-    });
+    setTeamRows((prev) => resizeTeamRows(prev, next));
   };
 
   const updateTeamRow = (idx: number, patch: Partial<TeamRow>) => {
@@ -211,19 +250,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
   // teamRows ベースの validation を 1 pass に集約 (= 4 つ .every() / IIFE を回す代わり)。
   // teamRows 変更時のみ再評価され、render path の負担を減らす。
-  const teamValidation = useMemo(() => {
-    let allSlugsValid = true;
-    let allAccountsValid = true;
-    const slugs = new Set<string>();
-    let hasDuplicateSlug = false;
-    for (const t of teamRows) {
-      if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
-      if (!ACCOUNT_ID_RE.test(t.awsAccountId)) allAccountsValid = false;
-      if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;
-      else slugs.add(t.internalSlug);
-    }
-    return { allSlugsValid, allAccountsValid, hasDuplicateSlug };
-  }, [teamRows]);
+  const teamValidation = useMemo(() => validateTeamRows(teamRows), [teamRows]);
   // Table の items に渡す配列を teamRows ベースで memo 化。Cloudscape Table は items の
   // shallow identity で再 render 判定するので、毎 render 新 array を渡すと無駄に重い
   // (= 99 行 × 2 column の Input が全部 reconcile される)。
@@ -314,11 +341,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
               <FormField
                 label={t("event_create.name_label")}
                 description={t("event_create.name_placeholder_example")}
-                errorText={
-                  nameInvalid && name.length > 0
-                    ? t("event_create.name_invalid", { max: NAME_MAX })
-                    : undefined
-                }
+                errorText={getNameErrorText(t, name, nameInvalid)}
               >
                 <Input
                   value={name}
@@ -332,23 +355,15 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                   min: TEAMS_MIN,
                   max: TEAMS_MAX,
                 })}
-                errorText={
-                  teamCountInvalid
-                    ? t("event_create.team_count_invalid", { min: TEAMS_MIN, max: TEAMS_MAX })
-                    : undefined
-                }
+                errorText={getTeamCountErrorText(t, teamCountInvalid)}
               >
                 <Input
                   type="number"
                   inputMode="numeric"
                   value={String(teamRows.length)}
                   onChange={({ detail }) => {
-                    const next = Number.parseInt(
-                      detail.value.replace(/\D/g, "").slice(0, TEAM_COUNT_INPUT_MAX_LEN),
-                      10,
-                    );
-                    if (Number.isFinite(next))
-                      handleTeamCountChange(Math.max(0, Math.min(TEAMS_MAX, next)));
+                    const next = parseTeamCountInput(detail.value);
+                    if (next !== undefined) handleTeamCountChange(next);
                   }}
                   invalid={teamCountInvalid}
                 />
