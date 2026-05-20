@@ -1,0 +1,82 @@
+# Roadmap
+
+TenkaCloud is moving toward a simple path for running real cloud competitions:
+start with Lite mode, grow into richer scenarios, then share problems as a
+community catalog.
+
+## Now
+
+These areas are active and ready for contributors.
+
+| Area | Direction | Good first contribution shape |
+| --- | --- | --- |
+| Lite mode | Make one-organizer events easy to deploy, inspect, and tear down | Improve command docs, error messages, and local status output |
+| Problem DX | Make problem authoring feel like adding a small plugin | Add examples, metadata validation messages, and starter templates |
+| Community feedback | Help first-time readers understand the product quickly | Improve README, gallery entries, screenshots, and onboarding docs |
+
+## Next
+
+| Area | Direction | Expected outcome |
+| --- | --- | --- |
+| Problem marketplace | Turn curated examples into a browsable catalog | Authors can discover, copy, and adapt proven competition patterns |
+| Richer scenarios | Expand beyond single-team deploy and score loops | More Battle formats, disruption events, and portal plugins |
+| Offline emulator | Let contributors test flows without full AWS deployment | LocalStack and frontend mock paths for faster iteration |
+| Operations polish | Make event day diagnosis easier | Clearer deploy logs, sandbox lifecycle state, and health checks |
+
+## Future
+
+| Area | Direction |
+| --- | --- |
+| Cloud competition ecosystem | Shared problem packs, reusable judging models, and event templates |
+| Multi-cloud authority transfer | Trust Bridge adapters for more controlled provider operations |
+| Author analytics | Feedback loops that show where players get stuck and what to improve |
+
+## Good First Issue Candidates
+
+These are repo-local starter tasks. They can become GitHub issues when a
+maintainer wants to reserve one for a contributor.
+
+### Docs Fix: Add A Screenshot To A Problem README
+
+- **Why it helps**: new users understand a problem faster when they can see the
+  portal state.
+- **Files**: one problem `README.md` and a matching image under `docs/assets/`.
+- **Validation**: `bun run lint:md` and `bun run lint:text`.
+
+### Example Problem: IAM Disaster Recovery
+
+- **Why it helps**: IAM repair is a common GameDay scenario and fits a small
+  Challenge.
+- **Files**: `problems/challenges/iam-disaster-recovery/metadata.json`,
+  `template.yaml`, and optional README.
+- **Validation**: `bun run scripts/tenkacloud-problem.ts validate iam-disaster-recovery`
+  and `make validate-problems`.
+
+### UI Polish: Empty State For No Deployments
+
+- **Why it helps**: first-time operators need a clear next action before any
+  deploy exists.
+- **Files**: Participant Portal or Application Admin Console page components.
+- **Validation**: focused Vitest coverage plus the relevant app test command.
+
+### Authoring DX: Improve Metadata Error Messages
+
+- **Why it helps**: schema failures should point authors to the exact field and
+  fix.
+- **Files**: `scripts/validate-problems.ts` and focused tests.
+- **Validation**: `bun run validate:problems` and script tests if added.
+
+### Gallery Entry: Add A New Competition Concept
+
+- **Why it helps**: examples expand what new users imagine building.
+- **Files**: `docs/gallery.md`, and optionally a problem scaffold.
+- **Validation**: `bun run lint:md` and `bun run lint:text`.
+
+## Contribution Flow
+
+1. Pick a starter task or an existing issue.
+2. Keep the PR small: one behavior, one doc set, or one problem scaffold.
+3. Add or update tests when code behavior changes.
+4. Run `make harness` and `make before-commit` before asking for review.
+
+Contributor guide: [CONTRIBUTING.md](./CONTRIBUTING.md)

@@ -3,9 +3,12 @@
 
 # TenkaCloud
 
-**The open-source platform for running real cloud competitions on real AWS accounts.**
+**Run AWS GameDay like GitHub Pages.**
 
-Battle (real-time) and Challenge (self-paced) problems deployed straight to each competitor's own AWS account — multi-tenant SaaS infrastructure included.
+Create cloud competitions in 5 minutes, deploy problems into each team's AWS
+account, and watch scores update from a participant portal.
+
+[30 sec demo](#30-second-demo) · [Try Lite](#try-lite-in-5-minutes) · [Create first problem](#create-your-first-problem)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -17,17 +20,37 @@ Battle (real-time) and Challenge (self-paced) problems deployed straight to each
 
 ---
 
+## 30-Second Demo
+
+TenkaCloud turns a problem directory into a playable cloud competition:
+
+![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
+
+1. Author a problem with `metadata.json` and `template.yaml`.
+2. Start Lite mode for a single event.
+3. Deploy into each competitor's AWS account with AssumeRole + ExternalId.
+4. Let participants recover, migrate, harden, or capture flags.
+5. Score from health checks, flag submission, phased polling, or attack detection.
+
 ## Why TenkaCloud
 
-Cloud competitions usually need three things that don't ship together: a multi-tenant SaaS control plane, a deploy pipeline into the *competitor's* AWS account, and a portal where each team sees their own scoreboard. TenkaCloud bundles all three into a single CDK app.
+Cloud competitions usually require a custom control plane, a deploy pipeline into
+competitor accounts, a scoreboard, and per-team portals. TenkaCloud bundles those
+pieces into one open-source platform.
 
-- **Real AWS deploys** — Problems are CloudFormation templates that land in the competitor's account via AssumeRole + ExternalId. No simulated sandbox.
-- **Multi-tenant by design** — SBT (Serverless SaaS Builder Toolkit) for the control plane; per-tenant Cognito, DynamoDB, and API Gateway for the application plane. Pooled and silo tiers are supported out of the box.
-- **Free Tier friendly** — Every DynamoDB table is forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect, so the whole platform fits under the AWS Free Tier when not under load.
+| Need | TenkaCloud gives you |
+| --- | --- |
+| Run a one-off internal GameDay | Lite mode: Application Admin Console + Participant Portal + deploy backend |
+| Deploy real infrastructure | CloudFormation lands in each competitor account via AssumeRole + ExternalId |
+| Add new scenarios quickly | Problem plugin model: `metadata.json` + `template.yaml` + optional portal UI |
+| Keep costs predictable | DynamoDB tables are forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect |
+| Grow into SaaS mode | SBT control plane, pooled/silo tenants, Cognito, EventBridge, and tenant pipeline |
 
-## Quick start
+## Try Lite In 5 Minutes
 
-`make deploy` brings up the Application Admin Console and Participant Portal without the SBT control plane — enough to run one competition end-to-end:
+Lite mode is the fastest path for one organizer running one competition. It skips
+the SBT control plane and deploys the Application Admin Console, Participant
+Portal, and deploy backend for a fixed local tenant.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -35,17 +58,17 @@ cd TenkaCloud
 make install
 cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
-# edit AWS_ACCOUNT_ID (+ AWS_REGION if not ap-northeast-1)
+# edit AWS_ACCOUNT_ID and TENANT_ADMIN_EMAIL
 
 make deploy
 ```
 
 You get:
 
-- **Application Admin Console** — Tenant Admin UI (CloudFront)
-- **Participant Portal** — Competitor UI (CloudFront)
-- **Problem Deploy Backend** — DynamoDB + Lambda + Step Functions + CodeBuild
-- A pre-seeded `hello-world` problem you can deploy to your own AWS account
+- **Application Admin Console**: choose problems, create deploys, watch progress.
+- **Participant Portal**: team login, problem details, hints, submissions, scores.
+- **Problem Deploy Backend**: DynamoDB + Lambda + Step Functions + CodeBuild.
+- **Sample problems**: start with Hello World, then move to Battle scenarios.
 
 Teardown:
 
@@ -53,76 +76,100 @@ Teardown:
 make destroy
 ```
 
-## Features
+## Example Competitions
 
-| | |
-|---|---|
-| **Battle problems** | Real-time PvP-style competitions |
-| **Challenge problems** | Self-paced, always-on training |
-| **Plugin architecture** | Each problem ships its own `metadata.json` + `template.yaml` (+ optional `portal/*.tsx`) — no platform changes needed to add problems |
-| **5 scoring kinds** | `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` — declared per problem |
-| **i18n** | Japanese and English. Problem metadata supports per-locale narrative overrides |
-| **Security** | Required ExternalId on AssumeRole; SSM SecureString for secrets; Cognito JWT + MFA; per-team rate limiting |
-| **Trust Bridge** | `@TenkaCloud/trust-bridge` — Cloud Action Intent protocol for cross-cloud authority transfer (AWS + GCP + Azure adapters) |
-| **Observability** | CloudWatch Dashboard, AWS Budgets, and CloudWatch Alarms (Lambda Errors / DDB throttling / API Gateway 5XX) wired to a shared SNS topic. Admin console links straight to AWS Console |
+| Competition | Difficulty | What players practice |
+| --- | --- | --- |
+| [Hello World](./problems/challenges/hello-world/) | 1 | Read an SSM Parameter and submit a flag |
+| [Hello World Battle](./problems/battles/hello-world-battle/) | 1 | Keep nginx + API endpoints alive under uptime scoring |
+| [Security Battle Royale](./problems/battles/security-battle-royale/) | 3 | Patch a vulnerable web app while preserving availability |
+| [Microservice Migration Battle](./problems/battles/microservice-migration-battle/) | 4 | Split a monolith into Lambda, ECS, and App Runner under time pressure |
+| [StackStack](./problems/battles/stackstack/) | 4 | Ship AI-generated apps safely across auth, network, rate, audit, and UX controls |
 
-## How problems work
+Browse the curated catalog: [Competition Gallery](./docs/gallery.md).
 
-A problem is a self-contained directory of three artifacts:
+## Create Your First Problem
 
-```
+A problem is a self-contained directory:
+
+```text
 problems/<category>/<id>/
 ├── metadata.json    # catalog display + scoring rule + portal slot wiring
-├── template.yaml    # CloudFormation deployed to competitor's account
+├── template.yaml    # CloudFormation deployed to the competitor account
 └── portal/          # optional React.lazy components for the Participant Portal
 ```
 
-To add a new problem:
+Create a scaffold:
 
 ```bash
-bun run scripts/tenkacloud-problem.ts create <id> --kind <flag|uptime-flat|...>
-bun run scripts/tenkacloud-problem.ts validate <id>
+bun run scripts/tenkacloud-problem.ts create my-first-challenge --kind flag
+bun run scripts/tenkacloud-problem.ts validate my-first-challenge
 ```
 
-Schema: [`problems/SCHEMA.json`](./problems/SCHEMA.json) · Authoring guide: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html)
+Authoring references:
 
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | Vite, React, react-router, [Cloudscape Design System](https://cloudscape.design/) |
-| Backend | AWS Lambda (Node.js + Hono), API Gateway HTTP API |
-| IaC | AWS CDK 2 + [`@cdklabs/sbt-aws`](https://github.com/awslabs/sbt-aws), cdk-nag |
-| Auth | AWS Cognito (Hosted UI + OAuth Code + PKCE), TOTP MFA |
-| Data | DynamoDB (PROVISIONED 1/1, Free Tier friendly) |
-| Events | EventBridge for cross-plane signalling |
-| Tests | Vitest |
-| Package | Bun (workspaces: `infrastructure` + `apps/*` + `packages/*`) |
+- [30-minute problem authoring guide](./docs/problems/AUTHORING.html)
+- [Problem schema](./problems/SCHEMA.json)
+- [Problem catalog README](./problems/README.md)
 
 ## Architecture
 
-Architecture is documented as a set of HTML ADRs in [`docs/architecture/`](./docs/architecture/). They use HTML for layout expressiveness (decision tables, threat-model grids, color-coded badges).
+TenkaCloud has two operating modes:
 
-Start here:
+| Mode | Use it when | Entry point |
+| --- | --- | --- |
+| **Lite** | You run one event and do not need tenant onboarding | `make deploy` |
+| **SaaS** | You need a multi-tenant control plane and tenant provisioning pipeline | `make deploy-saas` |
 
-- [ADR-012 — Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
-- [ADR-016 — TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
-- [ADR-017 — Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
+Core planes:
+
+- **Control Plane**: SBT tenant management, EventBridge bus, tenant pipeline.
+- **Application Plane**: tenant admin console, participant portal, Cognito, APIs.
+- **Problem Deploy Plane**: deploy worker that assumes the competitor role and
+  creates CloudFormation stacks.
+- **Trust Bridge**: `@TenkaCloud/trust-bridge` Cloud Action Intent protocol for
+  cross-cloud authority transfer.
+
+Start with these architecture docs:
+
+- [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
+- [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
+- [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
 - [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html)
 
-Full ADR index lives under [`docs/architecture/`](./docs/architecture/).
+## Full Deployment
+
+Use SaaS mode when you want tenant onboarding, pooled/silo tiers, and the full SBT
+control plane:
+
+```bash
+cp infrastructure/environments/development/.env.example \
+   infrastructure/environments/development/.env
+# edit SYSTEM_ADMIN_EMAIL, AWS_ACCOUNT_ID, and AWS_REGION
+
+make deploy-saas
+```
+
+The repository also includes targeted commands for local development:
+
+```bash
+make lite-status
+make lite-console-url
+make lite-portal-url
+make before-commit
+make harness
+```
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). In short:
+Contributor path:
 
-- Pick an issue labeled [`good first issue`](https://github.com/susumutomita/TenkaCloud/labels/good%20first%20issue)
-- Tests are required (Vitest)
-- Run `make before-commit` before opening a PR
-- Architecture invariants are enforced by `make harness` (see [`docs/architecture/harness.md`](./docs/architecture/harness.md))
+- Read [CONTRIBUTING.md](./CONTRIBUTING.md).
+- Pick a starter task from [ROADMAP.md](./ROADMAP.md#good-first-issue-candidates).
+- Run `make before-commit` and `make harness` before opening a PR.
 
-AI agent guidelines: [`AGENTS.md`](./AGENTS.md) · [`CLAUDE.md`](./CLAUDE.md)
+AI agent guidelines: [AGENTS.md](./AGENTS.md) · [CLAUDE.md](./CLAUDE.md)
 
 ## License
 
-[Apache License 2.0](./LICENSE) — Use commercially, modify, distribute. Just keep the notice.
+[Apache License 2.0](./LICENSE) — use commercially, modify, and distribute.
