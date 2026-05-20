@@ -60,6 +60,14 @@ export type {
   VerifyOutcome,
 } from "./jws.js";
 export { signIntent, verifySignature } from "./jws.js";
+export type {
+  MockCloudAdapterOptions,
+  MockCloudCredential,
+  MockCloudExchangeContext,
+  MockDeploymentSignal,
+  MockDeploymentSignalStatus,
+} from "./mock-cloud-adapter.js";
+export { MockCloudAdapter } from "./mock-cloud-adapter.js";
 
 export type {
   ExchangeContext,
