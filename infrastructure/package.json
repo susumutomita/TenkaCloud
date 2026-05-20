@@ -18,10 +18,8 @@
     "_synth-app": "tsx bin/infrastructure.ts"
   },
   "devDependencies": {
-    "@aws-sdk/client-codebuild": "^3.1048.0",
     "@aws-sdk/client-cloudformation": "^3.1048.0",
     "@aws-sdk/client-cloudwatch": "^3.1048.0",
-    "@aws-sdk/client-cloudwatch-logs": "^3.1048.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1048.0",
     "@aws-sdk/client-dynamodb": "^3.1048.0",
     "@aws-sdk/client-eventbridge": "^3.1048.0",
@@ -47,7 +45,9 @@
   "dependencies": {
     "@TenkaCloud/trust-bridge": "workspace:*",
     "@aws-cdk/aws-lambda-python-alpha": "^2.140.0-alpha.0",
+    "@aws-sdk/client-codebuild": "^3.1048.0",
     "@aws-sdk/client-codepipeline": "^3.1048.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1048.0",
     "@aws-sdk/client-sfn": "^3.1048.0",
     "@cdklabs/sbt-aws": "0.3.9",
     "ajv": "8.18.0",
