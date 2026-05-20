@@ -61,6 +61,12 @@ export type {
 } from "./jws.js";
 export { signIntent, verifySignature } from "./jws.js";
 export type {
+  LocalStackCloudAdapterOptions,
+  LocalStackCredential,
+  LocalStackExchangeContext,
+} from "./localstack-cloud-adapter.js";
+export { LocalStackCloudAdapter } from "./localstack-cloud-adapter.js";
+export type {
   MockCloudAdapterOptions,
   MockCloudCredential,
   MockCloudExchangeContext,
