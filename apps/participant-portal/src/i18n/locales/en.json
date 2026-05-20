@@ -6,7 +6,11 @@
     "title": "TenkaCloud Participant Portal",
     "loading": "Loading…",
     "no_session": "No active session. Please sign in again.",
-    "dev_mock_alert": "Running in dev-mock mode. To connect to a real backend, set runtime-config mode to backend.",
+    "mock_cloud_header": "Mock cloud mode",
+    "mock_cloud_body": "This event is using a local mock cloud adapter. No real AWS resources are created.",
+    "localstack_cloud_header": "LocalStack cloud mode",
+    "localstack_cloud_body": "This event is configured for LocalStack at {endpoint}. Real AWS resources are not used.",
+    "localstack_endpoint_missing": "endpoint not configured",
     "fetch_status_failed": "Failed to fetch status"
   },
   "nav": {

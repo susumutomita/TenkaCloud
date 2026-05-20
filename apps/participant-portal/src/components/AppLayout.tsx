@@ -1,3 +1,4 @@
+import Alert from "@cloudscape-design/components/alert";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
@@ -23,6 +24,25 @@ const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
   ja: "日本語",
   en: "English",
 };
+
+function OfflineCloudModeAlert({ config }: { config: AppConfig }) {
+  const { t } = useI18n();
+  if (config.cloudMode === "real") return null;
+  if (config.cloudMode === "localstack") {
+    return (
+      <Alert type="warning" header={t("app.localstack_cloud_header")}>
+        {t("app.localstack_cloud_body", {
+          endpoint: config.localstackEndpoint ?? t("app.localstack_endpoint_missing"),
+        })}
+      </Alert>
+    );
+  }
+  return (
+    <Alert type="info" header={t("app.mock_cloud_header")}>
+      {t("app.mock_cloud_body")}
+    </Alert>
+  );
+}
 
 /**
  * Participant Portal の shell。AWS GameDay の参考画面に倣って TopNavigation +
@@ -190,6 +210,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         }
         content={
           <SpaceBetween size="m">
+            <OfflineCloudModeAlert config={config} />
             {auth.session === null ? (
               <Box variant="strong" color="text-status-warning">
                 {t("app.no_session")}

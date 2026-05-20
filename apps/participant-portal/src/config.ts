@@ -9,14 +9,19 @@
  * `mode` は backend 連携モード。`"dev-mock"` はフロント単体動作 (mock auth が有効)。
  *   `"backend"` は本物の backend API を呼ぶ。runtime-config の値が優先、なければ
  *   fallback で `"dev-mock"` 扱い。
+ * `cloudMode` は実際に問題環境を作る provider execution mode。frontend はこれを見て
+ * offline/mock/localstack の警告 UI を出すが、認証 skip には使わない。
  */
 export type AppMode = "dev-mock" | "backend";
+export type CloudMode = "real" | "mock" | "localstack";
 
 export interface AppConfig {
   readonly apiBaseUrl: string;
   readonly eventTitle: string;
   readonly eventRegion: string;
   readonly mode: AppMode;
+  readonly cloudMode: CloudMode;
+  readonly localstackEndpoint?: string;
 }
 
 interface RuntimeConfig {
@@ -24,6 +29,8 @@ interface RuntimeConfig {
   readonly eventTitle?: string;
   readonly eventRegion?: string;
   readonly mode?: AppMode;
+  readonly cloudMode?: CloudMode;
+  readonly localstackEndpoint?: string;
 }
 
 const DEV_FALLBACK: AppConfig = {
@@ -31,6 +38,7 @@ const DEV_FALLBACK: AppConfig = {
   eventTitle: "TenkaCloud Battle (dev mock)",
   eventRegion: "ap-northeast-1",
   mode: "dev-mock",
+  cloudMode: "mock",
 };
 
 /**
@@ -46,6 +54,28 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
+function isCloudMode(value: unknown): value is CloudMode {
+  return value === "real" || value === "mock" || value === "localstack";
+}
+
+function defaultCloudMode(mode: AppMode): CloudMode {
+  return mode === "backend" ? "real" : "mock";
+}
+
+function normalizeLocalstackEndpoint(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.trim().length === 0) return undefined;
+  try {
+    const url = new URL(value);
+    const allowedHost =
+      url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+    const allowedProtocol = url.protocol === "http:" || url.protocol === "https:";
+    if (!allowedHost || !allowedProtocol) return undefined;
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
 export async function loadConfig(): Promise<AppConfig> {
   try {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
@@ -55,6 +85,7 @@ export async function loadConfig(): Promise<AppConfig> {
     }
     const runtime = (await res.json()) as RuntimeConfig;
     const mode = runtime.mode ?? DEV_FALLBACK.mode;
+    const cloudMode = isCloudMode(runtime.cloudMode) ? runtime.cloudMode : defaultCloudMode(mode);
     const apiBaseUrl = runtime.apiBaseUrl ?? DEV_FALLBACK.apiBaseUrl;
     // Issue #871: backend mode は HTTPS 必須 (= teamLoginKey を attacker に漏らさない)
     if (mode === "backend" && apiBaseUrl && !isHttpsUrl(apiBaseUrl)) {
@@ -68,6 +99,11 @@ export async function loadConfig(): Promise<AppConfig> {
       eventTitle: runtime.eventTitle ?? DEV_FALLBACK.eventTitle,
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
       mode,
+      cloudMode,
+      localstackEndpoint:
+        cloudMode === "localstack"
+          ? normalizeLocalstackEndpoint(runtime.localstackEndpoint)
+          : undefined,
     };
   } catch {
     return DEV_FALLBACK;

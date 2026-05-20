@@ -168,7 +168,6 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         {t("quests.header")}
       </Header>
 
-      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}
