@@ -6,6 +6,7 @@ import {
   getDeployment,
   getStackProgress,
   listDeployments,
+  parseStackOutputs,
   startDeployment,
   statusToIndicator,
   TERMINAL_STATUSES,
@@ -115,6 +116,38 @@ describe("getDeployment", () => {
     });
     await getDeployment(client, "01H");
     expect(calls[0]).toEqual({ path: "/deployments/01H", method: "GET" });
+  });
+});
+
+describe("parseStackOutputs", () => {
+  it("map 形式の stackOutputs から string 値だけを取り出すべき", () => {
+    expect(
+      parseStackOutputs(
+        JSON.stringify({
+          FrontendUrl: "https://app.example.com",
+          Port: 443,
+          Empty: null,
+        }),
+      ),
+    ).toEqual({ FrontendUrl: "https://app.example.com" });
+  });
+
+  it("CloudFormation Output 配列形式から OutputKey/OutputValue を取り出すべき", () => {
+    expect(
+      parseStackOutputs(
+        JSON.stringify([
+          { OutputKey: "FrontendUrl", OutputValue: "https://app.example.com" },
+          { OutputKey: "IgnoredNumber", OutputValue: 123 },
+          { OutputKey: 456, OutputValue: "ignored" },
+        ]),
+      ),
+    ).toEqual({ FrontendUrl: "https://app.example.com" });
+  });
+
+  it("壊れた JSON や非 object は空 map にすべき", () => {
+    expect(parseStackOutputs(undefined)).toEqual({});
+    expect(parseStackOutputs("{bad json")).toEqual({});
+    expect(parseStackOutputs(JSON.stringify("not-object"))).toEqual({});
   });
 });
 
