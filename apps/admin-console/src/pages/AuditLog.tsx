@@ -21,6 +21,45 @@ import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
+const AUDIT_PAGE_LIMIT = 50;
+
+type AuditListInput = Parameters<AuditClient["list"]>[0];
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+
+export function validateAuditLoadInput(scope: AuditScope, tenantId: string, t: TFn): string | null {
+  if (scope === "tenant" && tenantId.trim().length === 0) {
+    return t("audit_log.tenant_id_required");
+  }
+  return null;
+}
+
+export function buildAuditListInput(
+  scope: AuditScope,
+  tenantId: string,
+  cursor: string | undefined,
+): AuditListInput {
+  return {
+    scope,
+    ...(scope === "tenant" ? { tenantId: tenantId.trim() } : {}),
+    limit: AUDIT_PAGE_LIMIT,
+    ...(cursor ? { cursor } : {}),
+  };
+}
+
+export function mergeAuditItems(
+  previousItems: readonly AuditItem[],
+  pageItems: readonly AuditItem[],
+  cursor: string | undefined,
+): AuditItem[] {
+  return cursor ? [...previousItems, ...pageItems] : [...pageItems];
+}
+
+export function describeAuditLoadError(err: unknown, t: TFn): string {
+  if (err instanceof AuditApiError) return describeAuditError(err);
+  if (err instanceof Error) return err.message;
+  return t("audit_log.fetch_failed");
+}
+
 /**
  * Issue #950 (ADR-020 Phase D): SystemAdmin Console 側の admin 操作監査ログ view。
  *
@@ -46,34 +85,19 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
   const load = useCallback(
     async (cursor: string | undefined) => {
       if (!client) return;
-      if (scope === "tenant" && tenantId.trim().length === 0) {
-        setError(t("audit_log.tenant_id_required"));
+      const validationError = validateAuditLoadInput(scope, tenantId, t);
+      if (validationError) {
+        setError(validationError);
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        const page = await client.list({
-          scope,
-          ...(scope === "tenant" ? { tenantId: tenantId.trim() } : {}),
-          limit: 50,
-          ...(cursor ? { cursor } : {}),
-        });
-        if (cursor) {
-          // 続きを append
-          setItems((prev) => [...prev, ...page.items]);
-        } else {
-          setItems([...page.items]);
-        }
+        const page = await client.list(buildAuditListInput(scope, tenantId, cursor));
+        setItems((prev) => mergeAuditItems(prev, page.items, cursor));
         setNextCursor(page.nextCursor);
       } catch (err) {
-        if (err instanceof AuditApiError) {
-          setError(describeAuditError(err));
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError(t("audit_log.fetch_failed"));
-        }
+        setError(describeAuditLoadError(err, t));
       } finally {
         setLoading(false);
       }
