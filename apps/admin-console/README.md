@@ -1,22 +1,22 @@
 # @TenkaCloud/admin-console
 
-TenkaCloud の SaaS mode で System Admin が Control Plane (`@cdklabs/sbt-aws` 0.3.9 の ControlPlane Stack) を操作する SPA。 Vite + React + Cloudscape Design System、 認証は Cognito Hosted UI への OAuth Code + PKCE。
+SPA used by the System Admin in SaaS mode to operate the Control Plane (the `ControlPlane` construct from [`@cdklabs/sbt-aws`](https://github.com/awslabs/sbt-aws) 0.3.9). Built with Vite + React + Cloudscape Design System. Authentication is OAuth Code + PKCE through the Cognito Hosted UI.
 
-> Lite mode (= `make deploy`) では本 SPA は使わない (= SaaS mode 専用)。 主催者 1 人 1 大会の最短経路は `make deploy` で `apps/application-admin-console` を直接使う。
+> Lite mode (= `make deploy`) does not use this SPA — it is SaaS-mode-only. For the single-operator, single-competition path, use `apps/application-admin-console` directly via `make deploy`.
 
-## 機能
+## Features
 
-- サインイン (Cognito Hosted UI 経由、 TOTP MFA 必須)
-- テナント一覧 / 作成 / deprovision
-- プロビジョニング Jobs (CodePipeline 実行履歴)
-- 監査ログ
-- 運用ダッシュボード (CloudWatch Dashboard / AWS Budgets / Alarms への deep link)
+- Sign-in through the Cognito Hosted UI (TOTP MFA required)
+- Tenant list / create / deprovision
+- Provisioning jobs (CodePipeline execution history)
+- Audit log
+- Operations dashboard (deep links to CloudWatch Dashboard / AWS Budgets / Alarms)
 
-i18n は ja + en の 2 言語。
+i18n: Japanese and English.
 
-## ローカル開発
+## Local development
 
-`.env.local` を配置してから起動する。
+Create `.env.local` first, then start the dev server.
 
 ```env
 VITE_COGNITO_DOMAIN=https://tenkacloud-xxxx.auth.ap-northeast-1.amazoncognito.com
@@ -30,13 +30,13 @@ make dev
 # → http://localhost:5173
 ```
 
-Cognito UserPoolClient 側で `http://localhost:5173/callback` を許可コールバック URL に追加する (`make deploy-saas` 後は CDK が自動で追加済)。 production deploy では runtime-config.json 経由で URL が注入されるため `.env.local` 不要。
+Add `http://localhost:5173/callback` as an allowed callback URL on the Cognito UserPoolClient (CDK adds this automatically after `make deploy-saas`). In production builds, the URL is injected via `runtime-config.json`, so `.env.local` is not needed.
 
-## コマンド
+## Commands
 
 ```sh
-make dev      # 開発サーバ
-make build    # 型チェック + 本番ビルド
-make preview  # dist/ を serve
+make dev      # dev server
+make build    # type-check + production build
+make preview  # serve dist/
 make test     # vitest
 ```

@@ -1,8 +1,8 @@
-# コントリビューションガイド
+# Contributing
 
-TenkaCloud へのコントリビューションを歓迎します。
+Contributions to TenkaCloud are welcome.
 
-## セットアップ
+## Setup
 
 ```bash
 git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
@@ -11,25 +11,25 @@ make install
 make start
 ```
 
-## 開発フロー
+## Development flow
 
-1. Issue を確認（`good first issue` / `help wanted`）
-2. ブランチを作成: `git checkout -b feat/your-feature`
-3. TDD でコードを書く（テストタイトルは日本語「〜すべき」形式）
-4. `make before-commit` を実行（lint・format・typecheck・test 99％+・build）
-5. PR を作成（タイトル 70 文字以内、Conventional Commits 形式）
+1. Pick an issue (`good first issue` / `help wanted`)
+2. Create a branch: `git checkout -b feat/your-feature`
+3. Write tests first (TDD). Test titles use the Japanese pattern `〜すべき` — match this style for consistency with the existing suite.
+4. Run `make before-commit` (lint / format / typecheck / tests / build)
+5. Open a PR (title under 70 characters, Conventional Commits)
 
-## コミットメッセージ
+## Commit messages
 
-[Conventional Commits](https://www.conventionalcommits.org/) に従います: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
+We follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
 
-## ルールと禁止事項
+## Rules and constraints
 
-[CLAUDE.md](./CLAUDE.md) を参照してください。
+See [CLAUDE.md](./CLAUDE.md) for project rules, architecture invariants, and prohibited patterns. The same rules apply whether the change is made by a human or by an AI agent.
 
-## 質問・相談
+## Questions
 
 - [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions)
 - [GitHub Issues](https://github.com/susumutomita/TenkaCloud/issues)
 
-コントリビューションは [MIT License](./LICENSE) の下で公開されます。
+Contributions are released under the [Apache License 2.0](./LICENSE).

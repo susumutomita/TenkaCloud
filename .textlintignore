@@ -20,10 +20,13 @@ infrastructure/cloudformation/**
 references/
 references/**
 
-# 英語 README は Japanese textlint rule (= ja-technical-writing / ja-spacing /
-# spellcheck-tech-word の日本語側 dictionary) の対象外。 README.ja.md だけは
-# 日本語版なので除外しない。
+# 英語ドキュメントは Japanese textlint rule (= ja-technical-writing / ja-spacing /
+# spellcheck-tech-word の日本語側 dictionary) の対象外。 プロジェクトは
+# OSS 配布で英語を正本としているため、 README / CONTRIBUTING / apps/*/README は
+# 全て英語固定 (#1087)。
 README.md
+CONTRIBUTING.md
+apps/*/README.md
 
 # 外部 spec の vendor 翻訳。 textlint の社内 style rule (= 句点 / 接続詞 / 曖昧表現)
 # を当てると原典の意図がずれる。

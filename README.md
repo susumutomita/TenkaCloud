@@ -13,8 +13,6 @@ Battle (real-time) and Challenge (self-paced) problems deployed straight to each
 [![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
 [![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
 
-🌐 [English](./README.md) · [日本語](./README.ja.md)
-
 </div>
 
 ---
@@ -29,9 +27,7 @@ Cloud competitions usually need three things that don't ship together: a multi-t
 
 ## Quick start
 
-### Default: Lite mode — `make deploy`
-
-Most operators run one competition at a time, not a multi-tenant SaaS. `make deploy` defaults to Lite mode, deploying the Application Admin Console and Participant Portal without the SBT control plane:
+`make deploy` brings up the Application Admin Console and Participant Portal without the SBT control plane — enough to run one competition end-to-end:
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -56,17 +52,6 @@ Teardown:
 ```bash
 make destroy
 ```
-
-### Opt-in: SaaS mode — `make deploy-saas`
-
-For multiple tenants, pooled tiers (BASIC / STANDARD / PREMIUM) and silo tier (PLATINUM), and System Admin onboarding:
-
-```bash
-make deploy-saas
-make destroy-saas
-```
-
-SaaS mode requires `SYSTEM_ADMIN_EMAIL` in the env file. See [`scripts/install.sh`](./scripts/install.sh) for the orchestration.
 
 ## Features
 
