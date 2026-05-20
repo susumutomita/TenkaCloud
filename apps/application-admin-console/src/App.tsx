@@ -22,10 +22,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function guarded(config: AppConfig, element: React.ReactNode) {
+function guarded(element: React.ReactNode) {
   return (
     <RequireAuth>
-      <ShellLayout config={config}>{element}</ShellLayout>
+      <ShellLayout>{element}</ShellLayout>
     </RequireAuth>
   );
 }
@@ -36,27 +36,24 @@ export function App({ config }: { config: AppConfig }) {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
-        <Route path="/" element={guarded(config, <HomePage />)} />
-        <Route path="/problems" element={guarded(config, <ProblemsPage />)} />
+        <Route path="/" element={guarded(<HomePage />)} />
+        <Route path="/problems" element={guarded(<ProblemsPage />)} />
         <Route
           path="/problems/:problemId"
-          element={guarded(config, <ProblemDetailPage config={config} />)}
+          element={guarded(<ProblemDetailPage config={config} />)}
         />
-        <Route path="/deployments" element={guarded(config, <DeploymentsPage config={config} />)} />
+        <Route path="/deployments" element={guarded(<DeploymentsPage config={config} />)} />
         <Route
           path="/deployments/:jobId"
-          element={guarded(config, <DeploymentDetailPage config={config} />)}
+          element={guarded(<DeploymentDetailPage config={config} />)}
         />
         <Route
           path="/competitor-accounts"
-          element={guarded(config, <CompetitorAccountsPage config={config} />)}
+          element={guarded(<CompetitorAccountsPage config={config} />)}
         />
-        <Route path="/events" element={guarded(config, <EventListPage config={config} />)} />
-        <Route path="/events/new" element={guarded(config, <EventCreatePage config={config} />)} />
-        <Route
-          path="/events/:eventId"
-          element={guarded(config, <EventDetailPage config={config} />)}
-        />
+        <Route path="/events" element={guarded(<EventListPage config={config} />)} />
+        <Route path="/events/new" element={guarded(<EventCreatePage config={config} />)} />
+        <Route path="/events/:eventId" element={guarded(<EventDetailPage config={config} />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>

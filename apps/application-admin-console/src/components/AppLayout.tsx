@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
-import type { AppConfig } from "../config";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 
 /** Issue #583 Phase 1.C: locale switcher display 名 map (= 各 locale.json と同期)。 */
@@ -24,7 +23,7 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
  * placeholder のまま漏れるので、ここでは表示しない。Home ページ側で JWT custom 属性
  * (custom:tenantId / 将来 custom:tenantName) からユーザの所属テナントを描画する。
  */
-export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
+export function ShellLayout({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

@@ -37,7 +37,6 @@ import {
   type DeployPhase,
   deploySummaryTitle,
   derivePhases,
-  formatLogTimestamp,
   type LogLine,
   type PhaseStatus,
 } from "../lib/deploy-phases";
