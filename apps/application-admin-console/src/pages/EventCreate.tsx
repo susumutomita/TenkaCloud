@@ -39,7 +39,6 @@ const TEAMS_MIN = 1;
 const TEAMS_MAX = 99;
 const TEAM_COUNT_INPUT_MAX_LEN = 3; // TEAMS_MAX が 99 = 2 桁、+1 余裕で 3 桁まで入力受理
 const INITIAL_TEAM_COUNT = 3;
-const NO_VERIFIED_ACCOUNTS_HELPER = "No verified accounts available. Add one first.";
 
 const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
   value: r.code,
