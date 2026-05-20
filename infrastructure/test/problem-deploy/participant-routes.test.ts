@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   lookupTeamByLoginKey: vi.fn(),
+  getParticipantDeployLogs: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
@@ -14,6 +15,16 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
 
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/lookup", () => ({
   lookupTeamByLoginKey: mocks.lookupTeamByLoginKey,
+}));
+
+vi.mock("../../lib/problem-deploy/handlers/participant-handler/deploy-logs", () => ({
+  defaultDeployLogDeps: {},
+  getParticipantDeployLogs: mocks.getParticipantDeployLogs,
+  parseDeployLogLimit: (raw: string | undefined) => {
+    if (raw === undefined) return 50;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 1 && n <= 100 ? n : null;
+  },
 }));
 
 const { app } = await import("../../lib/problem-deploy/handlers/participant-handler/index");
@@ -95,5 +106,67 @@ describe("GET /portal/me", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBe("internal_error");
+  });
+});
+
+describe("GET /portal/me/deploy-logs", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("jobId が無い場合は 400 を返すべき", async () => {
+    const res = await app.request("/portal/me/deploy-logs", {
+      headers: { authorization: `Bearer ${VALID_KEY}` },
+    });
+
+    expect(res.status).toBe(400);
+    expect(mocks.getParticipantDeployLogs).not.toHaveBeenCalled();
+  });
+
+  it("limit が不正なら 400 を返すべき", async () => {
+    const res = await app.request(
+      "/portal/me/deploy-logs?jobId=01H8XGJWBWBAQ4N6RZHM4S2KMV&limit=101",
+      { headers: { authorization: `Bearer ${VALID_KEY}` } },
+    );
+
+    expect(res.status).toBe(400);
+    expect(mocks.getParticipantDeployLogs).not.toHaveBeenCalled();
+  });
+
+  it("正常系: deploy log response を返すべき", async () => {
+    mocks.getParticipantDeployLogs.mockResolvedValueOnce({
+      kind: "ok",
+      response: {
+        jobId: "01H8XGJWBWBAQ4N6RZHM4S2KMV",
+        buildStatus: "IN_PROGRESS",
+        complete: false,
+        nextToken: "next",
+        entries: [
+          { id: "1", timestamp: "2026-05-20T10:00:00.000Z", source: "codebuild", message: "hello" },
+        ],
+      },
+    });
+
+    const res = await app.request(
+      "/portal/me/deploy-logs?jobId=01H8XGJWBWBAQ4N6RZHM4S2KMV&limit=10&nextToken=prev",
+      { headers: { authorization: `Bearer ${VALID_KEY}` } },
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.entries[0].message).toBe("hello");
+    expect(mocks.getParticipantDeployLogs).toHaveBeenCalledWith(expect.anything(), {}, VALID_KEY, {
+      jobId: "01H8XGJWBWBAQ4N6RZHM4S2KMV",
+      nextToken: "prev",
+      limit: 10,
+    });
+  });
+
+  it("not_found outcome は 404 を返すべき", async () => {
+    mocks.getParticipantDeployLogs.mockResolvedValueOnce({ kind: "not_found" });
+
+    const res = await app.request("/portal/me/deploy-logs?jobId=01H8XGJWBWBAQ4N6RZHM4S2KMV", {
+      headers: { authorization: `Bearer ${VALID_KEY}` },
+    });
+
+    expect(res.status).toBe(404);
   });
 });

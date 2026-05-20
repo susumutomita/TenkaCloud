@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deleteProblemEndpointOverride,
+  getDeployLogs,
   getNotifications,
   getPortalMe,
   listProblemEndpoints,
@@ -151,6 +152,62 @@ describe("getNotifications", () => {
     await getNotifications("https://x", KEY, 50);
     const [url] = fetchMock.mock.calls[0] as [URL];
     expect(url.searchParams.get("limit")).toBe("50");
+  });
+});
+
+describe("getDeployLogs", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("jobId / nextToken / limit を query に乗せて CodeBuild log response を返すべき", async () => {
+    const payload = {
+      jobId: "01H8XGJWBWBAQ4N6RZHM4S2KMV",
+      buildStatus: "IN_PROGRESS",
+      complete: false,
+      nextToken: "next",
+      entries: [
+        {
+          id: "1",
+          timestamp: "2026-05-20T10:00:00.000Z",
+          source: "codebuild",
+          message: "install phase",
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await getDeployLogs("https://api.example.com", KEY, payload.jobId, {
+      nextToken: "prev",
+      limit: 25,
+    });
+
+    expect(out.entries[0]?.message).toBe("install phase");
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.toString()).toBe(
+      "https://api.example.com/portal/me/deploy-logs?jobId=01H8XGJWBWBAQ4N6RZHM4S2KMV&nextToken=prev&limit=25",
+    );
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
+  });
+
+  it("400 invalid_jobid は PortalValidationError として扱うべき", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: "invalid_jobid" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(getDeployLogs("https://x", KEY, "bad")).rejects.toMatchObject({
+      errorCode: "invalid_jobid",
+    });
   });
 });
 

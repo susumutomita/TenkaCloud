@@ -12,10 +12,13 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  type DeployLogsResponse,
   type DeploymentLogEntry,
+  type DeploymentLogView,
   type DeploymentStatus,
+  getDeployLogs,
   type ParticipantHintView,
   type ParticipantProblemView,
   PortalScoringGateError,
@@ -87,6 +90,7 @@ const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
 const POLL_INTERVAL_MS = 30_000;
+const LIVE_DEPLOY_LOG_POLL_INTERVAL_MS = 5_000;
 
 const DEPLOY_LOG_LEVEL_COLOR: Record<DeploymentLogEntry["level"], string> = {
   info: "#9bd3ff",
@@ -111,6 +115,7 @@ export function ProblemPanel({
   onScored: () => Promise<void>;
 }) {
   const t = useT();
+  const [liveDeployLog, setLiveDeployLog] = useState<DeploymentLogView | null>(null);
   const kindLabel = problem.scoring
     ? t(SCORING_KIND_KEY[problem.scoring.kind] ?? "problem_panel.kind_unknown")
     : t("problem_panel.kind_unknown");
@@ -124,6 +129,39 @@ export function ProblemPanel({
     Number.isFinite(lastScoredMs) &&
     now - lastScoredMs > STALE_THRESHOLD_MS &&
     problem.status === "COMPLETE";
+  const displayedDeployLog =
+    liveDeployLog && liveDeployLog.entries.length > 0 ? liveDeployLog : problem.deployLog;
+
+  useEffect(() => {
+    setLiveDeployLog(null);
+    if (TERMINAL_STATUSES.has(problem.status)) return;
+
+    let cancelled = false;
+    let nextToken: string | undefined;
+    const poll = async () => {
+      try {
+        const response = await getDeployLogs(apiBaseUrl, sessionToken, problem.jobId, {
+          nextToken,
+          limit: 50,
+        });
+        if (cancelled) return;
+        nextToken = response.nextToken;
+        setLiveDeployLog((prev) => mergeLiveDeployLog(prev, response));
+        if (response.complete) cancelled = true;
+      } catch {
+        // Live logs are best-effort; keep the synthetic deployment log visible if polling fails.
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => {
+      if (!cancelled) void poll();
+    }, LIVE_DEPLOY_LOG_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [apiBaseUrl, sessionToken, problem.jobId, problem.status]);
 
   return (
     <Container
@@ -162,9 +200,9 @@ export function ProblemPanel({
           ]}
         />
 
-        {problem.deployLog?.entries.length > 0 && (
+        {displayedDeployLog?.entries.length > 0 && (
           <DeployTerminal
-            entries={problem.deployLog.entries}
+            entries={displayedDeployLog.entries}
             title={t("problem_panel.deploy_log_header")}
           />
         )}
@@ -209,6 +247,28 @@ export function ProblemPanel({
       </SpaceBetween>
     </Container>
   );
+}
+
+function mergeLiveDeployLog(
+  prev: DeploymentLogView | null,
+  response: DeployLogsResponse,
+): DeploymentLogView {
+  const existing = prev?.entries ?? [];
+  const seen = new Set(existing.map((entry) => entry.id));
+  const next = response.entries
+    .filter((entry) => !seen.has(entry.id))
+    .map((entry): DeploymentLogEntry => ({ ...entry, level: classifyCodeBuildLog(entry.message) }));
+  return {
+    cursor: response.nextToken ?? prev?.cursor ?? "",
+    entries: [...existing, ...next].slice(-200),
+  };
+}
+
+function classifyCodeBuildLog(message: string): DeploymentLogEntry["level"] {
+  if (/\b(error|failed|failure|timed out|fault)\b/i.test(message)) return "error";
+  if (/\b(succeeded|complete|completed)\b/i.test(message)) return "success";
+  if (/\b(warn|warning)\b/i.test(message)) return "warning";
+  return "info";
 }
 
 function DeployTerminal({
