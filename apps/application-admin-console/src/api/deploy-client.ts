@@ -44,17 +44,21 @@ export type DeploymentStatus =
   | "COMPLETE"
   | "FAILED"
   | "DELETING"
-  | "DELETED";
+  | "DELETED"
+  | "EXPIRED"
+  | "AUTO_DELETED";
 
 export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
   "COMPLETE",
   "FAILED",
   "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
 ]);
 
 export const DEPLOYMENT_STATUS_INDICATOR: Record<
   DeploymentStatus,
-  "pending" | "in-progress" | "success" | "error" | "stopped"
+  "pending" | "in-progress" | "success" | "error" | "stopped" | "warning"
 > = {
   PENDING: "pending",
   IN_PROGRESS: "in-progress",
@@ -62,6 +66,8 @@ export const DEPLOYMENT_STATUS_INDICATOR: Record<
   FAILED: "error",
   DELETING: "in-progress",
   DELETED: "stopped",
+  EXPIRED: "warning",
+  AUTO_DELETED: "stopped",
 };
 
 export interface DeployRequestBody {

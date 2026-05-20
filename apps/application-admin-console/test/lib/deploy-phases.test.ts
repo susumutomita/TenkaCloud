@@ -143,6 +143,16 @@ describe("derivePhases", () => {
     expect(pick(phases, "complete").status).toBe("skipped");
   });
 
+  it("status=EXPIRED / AUTO_DELETED のとき自動削除 lifecycle として表示すべき", () => {
+    const expired = derivePhases({ ...baseDeployment, status: "EXPIRED" }, emptyProgress);
+    expect(pick(expired, "cfn-deploy").status).toBe("skipped");
+    expect(pick(expired, "complete").status).toBe("failed");
+
+    const autoDeleted = derivePhases({ ...baseDeployment, status: "AUTO_DELETED" }, emptyProgress);
+    expect(pick(autoDeleted, "cfn-deploy").status).toBe("skipped");
+    expect(pick(autoDeleted, "complete").status).toBe("skipped");
+  });
+
   // #818 regression: past CREATE_IN_PROGRESS event が history に残っていても、
   // stack 自体は CREATE_COMPLETE に到達しているなら cfn-deploy phase は complete。
   it("stackStatus=CREATE_COMPLETE のとき過去 IN_PROGRESS event があっても complete にすべき (#818)", () => {
@@ -219,6 +229,13 @@ describe("deploySummaryTitle", () => {
   });
   it("FAILED のとき failed を含むべき", () => {
     expect(deploySummaryTitle({ ...baseDeployment, status: "FAILED" })).toMatch(/failed/);
+  });
+
+  it("EXPIRED / AUTO_DELETED のとき lifecycle label を含むべき", () => {
+    expect(deploySummaryTitle({ ...baseDeployment, status: "EXPIRED" })).toMatch(/expired/);
+    expect(deploySummaryTitle({ ...baseDeployment, status: "AUTO_DELETED" })).toMatch(
+      /auto-deleted/,
+    );
   });
 });
 

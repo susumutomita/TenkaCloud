@@ -35,10 +35,18 @@ function renderSubmissionState(
   readonly label: string;
 } {
   if (problem.status === "FAILED") return { type: "error", label: t("quests.submission_failed") };
-  if (problem.status === "DELETED")
-    return { type: "stopped", label: t("quests.submission_finished") };
-  if (problem.status === "PENDING" || problem.status === "IN_PROGRESS") {
-    return { type: "in-progress", label: t("quests.submission_preparing") };
+  if (problem.status === "EXPIRED") {
+    return { type: "warning", label: t("quests.status_label.EXPIRED") };
+  }
+  if (problem.status === "DELETED" || problem.status === "AUTO_DELETED") {
+    return { type: "stopped", label: t(`quests.status_label.${problem.status}`) };
+  }
+  if (
+    problem.status === "PENDING" ||
+    problem.status === "IN_PROGRESS" ||
+    problem.status === "DELETING"
+  ) {
+    return { type: "in-progress", label: t(`quests.status_label.${problem.status}`) };
   }
   if (problem.scoring?.kind === "flag") {
     if (problem.scoring.flagSubmitted)

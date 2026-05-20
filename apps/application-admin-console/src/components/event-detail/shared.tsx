@@ -18,6 +18,8 @@ const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "gre
   FAILED: "red",
   DELETING: "grey",
   DELETED: "grey",
+  EXPIRED: "red",
+  AUTO_DELETED: "grey",
 };
 
 export const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
@@ -45,10 +47,12 @@ export function renderProblemDeployStatus(
     );
   }
   const total = deployments.length;
-  const complete = deployments.filter((d) => d.status === "COMPLETE").length;
-  const failed = deployments.filter((d) => d.status === "FAILED").length;
+  const complete = deployments.filter(
+    (d) => d.status === "COMPLETE" || d.status === "AUTO_DELETED",
+  ).length;
+  const failed = deployments.filter((d) => d.status === "FAILED" || d.status === "EXPIRED").length;
   const inFlight = deployments.filter(
-    (d) => d.status === "PENDING" || d.status === "IN_PROGRESS",
+    (d) => d.status === "PENDING" || d.status === "IN_PROGRESS" || d.status === "DELETING",
   ).length;
   return (
     <SpaceBetween direction="horizontal" size="xs" alignItems="center">

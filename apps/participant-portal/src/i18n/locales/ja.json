@@ -117,7 +117,9 @@
       "COMPLETE": "起動中",
       "FAILED": "起動失敗",
       "DELETING": "停止中",
-      "DELETED": "停止済"
+      "DELETED": "停止済",
+      "EXPIRED": "期限切れ",
+      "AUTO_DELETED": "自動削除済み"
     },
     "submission_failed": "デプロイ失敗",
     "submission_finished": "終了",

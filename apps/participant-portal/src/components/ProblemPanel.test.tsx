@@ -132,4 +132,19 @@ describe("ProblemPanel deploy terminal", () => {
     expect(screen.getByText(/14/)).toBeInTheDocument();
     expect(screen.getByText(/teardown/)).toBeInTheDocument();
   });
+
+  it("AUTO_DELETED status を停止済みとして表示すべき", () => {
+    render(
+      withI18n(
+        <ProblemPanel
+          problem={{ ...baseProblem, status: "AUTO_DELETED" }}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+
+    expect(screen.getByText(/Auto-deleted|自動削除済み/)).toBeInTheDocument();
+  });
 });

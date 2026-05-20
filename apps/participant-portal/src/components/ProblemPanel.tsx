@@ -39,6 +39,8 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   FAILED: "error",
   DELETING: "in-progress",
   DELETED: "stopped",
+  EXPIRED: "warning",
+  AUTO_DELETED: "stopped",
 };
 
 const SCORING_KIND_KEY: Record<string, string> = {
@@ -220,7 +222,9 @@ export function ProblemPanel({
           variant="h2"
           description={`${kindLabel} / ${problem.score} pt`}
           actions={
-            <StatusIndicator type={STATUS_TYPE[problem.status]}>{problem.status}</StatusIndicator>
+            <StatusIndicator type={STATUS_TYPE[problem.status]}>
+              {t(`quests.status_label.${problem.status}`)}
+            </StatusIndicator>
           }
         >
           {problem.problemId}
