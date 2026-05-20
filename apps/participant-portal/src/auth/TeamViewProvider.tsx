@@ -101,6 +101,7 @@ function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeam
       p.lastResult !== n.lastResult ||
       p.scoring?.flagSubmitted !== n.scoring?.flagSubmitted ||
       p.failureReason !== n.failureReason ||
+      p.deployLog?.cursor !== n.deployLog?.cursor ||
       JSON.stringify(p.stackOutputs) !== JSON.stringify(n.stackOutputs)
     ) {
       return false;

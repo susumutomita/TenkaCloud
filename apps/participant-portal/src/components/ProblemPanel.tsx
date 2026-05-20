@@ -14,6 +14,7 @@ import StatusIndicator, {
 } from "@cloudscape-design/components/status-indicator";
 import { useState } from "react";
 import {
+  type DeploymentLogEntry,
   type DeploymentStatus,
   type ParticipantHintView,
   type ParticipantProblemView,
@@ -87,6 +88,13 @@ const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
 const POLL_INTERVAL_MS = 30_000;
 
+const DEPLOY_LOG_LEVEL_COLOR: Record<DeploymentLogEntry["level"], string> = {
+  info: "#9bd3ff",
+  success: "#9dffb0",
+  warning: "#ffd27d",
+  error: "#ff9b9b",
+};
+
 /**
  * 1 problem 単位の詳細パネル。Home (= 全 problem を縦並べ) と ProblemDetail
  * (= 1 problem 専用ページ) の両方から使う共通 component。
@@ -154,6 +162,13 @@ export function ProblemPanel({
           ]}
         />
 
+        {problem.deployLog?.entries.length > 0 && (
+          <DeployTerminal
+            entries={problem.deployLog.entries}
+            title={t("problem_panel.deploy_log_header")}
+          />
+        )}
+
         {Object.keys(problem.stackOutputs).length > 0 && (
           <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
             <KeyValuePairs
@@ -194,6 +209,53 @@ export function ProblemPanel({
       </SpaceBetween>
     </Container>
   );
+}
+
+function DeployTerminal({
+  entries,
+  title,
+}: {
+  entries: readonly DeploymentLogEntry[];
+  title: string;
+}) {
+  return (
+    <section aria-label={title}>
+      <Box variant="h3">{title}</Box>
+      <div
+        style={{
+          marginTop: 8,
+          maxHeight: 240,
+          overflowY: "auto",
+          borderRadius: 6,
+          background: "#0f1419",
+          color: "#d5dde5",
+          padding: "12px 14px",
+          fontFamily:
+            "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+          fontSize: 13,
+          lineHeight: 1.55,
+        }}
+      >
+        {entries.map((entry) => (
+          <div key={entry.id} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            <span style={{ color: "#8796a5" }}>{formatTerminalTime(entry.timestamp)}</span>{" "}
+            <span style={{ color: DEPLOY_LOG_LEVEL_COLOR[entry.level] }}>[{entry.level}]</span>{" "}
+            <span>{entry.message}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function formatTerminalTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--:--:--";
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function FlagSubmissionPanel({

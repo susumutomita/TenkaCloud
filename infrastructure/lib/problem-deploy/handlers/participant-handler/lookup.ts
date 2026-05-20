@@ -82,6 +82,23 @@ export interface ApplicationStatus {
   readonly checkedAt?: string;
 }
 
+export interface DeploymentLogEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly source: "deployment";
+  readonly level: "info" | "success" | "warning" | "error";
+  readonly message: string;
+}
+
+export interface DeploymentLogView {
+  /**
+   * `/portal/me` polling で差分判定するための cursor。現状は DDB row の updatedAt を使い、
+   * CloudWatch Logs 直読を後続で足す場合は nextToken に差し替え可能な shape にしておく。
+   */
+  readonly cursor: string;
+  readonly entries: readonly DeploymentLogEntry[];
+}
+
 export type ParticipantProblemView = Pick<
   DeploymentItem,
   "jobId" | "problemId" | "region" | "expiresAt" | "awsAccountId"
@@ -93,6 +110,7 @@ export type ParticipantProblemView = Pick<
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
   readonly scoring?: ParticipantScoringInfo;
+  readonly deployLog: DeploymentLogView;
   /** ADR-012 Phase 4 / Issue #607: deploy 開始時刻 (= DDB.createdAt の echo)。 portal の phase
    *  countdown timeline (= metadata.phases[].afterMinutes の経過判定) に使う。 deploy 中の
    *  PENDING / IN_PROGRESS でも present (= job 生成時刻)。 */
@@ -171,6 +189,7 @@ export function toProblemView(
     lastScoredAt: typeof item.lastScoredAt === "string" ? item.lastScoredAt : undefined,
     lastResult: item.lastResult,
     scoring: scoring ? toScoringInfo(scoring, item) : undefined,
+    deployLog: toDeploymentLog(item, status),
     // Issue #607: deploy 開始時刻 (DDB.createdAt) を echo。 portal の phase countdown が
     // metadata.phases[].afterMinutes との差で「+N 分まであと M 分」を計算する。
     createdAt: typeof item.createdAt === "string" ? item.createdAt : undefined,
@@ -179,6 +198,78 @@ export function toProblemView(
     // attack-detection / flag では undefined (= probe しない kind)。
     applicationStatus: isUptimeKind(scoring?.kind) ? toApplicationStatus(item) : undefined,
   };
+}
+
+function toDeploymentLog(
+  item: Partial<DeploymentItem>,
+  status: DeploymentStatus,
+): DeploymentLogView {
+  const createdAt = typeof item.createdAt === "string" ? item.createdAt : "";
+  const updatedAt = typeof item.updatedAt === "string" ? item.updatedAt : createdAt;
+  const hasBuildId = hasNonEmptyString(item.buildId);
+  const hasStackId = hasNonEmptyString(item.stackId);
+  const entries: DeploymentLogEntry[] = [];
+
+  const push = (
+    message: string,
+    level: DeploymentLogEntry["level"] = "info",
+    at: string | undefined = createdAt,
+  ) => {
+    entries.push({
+      id: `${resolveLogTimestamp(at, updatedAt, createdAt)}:${entries.length}`,
+      timestamp: resolveLogTimestamp(at, updatedAt, createdAt),
+      source: "deployment",
+      level,
+      message,
+    });
+  };
+
+  push("Deployment job was queued.", "info", createdAt);
+
+  if (hasBuildId) {
+    push("Build runner started.", "info", updatedAt);
+  } else if (status === "PENDING") {
+    push("Waiting for build runner.", "info", updatedAt);
+  }
+
+  if (hasStackId) {
+    push(...describeStackLog(status), updatedAt);
+  }
+
+  if (status === "COMPLETE") {
+    push("Deployment completed.", "success", updatedAt);
+  } else if (status === "FAILED") {
+    const reason =
+      typeof item.failureReason === "string" && item.failureReason.length > 0
+        ? `: ${item.failureReason}`
+        : ".";
+    push(`Deployment failed${reason}`, "error", updatedAt);
+  } else if (status === "IN_PROGRESS") {
+    push("Deployment is still running.", "info", updatedAt);
+  }
+
+  return {
+    cursor: updatedAt || createdAt || status,
+    entries,
+  };
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function resolveLogTimestamp(
+  value: string | undefined,
+  updatedAt: string,
+  createdAt: string,
+): string {
+  return value || updatedAt || createdAt;
+}
+
+function describeStackLog(status: DeploymentStatus): [string, DeploymentLogEntry["level"]] {
+  if (status === "COMPLETE") return ["CloudFormation stack completed.", "success"];
+  if (status === "FAILED") return ["CloudFormation reported a failure.", "error"];
+  return ["CloudFormation stack creation is in progress.", "info"];
 }
 
 function isUptimeKind(kind: string | undefined): boolean {
