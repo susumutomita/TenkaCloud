@@ -48,6 +48,25 @@
       "shortDescription": "意図的に脆弱性を仕込んだ Web アプリを攻撃 / 防御し、競技アカウント上で生き残るチームを決める。",
       "tags": ["security", "web", "sql-injection", "rce", "ssrf"],
       "scoringKind": "uptime-multi"
+    },
+    {
+      "id": "stackstack",
+      "name": "StackStack — AI → Production ラストワンマイル",
+      "category": "Battle",
+      "status": "draft",
+      "visibility": "public",
+      "difficulty": 4,
+      "estimatedDuration": "90〜120 分",
+      "shortDescription": "非エンジニアが AI で量産した社内アプリを、安全に公開する Platform Team の能力を競う Battle。コード改善競争ではなく組織運営競争。",
+      "tags": [
+        "platform-engineering",
+        "ai-native",
+        "ccoe",
+        "security",
+        "governance",
+        "availability"
+      ],
+      "scoringKind": "phased-polling"
     }
   ]
 }
