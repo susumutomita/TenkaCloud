@@ -14,25 +14,39 @@ export const JOB_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
  */
 export function parseStackOutputs(json: string | undefined): Record<string, string> {
   if (!json) return {};
-  let parsed: unknown;
+  const parsed = parseJson(json);
+  if (!isObjectLike(parsed)) return {};
+  return Array.isArray(parsed)
+    ? stackOutputArrayToRecord(parsed)
+    : stackOutputMapToRecord(parsed as Record<string, unknown>);
+}
+
+function parseJson(json: string): unknown {
   try {
-    parsed = JSON.parse(json);
+    return JSON.parse(json);
   } catch {
-    return {};
+    return undefined;
   }
-  if (!parsed || typeof parsed !== "object") return {};
+}
+
+function isObjectLike(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
+function stackOutputArrayToRecord(entries: readonly unknown[]): Record<string, string> {
   const out: Record<string, string> = {};
-  if (Array.isArray(parsed)) {
-    for (const entry of parsed) {
-      if (entry && typeof entry === "object") {
-        const k = (entry as { OutputKey?: unknown }).OutputKey;
-        const v = (entry as { OutputValue?: unknown }).OutputValue;
-        if (typeof k === "string" && typeof v === "string") out[k] = v;
-      }
-    }
-    return out;
+  for (const entry of entries) {
+    if (!isObjectLike(entry)) continue;
+    const k = (entry as { OutputKey?: unknown }).OutputKey;
+    const v = (entry as { OutputValue?: unknown }).OutputValue;
+    if (typeof k === "string" && typeof v === "string") out[k] = v;
   }
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+  return out;
+}
+
+function stackOutputMapToRecord(entries: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(entries)) {
     if (typeof v === "string") out[k] = v;
   }
   return out;
