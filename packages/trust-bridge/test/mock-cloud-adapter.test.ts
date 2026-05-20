@@ -52,6 +52,9 @@ describe("MockCloudAdapter (#1122)", () => {
     expect(credential.forRequestId).toBe("req-mock-1");
     expect(credential.accountRef).toBe("123456789012");
     expect(credential.region).toBe("ap-northeast-1");
+    expect(credential.accessKeyId).toBe("MOCK-req-mock-1");
+    expect(credential.secretAccessKey).toBe("mock-secret-not-valid-for-cloud-provider");
+    expect(credential.sessionToken).toBe("mock-session-nonce-mock-1");
     expect(credential.deploymentSignal).toEqual({
       status: "SUCCEEDED",
       actionType: "deploy",
