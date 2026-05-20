@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import type * as React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantProblemView } from "../api/portal-client";
 import { I18nProvider } from "../i18n";
 import { ProblemPanel } from "./ProblemPanel";
@@ -15,7 +15,6 @@ vi.mock("../api/portal-client", async (importOriginal) => {
 });
 
 function withI18n(node: React.ReactNode) {
-  window.localStorage.setItem("tenkacloud.portal.locale", "ja");
   return <I18nProvider>{node}</I18nProvider>;
 }
 
@@ -26,7 +25,7 @@ const baseProblem: ParticipantProblemView = {
   awsAccountId: "999999999999",
   status: "IN_PROGRESS",
   stackOutputs: {},
-  expiresAt: 1_700_000_000,
+  expiresAt: 9_999_999_999,
   score: 0,
   deployLog: {
     cursor: "2026-05-04T15:02:00.000Z",
@@ -49,6 +48,10 @@ const baseProblem: ParticipantProblemView = {
   },
 };
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("ProblemPanel deploy terminal", () => {
   beforeEach(() => {
     apiMocks.getDeployLogs.mockReset();
@@ -67,7 +70,7 @@ describe("ProblemPanel deploy terminal", () => {
       ),
     );
 
-    expect(screen.getByLabelText("デプロイ terminal")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Deployment terminal|デプロイ terminal/)).toBeInTheDocument();
     expect(screen.getByText("Deployment job was queued.")).toBeInTheDocument();
     expect(screen.getByText("CloudFormation stack creation is in progress.")).toBeInTheDocument();
   });
@@ -106,5 +109,27 @@ describe("ProblemPanel deploy terminal", () => {
       baseProblem.jobId,
       { nextToken: undefined, limit: 50 },
     );
+  });
+
+  it("expiresAt から自動削除までの残り時間を表示すべき", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-20T00:00:00.000Z"));
+    render(
+      withI18n(
+        <ProblemPanel
+          problem={{
+            ...baseProblem,
+            expiresAt: Math.floor(new Date("2026-05-20T00:14:00.000Z").getTime() / 1000),
+          }}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+
+    expect(screen.getByText(/Auto-delete scheduled|自動削除予定/)).toBeInTheDocument();
+    expect(screen.getByText(/14/)).toBeInTheDocument();
+    expect(screen.getByText(/teardown/)).toBeInTheDocument();
   });
 });

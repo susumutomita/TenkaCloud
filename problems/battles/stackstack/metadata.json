@@ -1,0 +1,187 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack",
+  "name": "StackStack — AI → Production ラストワンマイル",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "非エンジニアが AI で量産した社内アプリを、安全に公開する Platform Team の能力を競う Battle。コード改善競争ではなく組織運営競争。",
+  "description": "## 概要\n\n生成 AI により誰でもアプリを作れる時代の **AI → Production ラストワンマイル** を競技化する Battle。コードを書く速さでも CTF でもなく、Platform Team として「速く・安全に・統制下で」社内公開する能力を競う。\n\n参加者は企業の Platform Team として、社内 100 人の AI Builder が量産する脆弱なアプリを 5 つの統制軸 (Security / Network / Rate / Audit / UX availability) で本番品質に持ち上げる。Score は単純な速度ではなく、5 軸の総合バランス + ランダム組織イベント (CEO 5000 人デモ要求 / Legal の PII 指摘 / .env 流出 / AI が秘密鍵を commit 等) への対応で決まる。\n\n## 5 軸 (= 5 endpoint slot)\n\n| slot | 統制軸 | 初期状態 | hardened 状態 |\n|------|--------|---------|---------------|\n| `auth` | Authentication / Authorization | EC2 上の naive Basic auth (`/meta` → `\"ec2\"`) | Cognito / SSO 統合 (Lambda+API GW / App Runner / ECS) |\n| `network` | Network controls (S3 / WAF / IAM) | Public S3 + wildcard IAM (`ec2`) | Origin Access Control + scoped IAM (managed) |\n| `rate` | Rate limit / DoS protection | 無制限の Flask (`ec2`) | API Gateway throttle / Lambda concurrency (managed) |\n| `audit` | Logging / Compliance | 標準出力のみ (`ec2`) | CloudTrail + Athena + WORM bucket (managed) |\n| `ux` | User-facing availability | EC2 1 台 (`ec2`) | Multi-AZ + ALB + Auto Scaling (managed) |\n\n各 slot は `/meta` で現在の hosting platform を自己申告する。EC2 上に同居する初期 deploy では全 slot が `\"ec2\"` を返し低スコア (= 100 pt/cycle/slot)。参加者が Lambda+API GW / ECS Fargate / App Runner に切り出して endpoint を override 登録すると `/meta` が `\"lambda\" | \"ecs\" | \"apprunner\"` を返すようになり、加点が 1000 pt/cycle/slot にジャンプする。\n\n## 時間進行 (phases)\n\n- 0 分: 全 slot が EC2 上に naive deploy (= 500 pt/min ベース)\n- 30 分: **production-ramp** phase。`ux` slot が EC2 のままだと degradedPoints (= 10 pt) に劣化 (CEO の 5000 人デモ予告に間に合わなかった状態)\n- 60 分: **compliance-audit** phase。`audit` slot が EC2 のままだと degraded に劣化 (Legal 監査に間に合わなかった状態)\n- 90 分: **incident-response** phase。全 slot で `/score?legacy=true` に切替。AI Builder が混入させた legacy path を取り除いて再 deploy する必要が出る\n\n## ランダム組織イベント (disruptions)\n\noperator が任意タイミングで fire する。catalog:\n\n| id | name | 影響 |\n|----|------|------|\n| `ceo-5000-users` | CEO が明日 5000 人デモを要求 | `ux` slot が落ちると即減点 |\n| `mfa-mandate` | Security Team が MFA 必須化 | `auth` slot の hardening 期限 |\n| `legal-pii-found` | Legal が PII 検出 | `audit` slot が EC2 のままで -500 pt |\n| `env-credential-leak` | .env 流出 | `auth` slot が 5 分間 503 (degraded) |\n| `ai-committed-secret` | Claude が秘密鍵を git commit | `network` + `audit` の両方が 503 連動 |\n\n## 全 4 platform 移行ボーナス\n\n全 5 slot が Lambda+API GW / ECS / App Runner のいずれかにホスティング済みなら 5000 pt one-time bonus (\"production-ready\" 認定)。\n\n## Phase 1 / Phase 2 スコープ\n\n### Phase 1 (= 本 problem の現状)\n\n- ✅ 個別 team が「naive AI アプリを 5 軸でハードニングする」mechanics は phased-polling kind の既存 engine で動く\n- ✅ ランダム組織イベント catalog は disruptions[] で宣言済み (operator fire)\n- ✅ 5 軸 subscore display は dashboard.slots/StatusPanel.tsx\n\n### Phase 2 (= platform 拡張が必要)\n\n以下は今日の platform にプリミティブが無く、別 ADR / 別 PR で扱う:\n\n- **inter-team coordination plugin** (ADR-022): 問題ごとに他チーム interaction の primitive が違う (microservice-migration の service router / security-battle-royale の同盟 / その他)。 platform にこの coordination 機構を 1 つ hardcode せず、 問題が宣言した primitive を platform が dispatch する plugin 契約を ADR-022 で定義する。 StackStack の inter-team primitive (= 何を競うか) は ADR-022 ship 後に declare する\n- **AI Agent 利用 / Platform 利用ステータス**: 競技者 portal から trigger する操作系。 portal plugin SDK の拡張が必要\n\n### やらないこと (= 明示却下)\n\n- **tenant 横断 shared resource registry** (SSO Proxy 2 slot 先着 / Security Review 待ち行列 / Claude API quota): security 設計の難度が現 platform の整備状況と釣り合わないため Phase 2 計画から外す。 StackStack の inter-team primitive は ADR-022 plugin 契約の上で別の (= tenant 境界を越えない) 形に置き換える。\n\nPhase 1 だけでも StackStack の中核 (= 5 軸 + ランダムイベント + 時間進行) は体験できる。",
+  "tags": ["platform-engineering", "ai-native", "ccoe", "security", "governance", "availability"],
+  "exposedPorts": [
+    { "port": 80, "name": "nginx reverse proxy (auth / network / rate / audit / ux)" }
+  ],
+  "learningGoals": [
+    "AI で量産されたアプリを 5 つの統制軸 (auth / network / rate / audit / ux) で本番化する判断と順序付けを体験する",
+    "managed services (Lambda / ECS / App Runner) への移行が hardening をどう自動で底上げするかを理解する",
+    "ランダム組織イベント (CEO 要求 / Legal 監査 / .env 流出) の発火下で優先度を再評価する Platform Team の意思決定を訓練する",
+    "Phase 2 (inter-team coordination plugin = ADR-022) と Phase 1 (個別チームの hardening) の境界を見極め、 platform 拡張要求を ADR として言語化する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "StackStack — AI to Production Last Mile",
+      "shortDescription": "Battle that gamifies the Platform Team's ability to safely ship AI-generated apps. The competition is operational quality, not code speed.",
+      "description": "## Overview\n\nA Battle that gamifies the **AI → Production last mile** in an era where anyone can generate apps with AI. It is neither a coding race nor a CTF; it is a contest of Platform Team operational quality — shipping fast AND safely AND under governance.\n\nPlayers act as the Platform Team for a company with 100 internal AI Builders pushing out fragile apps. Each app must be hardened across 5 control axes (Security / Network / Rate / Audit / UX availability). Score is composite, not just speed. Random organizational events (CEO demanding a 5000-person demo, Legal finding PII, .env leaks, Claude committing secrets) disrupt the plan.\n\n## 5 control axes (= 5 endpoint slots)\n\n| slot | axis | initial state | hardened state |\n|------|------|---------------|----------------|\n| `auth` | Authentication / Authorization | naive Basic auth on EC2 | Cognito / SSO via managed runtime |\n| `network` | Network controls | Public S3 + wildcard IAM | OAC + scoped IAM via managed runtime |\n| `rate` | Rate limit / DoS | unthrottled Flask | API GW throttle / Lambda concurrency |\n| `audit` | Logging / Compliance | stdout only | CloudTrail + Athena + WORM bucket |\n| `ux` | User-facing availability | single EC2 | Multi-AZ + ALB + Auto Scaling |\n\nEach slot self-reports its hosting platform via `/meta`. Initial deploy puts all five on EC2 (low score). Hardening = re-hosting to Lambda + API GW / ECS Fargate / App Runner, which inherently brings managed security defaults, then registering the new URL via the portal override.\n\n## Time-based phases\n\n- 0 min: all slots naive on EC2 (≈ 500 pt/min baseline)\n- 30 min: **production-ramp** — `ux` slot degrades on EC2 (CEO 5000-user demo pressure)\n- 60 min: **compliance-audit** — `audit` slot degrades on EC2 (Legal review pressure)\n- 90 min: **incident-response** — all slots switch to `/score?legacy=true`, requiring redeploy without legacy code paths the AI Builder injected\n\n## Random org events (disruptions)\n\nOperator-fired catalog with five events: CEO 5000-user demand, Security MFA mandate, Legal PII finding, .env credential leak (auth degrades 5 min), AI-committed-secret (network + audit both degrade).\n\n## Scope: Phase 1 vs Phase 2\n\n### Phase 1 (= this problem today)\n- Individual-team hardening mechanics via existing phased-polling engine\n- Disruption catalog declared (operator-fired)\n- 5-axis subscore display via dashboard.slots\n\n### Phase 2 (= requires platform extension, separate ADR / issue)\n- Inter-team coordination plugin contract (ADR-022) — problems declare their inter-team primitive (router / alliance / queue / etc.), platform dispatches. StackStack's specific inter-team primitive will be declared once ADR-022 lands.\n- Player-triggered platform actions from the portal (portal plugin SDK extension).\n\n### Explicitly rejected\n\n- Tenant-spanning shared resource registry (SSO Proxy 2 slots / Security Review queue / Claude API quota) — security design exceeds the current platform's maturity. Replaced by an inter-team primitive that stays within tenant boundaries via ADR-022.\n\nPhase 1 alone is enough to experience the StackStack core (5 axes + random events + phased timeline).",
+      "learningGoals": [
+        "Practice the judgment and ordering required to take an AI-generated app to production across 5 control axes",
+        "Understand how migrating to managed runtimes (Lambda / ECS / App Runner) auto-bootstraps hardening defaults",
+        "Train Platform Team decision-making under random organizational events (CEO demand / Legal audit / .env leak)",
+        "Articulate the Phase 2 platform extension (inter-team coordination plugin via ADR-022) versus Phase 1 individual-team hardening as an ADR"
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "auth",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/auth" },
+      "overridable": true,
+      "label": "Auth (Authentication / Authorization)",
+      "description": "初期は EC2 上の naive Basic auth。 Lambda + Cognito / SSO に切り出して override 登録すると hardened 加点。"
+    },
+    {
+      "slot": "network",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/network" },
+      "overridable": true,
+      "label": "Network (S3 / WAF / IAM scope)",
+      "description": "初期は Public S3 + wildcard IAM。 CloudFront + OAC + scoped IAM に切り出して override 登録すると hardened。"
+    },
+    {
+      "slot": "rate",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/rate" },
+      "overridable": true,
+      "label": "Rate limit / DoS",
+      "description": "初期は無制限の Flask。 API GW throttle / Lambda concurrency cap に切り出して hardened。"
+    },
+    {
+      "slot": "audit",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/audit" },
+      "overridable": true,
+      "label": "Audit / Logging",
+      "description": "初期は stdout のみ。 CloudTrail + S3 WORM + Athena に切り出して hardened。"
+    },
+    {
+      "slot": "ux",
+      "default": { "from": "cfn-output", "key": "BaseUrl", "appendPath": "/ux" },
+      "overridable": true,
+      "label": "UX / Availability",
+      "description": "初期は EC2 1 台。 ALB + Multi-AZ + Auto Scaling に切り出して hardened。"
+    }
+  ],
+  "scoring": {
+    "kind": "phased-polling",
+    "intervalMinutes": 1,
+    "probe": {
+      "metaPath": "/meta",
+      "scorePath": "/score"
+    },
+    "platformRules": {
+      "ec2": { "points": 100, "degradedPoints": 10 },
+      "lambda": { "points": 1000 },
+      "ecs": { "points": 1000 },
+      "apprunner": { "points": 1000 }
+    },
+    "failurePenalty": -100,
+    "responsePenalties": [{ "if": "responseTimeMs > 1500", "points": -10 }],
+    "bonuses": [
+      {
+        "kind": "all-slots-on-platforms",
+        "platforms": ["lambda", "ecs", "apprunner"],
+        "points": 5000,
+        "once": true
+      }
+    ],
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "5 つの slot は EC2 上の docker compose で全部同居しています。 1 つずつ managed runtime (Lambda+API GW / App Runner / ECS) に切り出して portal の Endpoint Override で新 URL を登録すると加点が 10× になります。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "30 分後の production-ramp phase で ux slot が、 60 分後の compliance-audit phase で audit slot が degradedPoints に劣化します。 この 2 軸を優先して移行するとスコアが安定します。",
+        "penalty": 100
+      },
+      {
+        "id": "hint-3",
+        "content": "全 5 slot を managed (lambda/ecs/apprunner) に乗せると \"production-ready\" bonus +5000 pt が one-time で入ります。 ec2 が 1 つでも残っていると bonus は付きません。",
+        "penalty": 200
+      }
+    ]
+  },
+  "phases": [
+    {
+      "name": "production-ramp",
+      "afterMinutes": 30,
+      "effect": { "switchPlatformToDegraded": ["ec2"] },
+      "description": "CEO が明日 5000 人デモを要求。 ux slot を EC2 から外していないと UX が劣化 (degradedPoints = 10) に切り替わる。"
+    },
+    {
+      "name": "compliance-audit",
+      "afterMinutes": 60,
+      "effect": { "switchPlatformToDegraded": ["ec2"] },
+      "description": "Legal が PII 検出。 audit slot を EC2 のままにしていると監査要件不足で degradedPoints。 (production-ramp と同 effect だが文脈別)。"
+    },
+    {
+      "name": "incident-response",
+      "afterMinutes": 90,
+      "effect": { "scorePathOverride": "/score?legacy=true" },
+      "description": "Incident phase。 全 slot で /score?legacy=true に切替。 AI Builder が混入させた legacy code path (= 2 秒 sleep) を取り除いて再 deploy する必要が出る。"
+    }
+  ],
+  "disruptions": [
+    {
+      "id": "ceo-5000-users",
+      "name": "CEO が明日 5000 人デモを要求",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 30,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "targetSlot": "ux" },
+      "description": "CEO event。 ux slot が EC2 上にある間は -500 pt/cycle のペナルティを追加。 production-ramp phase と組み合わせる前提。"
+    },
+    {
+      "id": "mfa-mandate",
+      "name": "Security Team が MFA 必須化",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 20,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "targetSlot": "auth" },
+      "description": "Security event。 auth slot が ec2 のまま 10 分以上経過すると失格扱い (= failurePenalty に張り付き)。"
+    },
+    {
+      "id": "legal-pii-found",
+      "name": "Legal が PII 検出",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 45,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "targetSlot": "audit" },
+      "description": "Legal event。 audit slot が ec2 のままだと -500 pt/cycle。 compliance-audit phase と連動。"
+    },
+    {
+      "id": "env-credential-leak",
+      "name": ".env 流出",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 50,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "targetSlot": "auth", "degradeMinutes": 5 },
+      "description": "auth slot を 5 分間 503 にする (= failurePenalty 連発)。 一度しか発火しない。 Platform Team は別 slot 経由で degrade を吸収する必要。"
+    },
+    {
+      "id": "ai-committed-secret",
+      "name": "Claude が秘密鍵を git commit",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 70,
+      "operatorEditable": ["afterMinutes"],
+      "parameters": { "targetSlots": ["network", "audit"] },
+      "description": "network + audit の 2 slot を連動で 3 分間 503 にする。 AI Native 組織における二次被害 (= 漏洩 + 監査ログ不整合) を体験させる。"
+    }
+  ],
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  }
+}

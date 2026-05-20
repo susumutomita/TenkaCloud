@@ -46,7 +46,6 @@ export function HomePage({ config }: { config: AppConfig }) {
         {t("home.welcome", { teamName })}
       </Header>
 
-      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {error && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
           {error}

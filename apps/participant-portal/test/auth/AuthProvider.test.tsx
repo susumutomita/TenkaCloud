@@ -8,6 +8,7 @@ const devConfig: AppConfig = {
   eventTitle: "Test Event",
   eventRegion: "ap-northeast-1",
   mode: "dev-mock",
+  cloudMode: "mock",
 };
 
 const prodConfig: AppConfig = {
@@ -15,6 +16,7 @@ const prodConfig: AppConfig = {
   eventTitle: "Test Event",
   eventRegion: "ap-northeast-1",
   mode: "backend",
+  cloudMode: "real",
 };
 
 const renderAuth = (config: AppConfig) =>

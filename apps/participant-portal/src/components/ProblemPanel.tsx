@@ -91,6 +91,8 @@ const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
 const POLL_INTERVAL_MS = 30_000;
 const LIVE_DEPLOY_LOG_POLL_INTERVAL_MS = 5_000;
+const COUNTDOWN_REFRESH_MS = 30_000;
+const AUTO_DELETE_SOON_THRESHOLD_MS = 15 * 60 * 1000;
 
 const DEPLOY_LOG_LEVEL_COLOR: Record<DeploymentLogEntry["level"], string> = {
   info: "#9bd3ff",
@@ -98,6 +100,53 @@ const DEPLOY_LOG_LEVEL_COLOR: Record<DeploymentLogEntry["level"], string> = {
   warning: "#ffd27d",
   error: "#ff9b9b",
 };
+
+function useNowMs(intervalMs: number): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return nowMs;
+}
+
+function describeRemainingUntilAutoDelete(t: TFn, diffMs: number): string {
+  const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
+  if (totalMinutes < 60) {
+    return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return t("problem_panel.auto_delete_remaining_hours", { hours, minutes });
+}
+
+function buildAutoDeleteNotice(
+  t: TFn,
+  expiresAt: number,
+  nowMs: number,
+): { readonly type: "info" | "warning"; readonly body: string } | undefined {
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return undefined;
+  const expiresAtMs = expiresAt * 1000;
+  const expiresAtLabel = new Date(expiresAtMs).toLocaleString();
+  const diffMs = expiresAtMs - nowMs;
+  if (diffMs <= 0) {
+    return {
+      type: "warning",
+      body: t("problem_panel.auto_delete_expired_body", { expiresAt: expiresAtLabel }),
+    };
+  }
+  const remaining = describeRemainingUntilAutoDelete(t, diffMs);
+  if (diffMs <= AUTO_DELETE_SOON_THRESHOLD_MS) {
+    return {
+      type: "warning",
+      body: t("problem_panel.auto_delete_soon_body", { remaining, expiresAt: expiresAtLabel }),
+    };
+  }
+  return {
+    type: "info",
+    body: t("problem_panel.auto_delete_body", { remaining, expiresAt: expiresAtLabel }),
+  };
+}
 
 /**
  * 1 problem 単位の詳細パネル。Home (= 全 problem を縦並べ) と ProblemDetail
@@ -115,12 +164,13 @@ export function ProblemPanel({
   onScored: () => Promise<void>;
 }) {
   const t = useT();
+  const now = useNowMs(COUNTDOWN_REFRESH_MS);
   const [liveDeployLog, setLiveDeployLog] = useState<DeploymentLogView | null>(null);
   const kindLabel = problem.scoring
     ? t(SCORING_KIND_KEY[problem.scoring.kind] ?? "problem_panel.kind_unknown")
     : t("problem_panel.kind_unknown");
-  const now = Date.now();
   const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
+  const autoDeleteNotice = buildAutoDeleteNotice(t, problem.expiresAt, now);
   // #688: phased-polling / uptime-flat / uptime-multi / attack-detection も Battle 軸
   // (= uptime と同じ "古い lastScoredAt = stale" UX を適用)。 flag だけ非 Battle。
   const isUptime = problem.scoring ? problem.scoring.kind !== "flag" : false;
@@ -186,6 +236,11 @@ export function ProblemPanel({
         {isStale && (
           <Alert type="warning" header={t("problem_panel.stale_header")}>
             {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now) })}
+          </Alert>
+        )}
+        {autoDeleteNotice && (
+          <Alert type={autoDeleteNotice.type} header={t("problem_panel.auto_delete_header")}>
+            {autoDeleteNotice.body}
           </Alert>
         )}
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は AWS 多リージョン
