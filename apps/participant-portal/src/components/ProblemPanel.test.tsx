@@ -1,9 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import type * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantProblemView } from "../api/portal-client";
 import { I18nProvider } from "../i18n";
 import { ProblemPanel } from "./ProblemPanel";
+
+const apiMocks = vi.hoisted(() => ({
+  getDeployLogs: vi.fn(),
+}));
+
+vi.mock("../api/portal-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/portal-client")>();
+  return { ...actual, getDeployLogs: apiMocks.getDeployLogs };
+});
 
 function withI18n(node: React.ReactNode) {
   return <I18nProvider>{node}</I18nProvider>;
@@ -44,6 +53,11 @@ afterEach(() => {
 });
 
 describe("ProblemPanel deploy terminal", () => {
+  beforeEach(() => {
+    apiMocks.getDeployLogs.mockReset();
+    apiMocks.getDeployLogs.mockRejectedValue(new Error("not configured"));
+  });
+
   it("deployLog の terminal 行を表示すべき", () => {
     render(
       withI18n(
@@ -59,6 +73,42 @@ describe("ProblemPanel deploy terminal", () => {
     expect(screen.getByLabelText(/Deployment terminal|デプロイ terminal/)).toBeInTheDocument();
     expect(screen.getByText("Deployment job was queued.")).toBeInTheDocument();
     expect(screen.getByText("CloudFormation stack creation is in progress.")).toBeInTheDocument();
+  });
+
+  it("非 terminal status では CodeBuild live log を取得して terminal に表示すべき", async () => {
+    apiMocks.getDeployLogs.mockResolvedValueOnce({
+      jobId: baseProblem.jobId,
+      buildStatus: "IN_PROGRESS",
+      complete: false,
+      nextToken: "next",
+      entries: [
+        {
+          id: "codebuild-1",
+          timestamp: "2026-05-20T10:00:00.000Z",
+          source: "codebuild",
+          message: "CodeBuild install phase complete",
+        },
+      ],
+    });
+
+    render(
+      withI18n(
+        <ProblemPanel
+          problem={baseProblem}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+
+    expect(await screen.findByText("CodeBuild install phase complete")).toBeInTheDocument();
+    expect(apiMocks.getDeployLogs).toHaveBeenCalledWith(
+      "https://api.example.com",
+      "team-key",
+      baseProblem.jobId,
+      { nextToken: undefined, limit: 50 },
+    );
   });
 
   it("expiresAt から自動削除までの残り時間を表示すべき", () => {

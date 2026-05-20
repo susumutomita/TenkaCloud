@@ -7,10 +7,15 @@ import {
   listProblemEndpoints,
   upsertProblemEndpointOverride,
 } from "../problem-endpoints-handler/endpoints.js";
-import { PROBLEM_ID_RE } from "../shared/constants.js";
+import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { HTTP_OK } from "../shared/http-status.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
+import {
+  defaultDeployLogDeps,
+  getParticipantDeployLogs,
+  parseDeployLogLimit,
+} from "./deploy-logs.js";
 import { getLeaderboard } from "./leaderboard.js";
 import { getLeaderboardScoreEvents } from "./leaderboard-score-events.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
@@ -84,7 +89,7 @@ app.get("/portal/me/notifications", (c) =>
       // 側の `Number.isInteger` で reject。`parseInt` だと truncate されて silent pass する。
       const limit = limitRaw === undefined ? NOTIFICATIONS_DEFAULT_LIMIT : Number(limitRaw);
       const outcome = await listNotifications(shared, token, limit);
-      if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+      if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
       return respondError(c, outcome.kind);
     },
     RATE_LIMITS.READ_HIGH,
@@ -105,6 +110,30 @@ app.get("/portal/me/battle-attacks", (c) =>
     if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
     return respondError(c, outcome.kind);
   }),
+);
+
+app.get("/portal/me/deploy-logs", (c) =>
+  withBearerAuth(
+    c,
+    "deploy-logs",
+    async (token) => {
+      const jobId = c.req.query("jobId");
+      if (!jobId) return respondError(c, "missing_jobid");
+      if (!JOB_ID_RE.test(jobId)) return respondError(c, "invalid_jobid");
+
+      const limit = parseDeployLogLimit(c.req.query("limit"));
+      if (limit === null) return respondError(c, "invalid_limit");
+
+      const outcome = await getParticipantDeployLogs(shared, defaultDeployLogDeps, token, {
+        jobId,
+        nextToken: c.req.query("nextToken"),
+        limit,
+      });
+      if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+      return respondError(c, outcome.kind);
+    },
+    RATE_LIMITS.READ_HIGH,
+  ),
 );
 
 app.get("/portal/leaderboard", (c) =>

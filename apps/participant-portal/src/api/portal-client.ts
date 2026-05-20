@@ -65,7 +65,7 @@ export interface ApplicationStatus {
 export interface DeploymentLogEntry {
   readonly id: string;
   readonly timestamp: string;
-  readonly source: "deployment";
+  readonly source: "deployment" | "codebuild";
   readonly level: "info" | "success" | "warning" | "error";
   readonly message: string;
 }
@@ -73,6 +73,14 @@ export interface DeploymentLogEntry {
 export interface DeploymentLogView {
   readonly cursor: string;
   readonly entries: readonly DeploymentLogEntry[];
+}
+
+export interface DeployLogsResponse {
+  readonly jobId: string;
+  readonly buildStatus?: string;
+  readonly complete: boolean;
+  readonly nextToken?: string;
+  readonly entries: readonly Omit<DeploymentLogEntry, "level">[];
 }
 
 /**
@@ -471,6 +479,27 @@ export async function getBattleAttacks(
     teamLoginKey,
     { query, throwOn400: true, signal },
   )) as BattleAttacksResponse;
+}
+
+/**
+ * Issue #1120: deploy 中の CodeBuild / CloudWatch Logs を nextToken で増分取得する。
+ * `/portal/me` の synthetic deployLog は初期表示用で、本 endpoint は terminal の live
+ * tailing 用に使う。limit は backend 側で 1-100 に制限される。
+ */
+export async function getDeployLogs(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  jobId: string,
+  options: { nextToken?: string; limit?: number; signal?: AbortSignal } = {},
+): Promise<DeployLogsResponse> {
+  const query: Record<string, string> = { jobId };
+  if (options.nextToken !== undefined) query.nextToken = options.nextToken;
+  if (options.limit !== undefined) query.limit = String(options.limit);
+  return (await portalFetch<DeployLogsResponse>(apiBaseUrl, "portal/me/deploy-logs", teamLoginKey, {
+    query,
+    throwOn400: true,
+    signal: options.signal,
+  })) as DeployLogsResponse;
 }
 
 /**
