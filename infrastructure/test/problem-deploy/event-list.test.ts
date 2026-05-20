@@ -232,6 +232,7 @@ describe("getEventDetail", () => {
         { teamId: "T1", eventId: "EV1", problemId: "p1", jobId: "J1", status: "COMPLETE" },
         { teamId: "T1", eventId: "EV1", problemId: "p1", jobId: "J2", status: "FAILED" },
         { teamId: "T1", eventId: "EV1", problemId: "p2", jobId: "J3", status: "IN_PROGRESS" },
+        { teamId: "T1", eventId: "EV1", problemId: "p2", jobId: "J4", status: "AUTO_DELETED" },
         // 別 event の deployment は除外されるべき
         { teamId: "T1", eventId: "EV-OTHER", problemId: "p1", jobId: "J-LEAK", status: "COMPLETE" },
       ],
@@ -239,7 +240,7 @@ describe("getEventDetail", () => {
 
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out?.deploymentsByProblem.p1).toHaveLength(2);
-    expect(out?.deploymentsByProblem.p2).toHaveLength(1);
+    expect(out?.deploymentsByProblem.p2).toHaveLength(2);
     expect(out?.deploymentsByProblem.p1?.[0]).toMatchObject({
       jobId: "J1",
       teamId: "T1",
@@ -248,6 +249,10 @@ describe("getEventDetail", () => {
     expect(out?.deploymentsByProblem.p2?.[0]).toMatchObject({
       jobId: "J3",
       status: "IN_PROGRESS",
+    });
+    expect(out?.deploymentsByProblem.p2?.[1]).toMatchObject({
+      jobId: "J4",
+      status: "AUTO_DELETED",
     });
     // 別 event の jobId が漏れないこと
     expect(JSON.stringify(out?.deploymentsByProblem)).not.toContain("J-LEAK");

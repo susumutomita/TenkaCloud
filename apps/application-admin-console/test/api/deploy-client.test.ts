@@ -133,10 +133,12 @@ describe("listDeployments", () => {
 });
 
 describe("TERMINAL_STATUSES", () => {
-  it("COMPLETE / FAILED / DELETED を含むべき (poll 停止条件)", () => {
+  it("terminal status を含むべき (poll 停止条件)", () => {
     expect(TERMINAL_STATUSES.has("COMPLETE")).toBe(true);
     expect(TERMINAL_STATUSES.has("FAILED")).toBe(true);
     expect(TERMINAL_STATUSES.has("DELETED")).toBe(true);
+    expect(TERMINAL_STATUSES.has("EXPIRED")).toBe(true);
+    expect(TERMINAL_STATUSES.has("AUTO_DELETED")).toBe(true);
   });
 
   it("PENDING / IN_PROGRESS / DELETING は含まないべき", () => {

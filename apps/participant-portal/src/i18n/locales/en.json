@@ -117,7 +117,9 @@
       "COMPLETE": "Running",
       "FAILED": "Failed to start",
       "DELETING": "Stopping",
-      "DELETED": "Stopped"
+      "DELETED": "Stopped",
+      "EXPIRED": "Expired",
+      "AUTO_DELETED": "Auto-deleted"
     },
     "submission_failed": "Deploy failed",
     "submission_finished": "Finished",

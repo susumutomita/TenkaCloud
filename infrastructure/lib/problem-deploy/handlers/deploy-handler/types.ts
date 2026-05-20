@@ -14,6 +14,8 @@ export const DeploymentStatusSchema = z.enum([
   "FAILED",
   "DELETING",
   "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
 ]);
 export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
 

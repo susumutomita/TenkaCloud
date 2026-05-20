@@ -58,7 +58,9 @@ export type EventDeploymentStatus =
   | "COMPLETE"
   | "FAILED"
   | "DELETING"
-  | "DELETED";
+  | "DELETED"
+  | "EXPIRED"
+  | "AUTO_DELETED";
 
 export interface EventDeploymentSummary {
   jobId: string;

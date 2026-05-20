@@ -14,4 +14,6 @@ export const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 export const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
   "DELETING",
   "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
 ]);

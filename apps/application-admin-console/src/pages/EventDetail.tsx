@@ -41,9 +41,15 @@ function summarizeDeployments(detail: EventDetail): DeploymentCounts {
     (acc, list) => {
       for (const deployment of list) {
         acc.totalDeployCount += 1;
-        if (deployment.status === "COMPLETE") acc.completeCount += 1;
-        if (deployment.status === "FAILED") acc.failedCount += 1;
-        if (deployment.status === "PENDING" || deployment.status === "IN_PROGRESS") {
+        if (deployment.status === "COMPLETE" || deployment.status === "AUTO_DELETED") {
+          acc.completeCount += 1;
+        }
+        if (deployment.status === "FAILED" || deployment.status === "EXPIRED") acc.failedCount += 1;
+        if (
+          deployment.status === "PENDING" ||
+          deployment.status === "IN_PROGRESS" ||
+          deployment.status === "DELETING"
+        ) {
           acc.inFlightCount += 1;
         }
       }

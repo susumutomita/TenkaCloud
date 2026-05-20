@@ -33,7 +33,13 @@ export interface DeployPhase {
   readonly note?: string;
 }
 
-const COMPLETE_STATUSES: ReadonlySet<DeploymentStatus> = new Set(["COMPLETE", "FAILED", "DELETED"]);
+const COMPLETE_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
+  "COMPLETE",
+  "FAILED",
+  "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
+]);
 
 /**
  * Issue #818: stackStatus (= 現在の stack 状態) を権威 source として優先する。
@@ -102,7 +108,7 @@ export function derivePhases(
   // - status=FAILED かつ CFn 進行が観測されていない → Build で Failed (= CodeBuild 失敗)
   // - status=IN_PROGRESS かつ CFn 未観測 → In Progress
   // - status=PENDING → Pending
-  // - status=COMPLETE / DELETING / DELETED → Complete (terminal)
+  // - status=COMPLETE / DELETING / DELETED / EXPIRED / AUTO_DELETED → Complete (terminal)
   let buildingStatus: PhaseStatus;
   if (hasObservedCfn) {
     buildingStatus = "complete";
@@ -113,7 +119,7 @@ export function derivePhases(
   } else if (status === "FAILED") {
     buildingStatus = "failed";
   } else {
-    // COMPLETE / DELETING / DELETED — CFn が観測できなくても build は通っていた。
+    // terminal statuses — CFn が観測できなくても build は通っていた。
     buildingStatus = "complete";
   }
   const building: DeployPhase = {
@@ -134,7 +140,13 @@ export function derivePhases(
   } else if (events.length === 0) {
     if (status === "COMPLETE") cfnStatus = "complete";
     else if (status === "FAILED") cfnStatus = "pending";
-    else if (status === "DELETING" || status === "DELETED") cfnStatus = "skipped";
+    else if (
+      status === "DELETING" ||
+      status === "DELETED" ||
+      status === "EXPIRED" ||
+      status === "AUTO_DELETED"
+    )
+      cfnStatus = "skipped";
     else cfnStatus = "pending";
   } else {
     cfnStatus = eventsToPhaseStatus(events);
@@ -159,6 +171,8 @@ export function derivePhases(
   else if (status === "FAILED") finalStatus = "failed";
   else if (status === "DELETING") finalStatus = "in-progress";
   else if (status === "DELETED") finalStatus = "skipped";
+  else if (status === "EXPIRED") finalStatus = "failed";
+  else if (status === "AUTO_DELETED") finalStatus = "skipped";
   else if (COMPLETE_STATUSES.has(status)) finalStatus = "complete";
   else finalStatus = "pending";
   const complete: DeployPhase = {
@@ -188,6 +202,10 @@ export function deploySummaryTitle(deployment: DeploymentSummary): string {
       return `Tearing down ${label}`;
     case "DELETED":
       return `Deploy removed for ${label}`;
+    case "EXPIRED":
+      return `Deploy expired for ${label}`;
+    case "AUTO_DELETED":
+      return `Deploy auto-deleted for ${label}`;
     default:
       return `Deploy for ${label}`;
   }

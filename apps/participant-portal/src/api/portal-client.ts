@@ -6,12 +6,16 @@ export type DeploymentStatus =
   | "COMPLETE"
   | "FAILED"
   | "DELETING"
-  | "DELETED";
+  | "DELETED"
+  | "EXPIRED"
+  | "AUTO_DELETED";
 
 export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
   "COMPLETE",
   "FAILED",
   "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
 ]);
 
 /**

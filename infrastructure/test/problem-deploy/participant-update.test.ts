@@ -144,8 +144,8 @@ describe("setDisplayTeamName", () => {
     expect(out.kind).toBe("unauthorized");
   });
 
-  it("team の全行が DELETING / DELETED なら unauthorized (UpdateItem しない)", async () => {
-    for (const status of ["DELETING", "DELETED"]) {
+  it("team の全行が削除済み扱い status なら unauthorized (UpdateItem しない)", async () => {
+    for (const status of ["DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"]) {
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status })] });
       const out = await setDisplayTeamName(shared, "KEY1", "Alpha");

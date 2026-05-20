@@ -17,6 +17,8 @@ const DEPLOYMENT_STATUS_VALUES = [
   "FAILED",
   "DELETING",
   "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
 ] as const;
 type DeploymentStatus = (typeof DEPLOYMENT_STATUS_VALUES)[number];
 

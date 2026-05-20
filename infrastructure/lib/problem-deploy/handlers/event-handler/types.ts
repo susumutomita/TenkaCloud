@@ -268,7 +268,16 @@ export type TeamSummary = z.infer<typeof TeamSummarySchema>;
 export const EventDeploymentSummarySchema = z.object({
   jobId: z.string(),
   teamId: z.string(),
-  status: z.enum(["PENDING", "IN_PROGRESS", "COMPLETE", "FAILED", "DELETING", "DELETED"]),
+  status: z.enum([
+    "PENDING",
+    "IN_PROGRESS",
+    "COMPLETE",
+    "FAILED",
+    "DELETING",
+    "DELETED",
+    "EXPIRED",
+    "AUTO_DELETED",
+  ]),
 });
 export type EventDeploymentSummary = z.infer<typeof EventDeploymentSummarySchema>;
 
