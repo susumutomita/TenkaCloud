@@ -32,7 +32,6 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
         {t("scoreboard.title")}
       </Header>
 
-      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {leaderboardError && (
         <Alert type="error" header={t("app.fetch_status_failed")}>
           {leaderboardError}

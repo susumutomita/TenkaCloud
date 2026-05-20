@@ -11,6 +11,7 @@ const config: AppConfig = {
   eventTitle: "TenkaCloud Battle (test)",
   eventRegion: "ap-northeast-1",
   mode: "dev-mock",
+  cloudMode: "mock",
 };
 
 function renderApp(initialPath: string) {
@@ -72,6 +73,7 @@ describe("App", () => {
       expect(
         await screen.findByRole("heading", { level: 1, name: /ようこそ/ }),
       ).toBeInTheDocument();
+      expect(screen.getByText("Mock cloud mode")).toBeInTheDocument();
     });
   });
 

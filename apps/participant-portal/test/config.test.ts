@@ -25,6 +25,7 @@ describe("loadConfig", () => {
     expect(cfg.eventTitle).toBe("Real Event");
     expect(cfg.eventRegion).toBe("us-east-1");
     expect(cfg.mode).toBe("backend");
+    expect(cfg.cloudMode).toBe("real");
   });
 
   it("mode が runtime-config に無いときは fallback の dev-mock になるべき", async () => {
@@ -34,6 +35,40 @@ describe("loadConfig", () => {
     });
     const cfg = await loadConfig();
     expect(cfg.mode).toBe("dev-mock");
+    expect(cfg.cloudMode).toBe("mock");
+  });
+
+  it("cloudMode=localstack の runtime-config を読み込むべき", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://api.example.com",
+        eventTitle: "Offline Event",
+        eventRegion: "ap-northeast-1",
+        mode: "backend",
+        cloudMode: "localstack",
+        localstackEndpoint: "http://localhost:4566/",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.mode).toBe("backend");
+    expect(cfg.cloudMode).toBe("localstack");
+    expect(cfg.localstackEndpoint).toBe("http://localhost:4566");
+  });
+
+  it("localstackEndpoint が localhost 以外なら表示用 endpoint として採用しないべき", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://api.example.com",
+        mode: "backend",
+        cloudMode: "localstack",
+        localstackEndpoint: "https://example.com:4566",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.cloudMode).toBe("localstack");
+    expect(cfg.localstackEndpoint).toBeUndefined();
   });
 
   it("一部キー欠落でも fallback で埋めるべき", async () => {
@@ -79,5 +114,6 @@ describe("loadConfig", () => {
     // fallback の dev-mock URL に倒れる (= teamLoginKey を attacker に送らない)
     expect(cfg.apiBaseUrl).toContain("dev-mock");
     expect(cfg.mode).toBe("dev-mock");
+    expect(cfg.cloudMode).toBe("mock");
   });
 });

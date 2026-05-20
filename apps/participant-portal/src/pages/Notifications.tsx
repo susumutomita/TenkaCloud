@@ -51,7 +51,6 @@ export function NotificationsPage({ config }: { config: AppConfig }) {
         {t("notifications.header")}
       </Header>
 
-      {!isBackend && <Alert type="info">{t("app.dev_mock_alert")}</Alert>}
       {notificationsError && (
         <Alert type="error" header={t("notifications.fetch_failed")}>
           {notificationsError}
