@@ -1,49 +1,46 @@
 <!--
-この template の意図は docs/architecture/harness.md の PR Discipline invariants を
-満たすための構造チェック。埋められない欄がある場合は PR 単位を見直すか DRAFT のまま残す。
+This template is intended to satisfy the PR Discipline invariants in docs/architecture/harness.md by enforcing a consistent structure.
+If a section cannot be completed, reconsider the PR scope or keep the PR in DRAFT.
 
-参考: https://zenn.dev/nttdata_tech/articles/8a010aff542625
-(AI-native 開発で欠けやすい: テスト観点・PR 単位・仕様の明示・デグレ検出)
+Reference: https://zenn.dev/nttdata_tech/articles/8a010aff542625
+(Common omissions in AI-native development: test coverage, PR boundary, specification clarity, regression analysis)
 -->
 
-## この PR merge 後に何が動くようになるか
+## What will work after this PR is merged?
 
 <!--
-1 文。ユーザー観察可能な動作で書く。「バケットが作られる」ではなく
-「admin-console から tenant 作成するとメールが飛ぶ」のような、
-end-user / operator が確認できる振る舞い。
+Write one sentence describing user-observable behavior. Do not describe implementation details like "a bucket is created." Instead write a behavior such as "creating a tenant from admin-console sends an email."
 
-「動く」= 商用運用に耐える状態。デモのためのハリボテ / 雑な MVP ではない。
-小さい scope であっても、テストされていて意図が明確で、そのまま本番に出しても
-壊れないレベルまで詰める。
+"Working" means production-ready behavior, not a demo or messy MVP.
+Even a small scope must be tested, intentional, and safe to ship as-is.
 (INVARIANT_PR_SHIPS_WORKING_INCREMENT)
 
-書けない場合は PR 単位が適切でない。value を出す PR と束ねるか、rebase で順序を整えること。
+If you cannot write this sentence, the PR scope is likely wrong. Bundle value-producing work together or reorder commits with a rebase.
 -->
 
-## なぜ今これが要るか
+## Why is this needed now?
 
-<!-- 2-3 文。無いと何に困るか、他の解との比較、優先度の根拠 -->
+<!-- 2-3 sentences describing the problem, why it matters, and why this solution is appropriate. -->
 
-## 関連 Issue
+## Related issues
 
 <!--
-GitHub の auto-close keyword (= `Closes #N` / `Fixes #N` / `Resolves #N`) を **括弧なし** で
-書く。`(#N)` のように括弧で囲むと auto-close されない (= merge 後も Issue が開いたまま残る、
-手動で close 漏れの原因)。複数 issue は別行に書く。
+Write GitHub auto-close keywords without parentheses: `Closes #N` / `Fixes #N` / `Resolves #N`.
+Using `(#N)` prevents auto-close and may leave the issue open after merge.
+Put each issue on its own line.
 
-partial fix で issue を残したい場合は `Relates #N` (= auto-close されない) を使う。
-全 close 不要な PR (refactor / docs / chore 等) はこのセクションごと削除可。
+If this PR only partially resolves an issue, use `Relates #N`.
+If no issue should be closed, remove this section.
 -->
 
 - Closes #
 - Relates #
 
-## 変更前 → 変更後のフロー
+## Before → After flow
 
 <!--
-mermaid で実行経路の差分。consumer を全部描く。
-AWS リソース / event / API 呼び出しの順序を可視化する。
+Use mermaid to show the change in execution flow. Include all consumers.
+Visualize AWS resources, events, and API call order.
 -->
 
 ```mermaid
@@ -51,90 +48,91 @@ flowchart LR
     A[before] --> B[...]
 ```
 
-## 物理影響
+## Physical impact
 
-### AWS リソース (`make deploy`)
+### AWS resources (`make deploy`)
 
 <!--
-CFT 差分ベースで列挙する。「CFT 差分ゼロ」の場合も明示的に書く (reviewer に推論させない)。
-種別: CREATE / UPDATE in-place / REPLACE (= 一時中断) / DELETE / NO-OP
+List impacts based on CloudFormation diff. If there is zero CFT diff, state that explicitly.
+Types: CREATE / UPDATE in-place / REPLACE (= interruption) / DELETE / NO-OP
 -->
 
-| Stack | Resource | 種別 | 影響 |
+| Stack | Resource | Type | Impact |
 |---|---|---|---|
-| _Stack_ | _Resource_ | _種別_ | _影響_ |
+| _Stack_ | _Resource_ | _Type_ | _Impact_ |
 
-### ビルド成果物 (`make build`)
+### Build artifacts (`make build`)
 
-<!-- TS / static site / script など、deploy 外で変わる成果物 -->
+<!--
+Mention any non-deploy artifacts that change: TS build output, static site, scripts, etc.
+-->
 
-| パッケージ | 変更 |
+| Package | Change |
 |---|---|
-| _例: apps/admin-console_ | _ロジック変更のみ、AWS は不変_ |
+| _e.g. apps/admin-console_ | _Logic change only; AWS remains unchanged_ |
 
-## ファイルごとの変更意図
+## File-level intent
 
-<!-- 全ファイル 1 行ずつ。「何を」ではなく「なぜ」を書く。触ったファイル数が 10 を超えたら PR 分割を検討 -->
+<!-- Write one line per file explaining why the change was made, not just what changed.
+If more than 10 files are touched, consider splitting the PR. -->
 
-- `path/to/file.ts` — _変更意図_
+- `path/to/file.ts` — _intent_
 
-## Regression 分析
+## Regression analysis
 
 <!--
-merge で壊しうる既存挙動を列挙する。未確認項目がある PR は DRAFT のまま残す
-(INVARIANT_PR_REGRESSION_ANALYSIS_DOCUMENTED)。
+List existing behavior that this PR could break. Keep the PR in DRAFT if any items remain unchecked.
+(INVARIANT_PR_REGRESSION_ANALYSIS_DOCUMENTED)
 
-確認方法は具体的に書く: grep / code read / test run / 実環境観察 など。
-「テストが通った」だけでは Regression 分析にならない。テストが existing behavior を
-カバーしているか自体を確認する必要がある。
+Be explicit about verification: grep, code review, test run, production observation, etc.
+Passing tests alone is not enough; confirm that the tests actually cover the existing behavior.
 -->
 
-| # | 壊れうる既存挙動 | 影響範囲 | 確認状態 | 確認方法 / 対処 |
+| # | Existing behavior at risk | Scope | Status | Verification / mitigation |
 |---|---|---|---|---|
-| 1 | _例: event consumer の契約_ | _例: `PROVISION_SUCCESS` 購読者_ | ✅ 確認済み / ❌ 未確認 | _grep で全 consumer を列挙: ..._ |
+| 1 | _e.g. event consumer contract_ | _e.g. `PROVISION_SUCCESS` subscribers_ | ✅ Verified / ❌ Not verified | _list all consumers by grep: ..._ |
 
-## Rollback 手順
+## Rollback procedure
 
-<!-- この PR を revert したら何が起こるか、手順を書く。データ / サイドエフェクトの fate も明記 -->
+<!-- Describe what happens if this PR is reverted and the steps to restore the previous state.
+Include the fate of any data or side effects. -->
 
-1. `git revert <merge-sha>` → 新 PR で main に戻す
-2. `make deploy` で CFT 差分を適用
-3. _既に発生したデータ / サイドエフェクトの fate: ..._
+1. `git revert <merge-sha>` → open a new PR to restore main
+2. `make deploy` to apply the CFT diff
+3. _Data / side effect fate: ..._
 
-## テスト戦略
+## Test strategy
 
 <!--
-この PR で touch したコードに対するテスト観点を宣言する。
-既存テストがカバーする範囲 / 新規テストで追加した観点 / 未カバー観点を明示。
-
-AI に丸投げで生成したテストは、実行パスを本当にカバーしているか必ず確認すること
-(article の指摘: AI生成テストは claim した code path を実際に exercise していないケースがある)。
+Declare the test coverage for the touched code.
+State what existing tests cover, what new tests were added, and what remains untested.
+AI-generated tests must still be manually validated against the actual code paths.
 -->
 
-- 既存テストでカバーされる観点 — _列挙_
-- この PR で追加したテスト — _ファイル名 + 観点_
-- 未カバー (受容する理由) — _例: 実環境でしか確認できない部分は `## Verification (merge 後)` に回した_
+- Covered by existing tests — _list scope_
+- Added by this PR — _file names + coverage_
+- Not covered (reason accepted) — _e.g. environment-only checks moved to `## Verification (after merge)`_
 
 ## Verification
 
-### Merge 前 (DRAFT 解除条件)
+### Before merge (DRAFT release criteria)
 
 - [ ] `make test`
 - [ ] `make typecheck`
 - [ ] `make lint`
 - [ ] `make harness`
-- [ ] `make synth` (対象 stack 全部)
-- [ ] Regression 分析の未確認がゼロ
-- [ ] merge で動くようになる機能を 1 文で書けている
+- [ ] `make synth` (all target stacks)
+- [ ] No unchecked regression analysis items
+- [ ] One clear sentence describing the feature that will work after merge
 
-### Merge 後 (deploy 後 signal)
+### After merge (deploy signal)
 
-- [ ] `make deploy` 成功
-- [ ] _検証コマンド / 観察 signal_
-- [ ] _tear-down で元に戻せるか (dev 環境)_
+- [ ] `make deploy` success
+- [ ] _verification command / observation signal_
+- [ ] _tear-down can restore the dev environment_
 
-## 既知の未完了 (scope 外)
+## Known incomplete work (out of scope)
 
-<!-- この PR で解決しない既知問題。scope から除外した理由、後続 issue / PR 案を明示 -->
+<!-- Document known issues that this PR does not resolve, why they are excluded, and any follow-up issue or PR plans. -->
 
-- _項目 1_ — _後続 PR で対処予定 / 別 issue_
+- _item 1_ — _planned for follow-up PR / separate issue_
