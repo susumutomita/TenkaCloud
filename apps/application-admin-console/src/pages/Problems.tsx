@@ -24,12 +24,6 @@ import {
   toggleTagFilter,
 } from "../lib/problem-filter";
 
-const STATUS_BADGE_COLOR: Record<ProblemSummary["status"], "green" | "blue" | "grey"> = {
-  ready: "green",
-  draft: "blue",
-  deprecated: "grey",
-};
-
 const DIFFICULTY_LEVELS: DifficultyLevel[] = [1, 2, 3, 4, 5];
 
 /**
@@ -54,18 +48,11 @@ export function ProblemsPage() {
 
   const difficultyLabel = (d: ProblemSummary["difficulty"]): string =>
     t(`problems.difficulty_${d}`);
-  const statusLabel = (s: ProblemSummary["status"]): string => t(`problems.status_${s}`);
 
   const categorySegments: SegmentedControlProps.Option[] = [
     { id: "all", text: t("problems.all") },
     { id: "Battle", text: "Battle" },
     { id: "Challenge", text: "Challenge" },
-  ];
-  const statusSegments: SegmentedControlProps.Option[] = [
-    { id: "all", text: t("problems.all") },
-    { id: "ready", text: t("problems.status_ready") },
-    { id: "draft", text: t("problems.status_draft") },
-    { id: "deprecated", text: t("problems.status_deprecated") },
   ];
 
   const tagOptions: MultiselectProps.Option[] = useMemo(
@@ -135,20 +122,6 @@ export function ProblemsPage() {
               }))
             }
           />
-          <SegmentedControl
-            selectedId={criteria.statuses.length === 1 ? criteria.statuses[0] : "all"}
-            options={statusSegments}
-            label={t("problems.status_label")}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                statuses:
-                  detail.selectedId === "all"
-                    ? []
-                    : [detail.selectedId as ProblemSummary["status"]],
-              }))
-            }
-          />
         </SpaceBetween>
         <SpaceBetween direction="horizontal" size="s">
           <Multiselect
@@ -176,6 +149,10 @@ export function ProblemsPage() {
             options={tagOptions}
             selectedOptions={tagSelected}
             tokenLimit={10}
+            // タグ数が増えると dropdown を縦スクロールで探すのが辛い (= 利用者報告)。
+            // filteringType="auto" で dropdown 上部に inline search box を出す。
+            filteringType="auto"
+            filteringPlaceholder={t("problems.tag_filter_placeholder")}
             onChange={({ detail }) =>
               setCriteria((prev) => ({
                 ...prev,
@@ -223,7 +200,6 @@ export function ProblemsPage() {
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xs">
                   <Badge color={item.category === "Battle" ? "red" : "blue"}>{item.category}</Badge>
-                  <Badge color={STATUS_BADGE_COLOR[item.status]}>{statusLabel(item.status)}</Badge>
                   <Badge color="grey">
                     {interpolate(t("problems.badge_difficulty"), {
                       label: difficultyLabel(item.difficulty),
