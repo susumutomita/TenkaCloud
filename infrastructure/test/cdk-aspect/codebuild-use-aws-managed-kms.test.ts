@@ -19,6 +19,19 @@ function buildStackWithCodeBuild(): Template {
   return Template.fromStack(stack);
 }
 
+function collectPolicyActions(template: Template): string[] {
+  const policies = template.findResources("AWS::IAM::Policy");
+  return Object.values(policies).flatMap((policy) => {
+    const statements = (policy as { Properties: { PolicyDocument: { Statement: unknown[] } } })
+      .Properties.PolicyDocument.Statement;
+    return statements.flatMap((statement) => {
+      const action = (statement as { Action?: string | string[] }).Action;
+      if (Array.isArray(action)) return action;
+      return action ? [action] : [];
+    });
+  });
+}
+
 describe("CodeBuildUseAwsManagedKms", () => {
   it("should remove the EncryptionKey property from the CodeBuild Project (fall back to AWS-managed default)", () => {
     const template = buildStackWithCodeBuild();
@@ -37,25 +50,10 @@ describe("CodeBuildUseAwsManagedKms", () => {
 
   it("should strip kms:* statements from the CodeBuild Role IAM Policy (no kms action remains)", () => {
     const template = buildStackWithCodeBuild();
-    const policies = template.findResources("AWS::IAM::Policy");
-    for (const policy of Object.values(policies)) {
-      const statements = (policy as { Properties: { PolicyDocument: { Statement: unknown[] } } })
-        .Properties.PolicyDocument.Statement;
-      for (const s of statements) {
-        const stmt = s as { Action?: string | string[] };
-        const actions = Array.isArray(stmt.Action)
-          ? stmt.Action
-          : stmt.Action != null
-            ? [stmt.Action]
-            : [];
-        // `kms:` prefix で始まる action が残っていないこと。
-        // 旧 test は JSON.stringify().includes("kms:") だったが、これだと
-        // alias/aws/s3 ARN 等の "arn:...kms:..." にも誤 match する。
-        // statement.Action だけを構造的に check する。
-        for (const action of actions) {
-          expect(action.startsWith("kms:")).toBe(false);
-        }
-      }
+    // `kms:` prefix で始まる action が残っていないこと。 Resource ARN 内の `kms:`
+    // 文字列ではなく statement.Action だけを構造的に check する。
+    for (const action of collectPolicyActions(template)) {
+      expect(action.startsWith("kms:")).toBe(false);
     }
   });
 

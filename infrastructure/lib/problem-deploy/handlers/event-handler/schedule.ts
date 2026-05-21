@@ -73,38 +73,68 @@ export async function setEventSchedule(
   eventId: string,
   params: SetEventScheduleParams,
 ): Promise<SetEventScheduleOutcome> {
+  const { startsAt, endsAt, scoreboardFreezeMinutes } = params;
+  const validation = validateScheduleParams(params);
+  if (validation) return validation;
+
+  const currentEvent = await getCurrentSchedule(shared, eventId);
+  if (!currentEvent || currentEvent.tenantId !== tenantId) return { kind: "not_found" };
+
+  const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
+  const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
+  const effectiveOrder = validateScheduleOrder(effectiveStartsAt, effectiveEndsAt);
+  if (effectiveOrder) return effectiveOrder;
+  const update = buildScheduleUpdate(tenantId, params);
+  const updatedEvent = await updateEventSchedule(shared, eventId, update);
+  if (!updatedEvent) return { kind: "not_found" };
+
+  // 紐づく deployment 行を全部引いて eventStartsAt / eventEndsAt を伝播。
+  const updatedDeployments = await propagateSchedule(shared, tenantId, eventId, update);
+
+  return {
+    kind: "ok",
+    startsAt,
+    endsAt,
+    ...(scoreboardFreezeMinutes !== undefined ? { scoreboardFreezeMinutes } : {}),
+    updatedDeployments,
+  };
+}
+
+function validateScheduleParams(
+  params: SetEventScheduleParams,
+): SetEventScheduleOutcome | undefined {
   const { startsAt, endsAt, scoreboardFreezeMinutes, nowMs } = params;
-  // zod 通過済なので 3 field 全 undefined にはならない想定だが、defense-in-depth。
   if (startsAt === undefined && endsAt === undefined && scoreboardFreezeMinutes === undefined) {
     return { kind: "no_op" };
   }
+  if (isPastScheduleTime(startsAt, nowMs)) return { kind: "past_starts_at", startsAt, nowMs };
+  if (isPastScheduleTime(endsAt, nowMs)) return { kind: "past_ends_at", endsAt, nowMs };
+  return validateScheduleOrder(startsAt, endsAt);
+}
 
-  // #537: 過去 startsAt reject。「即座に開始」は handler で server now に解決済なので、
-  // ここに到達する startsAt は operator 入力 (= 任意時刻)。
-  if (startsAt !== undefined) {
-    const startsAtMs = new Date(startsAt).getTime();
-    if (Number.isFinite(startsAtMs) && startsAtMs < nowMs - SCHEDULE_SLACK_MS) {
-      return { kind: "past_starts_at", startsAt, nowMs };
-    }
-  }
-  // #536: 過去 endsAt reject。「Event を終了」 button は別 endpoint
-  // (POST /events/:id/end) で server now を書く経路があるので、本 schedule API には
-  // 未来の endsAt のみが来る想定。
-  if (endsAt !== undefined) {
-    const endsAtMs = new Date(endsAt).getTime();
-    if (Number.isFinite(endsAtMs) && endsAtMs < nowMs - SCHEDULE_SLACK_MS) {
-      return { kind: "past_ends_at", endsAt, nowMs };
-    }
-  }
-  // #536: 両方指定時に endsAt <= startsAt を弾く (= 競技時間 0 や負を防ぐ)。
-  if (startsAt !== undefined && endsAt !== undefined) {
-    const startsAtMs = new Date(startsAt).getTime();
-    const endsAtMs = new Date(endsAt).getTime();
-    if (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && endsAtMs <= startsAtMs) {
-      return { kind: "ends_before_starts", startsAt, endsAt };
-    }
-  }
+function isPastScheduleTime(value: string | undefined, nowMs: number): value is string {
+  if (value === undefined) return false;
+  const valueMs = new Date(value).getTime();
+  return Number.isFinite(valueMs) && valueMs < nowMs - SCHEDULE_SLACK_MS;
+}
 
+function validateScheduleOrder(
+  startsAt: string | undefined,
+  endsAt: string | undefined,
+): Extract<SetEventScheduleOutcome, { kind: "ends_before_starts" }> | undefined {
+  if (startsAt === undefined || endsAt === undefined) return undefined;
+  const startsAtMs = new Date(startsAt).getTime();
+  const endsAtMs = new Date(endsAt).getTime();
+  if (!Number.isFinite(startsAtMs) || !Number.isFinite(endsAtMs) || endsAtMs > startsAtMs) {
+    return undefined;
+  }
+  return { kind: "ends_before_starts", startsAt, endsAt };
+}
+
+async function getCurrentSchedule(
+  shared: EventSharedResources,
+  eventId: string,
+): Promise<Pick<EventItem, "tenantId" | "startsAt" | "endsAt"> | undefined> {
   const currentOut = await shared.ddb.send(
     new GetCommand({
       TableName: shared.eventsTableName,
@@ -112,118 +142,100 @@ export async function setEventSchedule(
       ProjectionExpression: "tenantId, startsAt, endsAt",
     }),
   );
-  const currentEvent = currentOut.Item as Pick<EventItem, "tenantId" | "startsAt" | "endsAt">;
-  if (!currentEvent || currentEvent.tenantId !== tenantId) return { kind: "not_found" };
+  return currentOut.Item as Pick<EventItem, "tenantId" | "startsAt" | "endsAt"> | undefined;
+}
 
-  const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
-  const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
-  if (effectiveStartsAt !== undefined && effectiveEndsAt !== undefined) {
-    const startsAtMs = new Date(effectiveStartsAt).getTime();
-    const endsAtMs = new Date(effectiveEndsAt).getTime();
-    if (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && endsAtMs <= startsAtMs) {
-      return {
-        kind: "ends_before_starts",
-        startsAt: effectiveStartsAt,
-        endsAt: effectiveEndsAt,
-      };
-    }
+interface ScheduleUpdate {
+  readonly eventExpression: string;
+  readonly eventValues: Record<string, string | number>;
+  readonly deploymentExpression: string;
+  readonly deploymentValues: Record<string, string>;
+}
+
+function buildScheduleUpdate(tenantId: string, params: SetEventScheduleParams): ScheduleUpdate {
+  const now = new Date(params.nowMs).toISOString();
+  const eventParts = ["updatedAt = :now"];
+  const deploymentParts = ["updatedAt = :now"];
+  const eventValues: Record<string, string | number> = { ":now": now, ":tenantId": tenantId };
+  const deploymentValues: Record<string, string> = { ":now": now, ":tenantId": tenantId };
+  if (params.startsAt !== undefined) {
+    eventParts.push("startsAt = :startsAt");
+    deploymentParts.push("eventStartsAt = :s");
+    eventValues[":startsAt"] = params.startsAt;
+    deploymentValues[":s"] = params.startsAt;
   }
-
-  // dynamic UpdateExpression: 指定 field のみ更新 (= 既存値を保持)。
-  // ExpressionAttributeNames で "endsAt" は予約語衝突なしだが symmetry で `#` 付に。
-  const setParts: string[] = ["updatedAt = :now"];
-  const exprValues: Record<string, string> = {
-    ":now": new Date(nowMs).toISOString(),
-    ":tenantId": tenantId,
+  if (params.endsAt !== undefined) {
+    eventParts.push("endsAt = :endsAt");
+    deploymentParts.push("eventEndsAt = :e");
+    eventValues[":endsAt"] = params.endsAt;
+    deploymentValues[":e"] = params.endsAt;
+  }
+  if (params.scoreboardFreezeMinutes !== undefined) {
+    eventParts.push("scoreboardFreezeMinutes = :fz");
+    eventValues[":fz"] = params.scoreboardFreezeMinutes;
+  }
+  return {
+    eventExpression: `SET ${eventParts.join(", ")}`,
+    eventValues,
+    deploymentExpression: `SET ${deploymentParts.join(", ")}`,
+    deploymentValues,
   };
-  if (startsAt !== undefined) {
-    setParts.push("startsAt = :startsAt");
-    exprValues[":startsAt"] = startsAt;
-  }
-  if (endsAt !== undefined) {
-    setParts.push("endsAt = :endsAt");
-    exprValues[":endsAt"] = endsAt;
-  }
-  // Issue #1038 P1 #9 follow-up: scoreboard freeze 分数を operator 可変設定
-  const exprNumberValues: Record<string, number> = {};
-  if (scoreboardFreezeMinutes !== undefined) {
-    setParts.push("scoreboardFreezeMinutes = :fz");
-    exprNumberValues[":fz"] = scoreboardFreezeMinutes;
-  }
-  const updateExpression = `SET ${setParts.join(", ")}`;
+}
 
-  let updatedEvent: Partial<EventItem> | undefined;
+async function updateEventSchedule(
+  shared: EventSharedResources,
+  eventId: string,
+  update: ScheduleUpdate,
+): Promise<Partial<EventItem> | undefined> {
   try {
-    const updateOut = await shared.ddb.send(
+    const out = await shared.ddb.send(
       new UpdateCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: updateExpression,
+        UpdateExpression: update.eventExpression,
         ConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: { ...exprValues, ...exprNumberValues },
+        ExpressionAttributeValues: update.eventValues,
         ReturnValues: "ALL_NEW",
       }),
     );
-    updatedEvent = updateOut.Attributes as Partial<EventItem> | undefined;
+    return out.Attributes as Partial<EventItem> | undefined;
   } catch (err) {
-    // ConditionalCheckFailedException = 行不在 or tenant 不一致 → not_found
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      return { kind: "not_found" };
-    }
+    if (err instanceof Error && err.name === "ConditionalCheckFailedException") return undefined;
     throw err;
   }
-  if (!updatedEvent) return { kind: "not_found" };
+}
 
-  // 紐づく deployment 行を全部引いて eventStartsAt / eventEndsAt を伝播。
-  const deploymentsOut = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
-  const targets = deploymentsOut
-    .map((d) => d as Pick<DeploymentItem, "PK">)
-    .filter((d) => typeof d.PK === "string");
+async function propagateSchedule(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  update: ScheduleUpdate,
+): Promise<number> {
+  const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
+  const targets = deployments
+    .map((deployment) => deployment as Pick<DeploymentItem, "PK">)
+    .filter((deployment) => typeof deployment.PK === "string");
+  await Promise.all(targets.map((target) => updateDeploymentSchedule(shared, target, update)));
+  return targets.length;
+}
 
-  // deployment 側も dynamic UpdateExpression — startsAt のみ / endsAt のみ / 両方 を対応
-  const depSetParts: string[] = ["updatedAt = :now"];
-  const depExprValues: Record<string, string> = {
-    ":now": exprValues[":now"] ?? "",
-    ":tenantId": tenantId,
-  };
-  if (startsAt !== undefined) {
-    depSetParts.push("eventStartsAt = :s");
-    depExprValues[":s"] = startsAt;
+async function updateDeploymentSchedule(
+  shared: EventSharedResources,
+  target: Pick<DeploymentItem, "PK">,
+  update: ScheduleUpdate,
+): Promise<void> {
+  try {
+    await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.deploymentsTableName,
+        Key: { PK: target.PK, SK: "META" },
+        UpdateExpression: update.deploymentExpression,
+        ConditionExpression: "tenantId = :tenantId",
+        ExpressionAttributeValues: update.deploymentValues,
+      }),
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
+    throw err;
   }
-  if (endsAt !== undefined) {
-    depSetParts.push("eventEndsAt = :e");
-    depExprValues[":e"] = endsAt;
-  }
-  const depUpdateExpression = `SET ${depSetParts.join(", ")}`;
-
-  // Promise.all で並列 update。各 row は冪等な field update。
-  // #872: tenantId 一致を atomic に強制 (= queryDeploymentsByEvent が GSI1=TENANT#... で
-  // 引いているので transitively 安全だが、 write 自体に condition を載せて defense-in-depth)。
-  await Promise.all(
-    targets.map((d) =>
-      shared.ddb
-        .send(
-          new UpdateCommand({
-            TableName: shared.deploymentsTableName,
-            Key: { PK: d.PK, SK: "META" },
-            UpdateExpression: depUpdateExpression,
-            ConditionExpression: "tenantId = :tenantId",
-            ExpressionAttributeValues: depExprValues,
-          }),
-        )
-        .catch((err: unknown) => {
-          // CCF = item が消えた / tenant 不一致 → skip (= idempotent な field 伝播なので無視 OK)。
-          if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
-          throw err;
-        }),
-    ),
-  );
-
-  return {
-    kind: "ok",
-    startsAt,
-    endsAt,
-    ...(scoreboardFreezeMinutes !== undefined ? { scoreboardFreezeMinutes } : {}),
-    updatedDeployments: targets.length,
-  };
 }

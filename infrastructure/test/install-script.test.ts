@@ -40,11 +40,11 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
 
   // prepare-source-bundle.sh が staging logic の DRY 集約点であることを pin。
   it("prepare-source-bundle.sh should copy the repo root `package.json` to the staging root", () => {
-    expect(prepareBundle).toContain('cp package.json "${STAGING}/package.json"');
+    expect(prepareBundle).toContain(`cp package.json "\${STAGING}/package.json"`);
   });
 
   it("prepare-source-bundle.sh should copy the `packages` directory to the staging root (workspace:* protocol)", () => {
-    expect(prepareBundle).toContain('cp -R packages "${STAGING}/packages"');
+    expect(prepareBundle).toContain(`cp -R packages "\${STAGING}/packages"`);
   });
 
   it("prepare-source-bundle.sh should rewrite staging package.json workspaces from `infrastructure` to `cdk`", () => {
@@ -52,9 +52,9 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
   });
 
   it("install.sh should source prepare-source-bundle.sh and delegate staging without inlining duplicates", () => {
-    expect(source).toContain('source "${SCRIPT_DIR}/prepare-source-bundle.sh"');
-    expect(source).not.toContain('cp -R packages "${STAGING}/packages"');
-    expect(source).not.toContain('cp -R problems "${STAGING}/problems"');
+    expect(source).toContain(`source "\${SCRIPT_DIR}/prepare-source-bundle.sh"`);
+    expect(source).not.toContain(`cp -R packages "\${STAGING}/packages"`);
+    expect(source).not.toContain(`cp -R problems "\${STAGING}/problems"`);
   });
 
   // Issue #1029 / PR-1028: pooled stack の lifecycle は SBT pipeline 一本化。

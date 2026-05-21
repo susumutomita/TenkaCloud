@@ -179,37 +179,15 @@ async function applyKindResult(
   nowIso: string,
 ): Promise<void> {
   if (!item.PK) return;
-
-  // UpdateExpression を field 存在に応じて動的に組む。常に updatedAt / lastScoredAt を更新。
-  const setParts: string[] = ["lastScoredAt = :now", "updatedAt = :now"];
-  const exprValues: Record<string, unknown> = { ":now": nowIso };
-  let updateExpr = "";
-
-  if (result.scoreDelta !== 0) {
-    updateExpr = "ADD score :pts ";
-    exprValues[":pts"] = result.scoreDelta;
-  }
-  if (result.lastResult) {
-    setParts.push("lastResult = :lr");
-    exprValues[":lr"] = result.lastResult;
-  }
-  if (result.endpointsHealthJson !== undefined) {
-    setParts.push("endpointsHealth = :health");
-    exprValues[":health"] = result.endpointsHealthJson;
-  }
-  if (result.newState !== undefined) {
-    setParts.push("scoringState = :state");
-    exprValues[":state"] = JSON.stringify(result.newState);
-  }
-  updateExpr += `SET ${setParts.join(", ")}`;
+  const update = buildKindResultUpdate(result, nowIso);
 
   try {
     await shared.ddb.send(
       new UpdateCommand({
         TableName: shared.deploymentsTableName,
         Key: { PK: item.PK, SK: "META" },
-        UpdateExpression: updateExpr,
-        ExpressionAttributeValues: exprValues,
+        UpdateExpression: update.expression,
+        ExpressionAttributeValues: update.values,
       }),
     );
   } catch (err) {
@@ -221,6 +199,38 @@ async function applyKindResult(
 
   // score event 行 (= 履歴 marker) を best-effort で append。失敗は警告 log のみ
   // (= 採点 / 健全性 update は既に確定済、整合性より可用性優先)。
+  await appendKindScoreEvents(shared, item, result);
+}
+
+function buildKindResultUpdate(
+  result: KindResult,
+  nowIso: string,
+): { readonly expression: string; readonly values: Record<string, unknown> } {
+  // UpdateExpression を field 存在に応じて動的に組む。常に updatedAt / lastScoredAt を更新。
+  const setParts: string[] = ["lastScoredAt = :now", "updatedAt = :now"];
+  const values: Record<string, unknown> = { ":now": nowIso };
+  const addScore = result.scoreDelta !== 0 ? "ADD score :pts " : "";
+  if (result.scoreDelta !== 0) values[":pts"] = result.scoreDelta;
+  if (result.lastResult) {
+    setParts.push("lastResult = :lr");
+    values[":lr"] = result.lastResult;
+  }
+  if (result.endpointsHealthJson !== undefined) {
+    setParts.push("endpointsHealth = :health");
+    values[":health"] = result.endpointsHealthJson;
+  }
+  if (result.newState !== undefined) {
+    setParts.push("scoringState = :state");
+    values[":state"] = JSON.stringify(result.newState);
+  }
+  return { expression: `${addScore}SET ${setParts.join(", ")}`, values };
+}
+
+async function appendKindScoreEvents(
+  shared: GenericScoringSharedResources,
+  item: Partial<DeploymentItem>,
+  result: KindResult,
+): Promise<void> {
   if (!item.jobId || !item.problemId) return;
   const parent = {
     jobId: item.jobId,
@@ -357,41 +367,50 @@ export function parsePhasesEnv(raw: string | undefined): Record<string, readonly
     return {};
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  return parsePhasesMap(parsed as Record<string, unknown>);
+}
+
+function parsePhasesMap(parsed: Record<string, unknown>): Record<string, readonly PhaseEntry[]> {
   const out: Record<string, readonly PhaseEntry[]> = {};
-  for (const [problemId, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!Array.isArray(value)) continue;
-    const phases: PhaseEntry[] = [];
-    for (const entry of value) {
-      if (!entry || typeof entry !== "object") continue;
-      const p = entry as { name?: unknown; afterMinutes?: unknown; effect?: unknown };
-      if (typeof p.name !== "string" || typeof p.afterMinutes !== "number") continue;
-      const effectInput =
-        p.effect && typeof p.effect === "object"
-          ? (p.effect as Record<string, unknown>)
-          : undefined;
-      const effect = effectInput
-        ? {
-            ...(typeof effectInput.scorePathOverride === "string"
-              ? { scorePathOverride: effectInput.scorePathOverride }
-              : {}),
-            ...(Array.isArray(effectInput.switchPlatformToDegraded)
-              ? {
-                  switchPlatformToDegraded: effectInput.switchPlatformToDegraded.filter(
-                    (s): s is string => typeof s === "string",
-                  ),
-                }
-              : {}),
-          }
-        : undefined;
-      phases.push({
-        name: p.name,
-        afterMinutes: p.afterMinutes,
-        ...(effect ? { effect } : {}),
-      });
-    }
+  for (const [problemId, value] of Object.entries(parsed)) {
+    const phases = parsePhaseEntries(value);
     if (phases.length > 0) out[problemId] = phases;
   }
   return out;
+}
+
+function parsePhaseEntries(value: unknown): PhaseEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(parsePhaseEntry).filter((phase): phase is PhaseEntry => phase !== undefined);
+}
+
+function parsePhaseEntry(value: unknown): PhaseEntry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const phase = value as { name?: unknown; afterMinutes?: unknown; effect?: unknown };
+  if (typeof phase.name !== "string" || typeof phase.afterMinutes !== "number") return undefined;
+  const effect = parsePhaseEffect(phase.effect);
+  return {
+    name: phase.name,
+    afterMinutes: phase.afterMinutes,
+    ...(effect ? { effect } : {}),
+  };
+}
+
+function parsePhaseEffect(value: unknown): PhaseEntry["effect"] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const effect = value as Record<string, unknown>;
+  return {
+    ...(typeof effect.scorePathOverride === "string"
+      ? { scorePathOverride: effect.scorePathOverride }
+      : {}),
+    ...(Array.isArray(effect.switchPlatformToDegraded)
+      ? {
+          switchPlatformToDegraded: effect.switchPlatformToDegraded.filter(
+            (platform): platform is string => typeof platform === "string",
+          ),
+        }
+      : {}),
+  };
 }
 
 export {

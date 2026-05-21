@@ -157,17 +157,19 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   describe("IAM 権限 (ADR-011 D6 read-only)", () => {
     function collectActions(tpl: Template): string[] {
       const policies = tpl.findResources("AWS::IAM::Policy");
-      const allActions: string[] = [];
-      for (const p of Object.values(policies)) {
-        const statements = (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } })
-          .Properties?.PolicyDocument?.Statement;
-        for (const s of statements ?? []) {
-          const action = (s as { Action?: string | string[] }).Action;
-          if (Array.isArray(action)) allActions.push(...action);
-          else if (typeof action === "string") allActions.push(action);
-        }
-      }
-      return allActions;
+      return Object.values(policies).flatMap(policyActions);
+    }
+
+    function policyActions(policy: unknown): string[] {
+      const statements = (policy as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } })
+        .Properties?.PolicyDocument?.Statement;
+      return (statements ?? []).flatMap(statementActions);
+    }
+
+    function statementActions(statement: unknown): string[] {
+      const action = (statement as { Action?: string | string[] }).Action;
+      if (Array.isArray(action)) return action;
+      return typeof action === "string" ? [action] : [];
     }
 
     it("should Allow only reads on Deployments / Events / Teams tables (no writes)", () => {

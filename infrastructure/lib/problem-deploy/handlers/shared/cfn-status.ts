@@ -102,17 +102,22 @@ export function parseStackOutputs(json: string | undefined): Record<string, stri
     return {};
   }
   if (!parsed || typeof parsed !== "object") return {};
+  return Array.isArray(parsed) ? parseStackOutputArray(parsed) : parseStackOutputMap(parsed);
+}
+
+function parseStackOutputArray(parsed: readonly unknown[]): Record<string, string> {
   const out: Record<string, string> = {};
-  if (Array.isArray(parsed)) {
-    for (const entry of parsed) {
-      if (entry && typeof entry === "object") {
-        const k = (entry as { OutputKey?: unknown }).OutputKey;
-        const v = (entry as { OutputValue?: unknown }).OutputValue;
-        if (typeof k === "string" && typeof v === "string") out[k] = v;
-      }
-    }
-    return out;
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") continue;
+    const k = (entry as { OutputKey?: unknown }).OutputKey;
+    const v = (entry as { OutputValue?: unknown }).OutputValue;
+    if (typeof k === "string" && typeof v === "string") out[k] = v;
   }
+  return out;
+}
+
+function parseStackOutputMap(parsed: object): Record<string, string> {
+  const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof v === "string") out[k] = v;
   }

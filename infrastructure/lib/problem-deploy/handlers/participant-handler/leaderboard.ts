@@ -174,42 +174,10 @@ export function buildLeaderboardEntries(
   items: readonly Partial<DeploymentItem>[],
   myTeamId: string,
 ): LeaderboardEntry[] {
-  type Bucket = {
-    teamId: string;
-    teamName: string;
-    score: number;
-    completedProblems: number;
-    totalProblems: number;
-  };
   const byTeam = new Map<string, Bucket>();
 
   for (const item of items) {
-    if (typeof item.teamId !== "string") continue;
-    const status = (item.status ?? "PENDING") as DeploymentStatus;
-    if (DELETED_LIKE_STATUSES.has(status)) continue;
-
-    const teamId = item.teamId;
-    const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
-    const operatorSlug = typeof item.teamName === "string" ? item.teamName : "";
-    const teamName = display ?? operatorSlug;
-
-    let bucket = byTeam.get(teamId);
-    if (!bucket) {
-      bucket = {
-        teamId,
-        teamName,
-        score: 0,
-        completedProblems: 0,
-        totalProblems: 0,
-      };
-      byTeam.set(teamId, bucket);
-    } else if (display && bucket.teamName !== display) {
-      // displayTeamName を持つ行が後から見つかったら採用 (= 全行同期されている前提だが防御)
-      bucket.teamName = display;
-    }
-    bucket.totalProblems += 1;
-    bucket.score += Number(item.score ?? 0);
-    if (status === "COMPLETE") bucket.completedProblems += 1;
+    addLeaderboardItem(byTeam, item);
   }
 
   const sorted = [...byTeam.values()].sort((a, b) => {
@@ -226,4 +194,40 @@ export function buildLeaderboardEntries(
     totalProblems: bucket.totalProblems,
     isMyTeam: bucket.teamId === myTeamId,
   }));
+}
+
+type Bucket = {
+  teamId: string;
+  teamName: string;
+  score: number;
+  completedProblems: number;
+  totalProblems: number;
+};
+
+function getLeaderboardBucket(
+  byTeam: Map<string, Bucket>,
+  teamId: string,
+  teamName: string,
+): Bucket {
+  const existing = byTeam.get(teamId);
+  if (existing) return existing;
+  const created = { teamId, teamName, score: 0, completedProblems: 0, totalProblems: 0 };
+  byTeam.set(teamId, created);
+  return created;
+}
+
+function addLeaderboardItem(byTeam: Map<string, Bucket>, item: Partial<DeploymentItem>): void {
+  if (typeof item.teamId !== "string") return;
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  if (DELETED_LIKE_STATUSES.has(status)) return;
+  const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
+  const operatorSlug = typeof item.teamName === "string" ? item.teamName : "";
+  const bucket = getLeaderboardBucket(byTeam, item.teamId, display ?? operatorSlug);
+  if (display && bucket.teamName !== display) {
+    // displayTeamName を持つ行が後から見つかったら採用 (= 全行同期されている前提だが防御)
+    bucket.teamName = display;
+  }
+  bucket.totalProblems += 1;
+  bucket.score += Number(item.score ?? 0);
+  if (status === "COMPLETE") bucket.completedProblems += 1;
 }

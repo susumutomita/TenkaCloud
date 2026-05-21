@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
@@ -178,32 +178,7 @@ app.post("/portal/me/submit-flag", (c) =>
   withBearerAuth(
     c,
     "submitFlag",
-    async (token) => {
-      const body = await c.req.json().catch(() => null);
-      if (body === null) return respondError(c, "invalid_body");
-      const problemId = (body as { problemId?: unknown }).problemId;
-      const flag = (body as { flag?: unknown }).flag;
-      if (typeof problemId !== "string" || !PROBLEM_ID_RE.test(problemId)) {
-        return respondError(c, "invalid_problem_id");
-      }
-      if (typeof flag !== "string" || flag.length === 0 || flag.length > 200) {
-        return respondError(c, "invalid_flag");
-      }
-      const outcome = await submitFlag(shared, shared.problemsScoring, token, problemId, flag);
-      if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
-      if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
-      if (outcome.kind === "no_outputs") return respondError(c, "no_outputs");
-      if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
-      // Issue #13 / #1006: scoring gate failures に startsAt / endsAt を含めて返す。
-      // UI で 「競技開始まで N 分」 / 「競技は X 終了しました」 を出せるようにする。
-      if (outcome.kind === "scoring_not_started") {
-        return respondError(c, "scoring_not_started", { startsAt: outcome.startsAt });
-      }
-      if (outcome.kind === "scoring_ended") {
-        return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
-      }
-      return c.json(outcome, HTTP_OK);
-    },
+    (token) => handleSubmitFlag(c, token),
     RATE_LIMITS.WRITE_VERY_LOW,
   ),
 );
@@ -212,36 +187,77 @@ app.post("/portal/me/submit-flag", (c) =>
 // no-op、 既存 record の content + score を返す)。 rate limit は WRITE_LOW (= 10 burst /
 // 12 RPM、 hint をブルートフォースで全部 reveal させない壁)。
 app.post("/portal/me/problems/:problemId/hints/:hintId/reveal", (c) =>
-  withBearerAuth(
-    c,
-    "reveal-hint",
-    async (token) => {
-      const problemId = c.req.param("problemId");
-      if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
-        return respondError(c, "invalid_problem_id");
-      }
-      const hintId = c.req.param("hintId");
-      if (!hintId || hintId.length === 0 || hintId.length > 64) {
-        return respondError(c, "invalid_hint_id");
-      }
-      const outcome = await revealHint(shared, shared.problemsScoring, token, problemId, hintId);
-      if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
-      if (outcome.kind === "not_flag_problem") return respondError(c, "not_flag_problem");
-      if (outcome.kind === "unknown_hint") return respondError(c, "unknown_hint");
-      // Issue #1005 / #1006: scoring gate failures with startsAt / endsAt context.
-      if (outcome.kind === "scoring_not_started") {
-        return respondError(c, "scoring_not_started", { startsAt: outcome.startsAt });
-      }
-      if (outcome.kind === "scoring_ended") {
-        return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
-      }
-      if (outcome.kind === "scoring_locked") return respondError(c, "scoring_locked");
-      // ok / already_revealed どちらも 200 で content + score を返す (= idempotent UX)。
-      return c.json(outcome, HTTP_OK);
-    },
-    RATE_LIMITS.WRITE_LOW,
-  ),
+  withBearerAuth(c, "reveal-hint", (token) => handleHintReveal(c, token), RATE_LIMITS.WRITE_LOW),
 );
+
+async function handleSubmitFlag(c: Context, token: string): Promise<Response> {
+  const body = await c.req.json().catch(() => null);
+  if (body === null) return respondError(c, "invalid_body");
+  const problemId = (body as { problemId?: unknown }).problemId;
+  const flag = (body as { flag?: unknown }).flag;
+  if (typeof problemId !== "string" || !PROBLEM_ID_RE.test(problemId)) {
+    return respondError(c, "invalid_problem_id");
+  }
+  if (typeof flag !== "string" || flag.length === 0 || flag.length > 200) {
+    return respondError(c, "invalid_flag");
+  }
+  const outcome = await submitFlag(shared, shared.problemsScoring, token, problemId, flag);
+  return respondSubmitFlagOutcome(c, outcome);
+}
+
+async function handleHintReveal(c: Context, token: string): Promise<Response> {
+  const problemId = c.req.param("problemId");
+  if (!problemId || !PROBLEM_ID_RE.test(problemId)) return respondError(c, "invalid_problem_id");
+  const hintId = c.req.param("hintId");
+  if (!hintId || hintId.length === 0 || hintId.length > 64) {
+    return respondError(c, "invalid_hint_id");
+  }
+  const outcome = await revealHint(shared, shared.problemsScoring, token, problemId, hintId);
+  return respondHintRevealOutcome(c, outcome);
+}
+
+function respondSubmitFlagOutcome(
+  c: Context,
+  outcome: Awaited<ReturnType<typeof submitFlag>>,
+): Response {
+  if (outcome.kind === "scoring_not_started") {
+    return respondError(c, "scoring_not_started", { startsAt: outcome.startsAt });
+  }
+  if (outcome.kind === "scoring_ended") {
+    return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
+  }
+  if (
+    outcome.kind === "unauthorized" ||
+    outcome.kind === "not_flag_problem" ||
+    outcome.kind === "no_outputs" ||
+    outcome.kind === "scoring_locked"
+  ) {
+    return respondError(c, outcome.kind);
+  }
+  return c.json(outcome, HTTP_OK);
+}
+
+function respondHintRevealOutcome(
+  c: Context,
+  outcome: Awaited<ReturnType<typeof revealHint>>,
+): Response {
+  if (outcome.kind === "scoring_not_started") {
+    return respondError(c, "scoring_not_started", { startsAt: outcome.startsAt });
+  }
+  if (outcome.kind === "scoring_ended") {
+    return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
+  }
+  if (
+    outcome.kind === "unauthorized" ||
+    outcome.kind === "not_flag_problem" ||
+    outcome.kind === "unknown_hint" ||
+    outcome.kind === "scoring_locked"
+  ) {
+    return respondError(c, outcome.kind);
+  }
+  // ok / already_revealed どちらも 200 で content + score を返す (= idempotent UX)。
+  return c.json(outcome, HTTP_OK);
+}
 
 // ADR-012 Phase 3.A: Endpoint registry (override) routes — 競技者が自 team の slot URL を
 // 再ホスト先 (Lambda / ECS / App Runner 等) に切り替えるための CRUD。auth は teamLoginKey

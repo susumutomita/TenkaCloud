@@ -202,23 +202,25 @@ function parseFlag(value: unknown): FlagScoringMetadata | undefined {
  */
 function parseHints(value: unknown): readonly ProgressiveHint[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const hints: ProgressiveHint[] = [];
-  for (const [index, raw] of value.entries()) {
-    if (typeof raw === "string") {
-      hints.push({ id: `hint-${index + 1}`, content: raw, penalty: 0 });
-      continue;
-    }
-    if (typeof raw !== "object" || raw === null) continue;
-    const obj = raw as { id?: unknown; content?: unknown; penalty?: unknown };
-    if (typeof obj.id !== "string" || obj.id.length === 0) continue;
-    if (typeof obj.content !== "string" || obj.content.length === 0) continue;
-    const penalty =
-      typeof obj.penalty === "number" && Number.isFinite(obj.penalty) && obj.penalty >= 0
-        ? Math.floor(obj.penalty)
-        : 0;
-    hints.push({ id: obj.id, content: obj.content, penalty });
-  }
+  const hints = value
+    .map((hint, index) => parseHint(hint, index))
+    .filter((hint): hint is ProgressiveHint => hint !== undefined);
   return hints.length > 0 ? hints : undefined;
+}
+
+function parseHint(value: unknown, index: number): ProgressiveHint | undefined {
+  if (typeof value === "string") {
+    return { id: `hint-${index + 1}`, content: value, penalty: 0 };
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const hint = value as { id?: unknown; content?: unknown; penalty?: unknown };
+  if (typeof hint.id !== "string" || hint.id.length === 0) return undefined;
+  if (typeof hint.content !== "string" || hint.content.length === 0) return undefined;
+  return { id: hint.id, content: hint.content, penalty: normalizeHintPenalty(hint.penalty) };
+}
+
+function normalizeHintPenalty(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
 }
 
 function parseUptimeFlat(
@@ -228,34 +230,9 @@ function parseUptimeFlat(
   const u = value as { endpoints?: unknown; pointsPerSuccess?: unknown; hints?: unknown };
   if (!Array.isArray(u.endpoints) || u.endpoints.length === 0) return undefined;
   if (typeof u.pointsPerSuccess !== "number" || u.pointsPerSuccess <= 0) return undefined;
-  const endpoints: UptimeFlatEndpoint[] = [];
-  for (const entry of u.endpoints) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as {
-      slot?: unknown;
-      outputKey?: unknown;
-      path?: unknown;
-      expectStatus?: unknown;
-      pointsPerSuccess?: unknown;
-    };
-    if (typeof e.path !== "string") continue;
-    if (!Array.isArray(e.expectStatus) || e.expectStatus.length === 0) continue;
-    const expectStatus = e.expectStatus.filter((s): s is number => typeof s === "number");
-    if (expectStatus.length === 0) continue;
-    // slot か outputKey のどちらかが要る (= effective URL を解決するため)。
-    const hasSlot = typeof e.slot === "string" && e.slot.length > 0;
-    const hasOutputKey = typeof e.outputKey === "string" && e.outputKey.length > 0;
-    if (!hasSlot && !hasOutputKey) continue;
-    endpoints.push({
-      ...(hasSlot ? { slot: e.slot as string } : {}),
-      ...(hasOutputKey ? { outputKey: e.outputKey as string } : {}),
-      path: e.path,
-      expectStatus,
-      ...(typeof e.pointsPerSuccess === "number" && e.pointsPerSuccess > 0
-        ? { pointsPerSuccess: e.pointsPerSuccess }
-        : {}),
-    });
-  }
+  const endpoints = u.endpoints
+    .map(parseUptimeFlatEndpoint)
+    .filter((endpoint): endpoint is UptimeFlatEndpoint => endpoint !== undefined);
   if (endpoints.length === 0) return undefined;
   // 入力 kind を保ったまま返す (= legacy `uptime` 採用 metadata の view 互換)。
   // dispatcher 側は両者を flat probe として処理する。
@@ -268,6 +245,32 @@ function parseUptimeFlat(
   };
 }
 
+function parseUptimeFlatEndpoint(value: unknown): UptimeFlatEndpoint | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const endpoint = value as {
+    slot?: unknown;
+    outputKey?: unknown;
+    path?: unknown;
+    expectStatus?: unknown;
+    pointsPerSuccess?: unknown;
+  };
+  if (typeof endpoint.path !== "string") return undefined;
+  const expectStatus = parseExpectedStatuses(endpoint.expectStatus);
+  if (!expectStatus) return undefined;
+  const slot = optionalNonEmptyString(endpoint.slot);
+  const outputKey = optionalNonEmptyString(endpoint.outputKey);
+  if (!slot && !outputKey) return undefined;
+  return {
+    ...(slot ? { slot } : {}),
+    ...(outputKey ? { outputKey } : {}),
+    path: endpoint.path,
+    expectStatus,
+    ...(isPositiveNumber(endpoint.pointsPerSuccess)
+      ? { pointsPerSuccess: endpoint.pointsPerSuccess }
+      : {}),
+  };
+}
+
 function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefined {
   const u = value as {
     probedSlots?: unknown;
@@ -277,16 +280,9 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
   };
   if (!Array.isArray(u.probedSlots) || u.probedSlots.length === 0) return undefined;
   if (typeof u.pointsAllOk !== "number" || u.pointsAllOk <= 0) return undefined;
-  const probedSlots: UptimeMultiProbedSlot[] = [];
-  for (const entry of u.probedSlots) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as { slot?: unknown; path?: unknown; expectStatus?: unknown };
-    if (typeof e.slot !== "string" || typeof e.path !== "string") continue;
-    if (!Array.isArray(e.expectStatus) || e.expectStatus.length === 0) continue;
-    const expectStatus = e.expectStatus.filter((s): s is number => typeof s === "number");
-    if (expectStatus.length === 0) continue;
-    probedSlots.push({ slot: e.slot, path: e.path, expectStatus });
-  }
+  const probedSlots = u.probedSlots
+    .map(parseUptimeMultiSlot)
+    .filter((slot): slot is UptimeMultiProbedSlot => slot !== undefined);
   if (probedSlots.length === 0) return undefined;
   const hints = parseHints(u.hints);
   return {
@@ -296,6 +292,14 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     ...(typeof u.failurePenalty === "number" ? { failurePenalty: u.failurePenalty } : {}),
     ...(hints ? { hints } : {}),
   };
+}
+
+function parseUptimeMultiSlot(value: unknown): UptimeMultiProbedSlot | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const slot = value as { slot?: unknown; path?: unknown; expectStatus?: unknown };
+  if (typeof slot.slot !== "string" || typeof slot.path !== "string") return undefined;
+  const expectStatus = parseExpectedStatuses(slot.expectStatus);
+  return expectStatus ? { slot: slot.slot, path: slot.path, expectStatus } : undefined;
 }
 
 function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | undefined {
@@ -309,55 +313,13 @@ function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | unde
     hints?: unknown;
   };
   if (typeof p.intervalMinutes !== "number" || p.intervalMinutes <= 0) return undefined;
-  if (!p.probe || typeof p.probe !== "object") return undefined;
-  const probe = p.probe as { metaPath?: unknown; scorePath?: unknown };
-  if (typeof probe.metaPath !== "string" || typeof probe.scorePath !== "string") return undefined;
-  if (!p.platformRules || typeof p.platformRules !== "object") return undefined;
-
-  const platformRules: Record<string, PhasedPollingPlatformRule> = {};
-  for (const [name, rule] of Object.entries(p.platformRules as Record<string, unknown>)) {
-    if (!rule || typeof rule !== "object") continue;
-    const r = rule as { points?: unknown; degradedPoints?: unknown };
-    if (typeof r.points !== "number") continue;
-    platformRules[name] = {
-      points: r.points,
-      ...(typeof r.degradedPoints === "number" ? { degradedPoints: r.degradedPoints } : {}),
-    };
-  }
+  const probe = parsePhasedPollingProbe(p.probe);
+  const platformRules = parsePlatformRules(p.platformRules);
+  if (!probe) return undefined;
   if (Object.keys(platformRules).length === 0) return undefined;
 
-  const responsePenalties: PhasedPollingResponsePenalty[] = [];
-  if (Array.isArray(p.responsePenalties)) {
-    for (const entry of p.responsePenalties) {
-      if (!entry || typeof entry !== "object") continue;
-      const e = entry as { if?: unknown; points?: unknown };
-      if (typeof e.if !== "string" || typeof e.points !== "number") continue;
-      responsePenalties.push({ if: e.if, points: e.points });
-    }
-  }
-
-  const bonuses: PhasedPollingBonus[] = [];
-  if (Array.isArray(p.bonuses)) {
-    for (const entry of p.bonuses) {
-      if (!entry || typeof entry !== "object") continue;
-      const e = entry as {
-        kind?: unknown;
-        points?: unknown;
-        once?: unknown;
-        platforms?: unknown;
-      };
-      if (typeof e.kind !== "string" || typeof e.points !== "number") continue;
-      bonuses.push({
-        kind: e.kind,
-        points: e.points,
-        ...(typeof e.once === "boolean" ? { once: e.once } : {}),
-        ...(Array.isArray(e.platforms)
-          ? { platforms: e.platforms.filter((s): s is string => typeof s === "string") }
-          : {}),
-      });
-    }
-  }
-
+  const responsePenalties = parseResponsePenalties(p.responsePenalties);
+  const bonuses = parsePhasedPollingBonuses(p.bonuses);
   const hints = parseHints(p.hints);
   return {
     kind: "phased-polling",
@@ -371,6 +333,69 @@ function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | unde
   };
 }
 
+function parsePhasedPollingProbe(
+  value: unknown,
+): PhasedPollingScoringMetadata["probe"] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const probe = value as { metaPath?: unknown; scorePath?: unknown };
+  if (typeof probe.metaPath !== "string" || typeof probe.scorePath !== "string") {
+    return undefined;
+  }
+  return { metaPath: probe.metaPath, scorePath: probe.scorePath };
+}
+
+function parsePlatformRules(value: unknown): Record<string, PhasedPollingPlatformRule> {
+  if (!value || typeof value !== "object") return {};
+  const rules: Record<string, PhasedPollingPlatformRule> = {};
+  for (const [name, rawRule] of Object.entries(value as Record<string, unknown>)) {
+    if (!rawRule || typeof rawRule !== "object") continue;
+    const rule = rawRule as { points?: unknown; degradedPoints?: unknown };
+    if (typeof rule.points !== "number") continue;
+    rules[name] = {
+      points: rule.points,
+      ...(typeof rule.degradedPoints === "number" ? { degradedPoints: rule.degradedPoints } : {}),
+    };
+  }
+  return rules;
+}
+
+function parseResponsePenalties(value: unknown): PhasedPollingResponsePenalty[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return undefined;
+      const penalty = entry as { if?: unknown; points?: unknown };
+      if (typeof penalty.if !== "string" || typeof penalty.points !== "number") return undefined;
+      return { if: penalty.if, points: penalty.points };
+    })
+    .filter((penalty): penalty is PhasedPollingResponsePenalty => penalty !== undefined);
+}
+
+function parsePhasedPollingBonuses(value: unknown): PhasedPollingBonus[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(parsePhasedPollingBonus)
+    .filter((bonus): bonus is PhasedPollingBonus => bonus !== undefined);
+}
+
+function parsePhasedPollingBonus(value: unknown): PhasedPollingBonus | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const bonus = value as { kind?: unknown; points?: unknown; once?: unknown; platforms?: unknown };
+  if (typeof bonus.kind !== "string" || typeof bonus.points !== "number") return undefined;
+  return {
+    kind: bonus.kind,
+    points: bonus.points,
+    ...(typeof bonus.once === "boolean" ? { once: bonus.once } : {}),
+    ...(Array.isArray(bonus.platforms)
+      ? {
+          platforms: bonus.platforms.filter(
+            (platform): platform is string => typeof platform === "string",
+          ),
+        }
+      : {}),
+  };
+}
+
 function parseAttackDetection(value: unknown): AttackDetectionScoringMetadata | undefined {
   const a = value as {
     statsOutputKey?: unknown;
@@ -380,18 +405,7 @@ function parseAttackDetection(value: unknown): AttackDetectionScoringMetadata | 
   };
   if (typeof a.statsOutputKey !== "string" || a.statsOutputKey.length === 0) return undefined;
   if (typeof a.pointsPerAttack !== "number" || a.pointsPerAttack <= 0) return undefined;
-  const categories: AttackDetectionCategory[] = [];
-  if (Array.isArray(a.categories)) {
-    for (const entry of a.categories) {
-      if (!entry || typeof entry !== "object") continue;
-      const e = entry as { name?: unknown; pointsPerAttack?: unknown };
-      if (typeof e.name !== "string") continue;
-      categories.push({
-        name: e.name,
-        ...(typeof e.pointsPerAttack === "number" ? { pointsPerAttack: e.pointsPerAttack } : {}),
-      });
-    }
-  }
+  const categories = parseAttackDetectionCategories(a.categories);
   const hints = parseHints(a.hints);
   return {
     kind: "attack-detection",
@@ -400,6 +414,37 @@ function parseAttackDetection(value: unknown): AttackDetectionScoringMetadata | 
     ...(categories.length > 0 ? { categories } : {}),
     ...(hints ? { hints } : {}),
   };
+}
+
+function parseAttackDetectionCategories(value: unknown): AttackDetectionCategory[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return undefined;
+      const category = entry as { name?: unknown; pointsPerAttack?: unknown };
+      if (typeof category.name !== "string") return undefined;
+      return {
+        name: category.name,
+        ...(typeof category.pointsPerAttack === "number"
+          ? { pointsPerAttack: category.pointsPerAttack }
+          : {}),
+      };
+    })
+    .filter((category): category is AttackDetectionCategory => category !== undefined);
+}
+
+function isPositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && value > 0;
+}
+
+function optionalNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function parseExpectedStatuses(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const statuses = value.filter((status): status is number => typeof status === "number");
+  return statuses.length > 0 ? statuses : undefined;
 }
 
 /**

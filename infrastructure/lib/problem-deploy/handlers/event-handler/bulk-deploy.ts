@@ -90,8 +90,102 @@ export async function bulkDeployEvent(
   nowMs: number,
   request?: BulkDeployRequest,
 ): Promise<BulkDeployOutcome> {
-  // Event Get と Teams Query は依存なし → Promise.all で 1 ラウンドトリップ節約。
-  // 不正 eventId のとき teams query が無駄になるが空 partition で 1 RCU 程度。
+  const loaded = await loadBulkDeployTargets(shared, tenantId, eventId);
+  if (!loaded) return { kind: "not_found" };
+  if (loaded.allTeams.length === 0 || loaded.allProblems.length === 0) {
+    traceEmptyBulkDeploy(eventId, tenantId, loaded, request);
+    return emptyBulkDeployResult(eventId);
+  }
+  const selected = selectBulkDeployTargets(eventId, tenantId, loaded, request);
+  if (!selected) return emptyBulkDeployResult(eventId);
+  const existingDeployments = await queryDeploymentsByEvent(
+    shared,
+    tenantId,
+    eventId,
+    "jobId, teamId, problemId, #s",
+  );
+  const existing = indexExistingDeployments(existingDeployments);
+  const retryFailedOnly = request?.retryFailedOnly === true;
+  const forceRedeploy = request?.forceRedeploy === true;
+  if (retryFailedOnly && existing.failedByKey.size === 0) {
+    traceNoFailedRows(eventId, tenantId, existingDeployments);
+    return emptyBulkDeployResult(eventId);
+  }
+  const verified = await resolveBulkVerifiedAccounts(
+    shared,
+    tenantId,
+    selected.teams,
+    selected.problems,
+  );
+  const plan = buildBulkDeployPlan({
+    shared,
+    tenantId,
+    eventId,
+    nowMs,
+    event: loaded.event,
+    selected,
+    existing,
+    verified,
+    retryFailedOnly,
+    forceRedeploy,
+  });
+  if (plan.entries.length === 0) {
+    traceEmptyPlan(eventId, tenantId, selected, existing, plan, retryFailedOnly, forceRedeploy);
+    return { kind: "ok", result: buildResult({ eventId, enqueued: 0, ...plan }) };
+  }
+  traceBulkPlan(eventId, tenantId, plan, retryFailedOnly, forceRedeploy);
+  await writeBulkDeployPlan(shared, tenantId, plan.entries, retryFailedOnly || forceRedeploy);
+  const failures = await publishBulkDeployPlan(
+    shared,
+    tenantId,
+    eventId,
+    plan.createdAt,
+    plan.entries,
+  );
+  if (failures.length > 0) {
+    await markPublishFailuresFailed(shared, tenantId, failures, plan.createdAt);
+    throw new Error(
+      `EventBridge PutEvents failed for ${failures.length} deployment(s): ${failures
+        .map((f) => `${f.jobId} ${f.reason}`)
+        .join("; ")}`,
+    );
+  }
+
+  return {
+    kind: "ok",
+    result: buildResult({ eventId, enqueued: plan.entries.length, ...plan }),
+  };
+}
+
+interface LoadedBulkDeployTargets {
+  readonly event: Partial<EventItem>;
+  readonly allTeams: readonly TeamItem[];
+  readonly allProblems: readonly EventProblemTarget[];
+}
+
+interface SelectedBulkDeployTargets {
+  readonly teams: readonly TeamItem[];
+  readonly problems: readonly EventProblemTarget[];
+}
+
+interface ExistingDeploymentIndex {
+  readonly failedByKey: Map<string, { jobId: string }>;
+  readonly forceRedeployByKey: Map<string, { jobId: string }>;
+  readonly existingKey: Set<string>;
+}
+
+interface BulkDeployPlan {
+  readonly entries: readonly PlanEntry[];
+  readonly createdAt: string;
+  readonly skipped: number;
+  readonly unverifiedAccounts: Set<string>;
+}
+
+async function loadBulkDeployTargets(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+): Promise<LoadedBulkDeployTargets | undefined> {
   const [eventOut, teamsOut] = await Promise.all([
     shared.ddb.send(
       new GetCommand({
@@ -108,372 +202,483 @@ export async function bulkDeployEvent(
     ),
   ]);
   const event = eventOut.Item as Partial<EventItem> | undefined;
-  if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
+  if (!event || event.tenantId !== tenantId) return undefined;
+  return {
+    event,
+    allTeams: (teamsOut.Items ?? []) as TeamItem[],
+    allProblems: (Array.isArray(event.problems) ? event.problems : []) as EventProblemTarget[],
+  };
+}
 
-  const allTeams = (teamsOut.Items ?? []) as TeamItem[];
-  const allProblems = (Array.isArray(event.problems) ? event.problems : []) as EventProblemTarget[];
-  if (allTeams.length === 0 || allProblems.length === 0) {
-    // Issue #813: silent 0 を観測可能にする。 operator が 「なぜ retry / deploy が
-    // 0 件で帰ってきたか」 を CloudWatch Logs Insights 1 query で引けるよう、
-    // skip 理由を JSON 1 行で出す。
-    warnDeployTrace("bulk-deploy.skip.no_teams_or_problems", {
-      correlationId: eventId,
-      tenantId,
-      allTeamsCount: allTeams.length,
-      allProblemsCount: allProblems.length,
-      retryFailedOnly: request?.retryFailedOnly === true,
-    });
-    return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
-  }
+function emptyBulkDeployResult(eventId: string): BulkDeployOutcome {
+  return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
+}
 
-  // #555: opt-in filter / retry-failed の選択肢を解釈する。
-  //   - teamIds / problemIds → in-memory で範囲を絞る (= 後追い team / 問題用)。
-  //   - retryFailedOnly → 既存 FAILED 行を query し、その (teamId, problemId) に絞る。
-  //     旧 FAILED 行は後段 TransactWrite で Put + Delete を 1 transaction にし、jobId を
-  //     更新する (履歴より状態のクリーンさを優先 — Issue #555 設計判断)。
+function traceEmptyBulkDeploy(
+  eventId: string,
+  tenantId: string,
+  loaded: LoadedBulkDeployTargets,
+  request: BulkDeployRequest | undefined,
+): void {
+  warnDeployTrace("bulk-deploy.skip.no_teams_or_problems", {
+    correlationId: eventId,
+    tenantId,
+    allTeamsCount: loaded.allTeams.length,
+    allProblemsCount: loaded.allProblems.length,
+    retryFailedOnly: request?.retryFailedOnly === true,
+  });
+}
+
+function selectBulkDeployTargets(
+  eventId: string,
+  tenantId: string,
+  loaded: LoadedBulkDeployTargets,
+  request: BulkDeployRequest | undefined,
+): SelectedBulkDeployTargets | undefined {
   const teamIdFilter = request?.teamIds ? new Set(request.teamIds) : undefined;
   const problemIdFilter = request?.problemIds ? new Set(request.problemIds) : undefined;
-  const teams = teamIdFilter ? allTeams.filter((t) => teamIdFilter.has(t.teamId)) : allTeams;
+  const teams = teamIdFilter
+    ? loaded.allTeams.filter((team) => teamIdFilter.has(team.teamId))
+    : loaded.allTeams;
   const problems = problemIdFilter
-    ? allProblems.filter((p) => problemIdFilter.has(p.problemId))
-    : allProblems;
-  if (teams.length === 0 || problems.length === 0) {
-    warnDeployTrace("bulk-deploy.skip.filter_eliminated_all", {
-      correlationId: eventId,
-      tenantId,
-      allTeamsCount: allTeams.length,
-      filteredTeamsCount: teams.length,
-      allProblemsCount: allProblems.length,
-      filteredProblemsCount: problems.length,
-      hasTeamIdFilter: teamIdFilter !== undefined,
-      hasProblemIdFilter: problemIdFilter !== undefined,
-    });
-    return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
-  }
-
-  // #555: 既存 deployment 行を読む。retryFailedOnly のときは「FAILED 行のみを再生成」
-  // の対象 set を作る目的、それ以外でも「(eventId, teamId, problemId) 衝突は in-memory
-  // skip」に使う (= 後追い deploy の二重生成防止)。
-  const existingDeployments = await queryDeploymentsByEvent(
-    shared,
+    ? loaded.allProblems.filter((problem) => problemIdFilter.has(problem.problemId))
+    : loaded.allProblems;
+  if (teams.length > 0 && problems.length > 0) return { teams, problems };
+  warnDeployTrace("bulk-deploy.skip.filter_eliminated_all", {
+    correlationId: eventId,
     tenantId,
-    eventId,
-    "jobId, teamId, problemId, #s",
-  );
-  // (teamId, problemId) → 旧 FAILED 行の jobId (retryFailedOnly のとき DELETE 対象)。
-  const failedByKey = new Map<string, { jobId: string }>();
-  // (teamId, problemId) → 再 deploy で置換可能な terminal 行の jobId。
-  const forceRedeployByKey = new Map<string, { jobId: string }>();
-  // (teamId, problemId) → status を問わず存在する組 (skipped 計算用)。
-  const existingKey = new Set<string>();
-  for (const d of existingDeployments) {
-    const tId = String(d.teamId ?? "");
-    const pId = String(d.problemId ?? "");
-    if (!tId || !pId) continue;
-    const k = `${tId} ${pId}`;
-    existingKey.add(k);
-    if (d.status === "FAILED" && !failedByKey.has(k)) {
-      failedByKey.set(k, { jobId: String(d.jobId ?? "") });
-    }
-    if (
-      (d.status === "COMPLETE" || d.status === "FAILED" || d.status === "DELETED") &&
-      !forceRedeployByKey.has(k)
-    ) {
-      forceRedeployByKey.set(k, { jobId: String(d.jobId ?? "") });
-    }
-  }
-  const retryFailedOnly = request?.retryFailedOnly === true;
-  const forceRedeploy = request?.forceRedeploy === true;
-  // retryFailedOnly でかつ FAILED 行が 0 件 → 何もしない (= enqueued: 0、skipped: 0)。
-  if (retryFailedOnly && failedByKey.size === 0) {
-    warnDeployTrace("bulk-deploy.skip.no_failed_rows", {
-      correlationId: eventId,
-      tenantId,
-      retryFailedOnly: true,
-      existingDeploymentsCount: existingDeployments.length,
-      // event-scope query で見えた deployment の status 分布 (= UI 上 \"失敗 1 件\" と
-      // backend 観測が食い違うときの原因切り分け用)
-      statusBreakdown: Object.fromEntries(
-        existingDeployments.reduce((acc, d) => {
-          const s = String(d.status ?? "<unset>");
-          acc.set(s, (acc.get(s) ?? 0) + 1);
-          return acc;
-        }, new Map<string, number>()),
-      ),
-    });
-    return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
-  }
+    allTeamsCount: loaded.allTeams.length,
+    filteredTeamsCount: teams.length,
+    allProblemsCount: loaded.allProblems.length,
+    filteredProblemsCount: problems.length,
+    hasTeamIdFilter: teamIdFilter !== undefined,
+    hasProblemIdFilter: problemIdFilter !== undefined,
+  });
+  return undefined;
+}
 
-  // Phase 2.2 (Issue #459): bulk-deploy 前に CompetitorAccounts table で verified=true 行が
-  // ある (tenantId, awsAccountId) のみ許可する。verified=false / 未登録の team は plan から
-  // 落ちる (= unverified にカウント、`unverifiedAccounts` で operator に通知)。
-  //
-  // teams × problems の plan ループに入る前に 1 度だけ解決して in-memory map 化する。
-  // problem.defaultAwsAccountId fallback 経路も同じ map で評価できるよう、unique な
-  // awsAccountId set を作って一度に解決する。
-  const candidateAccountIds = new Set<string>();
-  for (const t of teams) if (t.awsAccountId) candidateAccountIds.add(t.awsAccountId);
-  for (const p of problems)
-    if (p.defaultAwsAccountId) candidateAccountIds.add(p.defaultAwsAccountId);
-  const verifiedByAccount = new Map<string, VerifiedCompetitorAccount>();
+function indexExistingDeployments(
+  existing: readonly Partial<DeploymentItem>[],
+): ExistingDeploymentIndex {
+  const index: ExistingDeploymentIndex = {
+    failedByKey: new Map(),
+    forceRedeployByKey: new Map(),
+    existingKey: new Set(),
+  };
+  for (const deployment of existing) addExistingDeployment(index, deployment);
+  return index;
+}
+
+function addExistingDeployment(
+  index: ExistingDeploymentIndex,
+  deployment: Partial<DeploymentItem>,
+): void {
+  const teamId = String(deployment.teamId ?? "");
+  const problemId = String(deployment.problemId ?? "");
+  if (!teamId || !problemId) return;
+  const key = `${teamId} ${problemId}`;
+  index.existingKey.add(key);
+  if (deployment.status === "FAILED" && !index.failedByKey.has(key)) {
+    index.failedByKey.set(key, { jobId: String(deployment.jobId ?? "") });
+  }
+  if (isForceRedeployStatus(deployment.status) && !index.forceRedeployByKey.has(key)) {
+    index.forceRedeployByKey.set(key, { jobId: String(deployment.jobId ?? "") });
+  }
+}
+
+function isForceRedeployStatus(status: unknown): boolean {
+  return status === "COMPLETE" || status === "FAILED" || status === "DELETED";
+}
+
+function traceNoFailedRows(
+  eventId: string,
+  tenantId: string,
+  existing: readonly Partial<DeploymentItem>[],
+): void {
+  warnDeployTrace("bulk-deploy.skip.no_failed_rows", {
+    correlationId: eventId,
+    tenantId,
+    retryFailedOnly: true,
+    existingDeploymentsCount: existing.length,
+    statusBreakdown: Object.fromEntries(
+      existing.reduce((acc, deployment) => {
+        const status = String(deployment.status ?? "<unset>");
+        acc.set(status, (acc.get(status) ?? 0) + 1);
+        return acc;
+      }, new Map<string, number>()),
+    ),
+  });
+}
+
+async function resolveBulkVerifiedAccounts(
+  shared: EventSharedResources,
+  tenantId: string,
+  teams: readonly TeamItem[],
+  problems: readonly EventProblemTarget[],
+): Promise<Map<string, VerifiedCompetitorAccount>> {
+  const accountIds = candidateBulkAccountIds(teams, problems);
+  const verified = new Map<string, VerifiedCompetitorAccount>();
   await Promise.all(
-    Array.from(candidateAccountIds).map(async (aId) => {
-      const v = await resolveVerifiedCompetitorAccount(
+    Array.from(accountIds).map(async (accountId) => {
+      const account = await resolveVerifiedCompetitorAccount(
         {
           ddb: shared.ddb,
           competitorAccountsTableName: shared.competitorAccountsTableName,
           env: shared.env,
         },
         tenantId,
-        aId,
+        accountId,
       );
-      if (v) verifiedByAccount.set(aId, v);
+      if (account) verified.set(accountId, account);
     }),
   );
+  return verified;
+}
 
-  const createdAt = new Date(nowMs).toISOString();
-  const expiresAt = toEpochSeconds(nowMs + DEFAULT_TTL_MS);
-  // Event.startsAt が未設定 = 競技開始時刻が決まっていないので採点開始しない gate に倒す。
-  // operator は EventDetail の「日時を設定」or「即座に開始」で後から有効化できる。
-  const eventStartsAt = typeof event.startsAt === "string" ? event.startsAt : undefined;
-  // Event.endsAt が設定済 (= 既に終了済 event) なら deploy 行にも denormalize して
-  // 採点 gate を即時 close する。READY 状態のみ end-event 可能なので通常は undefined。
-  const eventEndsAt = typeof event.endsAt === "string" ? event.endsAt : undefined;
+function candidateBulkAccountIds(
+  teams: readonly TeamItem[],
+  problems: readonly EventProblemTarget[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const team of teams) if (team.awsAccountId) ids.add(team.awsAccountId);
+  for (const problem of problems)
+    if (problem.defaultAwsAccountId) ids.add(problem.defaultAwsAccountId);
+  return ids;
+}
 
-  // teams × problems を全展開し、deployment 行 + publish entry を組み立てる。
-  // shared.problemsCatalog (problemId → problemDir) に存在しない problemId は skip。
-  // #528: deploy target の awsAccountId は team から (= 各 team は自社 AWS account)、region は
-  // problem から (= 問題テンプレが特定 region 依存)。team.awsAccountId が無い旧 Event は
-  // problem.defaultAwsAccountId に fallback (Phase 2 で fallback も削除予定)。
+function buildBulkDeployPlan(args: {
+  readonly shared: EventSharedResources;
+  readonly tenantId: string;
+  readonly eventId: string;
+  readonly nowMs: number;
+  readonly event: Partial<EventItem>;
+  readonly selected: SelectedBulkDeployTargets;
+  readonly existing: ExistingDeploymentIndex;
+  readonly verified: Map<string, VerifiedCompetitorAccount>;
+  readonly retryFailedOnly: boolean;
+  readonly forceRedeploy: boolean;
+}): BulkDeployPlan {
+  const createdAt = new Date(args.nowMs).toISOString();
   const plan: PlanEntry[] = [];
   let skipped = 0;
   const unverifiedAccounts = new Set<string>();
-  for (const team of teams) {
-    const teamAwsAccountId = team.awsAccountId;
-    for (const problem of problems) {
-      const k = `${team.teamId} ${problem.problemId}`;
-      const replacement = retryFailedOnly
-        ? failedByKey.get(k)
-        : forceRedeploy
-          ? forceRedeployByKey.get(k)
-          : undefined;
-      if (retryFailedOnly) {
-        // FAILED で無い組み合わせは対象外 (= silent skip、skipped にも計上しない)。
-        if (!replacement) continue;
-      } else if (existingKey.has(k)) {
-        if (forceRedeploy && replacement) {
-          // terminal 行は下で DELETE + 新 PENDING CREATE。in-flight 行は通常通り skip。
-        } else {
-          // 既存 (status を問わず) と衝突 → idempotent skip (全展開 / 部分指定 共通)。
-          skipped++;
-          continue;
-        }
-      }
-      const problemDir = shared.problemsCatalog[problem.problemId];
-      if (!problemDir) {
-        skipped++;
-        continue;
-      }
-      // #528: team.awsAccountId が新 source-of-truth。旧 Event は problem.defaultAwsAccountId
-      // を fallback として使う。両方無いと deploy target を組めないので skip。
-      const awsAccountId = teamAwsAccountId ?? problem.defaultAwsAccountId;
-      if (!awsAccountId) {
-        skipped++;
-        continue;
-      }
-      // Phase 2.2 (Issue #459): verified=true な行が無い account は reject。
-      // plan に乗せない (= worker が走らない) ため fail-closed。
-      const verified = verifiedByAccount.get(awsAccountId);
-      if (!verified) {
-        unverifiedAccounts.add(awsAccountId);
-        continue;
-      }
-      const jobId = ulid();
-      const namePrefix = buildStackPrefix(problem.problemId, team.internalSlug);
-      const teamSlug = slugify(team.internalSlug);
-      const item: DeploymentItem = {
-        PK: `DEPLOYMENT#${jobId}`,
-        SK: "META",
-        GSI1PK: `TENANT#${tenantId}`,
-        GSI1SK: createdAt,
-        GSI2PK: `TEAMKEY#${team.teamLoginKey}`,
-        GSI2SK: createdAt,
-        jobId,
-        problemId: problem.problemId,
-        tenantId,
-        awsAccountId,
-        competitorRoleArn: verified.competitorRoleArn,
-        region: problem.defaultRegion,
-        teamName: team.internalSlug,
-        namePrefix,
-        teamLoginKey: team.teamLoginKey,
-        status: "PENDING",
-        createdAt,
-        updatedAt: createdAt,
-        expiresAt,
-        eventId,
-        teamId: team.teamId,
-        eventStartsAt,
-        eventEndsAt,
-      };
-      const detail: DeployCreateRequestedDetail = {
-        jobId,
-        correlationId: jobId,
-        tenantId,
-        problemId: problem.problemId,
-        problemDir,
-        teamSlug,
-        namePrefix,
-        region: problem.defaultRegion,
-        awsAccountId,
-        // Phase 2.2: cross-account 経路で CodeBuild が AssumeRole に使う metadata。
-        // verified=true 行が解決できたときのみ詰める (= 未指定なら same-account fallback)。
-        competitorRoleArn: verified.competitorRoleArn,
-        externalIdParameterName: verified.externalIdParameterName,
-      };
-      const entry: PutEventsRequestEntry = {
-        EventBusName: shared.eventBusName,
-        Source: EVENT_SOURCE,
-        DetailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-        Detail: JSON.stringify(detail),
-        Resources: [`tenkacloud:deployment:${jobId}`],
-      };
-      plan.push({
-        item,
-        entry,
-        replacesJobId: replacement?.jobId,
-      });
+  for (const team of args.selected.teams) {
+    for (const problem of args.selected.problems) {
+      const candidate = buildBulkPlanEntry(args, team, problem, createdAt);
+      if (candidate.kind === "entry") plan.push(candidate.entry);
+      if (candidate.kind === "skip") skipped++;
+      if (candidate.kind === "unverified") unverifiedAccounts.add(candidate.accountId);
     }
   }
+  return { entries: plan, createdAt, skipped, unverifiedAccounts };
+}
 
-  if (plan.length === 0) {
-    // Issue #813: retryFailedOnly で failedByKey.size > 0 だが plan が 0 件 = team/
-    // problem mismatch (例: event から team が消えたが旧 FAILED row が残っている)
-    // OR 全 team の verified account が無い、 のいずれか。 切り分けに必要な情報を
-    // 1 行 JSON で残す。
-    warnDeployTrace("bulk-deploy.skip.plan_empty_after_iteration", {
-      correlationId: eventId,
-      tenantId,
-      retryFailedOnly,
-      forceRedeploy,
-      teamsCount: teams.length,
-      problemsCount: problems.length,
-      failedByKeyCount: failedByKey.size,
-      forceRedeployByKeyCount: forceRedeployByKey.size,
-      existingKeyCount: existingKey.size,
-      skipped,
-      unverifiedAccountsCount: unverifiedAccounts.size,
-      // failedByKey のキー (= 残った FAILED 行が想定する team/problem 組) と、 live
-      // teams × problems の組を出して、 mismatch を肉眼で確認可能にする
-      failedKeys: Array.from(failedByKey.keys()),
-      liveTeamIds: teams.map((t) => t.teamId),
-      liveProblemIds: problems.map((p) => p.problemId),
-    });
-    return {
-      kind: "ok",
-      result: buildResult({ eventId, enqueued: 0, skipped, unverifiedAccounts }),
-    };
-  }
-  // success path も 1 行残す (= operator が \"何件 enqueue した\" を CloudWatch 1 query で引ける)
+type BulkPlanCandidate =
+  | { readonly kind: "entry"; readonly entry: PlanEntry }
+  | { readonly kind: "skip" }
+  | { readonly kind: "ignore" }
+  | { readonly kind: "unverified"; readonly accountId: string };
+
+function buildBulkPlanEntry(
+  args: Parameters<typeof buildBulkDeployPlan>[0],
+  team: TeamItem,
+  problem: EventProblemTarget,
+  createdAt: string,
+): BulkPlanCandidate {
+  const key = `${team.teamId} ${problem.problemId}`;
+  const replacement = selectPlanReplacement(args, key);
+  if (args.retryFailedOnly && !replacement) return { kind: "ignore" };
+  if (shouldSkipExistingPlanTarget(args, key, replacement)) return { kind: "skip" };
+  const problemDir = args.shared.problemsCatalog[problem.problemId];
+  if (!problemDir) return { kind: "skip" };
+  const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
+  if (!awsAccountId) return { kind: "skip" };
+  const verified = args.verified.get(awsAccountId);
+  if (!verified) return { kind: "unverified", accountId: awsAccountId };
+  return {
+    kind: "entry",
+    entry: createPlanEntry(
+      args,
+      team,
+      problem,
+      problemDir,
+      awsAccountId,
+      verified,
+      replacement,
+      createdAt,
+    ),
+  };
+}
+
+function selectPlanReplacement(
+  args: Parameters<typeof buildBulkDeployPlan>[0],
+  key: string,
+): { jobId: string } | undefined {
+  if (args.retryFailedOnly) return args.existing.failedByKey.get(key);
+  return args.forceRedeploy ? args.existing.forceRedeployByKey.get(key) : undefined;
+}
+
+function shouldSkipExistingPlanTarget(
+  args: Parameters<typeof buildBulkDeployPlan>[0],
+  key: string,
+  replacement: { jobId: string } | undefined,
+): boolean {
+  if (args.retryFailedOnly || !args.existing.existingKey.has(key)) return false;
+  return !(args.forceRedeploy && replacement);
+}
+
+function createPlanEntry(
+  args: Parameters<typeof buildBulkDeployPlan>[0],
+  team: TeamItem,
+  problem: EventProblemTarget,
+  problemDir: string,
+  awsAccountId: string,
+  verified: VerifiedCompetitorAccount,
+  replacement: { jobId: string } | undefined,
+  createdAt: string,
+): PlanEntry {
+  const jobId = ulid();
+  const namePrefix = buildStackPrefix(problem.problemId, team.internalSlug);
+  const item = createDeploymentItem(
+    args,
+    team,
+    problem,
+    awsAccountId,
+    verified,
+    jobId,
+    namePrefix,
+    createdAt,
+  );
+  const detail = createDeployDetail(
+    args.tenantId,
+    team,
+    problem,
+    problemDir,
+    awsAccountId,
+    verified,
+    jobId,
+    namePrefix,
+  );
+  return {
+    item,
+    entry: {
+      EventBusName: args.shared.eventBusName,
+      Source: EVENT_SOURCE,
+      DetailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
+      Detail: JSON.stringify(detail),
+      Resources: [`tenkacloud:deployment:${jobId}`],
+    },
+    replacesJobId: replacement?.jobId,
+  };
+}
+
+function createDeploymentItem(
+  args: Parameters<typeof buildBulkDeployPlan>[0],
+  team: TeamItem,
+  problem: EventProblemTarget,
+  awsAccountId: string,
+  verified: VerifiedCompetitorAccount,
+  jobId: string,
+  namePrefix: string,
+  createdAt: string,
+): DeploymentItem {
+  return {
+    PK: `DEPLOYMENT#${jobId}`,
+    SK: "META",
+    GSI1PK: `TENANT#${args.tenantId}`,
+    GSI1SK: createdAt,
+    GSI2PK: `TEAMKEY#${team.teamLoginKey}`,
+    GSI2SK: createdAt,
+    jobId,
+    problemId: problem.problemId,
+    tenantId: args.tenantId,
+    awsAccountId,
+    competitorRoleArn: verified.competitorRoleArn,
+    region: problem.defaultRegion,
+    teamName: team.internalSlug,
+    namePrefix,
+    teamLoginKey: team.teamLoginKey,
+    status: "PENDING",
+    createdAt,
+    updatedAt: createdAt,
+    expiresAt: toEpochSeconds(args.nowMs + DEFAULT_TTL_MS),
+    eventId: args.eventId,
+    teamId: team.teamId,
+    eventStartsAt: typeof args.event.startsAt === "string" ? args.event.startsAt : undefined,
+    eventEndsAt: typeof args.event.endsAt === "string" ? args.event.endsAt : undefined,
+  };
+}
+
+function createDeployDetail(
+  tenantId: string,
+  team: TeamItem,
+  problem: EventProblemTarget,
+  problemDir: string,
+  awsAccountId: string,
+  verified: VerifiedCompetitorAccount,
+  jobId: string,
+  namePrefix: string,
+): DeployCreateRequestedDetail {
+  return {
+    jobId,
+    correlationId: jobId,
+    tenantId,
+    problemId: problem.problemId,
+    problemDir,
+    teamSlug: slugify(team.internalSlug),
+    namePrefix,
+    region: problem.defaultRegion,
+    awsAccountId,
+    competitorRoleArn: verified.competitorRoleArn,
+    externalIdParameterName: verified.externalIdParameterName,
+  };
+}
+
+function traceEmptyPlan(
+  eventId: string,
+  tenantId: string,
+  selected: SelectedBulkDeployTargets,
+  existing: ExistingDeploymentIndex,
+  plan: BulkDeployPlan,
+  retryFailedOnly: boolean,
+  forceRedeploy: boolean,
+): void {
+  warnDeployTrace("bulk-deploy.skip.plan_empty_after_iteration", {
+    correlationId: eventId,
+    tenantId,
+    retryFailedOnly,
+    forceRedeploy,
+    teamsCount: selected.teams.length,
+    problemsCount: selected.problems.length,
+    failedByKeyCount: existing.failedByKey.size,
+    forceRedeployByKeyCount: existing.forceRedeployByKey.size,
+    existingKeyCount: existing.existingKey.size,
+    skipped: plan.skipped,
+    unverifiedAccountsCount: plan.unverifiedAccounts.size,
+    failedKeys: Array.from(existing.failedByKey.keys()),
+    liveTeamIds: selected.teams.map((team) => team.teamId),
+    liveProblemIds: selected.problems.map((problem) => problem.problemId),
+  });
+}
+
+function traceBulkPlan(
+  eventId: string,
+  tenantId: string,
+  plan: BulkDeployPlan,
+  retryFailedOnly: boolean,
+  forceRedeploy: boolean,
+): void {
   logDeployTrace("bulk-deploy.enqueued", {
     correlationId: eventId,
     tenantId,
     retryFailedOnly,
     forceRedeploy,
-    planCount: plan.length,
-    skipped,
-    unverifiedAccountsCount: unverifiedAccounts.size,
+    planCount: plan.entries.length,
+    skipped: plan.skipped,
+    unverifiedAccountsCount: plan.unverifiedAccounts.size,
   });
+}
 
-  // DDB TransactWrite は 1 call 25 items まで (Put + Delete を合算)。retry / force redeploy
-  // では 1 plan entry につき Put + Delete の 2 op が要るので chunk 上限を半減させる。
-  // ConditionExpression で同 jobId 二重生成を防ぐ (ULID 衝突は実質起こらないが defense)。
-  const opsPerEntry = retryFailedOnly || forceRedeploy ? 2 : 1;
+async function writeBulkDeployPlan(
+  shared: EventSharedResources,
+  tenantId: string,
+  plan: readonly PlanEntry[],
+  replacesExisting: boolean,
+): Promise<void> {
+  const opsPerEntry = replacesExisting ? 2 : 1;
   const planPerChunk = Math.floor(TRANSACT_WRITE_BATCH / opsPerEntry);
-  const transactChunks: Promise<unknown>[] = [];
-  for (let i = 0; i < plan.length; i += planPerChunk) {
-    const chunk = plan.slice(i, i + planPerChunk);
-    const transactItems: TransactWriteCommandInput["TransactItems"] = [];
-    for (const p of chunk) {
-      transactItems.push({
-        Put: {
+  const writes: Promise<unknown>[] = [];
+  for (let index = 0; index < plan.length; index += planPerChunk) {
+    const transactItems = buildTransactItems(
+      shared,
+      tenantId,
+      plan.slice(index, index + planPerChunk),
+    );
+    writes.push(shared.ddb.send(new TransactWriteCommand({ TransactItems: transactItems })));
+  }
+  await Promise.all(writes);
+}
+
+function buildTransactItems(
+  shared: EventSharedResources,
+  tenantId: string,
+  plan: readonly PlanEntry[],
+): TransactWriteCommandInput["TransactItems"] {
+  const items: TransactWriteCommandInput["TransactItems"] = [];
+  for (const entry of plan) {
+    items.push({
+      Put: {
+        TableName: shared.deploymentsTableName,
+        Item: entry.item,
+        ConditionExpression: "attribute_not_exists(PK)",
+      },
+    });
+    if (entry.replacesJobId) {
+      items.push({
+        Delete: {
           TableName: shared.deploymentsTableName,
-          Item: p.item,
-          ConditionExpression: "attribute_not_exists(PK)",
+          Key: { PK: `DEPLOYMENT#${entry.replacesJobId}`, SK: "META" },
+          ConditionExpression: "tenantId = :tenantId",
+          ExpressionAttributeValues: { ":tenantId": tenantId },
         },
       });
-      if (p.replacesJobId) {
-        // 旧 FAILED 行を同 transaction で DELETE (= jobId 履歴より状態のクリーンさを優先、
-        // failureReason の monitoring は publish 直後の CloudWatch Logs に残る)。
-        // tenantId で cross-tenant 削除を防ぐ ConditionExpression を必ず付ける。
-        transactItems.push({
-          Delete: {
-            TableName: shared.deploymentsTableName,
-            Key: { PK: `DEPLOYMENT#${p.replacesJobId}`, SK: "META" },
-            ConditionExpression: "tenantId = :tenantId",
-            ExpressionAttributeValues: { ":tenantId": tenantId },
-          },
-        });
-      }
     }
-    transactChunks.push(
-      shared.ddb.send(new TransactWriteCommand({ TransactItems: transactItems })),
-    );
   }
-  await Promise.all(transactChunks);
+  return items;
+}
 
-  const items = plan.map((p) => p.item);
+async function publishBulkDeployPlan(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  createdAt: string,
+  plan: readonly PlanEntry[],
+): Promise<PublishFailure[]> {
+  const publish = Promise.all(publishBulkPlanEntries(shared, tenantId, eventId, plan));
+  const [, failures] = await Promise.all([
+    markBulkEventDeploying(shared, tenantId, eventId, createdAt),
+    publish,
+  ]);
+  return failures.flat();
+}
 
-  // Issue #910 (#895 Phase 2.C.2.b): feature flag で publish 経路を分岐。
-  //   - true  → S3 PutObject + 1 BulkDeployCreateRequested → Distributed Map
-  //   - false → 旧 fan-out (= N×M 個の DeployCreateRequested を PutEvents、 default 維持)
-  // 切替の rollback safety:
-  //   - 旧 path は完全 untouched (= 切り戻し時 env を false にするだけ)
-  //   - 新 path で publish が失敗したら 既存 markPublishFailuresFailed で全 plan を
-  //     FAILED に倒して operator が retryFailedOnly で復旧する
-  const useDistributedMap =
-    shared.useBulkDistributedMap && shared.bulkDeployPayloadBucket.length > 0;
-
-  const putChunks: Promise<PublishFailure[]>[] = [];
-  if (useDistributedMap) {
-    // 新 path: deployment 配列を S3 に PutObject → 1 BulkDeployCreateRequested publish。
-    // batchId は eventId-tenantId-timestamp で衝突回避。 retry (= operator が同 event を
-    // 再叩き) でも別 batchId になり、 旧 batch の S3 object は lifecycle (7 日) で自動削除。
-    const batchId = ulid();
-    const details = plan.map(
-      (p) => JSON.parse(p.entry.Detail ?? "{}") as DeployCreateRequestedDetail,
-    );
-    putChunks.push(
+function publishBulkPlanEntries(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  plan: readonly PlanEntry[],
+): Promise<PublishFailure[]>[] {
+  if (shared.useBulkDistributedMap && shared.bulkDeployPayloadBucket.length > 0) {
+    return [
       publishViaDistributedMap(shared, {
-        batchId,
+        batchId: ulid(),
         tenantId,
-        details,
         eventId,
+        details: plan.map(
+          (entry) => JSON.parse(entry.entry.Detail ?? "{}") as DeployCreateRequestedDetail,
+        ),
       }),
-    );
-  } else {
-    // 旧 path: EventBridge PutEvents は 1 call 10 entries まで。chunk を Promise.all で並列発火。
-    // DDB row 作成後の publish 失敗は PENDING 放置にしない。失敗分だけ FAILED に倒せば
-    // operator が retryFailedOnly で復旧でき、duplicate deploy は既存 row として skip される。
-    for (let i = 0; i < plan.length; i += PUT_EVENTS_BATCH) {
-      const chunk = plan.slice(i, i + PUT_EVENTS_BATCH);
-      putChunks.push(publishPlanChunk(shared, chunk));
-    }
+    ];
   }
+  const chunks: Promise<PublishFailure[]>[] = [];
+  for (let index = 0; index < plan.length; index += PUT_EVENTS_BATCH) {
+    chunks.push(publishPlanChunk(shared, plan.slice(index, index + PUT_EVENTS_BATCH)));
+  }
+  return chunks;
+}
 
-  // Event status を DRAFT → DEPLOYING に倒す。operator が EventDetail の status badge で
-  // 「Bulk Deploy が走っている」ことを視認できるようにするため。
-  // ConditionExpression で他 status (TEARDOWN 等) を踏み越えない安全弁。CCF は
-  // 既に TEARDOWN/ARCHIVED 等の終端状態 → 触らないだけで成功扱い。
-  // PutEvents と並列実行 (互いに依存なし、書き込み先が別 service なのでラウンドトリップ節約)。
-  const updateStatus = shared.ddb
-    .send(
+async function markBulkEventDeploying(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  createdAt: string,
+): Promise<void> {
+  try {
+    await shared.ddb.send(
       new UpdateCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
         UpdateExpression: "SET #status = :deploying, updatedAt = :now",
-        // #872: tenantId 一致を atomic に強制 (= 他 tenant の event を踏み越えない defense-in-depth)。
-        // 状態遷移条件 (DRAFT/READY/DEPLOYING) と AND で評価。
         ConditionExpression:
           "tenantId = :tenantId AND (#status = :draft OR #status = :ready OR #status = :deploying)",
         ExpressionAttributeNames: { "#status": "status" },
@@ -485,27 +690,11 @@ export async function bulkDeployEvent(
           ":tenantId": tenantId,
         },
       }),
-    )
-    .catch((err: unknown) => {
-      if (err instanceof Error && err.name !== "ConditionalCheckFailedException") {
-        throw err;
-      }
-    });
-  const [publishFailures] = await Promise.all([Promise.all(putChunks), updateStatus]);
-  const failures = publishFailures.flat();
-  if (failures.length > 0) {
-    await markPublishFailuresFailed(shared, tenantId, failures, createdAt);
-    throw new Error(
-      `EventBridge PutEvents failed for ${failures.length} deployment(s): ${failures
-        .map((f) => `${f.jobId} ${f.reason}`)
-        .join("; ")}`,
     );
+  } catch (err) {
+    if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
+    throw err;
   }
-
-  return {
-    kind: "ok",
-    result: buildResult({ eventId, enqueued: items.length, skipped, unverifiedAccounts }),
-  };
 }
 
 interface PublishFailure {

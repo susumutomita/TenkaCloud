@@ -50,6 +50,37 @@ function buildIO(opts: {
   return { io, stdout, stderr, calls };
 }
 
+function tenantAdminUpCapture(opts: {
+  readonly adminGetUserCode: number;
+  readonly onDomain?: (domain: string | undefined) => void;
+}): (_cmd: string, args: readonly string[]) => SpawnCaptureResult {
+  return (_cmd, args) => {
+    if (args.includes("describe-stacks")) return describeStackCapture(args);
+    if (args.includes("describe-user-pool-domain")) {
+      opts.onDomain?.(args[args.indexOf("--domain") + 1]);
+      return { code: 0, stdout: "ap-northeast-1_AbCdEf\n", stderr: "" };
+    }
+    if (args.includes("admin-get-user")) {
+      return opts.adminGetUserCode === 0
+        ? { code: 0, stdout: '{"Username":"admin@example.com"}', stderr: "" }
+        : { code: 1, stdout: "", stderr: "UserNotFoundException" };
+    }
+    if (args.includes("admin-create-user")) return { code: 0, stdout: "{}", stderr: "" };
+    return { code: 0, stdout: "", stderr: "" };
+  };
+}
+
+function describeStackCapture(args: readonly string[]): SpawnCaptureResult {
+  if (args.join(" ").includes("CognitoDomainUrl")) {
+    return {
+      code: 0,
+      stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com\n",
+      stderr: "",
+    };
+  }
+  return { code: 0, stdout: "https://example.cloudfront.net\n", stderr: "" };
+}
+
 describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
   it("should print help and exit 0 on no-arg / help / -h / --help", async () => {
     for (const argv of [[], ["help"], ["-h"], ["--help"]]) {
@@ -265,30 +296,12 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
         let capturedDomain: string | undefined;
         const { io, calls } = buildIO({
           inheritExitCode: 0,
-          capture: (_cmd, args) => {
-            if (args.includes("describe-stacks")) {
-              if (args.join(" ").includes("CognitoDomainUrl")) {
-                return {
-                  code: 0,
-                  stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com\n",
-                  stderr: "",
-                };
-              }
-              return { code: 0, stdout: "https://example.cloudfront.net\n", stderr: "" };
-            }
-            if (args.includes("describe-user-pool-domain")) {
-              capturedDomain = args[args.indexOf("--domain") + 1];
-              return { code: 0, stdout: "ap-northeast-1_AbCdEf\n", stderr: "" };
-            }
-            if (args.includes("admin-get-user")) {
-              // 未存在 → admin-create-user に進む
-              return { code: 1, stdout: "", stderr: "UserNotFoundException" };
-            }
-            if (args.includes("admin-create-user")) {
-              return { code: 0, stdout: "{}", stderr: "" };
-            }
-            return { code: 0, stdout: "", stderr: "" };
-          },
+          capture: tenantAdminUpCapture({
+            adminGetUserCode: 1,
+            onDomain: (domain) => {
+              capturedDomain = domain;
+            },
+          }),
         });
         const code = await main(["up"], io);
         expect(code).toBe(0);
@@ -310,26 +323,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       try {
         const { io, calls } = buildIO({
           inheritExitCode: 0,
-          capture: (_cmd, args) => {
-            if (args.includes("describe-stacks") && args.join(" ").includes("CognitoDomainUrl")) {
-              return {
-                code: 0,
-                stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com",
-                stderr: "",
-              };
-            }
-            if (args.includes("describe-stacks")) {
-              return { code: 0, stdout: "https://example.cloudfront.net", stderr: "" };
-            }
-            if (args.includes("describe-user-pool-domain")) {
-              return { code: 0, stdout: "ap-northeast-1_AbCdEf", stderr: "" };
-            }
-            if (args.includes("admin-get-user")) {
-              // 既存 user
-              return { code: 0, stdout: '{"Username":"admin@example.com"}', stderr: "" };
-            }
-            return { code: 0, stdout: "", stderr: "" };
-          },
+          capture: tenantAdminUpCapture({ adminGetUserCode: 0 }),
         });
         await main(["up"], io);
         const createCall = calls.find((c) => c.args.includes("admin-create-user"));
@@ -345,28 +339,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       try {
         const { io, calls } = buildIO({
           inheritExitCode: 0,
-          capture: (_cmd, args) => {
-            if (args.includes("describe-stacks") && args.join(" ").includes("CognitoDomainUrl")) {
-              return {
-                code: 0,
-                stdout: "https://tc-app-prefix.auth.ap-northeast-1.amazoncognito.com",
-                stderr: "",
-              };
-            }
-            if (args.includes("describe-stacks")) {
-              return { code: 0, stdout: "https://example.cloudfront.net", stderr: "" };
-            }
-            if (args.includes("describe-user-pool-domain")) {
-              return { code: 0, stdout: "ap-northeast-1_AbCdEf", stderr: "" };
-            }
-            if (args.includes("admin-get-user")) {
-              return { code: 1, stdout: "", stderr: "UserNotFoundException" };
-            }
-            if (args.includes("admin-create-user")) {
-              return { code: 0, stdout: "{}", stderr: "" };
-            }
-            return { code: 0, stdout: "", stderr: "" };
-          },
+          capture: tenantAdminUpCapture({ adminGetUserCode: 1 }),
         });
         await main(["up"], io);
         const createCall = calls.find((c) => c.args.includes("admin-create-user"));

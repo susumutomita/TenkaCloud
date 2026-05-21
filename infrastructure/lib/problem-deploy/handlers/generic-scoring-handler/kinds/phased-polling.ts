@@ -52,105 +52,167 @@ export async function runPhasedPollingKind(
   const degradedPlatforms = new Set<string>(activePhase?.effect?.switchPlatformToDegraded ?? []);
 
   // 2/3. /meta + /score を slot 毎に並列 probe
-  const slotResults = await Promise.all(
-    slots.map(async (slot) => {
-      const overrideUrl = overrideMap.get(slot.slot);
-      const outputValue = outputs[slot.default.key];
-      const defaultUrl = outputValue
-        ? resolveDefaultUrl(outputValue, slot.default.appendPath)
-        : undefined;
-      const baseUrl = overrideUrl ?? defaultUrl;
-      if (!baseUrl) {
-        return {
-          slotName: slot.slot,
-          baseUrl: undefined,
-          platform: undefined,
-          scoreOk: false,
-          responseTimeMs: 0,
-        };
-      }
-      const [metaProbe, scoreProbe] = await Promise.all([
-        probeUrl(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
-        probeUrl(joinUrl(baseUrl, scorePath)),
-      ]);
-      return {
-        slotName: slot.slot,
-        baseUrl,
-        platform: parsePlatformFromMeta(metaProbe.body),
-        scoreOk: scoreProbe.ok,
-        responseTimeMs: scoreProbe.responseTimeMs,
-      };
-    }),
-  );
+  const slotResults = await probePhasedSlots(input, outputs, overrideMap, scorePath);
 
   const allUnresolved = slotResults.every((r) => !r.baseUrl);
   if (allUnresolved) return noopKindResult();
 
   // 4. platformRules + failurePenalty 適用
-  let scoreDelta = 0;
-  const scoreEvents: KindScoreEvent[] = [];
-  const newHealth: Record<string, { ok: boolean; checkedAt: string }> = {};
-  for (const r of slotResults) {
-    newHealth[r.slotName] = { ok: r.scoreOk, checkedAt: nowIso };
-    if (!r.baseUrl) continue;
-    if (!r.scoreOk) {
-      const penalty = scoring.failurePenalty ?? 0;
-      if (penalty !== 0) {
-        scoreDelta += penalty;
-        scoreEvents.push({ source: "uptime", points: penalty, occurredAt: nowIso });
-      }
-      continue;
-    }
-    const platformName = r.platform;
-    const rule = platformName ? scoring.platformRules[platformName] : undefined;
-    if (!platformName || !rule) {
-      // platform 不明 / 未登録 → failurePenalty 扱い (= 未登録 platform を運営が認めない)
-      const penalty = scoring.failurePenalty ?? 0;
-      if (penalty !== 0) {
-        scoreDelta += penalty;
-        scoreEvents.push({ source: "uptime", points: penalty, occurredAt: nowIso });
-      }
-      continue;
-    }
-    const isDegraded = degradedPlatforms.has(platformName);
-    const points =
-      isDegraded && rule.degradedPoints !== undefined ? rule.degradedPoints : rule.points;
-    if (points !== 0) {
-      scoreDelta += points;
-      scoreEvents.push({ source: "uptime", points, occurredAt: nowIso });
-    }
-    // 5. responsePenalties: 通過した slot のみ評価
-    for (const pen of scoring.responsePenalties ?? []) {
-      if (evalResponseCondition(pen.if, r.responseTimeMs) && pen.points !== 0) {
-        scoreDelta += pen.points;
-        scoreEvents.push({ source: "uptime", points: pen.points, occurredAt: nowIso });
-      }
-    }
-  }
+  const slotScore = scorePhasedSlots(scoring, degradedPlatforms, slotResults, nowIso);
 
   // 6. bonuses: 全 slot 集合に対する判定 (1 回 / once 制御)
-  const prevAwarded = prevState.bonusAwarded ?? {};
-  const newAwarded: Record<string, boolean> = { ...prevAwarded };
-  for (const bonus of scoring.bonuses ?? []) {
-    if (bonus.once && prevAwarded[bonus.kind] === true) continue;
-    const satisfied = isBonusSatisfied(bonus, slotResults);
-    if (!satisfied) continue;
-    scoreDelta += bonus.points;
-    scoreEvents.push({ source: "uptime", points: bonus.points, occurredAt: nowIso });
-    if (bonus.once) newAwarded[bonus.kind] = true;
-  }
+  const bonusScore = scorePhasedBonuses(scoring, slotResults, prevState, nowIso);
 
   const allOk = slotResults.every((r) => r.scoreOk);
   const newState: DeploymentScoringState | undefined =
-    Object.keys(newAwarded).length > 0 ? { bonusAwarded: newAwarded } : undefined;
+    Object.keys(bonusScore.awarded).length > 0 ? { bonusAwarded: bonusScore.awarded } : undefined;
 
   return {
-    scoreDelta,
-    scoreEvents,
-    endpointsHealthJson: JSON.stringify(newHealth),
+    scoreDelta: slotScore.scoreDelta + bonusScore.scoreDelta,
+    scoreEvents: [...slotScore.scoreEvents, ...bonusScore.scoreEvents],
+    endpointsHealthJson: JSON.stringify(slotScore.health),
     lastResult: allOk ? "ok" : "fail",
     ...(newState ? { newState } : {}),
   };
+}
+
+interface SlotResult {
+  readonly slotName: string;
+  readonly baseUrl: string | undefined;
+  readonly platform: string | undefined;
+  readonly scoreOk: boolean;
+  readonly responseTimeMs: number;
+}
+
+async function probePhasedSlots(
+  input: KindHandlerInput<PhasedPollingScoringMetadata>,
+  outputs: Record<string, string>,
+  overrideMap: Map<string, string>,
+  scorePath: string,
+): Promise<SlotResult[]> {
+  return Promise.all(
+    input.slots.map((slot) =>
+      probePhasedSlot(slot, input.scoring, outputs, overrideMap.get(slot.slot), scorePath),
+    ),
+  );
+}
+
+async function probePhasedSlot(
+  slot: KindHandlerInput<PhasedPollingScoringMetadata>["slots"][number],
+  scoring: PhasedPollingScoringMetadata,
+  outputs: Record<string, string>,
+  overrideUrl: string | undefined,
+  scorePath: string,
+): Promise<SlotResult> {
+  const outputValue = outputs[slot.default.key];
+  const defaultUrl = outputValue
+    ? resolveDefaultUrl(outputValue, slot.default.appendPath)
+    : undefined;
+  const baseUrl = overrideUrl ?? defaultUrl;
+  if (!baseUrl) {
+    return {
+      slotName: slot.slot,
+      baseUrl: undefined,
+      platform: undefined,
+      scoreOk: false,
+      responseTimeMs: 0,
+    };
+  }
+  const [metaProbe, scoreProbe] = await Promise.all([
+    probeUrl(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
+    probeUrl(joinUrl(baseUrl, scorePath)),
+  ]);
+  return {
+    slotName: slot.slot,
+    baseUrl,
+    platform: parsePlatformFromMeta(metaProbe.body),
+    scoreOk: scoreProbe.ok,
+    responseTimeMs: scoreProbe.responseTimeMs,
+  };
+}
+
+function scorePhasedSlots(
+  scoring: PhasedPollingScoringMetadata,
+  degradedPlatforms: Set<string>,
+  slotResults: readonly SlotResult[],
+  occurredAt: string,
+): {
+  readonly scoreDelta: number;
+  readonly scoreEvents: KindScoreEvent[];
+  readonly health: Record<string, { ok: boolean; checkedAt: string }>;
+} {
+  let scoreDelta = 0;
+  const scoreEvents: KindScoreEvent[] = [];
+  const health: Record<string, { ok: boolean; checkedAt: string }> = {};
+  for (const slot of slotResults) {
+    health[slot.slotName] = { ok: slot.scoreOk, checkedAt: occurredAt };
+    const score = scorePhasedSlot(scoring, degradedPlatforms, slot, occurredAt);
+    scoreDelta += score.scoreDelta;
+    scoreEvents.push(...score.scoreEvents);
+  }
+  return { scoreDelta, scoreEvents, health };
+}
+
+function scorePhasedSlot(
+  scoring: PhasedPollingScoringMetadata,
+  degradedPlatforms: Set<string>,
+  slot: SlotResult,
+  occurredAt: string,
+): { readonly scoreDelta: number; readonly scoreEvents: KindScoreEvent[] } {
+  if (!slot.baseUrl) return { scoreDelta: 0, scoreEvents: [] };
+  const platformRule = slot.platform ? scoring.platformRules[slot.platform] : undefined;
+  if (!slot.scoreOk || !slot.platform || !platformRule) {
+    return scoreFailurePenalty(scoring.failurePenalty ?? 0, occurredAt);
+  }
+  const points =
+    degradedPlatforms.has(slot.platform) && platformRule.degradedPoints !== undefined
+      ? platformRule.degradedPoints
+      : platformRule.points;
+  const scoreEvents = points === 0 ? [] : [uptimeEvent(points, occurredAt)];
+  for (const penalty of scoring.responsePenalties ?? []) {
+    if (evalResponseCondition(penalty.if, slot.responseTimeMs) && penalty.points !== 0) {
+      scoreEvents.push(uptimeEvent(penalty.points, occurredAt));
+    }
+  }
+  return { scoreDelta: scoreEvents.reduce((total, event) => total + event.points, 0), scoreEvents };
+}
+
+function scoreFailurePenalty(
+  points: number,
+  occurredAt: string,
+): { readonly scoreDelta: number; readonly scoreEvents: KindScoreEvent[] } {
+  return points === 0
+    ? { scoreDelta: 0, scoreEvents: [] }
+    : { scoreDelta: points, scoreEvents: [uptimeEvent(points, occurredAt)] };
+}
+
+function uptimeEvent(points: number, occurredAt: string): KindScoreEvent {
+  return { source: "uptime", points, occurredAt };
+}
+
+function scorePhasedBonuses(
+  scoring: PhasedPollingScoringMetadata,
+  slotResults: readonly SlotResult[],
+  prevState: DeploymentScoringState,
+  occurredAt: string,
+): {
+  readonly scoreDelta: number;
+  readonly scoreEvents: KindScoreEvent[];
+  readonly awarded: Record<string, boolean>;
+} {
+  let scoreDelta = 0;
+  const prevAwarded = prevState.bonusAwarded ?? {};
+  const awarded: Record<string, boolean> = { ...prevAwarded };
+  const scoreEvents: KindScoreEvent[] = [];
+  for (const bonus of scoring.bonuses ?? []) {
+    if ((bonus.once && prevAwarded[bonus.kind] === true) || !isBonusSatisfied(bonus, slotResults)) {
+      continue;
+    }
+    scoreDelta += bonus.points;
+    scoreEvents.push(uptimeEvent(bonus.points, occurredAt));
+    if (bonus.once) awarded[bonus.kind] = true;
+  }
+  return { scoreDelta, scoreEvents, awarded };
 }
 
 /**

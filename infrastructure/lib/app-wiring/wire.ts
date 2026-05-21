@@ -97,27 +97,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // payload を push するための bucket + OIDC IAM Role を立てる。 config.challengePayload が
   // 設定されていれば stack を立てる (= 旧 env override `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET`
   // は互換目的で残す = override 優先)。
-  let challengePayloadStack: ChallengePayloadStack | undefined;
-  if (config.challengePayload && !config.challengePayloadBucketName) {
-    challengePayloadStack = new ChallengePayloadStack(
-      app,
-      stackId("tenkacloud-challenge-payload", config.environment),
-      {
-        ...config.stackEnv,
-        environmentName: config.environment,
-        bucketName: config.challengePayload.bucketName,
-        githubRepository: config.challengePayload.githubRepository,
-        githubBranches: config.challengePayload.githubBranches,
-        ...(config.challengePayload.existingOidcProviderArn
-          ? { existingOidcProviderArn: config.challengePayload.existingOidcProviderArn }
-          : {}),
-        ...(config.challengePayload.noncurrentExpirationDays !== undefined
-          ? { noncurrentExpirationDays: config.challengePayload.noncurrentExpirationDays }
-          : {}),
-      },
-    );
-    cdk.Aspects.of(challengePayloadStack).add(new DestroyPolicySetter());
-  }
+  const challengePayloadStack = createChallengePayloadStack(app, config);
   const challengePayloadBucketName =
     config.challengePayloadBucketName ?? challengePayloadStack?.bucketName;
 
@@ -315,66 +295,15 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
 
   // Issue #952 epic / cost guardrails: 月次 AWS Budget を立てる。 limit / alarm 通知先は config から。
   // limit が 0 / 未指定なら budget は立てない (= legacy 互換)。
-  if (config.monthlyCostLimitUsd && config.monthlyCostLimitUsd > 0) {
-    const adminEmail = config.systemAdminEmail;
-    const extraEmails = config.budgetAlarmEmails ?? [];
-    // adminEmail と extraEmails の重複を排して同一宛先への重複 subscription を防ぐ。
-    const allEmails = Array.from(new Set(adminEmail ? [adminEmail, ...extraEmails] : extraEmails));
-    const budget = new CostBudget(observabilityStack, "CostBudget", {
-      budgetNamePrefix: `tenkacloud-${config.environment}`,
-      monthlyLimitUsd: config.monthlyCostLimitUsd,
-      notificationEmails: allEmails,
-      // App scope の cdk.Tags.of(app).add("Project", "TenkaCloud") と整合させ、
-      // TenkaCloud で deploy したリソース分だけを集計対象にする。
-      costAllocationTags: { Project: ["TenkaCloud"] },
-    });
-    // Issue #952 cost guardrails: Free Tier breach 検知 alarm を CostBudget と同じ SNS topic に
-    // wire する。 budget alarm (= 24-48h 遅延) を補完する resource-usage 即時 alarm。
-    new FreeTierAlarms(observabilityStack, "FreeTierAlarms", {
-      notificationTopic: budget.topic,
-      lambdaFunctionNames: [
-        problemDeployBackendStack.deployApiLambda.functionName,
-        problemDeployBackendStack.eventApiLambda.functionName,
-        adminConsoleInsightStack.lambdaFunctionName,
-        problemDeployBackendStack.competitorAccountsApiLambda.functionName,
-        problemDeployBackendStack.externalIdAuditLambda.functionName,
-        problemDeployBackendStack.genericScoringLambda.functionName,
-        ...(problemDeployBackendStack.participantPortalLambda
-          ? [problemDeployBackendStack.participantPortalLambda.functionName]
-          : []),
-      ],
-      dynamoDbTableNames: [
-        problemDeployBackendStack.deploymentsTable.tableName,
-        problemDeployBackendStack.eventsTable.tableName,
-        problemDeployBackendStack.teamsTable.tableName,
-        problemDeployBackendStack.competitorAccountsTable.tableName,
-        problemDeployBackendStack.problemEndpointsTable.tableName,
-        bootstrapTemplateStack.tenantMappingTable.tableName,
-      ],
-      // #1080: API Gateway 5XX rate alarm を 4 API (control-plane / tenant / problem-deploy /
-      // admin-insight) に対して立てる。 backend 障害 / Lambda timeout の早期検知が目的。
-      apiGateways: [
-        {
-          kind: "http",
-          label: "control-plane",
-          apiId: apiIdFromExecuteApiUrl(controlPlaneStack.regApiGatewayUrl),
-          stage: "$default",
-        },
-        {
-          kind: "rest",
-          label: "tenant",
-          apiName: tenantTemplateStack.tenantApiName,
-          stage: tenantTemplateStack.tenantApiStageName,
-        },
-        {
-          kind: "http",
-          label: "admin-insight",
-          apiId: adminConsoleInsightStack.apiId,
-          stage: "$default",
-        },
-      ],
-    });
-  }
+  addCostGuardrails({
+    config,
+    observabilityStack,
+    problemDeployBackendStack,
+    adminConsoleInsightStack,
+    bootstrapTemplateStack,
+    controlPlaneStack,
+    tenantTemplateStack,
+  });
 
   // Issue #1031: runtime-config.json を SiteBucket に配置する専用 stack。 全 backend stack の
   // cross-stack ref を集めて 1 ヶ所で runtime-config を組み立てる (= 旧 install.sh phase 2 で
@@ -418,6 +347,117 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     adminConsoleHosting: adminConsoleHostingStack,
     adminConsoleRuntimeConfigStack,
   };
+}
+
+function createChallengePayloadStack(
+  app: cdk.App,
+  config: AppConfig,
+): ChallengePayloadStack | undefined {
+  if (!config.challengePayload || config.challengePayloadBucketName) return undefined;
+  const stack = new ChallengePayloadStack(
+    app,
+    stackId("tenkacloud-challenge-payload", config.environment),
+    {
+      ...config.stackEnv,
+      environmentName: config.environment,
+      bucketName: config.challengePayload.bucketName,
+      githubRepository: config.challengePayload.githubRepository,
+      githubBranches: config.challengePayload.githubBranches,
+      ...(config.challengePayload.existingOidcProviderArn
+        ? { existingOidcProviderArn: config.challengePayload.existingOidcProviderArn }
+        : {}),
+      ...(config.challengePayload.noncurrentExpirationDays !== undefined
+        ? { noncurrentExpirationDays: config.challengePayload.noncurrentExpirationDays }
+        : {}),
+    },
+  );
+  cdk.Aspects.of(stack).add(new DestroyPolicySetter());
+  return stack;
+}
+
+function addCostGuardrails(args: {
+  readonly config: AppConfig;
+  readonly observabilityStack: ObservabilityStack;
+  readonly problemDeployBackendStack: ProblemDeployBackendStack;
+  readonly adminConsoleInsightStack: AdminConsoleInsightStack;
+  readonly bootstrapTemplateStack: BootstrapTemplateStack;
+  readonly controlPlaneStack: ControlPlaneStack;
+  readonly tenantTemplateStack: TenantTemplateStack;
+}): void {
+  const { config } = args;
+  if (!config.monthlyCostLimitUsd || config.monthlyCostLimitUsd <= 0) return;
+  const budget = new CostBudget(args.observabilityStack, "CostBudget", {
+    budgetNamePrefix: `tenkacloud-${config.environment}`,
+    monthlyLimitUsd: config.monthlyCostLimitUsd,
+    notificationEmails: Array.from(
+      new Set([config.systemAdminEmail, ...(config.budgetAlarmEmails ?? [])]),
+    ),
+    costAllocationTags: { Project: ["TenkaCloud"] },
+  });
+  new FreeTierAlarms(args.observabilityStack, "FreeTierAlarms", {
+    notificationTopic: budget.topic,
+    lambdaFunctionNames: freeTierLambdaNames(args),
+    dynamoDbTableNames: freeTierTableNames(args),
+    apiGateways: freeTierApiGateways(args),
+  });
+}
+
+function freeTierLambdaNames(args: {
+  readonly problemDeployBackendStack: ProblemDeployBackendStack;
+  readonly adminConsoleInsightStack: AdminConsoleInsightStack;
+}): string[] {
+  const problem = args.problemDeployBackendStack;
+  return [
+    problem.deployApiLambda.functionName,
+    problem.eventApiLambda.functionName,
+    args.adminConsoleInsightStack.lambdaFunctionName,
+    problem.competitorAccountsApiLambda.functionName,
+    problem.externalIdAuditLambda.functionName,
+    problem.genericScoringLambda.functionName,
+    ...(problem.participantPortalLambda ? [problem.participantPortalLambda.functionName] : []),
+  ];
+}
+
+function freeTierTableNames(args: {
+  readonly problemDeployBackendStack: ProblemDeployBackendStack;
+  readonly bootstrapTemplateStack: BootstrapTemplateStack;
+}): string[] {
+  const problem = args.problemDeployBackendStack;
+  return [
+    problem.deploymentsTable.tableName,
+    problem.eventsTable.tableName,
+    problem.teamsTable.tableName,
+    problem.competitorAccountsTable.tableName,
+    problem.problemEndpointsTable.tableName,
+    args.bootstrapTemplateStack.tenantMappingTable.tableName,
+  ];
+}
+
+function freeTierApiGateways(args: {
+  readonly controlPlaneStack: ControlPlaneStack;
+  readonly tenantTemplateStack: TenantTemplateStack;
+  readonly adminConsoleInsightStack: AdminConsoleInsightStack;
+}): ConstructorParameters<typeof FreeTierAlarms>[2]["apiGateways"] {
+  return [
+    {
+      kind: "http",
+      label: "control-plane",
+      apiId: apiIdFromExecuteApiUrl(args.controlPlaneStack.regApiGatewayUrl),
+      stage: "$default",
+    },
+    {
+      kind: "rest",
+      label: "tenant",
+      apiName: args.tenantTemplateStack.tenantApiName,
+      stage: args.tenantTemplateStack.tenantApiStageName,
+    },
+    {
+      kind: "http",
+      label: "admin-insight",
+      apiId: args.adminConsoleInsightStack.apiId,
+      stage: "$default",
+    },
+  ];
 }
 
 export interface TenkaCloudAppHandles {

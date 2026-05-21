@@ -81,32 +81,37 @@ export async function listAuditEntries(
       ExclusiveStartKey: decodeCursor(input.cursor),
     }),
   );
-  const items: AuditItem[] = (out.Items ?? []).map((row) => {
-    const r = row as Record<string, unknown>;
-    const sk = String(r.SK ?? "");
-    const id = sk.startsWith("AUDIT#") ? sk.substring(6) : sk;
-    const tenantId =
-      input.scope === "system" ? "SYSTEM" : String(r.PK ?? "").replace(/^TENANT#/, "");
-    return {
-      id,
-      tenantId,
-      actor: String(r.actor ?? "unknown"),
-      ...(typeof r.actorUsername === "string" ? { actorUsername: r.actorUsername } : {}),
-      action: String(r.action ?? ""),
-      outcome: String(r.outcome ?? ""),
-      ...(typeof r.target === "string" ? { target: r.target } : {}),
-      ...(typeof r.ipAddress === "string" ? { ipAddress: r.ipAddress } : {}),
-      ...(typeof r.userAgent === "string" ? { userAgent: r.userAgent } : {}),
-      occurredAt: String(r.occurredAt ?? ""),
-      ...(r.extra && typeof r.extra === "object"
-        ? { extra: r.extra as Record<string, unknown> }
-        : {}),
-    };
-  });
+  const items = (out.Items ?? []).map((row) => toAuditItem(row, input.scope));
   return {
     items,
     ...(out.LastEvaluatedKey
       ? { nextCursor: encodeCursor(out.LastEvaluatedKey as Record<string, unknown>) }
       : {}),
   };
+}
+
+function toAuditItem(row: unknown, scope: AuditListInput["scope"]): AuditItem {
+  const r = row as Record<string, unknown>;
+  const sk = String(r.SK ?? "");
+  return {
+    id: sk.startsWith("AUDIT#") ? sk.substring(6) : sk,
+    tenantId: scope === "system" ? "SYSTEM" : String(r.PK ?? "").replace(/^TENANT#/, ""),
+    actor: String(r.actor ?? "unknown"),
+    ...(optionalString(r, "actorUsername") ? { actorUsername: r.actorUsername as string } : {}),
+    action: String(r.action ?? ""),
+    outcome: String(r.outcome ?? ""),
+    ...(optionalString(r, "target") ? { target: r.target as string } : {}),
+    ...(optionalString(r, "ipAddress") ? { ipAddress: r.ipAddress as string } : {}),
+    ...(optionalString(r, "userAgent") ? { userAgent: r.userAgent as string } : {}),
+    occurredAt: String(r.occurredAt ?? ""),
+    ...(isRecord(r.extra) ? { extra: r.extra } : {}),
+  };
+}
+
+function optionalString(row: Record<string, unknown>, key: string): boolean {
+  return typeof row[key] === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
 }

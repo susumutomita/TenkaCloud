@@ -409,16 +409,10 @@ export function buildTeamView(
 ): ParticipantTeamView | undefined {
   if (items.length === 0) return undefined;
 
-  const problems: ParticipantProblemView[] = [];
-  let sample: Partial<DeploymentItem> | undefined;
-  for (const item of items) {
-    const view = toProblemView(item, scoringMap);
-    if (view) problems.push(view);
-    if (!sample) {
-      const status = (item.status ?? "PENDING") as DeploymentStatus;
-      if (!DELETED_LIKE_STATUSES.has(status)) sample = item;
-    }
-  }
+  const problems = items
+    .map((item) => toProblemView(item, scoringMap))
+    .filter((view): view is ParticipantProblemView => view !== undefined);
+  const sample = findLiveTeamSample(items);
   if (!sample || problems.length === 0) return undefined;
 
   const operatorSlug = String(sample.teamName ?? "");
@@ -433,4 +427,13 @@ export function buildTeamView(
     },
     problems,
   };
+}
+
+function findLiveTeamSample(
+  items: readonly Partial<DeploymentItem>[],
+): Partial<DeploymentItem> | undefined {
+  return items.find((item) => {
+    const status = (item.status ?? "PENDING") as DeploymentStatus;
+    return !DELETED_LIKE_STATUSES.has(status);
+  });
 }

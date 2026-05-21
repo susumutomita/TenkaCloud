@@ -161,51 +161,61 @@ export async function rescueStuckDeletingDeployments(
   nowMs: number,
   thresholdMs: number = STUCK_DELETING_THRESHOLD_MS,
 ): Promise<number> {
-  let rescued = 0;
-  await Promise.all(
-    rows.map(async (row) => {
-      if (row.status !== "DELETING") return;
-      if (!row.PK) return; // projection 漏れ (= 旧 fixture) は rescue skip
-      const updatedAtMs = row.updatedAt ? Date.parse(row.updatedAt) : Number.NaN;
-      if (!Number.isFinite(updatedAtMs)) return;
-      if (nowMs - updatedAtMs < thresholdMs) return;
-      try {
-        await ctx.ddb.send(
-          new UpdateCommand({
-            TableName: ctx.deploymentsTableName,
-            Key: { PK: row.PK, SK: "META" },
-            UpdateExpression:
-              "SET #status = :failed, updatedAt = :now, #reason = :reason REMOVE GSI2PK, GSI2SK",
-            ConditionExpression: "#status = :deleting",
-            ExpressionAttributeNames: {
-              "#status": "status",
-              "#reason": "failureReason",
-            },
-            ExpressionAttributeValues: {
-              ":deleting": "DELETING",
-              ":failed": "FAILED",
-              ":now": new Date(nowMs).toISOString(),
-              ":reason": `reconciler: stuck DELETING > ${Math.floor(thresholdMs / 60_000)} min, treating as FAILED to unblock Event TEARDOWN (#828)`,
-            },
-          }),
-        );
-        rescued += 1;
-        console.warn("[generic-scoring] rescued stuck DELETING deployment", {
-          PK: row.PK,
-          staleForMs: nowMs - updatedAtMs,
-        });
-      } catch (err) {
-        const code = (err as { name?: string })?.name ?? "";
-        // CCF = 並行 MarkDeleted / MarkFailed が先に勝った。 次 tick で再評価されるのでこの tick は skip。
-        if (code === "ConditionalCheckFailedException") return;
-        console.warn("[generic-scoring] stuck-DELETING rescue failed", {
-          PK: row.PK,
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }),
+  const rescued = await Promise.all(
+    rows.map((row) => rescueStuckDeletingDeployment(ctx, row, nowMs, thresholdMs)),
   );
-  return rescued;
+  return rescued.filter(Boolean).length;
+}
+
+async function rescueStuckDeletingDeployment(
+  ctx: ReconcileEventStatusesContext,
+  row: DeploymentReconcilerRow,
+  nowMs: number,
+  thresholdMs: number,
+): Promise<boolean> {
+  const updatedAtMs = staleDeletingUpdatedAtMs(row, nowMs, thresholdMs);
+  if (updatedAtMs === undefined || !row.PK) return false;
+  try {
+    await ctx.ddb.send(
+      new UpdateCommand({
+        TableName: ctx.deploymentsTableName,
+        Key: { PK: row.PK, SK: "META" },
+        UpdateExpression:
+          "SET #status = :failed, updatedAt = :now, #reason = :reason REMOVE GSI2PK, GSI2SK",
+        ConditionExpression: "#status = :deleting",
+        ExpressionAttributeNames: { "#status": "status", "#reason": "failureReason" },
+        ExpressionAttributeValues: {
+          ":deleting": "DELETING",
+          ":failed": "FAILED",
+          ":now": new Date(nowMs).toISOString(),
+          ":reason": `reconciler: stuck DELETING > ${Math.floor(thresholdMs / 60_000)} min, treating as FAILED to unblock Event TEARDOWN (#828)`,
+        },
+      }),
+    );
+    console.warn("[generic-scoring] rescued stuck DELETING deployment", {
+      PK: row.PK,
+      staleForMs: nowMs - updatedAtMs,
+    });
+    return true;
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
+    console.warn("[generic-scoring] stuck-DELETING rescue failed", {
+      PK: row.PK,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+function staleDeletingUpdatedAtMs(
+  row: DeploymentReconcilerRow,
+  nowMs: number,
+  thresholdMs: number,
+): number | undefined {
+  if (row.status !== "DELETING") return undefined;
+  const updatedAtMs = row.updatedAt ? Date.parse(row.updatedAt) : Number.NaN;
+  if (!Number.isFinite(updatedAtMs) || nowMs - updatedAtMs < thresholdMs) return undefined;
+  return updatedAtMs;
 }
 
 /**

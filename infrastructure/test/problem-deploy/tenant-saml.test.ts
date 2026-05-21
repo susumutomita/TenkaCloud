@@ -2,7 +2,6 @@ import {
   CreateIdentityProviderCommand,
   DeleteIdentityProviderCommand,
   DescribeIdentityProviderCommand,
-  DescribeUserPoolClientCommand,
   UpdateIdentityProviderCommand,
   type UpdateUserPoolClientCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
