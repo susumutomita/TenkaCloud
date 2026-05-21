@@ -95,7 +95,9 @@ describe("findMissingRequiredPolicies", () => {
       "  ParticipantViewerRole:",
       "    Properties:",
       "      ManagedPolicyArns:",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: CFn !Sub の literal を pin する意図
       '        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AWSSignInLocalDevelopmentAccess"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: CFn !Sub の literal を pin する意図
       '        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AWSCloudShellFullAccess"',
     ].join("\n");
     expect(findMissingRequiredPolicies(block)).toEqual([]);

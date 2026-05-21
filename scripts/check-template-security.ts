@@ -33,7 +33,7 @@ interface Finding {
 const WEB_PORTS = new Set([80, 443]);
 
 /**
- * AWS API design 上 Resource: "*" を要求する read-only action の allowlist。
+ * AWS API design 上 Resource: "*" を要求する action の allowlist。
  * これらは Resource を絞れず、 IAM policy で `*` を書く以外に手が無い (= AWS-side 制約)。
  * リストに無い action が `*` と組み合わさったら警告。
  */
@@ -80,6 +80,14 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   "dynamodb:DescribeTable",
   // STS sanity
   "sts:GetCallerIdentity",
+  // CloudShell participant baseline — sessions are per-identity and have no resource ARN scope.
+  "cloudshell:CreateEnvironment",
+  "cloudshell:CreateSession",
+  "cloudshell:GetEnvironmentStatus",
+  "cloudshell:StartEnvironment",
+  "cloudshell:StopEnvironment",
+  "cloudshell:DeleteEnvironment",
+  "cloudshell:PutCredentials",
 ]);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

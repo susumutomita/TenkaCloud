@@ -65,6 +65,22 @@ interface CastEventInput {
   readonly payload: unknown;
 }
 
+function isActiveDeployment(item: Partial<DeploymentItem>): boolean {
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  if (DELETED_LIKE_STATUSES.has(status)) return false;
+  if (status === "PENDING" || status === "IN_PROGRESS") return false;
+  return true;
+}
+
+function toSenderContext(
+  item: Partial<DeploymentItem>,
+): { eventId: string; teamId: string; jobId: string } | undefined {
+  if (typeof item.eventId !== "string") return undefined;
+  if (typeof item.teamId !== "string") return undefined;
+  if (typeof item.jobId !== "string") return undefined;
+  return { eventId: item.eventId, teamId: item.teamId, jobId: item.jobId };
+}
+
 /**
  * sender team の所有 deployment 一覧から自分の「 active な代表行 」 を選び、
  * sender 同定情報 (eventId / teamId / jobId) を返す。 deleted / pending は不可。
@@ -73,13 +89,9 @@ function pickSenderContext(
   items: readonly Partial<DeploymentItem>[],
 ): { eventId: string; teamId: string; jobId: string } | undefined {
   for (const item of items) {
-    const status = (item.status ?? "PENDING") as DeploymentStatus;
-    if (DELETED_LIKE_STATUSES.has(status)) continue;
-    if (status === "PENDING" || status === "IN_PROGRESS") continue;
-    const eventId = typeof item.eventId === "string" ? item.eventId : undefined;
-    const teamId = typeof item.teamId === "string" ? item.teamId : undefined;
-    const jobId = typeof item.jobId === "string" ? item.jobId : undefined;
-    if (eventId && teamId && jobId) return { eventId, teamId, jobId };
+    if (!isActiveDeployment(item)) continue;
+    const ctx = toSenderContext(item);
+    if (ctx) return ctx;
   }
   return undefined;
 }
@@ -174,6 +186,56 @@ export async function castEvent(
   return { kind: "ok", eventId: inboxId, occurredAt };
 }
 
+function isValidSinceMs(sinceMs: number, nowMs: number): boolean {
+  if (!Number.isInteger(sinceMs)) return false;
+  if (sinceMs < 0) return false;
+  if (sinceMs > nowMs) return false;
+  if (nowMs - sinceMs > INBOX_SINCE_MS_MAX) return false;
+  return true;
+}
+
+function toInboxEvent(item: Record<string, unknown>): InboxEvent | undefined {
+  const eventId = typeof item.eventId === "string" ? item.eventId : "";
+  const fromTeamId = typeof item.fromTeamId === "string" ? item.fromTeamId : "";
+  const fromJobId = typeof item.fromJobId === "string" ? item.fromJobId : "";
+  const kind = typeof item.kind === "string" ? item.kind : "";
+  const occurredAt = typeof item.occurredAt === "string" ? item.occurredAt : "";
+  if (!eventId || !fromTeamId || !fromJobId || !kind || !occurredAt) return undefined;
+  return { eventId, fromTeamId, fromJobId, kind, payload: item.payload, occurredAt };
+}
+
+async function queryInboxRows(
+  shared: ParticipantSharedResources,
+  jobId: string,
+  sinceMs: number,
+): Promise<readonly Record<string, unknown>[]> {
+  const sinceIso = new Date(sinceMs).toISOString();
+  const skStart = `${INBOX_SK_PREFIX}${sinceIso}`;
+  const skEnd = `${INBOX_SK_PREFIX}~`;
+  const rows: Record<string, unknown>[] = [];
+  let exclusiveStart: Record<string, unknown> | undefined;
+  do {
+    const out = await shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.tableName,
+        KeyConditionExpression: "PK = :pk AND SK BETWEEN :sk_start AND :sk_end",
+        ExpressionAttributeValues: {
+          ":pk": `DEPLOYMENT#${jobId}`,
+          ":sk_start": skStart,
+          ":sk_end": skEnd,
+        },
+        ScanIndexForward: false,
+        ExclusiveStartKey: exclusiveStart,
+      }),
+    );
+    for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
+      rows.push(item);
+    }
+    exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStart);
+  return rows;
+}
+
 /**
  * 自分の指定 jobId の inbox から、 `sinceMs` (epoch ms) 以降の event を時系列降順で返す。
  * 認可は teamLoginKey + jobId 所有チェック。
@@ -186,58 +248,17 @@ export async function readInbox(
   nowMs: number = Date.now(),
 ): Promise<InboxReadOutcome> {
   if (!ULID_RE.test(jobIdRaw)) return { kind: "invalid_jobid" };
-  if (
-    !Number.isInteger(sinceMsRaw) ||
-    sinceMsRaw < 0 ||
-    sinceMsRaw > nowMs ||
-    nowMs - sinceMsRaw > INBOX_SINCE_MS_MAX
-  ) {
-    return { kind: "invalid_since_ms" };
-  }
+  if (!isValidSinceMs(sinceMsRaw, nowMs)) return { kind: "invalid_since_ms" };
 
   const myItems = await queryTeamItems(shared, teamLoginKey);
   if (myItems.length === 0) return { kind: "unauthorized" };
-  const owned = findOwnedDeployment(myItems, jobIdRaw);
-  if (!owned) return { kind: "unauthorized" };
+  if (!findOwnedDeployment(myItems, jobIdRaw)) return { kind: "unauthorized" };
 
-  const sinceIso = new Date(sinceMsRaw).toISOString();
-  const skStart = `${INBOX_SK_PREFIX}${sinceIso}`;
-  const skEnd = `${INBOX_SK_PREFIX}~`;
-
+  const rows = await queryInboxRows(shared, jobIdRaw, sinceMsRaw);
   const events: InboxEvent[] = [];
-  let exclusiveStart: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.tableName,
-        KeyConditionExpression: "PK = :pk AND SK BETWEEN :sk_start AND :sk_end",
-        ExpressionAttributeValues: {
-          ":pk": `DEPLOYMENT#${jobIdRaw}`,
-          ":sk_start": skStart,
-          ":sk_end": skEnd,
-        },
-        ScanIndexForward: false,
-        ExclusiveStartKey: exclusiveStart,
-      }),
-    );
-    for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
-      const eventId = typeof item.eventId === "string" ? item.eventId : "";
-      const fromTeamId = typeof item.fromTeamId === "string" ? item.fromTeamId : "";
-      const fromJobId = typeof item.fromJobId === "string" ? item.fromJobId : "";
-      const kind = typeof item.kind === "string" ? item.kind : "";
-      const occurredAt = typeof item.occurredAt === "string" ? item.occurredAt : "";
-      if (!eventId || !fromTeamId || !fromJobId || !kind || !occurredAt) continue;
-      events.push({
-        eventId,
-        fromTeamId,
-        fromJobId,
-        kind,
-        payload: item.payload,
-        occurredAt,
-      });
-    }
-    exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStart);
-
+  for (const row of rows) {
+    const ev = toInboxEvent(row);
+    if (ev) events.push(ev);
+  }
   return { kind: "ok", events };
 }

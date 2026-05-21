@@ -64,6 +64,10 @@ const RESOURCE_STAR_OK_SIDS = new Set([
   "ConsoleEc2Metadata",
   // self-identity (= sts:GetCallerIdentity は呼び出し元 token を返すだけ)
   "ConsoleSelfIdentity",
+  // Issue #1198 (#1208 follow-up): CloudShell launch action は session 用 per-team
+  // dedicated AWS account に閉じる (= 他 tenant の cloudshell に触れない)。
+  // Resource-level scope は CloudShell API が持たないため、 Resource:"*" 必須。
+  "OpenCloudShellSession",
 ]);
 
 describe("problem template ParticipantViewerRole (#744)", () => {

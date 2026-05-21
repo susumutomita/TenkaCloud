@@ -3,6 +3,7 @@ import {
   parseTeamCountInput,
   resizeTeamRows,
   resolveInitialRegion,
+  resolveRegionOptions,
   validateTeamRows,
 } from "../../src/pages/EventCreate";
 
@@ -96,5 +97,36 @@ describe("resolveInitialRegion (Issue #1201)", () => {
     // 仕様: 空文字は宣言済として扱う (= 後で metadata validator が拒否すべき)。 ここでは
     // 純関数の動作を pin するだけ。
     expect(resolveInitialRegion("", "ap-northeast-1")).toBe("");
+  });
+});
+
+describe("resolveRegionOptions (Issue #1201 Phase 2)", () => {
+  const base = [
+    { value: "ap-northeast-1", label: "Tokyo" },
+    { value: "us-east-1", label: "N. Virginia" },
+    { value: "us-west-2", label: "Oregon" },
+  ];
+
+  it("should return all base options when supportedRegions is undefined (backward compatible)", () => {
+    expect(resolveRegionOptions(undefined, base)).toBe(base);
+  });
+
+  it("should return all base options when supportedRegions is empty array", () => {
+    expect(resolveRegionOptions([], base)).toBe(base);
+  });
+
+  it("should restrict to intersection of supportedRegions and base options", () => {
+    const out = resolveRegionOptions(["us-east-1", "us-west-2"], base);
+    expect(out.map((o) => o.value)).toEqual(["us-east-1", "us-west-2"]);
+  });
+
+  it("should ignore unknown region codes not in base", () => {
+    const out = resolveRegionOptions(["us-east-1", "made-up-region"], base);
+    expect(out.map((o) => o.value)).toEqual(["us-east-1"]);
+  });
+
+  it("should fall back to base when supportedRegions has no intersection (= author misconfig)", () => {
+    // wizard が空 picker で固まるのを防ぐ fail-safe。 metadata validator は別途で hard-error。
+    expect(resolveRegionOptions(["made-up-only"], base)).toBe(base);
   });
 });

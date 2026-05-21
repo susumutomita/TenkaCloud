@@ -22,6 +22,21 @@ function synthDefault(): Template {
   return Template.fromStack(stack);
 }
 
+function synthWithDeployConcurrentBuildLimit(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    deployConcurrentBuildLimit: 200,
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
+}
+
 describe("ProblemDeployBackendStack (MVP-1)", () => {
   const tpl = synthDefault();
 
@@ -130,26 +145,16 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
   });
 
   describe("CodeBuild Project concurrent build limit (#538)", () => {
-    // synth が 5 個の NodejsFunction (= esbuild bundling) を走らせるため、default 5s では足りない。
-    // 共有 fixture (`tpl = synthDefault()`) と別 props を渡すので別 instance での synth が必要。
+    // 共有 fixture (`tpl = synthDefault()`) と別 props を渡すので別 instance で synth する。
+    // bundling が長い環境でも assertion timeout に巻き込まれないよう collection 時に fixture 化する。
+    const limited = synthWithDeployConcurrentBuildLimit();
+
     it("should reflect `deployConcurrentBuildLimit: 200` in the CFn property", () => {
-      const app = new cdk.App();
-      const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
-        eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
-        sourceBucketName: "test-source-bucket",
-        sourceObjectKey: "source.zip",
-        problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
-        problemsScoring: {},
-        problemsEndpoints: {},
-        deployConcurrentBuildLimit: 200,
-        environmentName: "development",
-      });
-      const limited = Template.fromStack(stack);
       limited.hasResourceProperties(
         "AWS::CodeBuild::Project",
         Match.objectLike({ ConcurrentBuildLimit: 200 }),
       );
-    }, 30_000);
+    });
   });
 
   describe("Step Functions State Machine + EventBridge Rule", () => {

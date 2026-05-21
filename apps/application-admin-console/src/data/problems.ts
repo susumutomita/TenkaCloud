@@ -28,6 +28,13 @@ export interface ProblemSummary {
    * `DEFAULT_AWS_REGION` にフォールバック。 operator は wizard で override 可能。
    */
   defaultRegion?: string;
+  /**
+   * Issue #1201 Phase 2: 動作確認済の region 集合。 宣言された場合、 EventCreate
+   * wizard の region picker はこの集合だけを選択肢として出す (= 動かない region への
+   * misconfig 予防)。 `defaultRegion` はこの集合に含まれていることを validator が保証。
+   * 未宣言なら全 AWS region から選べる (= 後方互換)。
+   */
+  supportedRegions?: readonly string[];
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -61,6 +68,8 @@ interface ProblemMetadata {
   cfnParameters?: Record<string, string>;
   /** Issue #1201: 問題作成者宣言の推奨 region。 wizard が初期値に使う。 */
   defaultRegion?: string;
+  /** Issue #1201 Phase 2: 動作確認済 region 集合。 wizard が picker の選択肢を絞る。 */
+  supportedRegions?: string[];
 }
 
 // `import.meta.glob` で repo root の `problems/*/*/metadata.json` を build 時 / HMR 時に
@@ -85,6 +94,9 @@ function metadataToDetail(metadata: ProblemMetadata): ProblemDetail {
     exposedPorts: metadata.exposedPorts,
     learningGoals: metadata.learningGoals,
     ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
+    ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
+      ? { supportedRegions: metadata.supportedRegions }
+      : {}),
   };
 }
 
@@ -108,5 +120,6 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     estimatedDuration: p.estimatedDuration,
     tags: p.tags,
     ...(p.defaultRegion ? { defaultRegion: p.defaultRegion } : {}),
+    ...(p.supportedRegions ? { supportedRegions: p.supportedRegions } : {}),
   }));
 }
