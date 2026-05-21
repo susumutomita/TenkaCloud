@@ -16,7 +16,6 @@ import {
 } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import { encodeLargeEnvValue } from "../utils/env-encoding";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
   LAMBDA_NODEJS_RUNTIME,
@@ -175,9 +174,6 @@ export class ParticipantPortalLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
-        // Issue #810: gzip+base64 で 4 KB env-var 上限を回避。 GenericScoring と同じ。
-        BATTLE_PROBLEMS_SCORING: encodeLargeEnvValue(JSON.stringify(props.problemsScoring)),
-        PROBLEM_ENDPOINTS: encodeLargeEnvValue(JSON.stringify(props.problemsEndpoints)),
         DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
       },
@@ -186,6 +182,15 @@ export class ParticipantPortalLambda extends Construct {
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
+        // Issue #1158: 旧 #810 の gzip+base64 env 圧縮では問題追加で 4 KB を再度超える。
+        // esbuild define で build 時に literal 置換し env を 0 化する。 handler は
+        // process.env を読む既存コードのまま (= build 後に literal JSON が埋まる)。
+        define: {
+          "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
+            JSON.stringify(props.problemsScoring),
+          ),
+          "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
+        },
       },
     });
 

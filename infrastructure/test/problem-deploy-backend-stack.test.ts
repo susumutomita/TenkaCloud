@@ -290,26 +290,28 @@ describe("ProblemDeployBackendStack (MVP-1)", () => {
       );
     });
 
-    it("GenericScoring Lambda が PROBLEM_ENDPOINTS_TABLE_NAME / BATTLE_PROBLEMS_PHASES env を持つべき", () => {
-      // ADR-012 Phase 3.B: 旧 HealthCheck Lambda は scoring 設定のみ持っていたが、
-      // GenericScoring は Endpoint registry (Phase 3.A) と Phase 定義 (Phase 3.B) を併せて受ける。
-      tpl.hasResourceProperties(
-        "AWS::Lambda::Function",
-        Match.objectLike({
-          Runtime: "nodejs22.x",
-          Architectures: ["arm64"],
-          Environment: Match.objectLike({
-            Variables: Match.objectLike({
-              DEPLOYMENTS_TABLE_NAME: Match.anyValue(),
-              EVENTS_TABLE_NAME: Match.anyValue(),
-              PROBLEM_ENDPOINTS_TABLE_NAME: Match.anyValue(),
-              BATTLE_PROBLEMS_SCORING: Match.anyValue(),
-              PROBLEM_ENDPOINTS: Match.anyValue(),
-              BATTLE_PROBLEMS_PHASES: Match.anyValue(),
-            }),
-          }),
-        }),
+    it("GenericScoring Lambda が table name env を持ち catalog env は持たないべき", () => {
+      // Issue #1158: BATTLE_PROBLEMS_SCORING / PROBLEM_ENDPOINTS / BATTLE_PROBLEMS_PHASES は
+      // env vars 4 KB 上限を回避するため esbuild bundling.define で build 時 literal 置換し、
+      // Lambda env からは取り除いている。 catalog 配線は handler の `process.env.X` 読み取りが
+      // build 時に literal JSON に固定され、 runtime IO 0 で動く。
+      const functions = tpl.findResources("AWS::Lambda::Function");
+      const genericScoring = Object.entries(functions).find(
+        ([name]) => name.includes("GenericScoring") && name.includes("Function"),
       );
+      expect(genericScoring).toBeDefined();
+      const vars =
+        (
+          genericScoring?.[1] as {
+            Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+          }
+        )?.Properties?.Environment?.Variables ?? {};
+      expect(vars.DEPLOYMENTS_TABLE_NAME).toBeDefined();
+      expect(vars.EVENTS_TABLE_NAME).toBeDefined();
+      expect(vars.PROBLEM_ENDPOINTS_TABLE_NAME).toBeDefined();
+      expect(vars.BATTLE_PROBLEMS_SCORING).toBeUndefined();
+      expect(vars.PROBLEM_ENDPOINTS).toBeUndefined();
+      expect(vars.BATTLE_PROBLEMS_PHASES).toBeUndefined();
     });
   });
 
@@ -614,18 +616,32 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
     );
   });
 
-  it("ADR-012 Phase 3.A: environment に PROBLEM_ENDPOINTS_TABLE_NAME + PROBLEM_ENDPOINTS を持つべき", () => {
+  it("ADR-012 Phase 3.A: environment に PROBLEM_ENDPOINTS_TABLE_NAME を持ち catalog env は持たないべき", () => {
+    // Issue #1158: PROBLEM_ENDPOINTS / BATTLE_PROBLEMS_SCORING は env 4 KB 上限回避のため
+    // esbuild bundling.define で build 時 literal 置換し、 Lambda env からは取り除いている。
     tpl.hasResourceProperties(
       "AWS::Lambda::Function",
       Match.objectLike({
         Environment: Match.objectLike({
           Variables: Match.objectLike({
             PROBLEM_ENDPOINTS_TABLE_NAME: Match.anyValue(),
-            PROBLEM_ENDPOINTS: Match.anyValue(),
           }),
         }),
       }),
     );
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const participantPortal = Object.entries(functions).find(
+      ([name]) => name.includes("ParticipantPortal") && name.includes("Function"),
+    );
+    expect(participantPortal).toBeDefined();
+    const vars =
+      (
+        participantPortal?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(vars.PROBLEM_ENDPOINTS).toBeUndefined();
+    expect(vars.BATTLE_PROBLEMS_SCORING).toBeUndefined();
   });
 
   it("AWS Console SSO 用に DEPLOY_ENVIRONMENT を持つべき", () => {
