@@ -1,21 +1,23 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TenkaCloud — クラウド競技を、もっとシンプルに。</title>
-<meta name="description" content="TenkaCloud は本物の AWS で構築・防御・コスト最適化を競う、オープンソースのクラウド競技基盤。Battle / Challenge を 1 イベントに混ぜて使える、Apache 2.0 の SaaS。" />
+<title>TenkaCloud — Cloud competition, made simple.</title>
+<meta name="description" content="TenkaCloud is an open-source cloud-competition platform on real AWS. Mix Battle (real-time) and Challenge (self-paced) drills in one event. Apache 2.0." />
 <!--
-  Issue #952 / PR-958 follow-up: ウェイトリストの Google Form URL は本 meta tag を
-  書き換えるだけで差し替え可能。 GitHub Pages 配信 (= 静的 HTML) なので env 注入は
-  使わず、 deployer が直接編集する運用。 値が空 / placeholder のままなら waitlist
-  section は 「準備中」 alert に降格する。
+  Issue #952 / PR-958 follow-up: the waitlist Google Form URL is configurable by
+  rewriting this meta tag. We ship this page as static HTML on GitHub Pages, so
+  no env injection — the deployer edits the value directly. If empty / placeholder,
+  the waitlist section degrades to a "coming soon" alert.
   Embedded URL format: `https://docs.google.com/forms/d/e/<FORM_ID>/viewform?embedded=true`
 -->
 <meta name="tenkacloud:waitlist-form-url" content="" />
-<meta property="og:title" content="TenkaCloud — クラウド競技を、もっとシンプルに。" />
-<meta property="og:description" content="本物の AWS で競う、オープンソースのクラウド競技基盤。Battle / Challenge を 1 イベントに混ぜて使える。Apache 2.0。" />
+<meta property="og:title" content="TenkaCloud — Cloud competition, made simple." />
+<meta property="og:description" content="An open-source cloud-competition platform that runs on real AWS. Mix Battle and Challenge drills in one event. Apache 2.0." />
 <meta property="og:type" content="website" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:locale:alternate" content="ja_JP" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
@@ -479,9 +481,9 @@ footer .legal {
       <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
     </div>
     <div class="nav-right">
-      <button class="lang on" data-lang="ja" type="button">JA</button>
+      <button class="lang on" data-lang="en" type="button">EN</button>
       <span class="sep">·</span>
-      <button class="lang" data-lang="en" type="button">EN</button>
+      <button class="lang" data-lang="ja" type="button">JA</button>
     </div>
   </div>
 </nav>
@@ -600,7 +602,7 @@ footer .legal {
       <div class="role" data-i18n="aud.c.role">学校・コミュニティ</div>
       <h3 data-i18n="aud.c.h">AWS を、教材にする。</h3>
       <p data-i18n="aud.c.p">授業や勉強会で、本物の AWS を題材にできる。問題はオープン。新しい問題の提案も歓迎します。</p>
-      <a class="more" href="https://github.com/susumutomita/TenkaCloud/blob/main/problems/README.md" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.c.more">問題を作る</span> ›</a>
+      <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.c.more">問題を作る</span> ›</a>
     </div>
   </div>
 </section>
@@ -673,7 +675,7 @@ footer .legal {
       <h2 data-i18n="waitlist.h2">ウェイトリストに登録する。</h2>
       <p data-i18n="waitlist.p">公開アリーナの招待 / 開催ご相談の連絡先を残しておくと、 準備が整い次第お知らせします。 OSS なので料金はありません。</p>
       <div id="waitlist-embed">
-        <noscript data-i18n="waitlist.noscript">JavaScript を有効にすると登録フォームが表示されます。</noscript>
+        <noscript data-i18n="waitlist.noscript">Enable JavaScript to see the signup form.</noscript>
       </div>
       <div class="btns" id="waitlist-fallback" hidden>
         <a class="btn-primary" href="#" id="waitlist-fallback-link" target="_blank" rel="noopener noreferrer"><span data-i18n="waitlist.fallback">フォームを開く</span> ›</a>
@@ -705,7 +707,7 @@ footer .legal {
     <div>
       <h5>Product</h5>
       <a href="#modes" data-i18n="footer.p0">概要</a>
-      <a href="https://github.com/susumutomita/TenkaCloud/tree/main/problems" target="_blank" rel="noopener noreferrer" data-i18n="footer.p1">問題カタログ</a>
+      <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer" data-i18n="footer.p1">問題カタログ</a>
       <a data-i18n="footer.p2">参加者ポータル</a>
       <a data-i18n="footer.p3">運営コンソール</a>
     </div>
@@ -1041,13 +1043,45 @@ footer .legal {
     }
   }
 
+  /**
+   * Resolve the initial language with this priority:
+   *   1. `?lang=ja|en` URL query (= shareable links)
+   *   2. localStorage `tenkacloud.lang` (= sticky user choice)
+   *   3. navigator.language starts with `ja` (= visitor's browser preference)
+   *   4. default `en` (= English is the primary language; #1183 follow-up)
+   */
+  function detectInitialLang() {
+    var params = new URLSearchParams(window.location.search || "");
+    var fromQuery = params.get("lang");
+    if (fromQuery === "ja" || fromQuery === "en") return fromQuery;
+    try {
+      var stored = window.localStorage.getItem("tenkacloud.lang");
+      if (stored === "ja" || stored === "en") return stored;
+    } catch (_) {
+      /* localStorage blocked (= privacy mode); fall through */
+    }
+    var nav = (navigator.language || "en").toLowerCase();
+    if (nav.indexOf("ja") === 0) return "ja";
+    return "en";
+  }
+
+  function persistLang(lang) {
+    try {
+      window.localStorage.setItem("tenkacloud.lang", lang);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
   document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      applyLang(btn.getAttribute("data-lang"));
+      var lang = btn.getAttribute("data-lang");
+      applyLang(lang);
+      persistLang(lang);
     });
   });
 
-  applyLang("ja");
+  applyLang(detectInitialLang());
 
   var tick = 0;
   renderScoreboard(tick);
