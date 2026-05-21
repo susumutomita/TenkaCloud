@@ -110,65 +110,98 @@ function visit(
   }
 }
 
+function toArrayField(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value === undefined) return [];
+  return [value];
+}
+
+export function findIamActionWildcardFindings(
+  templatePath: string,
+  loc: string,
+  actions: readonly unknown[],
+): Finding[] {
+  return actions
+    .filter((a) => a === "*")
+    .map(() => ({
+      templatePath,
+      rule: "iam-action-wildcard",
+      location: loc,
+      detail: `Action "*" is a full-admin grant; scope to specific service actions`,
+    }));
+}
+
+export function findIamResourceWildcardFindings(
+  templatePath: string,
+  loc: string,
+  resources: readonly unknown[],
+  actions: readonly unknown[],
+): Finding[] {
+  if (!resources.includes("*")) return [];
+  const actionList = actions.map((a) => (typeof a === "string" ? a : "")).filter(Boolean);
+  const allRequireStar =
+    actionList.length > 0 && actionList.every((a) => RESOURCE_STAR_OK_ACTIONS.has(a));
+  if (allRequireStar) return [];
+  return [
+    {
+      templatePath,
+      rule: "iam-resource-wildcard",
+      location: loc,
+      detail: `Resource "*" with actions [${actionList.join(", ")}] is broader than required. Scope to specific ARNs, or add the action to RESOURCE_STAR_OK_ACTIONS allowlist if AWS API requires "*".`,
+    },
+  ];
+}
+
 function checkIamWildcards(template: unknown, results: Finding[], templatePath: string): void {
   visit(template, "", (loc, node) => {
     if (!isPlainObject(node)) return;
     // Action / Resource は IAM Statement entry の field。 Statement に近い文脈のみ拾う。
     if (!("Action" in node) && !("Resource" in node)) return;
-    const action = node.Action;
-    const actions = Array.isArray(action) ? action : action !== undefined ? [action] : [];
-    for (const a of actions) {
-      if (a === "*") {
-        results.push({
-          templatePath,
-          rule: "iam-action-wildcard",
-          location: loc,
-          detail: `Action "*" is a full-admin grant; scope to specific service actions`,
-        });
-      }
-    }
-    const resource = node.Resource;
-    const resources = Array.isArray(resource) ? resource : resource !== undefined ? [resource] : [];
-    // Resource: "*" の場合、 Action が AWS-side で require "*" な read-only API のみで構成
-    // されているなら許容。 1 つでも require "*" 外があれば警告。
-    if (resources.includes("*")) {
-      const actionList = actions.map((a) => (typeof a === "string" ? a : "")).filter(Boolean);
-      const allRequireStar =
-        actionList.length > 0 && actionList.every((a) => RESOURCE_STAR_OK_ACTIONS.has(a));
-      if (!allRequireStar) {
-        results.push({
-          templatePath,
-          rule: "iam-resource-wildcard",
-          location: loc,
-          detail: `Resource "*" with actions [${actionList.join(", ")}] is broader than required. Scope to specific ARNs, or add the action to RESOURCE_STAR_OK_ACTIONS allowlist if AWS API requires "*".`,
-        });
-      }
-    }
+    const actions = toArrayField(node.Action);
+    const resources = toArrayField(node.Resource);
+    results.push(...findIamActionWildcardFindings(templatePath, loc, actions));
+    results.push(...findIamResourceWildcardFindings(templatePath, loc, resources, actions));
   });
 }
 
-function checkSgIngress(template: unknown, results: Finding[], templatePath: string): void {
+function* iterateResourcesOfType(
+  template: unknown,
+  type: string,
+): Generator<[name: string, props: Record<string, unknown> | undefined]> {
   const resources =
     isPlainObject(template) && isPlainObject(template.Resources) ? template.Resources : {};
   for (const [name, res] of Object.entries(resources)) {
     if (!isPlainObject(res)) continue;
-    if (res.Type !== "AWS::EC2::SecurityGroup") continue;
-    const props = isPlainObject(res.Properties) ? res.Properties : undefined;
-    const ingress =
-      props && Array.isArray(props.SecurityGroupIngress) ? props.SecurityGroupIngress : [];
+    if (res.Type !== type) continue;
+    yield [name, isPlainObject(res.Properties) ? res.Properties : undefined];
+  }
+}
+
+export function findSgOpenNonWebFinding(
+  templatePath: string,
+  sgName: string,
+  index: number,
+  rule: Record<string, unknown>,
+): Finding | undefined {
+  const cidr = rule.CidrIp;
+  const fromPort = typeof rule.FromPort === "number" ? rule.FromPort : Number(rule.FromPort);
+  if (cidr !== "0.0.0.0/0" || WEB_PORTS.has(fromPort)) return undefined;
+  return {
+    templatePath,
+    rule: "sg-open-non-web",
+    location: `Resources.${sgName}.Properties.SecurityGroupIngress[${index}]`,
+    detail: `0.0.0.0/0 ingress to port ${fromPort} (= non-web). Scope to specific CIDR or restrict to 80/443.`,
+  };
+}
+
+function checkSgIngress(template: unknown, results: Finding[], templatePath: string): void {
+  for (const [name, props] of iterateResourcesOfType(template, "AWS::EC2::SecurityGroup")) {
+    const ingress = Array.isArray(props?.SecurityGroupIngress) ? props.SecurityGroupIngress : [];
     for (let i = 0; i < ingress.length; i++) {
       const rule = ingress[i];
       if (!isPlainObject(rule)) continue;
-      const cidr = rule.CidrIp;
-      const fromPort = typeof rule.FromPort === "number" ? rule.FromPort : Number(rule.FromPort);
-      if (cidr === "0.0.0.0/0" && !WEB_PORTS.has(fromPort)) {
-        results.push({
-          templatePath,
-          rule: "sg-open-non-web",
-          location: `Resources.${name}.Properties.SecurityGroupIngress[${i}]`,
-          detail: `0.0.0.0/0 ingress to port ${fromPort} (= non-web). Scope to specific CIDR or restrict to 80/443.`,
-        });
-      }
+      const finding = findSgOpenNonWebFinding(templatePath, name, i, rule);
+      if (finding) results.push(finding);
     }
   }
 }
@@ -297,4 +330,4 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+if (import.meta.main) main();
