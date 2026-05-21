@@ -11,6 +11,7 @@ import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { HTTP_OK } from "../shared/http-status.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
+import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
 import {
   defaultDeployLogDeps,
   getParticipantDeployLogs,
@@ -90,6 +91,52 @@ app.get("/portal/me/notifications", (c) =>
       const limit = limitRaw === undefined ? NOTIFICATIONS_DEFAULT_LIMIT : Number(limitRaw);
       const outcome = await listNotifications(shared, token, limit);
       if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
+      return respondError(c, outcome.kind);
+    },
+    RATE_LIMITS.READ_HIGH,
+  ),
+);
+
+// Inter-team event dispatch primitive (= platform は dispatch だけ、 semantics は問題側 plugin)。
+// 詳細は cast-event.ts の JSDoc を参照。
+app.post("/portal/me/cast-event", (c) =>
+  withBearerAuth(
+    c,
+    "cast-event",
+    async (token) => {
+      const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+      if (body === null) return respondError(c, "invalid_body");
+      const targetJobId = typeof body.targetJobId === "string" ? body.targetJobId : "";
+      const kindStr = typeof body.kind === "string" ? body.kind : "";
+      const outcome = await castEvent(shared, token, {
+        targetJobId,
+        kind: kindStr,
+        payload: body.payload,
+      });
+      if (outcome.kind === "ok") {
+        return c.json({ eventId: outcome.eventId, occurredAt: outcome.occurredAt }, StatusCodes.OK);
+      }
+      return respondError(c, outcome.kind);
+    },
+    RATE_LIMITS.WRITE_LOW,
+  ),
+);
+
+app.get("/portal/me/event-inbox", (c) =>
+  withBearerAuth(
+    c,
+    "event-inbox",
+    async (token) => {
+      const jobId = c.req.query("jobId");
+      if (!jobId) return respondError(c, "missing_jobid");
+      const sinceMsRaw = c.req.query("sinceMs");
+      // 既定は INBOX_SINCE_MS_MAX (= 24h 分まで) を遡る。 frontend が空で叩いても reasonable。
+      const sinceMs =
+        sinceMsRaw === undefined
+          ? Math.max(Date.now() - INBOX_SINCE_MS_MAX, 0)
+          : Number(sinceMsRaw);
+      const outcome = await readInbox(shared, token, jobId, sinceMs);
+      if (outcome.kind === "ok") return c.json({ events: outcome.events }, StatusCodes.OK);
       return respondError(c, outcome.kind);
     },
     RATE_LIMITS.READ_HIGH,
