@@ -53,6 +53,12 @@ const ERROR_STATUS = {
   slot_not_overridable: HTTP_CONFLICT,
   invalid_url: HTTP_BAD_REQUEST,
   invalid_slot: HTTP_BAD_REQUEST,
+  // Inter-team event dispatch primitive (cast-event.ts)
+  invalid_kind: HTTP_BAD_REQUEST,
+  invalid_payload: HTTP_BAD_REQUEST,
+  invalid_since_ms: HTTP_BAD_REQUEST,
+  target_not_found: HTTP_NOT_FOUND,
+  cross_event_forbidden: HTTP_CONFLICT,
 } as const;
 
 export type ErrorKind = keyof typeof ERROR_STATUS;
