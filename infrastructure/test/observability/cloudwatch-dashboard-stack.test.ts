@@ -73,14 +73,14 @@ function dashboardBody(template: Template): string {
 describe("ObservabilityStack", () => {
   const tpl = synthDefault();
 
-  it("CloudWatch Dashboard resource を 1 つ作るべき", () => {
+  it("should create 1 CloudWatch Dashboard resource", () => {
     tpl.resourceCountIs("AWS::CloudWatch::Dashboard", 1);
     tpl.hasResourceProperties("AWS::CloudWatch::Dashboard", {
       DashboardName: "tenkacloud-observability-test",
     });
   });
 
-  it("DashboardBody に deploy chain / DDB / Lambda / ApiGateway の監視対象を含むべき", () => {
+  it("DashboardBody should include deploy chain / DDB / Lambda / ApiGateway monitoring targets", () => {
     const body = dashboardBody(tpl);
 
     for (const expected of [

@@ -15,8 +15,8 @@ const config: AppConfig = {
 describe("createApiClient", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  describe("GET 呼び出し時", () => {
-    it("apiBaseUrl にパスを連結し Authorization ヘッダを付与すべき", async () => {
+  describe("when calling GET", () => {
+    it("should concatenate path to apiBaseUrl and attach Authorization header", async () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(new Response(JSON.stringify({ apps: [] }), { status: 200 }));
@@ -31,8 +31,8 @@ describe("createApiClient", () => {
     });
   });
 
-  describe("POST 呼び出し時", () => {
-    it("content-type: application/json を付け body を JSON stringify して送るべき", async () => {
+  describe("when calling POST", () => {
+    it("should set content-type: application/json and JSON.stringify the body", async () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 201 }));
@@ -48,8 +48,8 @@ describe("createApiClient", () => {
     });
   });
 
-  describe("API が 4xx/5xx を返したとき", () => {
-    it("ApiError を投げるべき (status と body を含む)", async () => {
+  describe("when API returns 4xx/5xx", () => {
+    it("should throw an ApiError (including status and body)", async () => {
       // Response body は 1 度しか read できないので毎回 fresh な Response を返す
       vi.stubGlobal(
         "fetch",
@@ -67,8 +67,8 @@ describe("createApiClient", () => {
     });
   });
 
-  describe("apiBaseUrl の末尾スラッシュ", () => {
-    it("有る/無しどちらでも同じ URL を組み立てるべき", async () => {
+  describe("trailing slash on apiBaseUrl", () => {
+    it("should build the same URL regardless of trailing slash presence", async () => {
       const fetchMock = vi
         .fn()
         .mockImplementation(() => Promise.resolve(new Response("{}", { status: 200 })));

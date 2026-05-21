@@ -60,7 +60,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     vi.unstubAllGlobals();
   });
 
-  it("全 endpoint が 200 を返したら pointsPerSuccess を加算し ok event を 1 件 emit すべき", async () => {
+  it("should add pointsPerSuccess and emit 1 ok event when all endpoints return 200", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const result = await runUptimeFlatKind(buildInput());
     expect(result.scoreDelta).toBe(100);
@@ -68,7 +68,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(result.lastResult).toBe("ok");
   });
 
-  it("1 endpoint が fail でも全 ok でない限り scoreDelta=0 になるべき (= 既存 health-check 挙動)", async () => {
+  it("should return scoreDelta=0 if a single endpoint fails (existing health-check behavior)", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => "" })
       .mockResolvedValueOnce({ status: 500, text: async () => "" });
@@ -77,7 +77,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(result.lastResult).toBe("fail");
   });
 
-  it("直前 tick が ok で今 tick fail なら attack-detected event を emit すべき (= ADR-005 D2-A)", async () => {
+  it("should emit an attack-detected event when previous tick was ok and current tick fails (ADR-005 D2-A)", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({
       deployment: {
@@ -92,7 +92,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     ]);
   });
 
-  it("連続 fail tick では attack-detected を再 emit しないべき (= 重複 write 防止 hard guard)", async () => {
+  it("should not re-emit attack-detected on consecutive fail ticks (hard guard against duplicate writes)", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({
       deployment: { ...buildInput().deployment, lastResult: "fail" },
@@ -102,7 +102,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(result.scoreEvents).toEqual([]);
   });
 
-  it("endpointsHealth JSON に slot/outputKey ごとの ok / checkedAt を書き戻すべき", async () => {
+  it("should write back per-slot/outputKey ok / checkedAt into endpointsHealth JSON", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const result = await runUptimeFlatKind(buildInput());
     const health = JSON.parse(result.endpointsHealthJson ?? "{}");
@@ -110,7 +110,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(health.ApiUrl).toMatchObject({ ok: true, checkedAt: NOW_ISO });
   });
 
-  it("slot 経由で metadata.endpoints の default URL を解決すべき (ADR-012 Phase 3.B 新規)", async () => {
+  it("should resolve metadata.endpoints default URLs via slot (new in ADR-012 Phase 3.B)", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const input = buildInput({
       scoring: {
@@ -133,7 +133,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(calledUrl).toBe("https://frontend.example.com/");
   });
 
-  it("override がある slot は override URL を probe すべき", async () => {
+  it("should probe the override URL for slots with an override", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const input = buildInput({
       scoring: {
@@ -154,7 +154,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://my-override.example.com/");
   });
 
-  it("stackOutputs が無いと noop になるべき (= deploy 未完了で probe しない)", async () => {
+  it("should noop when stackOutputs is missing (don't probe pre-deploy)", async () => {
     const input = buildInput({
       deployment: { ...buildInput().deployment, stackOutputs: undefined },
     });
@@ -164,7 +164,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('legacy `kind: "uptime"` 入力でも flat probe として動くべき (= alias 互換)', async () => {
+  it('should run as a flat probe for legacy `kind: "uptime"` input (alias compat)', async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const input = buildInput({
       scoring: {

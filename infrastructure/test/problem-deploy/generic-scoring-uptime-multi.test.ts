@@ -63,7 +63,7 @@ describe("uptime-multi kind", () => {
     vi.unstubAllGlobals();
   });
 
-  it("全 slot 200 なら pointsAllOk を加点すべき", async () => {
+  it("should award pointsAllOk when all slots return 200", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const result = await runUptimeMultiKind(buildInput());
     expect(result.scoreDelta).toBe(100);
@@ -71,7 +71,7 @@ describe("uptime-multi kind", () => {
     expect(result.lastResult).toBe("ok");
   });
 
-  it("1 slot fail なら failurePenalty を加点すべき (負値 = 減点)", async () => {
+  it("should add failurePenalty when 1 slot fails (negative value = deduction)", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => "" })
       .mockResolvedValueOnce({ status: 500, text: async () => "" });
@@ -80,7 +80,7 @@ describe("uptime-multi kind", () => {
     expect(result.lastResult).toBe("fail");
   });
 
-  it("failurePenalty 省略時は default 0 で加点しないべき", async () => {
+  it("should default failurePenalty to 0 and not award anything when omitted", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({
       scoring: {
@@ -97,7 +97,7 @@ describe("uptime-multi kind", () => {
     expect(result.lastResult).toBe("fail");
   });
 
-  it("全 slot が解決不可なら noop になるべき (= deploy 未完了 / stack output 不在)", async () => {
+  it("should noop when no slot can be resolved (deploy not yet complete / stack output absent)", async () => {
     const input = buildInput({
       deployment: { ...buildInput().deployment, stackOutputs: JSON.stringify({}) },
     });
@@ -106,7 +106,7 @@ describe("uptime-multi kind", () => {
     expect(result.scoreEvents).toEqual([]);
   });
 
-  it("override がある slot は override URL を probe すべき", async () => {
+  it("should probe the override URL for slots with an override", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const input = buildInput({
       overrides: [{ slot: "frontend", overrideUrl: "https://override.example.com/" }],
@@ -115,7 +115,7 @@ describe("uptime-multi kind", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://override.example.com/");
   });
 
-  it("ok→fail 遷移時に attack-detected を emit すべき (= ADR-005 D2-A 互換)", async () => {
+  it("should emit attack-detected on ok→fail transition (ADR-005 D2-A compat)", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({
       scoring: {
@@ -134,7 +134,7 @@ describe("uptime-multi kind", () => {
     });
   });
 
-  it("appendPath を含む slot default URL を組み立てて probe すべき", async () => {
+  it("should build the slot default URL including appendPath and probe it", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const input = buildInput({
       scoring: {

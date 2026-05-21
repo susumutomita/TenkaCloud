@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseTeamCountInput, resizeTeamRows, validateTeamRows } from "../../src/pages/EventCreate";
 
 describe("resizeTeamRows", () => {
-  it("同じ team 数なら同じ配列参照を返すべき", () => {
+  it("should return the same array reference when team count is unchanged", () => {
     const rows = [{ internalSlug: "team-1", awsAccountId: "111111111111" }];
 
     expect(resizeTeamRows(rows, 1)).toBe(rows);
   });
 
-  it("team 数を減らすと末尾の row を捨てるべき", () => {
+  it("should drop trailing rows when team count is reduced", () => {
     expect(
       resizeTeamRows(
         [
@@ -20,7 +20,7 @@ describe("resizeTeamRows", () => {
     ).toEqual([{ internalSlug: "team-1", awsAccountId: "111111111111" }]);
   });
 
-  it("team 数を増やすと既存 row を保持して空の新 row を追加すべき", () => {
+  it("should keep existing rows and append empty new rows when team count is increased", () => {
     expect(resizeTeamRows([{ internalSlug: "team-1", awsAccountId: "111111111111" }], 3)).toEqual([
       { internalSlug: "team-1", awsAccountId: "111111111111" },
       { internalSlug: "team-2", awsAccountId: "" },
@@ -28,7 +28,7 @@ describe("resizeTeamRows", () => {
     ]);
   });
 
-  it("負数は 0 件として扱うべき", () => {
+  it("should treat negative count as zero rows", () => {
     expect(resizeTeamRows([{ internalSlug: "team-1", awsAccountId: "111111111111" }], -1)).toEqual(
       [],
     );
@@ -36,7 +36,7 @@ describe("resizeTeamRows", () => {
 });
 
 describe("validateTeamRows", () => {
-  it("slug/account が全て有効で重複がなければ valid を返すべき", () => {
+  it("should return valid when all slug/account are valid and have no duplicates", () => {
     expect(
       validateTeamRows([
         { internalSlug: "team-1", awsAccountId: "111111111111" },
@@ -49,7 +49,7 @@ describe("validateTeamRows", () => {
     });
   });
 
-  it("不正 slug/account と重複 slug を検出すべき", () => {
+  it("should detect invalid slug/account and duplicate slugs", () => {
     expect(
       validateTeamRows([
         { internalSlug: "Team_1", awsAccountId: "111" },
@@ -64,16 +64,16 @@ describe("validateTeamRows", () => {
 });
 
 describe("parseTeamCountInput", () => {
-  it("数字だけを取り出して上限まで clamp すべき", () => {
+  it("should extract only digits and clamp to the upper limit", () => {
     expect(parseTeamCountInput("abc12345")).toBe(99);
   });
 
-  it("空文字や数字なし入力は undefined にすべき", () => {
+  it("should return undefined for empty string or input with no digits", () => {
     expect(parseTeamCountInput("")).toBeUndefined();
     expect(parseTeamCountInput("abc")).toBeUndefined();
   });
 
-  it("0 は 0 のまま返すべき", () => {
+  it("should return 0 as-is for input '0'", () => {
     expect(parseTeamCountInput("0")).toBe(0);
   });
 });

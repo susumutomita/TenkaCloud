@@ -2,23 +2,23 @@ import { describe, expect, it } from "vitest";
 import { toAsciiSlug } from "../../src/lib/slug";
 
 describe("toAsciiSlug", () => {
-  it("英数字以外を落とし、lowercase 化するべき", () => {
+  it("should drop non-alphanumerics and lowercase the result", () => {
     expect(toAsciiSlug("Alpha-1!")).toBe("alpha1");
   });
 
-  it("日本語などの非 ASCII 文字は anon にフォールバックするべき", () => {
+  it("should fall back to anon for non-ASCII characters such as Japanese", () => {
     expect(toAsciiSlug("日本語キー")).toBe("anon");
   });
 
-  it("空文字なら anon を返すべき", () => {
+  it("should return anon for empty string", () => {
     expect(toAsciiSlug("")).toBe("anon");
   });
 
-  it("デフォルトで 12 文字に切り詰めるべき", () => {
+  it("should truncate to 12 characters by default", () => {
     expect(toAsciiSlug("A".repeat(50))).toHaveLength(12);
   });
 
-  it("maxLength を渡せばその長さに切り詰めるべき", () => {
+  it("should truncate to the given length when maxLength is passed", () => {
     expect(toAsciiSlug("A".repeat(50), 5)).toBe("aaaaa");
   });
 });

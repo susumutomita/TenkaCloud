@@ -19,8 +19,8 @@ const config: AppConfig = {
 describe("createApiClient", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  describe("GET 呼び出し時", () => {
-    it("apiBaseUrl にパスを連結し Authorization ヘッダを付与すべき", async () => {
+  describe("when calling GET", () => {
+    it("should append the path to apiBaseUrl and attach an Authorization header", async () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
@@ -35,8 +35,8 @@ describe("createApiClient", () => {
     });
   });
 
-  describe("POST 呼び出し時", () => {
-    it("body を JSON 文字列にして送るべき", async () => {
+  describe("when calling POST", () => {
+    it("should send the body as a JSON string", async () => {
       const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);
 
@@ -49,8 +49,8 @@ describe("createApiClient", () => {
     });
   });
 
-  describe("サーバが 4xx を返したとき", () => {
-    it("ApiError を投げるべき", async () => {
+  describe("when the server returns 4xx", () => {
+    it("should throw an ApiError", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(new Response("bad", { status: 400, statusText: "Bad" })),

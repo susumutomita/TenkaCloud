@@ -20,12 +20,12 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     return <I18nProvider>{children}</I18nProvider>;
   }
 
-  it("default locale は ja (navigator.language 未対応の test 環境 default)", () => {
+  it("should default locale to ja (default for test envs that don't support navigator.language)", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     expect(result.current.locale).toMatch(/^(ja|en)$/);
   });
 
-  it("setLocale が localStorage に永続化し次回起動で復元すべき", () => {
+  it("should persist setLocale to localStorage and restore on next startup", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));
     expect(result.current.locale).toBe("en");
@@ -33,7 +33,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(window.localStorage.getItem("tenkacloud.application-admin.locale")).toBe("en");
   });
 
-  it("t() は dot-separated key で nested dictionary を引くべき", () => {
+  it("should look up nested dictionary entries via dot-separated key in t()", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("ja"));
     expect(result.current.t("app.title")).toBe("TenkaCloud アプリケーション管理コンソール");
@@ -41,7 +41,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current.t("app.title")).toBe("TenkaCloud Application Admin Console");
   });
 
-  it("locale で key 未定義なら en で fallback、 en にも無ければ raw key", () => {
+  it("should fall back to en when the key is not defined in the locale, or return raw key when also absent in en", () => {
     const { result } = renderHook(() => useT(), { wrapper });
     // 全 locale にあるキー → 翻訳成功
     expect(result.current("nav.problems")).toBeTruthy();
@@ -50,7 +50,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current("nonexistent.key")).toBe("nonexistent.key");
   });
 
-  it("SUPPORTED_LOCALES = 2 言語 [ja, en] (#1078 で zh/es 廃止)", () => {
+  it("should have SUPPORTED_LOCALES = 2 languages [ja, en] (zh/es dropped in #1078)", () => {
     const supported: readonly LocaleCode[] = ["ja", "en"];
     for (const code of supported) {
       const dict = _testInternals.LOCALE_DICTIONARIES[code];
@@ -60,7 +60,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     }
   });
 
-  it("locale 変更時に <html lang> が追従すべき", () => {
+  it("should sync <html lang> when locale changes", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));
     expect(document.documentElement.lang).toBe("en");
@@ -68,13 +68,13 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(document.documentElement.lang).toBe("ja");
   });
 
-  it("useI18n を Provider 外で呼ぶと throw すべき (= configuration error の早期発見)", () => {
+  it("should throw when useI18n is called outside Provider (= early detection of configuration error)", () => {
     // renderHook で wrapper を渡さないと throws する
     expect(() => renderHook(() => useI18n())).toThrow(/I18nProvider/);
   });
 
   // 翻訳結果が UI に出ることを実 render で確認
-  it("Provider 配下で翻訳結果が UI に反映されるべき", () => {
+  it("should reflect translation result in the UI under Provider", () => {
     function Probe() {
       const t = useT();
       return <div>{t("app.loading")}</div>;

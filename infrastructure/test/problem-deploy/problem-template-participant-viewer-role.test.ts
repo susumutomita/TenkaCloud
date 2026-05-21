@@ -74,7 +74,7 @@ const RESOURCE_STAR_OK_SIDS = new Set([
 
 describe("problem template ParticipantViewerRole (#744)", () => {
   for (const t of TEMPLATES) {
-    it(`${t.path} は ParticipantViewerRole と Output を宣言すべき`, () => {
+    it(`\${t.path} should declare ParticipantViewerRole and its Output`, () => {
       const template = readTemplate(t.path);
       const role = roleBlock(template);
 

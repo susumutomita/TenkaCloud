@@ -32,7 +32,7 @@ function conditionalFailure(): Error {
 describe("archiveEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系 (DRAFT): status を ARCHIVED に + archivedAt = now を SET するべき", async () => {
+  it("normal case (DRAFT): should SET status to ARCHIVED and archivedAt = now", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
 

@@ -82,8 +82,8 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("EventDetailPage #740 競技スケジュール終了操作", () => {
-  it("即座に終了 button で endsAt=now の schedule API を呼ぶべき", async () => {
+describe("EventDetailPage #740 competition schedule end operations", () => {
+  it("should call schedule API with endsAt=now when the 'End immediately' button is pressed", async () => {
     renderPage();
     await waitFor(() =>
       expect(screen.getAllByText(/Schedule Action Event/).length).toBeGreaterThan(0),
@@ -97,7 +97,7 @@ describe("EventDetailPage #740 競技スケジュール終了操作", () => {
     });
   });
 
-  it("競技スケジュール section の説明に内部 issue 番号を表示しないべき", async () => {
+  it("should NOT show internal issue numbers in the competition schedule section description", async () => {
     renderPage();
     await waitFor(() =>
       expect(screen.getAllByText(/Schedule Action Event/).length).toBeGreaterThan(0),

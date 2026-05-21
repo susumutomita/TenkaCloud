@@ -45,7 +45,7 @@ const baseEvent = {
 } as const;
 
 describe("writeAuditEvent (#950)", () => {
-  it("env 配線済なら PutCommand を送って true を返すべき", async () => {
+  it("should send PutCommand and return true when env is wired", async () => {
     const { client, send } = buildMockClient();
     const ok = await writeAuditEvent(baseEvent, client);
     expect(ok).toBe(true);
@@ -66,7 +66,7 @@ describe("writeAuditEvent (#950)", () => {
     expect(item.ttl).toBe(Math.floor(baseEvent.occurredAtMs / 1000) + 90 * 86400);
   });
 
-  it("env が空文字なら no-op で false を返すべき (= 旧 stack 互換)", async () => {
+  it("should noop and return false when env is empty (legacy stack compat)", async () => {
     delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
     const { client, send } = buildMockClient();
     const ok = await writeAuditEvent(baseEvent, client);
@@ -83,7 +83,7 @@ describe("writeAuditEvent (#950)", () => {
     errorSpy.mockRestore();
   });
 
-  it("tenantId='SYSTEM' は PK='SYSTEM#<env>' に変換されるべき", async () => {
+  it("should convert tenantId='SYSTEM' to PK='SYSTEM#<env>'", async () => {
     const { client, send } = buildMockClient();
     await writeAuditEvent({ ...baseEvent, tenantId: "SYSTEM" }, client);
     const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
@@ -91,7 +91,7 @@ describe("writeAuditEvent (#950)", () => {
     expect(item.PK).toBe("SYSTEM#test-env");
   });
 
-  it("optional fields (target / ipAddress / userAgent / extra) が undefined ならスキップされるべき", async () => {
+  it("should skip optional fields (target / ipAddress / userAgent / extra) when undefined", async () => {
     const { client, send } = buildMockClient();
     await writeAuditEvent(
       {
@@ -111,7 +111,7 @@ describe("writeAuditEvent (#950)", () => {
     expect(item.extra).toBeUndefined();
   });
 
-  it("extra が指定されると Item に含まれるべき (= 追加情報の保存)", async () => {
+  it("should include extra in the Item when specified (preserves extra info)", async () => {
     const { client, send } = buildMockClient();
     await writeAuditEvent(
       {
@@ -127,7 +127,7 @@ describe("writeAuditEvent (#950)", () => {
 });
 
 describe("extractAuditContext (#950)", () => {
-  it("HTTP API V2 形式 (= authorizer.jwt.claims) から actor / username / ipAddress / userAgent を抽出すべき", () => {
+  it("should extract actor / username / ipAddress / userAgent from HTTP API V2 form (authorizer.jwt.claims)", () => {
     const ctx = extractAuditContext({
       env: {
         event: {
@@ -151,7 +151,7 @@ describe("extractAuditContext (#950)", () => {
     expect(ctx.userAgent).toBe("curl/8.0");
   });
 
-  it("REST API 形式 (= authorizer.claims) でも actor が引けるべき", () => {
+  it("should still extract actor from REST API form (authorizer.claims)", () => {
     const ctx = extractAuditContext({
       env: {
         event: {

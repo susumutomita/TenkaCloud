@@ -46,7 +46,7 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
 }
 
 describe("startDeployment", () => {
-  it("POST /problems/:problemId/deploy にボディを送るべき", async () => {
+  it("should POST body to /problems/:problemId/deploy", async () => {
     const { client, calls } = fakeClient({
       jobId: "01H",
       status: "PENDING",
@@ -68,7 +68,7 @@ describe("startDeployment", () => {
     });
   });
 
-  it("problemId に特殊文字が来ても URL encode するべき", async () => {
+  it("should URL-encode problemId even with special characters", async () => {
     const { client, calls } = fakeClient({
       jobId: "01H",
       status: "PENDING",
@@ -86,13 +86,13 @@ describe("startDeployment", () => {
 });
 
 describe("deleteDeployment", () => {
-  it("DELETE /deployments/:jobId を呼ぶべき", async () => {
+  it("should call DELETE /deployments/:jobId", async () => {
     const { client, calls } = fakeClient(undefined);
     await deleteDeployment(client, "01H");
     expect(calls[0]).toEqual({ path: "/deployments/01H", method: "DELETE" });
   });
 
-  it("jobId に特殊文字が来ても URL encode するべき", async () => {
+  it("should URL-encode jobId even with special characters", async () => {
     const { client, calls } = fakeClient(undefined);
     await deleteDeployment(client, "a/b");
     expect(calls[0]?.path).toBe("/deployments/a%2Fb");
@@ -100,7 +100,7 @@ describe("deleteDeployment", () => {
 });
 
 describe("getDeployment", () => {
-  it("GET /deployments/:jobId を呼ぶべき", async () => {
+  it("should call GET /deployments/:jobId", async () => {
     const { client, calls } = fakeClient({
       jobId: "01H",
       problemId: "p",
@@ -120,7 +120,7 @@ describe("getDeployment", () => {
 });
 
 describe("parseStackOutputs", () => {
-  it("map 形式の stackOutputs から string 値だけを取り出すべき", () => {
+  it("should extract only string values from map-form stackOutputs", () => {
     expect(
       parseStackOutputs(
         JSON.stringify({
@@ -132,7 +132,7 @@ describe("parseStackOutputs", () => {
     ).toEqual({ FrontendUrl: "https://app.example.com" });
   });
 
-  it("CloudFormation Output 配列形式から OutputKey/OutputValue を取り出すべき", () => {
+  it("should extract OutputKey/OutputValue from CloudFormation Output array form", () => {
     expect(
       parseStackOutputs(
         JSON.stringify([
@@ -144,7 +144,7 @@ describe("parseStackOutputs", () => {
     ).toEqual({ FrontendUrl: "https://app.example.com" });
   });
 
-  it("壊れた JSON や非 object は空 map にすべき", () => {
+  it("should return empty map for broken JSON or non-object", () => {
     expect(parseStackOutputs(undefined)).toEqual({});
     expect(parseStackOutputs("{bad json")).toEqual({});
     expect(parseStackOutputs(JSON.stringify("not-object"))).toEqual({});
@@ -152,13 +152,13 @@ describe("parseStackOutputs", () => {
 });
 
 describe("listDeployments", () => {
-  it("GET /problems/:problemId/deployments を呼ぶべき (params 無し)", async () => {
+  it("should call GET /problems/:problemId/deployments (no params)", async () => {
     const { client, calls } = fakeClient({ items: [], nextCursor: undefined });
     await listDeployments(client, "p");
     expect(calls[0]?.path).toBe("/problems/p/deployments");
   });
 
-  it("limit / cursor を query string に乗せるべき", async () => {
+  it("should put limit / cursor onto the query string", async () => {
     const { client, calls } = fakeClient({ items: [], nextCursor: undefined });
     await listDeployments(client, "p", { limit: 10, cursor: "abc" });
     expect(calls[0]?.path).toBe("/problems/p/deployments?limit=10&cursor=abc");
@@ -166,7 +166,7 @@ describe("listDeployments", () => {
 });
 
 describe("TERMINAL_STATUSES", () => {
-  it("terminal status を含むべき (poll 停止条件)", () => {
+  it("should contain terminal statuses (poll stop condition)", () => {
     expect(TERMINAL_STATUSES.has("COMPLETE")).toBe(true);
     expect(TERMINAL_STATUSES.has("FAILED")).toBe(true);
     expect(TERMINAL_STATUSES.has("DELETED")).toBe(true);
@@ -174,7 +174,7 @@ describe("TERMINAL_STATUSES", () => {
     expect(TERMINAL_STATUSES.has("AUTO_DELETED")).toBe(true);
   });
 
-  it("PENDING / IN_PROGRESS / DELETING は含まないべき", () => {
+  it("should NOT contain PENDING / IN_PROGRESS / DELETING", () => {
     expect(TERMINAL_STATUSES.has("PENDING")).toBe(false);
     expect(TERMINAL_STATUSES.has("IN_PROGRESS")).toBe(false);
     expect(TERMINAL_STATUSES.has("DELETING")).toBe(false);
@@ -182,7 +182,7 @@ describe("TERMINAL_STATUSES", () => {
 });
 
 describe("getStackProgress", () => {
-  it("GET /deployments/:jobId/stack-progress を呼ぶべき", async () => {
+  it("should call GET /deployments/:jobId/stack-progress", async () => {
     const { client, calls } = fakeClient({
       jobId: "01H",
       stackName: "tc-x-y",
@@ -195,7 +195,7 @@ describe("getStackProgress", () => {
     expect(calls[0]).toEqual({ path: "/deployments/01H/stack-progress", method: "GET" });
   });
 
-  it("jobId に特殊文字が来ても URL encode するべき", async () => {
+  it("should URL-encode jobId even with special characters", async () => {
     const { client, calls } = fakeClient({
       jobId: "a/b",
       stackName: "x",
@@ -210,30 +210,30 @@ describe("getStackProgress", () => {
 });
 
 describe("statusToIndicator", () => {
-  it("CREATE_COMPLETE は success にすべき", () => {
+  it("should map CREATE_COMPLETE to success", () => {
     expect(statusToIndicator("CREATE_COMPLETE")).toBe("success");
     expect(statusToIndicator("UPDATE_COMPLETE")).toBe("success");
   });
 
-  it("CREATE_FAILED は error にすべき", () => {
+  it("should map CREATE_FAILED to error", () => {
     expect(statusToIndicator("CREATE_FAILED")).toBe("error");
     expect(statusToIndicator("UPDATE_FAILED")).toBe("error");
   });
 
-  it("ROLLBACK 系は warning にすべき", () => {
+  it("should map ROLLBACK statuses to warning", () => {
     expect(statusToIndicator("ROLLBACK_IN_PROGRESS")).toBe("warning");
     expect(statusToIndicator("UPDATE_ROLLBACK_COMPLETE")).toBe("warning");
   });
 
-  it("DELETE_COMPLETE は stopped にすべき", () => {
+  it("should map DELETE_COMPLETE to stopped", () => {
     expect(statusToIndicator("DELETE_COMPLETE")).toBe("stopped");
   });
 
-  it("CREATE_IN_PROGRESS は in-progress にすべき", () => {
+  it("should map CREATE_IN_PROGRESS to in-progress", () => {
     expect(statusToIndicator("CREATE_IN_PROGRESS")).toBe("in-progress");
   });
 
-  it("未知 status は in-progress にフォールバックすべき", () => {
+  it("should fall back to in-progress for unknown status", () => {
     expect(statusToIndicator("SOMETHING_NEW_FROM_FUTURE_CFN")).toBe("in-progress");
   });
 });

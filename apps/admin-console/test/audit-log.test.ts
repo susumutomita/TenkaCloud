@@ -29,12 +29,12 @@ const secondItem = {
 };
 
 describe("AuditLog helpers", () => {
-  it("tenant scope で tenantId が空なら validation error を返すべき", () => {
+  it("should return a validation error when tenantId is empty under tenant scope", () => {
     expect(validateAuditLoadInput("tenant", "  ", t)).toBe("t:audit_log.tenant_id_required");
     expect(validateAuditLoadInput("system", "  ", t)).toBeNull();
   });
 
-  it("Audit API list input は tenantId を trim し cursor を必要時だけ含めるべき", () => {
+  it("should trim tenantId in the Audit API list input and only include cursor when needed", () => {
     expect(buildAuditListInput("tenant", " tenant-a ", "next")).toEqual({
       scope: "tenant",
       tenantId: "tenant-a",
@@ -47,12 +47,12 @@ describe("AuditLog helpers", () => {
     });
   });
 
-  it("cursor ありなら audit items を append し cursor 無しなら差し替えるべき", () => {
+  it("should append audit items when a cursor is present and replace them when no cursor", () => {
     expect(mergeAuditItems([firstItem], [secondItem], "next")).toEqual([firstItem, secondItem]);
     expect(mergeAuditItems([firstItem], [secondItem], undefined)).toEqual([secondItem]);
   });
 
-  it("Audit API error と unknown error を表示文言に変換すべき", () => {
+  it("should convert Audit API errors and unknown errors to display text", () => {
     expect(describeAuditLoadError(new AuditApiError(StatusCodes.FORBIDDEN, undefined), t)).toBe(
       "SystemAdmin role が必要です",
     );

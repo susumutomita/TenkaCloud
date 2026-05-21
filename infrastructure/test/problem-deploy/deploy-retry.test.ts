@@ -95,7 +95,7 @@ describe("validateRetryRequest", () => {
 describe("retryDeployments", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("FAILED row を PENDING に戻し、 event を re-publish して action='requeued' を返すべき", async () => {
+  it("should revert FAILED rows to PENDING, re-publish the event, and return action='requeued'", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: failedRow() }); // Get
     ddbSend.mockResolvedValueOnce({}); // Update FAILED → PENDING
@@ -177,7 +177,7 @@ describe("retryDeployments", () => {
     expect(ddbSend).toHaveBeenCalledTimes(3);
   });
 
-  it("複数 jobId の一部成功・一部スキップを 1 response でまとめて返すべき", async () => {
+  it("should bundle partial success / partial skip across multiple jobIds into a single response", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     // jobId 1: FAILED → requeued
     ddbSend.mockResolvedValueOnce({ Item: failedRow({ jobId: VALID_JOB_ID }) });

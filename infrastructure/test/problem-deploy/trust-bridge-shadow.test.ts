@@ -53,7 +53,7 @@ function captureLogs(): {
 }
 
 describe("emitShadowAudit (#795 Phase 3 shadow)", () => {
-  it("正常 params で trust-bridge.shadow.audit を decision=allow で emit すべき", () => {
+  it("should emit trust-bridge.shadow.audit with decision=allow on normal params", () => {
     const cap = captureLogs();
     try {
       emitShadowAudit(baseParams());
@@ -70,7 +70,7 @@ describe("emitShadowAudit (#795 Phase 3 shadow)", () => {
     }
   });
 
-  it("action=destroy も同じ audit shape で emit すべき", () => {
+  it("should emit action=destroy with the same audit shape", () => {
     const cap = captureLogs();
     try {
       emitShadowAudit(baseParams({ action: "destroy" }));
@@ -82,7 +82,7 @@ describe("emitShadowAudit (#795 Phase 3 shadow)", () => {
     }
   });
 
-  it("ttlSeconds=0 (= schema 違反) でも throw せず warn + audit deny を emit すべき (= fail-open)", () => {
+  it("should not throw but warn and emit audit deny on ttlSeconds=0 (schema violation) (fail-open)", () => {
     const cap = captureLogs();
     try {
       expect(() => emitShadowAudit(baseParams({ ttlSeconds: 0 }))).not.toThrow();
@@ -97,7 +97,7 @@ describe("emitShadowAudit (#795 Phase 3 shadow)", () => {
     }
   });
 
-  it("ttlSeconds=9999 (= schema 上限超過) も同様に fail-open で audit deny を emit すべき", () => {
+  it("should likewise emit audit deny fail-open on ttlSeconds=9999 (above schema cap)", () => {
     const cap = captureLogs();
     try {
       expect(() => emitShadowAudit(baseParams({ ttlSeconds: 9999 }))).not.toThrow();
@@ -108,7 +108,7 @@ describe("emitShadowAudit (#795 Phase 3 shadow)", () => {
     }
   });
 
-  it("competitorRoleArn が未指定でも intent を組めて allow を emit すべき (= same-account dev path)", () => {
+  it("should still build an intent and emit allow when competitorRoleArn is unset (same-account dev path)", () => {
     const cap = captureLogs();
     try {
       emitShadowAudit(baseParams({ competitorRoleArn: undefined }));
@@ -119,7 +119,7 @@ describe("emitShadowAudit (#795 Phase 3 shadow)", () => {
     }
   });
 
-  it("teamSlug 未指定でも intent を組めて teamId field 無しの audit を emit すべき", () => {
+  it("should still build an intent and emit an audit without teamId field when teamSlug is unset", () => {
     const cap = captureLogs();
     try {
       emitShadowAudit(baseParams({ teamSlug: undefined }));

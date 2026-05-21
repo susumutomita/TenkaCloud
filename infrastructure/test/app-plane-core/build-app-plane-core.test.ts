@@ -48,7 +48,7 @@ function synth(): Template {
 }
 
 describe("buildAppPlaneCore", () => {
-  it("ApplicationAdminConsoleHosting / IdentityProvider / ApiGateway を Stack 直下に生成すべき (= CFn 物理差分 0 件 invariant)", () => {
+  it("should generate ApplicationAdminConsoleHosting / IdentityProvider / ApiGateway directly under the Stack (= 0 CFn physical diff invariant)", () => {
     const template = synth();
     // builder は scope = stack に対して 3 つの sub-construct を生成する。
     // 各 sub-construct は内部に複数の CFn resource を持つ。 stack 直下に下記が存在することで
@@ -62,14 +62,14 @@ describe("buildAppPlaneCore", () => {
     template.resourceCountIs("AWS::CloudFront::Distribution", 1);
   });
 
-  it("runtime-config.json 用の BucketDeployment custom resource を 1 件作るべき (= deployRuntimeConfig が呼ばれた証跡)", () => {
+  it("should create 1 BucketDeployment custom resource for runtime-config.json (evidence that deployRuntimeConfig was invoked)", () => {
     const template = synth();
     // BucketDeployment は AWS::CloudFormation::CustomResource として template に乗る。
     // hosting の runtime-config.json が apiGateway 確定後に配置されることを示す。
     template.hasResource("Custom::CDKBucketDeployment", Match.objectLike({}));
   });
 
-  it("UserPoolClient の callback URL は ApplicationAdminConsoleHosting の distribution URL を参照すべき", () => {
+  it("UserPoolClient callback URL should reference the ApplicationAdminConsoleHosting distribution URL", () => {
     const template = synth();
     // UserPoolClient の CallbackURLs / LogoutURLs に CloudFront distribution domain への
     // Fn::Join 参照が入る (= 順序依存)。 hosting が先に作られて identity に URL を渡す
@@ -83,7 +83,7 @@ describe("buildAppPlaneCore", () => {
     expect(logouts.length).toBeGreaterThan(0);
   });
 
-  it("戻り値の applicationAdminConsoleUrl は hosting.distributionUrl と一致すべき", () => {
+  it("the returned applicationAdminConsoleUrl should equal hosting.distributionUrl", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },

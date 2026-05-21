@@ -8,14 +8,14 @@ import { runDryRun } from "../../../scripts/tenkacloud-problem";
  */
 
 describe("scoring dry-run (#951 sub #3)", () => {
-  it("flag kind: 不正解で earned=0 すべき", () => {
+  it("flag kind: should set earned=0 on wrong answer", () => {
     const r = runDryRun({ problemId: "hello-world", submitted: "wrong" });
     expect(r.ok).toBe(true);
     expect(r.summary).toContain("不正解");
     expect(r.summary).toContain("earned=0");
   });
 
-  it("flag kind: hint 開示は penalty を引くべき (template に静的 Value が無いケースは expected null)", () => {
+  it("flag kind: should deduct penalty on hint reveal (expected null when template has no static Value)", () => {
     // hello-world は !Sub なので extractFlag は null を返す → submitted との一致は常に false
     const r = runDryRun({ problemId: "hello-world", submitted: "anything", revealHints: 1 });
     expect(r.ok).toBe(true);
@@ -31,7 +31,7 @@ describe("scoring dry-run (#951 sub #3)", () => {
     expect(r.summary).toContain("earned=1000");
   });
 
-  it("uptime-flat kind: 部分 fail の cycles で earned が下がるべき", () => {
+  it("uptime-flat kind: earned should drop on cycles with partial fail", () => {
     const r = runDryRun({ problemId: "hello-world-battle", cycles: 4, pattern: "ssff" });
     expect(r.ok).toBe(true);
     // 2 success cycles × 2 endpoints × 100 = 400 (failurePenalty=0)
@@ -47,14 +47,14 @@ describe("scoring dry-run (#951 sub #3)", () => {
 
   // Issue #951 sub #3 拡張: uptime-multi / phased-polling / attack-detection の dry-run 対応
 
-  it("uptime-multi kind: 全 success cycles で pointsAllOk × cycles を返すべき", () => {
+  it("uptime-multi kind: should return pointsAllOk × cycles for all-success cycles", () => {
     // security-battle-royale は uptime-multi、 pointsAllOk=100、 failurePenalty=0 想定
     const r = runDryRun({ problemId: "security-battle-royale", cycles: 5, pattern: "sssss" });
     expect(r.ok).toBe(true);
     expect(r.summary).toContain("earned=500");
   });
 
-  it("uptime-multi kind: 部分 fail で earned が下がるべき", () => {
+  it("uptime-multi kind: earned should drop on partial fail", () => {
     const r = runDryRun({ problemId: "security-battle-royale", cycles: 4, pattern: "ssff" });
     expect(r.ok).toBe(true);
     // 2 allOk × 100 = 200 (failurePenalty=0)
@@ -89,7 +89,7 @@ describe("scoring dry-run (#951 sub #3)", () => {
     expect(r.summary).toMatch(/phased-polling dry-run/);
   });
 
-  it("存在しない問題 id で ok=false を返すべき", () => {
+  it("should return ok=false for non-existent problem id", () => {
     const r = runDryRun({ problemId: "this-does-not-exist" });
     expect(r.ok).toBe(false);
     expect(r.summary).toContain("not found");

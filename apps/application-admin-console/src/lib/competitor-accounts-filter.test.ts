@@ -7,11 +7,11 @@ import {
 } from "./competitor-accounts-filter";
 
 describe("filterVerifiedAccounts (Issue #671)", () => {
-  it("null は空配列を返すべき", () => {
+  it("should return an empty array for null", () => {
     expect(filterVerifiedAccounts(null)).toEqual([]);
   });
 
-  it("verified=true のみ通すべき", () => {
+  it("should pass through only verified=true", () => {
     const accounts = [
       {
         awsAccountId: "111111111111",
@@ -33,7 +33,7 @@ describe("filterVerifiedAccounts (Issue #671)", () => {
     expect(filterVerifiedAccounts(accounts).map((a) => a.awsAccountId)).toEqual(["111111111111"]);
   });
 
-  it('verified が string "true" / number 1 の truthy 値も通すべき (= ABI 揺れ対策)', () => {
+  it('should also pass truthy values such as string "true" / number 1 for verified (= ABI drift guard)', () => {
     const accounts = [
       {
         awsAccountId: "111111111111",
@@ -57,21 +57,21 @@ describe("filterVerifiedAccounts (Issue #671)", () => {
 });
 
 describe("formatCompetitorAccountsLoadError (Issue #815)", () => {
-  it("ApiError 401 は friendly 再ログインメッセージに flip すべき", () => {
+  it("should flip ApiError 401 into a friendly re-login message", () => {
     const msg = formatCompetitorAccountsLoadError(
       new ApiError(StatusCodes.UNAUTHORIZED, "missing_tenant_claim"),
     );
     expect(msg).toMatch(/再ログイン/);
   });
 
-  it("ApiError 500 等の他 status は raw message を返すべき (= dev debug)", () => {
+  it("should return raw message for other statuses such as ApiError 500 (= dev debug)", () => {
     const msg = formatCompetitorAccountsLoadError(
       new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, "DynamoDB throttle"),
     );
     expect(msg).toContain("DynamoDB throttle");
   });
 
-  it("Error 以外 (= 文字列 / null 等) は String() で safe stringify すべき", () => {
+  it("should safe-stringify non-Error values via String() (= e.g. string / null)", () => {
     expect(formatCompetitorAccountsLoadError("plain string")).toBe("plain string");
     expect(formatCompetitorAccountsLoadError(null)).toBe("null");
   });

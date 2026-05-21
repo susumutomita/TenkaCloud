@@ -26,7 +26,7 @@ function teamView(statuses: readonly ParticipantTeamView["problems"][number]["st
 }
 
 describe("TeamViewProvider refresh decisions", () => {
-  it("portal/me 成功時は view と polling 停止判定を返すべき", () => {
+  it("should return view and polling stop decision on portal/me success", () => {
     const active = teamView(["COMPLETE", "FAILED"]);
     expect(toPortalMeRefreshDecision({ status: "fulfilled", value: active })).toEqual({
       kind: "view",
@@ -42,7 +42,7 @@ describe("TeamViewProvider refresh decisions", () => {
     });
   });
 
-  it("portal/me の認証エラーは logout 判定にすべき", () => {
+  it("should treat portal/me auth error as a logout decision", () => {
     expect(
       toPortalMeRefreshDecision({ status: "rejected", reason: new PortalAuthError() }),
     ).toEqual({
@@ -50,7 +50,7 @@ describe("TeamViewProvider refresh decisions", () => {
     });
   });
 
-  it("portal/me の通常エラーは message に変換すべき", () => {
+  it("should convert generic portal/me errors to a message", () => {
     expect(toPortalMeRefreshDecision({ status: "rejected", reason: new Error("boom") })).toEqual({
       kind: "error",
       message: "boom",
@@ -61,7 +61,7 @@ describe("TeamViewProvider refresh decisions", () => {
     });
   });
 
-  it("leaderboard 成功時は no-event と通常更新を区別すべき", () => {
+  it("should distinguish no-event from regular updates on leaderboard success", () => {
     expect(toLeaderboardRefreshDecision({ status: "fulfilled", value: undefined })).toEqual({
       kind: "no-event",
     });
@@ -73,7 +73,7 @@ describe("TeamViewProvider refresh decisions", () => {
     });
   });
 
-  it("leaderboard の認証エラーは無視し通常エラーだけ message に変換すべき", () => {
+  it("should ignore leaderboard auth errors and convert only generic errors to a message", () => {
     expect(
       toLeaderboardRefreshDecision({ status: "rejected", reason: new PortalAuthError() }),
     ).toEqual({

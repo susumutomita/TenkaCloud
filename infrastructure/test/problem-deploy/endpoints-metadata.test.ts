@@ -6,7 +6,7 @@ import {
 } from "../../lib/utils/endpoints-metadata";
 
 describe("parseEndpointSlot", () => {
-  it("最小構成 (= slot + default.from + default.key) を採用すべき", () => {
+  it("should adopt the minimal config (slot + default.from + default.key)", () => {
     expect(
       parseEndpointSlot({ slot: "main", default: { from: "cfn-output", key: "BaseUrl" } }),
     ).toEqual({
@@ -16,7 +16,7 @@ describe("parseEndpointSlot", () => {
     });
   });
 
-  it("overridable=true / label / description / appendPath を保持すべき", () => {
+  it("should preserve overridable=true / label / description / appendPath", () => {
     expect(
       parseEndpointSlot({
         slot: "users",
@@ -34,11 +34,11 @@ describe("parseEndpointSlot", () => {
     });
   });
 
-  it("from が cfn-output 以外なら undefined を返すべき", () => {
+  it("should return undefined when from is anything other than cfn-output", () => {
     expect(parseEndpointSlot({ slot: "x", default: { from: "manual", key: "Y" } })).toBeUndefined();
   });
 
-  it("slot が空文字 / key が空文字なら undefined を返すべき", () => {
+  it("should return undefined when slot or key is empty", () => {
     expect(
       parseEndpointSlot({ slot: "", default: { from: "cfn-output", key: "Y" } }),
     ).toBeUndefined();
@@ -49,7 +49,7 @@ describe("parseEndpointSlot", () => {
 });
 
 describe("parseEndpointsEnv", () => {
-  it("`{ [problemId]: ProblemEndpointSlot[] }` を採用すべき", () => {
+  it("should adopt the `{ [problemId]: ProblemEndpointSlot[] }` shape", () => {
     const raw = JSON.stringify({
       "hello-world-battle": [
         { slot: "frontend", default: { from: "cfn-output", key: "FrontendUrl" } },
@@ -72,14 +72,14 @@ describe("parseEndpointsEnv", () => {
     });
   });
 
-  it("空文字 / 不正 JSON / non-object は空 map を返すべき", () => {
+  it("should return an empty map for empty string / invalid JSON / non-object", () => {
     expect(parseEndpointsEnv(undefined)).toEqual({});
     expect(parseEndpointsEnv("")).toEqual({});
     expect(parseEndpointsEnv("{not-json")).toEqual({});
     expect(parseEndpointsEnv("[1,2,3]")).toEqual({});
   });
 
-  it("配列でない値 / 空配列の problemId は drop すべき", () => {
+  it("should drop non-array values / empty-array problemId", () => {
     const raw = JSON.stringify({
       "p-1": "not-array",
       "p-2": [],
@@ -88,7 +88,7 @@ describe("parseEndpointsEnv", () => {
     expect(Object.keys(parseEndpointsEnv(raw))).toEqual(["p-3"]);
   });
 
-  it("壊れた entry は drop し他は維持すべき", () => {
+  it("should drop broken entries while keeping the rest", () => {
     const raw = JSON.stringify({
       "p-1": [
         { slot: "good", default: { from: "cfn-output", key: "X" } },
@@ -109,17 +109,17 @@ describe("parseEndpointsEnv", () => {
 });
 
 describe("resolveDefaultUrl", () => {
-  it("appendPath 無しは base をそのまま返すべき", () => {
+  it("should return the base as-is when there is no appendPath", () => {
     expect(resolveDefaultUrl("https://example.com/")).toBe("https://example.com/");
     expect(resolveDefaultUrl("https://example.com")).toBe("https://example.com");
   });
 
-  it("appendPath を相対 path として base に合成すべき", () => {
+  it("should combine appendPath as a relative path onto the base", () => {
     expect(resolveDefaultUrl("https://example.com/", "/users")).toBe("https://example.com/users");
     expect(resolveDefaultUrl("https://example.com", "users")).toBe("https://example.com/users");
   });
 
-  it("appendPath が絶対 URL なら appendPath を採用すべき", () => {
+  it("should use appendPath when it is an absolute URL", () => {
     expect(resolveDefaultUrl("https://base.example.com/", "https://other.example.com/path")).toBe(
       "https://other.example.com/path",
     );

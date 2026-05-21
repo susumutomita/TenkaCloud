@@ -6,26 +6,26 @@ import {
 } from "../../src/pages/ProblemDetail";
 
 describe("ProblemDetail helpers", () => {
-  it("scoring_not_started gate のとき lock 状態にすべき", () => {
+  it("should lock when the scoring_not_started gate is active", () => {
     expect(isProblemDetailLocked({ kind: "scoring_not_started" })).toBe(true);
   });
 
-  it("gate が無い / scoring_not_started 以外なら lock しないべき", () => {
+  it("should not lock when there is no gate or the gate is not scoring_not_started", () => {
     expect(isProblemDetailLocked(undefined)).toBe(false);
     expect(isProblemDetailLocked({ kind: "ok" })).toBe(false);
     expect(isProblemDetailLocked({ kind: "scoring_ended" })).toBe(false);
   });
 
-  it("problem があり lock されていなければ問題本文を表示すべき", () => {
+  it("should display the problem body when a problem exists and is not locked", () => {
     expect(canRenderProblemDetailBody({ hasProblem: true, locked: false })).toBe(true);
   });
 
-  it("problem 不在または lock 中なら問題本文を表示しないべき", () => {
+  it("should not display the problem body when no problem exists or it is locked", () => {
     expect(canRenderProblemDetailBody({ hasProblem: false, locked: false })).toBe(false);
     expect(canRenderProblemDetailBody({ hasProblem: true, locked: true })).toBe(false);
   });
 
-  it("problem / metadata / endpoint があり lock されていなければ endpoint override を表示すべき", () => {
+  it("should display endpoint override when problem / metadata / endpoint exist and not locked", () => {
     expect(
       canRenderEndpointOverride({
         hasProblem: true,
@@ -36,7 +36,7 @@ describe("ProblemDetail helpers", () => {
     ).toBe(true);
   });
 
-  it("endpoint override の前提が欠けるか lock 中なら表示しないべき", () => {
+  it("should not display when endpoint override preconditions are missing or it is locked", () => {
     expect(
       canRenderEndpointOverride({
         hasProblem: true,

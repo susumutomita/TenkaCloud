@@ -81,7 +81,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
-  it("TEARDOWN な Event では Force ARCHIVED button + rescue Alert を表示するべき", async () => {
+  it("should show Force ARCHIVED button + rescue Alert when Event is in TEARDOWN", async () => {
     mocks.getEvent.mockResolvedValueOnce(baseDetail);
     renderPage();
     await waitFor(() =>
@@ -91,7 +91,7 @@ describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
     expect(screen.getByText(/削除が進まない場合/)).toBeInTheDocument();
   });
 
-  it("DEPLOYING な Event では Force ARCHIVED rescue は表示しないべき", async () => {
+  it("should NOT show Force ARCHIVED rescue when Event is in DEPLOYING", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DEPLOYING" });
     renderPage();
     await waitFor(() =>
@@ -100,7 +100,7 @@ describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
     expect(screen.queryByTestId("force-archive-button")).not.toBeInTheDocument();
   });
 
-  it("Force ARCHIVED を確定すると archiveEvent が呼ばれるべき", async () => {
+  it("should call archiveEvent when Force ARCHIVED is confirmed", async () => {
     mocks.getEvent.mockResolvedValue(baseDetail);
     mocks.archiveEvent.mockResolvedValue({ ok: true, archivedAt: "2026-05-13T00:00:00.000Z" });
     renderPage();

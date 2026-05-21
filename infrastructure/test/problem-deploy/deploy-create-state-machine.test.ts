@@ -48,7 +48,7 @@ function buildTestStack(): { stack: cdk.Stack; template: Template } {
 }
 
 describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => {
-  it("DescribeStack task の Parameters は object であり、 literal string ではないべき", () => {
+  it("DescribeStack task Parameters should be an object, not a literal string", () => {
     const { template } = buildTestStack();
     const stateMachines = template.findResources("AWS::StepFunctions::StateMachine");
     const sm = Object.values(stateMachines)[0];
@@ -76,7 +76,7 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
     expect(asJson).toContain('"detail.$":"$.detail"');
   });
 
-  it("DescribeStack task は payloadResponseOnly=true 維持で resultPath が $.cfn であるべき", () => {
+  it("DescribeStack task should keep payloadResponseOnly=true with resultPath $.cfn", () => {
     const { template } = buildTestStack();
     const stateMachines = template.findResources("AWS::StepFunctions::StateMachine");
     const sm = Object.values(stateMachines)[0];
@@ -93,7 +93,7 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
     expect(asJson).toContain('"ResultPath":"$.cfn"');
   });
 
-  it("StateMachine 全体が synth 可能で IAM policy で Lambda invoke が許可されるべき", () => {
+  it("the whole StateMachine should synth and the IAM policy should allow Lambda invoke", () => {
     const { template } = buildTestStack();
     template.resourceCountIs("AWS::StepFunctions::StateMachine", 1);
     // State Machine の execution role policy が Lambda invoke を含むこと
@@ -114,7 +114,7 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
   // Issue #895 Phase 2.A: ADR-001 §6 の stack tagging に必要な tenantId / jobId を
   // CodeBuild env に渡す経路の regression test。 これらが欠けると deploy-battles.sh が
   // tag 値を \"unknown\" にして CFn → tenant 逆引きが効かなくなる。
-  it("Issue #895: CodeBuild env に TENKACLOUD_TENANT_ID / TENKACLOUD_JOB_ID が渡されるべき", () => {
+  it("Issue #895: should pass TENKACLOUD_TENANT_ID / TENKACLOUD_JOB_ID into CodeBuild env", () => {
     const { template } = buildTestStack();
     const stateMachines = template.findResources("AWS::StepFunctions::StateMachine");
     const sm = Object.values(stateMachines)[0];

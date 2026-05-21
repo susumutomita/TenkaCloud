@@ -9,25 +9,25 @@ import {
  * presigned URL 発行可否判定の pin。 dormant-default と fail-safe parse の挙動を検証する。
  */
 describe("parseProblemsVisibility (Issue #642)", () => {
-  it("undefined / 空文字列なら空 map を返すべき (= 全 public 扱い)", () => {
+  it("should return an empty map for undefined / empty string (treated as all public)", () => {
     expect(parseProblemsVisibility(undefined)).toEqual({});
     expect(parseProblemsVisibility("")).toEqual({});
   });
 
-  it("不正な JSON は warn しつつ空 map を返すべき (= fail-safe)", () => {
+  it("should warn and return an empty map on invalid JSON (fail-safe)", () => {
     const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(parseProblemsVisibility("{not json")).toEqual({});
     expect(consoleSpy).toHaveBeenCalledOnce();
     consoleSpy.mockRestore();
   });
 
-  it("JSON でも array / 非 object なら空 map を返すべき", () => {
+  it("should return an empty map for JSON arrays / non-objects", () => {
     expect(parseProblemsVisibility("[]")).toEqual({});
     expect(parseProblemsVisibility('"private"')).toEqual({});
     expect(parseProblemsVisibility("42")).toEqual({});
   });
 
-  it('value が "private" のキーだけ抜き出すべき', () => {
+  it('should extract only keys whose value is "private"', () => {
     const raw = JSON.stringify({
       "secret-problem": "private",
       "public-problem": "public",
@@ -58,7 +58,7 @@ describe("resolveChallengePayloadBucket (Issue #642)", () => {
     ).toBeUndefined();
   });
 
-  it("visibility が undefined でも安全に undefined を返すべき", () => {
+  it("should safely return undefined when visibility is undefined", () => {
     expect(
       resolveChallengePayloadBucket({
         problemId: "any-problem",
@@ -68,7 +68,7 @@ describe("resolveChallengePayloadBucket (Issue #642)", () => {
     ).toBeUndefined();
   });
 
-  it("bucketName + visibility 両方揃ったら bucket 名を返すべき", () => {
+  it("should return the bucket name when bucketName + visibility are both set", () => {
     expect(
       resolveChallengePayloadBucket({
         problemId: "secret-problem",

@@ -46,13 +46,13 @@ describe("Problem scaffold templates", () => {
 
   const kinds = listKinds();
 
-  it("5 種の builtin kind の scaffold ディレクトリがすべて存在するべき", () => {
+  it("should have scaffold directories for all 5 builtin kinds", () => {
     const expected = ["attack-detection", "flag", "phased-polling", "uptime-flat", "uptime-multi"];
     expect(kinds).toEqual(expected);
   });
 
   for (const kind of kinds) {
-    it(`${kind}/metadata.json は CLI 置換後 SCHEMA.json に通るべき`, () => {
+    it(`\${kind}/metadata.json should pass SCHEMA.json after CLI substitution`, () => {
       const raw = readFileSync(join(TEMPLATES_ROOT, kind, "metadata.json"), "utf8");
       const substituted = applyPlaceholders(raw, "scaffold-smoke-test");
       const json = JSON.parse(substituted);
@@ -66,7 +66,7 @@ describe("Problem scaffold templates", () => {
       expect(ok).toBe(true);
     });
 
-    it(`${kind}/template.yaml が存在するべき`, () => {
+    it(`\${kind}/template.yaml should exist`, () => {
       const path = join(TEMPLATES_ROOT, kind, "template.yaml");
       expect(() => readFileSync(path, "utf8")).not.toThrow();
     });

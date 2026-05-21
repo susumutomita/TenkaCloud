@@ -16,7 +16,7 @@ function buildDeps(send: ReturnType<typeof vi.fn>, region: string): ListPipeline
 }
 
 describe("buildExecutionConsoleUrl", () => {
-  it("CodePipeline console の timeline deep link を組み立てるべき", () => {
+  it("should build the CodePipeline console timeline deep link", () => {
     const url = buildExecutionConsoleUrl("ap-northeast-1", "tenkacloud-saas-pipeline", "exec-1");
     expect(url).toContain(
       "https://ap-northeast-1.console.aws.amazon.com/codesuite/codepipeline/pipelines/tenkacloud-saas-pipeline/executions/exec-1/timeline",
@@ -24,14 +24,14 @@ describe("buildExecutionConsoleUrl", () => {
     expect(url).toContain("region=ap-northeast-1");
   });
 
-  it("特殊文字を含む executionId を encode すべき", () => {
+  it("should encode executionIds containing special characters", () => {
     const url = buildExecutionConsoleUrl("us-east-1", "p", "exec/with slash");
     expect(url).toContain("exec%2Fwith%20slash");
   });
 });
 
 describe("summarizeExecution", () => {
-  it("status / start / lastUpdate / consoleUrl を抽出すべき", () => {
+  it("should extract status / start / lastUpdate / consoleUrl", () => {
     const out = summarizeExecution("ap-northeast-1", "tenkacloud-saas-pipeline", {
       pipelineExecutionId: "exec-abc",
       status: "Succeeded",
@@ -47,14 +47,14 @@ describe("summarizeExecution", () => {
     expect(out.consoleUrl).toContain("exec-abc");
   });
 
-  it("executionId が無い summary は null を返すべき (= defensive)", () => {
+  it("should return null for summaries without executionId (defensive)", () => {
     const out = summarizeExecution("ap-northeast-1", "p", {
       status: "Failed",
     });
     expect(out).toBeNull();
   });
 
-  it('status が無ければ "Unknown" にフォールバックすべき', () => {
+  it('should fall back to "Unknown" when status is missing', () => {
     const out = summarizeExecution("ap-northeast-1", "p", {
       pipelineExecutionId: "x",
     });
@@ -63,7 +63,7 @@ describe("summarizeExecution", () => {
 });
 
 describe("listPipelineExecutions", () => {
-  it("CodePipeline ListPipelineExecutionsCommand を pipelineName=tenkacloud-saas-pipeline で叩くべき", async () => {
+  it("should call CodePipeline ListPipelineExecutionsCommand with pipelineName=tenkacloud-saas-pipeline", async () => {
     const send = vi.fn().mockResolvedValue({
       pipelineExecutionSummaries: [
         {
@@ -85,7 +85,7 @@ describe("listPipelineExecutions", () => {
     expect(out.items[0].executionId).toBe("e1");
   });
 
-  it("limit 未指定なら default=50 で呼ぶべき", async () => {
+  it("should call with default=50 when limit is unspecified", async () => {
     const send = vi.fn().mockResolvedValue({ pipelineExecutionSummaries: [] });
     await listPipelineExecutions(buildDeps(send, "us-east-1"));
     const cmd = (send.mock.calls[0] as unknown[])[0] as {
@@ -103,7 +103,7 @@ describe("listPipelineExecutions", () => {
     expect(cmd.input.maxResults).toBe(100);
   });
 
-  it("limit < 1 でも最低 1 で呼ぶべき (= defensive)", async () => {
+  it("should call with at least 1 even when limit < 1 (defensive)", async () => {
     const send = vi.fn().mockResolvedValue({ pipelineExecutionSummaries: [] });
     await listPipelineExecutions(buildDeps(send, "us-east-1"), { limit: 0 });
     const cmd = (send.mock.calls[0] as unknown[])[0] as {
@@ -112,7 +112,7 @@ describe("listPipelineExecutions", () => {
     expect(cmd.input.maxResults).toBe(1);
   });
 
-  it("executionId が無い summary は drop すべき", async () => {
+  it("should drop summaries without executionId", async () => {
     const send = vi.fn().mockResolvedValue({
       pipelineExecutionSummaries: [
         { pipelineExecutionId: "e1", status: "Succeeded" },

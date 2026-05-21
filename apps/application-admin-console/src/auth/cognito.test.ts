@@ -50,7 +50,7 @@ describe("beginLogout (Issue #833)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("refresh token を /oauth2/revoke に POST してから sessionStorage を clear すべき", async () => {
+  it("should POST refresh token to /oauth2/revoke before clearing sessionStorage", async () => {
     storeTokens("refresh.jwt");
 
     await beginLogout(CONFIG);
@@ -65,7 +65,7 @@ describe("beginLogout (Issue #833)", () => {
     expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
   });
 
-  it("refresh token が無いときは /oauth2/revoke を呼ばずに redirect すべき", async () => {
+  it("should redirect without calling /oauth2/revoke when there is no refresh token", async () => {
     storeTokens(undefined);
 
     await beginLogout(CONFIG);
@@ -74,7 +74,7 @@ describe("beginLogout (Issue #833)", () => {
     expect(assignSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("/logout に client_id と logout_uri を付けて redirect すべき", async () => {
+  it("should redirect to /logout with client_id and logout_uri", async () => {
     storeTokens("refresh.jwt");
 
     await beginLogout(CONFIG);
@@ -86,7 +86,7 @@ describe("beginLogout (Issue #833)", () => {
     expect(redirectedTo.searchParams.get("logout_uri")).toBe("https://app.example.com/login");
   });
 
-  it("/oauth2/revoke が失敗しても redirect は実行されるべき (= revoke failure で sign-out が止まらない)", async () => {
+  it("should still redirect even when /oauth2/revoke fails (= sign-out does not stall on revoke failure)", async () => {
     storeTokens("refresh.jwt");
     fetchSpy.mockRejectedValueOnce(new Error("network down"));
 

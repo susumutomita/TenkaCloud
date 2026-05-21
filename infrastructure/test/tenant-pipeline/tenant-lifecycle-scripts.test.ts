@@ -15,7 +15,7 @@ describe("tenant lifecycle scripts", () => {
     "scripts/deprovision-tenant.sh",
   ];
 
-  it("tenant lifecycle scripts は legacy package runner を使わないべき", () => {
+  it("tenant lifecycle scripts should not use the legacy package runner", () => {
     const legacyPackageRunnerPattern = new RegExp(`\\b${"np"}x\\b`);
 
     for (const scriptPath of lifecycleScripts) {
@@ -23,7 +23,7 @@ describe("tenant lifecycle scripts", () => {
     }
   });
 
-  it("tenant lifecycle scripts は CDK を bun で実行すべき", () => {
+  it("tenant lifecycle scripts should run CDK via bun", () => {
     expect(readRepoFile("scripts/provision-tenant.sh")).toContain(
       'bun cdk deploy "$STACK_NAME" --require-approval never',
     );
@@ -37,7 +37,7 @@ describe("tenant lifecycle scripts", () => {
     );
   });
 
-  it("CodeBuild runtime helper は packageManager の Bun を導入すべき", () => {
+  it("CodeBuild runtime helper should install the packageManager's Bun", () => {
     const helper = readRepoFile("scripts/lib/install-node.sh");
 
     expect(helper).toContain("packageManager");
@@ -45,7 +45,7 @@ describe("tenant lifecycle scripts", () => {
     expect(helper).toContain("install_bun_from_package_manager");
   });
 
-  it("deprovision script は runtime helper を source する前に source.zip を展開すべき", () => {
+  it("deprovision script should unpack source.zip before sourcing the runtime helper", () => {
     const script = readRepoFile("scripts/deprovision-tenant.sh");
     const unzipIndex = script.indexOf('unzip -o "$CDK_SOURCE_NAME"');
     const sourceIndex = script.indexOf("source ./scripts/lib/install-node.sh");
@@ -54,7 +54,7 @@ describe("tenant lifecycle scripts", () => {
     expect(sourceIndex).toBeGreaterThan(unzipIndex);
   });
 
-  it(".nvmrc は Node 22 以上を指定すべき", () => {
+  it("should pin .nvmrc to Node 22 or higher", () => {
     const nodeMajor = Number.parseInt(
       readRepoFile(".nvmrc").trim().replace(/^v/, "").split(".")[0] ?? "",
       10,
@@ -66,7 +66,7 @@ describe("tenant lifecycle scripts", () => {
   // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 update-tenant.sh / provision-tenant.sh
   // は `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` を env で渡さない (= cross-stack ref に置換)。
   // 旧 env-var 経路が誤って復活しないよう regression pin する。
-  it("update-tenant.sh は CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL を env-var inject しないべき (#1053)", () => {
+  it("update-tenant.sh should not env-var inject CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL (#1053)", () => {
     const script = readRepoFile("scripts/update-tenant.sh");
     expect(script).not.toMatch(/export\s+CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=/);
   });
@@ -76,22 +76,22 @@ describe("tenant lifecycle scripts", () => {
   // に倒れて `problemDeployBackendStack.participantPortalUrl` が undefined になり、 pooled
   // stack の runtime-config に `participantPortalUrl` が **silent に消える**。 install.sh と
   // 同じ default を CodeBuild にも入れて regression を防ぐ。
-  it("update-tenant.sh は CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true を export すべき", () => {
+  it("update-tenant.sh should export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true", () => {
     const script = readRepoFile("scripts/update-tenant.sh");
     expect(script).toMatch(/export\s+CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=["']true["']/);
   });
 
-  it("provision-tenant.sh は CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true を export すべき", () => {
+  it("provision-tenant.sh should export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true", () => {
     const script = readRepoFile("scripts/provision-tenant.sh");
     expect(script).toMatch(/export\s+CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=["']true["']/);
   });
 
-  it("install.sh も CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true を export すべき (= 3 script 同期)", () => {
+  it("install.sh should also export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true (3-script sync)", () => {
     const script = readRepoFile("scripts/install.sh");
     expect(script).toMatch(/export\s+CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=["']true["']/);
   });
 
-  it("mise の Node/Bun runtime は repo の正本 version と一致すべき", () => {
+  it("mise Node/Bun runtimes should match the repo's canonical versions", () => {
     const packageJson = JSON.parse(readRepoFile("package.json")) as {
       packageManager?: string;
     };
@@ -109,7 +109,7 @@ describe("tenant lifecycle scripts", () => {
   //   2. Stack ... is in UPDATE_IN_PROGRESS state and can not be updated
   // 実 deploy 環境 (2026-05-18 CodeBuild logs) で 3 連続 fail を観測したので regression
   // pin する。
-  it("update-tenant.sh は cdk deploy 直前に wait_for_stack_idle で stack を poll すべき", () => {
+  it("update-tenant.sh should poll the stack via wait_for_stack_idle right before cdk deploy", () => {
     const script = readRepoFile("scripts/update-tenant.sh");
     expect(script).toContain("wait_for_stack_idle()");
     expect(script).toContain('wait_for_stack_idle "${STACK_NAME}"');
@@ -124,7 +124,7 @@ describe("tenant lifecycle scripts", () => {
   // 可能性がある。 provision-tenant.sh が `[[ $TIER == "PLATINUM" ]]` で大文字比較する前に
   // 必ず uppercase 正規化する。 忘れると小文字 "platinum" が silo 分岐に入らず pooled に
   // 倒れて UI で「Open ↗ (pooled)」 表示になる (= 2026-05-18 testsilo regression)。
-  it("provision-tenant.sh は TIER を大文字に正規化してから PLATINUM 判定すべき", () => {
+  it("provision-tenant.sh should normalize TIER to uppercase before judging PLATINUM", () => {
     const script = readRepoFile("scripts/provision-tenant.sh");
     // TIER 環境変数が tr で大文字化されてから export されること
     expect(script).toMatch(/export TIER=\$\(echo "\$tier" \| tr '\[:lower:\]' '\[:upper:\]'\)/);
@@ -140,7 +140,7 @@ describe("tenant lifecycle scripts", () => {
 
   // Issue #1053: 初回 provisioning でも env-var inject は不要 (= ProblemDeployBackendStack
   // から cross-stack ref で URL が引かれる)。 旧経路が誤って復活しないよう regression pin。
-  it("provision-tenant.sh は CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL を env-var inject しないべき (#1053)", () => {
+  it("provision-tenant.sh should not env-var inject CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL (#1053)", () => {
     const script = readRepoFile("scripts/provision-tenant.sh");
     expect(script).not.toMatch(/export\s+CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL=/);
   });

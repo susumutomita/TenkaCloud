@@ -143,7 +143,7 @@ describe("listScoreEvents", () => {
   // Issue #1038 P1 #8 follow-up: 旧 toView は uptime/flag のみ通したため、 PR-1043 で書き
   // 込まれる hint 行と Issue #817 で書き込まれる flag-wrong 行が participant の Score events
   // 履歴に表示されなかった。 4 source 全て (= uptime / flag / flag-wrong / hint) を含める。
-  it("hint reveal の減点行 (source=hint, result=ok, points=-30) を履歴に含めるべき", async () => {
+  it("should include hint-reveal deduction rows (source=hint, result=ok, points=-30) in history", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({
@@ -168,7 +168,7 @@ describe("listScoreEvents", () => {
     }
   });
 
-  it("不正解 flag の減点行 (source=flag-wrong, result=wrong, points=-10) を履歴に含めるべき", async () => {
+  it("should include wrong-flag deduction rows (source=flag-wrong, result=wrong, points=-10) in history", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({
@@ -193,7 +193,7 @@ describe("listScoreEvents", () => {
     }
   });
 
-  it("attack-detected (marker 用、 result=down) は participant 履歴に出さないべき", async () => {
+  it("should not surface attack-detected markers (result=down) in participant history", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({
@@ -240,7 +240,7 @@ describe("listScoreEvents", () => {
     expect(secondPage.input.ExclusiveStartKey).toEqual({ PK: "DEPLOYMENT#J1", SK: "EVENT#x" });
   });
 
-  it("teamId / eventId / tenantId 等 operator 内部情報を出力に含めないべき", async () => {
+  it("should not include operator-internal info (teamId / eventId / tenantId) in output", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({

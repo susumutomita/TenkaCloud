@@ -61,7 +61,7 @@ const event = (over: Record<string, unknown> = {}) => ({
 describe("getLeaderboardScoreEvents", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("自チーム + ライバルチームの events を team 単位で group + occurredAt 昇順で返すべき", async () => {
+  it("should return own-team + rival-team events grouped by team and sorted by occurredAt ascending", async () => {
     const { shared, ddbSend } = buildShared();
     // 1st: GSI2 (my team) — 1 deployment
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
@@ -138,7 +138,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(out.response.eventId).toBe("EV1");
   });
 
-  it("teamLoginKey 不正 (= GSI2 が空) は unauthorized を返すべき", async () => {
+  it("should return unauthorized on invalid teamLoginKey (empty GSI2)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [] });
     const out = await getLeaderboardScoreEvents(shared, "BAD");
@@ -146,7 +146,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 
-  it("自チームに eventId / teamId が無い (= Phase 1 以前の旧 deployment) なら no_event を返すべき", async () => {
+  it("should return no_event when own team has no eventId / teamId (pre-Phase 1 legacy deployment)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [meta({ eventId: undefined, teamId: undefined })],
@@ -155,7 +155,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(out).toEqual({ kind: "no_event" });
   });
 
-  it("自チームの deployment が全て DELETING / DELETED なら unauthorized を返すべき", async () => {
+  it("should return unauthorized when all own-team deployments are DELETING / DELETED", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [meta({ status: "DELETING" }), meta({ status: "DELETED" })],
@@ -164,7 +164,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(out).toEqual({ kind: "unauthorized" });
   });
 
-  it("hint / flag-wrong / uptime / flag を chart 用 view に含めるべき (= 累計が leaderboard と一致)", async () => {
+  it("should include hint / flag-wrong / uptime / flag in the chart view (cumulative matches the leaderboard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
@@ -208,7 +208,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(total).toBe(65); // 5 + 100 - 30 - 10
   });
 
-  it("DELETING / DELETED の deployment は group から除外するべき (= 自チームの archived 行を集計しない)", async () => {
+  it("should exclude DELETING / DELETED deployments from groups (don't aggregate own team's archived rows)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({
@@ -230,7 +230,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(teamIds).not.toContain("TEAM_DEAD");
   });
 
-  it("operator 内部情報 (teamLoginKey / tenantId / awsAccountId / expiresAt) を出力に含めないべき", async () => {
+  it("should not include operator-internal info (teamLoginKey / tenantId / awsAccountId / expiresAt) in output", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
@@ -259,7 +259,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(json).toContain("TEAM_ME");
   });
 
-  it("EVENT# query は ScanIndexForward=false (= 新しい順) + Limit + PK で発火すべき", async () => {
+  it("EVENT# query should fire with ScanIndexForward=false (newest-first) + Limit + PK", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });
@@ -272,7 +272,7 @@ describe("getLeaderboardScoreEvents", () => {
     expect(evQuery.input.ExpressionAttributeValues?.[":evpfx"]).toBe("EVENT#");
   });
 
-  it("複数 deployment / page も読み切って 1 team に集約すべき", async () => {
+  it("should read across multiple deployments / pages and aggregate into 1 team", async () => {
     const { shared, ddbSend } = buildShared();
     // 自チームに 2 deployment、 events を 2 page にわたって返す
     ddbSend.mockResolvedValueOnce({ Items: [meta(), meta({ PK: "DEPLOYMENT#J2", jobId: "J2" })] });

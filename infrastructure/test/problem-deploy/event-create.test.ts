@@ -43,7 +43,7 @@ const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventReque
 describe("createEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("Event 1 行 + Teams N 行を 1 つの TransactWrite で書くべき", async () => {
+  it("should write 1 Event row + N Teams rows in a single TransactWrite", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
 
@@ -88,7 +88,7 @@ describe("createEvent", () => {
     expect(out.status).toBe("DRAFT");
   });
 
-  it("teams の internalSlug 重複は DuplicateInternalSlugError を投げ TransactWrite を呼ばないべき", async () => {
+  it("should throw DuplicateInternalSlugError without calling TransactWrite on duplicate internalSlug in teams", async () => {
     const { shared, ddbSend } = buildShared();
     await expect(
       createEvent(
@@ -105,7 +105,7 @@ describe("createEvent", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("problems の problemId 重複は DuplicateProblemIdError を投げ TransactWrite を呼ばないべき", async () => {
+  it("should throw DuplicateProblemIdError without calling TransactWrite on duplicate problemIds in problems", async () => {
     const { shared, ddbSend } = buildShared();
     await expect(
       createEvent(
@@ -130,7 +130,7 @@ describe("createEvent", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("Teams Put には GSI1 (TENANT) と GSI2 (TEAMKEY) の attribute が必ず付くべき (sparse 失効に備えて)", async () => {
+  it("Teams Put should always attach GSI1 (TENANT) and GSI2 (TEAMKEY) attributes (against sparse expiry)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
 
@@ -144,7 +144,7 @@ describe("createEvent", () => {
     expect(teamItem?.GSI2SK).toBe("META");
   });
 
-  it("Event Put には GSI1 (TENANT / createdAt) が付き、新しい順 query を可能にするべき", async () => {
+  it("Event Put should attach GSI1 (TENANT / createdAt) to enable newest-first queries", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
 
@@ -156,7 +156,7 @@ describe("createEvent", () => {
     expect(eventItem?.GSI1SK).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it("ConditionExpression で同一 PK の二重生成を防ぐべき (defense in depth)", async () => {
+  it("should prevent double creation on the same PK via ConditionExpression (defense in depth)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
 

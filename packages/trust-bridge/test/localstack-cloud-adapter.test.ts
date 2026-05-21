@@ -38,7 +38,7 @@ function makeIntent(overrides: Partial<CloudActionIntent> = {}): VerifiedCloudAc
 }
 
 describe("LocalStackCloudAdapter (#1122)", () => {
-  it("localhost endpoint 付きの AWS 形 credential を返すべき", async () => {
+  it("should return an AWS-shaped credential with a localhost endpoint", async () => {
     const adapter = new LocalStackCloudAdapter({
       endpointUrl: "http://localhost:4566/",
       now: () => new Date("2026-05-15T19:00:00.000Z"),
@@ -64,7 +64,7 @@ describe("LocalStackCloudAdapter (#1122)", () => {
     expect(credential.traceLabel).toBe("offline-demo");
   });
 
-  it("context endpointUrl で adapter default endpoint を上書きすべき", async () => {
+  it("should override the adapter default endpoint with context endpointUrl", async () => {
     const adapter = new LocalStackCloudAdapter({ endpointUrl: "http://localhost:4566" });
 
     const credential = await adapter.exchange(makeIntent(), {
@@ -74,7 +74,7 @@ describe("LocalStackCloudAdapter (#1122)", () => {
     expect(credential.endpointUrl).toBe("http://127.0.0.1:4567");
   });
 
-  it("target provider が aws 以外なら provider-mismatch を投げるべき", async () => {
+  it("should throw provider-mismatch when the target provider is not aws", async () => {
     const adapter = new LocalStackCloudAdapter();
     await expect(
       adapter.exchange(
@@ -84,21 +84,21 @@ describe("LocalStackCloudAdapter (#1122)", () => {
     ).rejects.toMatchObject({ reason: "provider-mismatch" });
   });
 
-  it("localhost 以外の endpoint は拒否すべき", async () => {
+  it("should reject any endpoint other than localhost", async () => {
     const adapter = new LocalStackCloudAdapter();
     await expect(
       adapter.exchange(makeIntent(), { endpointUrl: "https://localstack.example.com" }),
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("ttlSeconds は options.maxTtlSeconds を超えると ttl-exceeded-provider-limit を投げるべき", async () => {
+  it("should throw ttl-exceeded-provider-limit when ttlSeconds exceeds options.maxTtlSeconds", async () => {
     const adapter = new LocalStackCloudAdapter({ maxTtlSeconds: 300 });
     await expect(adapter.exchange(makeIntent(), {})).rejects.toMatchObject({
       reason: "ttl-exceeded-provider-limit",
     });
   });
 
-  it("ExchangeError として扱えるべき", async () => {
+  it("should be treatable as an ExchangeError", async () => {
     try {
       new LocalStackCloudAdapter({ endpointUrl: "ftp://localhost:4566" });
       throw new Error("expected throw");

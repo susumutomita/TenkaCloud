@@ -36,7 +36,7 @@ function mockCurrentEvent(
 describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: Event 行 + 紐づく全 deployment 行の eventStartsAt を更新するべき", async () => {
+  it("normal case: should update eventStartsAt on the Event row and all linked deployment rows", async () => {
     const { shared, ddbSend } = buildShared();
     mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
@@ -130,7 +130,7 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("startsAt が now - 30s (SLACK 内) なら通すべき (#537 clock skew)", async () => {
+  it("should pass when startsAt is now - 30s (within SLACK) (#537 clock skew)", async () => {
     const { shared, ddbSend } = buildShared();
     mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
@@ -145,7 +145,7 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
     expect(out.kind).toBe("ok");
   });
 
-  it("Event 更新 + 全 deployment update の updatedAt は同じ now 値を使うべき", async () => {
+  it("should use the same now value for updatedAt across Event and all deployment updates", async () => {
     const { shared, ddbSend } = buildShared();
     mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
@@ -193,7 +193,7 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
     expect(deployUpd.input.ExpressionAttributeValues?.[":s"]).toBeUndefined();
   });
 
-  it("startsAt + endsAt 両方指定 → 1 回の UpdateCommand で両方更新するべき", async () => {
+  it("should update both via a single UpdateCommand when startsAt + endsAt are both specified", async () => {
     const { shared, ddbSend } = buildShared();
     mockCurrentEvent(ddbSend);
     ddbSend.mockResolvedValueOnce({
@@ -249,7 +249,7 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("endsAt のみ指定でも既存 startsAt 以前なら ends_before_starts で reject すべき (#741)", async () => {
+  it("should reject with ends_before_starts when only endsAt is set and is before existing startsAt (#741)", async () => {
     const { shared, ddbSend } = buildShared();
     const laterStart = "2026-05-08T13:00:00.000Z";
     mockCurrentEvent(ddbSend, { tenantId: "tenant-acme", startsAt: laterStart });
@@ -294,17 +294,17 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
  * - startsAt / startNow / endsAt の組み合わせ refinement
  */
 describe("ScheduleEventRequestSchema", () => {
-  it("Z 終端の ISO 8601 はそのまま受理されるべき", () => {
+  it("should accept Z-terminated ISO 8601 as-is", () => {
     const out = ScheduleEventRequestSchema.parse({ startsAt: "2026-05-08T10:00:00.000Z" });
     expect(out.startsAt).toBe("2026-05-08T10:00:00.000Z");
   });
 
-  it("`+09:00` オフセットは UTC Z に transform されるべき", () => {
+  it("should transform a `+09:00` offset to UTC Z", () => {
     const out = ScheduleEventRequestSchema.parse({ startsAt: "2026-05-08T19:00:00+09:00" });
     expect(out.startsAt).toBe("2026-05-08T10:00:00.000Z");
   });
 
-  it("endsAt も同様にオフセットを Z に transform するべき (#536)", () => {
+  it("endsAt should likewise transform its offset to Z (#536)", () => {
     const out = ScheduleEventRequestSchema.parse({ endsAt: "2026-05-08T21:00:00+09:00" });
     expect(out.endsAt).toBe("2026-05-08T12:00:00.000Z");
   });

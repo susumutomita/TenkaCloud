@@ -36,7 +36,7 @@ function writeProblem(category: string, dir: string, body: object): void {
 }
 
 describe("discoverProblemsCatalog", () => {
-  it("metadata.json を持つ全 problem を id → problemDir map で返すべき", () => {
+  it("should return all problems with metadata.json as an id → problemDir map", () => {
     writeProblem("challenges", "hello-world", { id: "hello-world" });
     writeProblem("battles", "security-battle-royale", { id: "security-battle-royale" });
 
@@ -48,7 +48,7 @@ describe("discoverProblemsCatalog", () => {
     });
   });
 
-  it("ディレクトリ名と異なる id を metadata 側で名乗っているときは metadata の id を採用すべき", () => {
+  it("should adopt the metadata id when it differs from the directory name", () => {
     writeProblem("challenges", "physical-dir-name", { id: "logical-id" });
 
     const catalog = discoverProblemsCatalog(workspace);
@@ -56,7 +56,7 @@ describe("discoverProblemsCatalog", () => {
     expect(catalog).toEqual({ "logical-id": "problems/challenges/physical-dir-name" });
   });
 
-  it("problemsRoot 自体が存在しないときは空 map を返し warn すべき", () => {
+  it("should return an empty map and warn when problemsRoot itself does not exist", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const missing = path.join(workspace, "missing-root");
 
@@ -68,7 +68,7 @@ describe("discoverProblemsCatalog", () => {
     warn.mockRestore();
   });
 
-  it("metadata.json が無いディレクトリは silent skip するべき (warn しない)", () => {
+  it("should silently skip directories without metadata.json (no warn)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     fs.mkdirSync(path.join(workspace, "challenges", "no-metadata"), { recursive: true });
 
@@ -79,7 +79,7 @@ describe("discoverProblemsCatalog", () => {
     warn.mockRestore();
   });
 
-  it("壊れた JSON を持つ metadata は warn して skip し他の problem は採集すべき", () => {
+  it("should warn and skip metadata with broken JSON, collecting the rest", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     fs.mkdirSync(path.join(workspace, "challenges", "broken"), { recursive: true });
     fs.writeFileSync(path.join(workspace, "challenges", "broken", "metadata.json"), "{not-json");
@@ -93,7 +93,7 @@ describe("discoverProblemsCatalog", () => {
     warn.mockRestore();
   });
 
-  it("id field が無い / 空文字の metadata は warn して skip するべき", () => {
+  it("should warn and skip metadata with missing / empty id field", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     writeProblem("challenges", "no-id", { name: "no id field" });
     writeProblem("challenges", "empty-id", { id: "" });
@@ -107,7 +107,7 @@ describe("discoverProblemsCatalog", () => {
     warn.mockRestore();
   });
 
-  it("ファイル (= ディレクトリでない) が category 直下に紛れていても無視するべき", () => {
+  it("should ignore files (non-directories) mixed directly under category", () => {
     writeProblem("challenges", "hello-world", { id: "hello-world" });
     fs.writeFileSync(path.join(workspace, "README.md"), "not a category");
     fs.writeFileSync(path.join(workspace, "challenges", "stray.txt"), "not a problem dir");
@@ -119,7 +119,7 @@ describe("discoverProblemsCatalog", () => {
 });
 
 describe("discoverProblemsScoring", () => {
-  it("flag 形式の scoring を採集するべき", () => {
+  it("should collect scoring of flag form", () => {
     writeProblem("challenges", "hello-world", {
       id: "hello-world",
       scoring: { kind: "flag", flagOutputKey: "ParameterValue", points: 100 },
@@ -129,7 +129,7 @@ describe("discoverProblemsScoring", () => {
     });
   });
 
-  it("uptime 形式の scoring を採集するべき", () => {
+  it("should collect scoring of uptime form", () => {
     writeProblem("battles", "battle-1", {
       id: "battle-1",
       scoring: {
@@ -147,7 +147,7 @@ describe("discoverProblemsScoring", () => {
     });
   });
 
-  it("scoring を持たない problem は map に含めないべき", () => {
+  it("should not include problems without scoring in the map", () => {
     writeProblem("challenges", "hello-world", { id: "hello-world" });
     writeProblem("challenges", "with-scoring", {
       id: "with-scoring",
@@ -158,7 +158,7 @@ describe("discoverProblemsScoring", () => {
     });
   });
 
-  it("scoring の shape が壊れているもの (= kind 不正 / 必須 field 欠損) は drop するべき", () => {
+  it("should drop entries with broken scoring shape (invalid kind / missing required field)", () => {
     writeProblem("challenges", "broken-1", {
       id: "broken-1",
       scoring: { kind: "wrong-kind" },
@@ -179,7 +179,7 @@ describe("discoverProblemsScoring", () => {
 
 // ADR-008 Phase 3 (Issue #642): visibility 抜き出し
 describe("discoverProblemsVisibility (Issue #642)", () => {
-  it("visibility=private の問題だけを map にすべき (public は省略)", () => {
+  it("should map only visibility=private problems (omit public)", () => {
     writeProblem("challenges", "public-one", { id: "public-one", visibility: "public" });
     writeProblem("battles", "private-one", { id: "private-one", visibility: "private" });
     writeProblem("battles", "no-visibility", { id: "no-visibility" });

@@ -35,7 +35,7 @@ function buildDeps(): {
 }
 
 describe("computeRotationAgeDays (pure)", () => {
-  it("rotatedAt が設定されていれば rotate からの経過日数を返すべき", () => {
+  it("should return days since rotate when rotatedAt is set", () => {
     // 7 日前 = 7 days ago。
     const sevenDaysAgo = new Date(NOW_MS - 7 * 24 * 60 * 60 * 1000).toISOString();
     expect(
@@ -46,20 +46,20 @@ describe("computeRotationAgeDays (pure)", () => {
     ).toBe(7);
   });
 
-  it("rotatedAt が無ければ createdAt からの経過日数で fallback するべき (= 初期発行から何日)", () => {
+  it("should fall back to days since createdAt when rotatedAt is missing (days since initial issuance)", () => {
     const thirtyDaysAgo = new Date(NOW_MS - 30 * 24 * 60 * 60 * 1000).toISOString();
     expect(computeRotationAgeDays({ createdAt: thirtyDaysAgo }, NOW_MS)).toBe(30);
   });
 
-  it("rotatedAt も createdAt も無い行は 0 を返すべき (= alarm 誤発火を防ぐ安全側)", () => {
+  it("should return 0 for rows without rotatedAt or createdAt (safe side, avoid spurious alarms)", () => {
     expect(computeRotationAgeDays({}, NOW_MS)).toBe(0);
   });
 
-  it("rotatedAt が parse 不能な文字列なら 0 を返すべき", () => {
+  it("should return 0 when rotatedAt is an unparseable string", () => {
     expect(computeRotationAgeDays({ rotatedAt: "not-a-date" }, NOW_MS)).toBe(0);
   });
 
-  it("rotatedAt が未来 (= clock skew) なら 0 を返すべき", () => {
+  it("should return 0 when rotatedAt is in the future (clock skew)", () => {
     const future = new Date(NOW_MS + 24 * 60 * 60 * 1000).toISOString();
     expect(computeRotationAgeDays({ rotatedAt: future }, NOW_MS)).toBe(0);
   });
@@ -68,7 +68,7 @@ describe("computeRotationAgeDays (pure)", () => {
 describe("collectRotationAges", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("DDB Scan の Items を datapoint に変換するべき", async () => {
+  it("should convert DDB Scan Items into datapoints", async () => {
     const { deps, ddbSend } = buildDeps();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -103,7 +103,7 @@ describe("collectRotationAges", () => {
     });
   });
 
-  it("LastEvaluatedKey が返れば 2 ページ目を Scan するべき", async () => {
+  it("should Scan a second page when LastEvaluatedKey is returned", async () => {
     const { deps, ddbSend } = buildDeps();
     ddbSend
       .mockResolvedValueOnce({
@@ -136,7 +136,7 @@ describe("collectRotationAges", () => {
     });
   });
 
-  it("tenantId / awsAccountId 欠落行は skip するべき (= 不整合データの混入を吸収)", async () => {
+  it("should skip rows missing tenantId / awsAccountId (absorb inconsistent data)", async () => {
     const { deps, ddbSend } = buildDeps();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -158,7 +158,7 @@ describe("collectRotationAges", () => {
 describe("emitRotationAgeMetrics", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("PutMetricData で TenkaCloud/CompetitorAccounts namespace に書くべき", async () => {
+  it("should write to the TenkaCloud/CompetitorAccounts namespace via PutMetricData", async () => {
     const { deps, cwSend } = buildDeps();
     cwSend.mockResolvedValueOnce({});
     await emitRotationAgeMetrics(deps, [
@@ -181,7 +181,7 @@ describe("emitRotationAgeMetrics", () => {
     ]);
   });
 
-  it("datapoint が空なら PutMetricData を呼ばないべき", async () => {
+  it("should not call PutMetricData when there are no datapoints", async () => {
     const { deps, cwSend } = buildDeps();
     await emitRotationAgeMetrics(deps, []);
     expect(cwSend).not.toHaveBeenCalled();
@@ -191,7 +191,7 @@ describe("emitRotationAgeMetrics", () => {
 describe("runAudit (integration)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("Scan + PutMetricData を順に呼び、件数を返すべき", async () => {
+  it("should call Scan + PutMetricData in order and return the count", async () => {
     const { deps, ddbSend, cwSend } = buildDeps();
     ddbSend.mockResolvedValueOnce({
       Items: [

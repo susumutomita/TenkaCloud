@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
-  it("kind 番号 + ID + Enter (= category override 無し) で flag scaffold を生成するべき", async () => {
+  it("should generate the flag scaffold from kind number + ID + Enter (no category override)", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-flag`;
     const { prompts } = buildPrompts(["1", uniqueId, "", "Y"]);
     const out = join(REPO_ROOT, "problems/challenges", uniqueId);
@@ -74,7 +74,7 @@ describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
     expect(metadata.scoring.kind).toBe("flag");
   });
 
-  it("kind 名 (= 番号でなく文字列) でも受け付けるべき", async () => {
+  it("should also accept the kind name (string, not number)", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-uflat`;
     const { prompts } = buildPrompts(["uptime-flat", uniqueId, "", "y"]);
     createdPaths.push(join(REPO_ROOT, "problems/battles", uniqueId));
@@ -84,7 +84,7 @@ describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
     expect(created.category).toBe("Battle");
   });
 
-  it("category override (= Challenge を Battle に切替) を受け付けるべき", async () => {
+  it("should accept a category override (switching Challenge to Battle)", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-fbat`;
     const { prompts } = buildPrompts(["1", uniqueId, "Battle", "Y"]);
     createdPaths.push(join(REPO_ROOT, "problems/battles", uniqueId));
@@ -97,7 +97,7 @@ describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
     expect(metadata.category).toBe("Battle");
   });
 
-  it("無効 kind 入力 → 再 prompt → 正しい入力で進むべき", async () => {
+  it("should re-prompt on invalid kind input and proceed when given correct input", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-retry`;
     const { prompts, script } = buildPrompts(["bogus", "9", "1", uniqueId, "", "Y"]);
     createdPaths.push(join(REPO_ROOT, "problems/challenges", uniqueId));
@@ -109,7 +109,7 @@ describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
     expect(allOutput).toContain("無効");
   });
 
-  it("無効 problemId (= 大文字 / 短すぎ) は拒否され再 prompt されるべき", async () => {
+  it("should reject invalid problemId (uppercase / too short) and re-prompt", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-bad`;
     const { prompts } = buildPrompts(["1", "Bad-ID", "ab", uniqueId, "", "Y"]);
     createdPaths.push(join(REPO_ROOT, "problems/challenges", uniqueId));
@@ -118,7 +118,7 @@ describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
     expect(created.outputDir).toContain(uniqueId);
   });
 
-  it("既存 problemId は拒否され再 prompt されるべき (= hello-world は既に repo に存在)", async () => {
+  it("should reject existing problemId and re-prompt (hello-world already in repo)", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-dup`;
     const { prompts, script } = buildPrompts(["1", "hello-world", uniqueId, "", "Y"]);
     createdPaths.push(join(REPO_ROOT, "problems/challenges", uniqueId));
@@ -128,7 +128,7 @@ describe("ADR-012 Phase 6 / #954: runInteractive scaffolding", () => {
     expect(script.output.join("\n")).toContain("既に存在");
   });
 
-  it("confirm が 'n' なら 生成せず throw すべき (= 中止)", async () => {
+  it("should throw without generating when confirm is 'n' (abort)", async () => {
     const uniqueId = `test-iact-${Date.now().toString(36)}-abort`;
     const { prompts } = buildPrompts(["1", uniqueId, "", "n"]);
 
@@ -148,7 +148,7 @@ describe("ADR-012 Phase 6 / #954: scaffold 副作用の隔離 sanity", () => {
   beforeEach(() => {
     beforeCount = createdPaths.length;
   });
-  it("test 間で createdPaths は afterEach により 0 にリセットされるべき", () => {
+  it("createdPaths should reset to 0 between tests via afterEach", () => {
     expect(beforeCount).toBe(0);
     // tmpdir に dummy ディレクトリを作って (= test infra の sanity)
     const dummy = mkdtempSync(join(tmpdir(), "tc-iact-"));

@@ -18,30 +18,30 @@ import {
 describe("isScoringActive (relocated from health-check-handler)", () => {
   const NOW = "2026-05-08T10:00:00.000Z";
 
-  it("eventStartsAt 未設定なら false を返すべき (= deploy 直後の意図しない加点を防ぐ)", () => {
+  it("should return false when eventStartsAt is unset (prevent unintended scoring right after deploy)", () => {
     expect(isScoringActive({}, NOW)).toBe(false);
     expect(isScoringActive({ eventStartsAt: undefined }, NOW)).toBe(false);
   });
 
-  it("eventStartsAt が現在時刻より未来なら false を返すべき (= operator が schedule 済だが時刻未到達)", () => {
+  it("should return false when eventStartsAt is in the future (operator scheduled but time not reached)", () => {
     expect(isScoringActive({ eventStartsAt: "2026-05-08T10:00:00.001Z" }, NOW)).toBe(false);
     expect(isScoringActive({ eventStartsAt: "2026-05-08T11:00:00.000Z" }, NOW)).toBe(false);
   });
 
-  it("eventStartsAt が現在時刻と同じか過去なら true を返すべき (= 競技開始済、採点 active)", () => {
+  it("should return true when eventStartsAt is at or before now (competition started, scoring active)", () => {
     expect(isScoringActive({ eventStartsAt: NOW }, NOW)).toBe(true);
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
     expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(true);
   });
 
-  it("eventEndsAt 未設定は終了 gate 無しで true を返すべき (= 旧 deployment / 終了未指示の event の既存挙動)", () => {
+  it("should return true with no end-gate when eventEndsAt is unset (legacy deployment / no-end event existing behavior)", () => {
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: undefined }, NOW),
     ).toBe(true);
   });
 
-  it("eventEndsAt が設定済で now < eventEndsAt なら true を返すべき (= まだ競技中)", () => {
+  it("should return true when eventEndsAt is set and now < eventEndsAt (still competing)", () => {
     expect(
       isScoringActive(
         {
@@ -53,7 +53,7 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
     ).toBe(true);
   });
 
-  it("eventEndsAt 設定済で now >= eventEndsAt なら false を返すべき (= operator が終了済、採点停止)", () => {
+  it("should return false when eventEndsAt is set and now >= eventEndsAt (operator ended, scoring stopped)", () => {
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: NOW }, NOW),
     ).toBe(false);
@@ -68,7 +68,7 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
     ).toBe(false);
   });
 
-  it("eventStartsAt 未到達なら eventEndsAt が未設定でも false を返すべき (= 開始 gate が優先)", () => {
+  it("should return false when eventStartsAt is not yet reached, even if eventEndsAt is unset (start gate takes precedence)", () => {
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T11:00:00.000Z", eventEndsAt: undefined }, NOW),
     ).toBe(false);
@@ -76,37 +76,37 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
 });
 
 describe("joinUrl (relocated from health-check-handler)", () => {
-  it("path 空ならそのまま base を返すべき", () => {
+  it("should return base as-is when path is empty", () => {
     expect(joinUrl("https://x.example.com", "")).toBe("https://x.example.com");
   });
 
-  it("base 末尾 / と path 先頭 / の二重スラッシュを正規化すべき", () => {
+  it("should normalize the double slash between trailing / on base and leading / on path", () => {
     expect(joinUrl("https://x.example.com/", "/foo")).toBe("https://x.example.com/foo");
   });
 
-  it("base 末尾 / 無し + path 先頭 / 無しは / を補うべき", () => {
+  it("should insert a / between base without trailing / and path without leading /", () => {
     expect(joinUrl("https://x.example.com", "foo")).toBe("https://x.example.com/foo");
   });
 
-  it("path が絶対 URL ならそのまま採用すべき (= override)", () => {
+  it("should use the path as-is when it is an absolute URL (override)", () => {
     expect(joinUrl("https://x.example.com", "https://other.example.com/health")).toBe(
       "https://other.example.com/health",
     );
   });
 
-  it("通常 case (末尾 / 無し base + 先頭 / path) は base/path で結合すべき", () => {
+  it("normal case (base without trailing / + path with leading /) should join as base/path", () => {
     expect(joinUrl("https://x.example.com", "/healthz")).toBe("https://x.example.com/healthz");
   });
 });
 
 describe("parseEndpointsHealth", () => {
-  it("undefined / 空文字 / 壊れた JSON は空 map を返すべき", () => {
+  it("should return an empty map for undefined / empty string / broken JSON", () => {
     expect(parseEndpointsHealth(undefined)).toEqual({});
     expect(parseEndpointsHealth("")).toEqual({});
     expect(parseEndpointsHealth("{not-json")).toEqual({});
   });
 
-  it("正常な健全性 map を decode すべき", () => {
+  it("should decode a valid health map", () => {
     const raw = JSON.stringify({
       FrontendUrl: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z" },
       ApiUrl: {
@@ -129,21 +129,21 @@ describe("parseEndpointsHealth", () => {
 describe("computeSince", () => {
   const NOW = "2026-05-05T10:05:00.000Z";
 
-  it("ok=true なら undefined を返すべき", () => {
+  it("should return undefined when ok=true", () => {
     expect(computeSince(true, undefined, NOW)).toBeUndefined();
     expect(computeSince(true, { ok: false, checkedAt: "x", since: "y" }, NOW)).toBeUndefined();
   });
 
-  it("ok=false 新規 (prev=undefined) なら now を返すべき", () => {
+  it("should return now when ok=false starts fresh (prev=undefined)", () => {
     expect(computeSince(false, undefined, NOW)).toBe(NOW);
   });
 
-  it("ok=false 新規 (prev.ok=true) なら now を返すべき", () => {
+  it("should return now when ok=false starts fresh (prev.ok=true)", () => {
     const prev: EndpointHealth = { ok: true, checkedAt: "2026-05-05T10:04:00.000Z" };
     expect(computeSince(false, prev, NOW)).toBe(NOW);
   });
 
-  it("ok=false 継続中 (prev.ok=false で prev.since あり) なら prev.since を保持すべき", () => {
+  it("should preserve prev.since when ok=false continues (prev.ok=false with prev.since)", () => {
     const prev: EndpointHealth = {
       ok: false,
       checkedAt: "2026-05-05T10:04:00.000Z",
@@ -154,17 +154,17 @@ describe("computeSince", () => {
 });
 
 describe("parseScoringState (ADR-012 Phase 3.B、 dispatcher state persistence)", () => {
-  it("undefined / 空文字 / 壊れた JSON は空 state を返すべき", () => {
+  it("should return empty state for undefined / empty string / broken JSON", () => {
     expect(parseScoringState(undefined)).toEqual({});
     expect(parseScoringState("")).toEqual({});
     expect(parseScoringState("{not-json")).toEqual({});
   });
 
-  it("attackCount を数値で decode すべき", () => {
+  it("should decode attackCount as a number", () => {
     expect(parseScoringState(JSON.stringify({ attackCount: 42 }))).toEqual({ attackCount: 42 });
   });
 
-  it("bonusAwarded を boolean=true entries のみで decode すべき", () => {
+  it("should decode bonusAwarded only from boolean=true entries", () => {
     expect(
       parseScoringState(
         JSON.stringify({ bonusAwarded: { "all-slots": true, other: false, x: "no" } }),
@@ -172,13 +172,13 @@ describe("parseScoringState (ADR-012 Phase 3.B、 dispatcher state persistence)"
     ).toEqual({ bonusAwarded: { "all-slots": true } });
   });
 
-  it("両 field 混在を decode すべき", () => {
+  it("should decode mixed-field cases", () => {
     expect(
       parseScoringState(JSON.stringify({ attackCount: 1, bonusAwarded: { x: true } })),
     ).toEqual({ attackCount: 1, bonusAwarded: { x: true } });
   });
 
-  it("array や primitive は空 state を返すべき", () => {
+  it("should return empty state for arrays or primitives", () => {
     expect(parseScoringState(JSON.stringify([1, 2]))).toEqual({});
     expect(parseScoringState(JSON.stringify(123))).toEqual({});
   });

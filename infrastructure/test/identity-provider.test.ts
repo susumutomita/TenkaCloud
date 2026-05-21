@@ -25,14 +25,14 @@ function synth(
 
 describe("IdentityProvider", () => {
   describe("テナント ID と applicationAdminConsoleUrl を渡してインスタンス化したとき", () => {
-    it("Cognito UserPool / UserPoolClient / UserPoolDomain を 1 セット作るべき", () => {
+    it("should create 1 set of Cognito UserPool / UserPoolClient / UserPoolDomain", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.resourceCountIs("AWS::Cognito::UserPool", 1);
       template.resourceCountIs("AWS::Cognito::UserPoolClient", 1);
       template.resourceCountIs("AWS::Cognito::UserPoolDomain", 1);
     });
 
-    it("ADR-020 Phase E: tenant UserPool は MFA REQUIRED + TOTP-only に設定するべき", () => {
+    it("ADR-020 Phase E: should configure tenant UserPool with MFA REQUIRED + TOTP-only", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       // MFA を REQUIRED にし、 SMS を無効化、 TOTP (SOFTWARE_TOKEN_MFA) のみ許可。
       // destructive 操作を扱う tenant admin console の baseline (OPTIONAL は不可)。
@@ -45,14 +45,14 @@ describe("IdentityProvider", () => {
       );
     });
 
-    it("UserPoolDomain prefix は TenkaCloud-{env}-{tenantId}-{accountId} を lowercase 化して使うべき", () => {
+    it("UserPoolDomain prefix should use lowercased TenkaCloud-{env}-{tenantId}-{accountId}", () => {
       const { template } = synth("Tenant-ABC", "https://example.cloudfront.net", "Development");
       template.hasResourceProperties("AWS::Cognito::UserPoolDomain", {
         Domain: "tenkacloud-development-tenant-abc-123456789012",
       });
     });
 
-    it("UserPoolDomain prefix は env が違えば別の値になるべき (dev/staging 同居対応)", () => {
+    it("UserPoolDomain prefix should differ per env (dev/staging coexistence)", () => {
       const { template: dev } = synth("pooled", "https://example.cloudfront.net", "development");
       const { template: stg } = synth("pooled", "https://example.cloudfront.net", "staging");
       dev.hasResourceProperties("AWS::Cognito::UserPoolDomain", {
@@ -63,7 +63,7 @@ describe("IdentityProvider", () => {
       });
     });
 
-    it("UserPoolClient の callbackUrls に CloudFront URL/callback と localhost:5174/callback を含むべき", () => {
+    it("UserPoolClient callbackUrls should include CloudFront URL/callback and localhost:5174/callback", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.hasResourceProperties(
         "AWS::Cognito::UserPoolClient",
@@ -76,7 +76,7 @@ describe("IdentityProvider", () => {
       );
     });
 
-    it("UserPoolClient の logoutUrls に CloudFront URL/ と localhost:5174/ を含むべき", () => {
+    it("UserPoolClient logoutUrls should include CloudFront URL/ and localhost:5174/", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.hasResourceProperties(
         "AWS::Cognito::UserPoolClient",
@@ -89,7 +89,7 @@ describe("IdentityProvider", () => {
       );
     });
 
-    it("UserPoolClient の logoutUrls に /login も含むべき (= beginLogout の logout_uri と一致)", () => {
+    it("UserPoolClient logoutUrls should also include /login (matching beginLogout's logout_uri)", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.hasResourceProperties(
         "AWS::Cognito::UserPoolClient",
@@ -102,14 +102,14 @@ describe("IdentityProvider", () => {
       );
     });
 
-    it("cognitoDomainUrl を property として公開すべき (https://{prefix}.auth.{region}.amazoncognito.com 形式)", () => {
+    it("should expose cognitoDomainUrl as a property (https://{prefix}.auth.{region}.amazoncognito.com form)", () => {
       const { provider } = synth("tenant-1", "https://example.cloudfront.net");
       expect(provider.cognitoDomainUrl).toBe(
         "https://tenkacloud-development-tenant-1-123456789012.auth.ap-northeast-1.amazoncognito.com",
       );
     });
 
-    it("UserPoolClient の writeAttributes は custom:tenantId を含まないべき (cross-tenant rewrite 防止)", () => {
+    it("UserPoolClient writeAttributes should not include custom:tenantId (cross-tenant rewrite guard)", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       const clients = template.findResources("AWS::Cognito::UserPoolClient");
       const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
@@ -126,14 +126,14 @@ describe("IdentityProvider", () => {
       }
     });
 
-    it("UserPoolClient の writeAttributes は email を含むべき (ユーザは自分の email を更新できる)", () => {
+    it("UserPoolClient writeAttributes should include email (users can update their own email)", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       const clients = template.findResources("AWS::Cognito::UserPoolClient");
       const writeAttrs = Object.values(clients)[0]?.Properties?.WriteAttributes ?? [];
       expect(writeAttrs).toContain("email");
     });
 
-    it("Issue #748: UserPool schema に custom:tenantName が含まれるべき (mutable=true、 admin 経由で書き換える)", () => {
+    it("Issue #748: UserPool schema should include custom:tenantName (mutable=true, rewritten via admin)", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.hasResourceProperties(
         "AWS::Cognito::UserPool",
@@ -149,14 +149,14 @@ describe("IdentityProvider", () => {
       );
     });
 
-    it("Issue #748: UserPoolClient の readAttributes は custom:tenantName を含むべき (id_token claim 経路)", () => {
+    it("Issue #748: UserPoolClient readAttributes should include custom:tenantName (id_token claim path)", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       const clients = template.findResources("AWS::Cognito::UserPoolClient");
       const readAttrs = Object.values(clients)[0]?.Properties?.ReadAttributes ?? [];
       expect(readAttrs).toContain("custom:tenantName");
     });
 
-    it("Issue #903: 招待メール subject は英語のみであるべき (4 言語混在を廃止)", () => {
+    it("Issue #903: invitation email subject should be English-only (no more 4-language mix)", () => {
       const consoleUrl = "https://d123abc.cloudfront.net";
       const { template } = synth("tenant-1", consoleUrl);
       template.hasResourceProperties(
@@ -171,7 +171,7 @@ describe("IdentityProvider", () => {
       );
     });
 
-    it("Issue #903: 招待メール body は英語のみで、 console URL + Cognito placeholder を含むべき", () => {
+    it("Issue #903: invitation email body should be English-only and include console URL + Cognito placeholder", () => {
       const consoleUrl = "https://d123abc.cloudfront.net";
       const { template } = synth("tenant-1", consoleUrl);
       const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
@@ -197,7 +197,7 @@ describe("IdentityProvider", () => {
       expect(body).toContain(consoleUrl);
     });
 
-    it("Issue #903: 各 field (Username / Temporary password / Sign-in URL) が paragraph break (= 二重改行) で区切られるべき", () => {
+    it("Issue #903: should separate each field (Username / Temporary password / Sign-in URL) with paragraph breaks (double newline)", () => {
       // Gmail / Outlook は単一改行を space に re-flow するので、 fields は \n\n で区切らないと
       // 1 行に潰れて読めなくなる (= PR-582 で起きた regression、 Issue #903 でも継続維持)。
       const consoleUrl = "https://d123abc.cloudfront.net";
@@ -214,7 +214,7 @@ describe("IdentityProvider", () => {
       expect(body).toMatch(/\n\nSign-in URL: /);
     });
 
-    it("#529: SMS message も InviteMessageTemplate 整合のため Cognito placeholder 込みで置かれるべき", () => {
+    it("#529: should set the SMS message with Cognito placeholders to stay consistent with InviteMessageTemplate", () => {
       // Cognito CFn は InviteMessageTemplate 設定時に SMSMessage の placeholder 整合性を
       // check する (aws-cdk#30315 系)。SMS は使わないが空にできないので最短形で配置。
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
@@ -232,12 +232,12 @@ describe("IdentityProvider", () => {
   });
 
   describe("Issue #1066: SAML IdP 連携は廃止 (= MFA 必須化 #1035 で代替)", () => {
-    it("UserPoolIdentityProvider (SAML) は作られないべき", () => {
+    it("should not create UserPoolIdentityProvider (SAML)", () => {
       const { template } = synth("tenant-1", "https://app.example.com");
       template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
     });
 
-    it("UserPoolClient の SupportedIdentityProviders は COGNITO のみであるべき", () => {
+    it("UserPoolClient SupportedIdentityProviders should be COGNITO only", () => {
       const { template } = synth("tenant-1", "https://app.example.com");
       template.hasResourceProperties(
         "AWS::Cognito::UserPoolClient",
@@ -250,7 +250,7 @@ describe("IdentityProvider", () => {
 });
 
 describe("buildAllowedRedirectUrls (Issue #861)", () => {
-  it("development では primary + dev localhost を返すべき", () => {
+  it("should return primary + dev localhost in development", () => {
     expect(
       buildAllowedRedirectUrls(
         "https://app.example.com/callback",
@@ -314,7 +314,7 @@ describe("OAuth flow hardening (Issue #861)", () => {
     expect(flows).not.toContain("implicit");
   });
 
-  it("production env では CallbackURLs に localhost が含まれないべき", () => {
+  it("CallbackURLs should not include localhost in production env", () => {
     const template = synthFor("production");
     const clients = template.findResources("AWS::Cognito::UserPoolClient");
     const callbacks = (Object.values(clients)[0]?.Properties?.CallbackURLs ?? []) as string[];

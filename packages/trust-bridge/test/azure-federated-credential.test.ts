@@ -47,7 +47,7 @@ function makeStub(capture?: (input: AzureTokenExchangeInput) => void): AzureToke
 }
 
 describe("AzureFederatedCredentialExchange (#795 Phase 4 prototype)", () => {
-  it("provider が azure でない intent では provider-mismatch を投げるべき", async () => {
+  it("should throw provider-mismatch for an intent whose provider is not azure", async () => {
     const ex = new AzureFederatedCredentialExchange({
       tokenClient: makeStub(),
       toClientAssertion: () => "jwt",
@@ -64,7 +64,7 @@ describe("AzureFederatedCredentialExchange (#795 Phase 4 prototype)", () => {
     ).rejects.toMatchObject({ reason: "provider-mismatch" });
   });
 
-  it("azureTenantId が無いと context-missing を投げるべき", async () => {
+  it("should throw context-missing when azureTenantId is absent", async () => {
     const ex = new AzureFederatedCredentialExchange({
       tokenClient: makeStub(),
       toClientAssertion: () => "jwt",
@@ -77,7 +77,7 @@ describe("AzureFederatedCredentialExchange (#795 Phase 4 prototype)", () => {
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("clientId / scope が無くても context-missing を投げるべき", async () => {
+  it("should also throw context-missing when clientId or scope is absent", async () => {
     const ex = new AzureFederatedCredentialExchange({
       tokenClient: makeStub(),
       toClientAssertion: () => "jwt",
@@ -98,7 +98,7 @@ describe("AzureFederatedCredentialExchange (#795 Phase 4 prototype)", () => {
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("成功 path で AzureAD endpoint に client_assertion / scope を渡し expires_in を ISO に正規化すべき", async () => {
+  it("should pass client_assertion / scope to the AzureAD endpoint and normalize expires_in to ISO on the success path", async () => {
     let captured: AzureTokenExchangeInput | undefined;
     const fixedNow = new Date("2026-05-15T22:00:00.000Z");
     const ex = new AzureFederatedCredentialExchange({
@@ -126,7 +126,7 @@ describe("AzureFederatedCredentialExchange (#795 Phase 4 prototype)", () => {
     expect(result.forRequestId).toBe("req-azure-1");
   });
 
-  it("Azure AD endpoint が throw したら provider-api-error に wrap するべき", async () => {
+  it("should wrap an Azure AD endpoint throw into provider-api-error", async () => {
     const ex = new AzureFederatedCredentialExchange({
       tokenClient: {
         exchangeAssertion: async () => {

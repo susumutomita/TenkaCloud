@@ -29,7 +29,7 @@ const noopDotenv = () => undefined;
 const fsAlwaysMissing = { existsSync: () => false };
 
 describe("resolveAppConfig", () => {
-  it("CDK_PARAM_SYSTEM_ADMIN_EMAIL が未設定なら throw すべき", () => {
+  it("should throw when CDK_PARAM_SYSTEM_ADMIN_EMAIL is unset", () => {
     expect(() =>
       resolveAppConfig({
         env: baseEnv({ CDK_PARAM_SYSTEM_ADMIN_EMAIL: undefined }),
@@ -41,7 +41,7 @@ describe("resolveAppConfig", () => {
     ).toThrow(/system admin email/i);
   });
 
-  it("CDK_PARAM_TENANT_ID 未設定なら pooled をデフォルトにし、 isPooledDeploy が true になるべき", () => {
+  it("should default to pooled and set isPooledDeploy=true when CDK_PARAM_TENANT_ID is unset", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -54,7 +54,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.tenantName).toBe("Shared Pooled Tenant");
   });
 
-  it("CDK_PARAM_TENANT_ID が ULID で CDK_PARAM_TENANT_NAME 未設定なら、 tenantName は tenantId にフォールバックすべき", () => {
+  it("should fall back tenantName to tenantId when CDK_PARAM_TENANT_ID is a ULID and CDK_PARAM_TENANT_NAME is unset", () => {
     const cfg = resolveAppConfig({
       env: baseEnv({ CDK_PARAM_TENANT_ID: "01ABCXYZ" }),
       binDir: BIN_DIR,
@@ -67,7 +67,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.isPooledDeploy).toBe(false);
   });
 
-  it("CDK_PARAM_TENANT_NAME が set されていれば優先すべき (#748 fix のもう一段下流)", () => {
+  it("should prefer CDK_PARAM_TENANT_NAME when set (downstream of #748 fix)", () => {
     const cfg = resolveAppConfig({
       env: baseEnv({ CDK_PARAM_TENANT_ID: "t-1", CDK_PARAM_TENANT_NAME: "Acme Corp" }),
       binDir: BIN_DIR,
@@ -78,7 +78,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.tenantName).toBe("Acme Corp");
   });
 
-  it("DynamoDB billing mode の default は PROVISIONED + 1/1 capacity であるべき (Free Tier 圧迫防止)", () => {
+  it("DynamoDB billing mode default should be PROVISIONED + 1/1 capacity (Free Tier safety)", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -129,7 +129,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.kmsPendingWindowInDays).toBe(21);
   });
 
-  it("namePrefix は `{appNameLower}-{environment}` で組み立てるべき", () => {
+  it("namePrefix should be built as `{appNameLower}-{environment}`", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -140,7 +140,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.namePrefix).toBe("tenkacloud-development");
   });
 
-  it("apiKeySSMParameterNames は 4 tier 分の keyId / value 名を namePrefix 込みで返すべき", () => {
+  it("apiKeySSMParameterNames should return keyId / value names for all 4 tiers including namePrefix", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -156,7 +156,7 @@ describe("resolveAppConfig", () => {
     );
   });
 
-  it("CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT が整数でなければ throw すべき", () => {
+  it("should throw if CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT is not an integer", () => {
     expect(() =>
       resolveAppConfig({
         env: baseEnv({ CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT: "abc" }),
@@ -168,7 +168,7 @@ describe("resolveAppConfig", () => {
     ).toThrow(/整数で指定/);
   });
 
-  it("CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT が未設定なら undefined を返すべき (= account-level quota 任せ)", () => {
+  it("should return undefined when CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT is unset (defer to account-level quota)", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -179,7 +179,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.deployConcurrentBuildLimit).toBeUndefined();
   });
 
-  it("CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true で participantPortal が runtimeConfig 付きで返るべき", () => {
+  it("should return participantPortal with runtimeConfig when CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true", () => {
     const cfg = resolveAppConfig({
       env: baseEnv({
         CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true",
@@ -206,7 +206,7 @@ describe("resolveAppConfig", () => {
     expect(cfg.participantPortal).toBeUndefined();
   });
 
-  it("Issue #1031: adminConsoleHostingInputs / adminConsoleOriginForCors field は AppConfig から除去されているべき", () => {
+  it("Issue #1031: adminConsoleHostingInputs / adminConsoleOriginForCors fields should be removed from AppConfig", () => {
     // admin-console-hosting は backend URL の cross-stack ref で立つようになり、 env-var 経由の
     // gate は廃止された。 AppConfig 出力に該当 field が含まれないことで env-var 経路 regression を防ぐ。
     const cfg = resolveAppConfig({
@@ -225,7 +225,7 @@ describe("resolveAppConfig", () => {
     expect((cfg as Record<string, unknown>).adminConsoleOriginForCors).toBeUndefined();
   });
 
-  it("CDK_PARAM_IDP_NAME / SYSTEM_ADMIN_ROLE_NAME のデフォルトを process.env に注入すべき (SBT ref-arch 互換)", () => {
+  it("should inject defaults for CDK_PARAM_IDP_NAME / SYSTEM_ADMIN_ROLE_NAME into process.env (SBT ref-arch compatible)", () => {
     const env = baseEnv();
     expect(env.CDK_PARAM_IDP_NAME).toBeUndefined();
     expect(env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME).toBeUndefined();
@@ -244,7 +244,7 @@ describe("resolveAppConfig", () => {
   // 許容する (`${MONTHLY_COST_LIMIT_USD:-50}` で `"50"` が JSON に入る) ため、 resolve は
   // string を Number として扱う必要がある。 env override は process.env 直読みのため本
   // test では config.json default (= "50") が正しく Number 化されることだけを pin する。
-  it("monthlyCostLimitUsd は config.json の string '50' を number 50 に正規化するべき", () => {
+  it("monthlyCostLimitUsd should normalize string '50' from config.json to number 50", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -258,7 +258,7 @@ describe("resolveAppConfig", () => {
 });
 
 describe("resolveApiKeyValue", () => {
-  it("env に値があればそれをそのまま返すべき", () => {
+  it("should return env as-is when set", () => {
     const value = resolveApiKeyValue({
       env: { MY_KEY: "from-env" },
       envVar: "MY_KEY",
@@ -270,7 +270,7 @@ describe("resolveApiKeyValue", () => {
     expect(value).toBe("from-env");
   });
 
-  it("dev 環境では deterministic default を返すべき", () => {
+  it("should return a deterministic default in the dev environment", () => {
     const value = resolveApiKeyValue({
       env: {},
       envVar: "MY_KEY",
@@ -282,7 +282,7 @@ describe("resolveApiKeyValue", () => {
     expect(value).toBe("tenkacloud-development-platinum-tier-key-default-do-not-share");
   });
 
-  it("production / staging 等の isProductionLike では env 必須で throw すべき", () => {
+  it("should throw on missing env in isProductionLike (production / staging etc.)", () => {
     expect(() =>
       resolveApiKeyValue({
         env: {},

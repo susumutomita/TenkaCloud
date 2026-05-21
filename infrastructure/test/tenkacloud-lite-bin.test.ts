@@ -71,7 +71,7 @@ function buildLiteApp(): cdk.App {
 }
 
 describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
-  it("`tenkacloud-lite-problem-deploy` + `tenkacloud-lite` の 2 stack だけが synth されるべき", () => {
+  it("should synth only the 2 stacks `tenkacloud-lite-problem-deploy` + `tenkacloud-lite`", () => {
     const app = buildLiteApp();
     const assembly = app.synth();
     const liteStacks = assembly.stacks.filter((s) => s.stackName.startsWith("tenkacloud-"));
@@ -79,7 +79,7 @@ describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
     expect(names).toEqual(["tenkacloud-lite", "tenkacloud-lite-problem-deploy"]);
   }, 30_000);
 
-  it("ProblemDeployBackend (Lite mode) は eventBusArn 省略で local EventBus を 1 つ作るべき", () => {
+  it("ProblemDeployBackend (Lite mode) should create 1 local EventBus when eventBusArn is omitted", () => {
     const app = buildLiteApp();
     const problemDeployStack = app.node
       .findAll()
@@ -89,7 +89,7 @@ describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
     template.resourceCountIs("AWS::Events::EventBus", 1);
   }, 30_000);
 
-  it("Lite stack 側は AppPlaneCore (= UserPool + REST API + CloudFront) を 1 セット作るべき", () => {
+  it("Lite stack side should create 1 set of AppPlaneCore (UserPool + REST API + CloudFront)", () => {
     const app = buildLiteApp();
     const liteStack = app.node
       .findAll()
@@ -101,7 +101,7 @@ describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
     template.resourceCountIs("AWS::CloudFront::Distribution", 1);
   }, 30_000);
 
-  it("Lite stack は ControlPlane / Tenant-Pipeline / Bootstrap / AdminConsoleInsight を持ち込まないべき", () => {
+  it("Lite stack should not include ControlPlane / Tenant-Pipeline / Bootstrap / AdminConsoleInsight", () => {
     const app = buildLiteApp();
     const assembly = app.synth();
     const stackNames = assembly.stacks.map((s) => s.stackName);
@@ -120,7 +120,7 @@ describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
     }
   }, 30_000);
 
-  it("Lite stack は ProblemDeploy stack に明示的に depend するべき (= cross-stack Lambda ref)", () => {
+  it("Lite stack should explicitly depend on the ProblemDeploy stack (cross-stack Lambda ref)", () => {
     const app = buildLiteApp();
     const liteStack = app.node
       .findAll()

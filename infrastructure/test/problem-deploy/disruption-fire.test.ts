@@ -62,19 +62,19 @@ const baseInput = (over: Partial<Parameters<typeof fireDisruption>[1]> = {}) => 
 describe("fireDisruption (#888)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("unknown_problem を返すべき (problemsDisruptions に entry が無い)", async () => {
+  it("should return unknown_problem (no entry in problemsDisruptions)", async () => {
     const { shared } = buildShared();
     const out = await fireDisruption(shared, baseInput({ problemId: "unknown" }));
     expect(out.kind).toBe("unknown_problem");
   });
 
-  it("unknown_disruption を返すべき (disruptionId が catalog に無い)", async () => {
+  it("should return unknown_disruption (disruptionId not in catalog)", async () => {
     const { shared } = buildShared();
     const out = await fireDisruption(shared, baseInput({ disruptionId: "nope" }));
     expect(out.kind).toBe("unknown_disruption");
   });
 
-  it("invalid_parameters を返すべき (operatorEditable allow-list 外の key)", async () => {
+  it("should return invalid_parameters (key outside operatorEditable allow-list)", async () => {
     const { shared } = buildShared();
     const out = await fireDisruption(shared, baseInput({ parameters: { evilKey: "exfil" } }));
     expect(out.kind).toBe("invalid_parameters");
@@ -150,14 +150,14 @@ describe("fireDisruption (#888)", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("no_targets を返すべき (event 配下に team 不在)", async () => {
+  it("should return no_targets (no teams under the event)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [] }); // team list 空
     const out = await fireDisruption(shared, baseInput());
     expect(out.kind).toBe("no_targets");
   });
 
-  it("PutEvents で FailedEntryCount > 0 なら throw して audit row を書かないべき", async () => {
+  it("should throw and not write audit rows when PutEvents reports FailedEntryCount > 0", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] }); // team list
     ddbSend.mockResolvedValueOnce({}); // idempotency Put
@@ -231,7 +231,7 @@ describe("listDisruptionAudit (#888)", () => {
 describe("listDisruptionCatalog (#888)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("event の problems[] に該当する disruption のみを catalog に出すべき", async () => {
+  it("should surface only disruptions matching event problems[] into the catalog", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {

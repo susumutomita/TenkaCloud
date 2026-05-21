@@ -32,7 +32,7 @@ const { app } = await import("../../lib/problem-deploy/handlers/participant-hand
 const VALID_KEY = "AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQ"; // 43 文字 base64url
 
 describe("GET /portal/healthz", () => {
-  it("ok: true を返すべき (auth 不要)", async () => {
+  it("should return ok: true (no auth required)", async () => {
     const res = await app.request("/portal/healthz");
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -43,7 +43,7 @@ describe("GET /portal/healthz", () => {
 describe("GET /portal/me", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: lookup ヒットで 200 と team scope view を返すべき", async () => {
+  it("normal case: should return 200 with team-scope view on lookup hit", async () => {
     mocks.lookupTeamByLoginKey.mockResolvedValueOnce({
       team: { teamName: "Alpha", teamNameSetByCompetitor: false },
       problems: [
@@ -112,7 +112,7 @@ describe("GET /portal/me", () => {
 describe("GET /portal/me/deploy-logs", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("jobId が無い場合は 400 を返すべき", async () => {
+  it("should return 400 when jobId is missing", async () => {
     const res = await app.request("/portal/me/deploy-logs", {
       headers: { authorization: `Bearer ${VALID_KEY}` },
     });
@@ -121,7 +121,7 @@ describe("GET /portal/me/deploy-logs", () => {
     expect(mocks.getParticipantDeployLogs).not.toHaveBeenCalled();
   });
 
-  it("limit が不正なら 400 を返すべき", async () => {
+  it("should return 400 when limit is invalid", async () => {
     const res = await app.request(
       "/portal/me/deploy-logs?jobId=01H8XGJWBWBAQ4N6RZHM4S2KMV&limit=101",
       { headers: { authorization: `Bearer ${VALID_KEY}` } },
@@ -131,7 +131,7 @@ describe("GET /portal/me/deploy-logs", () => {
     expect(mocks.getParticipantDeployLogs).not.toHaveBeenCalled();
   });
 
-  it("正常系: deploy log response を返すべき", async () => {
+  it("normal case: should return deploy log response", async () => {
     mocks.getParticipantDeployLogs.mockResolvedValueOnce({
       kind: "ok",
       response: {
@@ -160,7 +160,7 @@ describe("GET /portal/me/deploy-logs", () => {
     });
   });
 
-  it("not_found outcome は 404 を返すべき", async () => {
+  it("not_found outcome should return 404", async () => {
     mocks.getParticipantDeployLogs.mockResolvedValueOnce({ kind: "not_found" });
 
     const res = await app.request("/portal/me/deploy-logs?jobId=01H8XGJWBWBAQ4N6RZHM4S2KMV", {

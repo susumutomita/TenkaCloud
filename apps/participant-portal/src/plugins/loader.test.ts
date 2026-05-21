@@ -10,7 +10,7 @@ afterEach(() => {
  * discover できることと、 metadata.dashboard.slots → component の lookup が正しいことを pin。
  */
 describe("plugin loader (ADR-012 Phase 5)", () => {
-  it("Vite glob で microservice-migration-battle/portal/ の 2 file を discover すべき", () => {
+  it("should discover the 2 files under microservice-migration-battle/portal/ via Vite glob", () => {
     const keys = _listDiscoveredPluginKeys();
     expect(
       keys.some((k) => k.endsWith("/microservice-migration-battle/portal/StatusPanel.tsx")),
@@ -20,34 +20,34 @@ describe("plugin loader (ADR-012 Phase 5)", () => {
     ).toBe(true);
   });
 
-  it("dashboard.slots 宣言済の StatusPanel は React.lazy を返すべき", () => {
+  it("should return React.lazy for StatusPanel declared in dashboard.slots", () => {
     const Comp = loadPluginSlot("microservice-migration-battle", "StatusPanel");
     expect(Comp).toBeDefined();
     // React.lazy は LazyExoticComponent (= 内部に `$$typeof` / `_payload` を持つ)
     expect(typeof Comp).toBe("object");
   });
 
-  it("dashboard.slots 宣言済の RegistrationPanel も React.lazy を返すべき", () => {
+  it("should return React.lazy for RegistrationPanel declared in dashboard.slots as well", () => {
     const Comp = loadPluginSlot("microservice-migration-battle", "RegistrationPanel");
     expect(Comp).toBeDefined();
   });
 
-  it("metadata に slot 宣言が無い HelpDrawer は undefined を返すべき", () => {
+  it("should return undefined for HelpDrawer when the slot is not declared in metadata", () => {
     const Comp = loadPluginSlot("microservice-migration-battle", "HelpDrawer");
     expect(Comp).toBeUndefined();
   });
 
-  it("dashboard.slots を持たない問題 (hello-world) は全 slot で undefined を返すべき", () => {
+  it("should return undefined for all slots when the problem (hello-world) has no dashboard.slots", () => {
     expect(loadPluginSlot("hello-world", "StatusPanel")).toBeUndefined();
     expect(loadPluginSlot("hello-world", "RegistrationPanel")).toBeUndefined();
     expect(loadPluginSlot("hello-world", "HelpDrawer")).toBeUndefined();
   });
 
-  it("存在しない problemId は undefined を返すべき", () => {
+  it("should return undefined for a non-existent problemId", () => {
     expect(loadPluginSlot("does-not-exist", "StatusPanel")).toBeUndefined();
   });
 
-  it("同一 (problemId, slotName) を 2 回呼ぶと同 LazyExoticComponent instance を返すべき (= memoize)", () => {
+  it("should return the same LazyExoticComponent instance when called twice for the same (problemId, slotName) (= memoize)", () => {
     const a = loadPluginSlot("microservice-migration-battle", "StatusPanel");
     const b = loadPluginSlot("microservice-migration-battle", "StatusPanel");
     expect(a).toBeDefined();

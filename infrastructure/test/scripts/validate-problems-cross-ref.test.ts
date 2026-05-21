@@ -17,22 +17,22 @@ const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
 const VALIDATE_SCRIPT = join(REPO_ROOT, "scripts/validate-problems.ts");
 
 describe("validate-problems cross-ref check (#951 sub #2)", () => {
-  it("flagOutputKey が template.yaml Outputs に存在すれば includes() が true を返すべき", () => {
+  it("includes() should return true when flagOutputKey is present in template.yaml Outputs", () => {
     const yaml = `Outputs:\n  FlagValue:\n    Value: x\n`;
     expect(yaml.includes("FlagValue:")).toBe(true);
   });
 
-  it("flagOutputKey が Outputs に存在しないとき includes() が false を返すべき", () => {
+  it("includes() should return false when flagOutputKey is missing from Outputs", () => {
     const yaml = `Outputs:\n  SomeOtherKey:\n    Value: x\n`;
     expect(yaml.includes("ThisKeyDoesNotExist:")).toBe(false);
   });
 
-  it("endpoints[].default.key が Outputs に存在しないと検出されるべき", () => {
+  it("should detect when endpoints[].default.key is missing in Outputs", () => {
     const yaml = `Outputs:\n  ServiceUrl:\n    Value: https://example.com\n`;
     expect(yaml.includes("NonExistent:")).toBe(false);
   });
 
-  it("実 script (validate-problems.ts) が repo の problems/ で OK を返すべき", () => {
+  it("the real script (validate-problems.ts) should return OK on the repo's problems/", () => {
     const out = execSync(`bun run ${VALIDATE_SCRIPT}`, {
       encoding: "utf8",
       cwd: REPO_ROOT,

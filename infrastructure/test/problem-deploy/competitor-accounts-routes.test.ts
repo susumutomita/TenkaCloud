@@ -91,7 +91,7 @@ const { app } = await import("../../lib/problem-deploy/handlers/competitor-accou
 describe("POST /admin/competitor-accounts", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("201 で externalId / tenkaCloudAccountId を含む body を返すべき", async () => {
+  it("should return 201 with body containing externalId / tenkaCloudAccountId", async () => {
     mocks.createCompetitorAccount.mockResolvedValueOnce({
       awsAccountId: "222222222222",
       region: "ap-northeast-1",
@@ -118,7 +118,7 @@ describe("POST /admin/competitor-accounts", () => {
     expect(body.verified).toBe(false);
   });
 
-  it("validation 失敗 (= awsAccountId が 12 桁でない) は 400 を返すべき", async () => {
+  it("should return 400 on validation failure (awsAccountId not 12 digits)", async () => {
     const res = await app.request("/admin/competitor-accounts", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -128,7 +128,7 @@ describe("POST /admin/competitor-accounts", () => {
     expect(mocks.createCompetitorAccount).not.toHaveBeenCalled();
   });
 
-  it("Duplicate は 409 を返すべき", async () => {
+  it("should return 409 on Duplicate", async () => {
     mocks.createCompetitorAccount.mockRejectedValueOnce(
       new mocks.DuplicateCompetitorAccountError("222222222222"),
     );
@@ -148,7 +148,7 @@ describe("POST /admin/competitor-accounts", () => {
 describe("GET /admin/competitor-accounts", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("一覧 (verified 混在) を返し externalId は含めないべき", async () => {
+  it("should return the listing (mixed verified) without including externalId", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce([
       {
         awsAccountId: "222222222222",
@@ -178,7 +178,7 @@ describe("GET /admin/competitor-accounts", () => {
 describe("POST /admin/competitor-accounts/:awsAccountId/verify", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("STS 成功時は 200 + verified=true を返すべき", async () => {
+  it("should return 200 + verified=true on STS success", async () => {
     mocks.verifyCompetitorAccount.mockResolvedValueOnce({
       awsAccountId: "222222222222",
       region: "ap-northeast-1",
@@ -196,7 +196,7 @@ describe("POST /admin/competitor-accounts/:awsAccountId/verify", () => {
     expect(body.verified).toBe(true);
   });
 
-  it("STS AssumeRole 失敗時は 422 + underlyingErrorName を返すべき", async () => {
+  it("should return 422 + underlyingErrorName when STS AssumeRole fails", async () => {
     mocks.verifyCompetitorAccount.mockRejectedValueOnce(
       new mocks.AssumeRoleSanityCheckFailedError("222222222222", "AccessDenied", "denied"),
     );
@@ -208,7 +208,7 @@ describe("POST /admin/competitor-accounts/:awsAccountId/verify", () => {
     expect(body.underlyingErrorName).toBe("AccessDenied");
   });
 
-  it("row なしは 404 を返すべき", async () => {
+  it("should return 404 when there is no row", async () => {
     mocks.verifyCompetitorAccount.mockRejectedValueOnce(
       new mocks.CompetitorAccountNotFoundError("999999999999"),
     );
@@ -229,7 +229,7 @@ describe("POST /admin/competitor-accounts/:awsAccountId/verify", () => {
 // create の 2 step に統一済 (= 仕様簡素化)。 旧テスト群は撤去。
 
 describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id (廃止)", () => {
-  it("#1089: rotate endpoint は 404 を返すべき (= 廃止済)", async () => {
+  it("#1089: should return 404 from the rotate endpoint (= removed)", async () => {
     const res = await app.request("/admin/competitor-accounts/222222222222/rotate-external-id", {
       method: "POST",
     });
@@ -240,7 +240,7 @@ describe("POST /admin/competitor-accounts/:awsAccountId/rotate-external-id (廃�
 describe("DELETE /admin/competitor-accounts/:awsAccountId", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("200 + deleted=true を返すべき", async () => {
+  it("should return 200 + deleted=true", async () => {
     mocks.deleteCompetitorAccount.mockResolvedValueOnce(undefined);
     const res = await app.request("/admin/competitor-accounts/222222222222", {
       method: "DELETE",
@@ -270,7 +270,7 @@ describe("/admin/* middleware (Issue #854)", () => {
     else process.env.DEFAULT_USER_ROLE = originalRole;
   });
 
-  it("role 不一致 (= TenantUser) なら 403 forbidden_role を返すべき", async () => {
+  it("should return 403 forbidden_role on role mismatch (TenantUser)", async () => {
     process.env.DEFAULT_USER_ROLE = "TenantUser";
     const res = await app.request("/admin/competitor-accounts", { method: "GET" });
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
@@ -284,7 +284,7 @@ describe("/admin/* middleware (Issue #854)", () => {
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
   });
 
-  it("healthz は role check skip して 200 を返すべき", async () => {
+  it("healthz should skip the role check and return 200", async () => {
     delete process.env.DEFAULT_USER_ROLE;
     const res = await app.request("/admin/competitor-accounts/healthz", { method: "GET" });
     expect(res.status).toBe(StatusCodes.OK);

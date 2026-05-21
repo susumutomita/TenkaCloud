@@ -37,7 +37,7 @@ function makeIO(spawnResults: SpawnCaptureResult[]): {
 }
 
 describe("tenkacloud-ops (#952 AI ops scaffold)", () => {
-  it("ヘルプ表示は exit 0 で usage を返すべき", async () => {
+  it("help should return usage with exit 0", async () => {
     const { io, stdout } = makeIO([]);
     const code = await main(["help"], io);
     expect(code).toBe(0);
@@ -45,21 +45,21 @@ describe("tenkacloud-ops (#952 AI ops scaffold)", () => {
     expect(stdout.join("")).toContain("Usage:");
   });
 
-  it("引数なしは help を表示するべき", async () => {
+  it("should show help when called with no arguments", async () => {
     const { io, stdout } = makeIO([]);
     const code = await main([], io);
     expect(code).toBe(0);
     expect(stdout.join("")).toContain("Usage:");
   });
 
-  it("未知 subcommand は exit 1 でエラーメッセージを stderr に出すべき", async () => {
+  it("should print an error message to stderr and exit 1 on unknown subcommand", async () => {
     const { io, stderr } = makeIO([]);
     const code = await main(["bogus-cmd"], io);
     expect(code).toBe(1);
     expect(stderr.join("")).toContain("unknown command");
   });
 
-  it("health: 全 stack 健全なら exit 0 すべき", async () => {
+  it("health: should exit 0 when all stacks are healthy", async () => {
     const { io, stdout } = makeIO([
       {
         code: 0,
@@ -132,7 +132,7 @@ describe("tenkacloud-ops (#952 AI ops scaffold)", () => {
     expect(stderr.join("")).toContain("credentials expired");
   });
 
-  it("health --region us-east-1 が aws CLI 引数に渡るべき", async () => {
+  it("should pass health --region us-east-1 through to aws CLI arguments", async () => {
     let capturedArgs: readonly string[] | null = null;
     const io: CliIO = {
       stdout: () => {},
@@ -150,7 +150,7 @@ describe("tenkacloud-ops (#952 AI ops scaffold)", () => {
 });
 
 describe("runHealth helpers", () => {
-  it("buildListStacksArgs: region 未指定なら --region を付けず status filter は完全に揃うべき", () => {
+  it("buildListStacksArgs: should omit --region when not specified and keep the status filter intact", () => {
     const args = buildListStacksArgs();
     expect(args).toContain("cloudformation");
     expect(args).toContain("list-stacks");
@@ -164,13 +164,13 @@ describe("runHealth helpers", () => {
     expect(args).not.toContain("--region");
   });
 
-  it("buildListStacksArgs: region 指定で --region <r> を末尾に追加すべき", () => {
+  it("buildListStacksArgs: should append --region <r> when region is specified", () => {
     const args = buildListStacksArgs("ap-northeast-1");
     expect(args[args.length - 2]).toBe("--region");
     expect(args[args.length - 1]).toBe("ap-northeast-1");
   });
 
-  it("parseStackSummariesJson: 正常 JSON は StackSummaries を返すべき", () => {
+  it("parseStackSummariesJson: should return StackSummaries on normal JSON", () => {
     const out = parseStackSummariesJson(
       JSON.stringify({
         StackSummaries: [{ StackName: "tenkacloud-x", StackStatus: "CREATE_COMPLETE" }],
@@ -182,17 +182,17 @@ describe("runHealth helpers", () => {
     });
   });
 
-  it("parseStackSummariesJson: StackSummaries 不在は空配列を返すべき", () => {
+  it("parseStackSummariesJson: should return an empty array when StackSummaries is absent", () => {
     expect(parseStackSummariesJson("{}")).toEqual({ ok: true, stacks: [] });
   });
 
-  it("parseStackSummariesJson: 壊れた JSON は error を返すべき", () => {
+  it("parseStackSummariesJson: should return an error on broken JSON", () => {
     const out = parseStackSummariesJson("not json");
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.error).toMatch(/.+/);
   });
 
-  it("filterTenkaCloudStacks: 既知 prefix の stack だけを残すべき", () => {
+  it("filterTenkaCloudStacks: should keep only stacks with known prefixes", () => {
     const all: readonly CfnStackSummary[] = [
       { StackName: "tenkacloud-control-plane", StackStatus: "CREATE_COMPLETE" },
       { StackName: "serverless-saas-ref-arch-pooled", StackStatus: "CREATE_COMPLETE" },
@@ -207,7 +207,7 @@ describe("runHealth helpers", () => {
     ]);
   });
 
-  it("classifyStacks: FAILED / ROLLBACK / IN_PROGRESS / その他で 3 bucket に振り分けるべき", () => {
+  it("classifyStacks: should sort stacks into 3 buckets (FAILED / ROLLBACK / IN_PROGRESS / others)", () => {
     const buckets = classifyStacks([
       { StackName: "a", StackStatus: "CREATE_COMPLETE" },
       { StackName: "b", StackStatus: "CREATE_FAILED" },

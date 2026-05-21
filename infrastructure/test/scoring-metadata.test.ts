@@ -8,7 +8,7 @@ import { parseScoringEnv, parseScoringMetadata } from "../lib/utils/scoring-meta
 
 describe("parseScoringMetadata", () => {
   describe("flag 形式", () => {
-    it("flagOutputKey + points が揃っていれば narrow するべき", () => {
+    it("should narrow when flagOutputKey + points are both set", () => {
       expect(
         parseScoringMetadata({ kind: "flag", flagOutputKey: "ParameterValue", points: 100 }),
       ).toEqual({
@@ -146,7 +146,7 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("[#742 Phase 5] hints は全 5 kind に共通拡張", () => {
-    it("uptime-flat kind が hints を受け入れて ProgressiveHint[] に正規化すべき", () => {
+    it("uptime-flat kind should accept hints and normalize them to ProgressiveHint[]", () => {
       const result = parseScoringMetadata({
         kind: "uptime-flat",
         endpoints: [{ slot: "main", path: "/", expectStatus: [200] }],
@@ -158,7 +158,7 @@ describe("parseScoringMetadata", () => {
       expect(result.hints).toEqual([{ id: "h1", content: "first endpoint", penalty: 5 }]);
     });
 
-    it("uptime-multi kind が hints を受け入れるべき (v1 legacy も同様に動く)", () => {
+    it("uptime-multi kind should accept hints (v1 legacy works too)", () => {
       const result = parseScoringMetadata({
         kind: "uptime-multi",
         probedSlots: [{ slot: "frontend", path: "/", expectStatus: [200] }],
@@ -170,7 +170,7 @@ describe("parseScoringMetadata", () => {
       expect(result.hints).toEqual([{ id: "hint-1", content: "legacy hint", penalty: 0 }]);
     });
 
-    it("phased-polling kind が hints を受け入れるべき", () => {
+    it("phased-polling kind should accept hints", () => {
       const result = parseScoringMetadata({
         kind: "phased-polling",
         intervalMinutes: 1,
@@ -185,7 +185,7 @@ describe("parseScoringMetadata", () => {
       ]);
     });
 
-    it("attack-detection kind が hints を受け入れるべき", () => {
+    it("attack-detection kind should accept hints", () => {
       const result = parseScoringMetadata({
         kind: "attack-detection",
         statsOutputKey: "AttackCount",
@@ -210,7 +210,7 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("uptime 形式 (legacy alias of uptime-flat)", () => {
-    it("endpoints が array + pointsPerSuccess が number なら narrow するべき", () => {
+    it("should narrow when endpoints is an array and pointsPerSuccess is a number", () => {
       const cfg = {
         kind: "uptime",
         endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
@@ -226,7 +226,7 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("uptime-flat 形式 (ADR-012 Phase 3.B 新名)", () => {
-    it("slot 経由の endpoint を narrow するべき", () => {
+    it("should narrow slot-based endpoints", () => {
       const cfg = {
         kind: "uptime-flat",
         endpoints: [{ slot: "frontend", path: "/", expectStatus: [200] }],
@@ -235,7 +235,7 @@ describe("parseScoringMetadata", () => {
       expect(parseScoringMetadata(cfg)).toEqual(cfg);
     });
 
-    it("slot も outputKey も無い endpoint は drop すべき", () => {
+    it("should drop endpoints lacking both slot and outputKey", () => {
       expect(
         parseScoringMetadata({
           kind: "uptime-flat",
@@ -247,7 +247,7 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("uptime-multi 形式", () => {
-    it("probedSlots + pointsAllOk が揃っていれば narrow すべき", () => {
+    it("should narrow when probedSlots + pointsAllOk are both set", () => {
       const cfg = {
         kind: "uptime-multi",
         probedSlots: [{ slot: "frontend", path: "/", expectStatus: [200] }],
@@ -271,7 +271,7 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("phased-polling 形式", () => {
-    it("intervalMinutes + probe + platformRules が揃っていれば narrow すべき", () => {
+    it("should narrow when intervalMinutes + probe + platformRules are all set", () => {
       const cfg = {
         kind: "phased-polling",
         intervalMinutes: 1,
@@ -315,7 +315,7 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("attack-detection 形式", () => {
-    it("statsOutputKey + pointsPerAttack が揃っていれば narrow すべき", () => {
+    it("should narrow when statsOutputKey + pointsPerAttack are both set", () => {
       const cfg = {
         kind: "attack-detection",
         statsOutputKey: "AttackCounter",
@@ -348,25 +348,25 @@ describe("parseScoringMetadata", () => {
       [],
       { kind: "wrong-kind" },
       { points: 100 },
-    ])("%s は undefined を返すべき", (input) => {
+    ])("should return undefined for %s", (input) => {
       expect(parseScoringMetadata(input)).toBeUndefined();
     });
   });
 });
 
 describe("parseScoringEnv", () => {
-  it("undefined / 空文字 / 壊れた JSON は空 map を返すべき", () => {
+  it("should return an empty map for undefined / empty string / broken JSON", () => {
     expect(parseScoringEnv(undefined)).toEqual({});
     expect(parseScoringEnv("")).toEqual({});
     expect(parseScoringEnv("{not-json")).toEqual({});
   });
 
-  it("array や primitive は空 map を返すべき", () => {
+  it("should return an empty map for arrays or primitives", () => {
     expect(parseScoringEnv(JSON.stringify(["x"]))).toEqual({});
     expect(parseScoringEnv(JSON.stringify(123))).toEqual({});
   });
 
-  it("混在 entries は valid なものだけ拾うべき", () => {
+  it("should pick up only the valid entries in a mixed set", () => {
     const raw = JSON.stringify({
       "valid-flag": { kind: "flag", flagOutputKey: "X", points: 100 },
       "valid-uptime": {

@@ -45,7 +45,7 @@ function synthInsightStack(adminConsoleOrigin?: string): Template {
 
 describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   describe("Lambda", () => {
-    it("AdminInsight Lambda を Node.js 22 / arm64 で 1 個 立てるべき", () => {
+    it("should provision 1 AdminInsight Lambda on Node.js 22 / arm64", () => {
       const tpl = synthInsightStack();
       tpl.resourceCountIs("AWS::Lambda::Function", 1);
       tpl.hasResourceProperties(
@@ -57,7 +57,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       );
     });
 
-    it("Lambda env に Deployments / Events / Teams Table 名を渡すべき", () => {
+    it("should pass Deployments / Events / Teams table names to Lambda env", () => {
       const tpl = synthInsightStack();
       tpl.hasResourceProperties(
         "AWS::Lambda::Function",
@@ -75,12 +75,12 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   });
 
   describe("HTTP API + Cognito JWT Authorizer", () => {
-    it("HTTP API (API GW v2) を 1 つ持つべき", () => {
+    it("should have 1 HTTP API (API GW v2)", () => {
       const tpl = synthInsightStack();
       tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
     });
 
-    it("JWT Authorizer (= Cognito UserPool 連動) を持つべき", () => {
+    it("should have a JWT Authorizer (linked to Cognito UserPool)", () => {
       const tpl = synthInsightStack();
       tpl.hasResourceProperties(
         "AWS::ApiGatewayV2::Authorizer",
@@ -91,7 +91,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       );
     });
 
-    it("GET /admin/insight/tenants/summary route が JWT Authorizer に紐づくべき", () => {
+    it("GET /admin/insight/tenants/summary route should be wired to the JWT Authorizer", () => {
       const tpl = synthInsightStack();
       const routes = tpl.findResources("AWS::ApiGatewayV2::Route", {
         Properties: { RouteKey: "GET /admin/insight/tenants/summary" },
@@ -104,7 +104,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       expect(route.Properties.AuthorizerId).toBeDefined();
     });
 
-    it("Phase 1.B drill-down 4 route (events / event detail / deployment / stack-progress) を持つべき", () => {
+    it("should have the 4 Phase 1.B drill-down routes (events / event detail / deployment / stack-progress)", () => {
       const tpl = synthInsightStack();
       const expected = [
         "GET /admin/insight/tenants/{tenantId}/events",
@@ -124,7 +124,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       }
     });
 
-    it("CORS allowOrigins に localhost dev を入れるべき", () => {
+    it("should include localhost dev in CORS allowOrigins", () => {
       const tpl = synthInsightStack();
       tpl.hasResourceProperties(
         "AWS::ApiGatewayV2::Api",
@@ -141,7 +141,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       );
     });
 
-    it("CDK_PARAM_ADMIN_CONSOLE_ORIGIN 相当の adminConsoleOrigin を CORS に追加するべき", () => {
+    it("should add adminConsoleOrigin (equivalent to CDK_PARAM_ADMIN_CONSOLE_ORIGIN) to CORS", () => {
       const tpl = synthInsightStack("https://abc.cloudfront.net");
       tpl.hasResourceProperties(
         "AWS::ApiGatewayV2::Api",
@@ -170,7 +170,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       return allActions;
     }
 
-    it("Deployments / Events / Teams Table の read のみを Allow するべき (write は禁止)", () => {
+    it("should Allow only reads on Deployments / Events / Teams tables (no writes)", () => {
       const tpl = synthInsightStack();
       // Lambda role に attach された IAM Policy の中に DynamoDB write action が無いことを
       // 強めに検証する (= 旧 grantReadWriteData で誤 wire したら test が落ちる)。
@@ -183,7 +183,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       expect(allActions.some((a) => a === "dynamodb:Query" || a === "dynamodb:GetItem")).toBe(true);
     });
 
-    it("Phase 1.B: Teams table の read を grant するべき (#598)", () => {
+    it("Phase 1.B: should grant Teams-table read (#598)", () => {
       const tpl = synthInsightStack();
       // Teams は Phase 1.A では env 注入のみだったが、Phase 1.B drill-down で read 権限を
       // 追加する。Policy が Teams table の ARN を参照する Statement を 1 つ以上持つこと。
@@ -194,7 +194,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       expect(policyJsonAll).toContain("Teams");
     });
 
-    it("Phase 1.B: CFn DescribeStackEvents / DescribeStackResources を grant するべき (#598)", () => {
+    it("Phase 1.B: should grant CFn DescribeStackEvents / DescribeStackResources (#598)", () => {
       const tpl = synthInsightStack();
       const allActions = collectActions(tpl);
       expect(allActions).toContain("cloudformation:DescribeStackEvents");
@@ -203,7 +203,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   });
 
   describe("Outputs", () => {
-    it("AdminInsightApiUrl を Output として出すべき", () => {
+    it("should expose AdminInsightApiUrl as a stack Output", () => {
       const tpl = synthInsightStack();
       const outputs = tpl.findOutputs("*");
       expect(Object.keys(outputs)).toContain("AdminInsightApiUrl");

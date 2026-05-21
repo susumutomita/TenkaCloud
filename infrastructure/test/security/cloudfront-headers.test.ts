@@ -27,14 +27,14 @@ describe("buildContentSecurityPolicy (pure helper)", () => {
     expect(csp).toContain("object-src 'none'");
   });
 
-  it("connectSrcAllowedOrigins を 'self' に追加するべき", () => {
+  it("should add connectSrcAllowedOrigins to 'self'", () => {
     const csp = buildContentSecurityPolicy({
       connectSrcAllowedOrigins: ["https://api.example.com", "https://auth.example.com"],
     });
     expect(csp).toContain("connect-src 'self' https://api.example.com https://auth.example.com");
   });
 
-  it("formActionAllowedOrigins を 'self' に追加するべき", () => {
+  it("should add formActionAllowedOrigins to 'self'", () => {
     const csp = buildContentSecurityPolicy({
       formActionAllowedOrigins: ["https://auth.example.com"],
     });
@@ -55,7 +55,7 @@ describe("buildContentSecurityPolicy (pure helper)", () => {
     expect(buildContentSecurityPolicy()).toContain("frame-ancestors 'none'");
   });
 
-  it("Issue #899: additionalScriptSrcs を script-src / style-src / connect-src に追加するべき", () => {
+  it("Issue #899: should add additionalScriptSrcs to script-src / style-src / connect-src", () => {
     const csp = buildContentSecurityPolicy({
       additionalScriptSrcs: ["https://cdn.jsdelivr.net"],
     });

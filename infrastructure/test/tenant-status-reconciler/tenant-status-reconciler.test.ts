@@ -20,13 +20,13 @@ function synth() {
 }
 
 describe("TenantStatusReconciler", () => {
-  it("Lambda + EventBridge Rule を 1 セット作るべき", () => {
+  it("should create 1 set of Lambda + EventBridge Rule", () => {
     const { template } = synth();
     template.resourceCountIs("AWS::Lambda::Function", 1);
     template.resourceCountIs("AWS::Events::Rule", 1);
   });
 
-  it("Schedule は 2 分周期がデフォルトであるべき", () => {
+  it("Schedule should default to a 2-minute interval", () => {
     const { template } = synth();
     template.hasResourceProperties(
       "AWS::Events::Rule",
@@ -36,7 +36,7 @@ describe("TenantStatusReconciler", () => {
     );
   });
 
-  it("Lambda の environment に TENANT_MAPPING_TABLE_NAME を渡すべき", () => {
+  it("should pass TENANT_MAPPING_TABLE_NAME to the Lambda environment", () => {
     const { template } = synth();
     template.hasResourceProperties(
       "AWS::Lambda::Function",
@@ -50,7 +50,7 @@ describe("TenantStatusReconciler", () => {
     );
   });
 
-  it("Lambda の IAM policy が TenantMappingTable への Scan + UpdateItem を grant すべき", () => {
+  it("Lambda IAM policy should grant Scan + UpdateItem on TenantMappingTable", () => {
     const { template } = synth();
     template.hasResourceProperties(
       "AWS::IAM::Policy",
@@ -66,7 +66,7 @@ describe("TenantStatusReconciler", () => {
     );
   });
 
-  it("scheduleInterval を override できるべき", () => {
+  it("should allow overriding scheduleInterval", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "T", {
       env: { account: "123456789012", region: "ap-northeast-1" },

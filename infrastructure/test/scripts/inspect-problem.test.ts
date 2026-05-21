@@ -7,7 +7,7 @@ import { runInspect } from "../../../scripts/tenkacloud-problem";
  */
 
 describe("runInspect (#951 sub #5)", () => {
-  it("hello-world: flag kind の scoring + template Outputs + cross-ref OK を含むべき", () => {
+  it("hello-world: should include flag-kind scoring + template Outputs + cross-ref OK", () => {
     const r = runInspect({ problemId: "hello-world" });
     expect(r.ok).toBe(true);
     const text = r.lines.join("\n");
@@ -21,7 +21,7 @@ describe("runInspect (#951 sub #5)", () => {
     expect(text).toContain("Cross-ref:  OK");
   });
 
-  it("hello-world-battle: uptime-flat の endpoint registry を含むべき", () => {
+  it("hello-world-battle: should include the uptime-flat endpoint registry", () => {
     const r = runInspect({ problemId: "hello-world-battle" });
     expect(r.ok).toBe(true);
     const text = r.lines.join("\n");
@@ -30,7 +30,7 @@ describe("runInspect (#951 sub #5)", () => {
     expect(text).toContain("slot=api");
   });
 
-  it("microservice-migration-battle: portal slots + phases + disruptions を含むべき", () => {
+  it("microservice-migration-battle: should include portal slots + phases + disruptions", () => {
     const r = runInspect({ problemId: "microservice-migration-battle" });
     expect(r.ok).toBe(true);
     const text = r.lines.join("\n");
@@ -41,7 +41,7 @@ describe("runInspect (#951 sub #5)", () => {
     expect(text).toContain("(OK)");
   });
 
-  it("security-battle-royale: uptime-multi の probedSlots を含むべき", () => {
+  it("security-battle-royale: should include uptime-multi probedSlots", () => {
     const r = runInspect({ problemId: "security-battle-royale" });
     expect(r.ok).toBe(true);
     const text = r.lines.join("\n");
@@ -49,7 +49,7 @@ describe("runInspect (#951 sub #5)", () => {
     expect(text).toContain("probedSlots:");
   });
 
-  it("存在しない problemId は ok=false を返すべき", () => {
+  it("should return ok=false for non-existent problemId", () => {
     const r = runInspect({ problemId: "does-not-exist-12345" });
     expect(r.ok).toBe(false);
     expect(r.summary).toContain("not found");

@@ -20,7 +20,7 @@ function buildStackWithCodeBuild(): Template {
 }
 
 describe("CodeBuildUseAwsManagedKms", () => {
-  it("CodeBuild Project から EncryptionKey property が削除されるべき (= AWS-managed default にフォールバック)", () => {
+  it("should remove the EncryptionKey property from the CodeBuild Project (fall back to AWS-managed default)", () => {
     const template = buildStackWithCodeBuild();
     const projects = template.findResources("AWS::CodeBuild::Project");
     const projectKeys = Object.keys(projects);
@@ -30,12 +30,12 @@ describe("CodeBuildUseAwsManagedKms", () => {
     }
   });
 
-  it("'EncryptionKey' を含む Construct path の AWS::KMS::Key resource は template から消えるべき", () => {
+  it("should remove AWS::KMS::Key resources whose Construct path contains 'EncryptionKey' from the template", () => {
     const template = buildStackWithCodeBuild();
     template.resourceCountIs("AWS::KMS::Key", 0);
   });
 
-  it("CodeBuild Role の IAM Policy の kms:* statement は除去されるべき (= 残った statement に kms action が無い)", () => {
+  it("should strip kms:* statements from the CodeBuild Role IAM Policy (no kms action remains)", () => {
     const template = buildStackWithCodeBuild();
     const policies = template.findResources("AWS::IAM::Policy");
     for (const policy of Object.values(policies)) {
@@ -59,7 +59,7 @@ describe("CodeBuildUseAwsManagedKms", () => {
     }
   });
 
-  it("CodeBuild Role の IAM Policy の Resource に Fn::GetAtt EncryptionKey 参照は残らないべき", () => {
+  it("should leave no Fn::GetAtt EncryptionKey reference in the CodeBuild Role IAM Policy Resource", () => {
     const template = buildStackWithCodeBuild();
     const policies = template.findResources("AWS::IAM::Policy");
     for (const policy of Object.values(policies)) {
@@ -68,7 +68,7 @@ describe("CodeBuildUseAwsManagedKms", () => {
     }
   });
 
-  it("EncryptionKey と無関係な KMS Key (= 別用途) は影響を受けないべき", () => {
+  it("should leave KMS Keys unrelated to EncryptionKey untouched (different use)", () => {
     const app = new App();
     const stack = new Stack(app, "OtherStack");
     new Key(stack, "DataAtRestKey", { description: "別用途の KMS、削除されてはいけない" });
@@ -77,7 +77,7 @@ describe("CodeBuildUseAwsManagedKms", () => {
     template.resourceCountIs("AWS::KMS::Key", 1);
   });
 
-  it("mixed Resource (EncryptionKey + 他 ARN) の statement は維持されるべき (.every() defensive)", async () => {
+  it("should keep statements with mixed Resources (EncryptionKey + other ARNs) (.every() defensive)", async () => {
     const { App, Aspects, Stack } = await import("aws-cdk-lib");
     const { Role, ServicePrincipal, PolicyStatement, Effect, Policy } = await import(
       "aws-cdk-lib/aws-iam"

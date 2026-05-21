@@ -34,7 +34,7 @@ const ev = (over: Record<string, unknown> = {}) => ({
 describe("collectTeamScoreEvents", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("複数 team の events を group + occurredAt 昇順で返すべき", async () => {
+  it("should return multiple teams' events grouped and sorted by occurredAt ascending", async () => {
     const { shared, ddbSend } = buildShared();
     // TEAM_A J1 と TEAM_B J2 — Promise.all なので mock 順は両方発火
     ddbSend.mockResolvedValueOnce({
@@ -79,7 +79,7 @@ describe("collectTeamScoreEvents", () => {
     expect(teams[1]?.events[0]?.source).toBe("flag");
   });
 
-  it("hint / flag-wrong / uptime / flag を含め、 attack-detected を除外するべき", async () => {
+  it("should include hint / flag-wrong / uptime / flag and exclude attack-detected", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -99,7 +99,7 @@ describe("collectTeamScoreEvents", () => {
     expect(total).toBe(65); // 5 + 100 - 30 - 10
   });
 
-  it("displayName 不在 / teamName 不在ならば teamId を fallback として使うべき", async () => {
+  it("should fall back to teamId when displayName / teamName are absent", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [ev()] });
     const teams = await collectTeamScoreEvents(shared, {
@@ -109,7 +109,7 @@ describe("collectTeamScoreEvents", () => {
     expect(teams[0]?.teamName).toBe("TEAM_X");
   });
 
-  it("EVENT# query は ScanIndexForward=false + PK + EVENT# prefix で発火するべき", async () => {
+  it("EVENT# query should fire with ScanIndexForward=false + PK + EVENT# prefix", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [ev()] });
     await collectTeamScoreEvents(shared, {
@@ -151,7 +151,7 @@ describe("collectTeamScoreEvents", () => {
     ]);
   });
 
-  it("空 deployments なら空 teams を返すべき (= DDB 呼び出しなし)", async () => {
+  it("should return empty teams when deployments are empty (no DDB call)", async () => {
     const { shared, ddbSend } = buildShared();
     const teams = await collectTeamScoreEvents(shared, {
       deployments: [],
@@ -161,7 +161,7 @@ describe("collectTeamScoreEvents", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("operator 内部情報 (PK / SK / expiresAt) を出力に含めないべき", async () => {
+  it("should not include operator-internal info (PK / SK / expiresAt) in output", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [

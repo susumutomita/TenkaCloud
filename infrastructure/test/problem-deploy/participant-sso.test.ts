@@ -71,20 +71,20 @@ describe("getConsoleSigninUrl", () => {
 
   afterEach(() => fetchSpy.mockReset());
 
-  it("不正な jobId (ULID 形式でない) は invalid_jobid を返すべき", async () => {
+  it("should return invalid_jobid for invalid jobId (not ULID form)", async () => {
     const { shared } = buildShared();
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, "not-ulid");
     expect(result).toEqual({ kind: "invalid_jobid" });
   });
 
-  it("teamLoginKey に該当 deployment が無ければ unauthorized を返すべき", async () => {
+  it("should return unauthorized when teamLoginKey has no matching deployments", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [] });
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
     expect(result).toEqual({ kind: "unauthorized" });
   });
 
-  it("jobId が team の deployment 一覧に無ければ unauthorized を返すべき", async () => {
+  it("should return unauthorized when jobId is not in the team's deployment list", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B3" })] });
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
@@ -98,7 +98,7 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "unauthorized" });
   });
 
-  it("IN_PROGRESS な deployment は AssumeRole せず not_ready を返すべき", async () => {
+  it("should return not_ready without AssumeRole for IN_PROGRESS deployments", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "IN_PROGRESS" })] });
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
@@ -107,7 +107,7 @@ describe("getConsoleSigninUrl", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("PENDING な deployment は AssumeRole せず not_ready を返すべき", async () => {
+  it("should return not_ready without AssumeRole for PENDING deployments", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "PENDING" })] });
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
@@ -152,7 +152,7 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "not_ready" });
   });
 
-  it("正常系: STS AssumeRole + getSigninToken fetch を経由して signin login URL を返すべき", async () => {
+  it("normal case: should return signin login URL via STS AssumeRole + getSigninToken fetch", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     stsSend.mockResolvedValueOnce({
@@ -199,7 +199,7 @@ describe("getConsoleSigninUrl", () => {
     expect(fetchedUrl).not.toContain("SessionDuration");
   });
 
-  it("stackOutputs に ParticipantViewerRoleArn が無ければ not_ready を返すべき", async () => {
+  it("should return not_ready when stackOutputs lacks ParticipantViewerRoleArn", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ stackOutputs: JSON.stringify({}) })] });
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
@@ -208,7 +208,7 @@ describe("getConsoleSigninUrl", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("CompetitorDeployRole から ParticipantViewerRole へ role chaining するべき", async () => {
+  it("should role-chain from CompetitorDeployRole to ParticipantViewerRole", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     stsSend.mockResolvedValueOnce({
@@ -286,7 +286,7 @@ describe("getConsoleSigninUrl", () => {
     expect(result).toEqual({ kind: "federation_endpoint_failed", status: 500 });
   });
 
-  it("STS AssumeRole が throw したら assume_role_failed + reason (error name) を返すべき (#705, #864)", async () => {
+  it("should return assume_role_failed + reason (error name) when STS AssumeRole throws (#705, #864)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     // Issue #864: reason は error.name (= 種別) のみを返す。 message / ARN は log に残さない。
@@ -301,7 +301,7 @@ describe("getConsoleSigninUrl", () => {
     }
   });
 
-  it("STS Credentials が empty なら assume_role_failed を返すべき (#705)", async () => {
+  it("should return assume_role_failed when STS Credentials are empty (#705)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     stsSend.mockResolvedValueOnce({ Credentials: undefined });
@@ -373,7 +373,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     return undefined;
   }
 
-  it("IN_PROGRESS の deployment で portal.sso.not_ready.in_progress を info log すべき", async () => {
+  it("should info log portal.sso.not_ready.in_progress for IN_PROGRESS deployments", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "IN_PROGRESS" })] });
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
@@ -386,7 +386,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     expect(payload?.status).toBe("IN_PROGRESS");
   });
 
-  it("namePrefix 未設定で portal.sso.not_ready.namePrefix_missing を info log すべき", async () => {
+  it("should info log portal.sso.not_ready.namePrefix_missing when namePrefix is unset", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ namePrefix: undefined, status: "COMPLETE" })],
@@ -398,7 +398,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     expect(payload?.jobId).toBe(VALID_JOB_ID);
   });
 
-  it("region 未設定で portal.sso.not_ready.region_missing を info log すべき", async () => {
+  it("should info log portal.sso.not_ready.region_missing when region is unset", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ region: undefined })],
@@ -410,7 +410,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     expect(payload?.jobId).toBe(VALID_JOB_ID);
   });
 
-  it("tenantId 未設定で portal.sso.not_ready.tenantId_missing を info log すべき", async () => {
+  it("should info log portal.sso.not_ready.tenantId_missing when tenantId is unset", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ tenantId: undefined })],
@@ -422,7 +422,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     expect(payload?.jobId).toBe(VALID_JOB_ID);
   });
 
-  it("competitorRoleArn 未設定で portal.sso.not_ready.competitorRoleArn_missing を info log すべき", async () => {
+  it("should info log portal.sso.not_ready.competitorRoleArn_missing when competitorRoleArn is unset", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ competitorRoleArn: undefined })],
@@ -435,7 +435,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     expect(payload?.tenantId).toBe("tenant-acme");
   });
 
-  it("ParticipantViewerRoleArn 不在で outputKeys を含む info log を emit すべき (世代不一致の即特定)", async () => {
+  it("should emit an info log with outputKeys when ParticipantViewerRoleArn is absent (quick generation-mismatch identification)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -456,7 +456,7 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     expect(payload?.outputKeys).not.toContain("ParticipantViewerRoleArn");
   });
 
-  it("成功経路では not_ready log は 1 件も emit しないべき", async () => {
+  it("should not emit any not_ready logs on the success path", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     stsSend.mockResolvedValueOnce({
