@@ -98,6 +98,24 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
   ];
 }
 
+type TFn = (key: string) => string;
+
+/**
+ * Archive 失敗時の error を user 向け文字列に整形する。 409 は CFn の `currentStatus` から
+ * 「DRAFT で archive できない」 「READY のままで archive できない」 等の文脈付き message を
+ * 出す。 それ以外は generic な Error message を流す。
+ */
+export function describeArchiveError(err: unknown, name: string, t: TFn): string {
+  if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
+    const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
+    const current = match?.[1];
+    return current
+      ? interpolate(t("event_list.archive_conflict_known"), { name, current })
+      : interpolate(t("event_list.archive_conflict_unknown"), { name });
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 export function EventListPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
@@ -157,17 +175,7 @@ export function EventListPage({ config }: { config: AppConfig }) {
       await archive(apiClient, target.eventId);
       await fetchOnce();
     } catch (err) {
-      if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
-        const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
-        const current = match?.[1];
-        setError(
-          current
-            ? interpolate(t("event_list.archive_conflict_known"), { name: target.name, current })
-            : interpolate(t("event_list.archive_conflict_unknown"), { name: target.name }),
-        );
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      setError(describeArchiveError(err, target.name, t));
     } finally {
       setArchivingId(null);
     }
