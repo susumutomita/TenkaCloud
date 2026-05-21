@@ -154,6 +154,51 @@ function leaderboardIsUnchanged(
   return true;
 }
 
+export type PortalMeRefreshDecision =
+  | { readonly kind: "view"; readonly view: ParticipantTeamView; readonly stopPolling: boolean }
+  | { readonly kind: "error"; readonly message: string }
+  | { readonly kind: "auth-error" };
+
+export type LeaderboardRefreshDecision =
+  | { readonly kind: "leaderboard"; readonly leaderboard: LeaderboardResponse }
+  | { readonly kind: "no-event" }
+  | { readonly kind: "error"; readonly message: string }
+  | { readonly kind: "auth-error" };
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function shouldStopProblemPolling(view: ParticipantTeamView): boolean {
+  return view.problems.every((p) => p.status === "FAILED" || p.status === "DELETED");
+}
+
+export function toPortalMeRefreshDecision(
+  result: PromiseSettledResult<ParticipantTeamView>,
+): PortalMeRefreshDecision {
+  if (result.status === "fulfilled") {
+    return {
+      kind: "view",
+      view: result.value,
+      stopPolling: shouldStopProblemPolling(result.value),
+    };
+  }
+  if (result.reason instanceof PortalAuthError) return { kind: "auth-error" };
+  return { kind: "error", message: errorMessage(result.reason) };
+}
+
+export function toLeaderboardRefreshDecision(
+  result: PromiseSettledResult<LeaderboardResponse | undefined>,
+): LeaderboardRefreshDecision {
+  if (result.status === "fulfilled") {
+    return result.value === undefined
+      ? { kind: "no-event" }
+      : { kind: "leaderboard", leaderboard: result.value };
+  }
+  if (result.reason instanceof PortalAuthError) return { kind: "auth-error" };
+  return { kind: "error", message: errorMessage(result.reason) };
+}
+
 /**
  * Authenticated 領域 (`ShellLayout`) の中で 1 度だけ動く polling を提供する Context。
  *
@@ -185,6 +230,43 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(() => loadLastSeenAt(eventIdForKey));
   const stopPollingRef = useRef(false);
 
+  const applyPortalMeDecision = useCallback(
+    (decision: PortalMeRefreshDecision): boolean => {
+      if (decision.kind === "auth-error") {
+        auth.logout();
+        return false;
+      }
+      if (decision.kind === "error") {
+        setError(decision.message);
+        return true;
+      }
+      setView((prev) => (viewIsUnchanged(prev, decision.view) ? prev : decision.view));
+      setError(null);
+      if (decision.stopPolling) stopPollingRef.current = true;
+      return true;
+    },
+    [auth],
+  );
+
+  const applyLeaderboardDecision = useCallback((decision: LeaderboardRefreshDecision): void => {
+    if (decision.kind === "auth-error") return;
+    if (decision.kind === "error") {
+      setLeaderboardError(decision.message);
+      return;
+    }
+    if (decision.kind === "no-event") {
+      // 404 = Phase 1 以前の旧 deployment (eventId 無し) → leaderboard 不能
+      setLeaderboardNoEvent(true);
+      setLeaderboard(null);
+    } else {
+      setLeaderboardNoEvent(false);
+      setLeaderboard((prev) =>
+        leaderboardIsUnchanged(prev, decision.leaderboard) ? prev : decision.leaderboard,
+      );
+    }
+    setLeaderboardError(null);
+  }, []);
+
   /** 5 秒 tick: `/portal/me` + `/portal/leaderboard`。Notifications は別系統。 */
   const refresh = useCallback(async () => {
     if (!isBackend || !sessionToken) return;
@@ -193,41 +275,9 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
       getLeaderboard(config.apiBaseUrl, sessionToken),
     ]);
 
-    if (meResult.status === "fulfilled") {
-      const next = meResult.value;
-      setView((prev) => (viewIsUnchanged(prev, next) ? prev : next));
-      setError(null);
-      if (next.problems.every((p) => p.status === "FAILED" || p.status === "DELETED")) {
-        stopPollingRef.current = true;
-      }
-    } else {
-      const err = meResult.reason;
-      if (err instanceof PortalAuthError) {
-        auth.logout();
-        return;
-      }
-      setError(err instanceof Error ? err.message : String(err));
-    }
-
-    if (leaderboardResult.status === "fulfilled") {
-      const next = leaderboardResult.value;
-      if (next === undefined) {
-        // 404 = Phase 1 以前の旧 deployment (eventId 無し) → leaderboard 不能
-        setLeaderboardNoEvent(true);
-        setLeaderboard(null);
-      } else {
-        setLeaderboardNoEvent(false);
-        setLeaderboard((prev) => (leaderboardIsUnchanged(prev, next) ? prev : next));
-      }
-      setLeaderboardError(null);
-    } else {
-      const err = leaderboardResult.reason;
-      // Auth エラーは meResult 側で処理済 (= 同じ token を使っているので)
-      if (!(err instanceof PortalAuthError)) {
-        setLeaderboardError(err instanceof Error ? err.message : String(err));
-      }
-    }
-  }, [isBackend, sessionToken, config.apiBaseUrl, auth]);
+    if (!applyPortalMeDecision(toPortalMeRefreshDecision(meResult))) return;
+    applyLeaderboardDecision(toLeaderboardRefreshDecision(leaderboardResult));
+  }, [isBackend, sessionToken, config.apiBaseUrl, applyPortalMeDecision, applyLeaderboardDecision]);
 
   /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
   const refreshNotifications = useCallback(async () => {
