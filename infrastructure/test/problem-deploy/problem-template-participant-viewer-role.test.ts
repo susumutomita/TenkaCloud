@@ -7,17 +7,11 @@ const REPO_ROOT = resolve(__dirname, "../../..");
 const TEMPLATES = [
   {
     path: "problems/challenges/hello-world/template.yaml",
-    actions: ["ssm:GetParameter", "cloudformation:DescribeStacks"],
+    actions: ["ssm:GetParameter"],
   },
   {
     path: "problems/battles/hello-world-battle/template.yaml",
-    actions: [
-      "ec2:Describe*",
-      "ssm:StartSession",
-      "ssm:TerminateSession",
-      "cloudformation:DescribeStacks",
-      "logs:FilterLogEvents",
-    ],
+    actions: ["ec2:Describe*", "ssm:StartSession", "ssm:TerminateSession", "logs:FilterLogEvents"],
   },
   {
     path: "problems/battles/security-battle-royale/template.yaml",

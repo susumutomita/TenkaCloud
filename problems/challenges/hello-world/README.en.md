@@ -27,8 +27,7 @@ The canonical worldbuilding lives in [`docs/lore/world.html`](../../../docs/lore
 - `AWS::SSM::Parameter` (`/{NamePrefix}/hello`, Standard tier, value `Hello from {NamePrefix}`)
 - `ParticipantViewerRole` — IAM Role competitors AssumeRole into for read-only AWS Console access
   - `ssm:GetParameter` / `GetParameters` / `GetParametersByPath` scoped **only to their own prefix**
-  - `cloudformation:DescribeStacks` etc. scoped **only to their own stack**
-  - Cannot peek at other tenants' parameters / stacks (ADR-021)
+  - SSM read only (= cannot peek at other tenants' parameters, ADR-021)
 
 No EC2 / VPC / public endpoint is created. SSM Standard tier is free.
 
@@ -40,9 +39,9 @@ aws ssm get-parameter --name /{NamePrefix}/hello --query Parameter.Value --outpu
 # → "Hello from {NamePrefix}"
 ```
 
-Or click through to the Parameter Store detail page in AWS Console — the deep link is published as the `ParameterConsoleUrl` output in [`template.yaml`](./template.yaml) and exposed to competitors via the Participant Portal.
+Or open the `ParameterConsoleUrl` output (= region-scoped AWS Console home) from the Participant Portal and navigate to SSM Parameter Store yourself. Type the parameter name (`ParameterName` output) into Parameter Store search, or read it via the CLI.
 
-> The Parameter Store **list** page in Console requires `ssm:DescribeParameters`, which `ParticipantViewerRole` intentionally lacks to prevent cross-tenant leakage (ADR-021). Listing from the console is deliberately blocked, so use the deep link from the Portal.
+> The Parameter Store **list** page in Console requires `ssm:DescribeParameters`, which `ParticipantViewerRole` intentionally lacks to prevent cross-tenant leakage (ADR-021). Listing from the console is deliberately blocked, so the CLI path (`aws ssm get-parameter --name ...`) is the recommended solve.
 
 Paste the value into the Participant Portal flag submission box and submit. Correct → +100 pt. Wrong → -5 pt.
 

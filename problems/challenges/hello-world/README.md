@@ -27,8 +27,7 @@ Challenge / flag-submission の **最小 sample** 問題。 SSM Parameter Store 
 - `AWS::SSM::Parameter` (`/{NamePrefix}/hello`、 Standard tier、 値は `Hello from {NamePrefix}`)
 - `ParticipantViewerRole` — 競技者が AWS Console で読み取り専用 AssumeRole するための IAM Role
   - `ssm:GetParameter` / `GetParameters` / `GetParametersByPath` を **自分の prefix だけ** に scope
-  - `cloudformation:DescribeStacks` etc. を **自分の stack だけ** に scope
-  - 他テナントの parameter / stack を覗けない (ADR-021)
+  - SSM 読み取り権限のみ (= 他テナントの parameter は覗けない、 ADR-021)
 
 EC2 / VPC / 公開エンドポイントは作らない。 SSM Standard tier は料金ゼロ。
 
@@ -40,9 +39,9 @@ aws ssm get-parameter --name /{NamePrefix}/hello --query Parameter.Value --outpu
 # → "Hello from {NamePrefix}"
 ```
 
-または AWS Console の Parameter Store 詳細ページ ([`ParameterConsoleUrl` の Output](./template.yaml)) を Participant Portal から click-through すると直接 deep link で開ける。
+または Participant Portal の `ParameterConsoleUrl` (= region-scoped AWS Console home) から飛んで、 自分で SSM Parameter Store に navigate する。 パラメータ名 (`ParameterName` Output) を直接入力するか、 CLI 経由で読み出すかの 2 択。
 
-> Console の Parameter Store **一覧** ページは `ssm:DescribeParameters` が必要で、 cross-tenant leak を防ぐため `ParticipantViewerRole` には付与していない (ADR-021)。 一覧から探す解き方は意図的に塞いであるので、 Portal の deep link を使う。
+> Console の Parameter Store **一覧** ページは `ssm:DescribeParameters` が必要で、 cross-tenant leak を防ぐため `ParticipantViewerRole` には付与していない (ADR-021)。 一覧から探す解き方は意図的に塞いであるので、 CLI で名前指定 (`aws ssm get-parameter --name ...`) が推奨経路。
 
 値を Participant Portal の Flag 提出欄に貼り付けて submit → 一致すれば +100 pt。 間違えると -5 pt のペナルティ。
 
