@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
-import { resolveAppConfig } from "../lib/app-config";
-import { buildTenkaCloudApp } from "../lib/app-wiring";
+import { resolveAppConfig } from "../lib/app-config/index.js";
+import { buildTenkaCloudApp } from "../lib/app-wiring/index.js";
 
 /**
  * TenkaCloud CDK app の composition root。

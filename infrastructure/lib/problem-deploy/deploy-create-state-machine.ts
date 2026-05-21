@@ -22,7 +22,7 @@ import {
   LambdaInvoke,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
-import { deploymentKey, stateEnteredTime } from "./state-machine-helpers";
+import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
 export interface DeployCreateStateMachineProps {
   /** 実体の deploy を担う CodeBuild Project (= `scripts/deploy-battles.sh` を実行)。 */

@@ -1,21 +1,21 @@
 import * as cdk from "aws-cdk-lib";
-import { AdminConsoleHostingStack } from "../admin-console-hosting";
-import { AdminConsoleRuntimeConfigStack } from "../admin-console-runtime-config-stack";
-import { AdminConsoleInsightStack } from "../admin-insight/admin-console-insight-stack";
-import type { AppConfig } from "../app-config/types";
-import { BootstrapTemplateStack } from "../bootstrap-template/bootstrap-template-stack";
-import { CodeBuildUseAwsManagedKms } from "../cdk-aspect/codebuild-use-aws-managed-kms";
-import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter";
-import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity";
-import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-window";
-import { ControlPlaneStack } from "../control-plane-stack";
-import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack";
-import { CostBudget } from "../observability/cost-budget";
-import { FreeTierAlarms } from "../observability/free-tier-alarms";
-import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
-import { ProblemDeployBackendStack } from "../problem-deploy/problem-deploy-backend-stack";
-import { ServerlessSaaSPipeline } from "../tenant-pipeline/serverless-saas-pipeline";
-import { TenantTemplateStack } from "../tenant-template/tenant-template-stack";
+import { AdminConsoleHostingStack } from "../admin-console-hosting.js";
+import { AdminConsoleRuntimeConfigStack } from "../admin-console-runtime-config-stack.js";
+import { AdminConsoleInsightStack } from "../admin-insight/admin-console-insight-stack.js";
+import type { AppConfig } from "../app-config/types.js";
+import { BootstrapTemplateStack } from "../bootstrap-template/bootstrap-template-stack.js";
+import { CodeBuildUseAwsManagedKms } from "../cdk-aspect/codebuild-use-aws-managed-kms.js";
+import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter.js";
+import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity.js";
+import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-window.js";
+import { ControlPlaneStack } from "../control-plane-stack.js";
+import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack.js";
+import { CostBudget } from "../observability/cost-budget.js";
+import { FreeTierAlarms } from "../observability/free-tier-alarms.js";
+import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
+import { ProblemDeployBackendStack } from "../problem-deploy/problem-deploy-backend-stack.js";
+import { ServerlessSaaSPipeline } from "../tenant-pipeline/serverless-saas-pipeline.js";
+import { TenantTemplateStack } from "../tenant-template/tenant-template-stack.js";
 
 /**
  * Issue #766: TenkaCloud の全 stack 配線を 1 つの pure function に集約する。

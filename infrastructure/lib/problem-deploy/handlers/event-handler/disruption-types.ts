@@ -2,7 +2,7 @@
  * Issue #888: Red Team Disruption Injection の API / store の共通 type 定義。
  */
 
-import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog";
+import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
 
 /** Fire API の request scope。 */
 export type DisruptionFireScope = "team" | "all" | "random-n";

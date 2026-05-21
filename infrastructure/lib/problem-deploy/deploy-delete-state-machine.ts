@@ -19,7 +19,7 @@ import {
   DynamoUpdateItem,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
-import { deploymentKey, stateEnteredTime } from "./state-machine-helpers";
+import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
 export interface DeployDeleteStateMachineProps {
   /**

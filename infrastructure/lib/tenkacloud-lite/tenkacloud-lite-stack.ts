@@ -1,7 +1,7 @@
 import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
-import { buildAppPlaneCore } from "../app-plane-core";
+import { buildAppPlaneCore } from "../app-plane-core/index.js";
 
 /**
  * Issue #778 ADR-016 Phase 3: TenkaCloud Lite mode の専用 stack。

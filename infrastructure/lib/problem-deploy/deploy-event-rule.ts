@@ -7,7 +7,7 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   EVENT_SOURCE,
-} from "./handlers/shared/events";
+} from "./handlers/shared/events.js";
 
 export interface DeployEventRuleProps {
   /** SBT ControlPlane が払い出す共通 EventBus。 */

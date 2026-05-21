@@ -10,12 +10,12 @@ import type {
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
-import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message";
+import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message.js";
 import {
   SYSTEM_ADMIN_ENABLED_MFAS,
   SYSTEM_ADMIN_MFA_CONFIGURATION,
   SYSTEM_ADMIN_PASSWORD_POLICY,
-} from "./control-plane/mfa-policy";
+} from "./control-plane/mfa-policy.js";
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;

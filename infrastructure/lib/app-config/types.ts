@@ -1,6 +1,6 @@
 import type { BillingMode } from "aws-cdk-lib/aws-dynamodb";
-import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
-import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
+import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
 
 export type { ApiKeySSMParameterNames };
 

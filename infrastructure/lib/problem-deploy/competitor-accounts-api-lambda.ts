@@ -9,7 +9,7 @@ import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime";
+} from "../utils/lambda-runtime.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface CompetitorAccountsApiLambdaProps {

@@ -11,9 +11,9 @@ import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import { PolicyDocument } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
-import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
-import { TenantStatusReconciler } from "../tenant-status-reconciler/tenant-status-reconciler";
-import { TenantApiKey } from "./tenant-api-key";
+import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import { TenantStatusReconciler } from "../tenant-status-reconciler/tenant-status-reconciler.js";
+import { TenantApiKey } from "./tenant-api-key.js";
 
 interface BootstrapTemplateStackProps extends StackProps {
   apiKeySSMParameterNames: ApiKeySSMParameterNames;

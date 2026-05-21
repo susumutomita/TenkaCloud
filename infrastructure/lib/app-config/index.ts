@@ -1,2 +1,2 @@
-export { resolveApiKeyValue, resolveAppConfig } from "./resolve";
-export type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types";
+export { resolveApiKeyValue, resolveAppConfig } from "./resolve.js";
+export type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types.js";

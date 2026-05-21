@@ -2,9 +2,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import * as dotenv from "dotenv";
-import { getEnv } from "../helper-functions";
-import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting";
-import { loadConfig } from "../utils/config-loader";
+import { getEnv } from "../helper-functions.js";
+import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
+import { loadConfig } from "../utils/config-loader.js";
 import {
   discoverProblemsCatalog,
   discoverProblemsDisruptions,
@@ -12,8 +12,8 @@ import {
   discoverProblemsPhases,
   discoverProblemsScoring,
   discoverProblemsVisibility,
-} from "../utils/discover-problems-catalog";
-import type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types";
+} from "../utils/discover-problems-catalog.js";
+import type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types.js";
 
 /**
  * Issue #766: bin/infrastructure.ts に散在していた env / config 解決を 1 つの pure function

@@ -6,7 +6,7 @@ import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { Construct } from "constructs";
-import { AdminInsightApiLambda } from "./admin-insight-api-lambda";
+import { AdminInsightApiLambda } from "./admin-insight-api-lambda.js";
 
 export interface AdminConsoleInsightStackProps extends cdk.StackProps {
   /**

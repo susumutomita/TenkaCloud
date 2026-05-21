@@ -8,8 +8,8 @@ import {
   PhysicalResourceId,
 } from "aws-cdk-lib/custom-resources";
 import type { Construct } from "constructs";
-import { buildAppPlaneCore } from "../app-plane-core";
-import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
+import { buildAppPlaneCore } from "../app-plane-core/index.js";
+import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 
 interface TenantTemplateStackProps extends StackProps {
   stageName: string;

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata";
-import { type ProblemScoringMetadata, parseScoringMetadata } from "./scoring-metadata";
+import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata.js";
+import { type ProblemScoringMetadata, parseScoringMetadata } from "./scoring-metadata.js";
 
 export type { ProblemEndpointSlot, ProblemScoringMetadata };
 
