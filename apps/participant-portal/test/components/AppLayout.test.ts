@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LeaderboardResponse, ParticipantTeamView } from "../../src/api/portal-client";
 import {
+  buildProfileMenuItems,
   formatTopNavRank,
   formatTopNavScore,
+  handleProfileMenuClick,
   isSupportedLocaleId,
 } from "../../src/components/AppLayout";
 
@@ -83,5 +85,39 @@ describe("AppLayout top navigation helpers", () => {
     expect(isSupportedLocaleId("ja")).toBe(true);
     expect(isSupportedLocaleId("en")).toBe(true);
     expect(isSupportedLocaleId("fr")).toBe(false);
+  });
+});
+
+describe("profile dropdown menu (Issue #1191)", () => {
+  it("should list change_team_name before logout so the destructive action is visually last", () => {
+    const items = buildProfileMenuItems((key) => `<${key}>`);
+    expect(items).toEqual([
+      { id: "change_team_name", text: "<nav.change_team_name>" },
+      { id: "logout", text: "<nav.sign_out>" },
+    ]);
+  });
+
+  it("should navigate to /setup when the change_team_name item is clicked", () => {
+    const logout = vi.fn();
+    const navigate = vi.fn();
+    handleProfileMenuClick("change_team_name", { logout, navigate });
+    expect(navigate).toHaveBeenCalledWith("/setup");
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it("should logout and navigate to /login when the logout item is clicked", () => {
+    const logout = vi.fn();
+    const navigate = vi.fn();
+    handleProfileMenuClick("logout", { logout, navigate });
+    expect(logout).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenCalledWith("/login");
+  });
+
+  it("should ignore unknown menu item ids without side effects", () => {
+    const logout = vi.fn();
+    const navigate = vi.fn();
+    handleProfileMenuClick("does-not-exist", { logout, navigate });
+    expect(logout).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

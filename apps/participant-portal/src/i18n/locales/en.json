@@ -25,6 +25,7 @@
     "scoreboard": "Scoreboard",
     "score_events": "Score events",
     "sso_credentials": "SSO Credentials",
+    "change_team_name": "Change team name",
     "sign_out": "Sign out"
   },
   "switcher": {
@@ -71,12 +72,16 @@
   "team_setup": {
     "title": "Choose your team name",
     "description": "Enter the name to call your team during this event",
+    "edit_title": "Change team name",
+    "edit_description": "Update the name shown on the scoreboard and your profile. Other members of your team will see the new name too.",
     "field_label": "Team name",
     "field_description": "Shown on your profile and the scoreboard. You can change it later.",
     "field_placeholder": "e.g. Our team",
     "field_constraint": "1–40 chars, alphanumeric / space / _ / - / Japanese",
     "field_invalid_format": "Invalid format",
     "submit_button": "Start with this name",
+    "edit_submit_button": "Save",
+    "cancel_button": "Cancel",
     "submit_failed_header": "Failed to save team name",
     "validation_failed": "Invalid team name format. Use 1–40 chars: alphanumeric, space, _, -, or Japanese characters only."
   },

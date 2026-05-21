@@ -69,7 +69,10 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const t = useT();
   const { locale, setLocale } = useI18n();
-  const [teamName, setTeamName] = useState("");
+  // Issue #1191: 既に teamName を設定済の競技者が dropdown 経由でこのページを開く
+  // ケースが edit mode。 初期表示の入力欄に現在の名前を埋めておく + Cancel で `/` に戻る。
+  const isEditMode = auth.session?.teamNameSetByCompetitor === true;
+  const [teamName, setTeamName] = useState(isEditMode ? (auth.session?.teamName ?? "") : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -135,8 +138,11 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
       <Box padding="l" textAlign="center">
         <Container
           header={
-            <Header variant="h1" description={t("team_setup.description")}>
-              {t("team_setup.title")}
+            <Header
+              variant="h1"
+              description={t(isEditMode ? "team_setup.edit_description" : "team_setup.description")}
+            >
+              {t(isEditMode ? "team_setup.edit_title" : "team_setup.title")}
             </Header>
           }
         >
@@ -161,14 +167,21 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
                   invalid={draft.invalid}
                 />
               </FormField>
-              <Button
-                variant="primary"
-                loading={submitting}
-                disabled={!canSubmit}
-                onClick={handleSubmit}
-              >
-                {t("team_setup.submit_button")}
-              </Button>
+              <SpaceBetween size="xs" direction="horizontal">
+                <Button
+                  variant="primary"
+                  loading={submitting}
+                  disabled={!canSubmit}
+                  onClick={handleSubmit}
+                >
+                  {t(isEditMode ? "team_setup.edit_submit_button" : "team_setup.submit_button")}
+                </Button>
+                {isEditMode && (
+                  <Button variant="link" disabled={submitting} onClick={() => navigate("/")}>
+                    {t("team_setup.cancel_button")}
+                  </Button>
+                )}
+              </SpaceBetween>
             </SpaceBetween>
           </Form>
         </Container>
