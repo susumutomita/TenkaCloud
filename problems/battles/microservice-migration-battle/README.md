@@ -1,5 +1,7 @@
 # Microservice Migration Battle
 
+> English version: [README.en.md](./README.en.md)
+>
 > **Status: Phase 1 (draft)** — Phase 1 では EC2 上のモノリス問題ファイル一式のみを出荷する。スコアエンジン / 登録 UI / EC2 劣化 cron / フェーズ進行ロジックは Phase 2 / Phase 3 で追加される (= issue #572 のフォローアップ)。
 
 EC2 1 台に同居する 3 サービス (`users` / `orders` / `catalog`) のモノリスを、競技時間 90〜120 分の間に **Lambda + API Gateway / Amazon ECS (Fargate) / AWS App Runner** の 3 種類の異なるホスティングへマイクロサービスとして分割していく Battle 問題。
