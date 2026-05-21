@@ -117,7 +117,8 @@
       "effect": {
         "switchPlatformToDegraded": ["ec2"]
       },
-      "description": "EC2 上の劣化フェーズ。 EC2 hosting platform の加点が degradedPoints (= 10) に切り替わる。"
+      "description": "EC2 hosting で稼働を続けているとスコア加算が degraded 値に切り替わる予告フェーズ。",
+      "publicHint": true
     },
     {
       "name": "legacy",
@@ -125,7 +126,8 @@
       "effect": {
         "scorePathOverride": "/score?legacy=true"
       },
-      "description": "Legacy code path フェーズ。 各サービスに仕込まれた遅延 code path を取り除く必要が出る。"
+      "description": "スコア engine が `/score?legacy=true` に切替わる予告フェーズ。",
+      "publicHint": true
     }
   ],
   "disruptions": [
@@ -139,7 +141,8 @@
         "delayMs": 200,
         "device": "eth0"
       },
-      "description": "deploy 後 60 分 (default) の self-triggered Scheduler が EC2 の eth0 に `tc qdisc add ... netem delay 200ms` を注入する。 phases[0]=degraded と同時刻で発火し、 score engine 側の degradedPoints 切替と組み合わさって accumulated latency による減点が始まる。 operator は deploy 時に afterMinutes を上書き可能 (CFn parameter `DegradedAfterMinutes`)。"
+      "description": "deploy 後 60 分 (default) で EC2 のネットワーク遅延が増加する予告。",
+      "publicHint": true
     }
   ],
   "dashboard": {

@@ -20,7 +20,6 @@ import {
   resolveLocalizedNarrative,
 } from "../data/problems";
 import { useI18n, useT } from "../i18n";
-import { renderMarkdownToSafeHtml } from "../lib/markdown";
 import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
@@ -245,7 +244,7 @@ function ProblemInfoSection({
   t,
 }: {
   metadata: ProblemCatalogEntry;
-  narrative: { readonly description: string };
+  narrative: { readonly shortDescription: string };
   t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }) {
   // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
@@ -272,14 +271,12 @@ function ProblemInfoSection({
 
         <div>
           <Box variant="awsui-key-label">{t("problem_detail.info_description_label")}</Box>
-          {/* Issue #661: metadata.json の description は markdown source。 marked → DOMPurify
-           *   で sanitize した HTML を render する。 ADR-008 で community contributor 経由の
-           *   metadata 受け入れを想定して必ず XSS sanitize を通す。 */}
-          <div
-            className="problem-description-markdown"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: DOMPurify sanitized in renderMarkdownToSafeHtml
-            dangerouslySetInnerHTML={{ __html: renderMarkdownToSafeHtml(narrative.description) }}
-          />
+          {/* fairness contract (#1124 follow-up): metadata.description は採点ルール /
+           *   hardened state / 段階詳細 などのネタバレを含むので portal には embed しない。
+           *   競技者向けの 1 行サマリ (= shortDescription) のみ表示する。 admin / authoring
+           *   view 用の長文は apps/application-admin-console / docs/problems/AUTHORING.html
+           *   を参照。 */}
+          <Box variant="p">{narrative.shortDescription}</Box>
         </div>
       </SpaceBetween>
     </Container>
