@@ -16,7 +16,7 @@ make start
 1. Pick an issue (`good first issue` / `help wanted`) or a starter task from
    [ROADMAP.md](./ROADMAP.md#good-first-issue-candidates)
 2. Create a branch: `git checkout -b feat/your-feature`
-3. Write tests first (TDD). Test titles use the Japanese pattern `〜すべき` — match this style for consistency with the existing suite.
+3. Write tests first (TDD). Test titles use the English `should ...` pattern — match this style for consistency with the existing suite.
 4. Run `make before-commit` (lint / format / typecheck / tests / build)
 5. Open a PR (title under 70 characters, Conventional Commits)
 
