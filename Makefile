@@ -13,7 +13,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        check-http-status check-template-ascii check-template-security check-template-cfn-refs \
+        check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access \
         env-check env-check-lite synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-battles destroy-battles \
@@ -49,6 +49,13 @@ check-template-ascii: ; bun run scripts/check-template-ascii.ts
 check-template-security: ; bun run scripts/check-template-security.ts
 # Issue #951 sub-2: 問題 template.yaml の構造的整合性 (= !Ref / !GetAtt が declared resource を指す)
 check-template-cfn-refs: ; bun run scripts/check-template-cfn-refs.ts
+# ParticipantViewerRole に Console federation 後の CLI / CloudShell access に必要な
+# AWS managed policy (AWSSignInLocalDevelopmentAccess + AWSCloudShellFullAccess) が
+# attach されているか検証。 未 attach だと Console login は成功するのに CLI / CloudShell が
+# 静かに失敗するため、 問題作成者が同じ落とし穴を踏まないよう merge 前に弾く。
+# 現状は既存 5 テンプレが未対応なので standalone target のみ。 TenkaCloudChallenge 側で
+# templates を更新してから before-commit / check に組み込む (follow-up PR で wire)。
+check-template-cli-access: ; bun run scripts/check-template-cli-access.ts
 audit-deps:    ; bun run audit:dependencies
 # `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
