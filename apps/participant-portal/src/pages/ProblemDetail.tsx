@@ -8,6 +8,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
+import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
@@ -29,6 +30,38 @@ const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
   4: "problem_detail.difficulty_4",
   5: "problem_detail.difficulty_5",
 };
+
+interface ProblemDetailGate {
+  readonly kind: string;
+}
+
+interface ProblemDetailVisibilityState {
+  readonly hasProblem: boolean;
+  readonly locked: boolean;
+}
+
+interface EndpointOverrideVisibilityState extends ProblemDetailVisibilityState {
+  readonly hasMetadata: boolean;
+  readonly endpointCount: number;
+}
+
+export function isProblemDetailLocked(eventGate: ProblemDetailGate | undefined): boolean {
+  return eventGate?.kind === "scoring_not_started";
+}
+
+export function canRenderProblemDetailBody(state: ProblemDetailVisibilityState): boolean {
+  return state.hasProblem && !state.locked;
+}
+
+export function canRenderEndpointOverride(state: EndpointOverrideVisibilityState): boolean {
+  return canRenderProblemDetailBody(state) && state.hasMetadata && state.endpointCount > 0;
+}
+
+function getScoringNotStartedStartsAt(
+  eventGate: ParticipantTeamView["eventGate"] | undefined,
+): string | undefined {
+  return eventGate?.kind === "scoring_not_started" ? eventGate.startsAt : undefined;
+}
 
 /**
  * 1 問題の詳細ページ。Quests から click で来る。`useTeamView()` の問題リストから
@@ -57,6 +90,15 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     () => (metadata ? resolveLocalizedNarrative(metadata, locale) : undefined),
     [metadata, locale],
   );
+  const locked = isProblemDetailLocked(view?.eventGate);
+  const canRenderBody = canRenderProblemDetailBody({ hasProblem: !!problem, locked });
+  const canRenderEndpoints = canRenderEndpointOverride({
+    hasProblem: !!problem,
+    hasMetadata: !!metadata,
+    endpointCount: metadata?.endpoints.length ?? 0,
+    locked,
+  });
+  const scoringNotStartedAt = getScoringNotStartedStartsAt(view?.eventGate);
 
   if (!jobId) return <Navigate to="/problems" replace />;
 
@@ -72,43 +114,25 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         {narrative?.name ?? problem?.problemId ?? jobId}
       </Header>
 
-      {error && (
-        <Alert type="error" header={t("app.fetch_status_failed")}>
-          {error}
-        </Alert>
-      )}
-
-      {!problem && view && (
-        <Alert type="warning" header={t("problem_detail.deploy_missing_header")}>
-          <Box variant="p">{t("problem_detail.deploy_missing_body", { jobId: jobId ?? "" })}</Box>
-        </Alert>
-      )}
-      {!problem && !view && !error && <Box>{t("app.loading")}</Box>}
-
       {/* Issue #1038 P0 #2: 競技開始前は問題詳細 / hints へのアクセスを **完全に lock**。
        *   backend (= participant-handler) から eventGate が scoring_not_started で返ってきた
        *   とき、 problem detail の代わりに lock screen を表示する。 backend 側で fail-closed
        *   が担保されているため、 eventId 不在 / gate 取得失敗時も同じく lock 表示になる。
        *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
-      {problem && view?.eventGate?.kind === "scoring_not_started" && (
-        <Alert type="info" header={t("problem_detail.scoring_not_started_header")}>
-          <Box variant="p">
-            {t("problem_detail.scoring_not_started_body")}
-            {view.eventGate.startsAt && (
-              <>
-                <br />
-                {t("problem_detail.scoring_not_started_starts_at_label")}:{" "}
-                <code>{new Date(view.eventGate.startsAt).toLocaleString()}</code>
-              </>
-            )}
-          </Box>
-        </Alert>
-      )}
+      <ProblemDetailStatusAlerts
+        error={error}
+        jobId={jobId}
+        locked={locked}
+        problem={problem}
+        scoringNotStartedAt={scoringNotStartedAt}
+        t={t}
+        view={view}
+      />
 
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
-      {problem && metadata && narrative && view?.eventGate?.kind !== "scoring_not_started" && (
+      {canRenderBody && metadata && narrative && (
         <ProblemInfoSection metadata={metadata} narrative={narrative} t={t} />
       )}
       {/* 2026-05-18 user feedback: 「攻撃時刻を相手に予告する Red Team は存在しない」
@@ -120,7 +144,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   ProblemDetail からのみ撤去する。 */}
 
       {/* Issue #1038 P0 #2: ProblemPanel (= flag 提出 / hint reveal の UI 本体) も lock。 */}
-      {problem && view?.eventGate?.kind !== "scoring_not_started" && (
+      {canRenderBody && problem && (
         <ProblemPanel
           problem={problem}
           apiBaseUrl={config.apiBaseUrl}
@@ -132,16 +156,13 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* Issue #607 ADR-012 Phase 3.A UI: endpoints[] が宣言された Battle 問題で override 登録
        *   form を表示。 endpoints 空 / 不在の問題 (= flag-only Challenge 等) は内部で skip。
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
-      {problem &&
-        metadata &&
-        metadata.endpoints.length > 0 &&
-        view?.eventGate?.kind !== "scoring_not_started" && (
-          <EndpointOverrideForm
-            apiBaseUrl={config.apiBaseUrl}
-            teamLoginKey={sessionToken ?? ""}
-            problemId={problem.problemId}
-          />
-        )}
+      {canRenderEndpoints && problem && (
+        <EndpointOverrideForm
+          apiBaseUrl={config.apiBaseUrl}
+          teamLoginKey={sessionToken ?? ""}
+          problemId={problem.problemId}
+        />
+      )}
 
       {/* ADR-012 Phase 5: problem 側 portal plugin (= metadata.dashboard.slots で宣言) を
        *   render する。 該当 slot が無い問題は section 全体が render されない。 */}
@@ -155,6 +176,54 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         />
       )}
     </SpaceBetween>
+  );
+}
+
+function ProblemDetailStatusAlerts({
+  error,
+  jobId,
+  locked,
+  problem,
+  scoringNotStartedAt,
+  t,
+  view,
+}: {
+  error: string | null;
+  jobId: string;
+  locked: boolean;
+  problem?: ParticipantProblemView;
+  scoringNotStartedAt?: string;
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
+  view: ParticipantTeamView | null;
+}) {
+  return (
+    <>
+      {error && (
+        <Alert type="error" header={t("app.fetch_status_failed")}>
+          {error}
+        </Alert>
+      )}
+      {!problem && view && (
+        <Alert type="warning" header={t("problem_detail.deploy_missing_header")}>
+          <Box variant="p">{t("problem_detail.deploy_missing_body", { jobId })}</Box>
+        </Alert>
+      )}
+      {!problem && !view && !error && <Box>{t("app.loading")}</Box>}
+      {problem && locked && (
+        <Alert type="info" header={t("problem_detail.scoring_not_started_header")}>
+          <Box variant="p">
+            {t("problem_detail.scoring_not_started_body")}
+            {scoringNotStartedAt && (
+              <>
+                <br />
+                {t("problem_detail.scoring_not_started_starts_at_label")}:{" "}
+                <code>{new Date(scoringNotStartedAt).toLocaleString()}</code>
+              </>
+            )}
+          </Box>
+        </Alert>
+      )}
+    </>
   );
 }
 
