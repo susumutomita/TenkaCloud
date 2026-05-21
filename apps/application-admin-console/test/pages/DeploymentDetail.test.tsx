@@ -114,12 +114,13 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
     await waitFor(() => expect(mocks.getDeployment).toHaveBeenCalled());
     await screen.findByTestId("phase-enqueued");
 
-    // all 5 phases should be displayed
-    for (const id of ["enqueued", "building", "cfn-deploy", "health-check", "complete"]) {
+    // all 4 phases should be displayed (the legacy Health Check placeholder is gone)
+    for (const id of ["enqueued", "building", "cfn-deploy", "complete"]) {
       expect(screen.getByTestId(`phase-${id}`)).toBeInTheDocument();
     }
+    expect(screen.queryByTestId("phase-health-check")).toBeNull();
 
-    // それぞれの phase に Complete または Skipped status が出る
+    // each phase should show Complete status
     const enqueued = within(screen.getByTestId("phase-enqueued"));
     expect(enqueued.getByText("Complete")).toBeInTheDocument();
 
@@ -128,9 +129,6 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
 
     const cfn = within(screen.getByTestId("phase-cfn-deploy"));
     expect(cfn.getByText("Complete")).toBeInTheDocument();
-
-    const health = within(screen.getByTestId("phase-health-check"));
-    expect(health.getByText("Skipped")).toBeInTheDocument();
 
     const completePhase = within(screen.getByTestId("phase-complete"));
     expect(completePhase.getByText("Complete")).toBeInTheDocument();

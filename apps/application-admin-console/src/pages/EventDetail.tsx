@@ -5,6 +5,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { type ApiClient, useApiClient } from "../api/client";
+import type { DeploymentStatus } from "../api/deploy-client";
 import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import { DeployProgressPanel } from "../components/event-detail/DeployProgressPanel";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
@@ -22,6 +23,7 @@ import type { AppConfig } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
 import { useT } from "../i18n";
+import { aggregateDeployProgressPercent } from "../lib/deploy-progress";
 import { computeEventWizardState, type WizardState } from "../lib/event-wizard";
 
 type EventOperations = ReturnType<typeof useEventOperations>;
@@ -37,10 +39,12 @@ interface DeploymentCounts {
 }
 
 function summarizeDeployments(detail: EventDetail): DeploymentCounts {
+  const statuses: DeploymentStatus[] = [];
   const counts = Object.values(detail.deploymentsByProblem).reduce(
     (acc, list) => {
       for (const deployment of list) {
         acc.totalDeployCount += 1;
+        statuses.push(deployment.status);
         if (deployment.status === "COMPLETE" || deployment.status === "AUTO_DELETED") {
           acc.completeCount += 1;
         }
@@ -61,8 +65,7 @@ function summarizeDeployments(detail: EventDetail): DeploymentCounts {
   return {
     ...counts,
     allDoneCount,
-    deployProgressPercent:
-      counts.totalDeployCount > 0 ? Math.round((allDoneCount / counts.totalDeployCount) * 100) : 0,
+    deployProgressPercent: aggregateDeployProgressPercent(statuses),
   };
 }
 
