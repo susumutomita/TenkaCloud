@@ -1,4 +1,4 @@
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, type QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   castEvent,

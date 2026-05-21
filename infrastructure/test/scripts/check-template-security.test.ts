@@ -54,6 +54,24 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       expect(findings).toEqual([]);
     });
 
+    it('should allow the CloudShell participant baseline on Resource: "*"', () => {
+      const findings = findIamResourceWildcardFindings(
+        PATH,
+        "loc",
+        ["*"],
+        [
+          "cloudshell:CreateEnvironment",
+          "cloudshell:CreateSession",
+          "cloudshell:GetEnvironmentStatus",
+          "cloudshell:StartEnvironment",
+          "cloudshell:StopEnvironment",
+          "cloudshell:DeleteEnvironment",
+          "cloudshell:PutCredentials",
+        ],
+      );
+      expect(findings).toEqual([]);
+    });
+
     it('should return 0 findings when Resource: "*" is absent (scoped ARNs are OK)', () => {
       expect(
         findIamResourceWildcardFindings(

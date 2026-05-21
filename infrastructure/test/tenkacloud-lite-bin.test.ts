@@ -70,41 +70,54 @@ function buildLiteApp(): cdk.App {
   return app;
 }
 
+function findStack(app: cdk.App, stackName: string): cdk.Stack {
+  const stack = app.node.findAll().find((construct): construct is cdk.Stack => {
+    return construct instanceof cdk.Stack && construct.stackName === stackName;
+  });
+  if (!stack) throw new Error(`stack not found: ${stackName}`);
+  return stack;
+}
+
+function synthLiteFixture() {
+  const app = buildLiteApp();
+  const problemDeployStack = findStack(app, "tenkacloud-lite-problem-deploy");
+  const liteStack = findStack(app, "tenkacloud-lite");
+  const assembly = app.synth();
+  const problemDeployArtifact = assembly.stacks.find(
+    (stack) => stack.stackName === problemDeployStack.stackName,
+  );
+  const liteArtifact = assembly.stacks.find((stack) => stack.stackName === liteStack.stackName);
+  if (!problemDeployArtifact || !liteArtifact) throw new Error("lite synth artifacts are missing");
+  return {
+    assembly,
+    liteStack,
+    problemDeployTemplate: Template.fromJSON(problemDeployArtifact.template),
+    liteTemplate: Template.fromJSON(liteArtifact.template),
+  };
+}
+
 describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
+  // ProblemDeployBackend の NodejsFunction bundling が重いので wiring 一式を 1 度だけ synth する。
+  const fixture = synthLiteFixture();
+
   it("should synth only the 2 stacks `tenkacloud-lite-problem-deploy` + `tenkacloud-lite`", () => {
-    const app = buildLiteApp();
-    const assembly = app.synth();
-    const liteStacks = assembly.stacks.filter((s) => s.stackName.startsWith("tenkacloud-"));
+    const liteStacks = fixture.assembly.stacks.filter((s) => s.stackName.startsWith("tenkacloud-"));
     const names = liteStacks.map((s) => s.stackName).sort();
     expect(names).toEqual(["tenkacloud-lite", "tenkacloud-lite-problem-deploy"]);
-  }, 30_000);
+  });
 
   it("ProblemDeployBackend (Lite mode) should create 1 local EventBus when eventBusArn is omitted", () => {
-    const app = buildLiteApp();
-    const problemDeployStack = app.node
-      .findAll()
-      .find((c) => c instanceof cdk.Stack && c.stackName === "tenkacloud-lite-problem-deploy");
-    expect(problemDeployStack).toBeDefined();
-    const template = Template.fromStack(problemDeployStack as cdk.Stack);
-    template.resourceCountIs("AWS::Events::EventBus", 1);
-  }, 30_000);
+    fixture.problemDeployTemplate.resourceCountIs("AWS::Events::EventBus", 1);
+  });
 
   it("Lite stack side should create 1 set of AppPlaneCore (UserPool + REST API + CloudFront)", () => {
-    const app = buildLiteApp();
-    const liteStack = app.node
-      .findAll()
-      .find((c) => c instanceof cdk.Stack && c.stackName === "tenkacloud-lite");
-    expect(liteStack).toBeDefined();
-    const template = Template.fromStack(liteStack as cdk.Stack);
-    template.resourceCountIs("AWS::Cognito::UserPool", 1);
-    template.resourceCountIs("AWS::ApiGateway::RestApi", 1);
-    template.resourceCountIs("AWS::CloudFront::Distribution", 1);
-  }, 30_000);
+    fixture.liteTemplate.resourceCountIs("AWS::Cognito::UserPool", 1);
+    fixture.liteTemplate.resourceCountIs("AWS::ApiGateway::RestApi", 1);
+    fixture.liteTemplate.resourceCountIs("AWS::CloudFront::Distribution", 1);
+  });
 
   it("Lite stack should not include ControlPlane / Tenant-Pipeline / Bootstrap / AdminConsoleInsight", () => {
-    const app = buildLiteApp();
-    const assembly = app.synth();
-    const stackNames = assembly.stacks.map((s) => s.stackName);
+    const stackNames = fixture.assembly.stacks.map((s) => s.stackName);
     for (const forbidden of [
       "tenkacloud-control-plane",
       "tenkacloud-bootstrap",
@@ -114,19 +127,14 @@ describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
       expect(stackNames).not.toContain(forbidden);
     }
     // ServerlessSaaSPipeline (= CodePipeline) も作らない。
-    const allTemplates = assembly.stacks.map((s) => Template.fromJSON(s.template));
+    const allTemplates = fixture.assembly.stacks.map((s) => Template.fromJSON(s.template));
     for (const template of allTemplates) {
       template.resourceCountIs("AWS::CodePipeline::Pipeline", 0);
     }
-  }, 30_000);
+  });
 
   it("Lite stack should explicitly depend on the ProblemDeploy stack (cross-stack Lambda ref)", () => {
-    const app = buildLiteApp();
-    const liteStack = app.node
-      .findAll()
-      .find((c): c is cdk.Stack => c instanceof cdk.Stack && c.stackName === "tenkacloud-lite");
-    expect(liteStack).toBeDefined();
-    const deps = liteStack?.dependencies.map((d) => d.stackName) ?? [];
+    const deps = fixture.liteStack.dependencies.map((d) => d.stackName);
     expect(deps).toContain("tenkacloud-lite-problem-deploy");
-  }, 30_000);
+  });
 });

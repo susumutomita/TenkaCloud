@@ -89,7 +89,7 @@ export function extractParticipantViewerBlock(yaml: string): string | undefined 
   for (let i = start + 1; i < lines.length; i++) {
     const line = lines[i];
     // 次の Resource (= 2-space indent + Name:) または top-level section に当たったら終端
-    if (/^  [A-Za-z][A-Za-z0-9]*:\s*$/.test(line)) {
+    if (/^ {2}[A-Za-z][A-Za-z0-9]*:\s*$/.test(line)) {
       end = i;
       break;
     }

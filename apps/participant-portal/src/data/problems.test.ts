@@ -56,25 +56,19 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
   });
 
   // ADR-012 Phase 4 + fairness contract: portal は author が `publicHint: true` で
-  // 明示宣言した phase / disruption だけを予告 panel に出す。 microservice-migration-battle は
-  // 全 phase / disruption に publicHint: true を立てているので全部見える。
-  it("should expose phases / disruptions for microservice-migration-battle (all publicHint: true)", () => {
-    const m = findProblemMetadata("microservice-migration-battle");
-    expect(m).toBeDefined();
-    expect(m?.phases.length).toBeGreaterThanOrEqual(2);
-    expect(m?.phases.map((p) => p.name)).toEqual(expect.arrayContaining(["degraded", "legacy"]));
-    expect(m?.disruptions.length).toBeGreaterThanOrEqual(1);
-    expect(m?.disruptions[0]?.id).toBe("ec2-latency-injection");
-    expect(m?.disruptions[0]?.defaultAfterMinutes).toBe(60);
-  });
-
-  // fairness contract: publicHint: true が無い phase / disruption は portal bundle に embed されない。
-  // stackstack の phases / disruptions は publicHint が無いので 0 件露出が期待値。
+  // 明示宣言した phase / disruption だけを予告 panel に出す。 現状の全 problem は
+  // publicHint: false (or 未宣言) なので competitor 視点では 0 件露出が期待値。
+  // (= 過去 microservice-migration-battle は publicHint: true で showcase されていたが、
+  //  catalog 側 metadata の方針変更で false に倒された)。
   it("should drop phases / disruptions without publicHint: true (fairness contract)", () => {
-    const m = findProblemMetadata("stackstack");
-    expect(m).toBeDefined();
-    expect(m?.phases).toEqual([]);
-    expect(m?.disruptions).toEqual([]);
+    for (const id of ["stackstack", "microservice-migration-battle"]) {
+      const m = findProblemMetadata(id);
+      expect(m, `${id} should be in catalog`).toBeDefined();
+      expect(m?.phases, `${id} phases should be hidden when publicHint != true`).toEqual([]);
+      expect(m?.disruptions, `${id} disruptions should be hidden when publicHint != true`).toEqual(
+        [],
+      );
+    }
   });
 
   it("phases / disruptions に operator 内部 field (effect / parameters / eventDetailType) を露出しないべき", () => {

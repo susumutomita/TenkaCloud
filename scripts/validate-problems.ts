@@ -68,6 +68,36 @@ function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
   ];
 }
 
+const REGION_RE = /^[a-z]{2,3}-[a-z]+-\d{1,2}$/;
+
+function checkSupportedRegionsArray(supportedRegions: readonly unknown[]): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (supportedRegions.length === 0) {
+    errors.push(
+      "supportedRegions が空配列です。 宣言するなら 1 件以上指定するか field 自体を省略してください",
+    );
+  }
+  for (const r of supportedRegions) {
+    if (typeof r !== "string" || !REGION_RE.test(r)) {
+      errors.push(
+        `supportedRegions に AWS region 形式でない値が含まれています: ${JSON.stringify(r)}`,
+      );
+    }
+  }
+  return errors;
+}
+
+function checkDefaultRegionInSupported(
+  defaultRegion: string,
+  supportedRegions: readonly unknown[],
+): ValidationError[] {
+  if (!supportedRegions.every((r) => typeof r === "string")) return [];
+  if (supportedRegions.includes(defaultRegion)) return [];
+  return [
+    `defaultRegion="${defaultRegion}" が supportedRegions=${JSON.stringify(supportedRegions)} に含まれていません (= wizard で picker から選べない region を初期値にしている)`,
+  ];
+}
+
 /**
  * Issue #1201 Phase 2: `defaultRegion` / `supportedRegions` の整合性 check。
  *
@@ -80,7 +110,6 @@ function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
  */
 export function checkRegionConsistency(meta: Metadata): ValidationError[] {
   const errors: ValidationError[] = [];
-  const REGION_RE = /^[a-z]{2,3}-[a-z]+-\d{1,2}$/;
   const defaultRegion = typeof meta.defaultRegion === "string" ? meta.defaultRegion : undefined;
   const supportedRegions = Array.isArray(meta.supportedRegions)
     ? (meta.supportedRegions as unknown[])
@@ -92,26 +121,9 @@ export function checkRegionConsistency(meta: Metadata): ValidationError[] {
     );
   }
   if (supportedRegions !== undefined) {
-    if (supportedRegions.length === 0) {
-      errors.push(
-        "supportedRegions が空配列です。 宣言するなら 1 件以上指定するか field 自体を省略してください",
-      );
-    }
-    for (const r of supportedRegions) {
-      if (typeof r !== "string" || !REGION_RE.test(r)) {
-        errors.push(
-          `supportedRegions に AWS region 形式でない値が含まれています: ${JSON.stringify(r)}`,
-        );
-      }
-    }
-    if (
-      defaultRegion !== undefined &&
-      supportedRegions.every((r) => typeof r === "string") &&
-      !supportedRegions.includes(defaultRegion)
-    ) {
-      errors.push(
-        `defaultRegion="${defaultRegion}" が supportedRegions=${JSON.stringify(supportedRegions)} に含まれていません (= wizard で picker から選べない region を初期値にしている)`,
-      );
+    errors.push(...checkSupportedRegionsArray(supportedRegions));
+    if (defaultRegion !== undefined) {
+      errors.push(...checkDefaultRegionInSupported(defaultRegion, supportedRegions));
     }
   }
   return errors;
