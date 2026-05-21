@@ -88,6 +88,38 @@ function buildScoreRankUtility(
   };
 }
 
+/**
+ * Issue #1191: profile dropdown のメニュー項目を再利用可能な pure function で組む
+ * (= unit test で項目構成を pin)。 競技者は「チーム名を変更」「サインアウト」の 2 つを
+ * 選べる。
+ */
+export function buildProfileMenuItems(
+  t: Translate,
+): readonly { readonly id: string; readonly text: string }[] {
+  return [
+    { id: "change_team_name", text: t("nav.change_team_name") },
+    { id: "logout", text: t("nav.sign_out") },
+  ];
+}
+
+/**
+ * profile dropdown の item click handler。 `id` ごとに副作用を分岐する pure
+ * dispatcher (unit test 可能)。
+ */
+export function handleProfileMenuClick(
+  id: string,
+  deps: { readonly logout: () => void; readonly navigate: (href: string) => void },
+): void {
+  if (id === "change_team_name") {
+    deps.navigate("/setup");
+    return;
+  }
+  if (id === "logout") {
+    deps.logout();
+    deps.navigate("/login");
+  }
+}
+
 function buildProfileUtility(
   teamName: string,
   logout: () => void,
@@ -98,13 +130,8 @@ function buildProfileUtility(
     type: "menu-dropdown",
     text: teamName,
     iconName: "user-profile",
-    items: [{ id: "logout", text: t("nav.sign_out") }],
-    onItemClick: ({ detail }) => {
-      if (detail.id === "logout") {
-        logout();
-        navigate("/login");
-      }
-    },
+    items: buildProfileMenuItems(t),
+    onItemClick: ({ detail }) => handleProfileMenuClick(detail.id, { logout, navigate }),
   };
 }
 

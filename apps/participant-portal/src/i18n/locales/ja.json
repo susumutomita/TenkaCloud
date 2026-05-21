@@ -25,6 +25,7 @@
     "scoreboard": "スコアボード",
     "score_events": "スコアイベント",
     "sso_credentials": "SSO 資格情報",
+    "change_team_name": "チーム名を変更",
     "sign_out": "サインアウト"
   },
   "switcher": {
@@ -71,12 +72,16 @@
   "team_setup": {
     "title": "チーム名を決めよう",
     "description": "このイベント中にあなたのチームを呼ぶ名前を入力してください",
+    "edit_title": "チーム名を変更",
+    "edit_description": "スコアボードやプロフィールに表示される名前を更新します。 チームメンバーの表示にも反映されます。",
     "field_label": "チーム名",
     "field_description": "プロフィールやスコアボードに表示される名前。 後から変更できます。",
     "field_placeholder": "例: わたしたちのチーム",
     "field_constraint": "1〜40 文字、 英数字 / 半角スペース / _ / - / 日本語",
     "field_invalid_format": "形式が無効です",
     "submit_button": "この名前で始める",
+    "edit_submit_button": "保存",
+    "cancel_button": "キャンセル",
     "submit_failed_header": "チーム名を保存できませんでした",
     "validation_failed": "チーム名の形式が無効です。 1〜40 文字、 英数字 / 半角スペース / _ / - / 日本語のみ。"
   },
