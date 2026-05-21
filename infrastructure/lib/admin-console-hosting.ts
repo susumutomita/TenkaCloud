@@ -11,7 +11,7 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
-import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers";
+import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers.js";
 
 /**
  * Issue #1031: admin-console-hosting は **CloudFront 配信側だけ** を担い、 runtime-config.json

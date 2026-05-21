@@ -1,6 +1,6 @@
 import { aws_cognito, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
-import type { IdentityDetails } from "../interfaces/identity-details";
+import type { IdentityDetails } from "../interfaces/identity-details.js";
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
 // 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。

@@ -3,7 +3,7 @@ import * as path from "node:path";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import type { Logger } from "winston";
-import type { Config } from "../config/config-interface";
+import type { Config } from "../config/config-interface.js";
 
 export interface ExpandOptions {
   /**

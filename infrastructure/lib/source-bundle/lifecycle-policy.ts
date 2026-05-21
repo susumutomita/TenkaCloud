@@ -1,4 +1,4 @@
-import type { SourceBundleConfig } from "../config/config-interface";
+import type { SourceBundleConfig } from "../config/config-interface.js";
 
 /**
  * Issue #1056: deploy artifact (= `source.zip`) bucket の lifecycle policy。

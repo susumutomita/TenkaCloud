@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
-import { resolveAppConfig } from "../lib/app-config";
-import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms";
-import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity";
-import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window";
-import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
-import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite";
+import { resolveAppConfig } from "../lib/app-config/index.js";
+import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms.js";
+import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity.js";
+import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
+import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack.js";
+import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
 
 /**
  * Issue #778 ADR-016 Phase 5: TenkaCloud Lite mode の CDK app entry point。

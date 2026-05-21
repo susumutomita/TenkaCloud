@@ -11,7 +11,7 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
-import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers";
+import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers.js";
 
 export type ParticipantPortalMode = "dev-mock" | "backend";
 

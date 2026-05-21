@@ -5,36 +5,36 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
-import { AdminAuditLogTable } from "./admin-audit-log-table";
-import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine";
-import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda";
-import { CompetitorAccountsTable } from "./competitor-accounts-table";
-import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting";
-import { DeployApiLambda } from "./deploy-api-lambda";
-import { DeployCodeBuildProject } from "./deploy-codebuild-project";
-import { DeployCreateStateMachine } from "./deploy-create-state-machine";
-import { DeployDeleteStateMachine } from "./deploy-delete-state-machine";
+import { AdminAuditLogTable } from "./admin-audit-log-table.js";
+import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
+import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js";
+import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
+import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
+import { DeployApiLambda } from "./deploy-api-lambda.js";
+import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
+import { DeployCreateStateMachine } from "./deploy-create-state-machine.js";
+import { DeployDeleteStateMachine } from "./deploy-delete-state-machine.js";
 import {
   BulkDeployCreateEventRule,
   DeployDeleteEventRule,
   DeployEventRule,
-} from "./deploy-event-rule";
-import { DeploymentsTable } from "./deployments-table";
-import { DescribeStackLambda } from "./describe-stack-lambda";
-import { DisruptionsTable } from "./disruptions-table";
-import { EventApiLambda } from "./event-api-lambda";
-import { EventsTable } from "./events-table";
-import { ExternalIdAuditLambda } from "./external-id-audit-lambda";
-import { GenericScoringLambda } from "./generic-scoring-lambda";
+} from "./deploy-event-rule.js";
+import { DeploymentsTable } from "./deployments-table.js";
+import { DescribeStackLambda } from "./describe-stack-lambda.js";
+import { DisruptionsTable } from "./disruptions-table.js";
+import { EventApiLambda } from "./event-api-lambda.js";
+import { EventsTable } from "./events-table.js";
+import { ExternalIdAuditLambda } from "./external-id-audit-lambda.js";
+import { GenericScoringLambda } from "./generic-scoring-lambda.js";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
   type ParticipantPortalRuntimeConfig,
-} from "./participant-portal-hosting";
-import { ParticipantPortalLambda } from "./participant-portal-lambda";
-import { ProblemEndpointsTable } from "./problem-endpoints-table";
-import { SystemAuditWriterLambda } from "./system-audit-writer-lambda";
-import { TeamsTable } from "./teams-table";
+} from "./participant-portal-hosting.js";
+import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
+import { ProblemEndpointsTable } from "./problem-endpoints-table.js";
+import { SystemAuditWriterLambda } from "./system-audit-writer-lambda.js";
+import { TeamsTable } from "./teams-table.js";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   /**

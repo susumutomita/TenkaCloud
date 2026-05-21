@@ -7,8 +7,8 @@ import {
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
-import type { CustomApiKey } from "../interfaces/custom-api-key";
-import type { IdentityDetails } from "../interfaces/identity-details";
+import type { CustomApiKey } from "../interfaces/custom-api-key.js";
+import type { IdentityDetails } from "../interfaces/identity-details.js";
 
 interface ApiGatewayProps {
   tenantId: string;

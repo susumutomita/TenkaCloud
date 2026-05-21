@@ -1,9 +1,9 @@
 import type { Stack } from "aws-cdk-lib";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names";
-import { ApiGateway } from "../tenant-template/api-gateway";
-import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting";
-import { IdentityProvider } from "../tenant-template/identity-provider";
+import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import { ApiGateway } from "../tenant-template/api-gateway.js";
+import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting.js";
+import { IdentityProvider } from "../tenant-template/identity-provider.js";
 
 /**
  * Issue #778 ADR-016 Phase 1: TenantTemplateStack から共通 App Plane コア構成を抽出する。

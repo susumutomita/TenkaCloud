@@ -1,2 +1,2 @@
-export type { TenkaCloudAppHandles } from "./wire";
-export { buildTenkaCloudApp } from "./wire";
+export type { TenkaCloudAppHandles } from "./wire.js";
+export { buildTenkaCloudApp } from "./wire.js";
