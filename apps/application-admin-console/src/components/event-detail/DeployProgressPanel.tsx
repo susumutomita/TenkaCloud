@@ -1,14 +1,21 @@
+import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
-import ProgressBar from "@cloudscape-design/components/progress-bar";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+/**
+ * Event の deployment 群の進捗パネル。 進捗は status の counts (完了 / 進行中 / 失敗) で
+ * 表現し、 % プログレスバーは持たない (= 状態ベースの per-deployment weight 平均は
+ * teardown 中も 80% など misleading な値を出すため)。 ユーザーが知りたいのは
+ * 「 何件中 何件が動いているか」 + 「 数分かかる非同期処理だよ」 という事実だけ。
+ */
 export function DeployProgressPanel({
   allDoneCount,
   completeCount,
-  deployProgressPercent,
   failedCount,
   inFlightCount,
   manualRefreshInFlight,
@@ -18,7 +25,6 @@ export function DeployProgressPanel({
 }: {
   readonly allDoneCount: number;
   readonly completeCount: number;
-  readonly deployProgressPercent: number;
   readonly failedCount: number;
   readonly inFlightCount: number;
   readonly manualRefreshInFlight: boolean;
@@ -27,6 +33,27 @@ export function DeployProgressPanel({
   readonly totalDeployCount: number;
 }) {
   if (totalDeployCount <= 0) return null;
+  const status =
+    failedCount > 0
+      ? ("error" as const)
+      : inFlightCount > 0
+        ? ("in-progress" as const)
+        : ("success" as const);
+  const statusLabel =
+    inFlightCount > 0
+      ? t("event_detail.deploy_progress_in_flight", {
+          done: allDoneCount,
+          total: totalDeployCount,
+        })
+      : failedCount > 0
+        ? t("event_detail.deploy_progress_complete_with_failed", { failed: failedCount })
+        : t("event_detail.deploy_progress_complete");
+  const statusDescription =
+    inFlightCount > 0
+      ? t("event_detail.deploy_progress_in_flight_description")
+      : failedCount > 0
+        ? t("event_detail.deploy_progress_failed_description")
+        : t("event_detail.deploy_progress_complete_description");
   return (
     <Container
       header={
@@ -62,28 +89,17 @@ export function DeployProgressPanel({
         </Header>
       }
     >
-      <ProgressBar
-        value={deployProgressPercent}
-        label={
-          inFlightCount > 0
-            ? t("event_detail.deploy_progress_in_flight", {
-                done: allDoneCount,
-                total: totalDeployCount,
-              })
-            : failedCount > 0
-              ? t("event_detail.deploy_progress_complete_with_failed", { failed: failedCount })
-              : t("event_detail.deploy_progress_complete")
-        }
-        description={
-          inFlightCount > 0
-            ? t("event_detail.deploy_progress_in_flight_description")
-            : failedCount > 0
-              ? t("event_detail.deploy_progress_failed_description")
-              : t("event_detail.deploy_progress_complete_description")
-        }
-        status={failedCount > 0 ? "error" : inFlightCount > 0 ? "in-progress" : "success"}
-        additionalInfo={inFlightCount > 0 ? "auto polling" : undefined}
-      />
+      <SpaceBetween size="xs">
+        <StatusIndicator type={status}>{statusLabel}</StatusIndicator>
+        <Box variant="small" color="text-body-secondary">
+          {statusDescription}
+        </Box>
+        {inFlightCount > 0 && (
+          <Box variant="small" color="text-status-info">
+            auto polling
+          </Box>
+        )}
+      </SpaceBetween>
     </Container>
   );
 }
