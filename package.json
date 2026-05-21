@@ -18,10 +18,10 @@
     "build:problems-index": "bun run scripts/build-problem-index.ts",
     "check:problems-index": "bun run scripts/build-problem-index.ts --check",
     "audit:dependencies": "bun run scripts/audit-dependencies.ts",
-    "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist'",
-    "lint:text": "textlint '**/*.md'",
+    "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist' '#problems/**'",
+    "lint:text": "textlint '**/*.md' '!problems/**'",
     "lint:format": "biome check",
-    "fix:md": "markdownlint-cli2 --fix '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist'",
+    "fix:md": "markdownlint-cli2 --fix '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist' '#problems/**'",
     "fix:text": "textlint --fix '**/*.md'",
     "fix:format": "biome check --write",
     "prepare": "husky"
