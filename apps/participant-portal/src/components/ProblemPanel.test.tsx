@@ -1,9 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ParticipantProblemView } from "../api/portal-client";
+import {
+  type ParticipantProblemView,
+  PortalScoringGateError,
+  PortalValidationError,
+} from "../api/portal-client";
 import { I18nProvider } from "../i18n";
 import { ProblemPanel } from "./ProblemPanel";
+import {
+  formatProblemPanelActionError,
+  shouldRefreshAfterFlagSubmit,
+} from "./ProblemPanel.helpers";
 
 const apiMocks = vi.hoisted(() => ({
   getDeployLogs: vi.fn(),
@@ -146,5 +154,47 @@ describe("ProblemPanel deploy terminal", () => {
     );
 
     expect(screen.getByText(/Auto-deleted|自動削除済み/)).toBeInTheDocument();
+  });
+});
+
+describe("ProblemPanel submit helpers", () => {
+  const t = (key: string, params?: Readonly<Record<string, string | number>>) =>
+    params?.errorCode ? `${key}:${params.errorCode}` : key;
+
+  it("ok / already_scored のとき score refresh 対象にすべき", () => {
+    expect(shouldRefreshAfterFlagSubmit({ kind: "ok", scoreDelta: 10, totalScore: 20 })).toBe(true);
+    expect(shouldRefreshAfterFlagSubmit({ kind: "already_scored", totalScore: 20 })).toBe(true);
+    expect(
+      shouldRefreshAfterFlagSubmit({
+        kind: "wrong",
+        scoreDelta: 0,
+        totalScore: 10,
+        wrongCount: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it("scoring gate error をユーザー向け文言に整形すべき", () => {
+    expect(
+      formatProblemPanelActionError(
+        t,
+        new PortalScoringGateError("scoring_locked"),
+        "problem_panel.validation_error",
+      ),
+    ).toBe("problem_panel.scoring_gate_paused");
+  });
+
+  it("validation error を指定 key の errorCode 付き文言に整形すべき", () => {
+    expect(
+      formatProblemPanelActionError(
+        t,
+        new PortalValidationError("invalid_flag"),
+        "problem_panel.submit_error_prefix",
+      ),
+    ).toBe("problem_panel.submit_error_prefix:invalid_flag");
+  });
+
+  it("Error 以外も string 化すべき", () => {
+    expect(formatProblemPanelActionError(t, "boom", "problem_panel.validation_error")).toBe("boom");
   });
 });

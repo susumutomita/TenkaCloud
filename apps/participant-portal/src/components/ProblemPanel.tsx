@@ -1,13 +1,8 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
-import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
-import Form from "@cloudscape-design/components/form";
-import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
-import Input from "@cloudscape-design/components/input";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
-import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
@@ -19,18 +14,13 @@ import {
   type DeploymentLogView,
   type DeploymentStatus,
   getDeployLogs,
-  type ParticipantHintView,
   type ParticipantProblemView,
-  PortalScoringGateError,
-  PortalValidationError,
-  revealHint,
-  type SubmitFlagOutcome,
-  submitFlag,
   TERMINAL_STATUSES,
 } from "../api/portal-client";
 import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
-import { CelebrationOverlay } from "./CelebrationOverlay";
+import type { ProblemPanelT } from "./ProblemPanel.helpers";
+import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -52,40 +42,7 @@ const SCORING_KIND_KEY: Record<string, string> = {
   "attack-detection": "problem_panel.kind_attack",
 };
 
-type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
-
-/**
- * Issue #1006: scoring gate (= 競技開始前 / 終了後 / 一時停止) のエラーを 「いつ開始 / 終了か」
- * を添えた人間可読 message に変換する。 backend が startsAt / endsAt を返すようになったので、
- * UI 側で 「あと N 分」 を計算して表示する。 #1093: i18n 化。
- */
-function describeScoringGate(t: TFn, err: PortalScoringGateError, now: Date = new Date()): string {
-  if (err.kind === "scoring_not_started") {
-    if (!err.startsAt) return t("problem_panel.scoring_gate_not_started_no_eta");
-    const startsAt = new Date(err.startsAt);
-    if (Number.isNaN(startsAt.getTime())) {
-      return t("problem_panel.scoring_gate_not_started_unknown");
-    }
-    const diffMs = startsAt.getTime() - now.getTime();
-    if (diffMs <= 0) {
-      return t("problem_panel.scoring_gate_not_started_passed", {
-        startsAt: startsAt.toLocaleString(),
-      });
-    }
-    const minutes = Math.ceil(diffMs / 60_000);
-    return t("problem_panel.scoring_gate_not_started_remaining", {
-      minutes,
-      startsAt: startsAt.toLocaleString(),
-    });
-  }
-  if (err.kind === "scoring_ended") {
-    if (!err.endsAt) return t("problem_panel.scoring_gate_ended_no_eta");
-    const endsAt = new Date(err.endsAt);
-    if (Number.isNaN(endsAt.getTime())) return t("problem_panel.scoring_gate_ended_unknown");
-    return t("problem_panel.scoring_gate_ended_at", { endsAt: endsAt.toLocaleString() });
-  }
-  return t("problem_panel.scoring_gate_paused");
-}
+type FlagScoringInfo = NonNullable<ParticipantProblemView["scoring"]>;
 
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
@@ -112,7 +69,7 @@ function useNowMs(intervalMs: number): number {
   return nowMs;
 }
 
-function describeRemainingUntilAutoDelete(t: TFn, diffMs: number): string {
+function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
   if (totalMinutes < 60) {
     return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
@@ -123,7 +80,7 @@ function describeRemainingUntilAutoDelete(t: TFn, diffMs: number): string {
 }
 
 function buildAutoDeleteNotice(
-  t: TFn,
+  t: ProblemPanelT,
   expiresAt: number,
   nowMs: number,
 ): { readonly type: "info" | "warning"; readonly body: string } | undefined {
@@ -150,39 +107,16 @@ function buildAutoDeleteNotice(
   };
 }
 
-/**
- * 1 problem 単位の詳細パネル。Home (= 全 problem を縦並べ) と ProblemDetail
- * (= 1 problem 専用ページ) の両方から使う共通 component。
- */
-export function ProblemPanel({
-  problem,
+function useLiveDeployLog({
   apiBaseUrl,
   sessionToken,
-  onScored,
+  problem,
 }: {
-  problem: ParticipantProblemView;
   apiBaseUrl: string;
   sessionToken: string;
-  onScored: () => Promise<void>;
-}) {
-  const t = useT();
-  const now = useNowMs(COUNTDOWN_REFRESH_MS);
+  problem: ParticipantProblemView;
+}): DeploymentLogView | null {
   const [liveDeployLog, setLiveDeployLog] = useState<DeploymentLogView | null>(null);
-  const kindLabel = problem.scoring
-    ? t(SCORING_KIND_KEY[problem.scoring.kind] ?? "problem_panel.kind_unknown")
-    : t("problem_panel.kind_unknown");
-  const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
-  const autoDeleteNotice = buildAutoDeleteNotice(t, problem.expiresAt, now);
-  // #688: phased-polling / uptime-flat / uptime-multi / attack-detection も Battle 軸
-  // (= uptime と同じ "古い lastScoredAt = stale" UX を適用)。 flag だけ非 Battle。
-  const isUptime = problem.scoring ? problem.scoring.kind !== "flag" : false;
-  const isStale =
-    isUptime &&
-    Number.isFinite(lastScoredMs) &&
-    now - lastScoredMs > STALE_THRESHOLD_MS &&
-    problem.status === "COMPLETE";
-  const displayedDeployLog =
-    liveDeployLog && liveDeployLog.entries.length > 0 ? liveDeployLog : problem.deployLog;
 
   useEffect(() => {
     setLiveDeployLog(null);
@@ -215,6 +149,105 @@ export function ProblemPanel({
     };
   }, [apiBaseUrl, sessionToken, problem.jobId, problem.status]);
 
+  return liveDeployLog;
+}
+
+function selectDisplayedDeployLog(
+  liveDeployLog: DeploymentLogView | null,
+  deployLog: DeploymentLogView,
+): DeploymentLogView {
+  return liveDeployLog && liveDeployLog.entries.length > 0 ? liveDeployLog : deployLog;
+}
+
+function describeProblemKind(t: ProblemPanelT, scoring: ParticipantProblemView["scoring"]): string {
+  if (!scoring) return t("problem_panel.kind_unknown");
+  return t(SCORING_KIND_KEY[scoring.kind] ?? "problem_panel.kind_unknown");
+}
+
+function isUptimeScoring(scoring: ParticipantProblemView["scoring"]): boolean {
+  return scoring ? scoring.kind !== "flag" : false;
+}
+
+function isStaleProblem(problem: ParticipantProblemView, now: number): boolean {
+  const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
+  return (
+    isUptimeScoring(problem.scoring) &&
+    Number.isFinite(lastScoredMs) &&
+    now - lastScoredMs > STALE_THRESHOLD_MS &&
+    problem.status === "COMPLETE"
+  );
+}
+
+function getCompleteFlagScoring(problem: ParticipantProblemView): FlagScoringInfo | undefined {
+  const scoring = problem.scoring;
+  if (problem.status !== "COMPLETE" || scoring?.kind !== "flag") return undefined;
+  return scoring;
+}
+
+function shouldShowAutoRefreshNote(status: DeploymentStatus): boolean {
+  return !TERMINAL_STATUSES.has(status);
+}
+
+function ProblemPanelAlerts({
+  problem,
+  isStale,
+  autoDeleteNotice,
+  now,
+  t,
+}: {
+  problem: ParticipantProblemView;
+  isStale: boolean;
+  autoDeleteNotice?: { readonly type: "info" | "warning"; readonly body: string };
+  now: number;
+  t: ProblemPanelT;
+}) {
+  return (
+    <>
+      {problem.status === "FAILED" && problem.failureReason && (
+        <Alert type="error" header={t("problem_panel.failure_reason_header")}>
+          {problem.failureReason}
+        </Alert>
+      )}
+      {isStale && (
+        <Alert type="warning" header={t("problem_panel.stale_header")}>
+          {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now) })}
+        </Alert>
+      )}
+      {autoDeleteNotice && (
+        <Alert type={autoDeleteNotice.type} header={t("problem_panel.auto_delete_header")}>
+          {autoDeleteNotice.body}
+        </Alert>
+      )}
+    </>
+  );
+}
+
+/**
+ * 1 problem 単位の詳細パネル。Home (= 全 problem を縦並べ) と ProblemDetail
+ * (= 1 problem 専用ページ) の両方から使う共通 component。
+ */
+export function ProblemPanel({
+  problem,
+  apiBaseUrl,
+  sessionToken,
+  onScored,
+}: {
+  problem: ParticipantProblemView;
+  apiBaseUrl: string;
+  sessionToken: string;
+  onScored: () => Promise<void>;
+}) {
+  const t = useT();
+  const now = useNowMs(COUNTDOWN_REFRESH_MS);
+  const liveDeployLog = useLiveDeployLog({ apiBaseUrl, sessionToken, problem });
+  const kindLabel = describeProblemKind(t, problem.scoring);
+  const autoDeleteNotice = buildAutoDeleteNotice(t, problem.expiresAt, now);
+  // #688: phased-polling / uptime-flat / uptime-multi / attack-detection も Battle 軸
+  // (= uptime と同じ "古い lastScoredAt = stale" UX を適用)。 flag だけ非 Battle。
+  const isStale = isStaleProblem(problem, now);
+  const displayedDeployLog = selectDisplayedDeployLog(liveDeployLog, problem.deployLog);
+  const flagScoring = getCompleteFlagScoring(problem);
+
   return (
     <Container
       header={
@@ -232,21 +265,13 @@ export function ProblemPanel({
       }
     >
       <SpaceBetween size="m">
-        {problem.status === "FAILED" && problem.failureReason && (
-          <Alert type="error" header={t("problem_panel.failure_reason_header")}>
-            {problem.failureReason}
-          </Alert>
-        )}
-        {isStale && (
-          <Alert type="warning" header={t("problem_panel.stale_header")}>
-            {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now) })}
-          </Alert>
-        )}
-        {autoDeleteNotice && (
-          <Alert type={autoDeleteNotice.type} header={t("problem_panel.auto_delete_header")}>
-            {autoDeleteNotice.body}
-          </Alert>
-        )}
+        <ProblemPanelAlerts
+          problem={problem}
+          isStale={isStale}
+          autoDeleteNotice={autoDeleteNotice}
+          now={now}
+          t={t}
+        />
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は AWS 多リージョン
             の場合のみ意味があるが、 1 リージョン運用の現状では noise。 残すのは現在の score + 最終加点 */}
         <KeyValuePairs
@@ -287,18 +312,18 @@ export function ProblemPanel({
             />
           </Container>
         )}
-        {problem.scoring?.kind === "flag" && problem.status === "COMPLETE" && (
+        {flagScoring && (
           <FlagSubmissionPanel
             apiBaseUrl={apiBaseUrl}
             sessionToken={sessionToken}
             problemId={problem.problemId}
-            flagSubmitted={problem.scoring.flagSubmitted ?? false}
-            points={problem.scoring.points ?? 0}
-            hints={problem.scoring.hints ?? []}
+            flagSubmitted={flagScoring.flagSubmitted ?? false}
+            points={flagScoring.points ?? 0}
+            hints={flagScoring.hints ?? []}
             onScored={onScored}
           />
         )}
-        {!TERMINAL_STATUSES.has(problem.status) && (
+        {shouldShowAutoRefreshNote(problem.status) && (
           <Box variant="small" color="text-status-info">
             {t("problem_panel.auto_refresh_note", { seconds: POLL_INTERVAL_MS / 1000 })}
           </Box>
@@ -375,279 +400,4 @@ function formatTerminalTime(value: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
-}
-
-function FlagSubmissionPanel({
-  apiBaseUrl,
-  sessionToken,
-  problemId,
-  flagSubmitted,
-  points,
-  hints,
-  onScored,
-}: {
-  apiBaseUrl: string;
-  sessionToken: string;
-  problemId: string;
-  flagSubmitted: boolean;
-  points: number;
-  hints: readonly ParticipantHintView[];
-  onScored: () => Promise<void>;
-}) {
-  const t = useT();
-  const [flag, setFlag] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  if (flagSubmitted) {
-    // audit #6: 既出提出 (= reload した後の表示)。 「事務的 提出済み」 ではなく祝祭的 message。
-    return (
-      <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
-        {t("problem_panel.celebrate_body")}
-      </Alert>
-    );
-  }
-
-  const handleSubmit = async (e: { preventDefault: () => void }) => {
-    e.preventDefault();
-    if (!flag.trim() || submitting) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    setOutcome(null);
-    try {
-      const result = await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
-      setOutcome(result);
-      if (result.kind === "ok" || result.kind === "already_scored") {
-        await onScored();
-      }
-    } catch (err) {
-      if (err instanceof PortalScoringGateError) {
-        setSubmitError(describeScoringGate(t, err));
-      } else if (err instanceof PortalValidationError) {
-        setSubmitError(t("problem_panel.submit_error_prefix", { errorCode: err.errorCode }));
-      } else {
-        setSubmitError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <SpaceBetween size="s">
-      {hints.length > 0 && (
-        <HintsPanel
-          apiBaseUrl={apiBaseUrl}
-          sessionToken={sessionToken}
-          problemId={problemId}
-          hints={hints}
-          onRevealed={onScored}
-        />
-      )}
-      <form onSubmit={handleSubmit}>
-        <Form
-          actions={
-            <Button variant="primary" loading={submitting} formAction="submit">
-              {t("problem_panel.submit_button", { points })}
-            </Button>
-          }
-        >
-          <FormField label={t("problem_panel.flag_field_label")}>
-            <Input
-              value={flag}
-              onChange={(e) => setFlag(e.detail.value)}
-              placeholder={t("problem_panel.flag_placeholder")}
-              disabled={submitting}
-            />
-          </FormField>
-        </Form>
-      </form>
-      <CelebrationOverlay visible={outcome?.kind === "ok"} />
-      {outcome?.kind === "ok" && (
-        <Alert
-          type="success"
-          header={t("problem_panel.ok_alert_header", { delta: outcome.scoreDelta })}
-        >
-          {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
-        </Alert>
-      )}
-      {outcome?.kind === "wrong" && (
-        <Alert
-          type="warning"
-          header={
-            outcome.scoreDelta < 0
-              ? t("problem_panel.wrong_with_penalty_header", {
-                  delta: outcome.scoreDelta,
-                  total: outcome.totalScore,
-                })
-              : t("problem_panel.wrong_header")
-          }
-        >
-          {outcome.scoreDelta < 0
-            ? t("problem_panel.wrong_with_penalty_body", {
-                count: outcome.wrongCount,
-                penalty: -outcome.scoreDelta,
-              })
-            : t("problem_panel.wrong_body")}
-        </Alert>
-      )}
-      {outcome?.kind === "already_scored" && (
-        <Alert type="info" header={t("problem_panel.already_scored_header")}>
-          {t("problem_panel.already_scored_body", { total: outcome.totalScore })}
-        </Alert>
-      )}
-      {submitError && (
-        <Alert type="error" header={t("problem_panel.submit_failed_header")}>
-          {submitError}
-        </Alert>
-      )}
-    </SpaceBetween>
-  );
-}
-
-/**
- * Issue #742 Phase 4: progressive hint UI。
- *
- * - revealed=false (locked): 「ヒント N (-X pt)」 + 「reveal」 button
- * - revealed=true (unlocked): hint content + revealedAt 表示
- *
- * reveal クリック時に POST /portal/me/problems/:problemId/hints/:hintId/reveal を叩き、
- * 成功時に親 (= onScored) を呼んで score / hint 状態を refetch する (= optimistic に状態
- * 更新せず、 server truth を読み直す)。 失敗時は inline error を表示。
- */
-function HintsPanel({
-  apiBaseUrl,
-  sessionToken,
-  problemId,
-  hints,
-  onRevealed,
-}: {
-  apiBaseUrl: string;
-  sessionToken: string;
-  problemId: string;
-  hints: readonly ParticipantHintView[];
-  onRevealed: () => Promise<void>;
-}) {
-  const t = useT();
-  const [revealing, setRevealing] = useState<string | null>(null);
-  const [revealError, setRevealError] = useState<string | null>(null);
-  const [pendingReveal, setPendingReveal] = useState<ParticipantHintView | null>(null);
-  const [pendingIndex, setPendingIndex] = useState<number>(0);
-
-  const handleReveal = async (hintId: string) => {
-    if (revealing) return;
-    setRevealing(hintId);
-    setRevealError(null);
-    try {
-      await revealHint(apiBaseUrl, sessionToken, problemId, hintId);
-      await onRevealed();
-    } catch (err) {
-      if (err instanceof PortalScoringGateError) {
-        setRevealError(describeScoringGate(t, err));
-      } else if (err instanceof PortalValidationError) {
-        setRevealError(t("problem_panel.validation_error", { errorCode: err.errorCode }));
-      } else {
-        setRevealError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      setRevealing(null);
-      setPendingReveal(null);
-    }
-  };
-
-  const revealedCount = hints.filter((h) => h.revealed).length;
-  return (
-    <>
-      <Alert
-        type="info"
-        header={t("problem_panel.hint_header", { revealed: revealedCount, total: hints.length })}
-      >
-        <SpaceBetween size="xs">
-          {hints.map((h, i) => (
-            <Box key={h.id}>
-              {h.revealed ? (
-                <Box>
-                  <strong>{t("problem_panel.hint_label_colon", { index: i + 1 })}</strong>{" "}
-                  {h.content}
-                  {h.revealedAt && (
-                    <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
-                      {t("problem_panel.hint_revealed_ago", {
-                        ago: describeAgo(h.revealedAt, Date.now()),
-                      })}
-                    </Box>
-                  )}
-                </Box>
-              ) : (
-                <Box>
-                  <strong>{t("problem_panel.hint_label", { index: i + 1 })}</strong>{" "}
-                  <span style={{ color: h.penalty > 0 ? "#b54708" : "#475467" }}>
-                    {t("problem_panel.hint_penalty_note", { penalty: h.penalty })}
-                  </span>{" "}
-                  <Button
-                    variant="normal"
-                    iconName="lock-private"
-                    loading={revealing === h.id}
-                    disabled={revealing !== null && revealing !== h.id}
-                    onClick={() => {
-                      setPendingReveal(h);
-                      setPendingIndex(i);
-                    }}
-                  >
-                    {t("problem_panel.hint_reveal_button")}
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          ))}
-          {revealError && (
-            <Box color="text-status-error" variant="small">
-              {revealError}
-            </Box>
-          )}
-        </SpaceBetween>
-      </Alert>
-
-      <Modal
-        visible={pendingReveal !== null}
-        onDismiss={() => setPendingReveal(null)}
-        header={t("problem_panel.hint_confirm_header", { index: pendingIndex + 1 })}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button
-                variant="link"
-                onClick={() => setPendingReveal(null)}
-                disabled={revealing !== null}
-              >
-                {t("problem_panel.hint_confirm_cancel")}
-              </Button>
-              <Button
-                variant="primary"
-                loading={revealing !== null}
-                onClick={() => {
-                  if (pendingReveal) void handleReveal(pendingReveal.id);
-                }}
-              >
-                {t("problem_panel.hint_confirm_submit")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        {pendingReveal && (
-          <SpaceBetween size="xs">
-            <Box>
-              {pendingReveal.penalty > 0
-                ? t("problem_panel.hint_confirm_penalty", { penalty: pendingReveal.penalty })
-                : t("problem_panel.hint_confirm_no_penalty")}
-            </Box>
-            <Box variant="small" color="text-status-inactive">
-              {t("problem_panel.hint_confirm_footer")}
-            </Box>
-          </SpaceBetween>
-        )}
-      </Modal>
-    </>
-  );
 }
