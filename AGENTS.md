@@ -1,133 +1,133 @@
 # AGENTS.md — TenkaCloud
 
-AI エージェント (Claude Code, Codex CLI 等) 向けのガイド。プロダクト全体の正本は @CLAUDE.md。本ファイルは「エージェントとして動くときに守る運用ルール」だけに絞る。
+Guide for AI agents (Claude Code, Codex CLI, etc.). The source of truth for the product as a whole is @CLAUDE.md. This file is scoped to the operational rules an agent should follow while it is acting.
 
-## 役割分担
+## Role split
 
-- **インフラ (CDK / SBT / IAM / `infrastructure/templates/`) はユーザーが書く**。CDK スタック、IAM ポリシー、CFn テンプレートはユーザー判断で進める。提案は OK だが勝手に編集しない。
-- **アプリ (`apps/*`、`scripts/*` の orchestration、`problems/*`) はエージェントが進める**。テストを書き、`make before-commit` を通し、PR を出すところまで一気通貫で。
-- 不明点はまず repo を読む (`git log`, `git diff main...HEAD`, 関連 stack の test)。それでも判断つかないときだけユーザーに問う。
+- **Infrastructure (CDK / SBT / IAM / `infrastructure/templates/`) is the user's responsibility.** CDK stacks, IAM policies, and CFn templates are the user's call. Proposals are fine; do not edit them on your own initiative.
+- **Application code (`apps/*`, `scripts/*` orchestration, `problems/*`) is the agent's responsibility.** Write tests, get `make before-commit` green, and follow it through to a PR end-to-end.
+- When something is unclear, read the repo first (`git log`, `git diff main...HEAD`, related stack tests). Only ask the user when even that is not enough.
 
-## 一気通貫で動く
+## Run end-to-end
 
-中間で「次に進めていいですか？」と止まらない。タスクが完了するまで連続で進めて、最後に結果だけ報告する。途中で軌道修正があれば次の発話で受け取る。
+Don't pause to ask "should I continue?" in the middle. Run continuously until the task is done, then report the result. Course corrections come back in the next message.
 
-次の例外を除く。
+The exceptions are:
 
-- 破壊的操作 (`rm -rf`、`git reset --hard`、強制 push、`make destroy`、本番への deploy)
-- 共有環境への push / PR 作成 / Slack 投稿等の外部副作用
-- シークレット (.env, AWS credentials) を扱う操作
+- Destructive operations (`rm -rf`, `git reset --hard`, force push, `make destroy`, production deploys)
+- Side effects on shared environments — pushing to PR / Slack / external services
+- Anything that touches secrets (`.env`, AWS credentials)
 
-これらは確認を取る。
+For those, ask first.
 
-## 品質ゲート
+## Quality gates
 
-PR 作成前に **この順序で** 通すこと。
+Run the following **in this order** before opening a PR.
 
 ```bash
-make harness         # architecture invariant チェック (docs/architecture/harness.md)
+make harness         # architecture invariant check (docs/architecture/harness.md)
 make before-commit   # lint (markdownlint + textlint + biome) / typecheck / test / validate-problems
-/review              # コードレビュー
-/security-review     # セキュリティレビュー
-/simplify            # 重複・複雑度・効率の最終チェック
+/review              # code review
+/security-review     # security review
+/simplify            # final pass for duplication, complexity, and efficiency
 ```
 
-何か落ちたらコードを直す。設定ファイル (`biome.json`, `vitest.config.ts`, `tsconfig.json`) を直接いじって誤魔化さない。
+If something fails, fix the code. Don't paper over it by editing config files (`biome.json`, `vitest.config.ts`, `tsconfig.json`).
 
-`make harness` が落ちる場合は `docs/architecture/harness.md` の invariant ID と照らし合わせる。harness 自体のテストは `make harness-test`、ハーネスのルールロジックは `.claude/harness/src/architecture.ts` と `tech-debt.ts`。
+If `make harness` fails, cross-reference the invariant ID with `docs/architecture/harness.md`. The harness's own unit tests are `make harness-test`, and the rule logic lives in `.claude/harness/src/architecture.ts` and `tech-debt.ts`.
 
-CI (`.github/workflows/ci.yml`) は `make install_ci` → textlint → format check → typecheck → test → build。ローカル `make before-commit` が通れば CI は通る前提。
+CI (`.github/workflows/ci.yml`) runs `make install_ci` → textlint → format check → typecheck → test → build. If `make before-commit` passes locally, CI passes — that's the contract.
 
-## 利用可能な skills
+## Available skills
 
-`/<skill>` で起動する。実体は `.claude/skills/<skill>/SKILL.md`。
+Invoke as `/<skill>`. Implementations live in `.claude/skills/<skill>/SKILL.md`.
 
-| skill              | 用途                                                                  |
-| ------------------ | --------------------------------------------------------------------- |
-| `/harness`         | `make harness` を走らせて invariant 違反を検出                       |
-| `/tech-debt`       | `make tech-debt` で技術的負債バックログを生成                         |
-| `/create-problem`  | `problems/<category>/<id>/` を `metadata.json` + `template.yaml` で雛形生成 |
-| `/spec`            | Open Web Docs (MDN) スタイルの技術仕様書を書く                       |
+| skill              | Purpose                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `/harness`         | Run `make harness` to detect invariant violations                                       |
+| `/tech-debt`       | Run `make tech-debt` to generate the tech-debt backlog                                  |
+| `/create-problem`  | Scaffold `problems/<category>/<id>/` with the `metadata.json` + `template.yaml` convention |
+| `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
 
-加えて TenkaCloud 関係なく使える共通 skill (`/review`、`/security-review`、`/simplify`、`/init` 等) は Claude Code 本体側に同梱されている。
+In addition, the common skills (`/review`, `/security-review`, `/simplify`, `/init`, etc.) that ship with Claude Code itself are also available; they are not TenkaCloud-specific.
 
-## Codex CLI との併用 (= 総力戦)
+## Working alongside Codex CLI ("total war" mode)
 
-OpenAI の Codex CLI も本 repo を AGENTS.md (本ファイル) 経由で読み込める。 並列に走らせて作業分担する典型パターンは次の通り。
+OpenAI's Codex CLI can also load this repo through this AGENTS.md file. The typical pattern for parallelizing work is:
 
-- **Claude Code** が `apps/*` と `scripts/*` の実装を主導 (= 本ファイルの「役割分担」通り)
-- **Codex CLI** で別ブランチを切り、 cross-cutting concern (= naming refactor / dead code 削除 / 同型 helper の抽出) を並行で進める
-- 結果は別々の PR にし、 conflict は user (= 最終 reviewer) が手で潰す
+- **Claude Code** drives the `apps/*` and `scripts/*` implementation (matches the role split above).
+- **Codex CLI** runs on a separate branch and tackles cross-cutting concerns (naming refactors, dead code removal, helper extraction, etc.) in parallel.
+- Each agent ships its own PR. Conflicts are reconciled by the user (the final reviewer).
 
-Codex CLI を起動する前に次を確認する。
+Before launching Codex CLI, check the following:
 
-1. `make harness` が通る状態であること (= invariant 違反のある branch を渡さない)
-2. 作業範囲を本ファイルの「役割分担」と「禁止事項」に従わせること (= CDK を弄らせない / `rm` 等を実行させない)
-3. Codex の出力 PR にも `## Regression 分析` / `## 物理影響` セクションを書かせること
+1. `make harness` passes (don't hand it a branch with invariant violations)
+2. The work scope respects this file's role split and prohibitions (no CDK edits, no `rm`, etc.)
+3. Codex's PR body must also include the `## Regression analysis` / `## Physical impact` sections
 
-Codex CLI 専用の skill / config は持たない (= AGENTS.md 1 つで両者をガイドする方針)。 Claude Code 側で `.claude/skills/*` を使う subcommand は Codex からは見えないので、 Codex には slash command (`/<skill>`) を要求しない普通の自然言語タスクを与えること。
+We do not maintain Codex CLI-specific skills or config — AGENTS.md alone guides both agents. The `.claude/skills/*` slash commands on the Claude Code side are invisible from Codex, so give Codex plain natural-language tasks that don't require `/<skill>` invocations.
 
-## ブランチと PR
+## Branches and PRs
 
-- **マージ済みブランチに push しない**。PR を出す前に必ず `gh pr view --json state` で state を確認。`MERGED` / `CLOSED` なら新ブランチを切る。
-- 小さな意味単位で PR を分ける。`feat(...)` `fix(...)` `refactor(...)` `docs(...)` `test(...)` `chore(...)` のいずれか (Conventional Commits)。
-- PR タイトルは 70 文字以内。本文に Summary + Test plan を書く。
-- Issue 引用は GitHub の auto-close keyword に揃える:
-  - **解決して閉じる** = `Closes #553` / `Fixes #553` / `Resolves #553` (= merge 時に GitHub が auto-close)
-  - **関連だが閉じない (= partial fix / backlink)** = `Relates #553` または非 keyword 位置で `#553` を書く
-  - **PR 同士の参照** = `PR-565` のように番号 prefix
-  - 旧ルール (= `(#N)` の括弧で auto-close 抑止) は誤解だった。`Closes` などの keyword が無ければ `#N` 単独で auto-close されない (= backlink のみ作る)。
+- **Don't push to a branch whose PR is already merged.** Always confirm state with `gh pr view --json state` before opening a new PR; if it is `MERGED` / `CLOSED`, cut a new branch.
+- Split PRs into small, meaningful units. Title must be one of `feat(...)` `fix(...)` `refactor(...)` `docs(...)` `test(...)` `chore(...)` (Conventional Commits).
+- PR titles are under 70 characters. Put Summary + Test plan in the body.
+- Issue references must align with GitHub's auto-close keywords:
+  - **Close on merge** = `Closes #553` / `Fixes #553` / `Resolves #553` (GitHub auto-closes at merge time)
+  - **Related but doesn't close** (partial fix / backlink) = `Relates #553`, or mention `#553` in a non-keyword position
+  - **PR-to-PR references** = use a `PR-565`-style number prefix
+  - The old rule of wrapping `(#N)` to suppress auto-close was a misunderstanding. Without a keyword like `Closes`, a bare `#N` does **not** auto-close — it just makes a backlink.
 
-## ADR 規約
+## ADR conventions
 
-- ADR は `docs/architecture/adr-*.html` で書く。Markdown の新規 ADR は作らない。row span / color / SVG / collapsible など、HTML の表現力を使って設計判断を正本化する。
-- ADR は self-contained に書く。chat 文脈、順次反映 metadata、`Claude が提案` / `user 担当` のような会話内の役割分担、未確定 TODO を残さない。OSS readers が ADR 単体で背景・判断・影響を理解できることを基準にする。
-- 機械検査は `make harness` の `adr-must-be-html` / `adr-self-contained` rule が担う。既存違反は `.claude/harness/baselines/adr-self-contained.json` で baseline 化し、新規 regression だけを落とす。
+- ADRs live in `docs/architecture/adr-*.html`. Don't create new ADRs in Markdown. Use HTML's expressive features (row spans, color, SVG, collapsible) to make design decisions the source of truth.
+- ADRs must be self-contained. Don't leave chat context, rolling-update metadata, role-split notes like `Claude proposes` / `user owns`, or unresolved TODOs. The benchmark is "an OSS reader can understand background, decision, and impact from this ADR alone."
+- Machine checks live in `make harness` as the `adr-must-be-html` / `adr-self-contained` rules. Existing violations are baselined at `.claude/harness/baselines/adr-self-contained.json` so only new regressions fail.
 
-## コーディング規約
+## Coding rules
 
-- **HTTP status code は `StatusCodes.*` (`http-status-codes` library) を使う**。`c.json(body, 200)` / `res.status === 401` のような数値リテラル直書きは禁止。意図 (200 vs 202、400 vs 409 等) を name で明示し、grep / lint で意味検索を可能にする。
+- **HTTP status codes use `StatusCodes.*` (`http-status-codes` library).** Numeric literals such as `c.json(body, 200)` / `res.status === 401` are forbidden. Names make intent explicit (200 vs 202, 400 vs 409, etc.) and let you grep / lint by meaning.
   - backend: `import { StatusCodes } from "http-status-codes"; return c.json(body, StatusCodes.OK);`
   - frontend: `if (res.status === StatusCodes.UNAUTHORIZED) ...`
-  - legacy alias (`HTTP_OK` 等、`infrastructure/lib/problem-deploy/handlers/shared/http-status.ts`) は deprecated。新規コードでは使わない
+  - The legacy aliases (`HTTP_OK` etc. in `infrastructure/lib/problem-deploy/handlers/shared/http-status.ts`) are deprecated. Don't use them in new code.
 
-## 禁止事項
+## Prohibited
 
-- `npx` → `bunx` または `nlx`
-- `rm` (環境破壊リスク) → `git rm`
-- HTTP status code の数値リテラル直書き — `StatusCodes.*` を使う
-- モック / スタブで握り潰す fallback / 空配列を返して見せかける処理
-- 設定ファイル (`biome.json`, `vitest.config.*`, `tsconfig.json`) の直接編集
-- DynamoDB の on-demand (`PAY_PER_REQUEST`) 化 — `DynamoDbLowCapacity` Aspect で 1/1 PROVISIONED 強制
-- SSE / WebSocket の新規導入 — Lambda 運用と整合する **polling** で書く
-  - 状態反映の polling 削減は [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html) に従い EventBridge 駆動で補完する。frontend polling 方針は維持する
-- シークレットのコミット (`infrastructure/environments/<env>/.env`、AWS credentials)
-- `package.json` の `trustedDependencies` への追加を独断で行わない — supply chain attack の入口になる
+- `npx` → use `bunx` or `nlx`
+- `rm` (risk of nuking the environment) → use `git rm`
+- HTTP status code numeric literals — use `StatusCodes.*`
+- Silent fallbacks via mocks / stubs / empty-array returns
+- Direct edits to config files (`biome.json`, `vitest.config.*`, `tsconfig.json`)
+- On-demand (`PAY_PER_REQUEST`) DynamoDB — the `DynamoDbLowCapacity` Aspect enforces 1/1 PROVISIONED
+- Introducing SSE / WebSocket — write **polling** so it aligns with the Lambda operational model
+  - To reduce polling pressure, supplement with EventBridge-driven reconciliation per [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html). The frontend polling policy stays.
+- Committing secrets (`infrastructure/environments/<env>/.env`, AWS credentials)
+- Adding packages to `package.json` `trustedDependencies` on your own — that's a supply chain attack vector
 
-## Supply Chain Security (mini Shai-Hulud 第二波 2026-05 対策)
+## Supply chain security (mini Shai-Hulud 2nd wave, 2026-05)
 
-参考: [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd)
+Reference: [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd)
 
-防御層は次の 4 段で構成する。
+The four defense layers are:
 
-1. **Bun の `trustedDependencies` モデル**: Bun は transitive dep の lifecycle script を default で実行しない。 root `package.json` の `trustedDependencies` 配列が allowlist (現状空)
-2. **`.npmrc`**: 万一 contributor が npm / yarn / pnpm を使っても自動 fallback で防御するため `ignore-scripts=true` + `min-release-age=168h` (= 7 日 quarantine) を入れる
-3. **CI 監査** (`make audit-deps`): `scripts/audit-dependencies.ts` が `node_modules` 配下を scan し、 lifecycle script (= preinstall / install / postinstall / preprepare / prepare / postprepare) を持つ package を `scripts/audit-baseline.json` と diff。 新規追加 / 既存 dep の hook 追加で CI を fail させる
-4. **CI の `--ignore-scripts` install + Safe Chain**: `make install_ci` は `bun install --frozen-lockfile --ignore-scripts`、 さらに Aikido Safe Chain で悪意 package を検出する
+1. **Bun's `trustedDependencies` model**: Bun does not run transitive lifecycle scripts by default. The root `package.json` `trustedDependencies` array is the allowlist (currently empty).
+2. **`.npmrc`**: To protect contributors who fall back to npm / yarn / pnpm, set `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine).
+3. **CI audit** (`make audit-deps`): `scripts/audit-dependencies.ts` scans under `node_modules`, diffs packages with lifecycle scripts (preinstall / install / postinstall / preprepare / prepare / postprepare) against `scripts/audit-baseline.json`, and fails CI on any new addition or any new hook on an existing dep.
+4. **`--ignore-scripts` install + Safe Chain in CI**: `make install_ci` runs `bun install --frozen-lockfile --ignore-scripts`, plus Aikido Safe Chain to detect malicious packages.
 
-### baseline を更新するとき
+### Updating the baseline
 
-dependency を新規追加 / 更新したとき lifecycle script を持つ新 package が baseline に増えることがある。 次の手順で更新する。
+When adding / updating a dependency, a new package with lifecycle scripts may end up in the baseline. Procedure:
 
-1. 該当 package の `package.json` 内 lifecycle script を実際に読み、 不審な動作 (= curl / wget / OS 識別 / 環境変数 exfil / ファイル書き込み / プロセス spawn) がないことを目視確認
-2. `bun run scripts/audit-dependencies.ts --update` で `scripts/audit-baseline.json` を更新
-3. PR body に「baseline 更新の理由 + 確認した script の要約」を書く
+1. Read the package's `package.json` lifecycle scripts by eye and verify there is no suspicious behavior (`curl` / `wget` / OS detection / env-var exfil / file writes / process spawn)
+2. Run `bun run scripts/audit-dependencies.ts --update` to refresh `scripts/audit-baseline.json`
+3. Document in the PR body the reason for the baseline change and a summary of the scripts you reviewed
 
-特に不審な script (= remote download / OS-level persistence / curl piped to sh) を見たら baseline に入れず PR を停止して報告すること。
+If you see something genuinely suspicious (remote download / OS-level persistence / `curl | sh`), do **not** add it to the baseline — stop the PR and report.
 
 ## TDD
 
-テストを先に書く。テストタイトルは日本語「〜すべき」形式。
+Write tests first. Test titles use the English `should ...` pattern.
 
 ```typescript
 import { Template } from "aws-cdk-lib/assertions";
@@ -135,7 +135,7 @@ import { describe, expect, it } from "vitest";
 import { App, Stack } from "aws-cdk-lib";
 
 describe("AdminConsoleHostingStack", () => {
-  it("CloudFront distribution に runtime-config.json が配置されるべき", () => {
+  it("should place runtime-config.json on the CloudFront distribution", () => {
     const app = new App();
     const stack = new AdminConsoleHostingStack(app, "Test", { /* ... */ });
     const template = Template.fromStack(stack);
@@ -144,61 +144,61 @@ describe("AdminConsoleHostingStack", () => {
 });
 ```
 
-CDK の test では `Template.fromStack(stack)` で生成 CFn を assertion する。Lambda handler のユニットテストは `vi.mock` で AWS SDK clients をモックする。
+In CDK tests, assert against the generated CFn via `Template.fromStack(stack)`. For Lambda handler unit tests, mock the AWS SDK clients with `vi.mock`.
 
-## ディレクトリ早見
+## Directory cheat sheet
 
 ```
 apps/
   admin-console/                   # System Admin (Cognito Hosted UI / OAuth Code+PKCE)
   application-admin-console/       # Tenant Admin (per-tenant Application Plane)
-  participant-portal/              # 競技者ポータル (per-team login key)
+  participant-portal/              # Competitor portal (per-team login key)
 infrastructure/
-  bin/infrastructure.ts            # 全 stack の配線
+  bin/infrastructure.ts            # Wiring for every stack
   lib/control-plane-stack.ts       # SBT ControlPlane
   lib/bootstrap-template/          # TenantMappingTable
-  lib/tenant-template/             # 1 tenant の API + Cognito + ApplicationConsole
-  lib/tenant-pipeline/             # CodePipeline 経由の per-tenant provisioning
-  lib/problem-deploy/              # 競技者 AWS への問題 deploy backend
-  lib/admin-console-hosting.ts     # admin-console S3+CloudFront 配信
+  lib/tenant-template/             # One tenant's API + Cognito + ApplicationConsole
+  lib/tenant-pipeline/             # Per-tenant provisioning via CodePipeline
+  lib/problem-deploy/              # Problem deployment backend into competitor AWS
+  lib/admin-console-hosting.ts     # admin-console S3 + CloudFront hosting
   lib/cdk-aspect/                  # DynamoDbLowCapacity / DestroyPolicySetter
   environments/<env>/              # config.json + .env
-  templates/competitor-bootstrap.yaml  # 競技者アカウントで流す IAM Role
+  templates/competitor-bootstrap.yaml  # IAM Role to roll out in the competitor account
 scripts/
-  install.sh                       # 3-phase deploy のオーケストレーション
-  cleanup.sh                       # 冪等な teardown
-  provision-tenant.sh              # CodeBuild から呼ばれる per-tenant deploy
-  deprovision-tenant.sh            # tenant 削除
-problems/<category>/<id>/          # metadata.json + template.yaml が正本
+  install.sh                       # 3-phase deploy orchestration
+  cleanup.sh                       # Idempotent teardown
+  provision-tenant.sh              # Per-tenant deploy invoked from CodeBuild
+  deprovision-tenant.sh            # Tenant teardown
+problems/<category>/<id>/          # metadata.json + template.yaml are the source of truth
 ```
 
-## クロスプレーン契約 (壊さない)
+## Cross-plane contracts (do not break)
 
-- **EventBridge bus** は `ControlPlaneStack` が払い出し、`bin/infrastructure.ts` が他 stack に ARN を渡す。新 stack を追加するときも同じ bus を使う。
-- **Tenant 作成イベント** (`onboardingRequest`) は `ServerlessSaaSPipeline` が拾って per-tenant stack を deploy する。BASIC / STANDARD / PREMIUM は pooled stack を共有、PLATINUM のみ silo stack を立てる。
-- **DeployRequested イベント** は `ProblemDeployBackendStack` の Worker Lambda が拾い、tenant の ExternalId で競技者アカウントに AssumeRole → CFn CreateStack する。**ExternalId は必ず要求** (省略不可)。
-- **Frontend の URL** は `runtime-config.json` (CloudFront 配下) 経由で注入される。`apps/*/src/config.ts` に `loadConfig()` がある。新しい URL を追加するときは hosting stack の env と config.ts の interface を両方更新する。
+- **EventBridge bus** is provisioned by `ControlPlaneStack`; `bin/infrastructure.ts` hands the ARN to every other stack. New stacks must use the same bus.
+- **Tenant creation event** (`onboardingRequest`) is picked up by `ServerlessSaaSPipeline`, which deploys the per-tenant stack. BASIC / STANDARD / PREMIUM share the pooled stack; only PLATINUM gets a silo stack.
+- **DeployRequested event** is picked up by the `ProblemDeployBackendStack` Worker Lambda, which AssumeRoles into the competitor account using the tenant's ExternalId and runs CFn CreateStack. **`ExternalId` is always required** (no omission allowed).
+- **Frontend URLs** are injected through `runtime-config.json` (served under CloudFront). `apps/*/src/config.ts` has a `loadConfig()`. When you add a new URL, update both the hosting stack env and the `config.ts` interface.
 
-## Problem Authoring (ADR-012)
+## Problem authoring (ADR-012)
 
-新しい問題を追加するときの正本は次の 3 点です。
+The three sources of truth when adding a problem are:
 
-- **正本 schema**: [`problems/SCHEMA.json`](./problems/SCHEMA.json) — `metadata.json` の JSON Schema
-- **30 分 onboarding guide**: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — step-by-step + 5 kind の決定木 + 実例 4 問
-- **Claude Code skill**: `.claude/skills/create-problem/SKILL.md` — `/create-problem` で起動、要件ヒアリング → 雛形生成 → metadata 編集まで誘導
+- **Schema source of truth**: [`problems/SCHEMA.json`](./problems/SCHEMA.json) — JSON Schema for `metadata.json`
+- **30-minute onboarding guide**: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — step-by-step + 5-kind decision tree + 4 worked examples
+- **Claude Code skill**: `.claude/skills/create-problem/SKILL.md` — invoked as `/create-problem`; walks through requirements gathering → scaffold generation → metadata editing
 
-問題は **3-asset model** (ADR-012):
+Problems use the **3-asset model** (ADR-012):
 
 ```
 problems/<category>/<id>/
-├── metadata.json    # catalog 表示 + scoring engine + portal plugin 配線の正本
-├── template.yaml    # CFn ペライチ (deploy 本体、 競技者 account に直接 deploy)
-└── portal/          # 任意 (= dashboard.slots で宣言した tsx)
+├── metadata.json    # Source of truth for catalog display + scoring engine + portal plugin wiring
+├── template.yaml    # A single-page CFn (the deploy body, deployed straight into the competitor account)
+└── portal/          # Optional (.tsx files declared in dashboard.slots)
 ```
 
-採点は 5 種の builtin kind (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) を 1 問題 1 つ宣言する。 platform 側 generic scoring Lambda (= ADR-012 Phase 3) が dispatch する。 問題固有の scoring code を platform に書かない。
+Scoring uses one of five built-in kinds (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) — one per problem. The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
 
-雛形生成 CLI を備えています。
+A scaffolding CLI is available:
 
 ```bash
 bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>
@@ -206,15 +206,15 @@ bun run scripts/tenkacloud-problem.ts validate <id>
 bun run scripts/tenkacloud-problem.ts list-kinds
 ```
 
-雛形 templates: `.claude/templates/problems/<kind>/` に 5 kind 分 (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`)。
+Scaffold templates live under `.claude/templates/problems/<kind>/` — one per kind (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`).
 
-## 参照
+## References
 
-- @CLAUDE.md — プロダクト全体・アーキテクチャ・コマンド一覧
-- [`docs/architecture/harness.md`](./docs/architecture/harness.md) — invariant + PR Discipline の正本
-- [`docs/architecture/adr-012-problem-plugin-architecture.html`](./docs/architecture/adr-012-problem-plugin-architecture.html) — 問題 = plugin、 platform = host の設計
-- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 問題作成 30 分 onboarding
-- [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — 競技者アカウント側のセットアップ
-- [`problems/README.md`](./problems/README.md) — 問題追加の手順とスキーマ
-- `apps/<app>/README.md` — 各 SPA のローカル開発手順
-- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) — CI が走らせるコマンド
+- @CLAUDE.md — full product overview, architecture, command list
+- [`docs/architecture/harness.md`](./docs/architecture/harness.md) — source of truth for invariants + PR Discipline
+- [`docs/architecture/adr-012-problem-plugin-architecture.html`](./docs/architecture/adr-012-problem-plugin-architecture.html) — problem = plugin, platform = host design
+- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 30-minute problem authoring onboarding
+- [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — competitor-side setup
+- [`problems/README.md`](./problems/README.md) — problem authoring steps + schema
+- `apps/<app>/README.md` — local development steps per SPA
+- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) — what CI runs
