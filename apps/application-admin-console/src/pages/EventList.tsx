@@ -67,7 +67,11 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
     {
       id: "status",
       header: ctx.t("event_list.col_status"),
-      cell: (item) => <Badge color={STATUS_COLOR[item.status]}>{item.status}</Badge>,
+      cell: (item) => (
+        <Badge color={STATUS_COLOR[item.status]}>
+          {ctx.t(`event_list.status_label.${item.status}`)}
+        </Badge>
+      ),
     },
     {
       id: "teamCount",
