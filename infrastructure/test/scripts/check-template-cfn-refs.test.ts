@@ -3,6 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  collectGetAttResources,
+  collectRefs,
+  collectSubRefs,
+  parseSections,
+} from "../../../scripts/check-template-cfn-refs";
 
 /**
  * Issue #951 sub #2: `scripts/check-template-cfn-refs.ts` の挙動を pin する。
@@ -91,5 +97,78 @@ Outputs:
     const re = /!Ref\s+([A-Za-z][A-Za-z0-9:_]*)/g;
     const refs = [...yaml.matchAll(re)].map((m) => m[1]);
     expect(refs).toContain("BogusResource");
+  });
+});
+
+describe("check-template-cfn-refs unit (= 抽出した helper の挙動を pin)", () => {
+  it("parseSections: Resources / Parameters / Outputs を分離して name を集めるべき", () => {
+    const yaml = `AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  NamePrefix:
+    Type: String
+  ExternalId:
+    Type: String
+Resources:
+  Role:
+    Type: AWS::IAM::Role
+  Bucket:
+    Type: AWS::S3::Bucket
+Outputs:
+  RoleArn:
+    Value: !GetAtt Role.Arn
+`;
+    const sections = parseSections(yaml);
+    expect([...sections.parameters].sort()).toEqual(["ExternalId", "NamePrefix"]);
+    expect([...sections.resources].sort()).toEqual(["Bucket", "Role"]);
+    expect([...sections.outputs].sort()).toEqual(["RoleArn"]);
+  });
+
+  it("parseSections: 他の top-level section (Conditions 等) に入ったら currentSection を抜けるべき", () => {
+    const yaml = `Resources:
+  A:
+    Type: AWS::Foo
+Conditions:
+  IsProd: !Equals [a, b]
+Resources:
+  B:
+    Type: AWS::Bar
+`;
+    const sections = parseSections(yaml);
+    expect([...sections.resources].sort()).toEqual(["A", "B"]);
+  });
+
+  it("collectRefs: !Ref shortform と Ref: longform の両方を拾うべき", () => {
+    const yaml = `Resources:
+  A:
+    Properties:
+      Name: !Ref NamePrefix
+      Tag:
+        Ref: ExternalId
+`;
+    expect(collectRefs(yaml).sort()).toEqual(["ExternalId", "NamePrefix"]);
+  });
+
+  it("collectGetAttResources: !GetAtt と Fn::GetAtt の両方を拾うべき", () => {
+    const yaml = `Resources:
+  Out:
+    Value: !GetAtt Role.Arn
+  Other:
+    Value:
+      Fn::GetAtt: [ Bucket, Arn ]
+`;
+    expect(collectGetAttResources(yaml).sort()).toEqual(["Bucket", "Role"]);
+  });
+
+  it("collectSubRefs: \\${Var} は ref、 \\${X.Y} は getAtt、 \\${!Literal} は無視すべき", () => {
+    const yaml = `Foo: !Sub "\${NamePrefix}-suffix"
+Bar: !Sub "arn:\${AWS::Partition}:s3:::bucket"
+Baz: !Sub "arn:s3:::\${Role.Arn}"
+Esc: !Sub "literal \${!NotAVariable}"
+`;
+    const out = collectSubRefs(yaml);
+    expect(out.refs.sort()).toEqual(["AWS::Partition", "NamePrefix"]);
+    expect(out.getAtts).toEqual(["Role"]);
+    expect(out.refs).not.toContain("NotAVariable");
+    expect(out.getAtts).not.toContain("NotAVariable");
   });
 });
