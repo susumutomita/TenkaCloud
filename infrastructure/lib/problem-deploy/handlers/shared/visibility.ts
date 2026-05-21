@@ -32,15 +32,19 @@ export function parseProblemsVisibility(
 }
 
 /**
- * private 問題 + bucket 両方揃ったとき bucket 名を返す。 dormant なら undefined。
- * 呼び出し側で truthy check 1 つで分岐できる + 型が narrow される。
+ * ADR-003 Phase 4a (problem catalog split): bucketName が set されていれば、 problemId の
+ * visibility に関わらず S3 経路を使う。 旧挙動 (= private 問題だけ S3、 public は source.zip
+ * 同梱) は repo split 前の transition 用で、 split 完了後は全問題が ChallengePayloadStack
+ * + TenkaCloudChallenge repo の publish workflow で S3 に publish される設計。
+ *
+ * `visibility` 引数 / `parseProblemsVisibility` 自体は metadata catalog で
+ * `private` 表示用に保持 (= operator UI / admin console で「答え非公開」マーカーを出す)。
+ * deploy 経路 (= CHALLENGE_PAYLOAD_URL の発行可否) では visibility は参照しない。
  */
 export function resolveChallengePayloadBucket(args: {
   readonly problemId: string;
-  readonly visibility: Readonly<Record<string, PrivateVisibility>> | undefined;
   readonly bucketName: string | undefined;
 }): string | undefined {
   if (!args.bucketName) return undefined;
-  if (args.visibility?.[args.problemId] !== PROBLEM_VISIBILITY_PRIVATE) return undefined;
   return args.bucketName;
 }

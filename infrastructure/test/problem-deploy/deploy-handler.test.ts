@@ -220,9 +220,10 @@ describe("startDeployment", () => {
     expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
 
-  // ADR-008 Phase 3 (Issue #642): visibility / bucket env が dormant なら presigned URL を発行しない (= default)
-  describe("Issue #642: private 問題の presigned URL 発行", () => {
-    it("visibility 空のとき detail.challengePayloadUrl は undefined (= default 互換)", async () => {
+  // ADR-003 Phase 4a (problem catalog split): bucket が bind されているとき、 visibility に
+  // 関わらず全問題が S3 経路で deploy される (= 旧 ADR-008 Phase 3 の private 限定経路を全問題に拡張)。
+  describe("ADR-003 Phase 4a: catalog split deploy routing", () => {
+    it("bucket 未 bound のとき detail.challengePayloadUrl は undefined (= source.zip fallback)", async () => {
       const { ctx, eventsSend } = buildContext();
       await startDeployment(ctx, sampleRequest());
       const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
@@ -231,18 +232,20 @@ describe("startDeployment", () => {
       expect(detail.challengePayloadUrl).toBeUndefined();
     });
 
-    it("bucket 未設定のとき private 問題でも presigned URL を発行しない (= dormant)", async () => {
+    it("bucket bound + visibility=public でも S3 から presigned URL を発行する (= catalog split)", async () => {
       const { ctx, eventsSend } = buildContext({
-        problemsVisibility: { "security-battle-royale": "private" },
-        // challengePayloadBucket は undefined のまま
+        challengePayloadBucket: "tc-challenges-test",
+        s3: {} as DeployContext["s3"],
       });
-      await startDeployment(ctx, sampleRequest());
+      await startDeployment(ctx, sampleRequest({ problemId: "security-battle-royale" }));
       const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
       const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
-      expect(detail.challengePayloadUrl).toBeUndefined();
+      expect(typeof detail.challengePayloadUrl).toBe("string");
+      expect(detail.challengePayloadUrl).toContain("tc-challenges-test");
+      expect(detail.challengePayloadUrl).toContain("security-battle-royale/latest.zip");
     });
 
-    it("should pack a presigned URL into detail when a private problem has a bucket configured and an S3 client", async () => {
+    it("bucket bound + visibility=private でも S3 から presigned URL を発行する (= 旧 ADR-008 互換)", async () => {
       const { ctx, eventsSend } = buildContext({
         problemsVisibility: { "security-battle-royale": "private" },
         challengePayloadBucket: "tc-challenges-test",
@@ -252,29 +255,17 @@ describe("startDeployment", () => {
       const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
       const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
       expect(typeof detail.challengePayloadUrl).toBe("string");
-      expect(detail.challengePayloadUrl).toContain("tc-challenges-test");
       expect(detail.challengePayloadUrl).toContain("security-battle-royale/latest.zip");
     });
 
-    it("public 問題は private map に無いので bucket 設定があっても presigned URL を発行しない", async () => {
-      const { ctx, eventsSend } = buildContext({
-        problemsVisibility: { "some-other-private-problem": "private" },
-        challengePayloadBucket: "tc-challenges-test",
-        s3: {} as DeployContext["s3"],
-      });
-      await startDeployment(ctx, sampleRequest({ problemId: "security-battle-royale" }));
-      const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
-      const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
-      expect(detail.challengePayloadUrl).toBeUndefined();
-    });
-
-    it("should throw an error for private problems with a bucket but no s3 client injected", async () => {
+    it("should throw when the bucket is bound but the S3 client is not injected", async () => {
       const { ctx } = buildContext({
-        problemsVisibility: { "security-battle-royale": "private" },
         challengePayloadBucket: "tc-challenges-test",
         s3: undefined,
       });
-      await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/S3 client/);
+      await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(
+        /challenge payload bucket/,
+      );
     });
   });
 });

@@ -37,42 +37,26 @@ describe("parseProblemsVisibility (Issue #642)", () => {
   });
 });
 
-describe("resolveChallengePayloadBucket (Issue #642)", () => {
-  it("bucketName 未設定なら undefined (= dormant)", () => {
+describe("resolveChallengePayloadBucket (ADR-003 Phase 4a)", () => {
+  it("should return undefined when bucketName is unset (= source.zip fallback)", () => {
     expect(
       resolveChallengePayloadBucket({
-        problemId: "secret-problem",
-        visibility: { "secret-problem": "private" },
+        problemId: "any-problem",
         bucketName: undefined,
       }),
     ).toBeUndefined();
   });
 
-  it("bucketName あっても visibility に該当 id が無ければ undefined", () => {
+  it("should return the bucket name regardless of visibility once bucketName is bound (= catalog split mode)", () => {
     expect(
       resolveChallengePayloadBucket({
         problemId: "public-problem",
-        visibility: { "secret-problem": "private" },
         bucketName: "tc-challenges-test",
       }),
-    ).toBeUndefined();
-  });
-
-  it("should safely return undefined when visibility is undefined", () => {
+    ).toBe("tc-challenges-test");
     expect(
       resolveChallengePayloadBucket({
-        problemId: "any-problem",
-        visibility: undefined,
-        bucketName: "tc-challenges-test",
-      }),
-    ).toBeUndefined();
-  });
-
-  it("should return the bucket name when bucketName + visibility are both set", () => {
-    expect(
-      resolveChallengePayloadBucket({
-        problemId: "secret-problem",
-        visibility: { "secret-problem": "private" },
+        problemId: "private-problem",
         bucketName: "tc-challenges-test",
       }),
     ).toBe("tc-challenges-test");

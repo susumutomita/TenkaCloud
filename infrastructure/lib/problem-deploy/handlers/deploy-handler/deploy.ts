@@ -148,24 +148,24 @@ export async function startDeployment(
     }),
   );
 
-  // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
-  // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
-  const privateBucket = resolveChallengePayloadBucket({
+  // ADR-003 Phase 4a (problem catalog split): bucket が bound されていれば
+  // visibility に関わらず S3 経路で payload を渡す (= 旧 ADR-008 Phase 3 の private
+  // 限定経路を全問題に拡張)。 bucket 未 bound のときは従来の source.zip 同梱経路で fallback。
+  const payloadBucket = resolveChallengePayloadBucket({
     problemId: request.problemId,
-    visibility: ctx.problemsVisibility,
     bucketName: ctx.challengePayloadBucket,
   });
   let challengePayloadUrl: string | undefined;
-  if (privateBucket) {
+  if (payloadBucket) {
     if (!ctx.s3) {
       throw new Error(
-        "deploy-handler: private problem requires S3 client but ctx.s3 is undefined. " +
+        "deploy-handler: challenge payload bucket is set but ctx.s3 is undefined. " +
           "Check CDK wiring for CHALLENGE_PAYLOAD_BUCKET + S3Client.",
       );
     }
     challengePayloadUrl = await generateChallengePayloadUrl({
       s3: ctx.s3,
-      bucketName: privateBucket,
+      bucketName: payloadBucket,
       problemId: request.problemId,
     });
   }
